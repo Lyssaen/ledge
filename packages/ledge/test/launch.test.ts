@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseLaunchArgs, ensureDaemon, attachEnv, launch } from '../src/cli/launch.js';
+import { parseLaunchArgs, ensureDaemon, attachEnv, agentEnv, launch } from '../src/cli/launch.js';
 import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { killTestServer, until } from './helpers.js';
@@ -98,6 +98,13 @@ describe('attachEnv', () => {
   });
 });
 
+describe('agentEnv', () => {
+  it('keeps the launcher environment, drops TMUX and TMUX_*, and adds the Ledge variables last', () => {
+    const env = agentEnv({ PATH: '/usr/bin', AWS_PROFILE: 'dev', TMUX: 'x', TMUX_PANE: '%1', TMUX_TMPDIR: '/t', LEDGE_SESSION: 'outer', GONE: undefined }, { LEDGE_SESSION: 'ab12', LEDGE_NAME: 'Otto' });
+    expect(env).toEqual({ PATH: '/usr/bin', AWS_PROFILE: 'dev', LEDGE_SESSION: 'ab12', LEDGE_NAME: 'Otto' });
+  });
+});
+
 describe('launch', () => {
   // One throwaway tmux server per test: reusing a socket races with the previous kill-server.
   let n = 0; let socket: string; let tmux: Tmux;
@@ -108,6 +115,22 @@ describe('launch', () => {
   });
   afterEach(async () => { await srv.close(); await killTestServer(socket); vi.restoreAllMocks(); });
   const only = () => { const all = store.all(); expect(all).toHaveLength(1); return all[0]!; };
+
+  it("gives the agent the launcher's environment, not the tmux server's", async () => {
+    // Start the server first: its global environment is frozen without the probe variables.
+    await tmux.newSession({ name: 'warm', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
+    const out = join(process.env.LEDGE_HOME!, 'env-probe');
+    process.env.LEDGE_ENV_PROBE = 'from the launcher';
+    process.env.TMUX_LEDGE_PROBE = 'must not pass';
+    try {
+      const code = await launch('claude', [], {
+        port: srv.port, tmuxSocket: socket, cwd: '/tmp', attach: ptyAttach,
+        command: ['sh', '-c', 'printf "%s|%s|%s" "$LEDGE_ENV_PROBE" "${TMUX_LEDGE_PROBE-unset}" "$LEDGE_NAME" > "$0"', out]
+      });
+      expect(code).toBe(0);
+    } finally { delete process.env.LEDGE_ENV_PROBE; delete process.env.TMUX_LEDGE_PROBE; }
+    expect(readFileSync(out, 'utf8')).toBe(`from the launcher|unset|${only().name}`);
+  });
 
   it("returns the agent's exit code (not tmux attach's) and unregisters with it", async () => {
     const code = await launch('claude', ['--name', 'otto'], { port: srv.port, tmuxSocket: socket, cwd: '/tmp', command: ['node', agent, 'work', '400', 'exit', '7'], attach: ptyAttach });

@@ -84,10 +84,21 @@ export async function ensureDaemon(opts: { port?: number; spawnDaemon?: () => vo
 /** Where the wrapped agent leaves its exit code (see createSession's `recordExit`). */
 export function exitFile(id: string): string { return join(paths().dir, `exit-${id}`); }
 
+/**
+ * The agent's environment: the launching shell's (AWS_PROFILE, venv, ANTHROPIC_*, CLAUDE_CONFIG_DIR...)
+ * so `ledge claude` behaves like plain `claude`, minus the launcher's own tmux variables, plus `extra`.
+ * Without this the pane only gets the tmux server's global environment, frozen when it started.
+ */
+export function agentEnv(base: NodeJS.ProcessEnv, extra: Record<string, string>): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(base)) if (v !== undefined && k !== 'TMUX' && !k.startsWith('TMUX_')) env[k] = v;
+  return { ...env, ...extra };
+}
+
 /** The daemon accepted the connection but failed during session creation: launch untracked instead. */
 export class DaemonError extends Error {}
 
-export async function createSession(opts: { tool: Tool; args: string[]; command?: string[]; recordExit?: boolean; name?: string; cwd: string; tmux: Tmux; client: Client | null; now?: () => string }): Promise<Session> {
+export async function createSession(opts: { tool: Tool; args: string[]; command?: string[]; recordExit?: boolean; name?: string; cwd: string; tmux: Tmux; client: Client | null; now?: () => string; env?: NodeJS.ProcessEnv }): Promise<Session> {
   const now = opts.now ?? (() => new Date().toISOString());
   const takenNames: string[] = []; const takenIds = new Set<string>();
   if (opts.client) {
@@ -105,7 +116,7 @@ export async function createSession(opts: { tool: Tool; args: string[]; command?
   // With recordExit, sh runs the agent with its argv untouched ("$@") and writes its exit code to
   // the file passed as $0, so the session can die naturally and the code is still readable.
   const command = opts.recordExit ? ['sh', '-c', '"$@"; echo $? > "$0"', exitFile(id), ...agent] : agent;
-  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: { LEDGE_SESSION: id, LEDGE_NAME: name }, command });
+  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(opts.env ?? process.env, { LEDGE_SESSION: id, LEDGE_NAME: name }), command });
   const at = now();
   const session: Session = { id, name, tool: opts.tool, cwd: opts.cwd, project, title: `${name} · ${project}`, tmuxSession, state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher' };
   // The agent already runs: a lost register only means an untracked session, never a failed launch.
