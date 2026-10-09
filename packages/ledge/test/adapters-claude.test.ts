@@ -10,6 +10,10 @@ describe('claude adapter: detection', () => {
     const m = claudeAdapter.detectPrompt(fx('claude-permission'));
     expect(m).toEqual({ kind: 'permission', text: 'Bash(npm test)', options: ['Yes', "Yes, and don't ask again for npm test", 'No, and tell Claude what to do differently (esc)'] });
   });
+  it('reports the tool call nearest the box, not the first in scrollback', () => {
+    const pane = '● Read(a)\n  ⎿  Read 3 lines\n\n● Bash(npm test)\n  ⎿  Run tests\n\n' + fx('claude-permission').split('\n').slice(3).join('\n');
+    expect(claudeAdapter.detectPrompt(pane)?.text).toBe('Bash(npm test)');
+  });
   it('detects a question with its options', () => {
     const m = claudeAdapter.detectPrompt(fx('claude-question'));
     expect(m?.kind).toBe('question');

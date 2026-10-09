@@ -6,7 +6,7 @@ import type { Adapter, KeyPlan, PanePromptMatch } from './types.js';
 const BOX_LINE = /^│\s(.*?)\s*│$/;
 const OPTION = /^(?:❯\s)?(\d+)\.\s(.+)$/;
 const PERMISSION_QUESTION = /^Do you want to proceed\??$/;
-const TOOL_CALL = /^●\s([A-Z][A-Za-z]+\([^)]*\))/m;
+const TOOL_CALL = /^●\s([A-Z][A-Za-z]+\([^)]*\))/;
 
 function boxLines(pane: string): string[] {
   return pane.split('\n').map(l => l.replace(/\s+$/, '')).filter(l => BOX_LINE.test(l)).map(l => l.match(BOX_LINE)![1]!.trim());
@@ -25,12 +25,23 @@ function parseBox(pane: string): { question: string; options: string[] } | null 
   return { question, options };
 }
 
+// The tool call being approved is the last one above the box, not the first in scrollback.
+function lastToolCallBeforeBox(pane: string): string | null {
+  const lines = pane.split('\n');
+  const boxStart = lines.findIndex(l => BOX_LINE.test(l.replace(/\s+$/, '')));
+  for (let i = (boxStart < 0 ? lines.length : boxStart) - 1; i >= 0; i--) {
+    const m = lines[i]!.match(TOOL_CALL);
+    if (m) return m[1]!;
+  }
+  return null;
+}
+
 function detectPrompt(pane: string): PanePromptMatch | null {
   const box = parseBox(pane);
   if (!box) return null;
   if (PERMISSION_QUESTION.test(box.question)) {
-    const call = pane.match(TOOL_CALL);
-    return { kind: 'permission', text: call ? call[1]! : box.question, options: box.options };
+    const call = lastToolCallBeforeBox(pane);
+    return { kind: 'permission', text: call ?? box.question, options: box.options };
   }
   return { kind: 'question', text: box.question, options: box.options };
 }
