@@ -2,7 +2,16 @@
 
 Date : 2026-10-09 · Projet personnel, hors story Jira · Auteur : Joffrey Desantoine avec Claude Code
 
-Références visuelles :
+**Révision 2 — direction visuelle et maquette interactive validées par l’utilisateur.** Signal est retenu en thème sombre, Galet en thème clair. Cette validation autorise la mise à jour du design et des plans ; elle ne signifie pas que l’overlay ou les intégrations réelles sont implémentés.
+
+Références visuelles, par ordre de priorité :
+
+- [Maquette interactive validée](../../mockups/ledge-prototype.html), avec ses fichiers dans `../../mockups/prototype/`.
+- [Version HTML autonome](../../mockups/ledge-prototype-standalone.html), ouvrable sans serveur, et aperçus [sombre](../../mockups/ledge-prototype-dark.png) / [clair](../../mockups/ledge-prototype-light.png).
+- Sources des mascottes : [géométrie SVG](../../mockups/prototype/mascot-svg.js), [expressions et gestes](../../mockups/prototype/mascot.css), [rythmes individuels](../../mockups/prototype/mascots.js), [matières liées au thème](../../mockups/prototype/prototype.css).
+- [Étude initiale](../../mockups/mascots.html) : exploration historique. La variante Souple et le choix d’une matière indépendant du thème ne sont pas retenus.
+
+Références historiques (les planches distantes n’ont pas pu être consultées pendant cette révision ; la spécification locale et la maquette validée font foi pour les décisions ci-dessous) :
 - Canvas de design (21 planches, dont le prototype jouable, planche 9) : https://claude.ai/artifact/57oDjsKdabQBmPgAXn15mc
 - Design system « Shadcn Red » (tokens oklch, README avec le vocabulaire de mouvement) : https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV
 
@@ -33,7 +42,7 @@ Historique des demandes, mise en sommeil d'un bot inactif, masquage automatique 
 | Lanceur | `ledge claude`, `ledge codex`, `ledge cursor` ; une session lancée sans lanceur apparaît en lecture seule |
 | Notification | La bulle, seul mode. Pas de « coup d'œil » seul ni d'ouverture automatique du panneau |
 | Ouverture | Survol du bord (180 ms d'approche), clic sur un bot, raccourci global `Ctrl+Alt+L` |
-| Thème | Sombre par défaut ; clair complet |
+| Thème | Sombre par défaut avec mascottes **Signal** ; clair complet avec mascottes **Galet** |
 | UI | shadcn/ui, design system Shadcn Red |
 
 ## 3. Architecture
@@ -112,6 +121,8 @@ Le hook `SessionStart` l'enregistre avec `source: hook_only`. Elle apparaît en 
 
 Il n'y a qu'une seule surface, ancrée au bord gauche, verticalement centrée. Au repos c'est la **poignée** ; c'est elle qui grandit en **bulle**, en **liste** ou en **session**, puis rétrécit. Rien n'apparaît jamais à côté d'elle. Sa hauteur suit toujours son contenu : nombre de bots pour la poignée et la liste, contenu de la vue pour la session.
 
+La colonne des scénarios, le faux bureau, les boutons de simulation et le compteur d’actions appartiennent à l’atelier de test, pas à l’overlay livré. Réglages et aide clavier se présentent dans la même surface. Les couches masquées sont inertes et retirées de la navigation au clavier. Le focus est transféré vers un contrôle visible après une transition.
+
 ### La poignée (planche 1, prototype planche 9)
 
 - 28 px de large, coins droits arrondis à 14 px, fond `sidebar`, bordure `sidebar-border`, ombre `shadow-overlay`.
@@ -127,14 +138,15 @@ Il n'y a qu'une seule surface, ancrée au bord gauche, verticalement centrée. A
 - Déclenchée par un `pending` nouveau, uniquement quand la surface est en poignée et hors « ne pas déranger ».
 - Séquence : le bot grossit dans la poignée (280 ms), puis 260 ms plus tard la surface se déploie en bulle depuis la place de ce bot, 336 px de large.
 - Contenu : le bot à 48 px, « <Prénom> needs your approval » ou « has a question », la demande en mono, un chevron, puis Deny et Approve (ou Later et la réponse recommandée pour une question).
-- Une barre de 2 px en bas s'écoule sur 4 s ; le survol la met en pause, la sortie la reprend. À zéro, la bulle rétrécit en poignée.
-- Décider sur place : la bulle reste 900 ms pour laisser voir le bot changer de pose, puis rétrécit. Cliquer le texte transforme la bulle en session.
+- Une barre de 2 px en bas s'écoule sur 4 s ; le survol, le focus dans la bulle et une fenêtre masquée suspendent le décompte. La reprise utilise le temps restant exact, sans repartir de zéro. À zéro, la bulle rétrécit en poignée ; la demande reste en attente.
+- Décider sur place : le bot acquiesce une fois et la bulle reste au moins 900 ms avant son repli. En production, le repli attend aussi la confirmation du daemon ; le délai seul ne confirme jamais l’exécution. Une erreur maintient une action de récupération lisible. Cliquer le texte transforme la bulle en session. Un diff ou un plan ouvre sa revue avant toute décision.
+- Largeur de 336 px ; hauteur mesurée selon le texte, les actions et la file. Aucune hauteur fixe de 128 px ne doit tronquer la version validée.
 - Plusieurs demandes : la bulle ne montre que la plus ancienne, avec « +N more » dessous.
 
 ### La liste (planche 3, clair planche 5)
 
 - 380 px. En-tête « Ledge », compteur « N bots · M waiting for you », boutons ne pas déranger, réglages, replier.
-- Une ligne de 56 px par bot : bot à 32 px, projet, sous-ligne « Prénom · Outil · durée · contexte », badge d'état. La ligne en attente la plus ancienne porte le fond `secondary` et la barre rouge de 2 px.
+- Une ligne de 58 px par bot : bot à 32 px, projet, sous-ligne « Prénom · Outil · durée · contexte », badge d'état. La ligne sélectionnée porte le fond `secondary` et la barre rouge de 2 px ; à l’ouverture, sélectionner la demande la plus ancienne. L’ordre des sessions ne change pas avec leur état.
 - Les lignes entrent en cascade, 24 ms d'écart, avec un glissement de 10 px.
 - Pied : interrupteur « Do not disturb » et le raccourci.
 - Un bot qui arrive se déplie en hauteur et en opacité ; un bot qui part se replie de la même façon. La hauteur de la surface suit.
@@ -151,7 +163,8 @@ Il n'y a qu'une seule surface, ancrée au bord gauche, verticalement centrée. A
 - Sans demande : **rapport reçu** (planche 11) quand l'agent a fini un tour : badge « Your turn », le dernier message rendu avec titres, paragraphes, listes et blocs de code qui reviennent à la ligne, puces de réponse rapide, lien vers le terminal ; **commande longue** (planche 16) : la commande, un chrono, une barre d'activité sans pourcentage, la sortie en direct avec « Follow », « Interrupt » qui envoie Échap ; **terminée** (planche 15) : durée, fichiers, tests, dernier message, liste des fichiers, barre des minutes avant la retraite du bot (10 min), « Open terminal », « Continue with <Prénom> ».
 - Aperçu terminal en lecture seule, 30 dernières lignes, et champ de réponse envoyé tel quel.
 - **Mode lecture** (planches 11b et 12b) : une icône élargit la surface à 560 px, texte 14/21 sur environ 70 caractères par ligne, pour les rapports et diffs longs.
-- La transition liste ↔ session est un glissement de 28 px avec fondu, 260 ms. Après Approve, la carte se replie (300 ms, courbe douce, 80 ms de retard), puis le bot reprend sa pose de travail 120 ms plus tard.
+- La transition liste ↔ session est un glissement de 12 px avec fondu, 260 ms. L’entrée du contenu suit le début de croissance de la surface de 140 ms. Après une décision : acquiescement de 650 ms, disparition de la carte sur 300 ms avec 180 ms de retard, puis passage à la suite après au moins 900 ms et confirmation du daemon. Une réponse tardive ne doit pas voler le focus ni rouvrir une session quittée entre-temps.
+- Les brouillons sont indexés par identifiant de session et survivent au retour à la liste, au changement de thème, au mode lecture et à une reconnexion. Un refus ou une interruption n’affiche jamais un rapport de réussite ; « Modifier le plan » conserve la session ouverte avec le champ de réponse accessible.
 
 ### Sous-agents (planche 17)
 
@@ -159,35 +172,76 @@ Les helpers lancés par un bot apparaissent sous lui en bots de 20 px avec leur 
 
 ### File d'attente (planche 19)
 
-Quand plusieurs bots attendent : bandeau « Waiting for you · 1 of N » avec les bots en attente, « Next » ou Tab, case « Go to the next one after deciding » cochée par défaut. Ordre du plus ancien au plus récent. Après le dernier, retour à la liste avec « all caught up », puis repli après 2 s.
+Quand plusieurs bots attendent : bandeau « Waiting for you · 1 of N » avec les bots en attente, « Next » ou `Alt+→`, case « Go to the next one after deciding » cochée par défaut. Ordre du plus ancien au plus récent. Après le dernier, retour à la liste avec « all caught up », puis repli après 2 s uniquement si la souris et le focus ont quitté la surface et qu’aucun brouillon n’est en cours d’édition. Une demande disparue n’est jamais sélectionnée par une transition différée.
 
 ### Clavier (planche 18)
 
 - `Ctrl+Alt+L` ouvre la liste. Ouverte au clavier, elle montre des badges numérotés sur les lignes ; ouverte à la souris, non.
 - La ligne sélectionnée s'agrandit pour montrer ses actions avec leurs touches : Approve Y, Deny N, Open Entrée. Y et N n'agissent que si la demande est un oui/non ; une question ouvre la session.
-- J et K se déplacent, Tab passe au prochain bot en attente, 1 à 9 sautent sur un bot, R met le focus sur le champ de réponse, O ouvre l'onglet terminal, D bascule ne pas déranger, Échap ferme, ? ouvre la feuille des touches.
-- Un coachmark ancré sous la ligne sélectionnée enseigne J, K, Tab et 1 à 9 les trois premières ouvertures au clavier.
+- J et K se déplacent, `Alt+→` passe au prochain bot en attente, 1 à 9 sautent sur un bot, R met le focus sur le champ de réponse, O ouvre l'onglet terminal, D bascule ne pas déranger, Échap revient à la liste depuis une session puis replie la liste, ? ouvre la feuille des touches.
+- Tab et Maj+Tab conservent leur navigation native entre les contrôles. Les raccourcis à une lettre ne s’appliquent pas à un champ éditable ou à une liste de sélection.
+- Un coachmark ancré sous la ligne sélectionnée enseigne J, K, `Alt+→` et 1 à 9 les trois premières ouvertures au clavier.
 
 ## 6. Les bots
 
-Chaque session est un bot (planches 6, 8, 10).
+Chaque session est un compagnon SVG, sans image raster, logo produit ou dépendance à un service d’images. Les trois silhouettes de la maquette validée remplacent les anciens dessins des planches 6, 8 et 10 : carré arrondi pour Claude Code, orbe pour Codex, pointe arrondie pour Cursor Agent. Une visière sombre unifie la famille ; pieds, antenne et main sont des détails secondaires.
 
-- **Forme de la tête = outil** : carré arrondi pour Claude Code, rond pour Codex, pointu comme un curseur pour Cursor Agent. Aucun logo produit.
-- **Yeux = état**, dans les couleurs des badges : balayage et antenne clignotante quand il travaille, grands yeux pour une question, main sur le rebord / mot à signer / toc toc pour une permission, yeux fermés ou souriants quand c'est fini, yeux en croix ou fumée sur erreur, contour pointillé en lecture seule.
-- **Trois poses par état**, attribuées par bot : pose = (hash(prénom) + index de l'état) mod 3, pour qu'une équipe ne bouge jamais à l'unisson. Lecture seule n'a qu'une pose.
-- **Transitions d'état** : les yeux et accessoires se fondent en 260 ms, la tête revient en place en 300 ms, la couleur de l'antenne glisse.
-- **Tailles** : 12 et 20 px dans la poignée, 16 px dans les onglets du terminal, 20 px pour les helpers, 32 px dans les lignes et en-têtes, 48 px dans la bulle.
-- Composant unique `Bot` avec les propriétés `tool`, `state`, `pose`, `size`, `theme`.
+### Matière et thème
+
+| Thème | Matière | Haut / bas de coque | Contour | Visière |
+|---|---|---|---|---|
+| Sombre | Signal | `#34434b` / `#273238` | `#859397`, épaisseur SVG 1,5 | `#172124` |
+| Clair | Galet | `#f0eee6` / `#b7b7b0` | `#ffffff99`, épaisseur SVG 0,8 | `#22292b` |
+
+Signal a des contours lisibles et aucun trait de reflet blanc. Galet reçoit un reflet léger et un dégradé mat. Ces couleurs deviennent des tokens `--bot-shell-top`, `--bot-shell-bottom`, `--bot-shell-line`, `--bot-visor` dans le design system. La matière se déduit du thème ; aucun sélecteur de matière indépendant n’est prévu dans le produit. Un changement de thème interpole les couleurs sur 240 ms sans remplacer le SVG, rejouer l’arrivée du bot ni modifier son état ou la phase de son animation.
+
+### Expressions
+
+| État réel | Expression et comportement | Couleur des yeux |
+|---|---|---|
+| `starting` | Regard qui se pose ; libellé Démarrage | `#90c7f2` |
+| `working` | Yeux ouverts, déplacements du regard de ±1,4 unité SVG, respiration discrète | `#90c7f2` |
+| `waiting_permission` | Regard centré, légère inclinaison, main levée une fois puis attente calme | `#f2b09c` |
+| `waiting_input` | Yeux légèrement agrandis, inclinaison interrogative | `#f6d487` |
+| `idle` | Yeux souriants ; session disponible, distincte du travail et d’une session terminée | `#a9dfc7` |
+| `error` | Expression préoccupée et inclinaison ; aucun tremblement, flash ou fumée | `#ffab9f` |
+| `exited` | Yeux fermés, opacité 0,55, aucun mouvement ; code de sortie non nul signalé par le badge et le texte | `#a3aaa9` |
+
+Lecture seule et connexion perdue sont des modificateurs, pas des états de travail inventés : garder l’expression connue, réduire l’opacité, figer les mouvements et afficher la cause textuellement. La lecture seule utilise un contour pointillé. Une couleur seule ne suffit jamais à distinguer les états : expression, libellé et badge restent présents.
+
+### Identité, échelle et rythme
+
+- Identité stable : clé React, graine de mouvement et décalage dérivent de `session.id` ; pour un helper, de `parent.id + ':' + helper.id`. Un renommage ou un changement de thème ne synchronise pas les bots.
+- Trois variantes sobres d’inclinaison et de phase par état ; pas trois animations d’accessoires complexes. Respiration entre 4,8 et 6,4 s, amplitude verticale maximale de 0,7 unité dans le repère SVG 96×96, rotation de ±0,3° et étirement vertical maximal de 1,4 %.
+- Clignement de 180 ms, intervalle déterministe de 3,4 à 6,7 s propre à chaque bot. Le regard de travail change toutes les 2,4 à 4,5 s, avec une transition de 450 ms. La main intervient une seule fois lors d’une nouvelle demande, après le regard ; geste de 850 ms.
+- Tailles : 12/20 px dans la poignée (11/18 px au-delà de cinq sessions), 16 px dans les onglets, 20 px pour les helpers, 32 px dans les lignes et en-têtes, 48 px dans la bulle. À 20 px ou moins, recadrer le SVG sur la tête, supprimer main, pieds, ombre et antenne, et arrêter les mouvements ambiants. Les grandes tailles de l’atelier ne sont que des agrandissements d’inspection.
+- Un composant `Bot` reçoit `tool`, `state`, `pose`, `size`, `theme`, `seed`, `readOnly`, `frozen` et `reducedMotion`. Les groupes coque, posture, regard, yeux et accessoires restent montés pendant une transition d’état. Les identifiants des gradients sont uniques par instance.
 
 ## 7. Vocabulaire de mouvement
 
-Trois courbes et rien d'autre (section Motion du design system) :
+Trois courbes pour les transitions de l’interface (section Motion du design system) :
 
 - **grow** : 320 ms `cubic-bezier(.22,1,.36,1)`, part vite et décélère longuement.
 - **shrink** : 260 ms `cubic-bezier(.65,0,.35,1)`, avec 60 ms de retard pour que le contenu s'efface d'abord.
 - **pop** : 260 ms `cubic-bezier(.34,1.3,.64,1)`, réservé à l'échelle d'un bot, jamais à une surface.
 
 Règles : survol et couleurs en 150 ms ; entrées en fondu de 180 ms après que la forme s'est presque posée (140 à 200 ms de retard), sorties en 100 ms avant que la forme bouge ; séquence plutôt que simultanéité ; toute apparition, disparition, redimension ou changement d'état est animé ; pas de rebond sur les surfaces, badges ou panneaux ; une variable d'environnement ramène toutes les durées à zéro pour les tests.
+
+Les microgestes organiques utilisent `ease-in-out` pour la respiration et le clignement ; la matière change en 240 ms. Les yeux se fondent en 260 ms et la posture revient en place en 300 ms avec `grow`. Un acquiescement dure 650 ms et confirme la réception d’une décision, jamais la réussite de la tâche. Le délai de 900 ms de la séquence de décision reste une durée de présentation, pas une source de vérité métier.
+
+`prefers-reduced-motion: reduce`, le réglage « Mouvements réduits » ou `VITE_LEDGE_MOTION=0` suppriment mouvements ambiants, interpolations et gestes. Les demandes, leurs libellés et les règles de temporisation restent fonctionnels ; un réglage local ne force pas le mouvement contre la préférence du système. Suspendre les boucles quand la fenêtre est masquée, la couche inactive ou la connexion perdue ; libérer les timers et observateurs au démontage. Les décomptes fonctionnels (bulle, reconnexion, retraite) ne sont pas mis à zéro par la suppression des animations.
+
+## 7 bis. Portée de la validation et raccordement
+
+La maquette valide les matières, les silhouettes, les expressions, la composition des vues et les interactions visibles. Elle contient douze scénarios : vue d’ensemble, autorisation, question, revue de fichiers, plan, sous-agents, commande longue, rapport, erreur, session terminée, lecture seule, équipe et connexion. Les préférences de l’atelier restent locales et la copie française illustre les libellés ; elle ne change pas les conventions de copie des adaptateurs et de la CLI.
+
+Les comportements suivants nécessitent encore leur raccordement produit ; ne pas copier les raccourcis de simulation dans le daemon :
+
+- Les délais de fin de tâche et les compteurs de tests/fichiers sont fictifs. Seuls les événements confirmés du daemon déterminent les états et les résultats réels.
+- Les options « Toujours » mémorisent une portée uniquement dans la simulation. En production, les proposer seulement si l’adaptateur sait appliquer et confirmer cette portée ; autrement les désactiver avec explication. Elles ne doivent jamais être un simple alias trompeur d’« Autoriser une fois ».
+- « Continuer » crée un nouvel identifiant dans la simulation. En production, `exited` reste terminal ; tant qu’un lancement/reprise confirmé n’est pas pris en charge, proposer l’ouverture du terminal pour relancer, sans prétendre avoir créé une session.
+- Les helpers ont des cartes et des expressions propres. Le protocole actuel route une permission de helper via le parent et `pending.helperId` : l’UI ne doit pas autoriser un autre helper, effacer une demande du parent ou prétendre à des décisions indépendantes non prises en charge. Les permissions concurrentes de plusieurs helpers requièrent un contrat de demandes distinctes avant activation.
+- L’ouverture du terminal, l’interruption réelle, les raccourcis globaux Windows, les reconnexions et la retraite à 10 min restent à vérifier avec Tauri, WSL et les adaptateurs. La vérification du prototype dans Chromium ne vaut pas validation de ces intégrations.
 
 ## 8. Gestion des erreurs
 
@@ -202,7 +256,8 @@ Règles : survol et couleurs en 150 ms ; entrées en fondu de 180 ms après que 
 
 - **Unitaires (Vitest, WSL)** : table de transitions du réducteur, chaque couple état × événement ; motifs des adaptateurs sur des captures de pane réelles dans `test/fixtures/panes/` avec cas positifs et pièges ; schémas du protocole avec exemples sérialisés.
 - **Intégration sans IA** : un faux agent Node qui imite chaque outil dans un vrai tmux (invite de permission, question, sortie avec code) pour tester lanceur, daemon, injection et vérification de bout en bout, en CI ; test de reconnexion, daemon tué puis relancé pendant qu'un faux agent tourne.
-- **Overlay (Windows)** : composants React avec Testing Library sur un daemon simulé en mémoire, durées d'animation à zéro ; captures visuelles par état (poignée à 0, 5, 10 bots, bulle, liste, session, deux thèmes) ; chaque scénario du prototype de la planche 9 devient un test du même nom.
+- **Overlay (Windows)** : composants React avec Testing Library sur un daemon simulé en mémoire, durées d'animation à zéro ; captures visuelles par état (poignée à 0, 5, 10 et 12 bots, bulle, liste, session, deux thèmes) ; chacun des douze scénarios de la maquette locale devient un test nommé. Vérifier les matières Signal/Galet à 12, 16, 20, 32 et 48 px, la distinction `idle`/`exited`, la stabilité des SVG au changement de thème et les mouvements réduits.
+- **Interactions** : timer de bulle conservant le temps restant après survol/focus, aucune fermeture pendant la saisie, conservation des brouillons, aucune action en lecture seule ou hors connexion, refus sans faux succès, changement de scénario/session annulant les callbacks devenus obsolètes, Tab natif et `Alt+→` pour la file.
 - **Manuel** : checklist de dix minutes avec les trois vrais outils avant chaque version : lancer, demander une permission, approuver depuis la bulle, répondre à une question, tuer la session, relancer le daemon.
 
 ## 10. Stack et dépôt

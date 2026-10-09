@@ -8,7 +8,9 @@
 
 **Tech Stack:** same as Plans 1 and 2 (TypeScript, Vitest, `ws`, `zod`, React 19, Tailwind v4, tmux 3.6).
 
-**Spec:** `docs/superpowers/specs/2026-10-09-ledge-design.md` (sections 4 adapters, 5 session cards, sub-agents, queue, reading mode; canvas boards 11 to 19).
+**Spec:** `docs/superpowers/specs/2026-10-09-ledge-design.md`, revision 2 (sections 4, 5, 6, 7 and 7 bis). Visual/interaction reference: [approved local prototype](../../mockups/ledge-prototype.html) and [standalone version](../../mockups/ledge-prototype-standalone.html), scenarios 3–10 and 12. The older remote canvas is historical; the local Signal/Galet prototype is authoritative for the approved direction.
+
+**Approved revision:** carry Plan 2's revised Bot API and mandatory Task 13 into every rich screen. Task 9 below is the final prototype-parity gate. Product code must consume confirmed daemon state, not the mockup's local completion timers, sample statistics or browser-only grants. This plan remains unimplemented; visual approval does not check off its tasks.
 
 **Depends on:**
 - Tasks 1 to 3 need Plan 1 up to its Task 7 merged (adapter interface, verify helper, server). They can start as soon as Plan 1's `packages/ledge/src/adapters/types.ts` and `src/daemon/server.ts` exist on `main`.
@@ -18,12 +20,15 @@
 ## Global Constraints
 
 - Everything in Plan 1 and Plan 2's Global Constraints still applies.
+- Dark mode uses Signal, light mode Galet, including helper avatars, queue avatars, reading mode and finished summaries. Pass the current theme and stable session/helper seed; never hard-code a dark helper/queue component.
+- Read-only and disconnected states disable every reply/decision entry point, including keyboard and quick replies; retain drafts and known expressions. A declined or interrupted action cannot produce a fabricated success report. Plan edits keep the session and reply field open.
+- Scoped “Always” options require an adapter capability and confirmed scope; with the current one-shot protocol they are disabled with an explanation. Browser-local grants from the prototype are not a daemon authorization policy.
 - Codex: decisions are `y` / `n`, replies are text then `Enter` 50 ms later, interrupt is `C-c`; `notify = ["ledge", "hook", "codex-notify"]` in `~/.codex/config.toml` (appended, never replacing an existing `notify`).
 - Cursor Agent: hooks in `~/.cursor/hooks.json` under `hooks.beforeShellExecution`, `hooks.afterFileEdit`, `hooks.stop` as `{ "command": "ledge hook Cursor<Event>" }` entries appended to existing arrays; prompt patterns anchored to a line start.
 - Pane patterns for every tool have at least one trap fixture (prompt text quoted inside output) and must not match it.
-- A sub-agent helper is shown under its bot only while the bot is alive; helpers never produce bubbles; a helper asking for permission is a `pending` on the parent bot with `helperId` set.
+- A sub-agent helper is shown under its bot only while the bot is alive; there is no separate helper surface/bubble. The current protocol routes one active helper permission through the parent's `pending.helperId`. A helper card is actionable only when it matches that active request; other waiting helpers remain visible without misrouted decision buttons. Independent concurrent helper permissions require a separate request-identity protocol before activation.
 - Reading mode is 560 px wide, body text 14/21, mono 12.5/20, diff lines wrap with `overflow-wrap: anywhere`; file headers in a diff are collapsible buttons.
-- The finished summary retires with the bot (10 min); "Continue with <Name>" focuses the terminal and sends nothing.
+- The finished summary retires with the bot (10 min); The prototype’s “Continue” creates a fictional new ID; until a real launch/resume command exists, the product action is “Open terminal to relaunch”, focuses the terminal and sends nothing.
 
 ## Review Focus
 
@@ -579,7 +584,7 @@ and in `runSetup`: read `~/.cursor/hooks.json` (missing → `{}`), merge, write 
 
 `hook.ts`: `mapCursorHook` as specified (id from `LEDGE_SESSION` else `payload.conversation_id`), plus in `mapClaudeHook`: `SubagentStart`/`SubagentStop` cases and `helperId: str(p.agent_id)` on `PermissionRequest` and `PreToolUse`. In `runHook`, route `eventName.startsWith('Cursor')` to `mapCursorHook`.
 
-`state.ts`: add `SubagentStart`/`SubagentStop` cases; in the pending branch, when `ev.helperId` and `s.pending && !s.pending.helperId`, keep `s.pending` (parent's own ask wins) but still mark the helper `waiting_permission`; otherwise set `pending.helperId = ev.helperId`. In `Decided`, map helpers in `waiting_permission` back to `working`. In `SessionEnd`/`PaneGone`, `helpers: []`.
+`state.ts`: add `SubagentStart`/`SubagentStop` cases; in the pending branch, when `ev.helperId` and `s.pending && !s.pending.helperId`, keep `s.pending` (parent's own ask wins) but still mark the helper `waiting_permission`; otherwise set `pending.helperId = ev.helperId`. In `Decided`, update only the helper whose ID matched the resolved `pending.helperId`, leaving other waiting helpers intact. A helper decision never completes the parent or clears a different parent request. In `SessionEnd`/`PaneGone`, `helpers: []`. Add a reducer test with two waiting helpers and a distinct parent request; exactly the confirmed target is updated.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
@@ -824,7 +829,7 @@ export function DiffCard({ pending, onDecide }: { pending: Pending; onDecide: (d
         {total > CAP && <div style={{ padding: '6px 10px', color: 'var(--muted-foreground)', fontSize: 11 }}>… {total - CAP} more lines, open the tab</div>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Button variant="ghost" size="sm" onClick={() => onDecide('accept')}>Always for these files</Button><span style={{ flexGrow: 1 }} />
+        <Button variant="ghost" size="sm" disabled title="Scoped authorization is not supported by this adapter">Always for these files</Button><span style={{ flexGrow: 1 }} />
         <Button variant="outline" onClick={() => onDecide('deny')}>Deny</Button>
         <Button variant="primary" onClick={() => onDecide('accept')}>Approve</Button>
       </div>
@@ -910,8 +915,8 @@ git commit -m "feat: diff, plan and report cards with capped detail and safe mar
 - Test: `apps/overlay/test/activity.test.tsx`
 
 **Interfaces:**
-- `<ActivityPanel session now onInterrupt onFocus onDismiss />`: for `command` → badge `Running a command`, the command in a well, elapsed `m:ss` from `activity.startedAt`, an indeterminate 2 px sweep bar (`ledge-sweep` keyframes, stops when `lastActivityAt` is older than 30 s), the preview as the live tail, `Interrupt` with `Esc`; for `finished` → badge `Done` (or `Error` with the code), "<Name> retires in <N> min unless you continue" with a 2 px bar at `(10 min − elapsed since exitedAt) / 10 min`, four stat tiles (session duration, files, tests ok, approvals = count of `Decided` is not tracked: show files and tests only, two tiles plus duration), the last message via `ReportCard` without quick replies, the files list with `M`/`A` markers, `Open terminal`, `Continue with <Name>` (calls `onFocus`), `Dismiss` (calls `onDismiss` → `back`).
-- `<HelpersPanel helpers onOpenHelper? />`: a tree with `├`/`└` connectors (the last row has no continuing line), 20 px bots (`claude` tool, state from the helper), kind · task, badge; a helper in `waiting_permission` is highlighted. In the list row, up to three 12 px bots are stacked under the 28 px avatar when `helpers.length > 0`, and the sub-line says `<n> helpers, <m> need you`.
+- `<ActivityPanel session now onInterrupt onFocus onDismiss />`: for `command` → badge `Running a command`, the command in a well, elapsed `m:ss` from `activity.startedAt`, an indeterminate 2 px sweep bar (`ledge-sweep` keyframes, stops when `lastActivityAt` is older than 30 s), the preview as the live tail, `Interrupt` with `Esc`; for `finished` → badge `Done` (or `Error` with the code), "<Name> retires in <N> min" with a 2 px bar at `(10 min − elapsed since exitedAt) / 10 min`, four stat tiles (session duration, files, tests ok, approvals = count of `Decided` is not tracked: show files and tests only, two tiles plus duration), the last message via `ReportCard` without quick replies, the files list with `M`/`A` markers, `Open terminal`, `Open terminal to relaunch` (calls `onFocus`), `Dismiss` (calls `onDismiss` → `back`).
+- `<HelpersPanel helpers parentId tool theme onOpenHelper? />`: a tree with `├`/`└` connectors (the last row has no continuing line), 20 px bots (parent tool unless a verified helper tool is available, actual helper state, current theme, seed `${parentId}:${helper.id}`), kind · task, badge; a helper in `waiting_permission` is highlighted. In the list row, up to three 12 px bots are stacked under the 32 px avatar when `helpers.length > 0`, and the sub-line says `<n> helpers, <m> need you`. Task 9 adds the correctly routed helper request card.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -943,7 +948,7 @@ describe('ActivityPanel', () => {
     expect(screen.getByText('2')).toBeInTheDocument(); expect(screen.getByText('48')).toBeInTheDocument();
     expect(screen.getByText('src/b.ts')).toBeInTheDocument();
     expect(screen.getByText(/paginates server side/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Continue with Nova' })); expect(onFocus).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Open terminal to relaunch' })); expect(onFocus).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' })); expect(onDismiss).toHaveBeenCalled();
   });
   it('an exit code other than 0 shows Error with the code', () => {
@@ -954,7 +959,7 @@ describe('ActivityPanel', () => {
 
 describe('HelpersPanel', () => {
   it('lists helpers with a tree and highlights the one that needs you', () => {
-    const { container } = render(<HelpersPanel helpers={[{ id: 'h1', kind: 'Explore', task: 'find consumers', state: 'working' }, { id: 'h2', kind: 'Plan', task: 'draft the table', state: 'waiting_permission' }]} />);
+    const { container } = render(<HelpersPanel parentId="parent-a" tool="claude" theme="dark" helpers={[{ id: 'h1', kind: 'Explore', task: 'find consumers', state: 'working' }, { id: 'h2', kind: 'Plan', task: 'draft the table', state: 'waiting_permission' }]} />);
     expect(screen.getByText(/Explore · find consumers/)).toBeInTheDocument();
     const rows = container.querySelectorAll('[data-helper]');
     expect(rows[1]).toHaveAttribute('data-last', 'true');
@@ -990,12 +995,12 @@ export function ActivityPanel({ session: s, preview, now, onInterrupt, onFocus, 
     const tile = (v: string | number, l: string, color?: string) => <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 12px', background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}><span style={{ fontSize: 18, lineHeight: '22px', fontWeight: 600, letterSpacing: '-0.02em', color }}>{v}</span><span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{l}</span></div>;
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Badge state={err ? 'error' : 'done'} label={err ? `Error · exit ${s.exitCode}` : 'Done'} /><span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{s.name} retires in {Math.ceil(left / 60000)} min unless you continue</span></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Badge state={err ? 'error' : 'done'} label={err ? `Error · exit ${s.exitCode}` : 'Done'} /><span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{s.name} retires in {Math.ceil(left / 60000)} min</span></div>
         <div style={{ height: 2, borderRadius: 9999, background: 'var(--muted)', overflow: 'hidden' }}><div style={{ width: `${(left / RETIRE_MS) * 100}%`, height: '100%', background: 'var(--success)', opacity: .7 }} /></div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>{tile(relativeTime(s.startedAt, Date.parse(s.exitedAt ?? s.lastActivityAt)), 'session')}{tile(s.filesChanged.length, 'files')}{tile(s.testsPassed ?? '–', 'tests ok', 'var(--success)')}</div>
         {s.activity?.kind === 'message' && <ReportCard text={s.activity.text} onReply={() => {}} quick={[]} />}
         {s.filesChanged.length > 0 && <div className="mono" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 16px', background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', fontSize: 12, lineHeight: '18px', color: 'var(--muted-foreground)' }}>{s.filesChanged.map(f => <div key={f.path} style={{ display: 'flex', gap: 8 }}><span style={{ width: 14, color: f.kind === 'A' ? 'var(--info)' : 'var(--success)' }}>{f.kind}</span><span>{f.path}</span></div>)}</div>}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Button variant="ghost" size="sm" onClick={onDismiss}>Dismiss</Button><span style={{ flexGrow: 1 }} /><Button variant="outline" onClick={onFocus}>Open terminal</Button><Button variant="secondary" onClick={onFocus}>Continue with {s.name}</Button></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Button variant="ghost" size="sm" onClick={onDismiss}>Dismiss</Button><span style={{ flexGrow: 1 }} /><Button variant="outline" onClick={onFocus}>Open terminal</Button><Button variant="secondary" onClick={onFocus}>Open terminal to relaunch</Button></div>
       </div>
     );
   }
@@ -1019,8 +1024,8 @@ import type { Helper } from '@ledge/protocol';
 import { Bot } from '../../bots/Bot';
 import { Badge } from '../../ui/Badge';
 import type { BotState } from '../../bots/poseFor';
-const st = (h: Helper): BotState => h.state === 'waiting_permission' ? 'approval' : h.state === 'waiting_input' ? 'question' : h.state === 'exited' ? 'done' : h.state === 'error' ? 'error' : 'working';
-export function HelpersPanel({ helpers }: { helpers: Helper[] }) {
+const st = (h: Helper): BotState => h.state === 'waiting_permission' ? 'approval' : h.state === 'waiting_input' ? 'question' : h.state === 'exited' ? 'done' : h.state === 'error' ? 'error' : h.state === 'idle' ? 'idle' : h.state === 'starting' ? 'starting' : 'working';
+export function HelpersPanel({ helpers, parentId, tool, theme }: { helpers: Helper[]; parentId: string; tool: import('@ledge/protocol').Tool; theme: 'dark' | 'light' }) {
   if (helpers.length === 0) return null;
   return (
     <div style={{ margin: '12px 16px 0', background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
@@ -1028,7 +1033,7 @@ export function HelpersPanel({ helpers }: { helpers: Helper[] }) {
       {helpers.map((h, i) => { const last = i === helpers.length - 1; const needs = h.state === 'waiting_permission' || h.state === 'waiting_input'; return (
         <div key={h.id} data-helper data-last={last ? 'true' : 'false'} data-needs-you={needs ? 'true' : 'false'} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, height: 44, padding: '0 12px 0 28px', background: needs ? 'var(--sidebar)' : 'transparent', opacity: h.state === 'exited' ? .6 : 1 }}>
           <span style={{ position: 'absolute', left: 14, top: 0, height: last ? 22 : '100%', width: 1, background: 'var(--input)' }} /><span style={{ position: 'absolute', left: 14, top: 21, width: 10, height: 1, background: 'var(--input)' }} />
-          <Bot tool="claude" state={st(h)} pose={1} size={20} theme="dark" />
+          <Bot seed={`${parentId}:${h.id}`} tool={tool} state={st(h)} pose={1} size={20} theme={theme} />
           <span style={{ display: 'flex', flexDirection: 'column', gap: 1, flexGrow: 1, minWidth: 0 }}><span style={{ fontSize: 13, lineHeight: '16px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.kind} · {h.task}</span></span>
           <Badge state={st(h)} />
         </div>); })}
@@ -1108,7 +1113,7 @@ git commit -m "feat(overlay): reading mode for long reports and diffs"
 
 ---
 
-### Task 7: Queue bandeau and Tab navigation
+### Task 7: Queue bandeau and Alt+ArrowRight navigation
 
 **Files:**
 - Create: `apps/overlay/src/surface/QueueBar.tsx`, `apps/overlay/src/surface/queue.ts`
@@ -1117,8 +1122,8 @@ git commit -m "feat(overlay): reading mode for long reports and diffs"
 
 **Interfaces:**
 - `waitingQueue(sessions: Session[]): Session[]` (pending sessions, oldest `lastActivityAt`-of-ask first: use `startedAt` of the pending bot order as kept by the daemon: pending sessions sorted by the time their state last changed, i.e. `lastActivityAt` ascending), `nextWaiting(sessions, currentId): string | null` (the next pending after `currentId` in queue order, wrapping; never returns a non-pending id; `null` when nothing else waits).
-- `<QueueBar current: Session; queue: Session[]; autoAdvance: boolean; onToggleAuto(); onNext(); onPick(id) />`: "Waiting for you · i of n", the queued bots as 32 px rings (the current one with a 2 px `var(--sidebar-primary)` ring), `Next` with `Kbd Tab`; hidden when `queue.length < 2`.
-- Machine: event `{ type: 'next'; id: string | null }` → in `session`, `selectedId = id` when not null, else `list` with the "all caught up" line for 2 s then `close` (`startTimer('caught', 2000)`; `caughtElapsed` → handle). The `Tab` key (Plan 2 `onNextAsk`) dispatches `next` with `nextWaiting(...)`.
+- `<QueueBar current: Session; queue: Session[]; theme: 'dark' | 'light'; autoAdvance: boolean; onToggleAuto(); onNext(); onPick(id) />`: "Waiting for you · i of n", the queued bots as 32 px rings (the current one with a 2 px `var(--sidebar-primary)` ring), `Next` with `Kbd Alt →`; hidden when `queue.length < 2`. Every avatar uses `seed={session.id}` and the current theme.
+- Machine: event `{ type: 'next'; id: string | null }` → in `session`, `selectedId = id` when not null, else `list` with the "all caught up" line for 2 s then `close` (`startTimer('caught', 2000)`; `caughtElapsed` → handle). The `Alt+ArrowRight` key (Plan 2 `onNextAsk`) dispatches `next` with `nextWaiting(...)`.
 - Auto-advance: after `onDecide`/`onReply` in the session view, when `autoAdvance` is on and the daemon confirms (`pending` gone on the current bot), dispatch `next` with the computed next id; stored in `localStorage['ledge.autoAdvance']`, default on.
 
 - [ ] **Step 1: Write the failing test**
@@ -1150,7 +1155,7 @@ describe('queue', () => {
   it('QueueBar shows position, rings and Next', () => {
     const onNext = vi.fn(), onPick = vi.fn();
     const q = waitingQueue(sessions);
-    render(<QueueBar current={q[1]!} queue={q} autoAdvance onToggleAuto={() => {}} onNext={onNext} onPick={onPick} />);
+    render(<QueueBar theme="dark" current={q[1]!} queue={q} autoAdvance onToggleAuto={() => {}} onNext={onNext} onPick={onPick} />);
     expect(screen.getByText('Waiting for you · 2 of 3')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Next/ })); expect(onNext).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /Then: Nova/ })); expect(onPick).toHaveBeenCalledWith('c');
@@ -1197,7 +1202,7 @@ import { Bot } from '../bots/Bot';
 import { botState, poseFor } from '../bots/poseFor';
 import { Button } from '../ui/Button';
 import { Kbd } from '../ui/Kbd';
-export function QueueBar({ current, queue, autoAdvance, onToggleAuto, onNext, onPick }: { current: Session; queue: Session[]; autoAdvance: boolean; onToggleAuto: () => void; onNext: () => void; onPick: (id: string) => void }) {
+export function QueueBar({ current, queue, autoAdvance, onToggleAuto, onNext, onPick, theme }: { theme: 'dark' | 'light'; current: Session; queue: Session[]; autoAdvance: boolean; onToggleAuto: () => void; onNext: () => void; onPick: (id: string) => void }) {
   if (queue.length < 2) return null;
   const i = queue.findIndex(s => s.id === current.id);
   return (
@@ -1205,10 +1210,10 @@ export function QueueBar({ current, queue, autoAdvance, onToggleAuto, onNext, on
       <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>Waiting for you · {i + 1} of {queue.length}</span>
       <span style={{ flexGrow: 1 }} />
       <span style={{ display: 'flex', gap: 4 }}>
-        {queue.map(s => <button key={s.id} type="button" aria-label={s.id === current.id ? `Current: ${s.name}` : `Then: ${s.name}`} onClick={() => onPick(s.id)} style={{ width: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9999, background: s.id === current.id ? 'var(--secondary)' : 'transparent', border: `${s.id === current.id ? 2 : 1}px solid ${s.id === current.id ? 'var(--sidebar-primary)' : 'var(--border)'}`, cursor: 'pointer', padding: 0, lineHeight: 0 }}><Bot tool={s.tool} state={botState(s)} pose={poseFor(s.name, s.state)} size={20} theme="dark" /></button>)}
+        {queue.map(s => <button key={s.id} type="button" aria-label={s.id === current.id ? `Current: ${s.name}` : `Then: ${s.name}`} onClick={() => onPick(s.id)} style={{ width: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9999, background: s.id === current.id ? 'var(--secondary)' : 'transparent', border: `${s.id === current.id ? 2 : 1}px solid ${s.id === current.id ? 'var(--sidebar-primary)' : 'var(--border)'}`, cursor: 'pointer', padding: 0, lineHeight: 0 }}><Bot seed={s.id} readOnly={s.source === 'hook_only'} tool={s.tool} state={botState(s)} pose={poseFor(s.id, s.state)} size={20} theme={theme} /></button>)}
       </span>
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted-foreground)', cursor: 'pointer' }}><input type="checkbox" checked={autoAdvance} onChange={onToggleAuto} style={{ margin: 0 }} />auto next</label>
-      <Button variant="outline" size="sm" onClick={onNext}>Next <Kbd>Tab</Kbd></Button>
+      <Button variant="outline" size="sm" onClick={onNext}>Next <Kbd>Alt →</Kbd></Button>
     </div>
   );
 }
@@ -1225,7 +1230,7 @@ Expected: PASS.
 
 ```bash
 git add apps/overlay
-git commit -m "feat(overlay): waiting queue bandeau, Tab navigation and auto-advance"
+git commit -m "feat(overlay): waiting queue bandeau, Alt+ArrowRight navigation and auto-advance"
 ```
 
 ---
@@ -1254,8 +1259,8 @@ Run in WSL with the overlay running on Windows (`pnpm --filter overlay tauri dev
 8. `ledge codex`: an approval box is detected and answered with y; the turn-complete message shows as a report.
 9. `ledge cursor`: a shell approval is detected and denied with n.
 10. Kill the daemon (`pkill -f "ledge daemon"`), start another `ledge claude`: the daemon restarts, old bots reappear, the dead one retires after 10 min.
-11. Ctrl+Alt+L, J/K/Tab/Y/N/Esc work; the coachmark shows the first three times.
-12. Three asks at once: the queue bandeau says 1 of 3, Tab moves on, "all caught up" appears at the end.
+11. Ctrl+Alt+L, J/K/Alt+Right/Y/N/Esc work; Tab keeps native focus navigation; the coachmark shows the first three times.
+12. Three asks at once: the queue bandeau says 1 of 3, Alt+Right moves on, "all caught up" appears at the end.
 ```
 
 - [ ] **Step 2: Update the READMEs**
@@ -1273,8 +1278,53 @@ git push
 
 ---
 
+### Task 9: Rich-screen parity with the approved prototype
+
+**Files:**
+- Modify: `apps/overlay/src/surface/cards/PermissionCard.tsx`, `QuestionCard.tsx`, `DiffCard.tsx`, `PlanCard.tsx`, `ReportCard.tsx`, `ActivityPanel.tsx`, `HelpersPanel.tsx`, `src/surface/SessionView.tsx`, `QueueBar.tsx`, `queue.ts`, `Surface.tsx`, `packages/ledge/src/daemon/state.ts`
+- Test: `apps/overlay/test/rich-prototype-parity.test.tsx`, `test/activity.test.tsx`, `test/queue.test.tsx`, `packages/ledge/test/state.test.ts`
+- Modify: `docs/checklist.md`
+
+**Consumes:** Plan 2 Task 3's Bot/material/motion API, Plan 2 Task 13's focus/countdown/acknowledgement contracts, and this plan's verified adapter messages. The source reference is `docs/mockups/ledge-prototype.html`; no browser-simulation state transition is copied into the daemon.
+
+**Interfaces:**
+- Pass `theme`, `parentId`, and verified parent `tool` through `SessionView` to `HelpersPanel`; pass `theme` to `QueueBar`. Queue avatars use session IDs, helper avatars use `${parentId}:${helper.id}` as seeds. Motion preference and disconnected/frozen state apply to all.
+- A helper decision is an existing `session.decide` routed to the parent only when `session.pending.helperId === helper.id`. Render a helper's actionable card from that exact `pending`; otherwise show its waiting status without an unrelated action. Do not synthesize an independent helper command channel or an auto-grant policy.
+- Scoped authorization and true relaunch are capability boundaries from spec section 7 bis. With this plan's current protocol, scoped controls remain disabled with an explanation, and the finished-session action says “Open terminal to relaunch”. A focus action never revives the exited ID or reports a new session.
+- Queue auto-advance observes resolution of the exact selected pending plus the navigation revision; manual navigation and plan modification cancel it. `caughtElapsed` only closes when pointer/focus is outside and no draft is being edited. Tab is not intercepted.
+
+- [ ] **Step 1: Add the rich-screen interaction tests**
+
+Use the fake daemon to pin these assertions:
+
+- Switching dark to light changes all main/helper/queue SVGs from Signal to Galet without replacing their identity; report/reading mode inherits the same preference.
+- Choosing a radio option sends its actual option value; custom text is sent verbatim. The draft and choice survive navigating away and back.
+- A diff exposes collapsible files, safe text rendering, counts, and a 560 px reading view; unsupported “Always” cannot send a one-shot decision. Refusal does not become a success report.
+- “Change it” sends the supported denial/exit-plan operation, preserves the session and focuses its reply field; it does not auto-advance. A stale daemon response after opening another session never reopens the old card.
+- With two waiting helpers and a separate parent request, only a card matching `pending.helperId` is actionable. Resolving that helper changes only its state; the parent is not marked complete and another helper's request remains visible.
+- Interrupt sends the adapter's actual interrupt command, waits for reported state and leaves no fabricated success count. Disconnected/read-only disables interruption, decisions, quick replies and text replies.
+- A finished session keeps closed eyes and its immutable exited ID. “Open terminal to relaunch” calls focus only and never mutates the session to working. An eventual real launch is registered under a new ID by the launcher.
+- After the last confirmed request, “all caught up” appears; a pointer, keyboard focus or edited draft prevents the 2 s automatic collapse.
+
+- [ ] **Step 2: Run the tests and locate the remaining integration gaps**
+
+Run `pnpm --filter overlay test rich-prototype-parity activity queue && pnpm --filter ledge test state`; expect the new assertions to fail before implementing their missing wiring.
+
+- [ ] **Step 3: Complete the card and queue wiring**
+
+Implement the interfaces above, replacing the old hard-coded helper tool/theme and indiscriminate helper reset. Keep the parent-owned pending limitation explicit. Separate plan modification from generic auto-advancing denial. Preserve draft/selection maps by stable session ID; retain authoritative status until confirmed by the daemon. Real progress and result counts come from the adapters, not the prototype's “12 tests passed” sample.
+
+- [ ] **Step 4: Verify all twelve approved scenarios**
+
+Run `pnpm --filter overlay test && pnpm --filter ledge test && pnpm typecheck`. Compare these scenarios against the approved reference in dark/Signal and light/Galet: overview, permission, question, diff, plan, helpers, long command, report, error, exited, read-only, team/connection. Plan 2 Task 13 supplies the base view checks; this task completes the rich screens. Test 0/5/12 sessions, reduced motion, keyboard-only navigation, draft retention and lost connection.
+
+Record browser visual/motion results separately from the Windows+WSL integration checklist. Browser checks do not prove terminal focus, global shortcut registration, real scoped grants, relaunch or retirement. Extend `docs/checklist.md` with both themes, a renamed bot retaining its motion identity, OS reduced motion and a helper request that cannot be misrouted. Commit after both suites pass; keep real-environment checks visibly outstanding until run.
+
+---
+
 ## Self-review notes
 
 - Spec coverage for this plan: section 4 Codex and Cursor adapters, hooks setup → Tasks 1, 3; sub-agents → Task 3 (daemon) and Task 5 (overlay); section 5 diff/plan/report/command/finished cards, reading mode, queue → Tasks 4 to 7; section 9 manual checklist → Task 8; the "last assistant message" source for the report card (transcript) → Task 2, with the fallback copy pinned by Review Focus 4.
 - Names consistent with Plans 1 and 2: `Adapter`, `adapterFor`, `mapClaudeHook`, `mapCodexNotify`, `mapCursorHook`, `mergeCodexNotify`, `mergeCursorHooks`, `lastAssistantMessage`, `diffDetail`, `viewFor`, `parseDiff`, `renderMarkdown`, `inline`, `waitingQueue`, `nextWaiting`, `measureSessionH`.
+- Revision 2: Plan 2 Task 3 owns Signal/Galet and motion identity; Plan 2 Task 13 owns the surface/focus/confirmation contract; this plan's Task 9 owns rich-card, helper and queue parity. Spec section 7 bis records the deliberate simulation/production boundaries.
 - Review Focus pins: 1 → Task 1 trap fixture `codex-trap-yn-in-output`; 2 → Task 3 "a helper permission does not erase a different pending"; 3 → Task 4 "caps at 400 lines" (daemon cap in `diffDetail`, overlay cap in `DiffCard`); 4 → Task 2 truncated/garbage transcript tests and Task 4 ReportCard fallback; 5 → Task 7 "never advances to a bot that stopped waiting".

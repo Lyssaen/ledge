@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-09-ledge-design.md` (sections 3, 4, 8, 9, 10 drive this plan; the overlay (section 5, 6, 7) and the Codex and Cursor adapters are separate plans).
 
+**Design revision 2 approved:** the [local interactive prototype](../../mockups/ledge-prototype.html) is the visual reference for Signal in dark mode and Galet in light mode. It does not change this plan's transport, launcher or adapter contract. Read spec section 7 bis before connecting UI actions: simulated timers, results, scoped grants and session restarts are not production protocol behavior. The core remains the source of truth; visual approval is not implementation completion.
+
 ## Global Constraints
 
 - Node 22 or newer; TypeScript strict; ESM only (`"type": "module"`).
@@ -20,6 +22,8 @@
 - A hook-sourced `pending` is never replaced by a pane-sourced one. A pane match is ignored for 2 s after any hook event on the same session.
 - After an injection the adapter re-reads the last 5 lines up to 3 times over 600 ms; if the prompt is still there the decision fails and nothing is re-sent.
 - `exited` is terminal: `SessionEnd` and `PaneGone` clear `pending`. Exited sessions are removed 10 minutes after exit.
+- Preserve stable session/helper IDs for the overlay's visual identity; theme, material and animation phase remain presentation concerns. `idle`, `working` and `exited` stay semantically distinct. UI acknowledgement timers must never produce daemon state transitions.
+- The current `session.decide` contract is a one-shot decision. Do not interpret it as a persistent grant or add auto-accept behavior from the prototype. Similarly, focusing a terminated session does not relaunch it; an actual new launch requires a new registered ID.
 - `lastActivityAt` advances only when the pane content hash changes. Pane poll every 1 s; dead-pane check every 5 s.
 - Bot names come from a fixed list of 64, never reused while a bot with that name is alive; `--name <n>` overrides.
 - `ledge setup` appends to existing hook arrays in `~/.claude/settings.json`, never replaces them, and is idempotent (the user already has another tool's hooks on every event).

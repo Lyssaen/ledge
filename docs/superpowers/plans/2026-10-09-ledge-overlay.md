@@ -8,7 +8,9 @@
 
 **Tech Stack:** Vite 6, React 19, TypeScript 5 strict, Tailwind v4 (`@tailwindcss/vite`), hand-written shadcn-style primitives on the Shadcn Red oklch tokens, Geist and Geist Mono, Vitest 2 + jsdom + Testing Library + user-event, `ws` for the mock daemon in tests, Tauri v2 (`@tauri-apps/api`, `@tauri-apps/plugin-global-shortcut`), Rust stable on Windows.
 
-**Spec:** `docs/superpowers/specs/2026-10-09-ledge-design.md` (sections 5, 6, 7 and the overlay parts of 8 and 9). Design canvas: https://claude.ai/artifact/57oDjsKdabQBmPgAXn15mc (boards 1 to 5, 9 is the behaviour reference, 6 and 10 the bots, 18 keyboard). Design system README (motion, tokens): https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV
+**Spec:** `docs/superpowers/specs/2026-10-09-ledge-design.md`, revision 2 (sections 5, 6, 7, 7 bis and the overlay parts of 8 and 9). The approved local reference is [the interactive prototype](../../mockups/ledge-prototype.html), also available as [standalone HTML](../../mockups/ledge-prototype-standalone.html). Its source is `docs/mockups/prototype/`. The remote canvas and Shadcn Red artifact are historical references; they are not prerequisites for porting the approved mascots.
+
+**Approved design revision:** Signal in dark mode, Galet in light mode; the same identities and expressions survive a theme change. Task 3 replaces the old mascot port. Task 13 is a required integration gate for the revised interactions; the earlier scaffold snippets must be completed against its contracts before claiming spec coverage. The design is approved; the implementation checkboxes remain unchecked because this repository currently contains documentation and prototypes, not the production overlay.
 
 **Depends on:** `packages/protocol` from Plan 1 Task 1 (`docs/superpowers/plans/2026-10-09-ledge-core-wsl.md`). If that commit is not on `main` yet, create the package exactly as Plan 1 Task 1 specifies before Task 1 here, in a separate commit, so both plans converge on identical files. Nothing else from Plan 1 is needed: every test here runs against the mock daemon.
 
@@ -16,10 +18,12 @@
 
 - React and UI code runs and is tested in WSL (`pnpm --filter overlay test`); the Tauri shell compiles only on Windows with Rust installed, from the same checkout opened through `\\wsl.localhost\...` or a Windows clone.
 - Daemon address `ws://127.0.0.1:47831`; reconnect every 2 s, backoff to 30 s; the surface stays visible while unreachable, greyed, bots frozen.
-- Colors come only from `src/styles/tokens.css` (the Shadcn Red oklch variables); dark theme by default, light theme complete; no other color literals in components.
+- Colors come only from `src/styles/tokens.css` (Shadcn Red plus the exact mascot tokens in spec section 6); dark/Signal by default, complete light/Galet theme; no other color literals in components. Material follows theme, with no independent picker.
 - Motion: `grow` 320 ms `cubic-bezier(.22,1,.36,1)`, `shrink` 260 ms `cubic-bezier(.65,0,.35,1)` with 60 ms delay, `pop` 260 ms `cubic-bezier(.34,1.3,.64,1)` on a bot's scale only; fades in 180 ms after 140 to 200 ms, out 100 ms; hover and color 150 ms; `VITE_LEDGE_MOTION=0` sets every duration and delay to 0 (tests).
-- Sizes: handle 28 px wide, bots 12/20 px (11/18 past five), gap 5 (3), bubble 336×128, list 380 wide with 56 px rows, session 420, reading mode 560; the surface height always follows its content, vertically centred on the screen, clamped to 40 px from the top and bottom.
-- Timings: edge hover dwell 180 ms, leave 500 ms, bubble 4 s paused on hover, decide-in-bubble holds 900 ms, bot grows 280 ms then the bubble unfolds 260 ms later, list rows cascade 24 ms apart.
+- Sizes: handle 28 px wide, bots 12/20 px (11/18 past five), gap 5 (3), bubble 336 px wide with measured height, list 380 wide with 58 px rows, session 420, reading mode 560; the surface height follows its content and is clamped to 40 px from the top and bottom. Test 0, 5, 10 and 12 sessions.
+- Timings: edge hover dwell 180 ms, leave 500 ms, bubble 4 s paused on hover/focus/hidden document with exact remaining time, decision presentation at least 900 ms plus daemon confirmation, bot grows 280 ms then the bubble unfolds 260 ms later (540 ms total), list rows cascade 24 ms apart. Theme/material 240 ms, nod 650 ms, card exit 300 ms after 180 ms; no success inferred from a timer.
+- Reduced motion: respect the OS and app preference in both CSS and JS; stop ambient loops in hidden/inactive/disconnected views and at ≤20 px. `VITE_LEDGE_MOTION=0` disables presentation animation, not functional countdowns. Session/helper IDs seed the motion; a theme change or rename must not remount/reset an avatar.
+- Keyboard: Tab/Shift+Tab keep native focus navigation. `Alt+ArrowRight` selects the next pending request; hidden layers are inert; single-letter commands are ignored in editable fields and selects.
 - Copy: sentence case, no emoji, "Claude Code", "Codex", "Cursor Agent"; relative time under a day ("2m", "48s ago").
 - Accessibility: every control is a real `button`, `a`, `input` or `label`; icon-only buttons carry `aria-label`; text contrast at least 4.5:1 in both themes.
 
@@ -45,8 +49,12 @@ apps/overlay/
   src/motion.ts                      # curves, durations, scale(), transition()
   src/daemon/client.ts               # DaemonClient: ws, reconnect, send, status
   src/daemon/store.ts                # daemonStore: sessions map, status, useDaemon()
-  src/bots/poseFor.ts                # pose = (hash(name) + stateIndex) mod 3
-  src/bots/Bot.tsx                   # the mascot (port of Bot.dc.html)
+  src/bots/poseFor.ts                # deterministic pose from stable ID + state
+  src/bots/material.ts              # dark -> Signal, light -> Galet
+  src/bots/Bot.tsx                   # approved local layered SVG
+  src/bots/useBotMotion.ts           # independent blink/gaze lifecycle
+  src/bots/bots.css                  # expressions, materials and reduced motion
+  src/motionPreferences.ts           # app + OS preferences, shared by all views
   src/surface/geometry.ts            # pure layout: slots, handle, bubble, panel rects, hot zones
   src/surface/machine.ts             # pure mode machine: transition(state, event) -> state + effects
   src/surface/controller.ts          # timers and effects around the machine
@@ -530,129 +538,85 @@ git commit -m "feat(overlay): daemon websocket client with backoff and the sessi
 
 ---
 
-### Task 3: The Bot mascot component
+### Task 3: Validated Signal / Galet mascot component
 
 **Files:**
-- Create: `apps/overlay/src/bots/poseFor.ts`, `apps/overlay/src/bots/Bot.tsx`
-- Test: `apps/overlay/test/bot.test.tsx`
+- Create: `apps/overlay/src/bots/poseFor.ts`, `material.ts`, `Bot.tsx`, `useBotMotion.ts`, `bots.css`, `apps/overlay/src/motionPreferences.ts`
+- Modify: `apps/overlay/src/styles/tokens.css`, `apps/overlay/src/styles/base.css`
+- Test: `apps/overlay/test/bot.test.tsx`, `apps/overlay/test/bot-motion.test.tsx`
+
+**References:** Spec sections 6 and 7; `docs/mockups/prototype/mascot-svg.js`, `mascot.css`, `mascots.js`, and `prototype.css`. Port the approved local SVG geometry and layered expressions, not the old remote canvas. The prototype's global timers and DOM mutation code are references for motion only; use React lifecycle cleanup in the product.
 
 **Interfaces:**
-- Produces: `poseFor(name: string, state: SessionState): 1 | 2 | 3` (`readonly` and `starting`/`idle` map to 1); `botState(session: Session): BotState` where `BotState = 'working' | 'question' | 'approval' | 'done' | 'error' | 'readonly'` (`waiting_input` → `question`, `waiting_permission` → `approval`, `exited` → `done` unless `exitCode` is a non-zero number → `error`, `error` → `error`, `hook_only` and no terminal → `readonly`, else `working`); `<Bot tool state pose size theme="dark"|"light" />` rendering one `svg` with `role="img"` and an `aria-label` like `claude bot, needs approval, on the ledge`.
-- The SVG paths, poses and per-state animations are a direct port of `project/Bot.dc.html` on the canvas (read it with the Artifact tool, `path: "project/Bot.dc.html"`); every eye and prop layer is always rendered and crossfaded (`opacity` with `transition: fadeIn/fadeOut`), the head group transitions `transform` with the shrink curve, the light's `fill` transitions 300 ms.
+- `BotState = 'starting' | 'working' | 'question' | 'approval' | 'idle' | 'done' | 'error' | 'readonly'`. `botState(session: Session): BotState` maps `waiting_input` to `question`, `waiting_permission` to `approval`, `exited` to `done`, and preserves `starting`, `working`, `idle`, `error`. A nonzero exit code is shown by the status badge/text; an exited mascot always remains still with closed eyes. `readonly` is retained for the read-only badge/fallback, never used to erase a known session expression.
+- `poseFor(seed: string, state: SessionState): 1 | 2 | 3`, deterministic from stable session/helper identity and state. All callers use the ID, not the mutable display name.
+- `materialFor(theme: 'dark' | 'light'): 'signal' | 'pebble'` returns Signal for dark and Galet for light. No user-selectable material prop.
+- `BotProps = { tool: Tool; state: BotState; pose: 1 | 2 | 3; size: number; theme: 'dark' | 'light'; seed: string; readOnly?: boolean; frozen?: boolean; reducedMotion?: boolean; className?: string }`. `Bot(props: BotProps): JSX.Element` returns a persistent SVG with unique gradient IDs, a descriptive `aria-label`, `data-material`, `data-state`, and `data-simplified` attributes.
+- `useMotionPreferences(): { reduced: boolean; setReduced(value: boolean): void }` combines the persisted app preference, the live OS media query and `VITE_LEDGE_MOTION=0`; OS reduction cannot be overridden to force animation.
+- `useBotMotion(ref: RefObject<SVGSVGElement | null>, options: { seed: string; state: BotState; enabled: boolean }): void` handles individual blink/gaze scheduling; disabled for small size, read-only/frozen state, hidden document or inactive surface layer. Release all timers/listeners on unmount.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Pin semantic state and material behavior**
 
-`apps/overlay/test/bot.test.tsx`:
-```tsx
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { Bot } from '../src/bots/Bot';
-import { poseFor, botState } from '../src/bots/poseFor';
-import { fakeSession } from './mockDaemon';
-
-describe('poseFor', () => {
-  it('is deterministic per name and state, in 1..3', () => {
-    const a = poseFor('Otto', 'working'), b = poseFor('Otto', 'working');
-    expect(a).toBe(b); expect([1, 2, 3]).toContain(a);
-  });
-  it('varies across a team for the same state', () => {
-    const poses = new Set(['Otto', 'Pim', 'Nova', 'Bix', 'Lu', 'Max', 'Ida'].map(n => poseFor(n, 'waiting_permission')));
-    expect(poses.size).toBeGreaterThan(1);
-  });
-  it('readonly has a single pose', () => { expect(poseFor('Zoe', 'idle')).toBe(poseFor('Zoe', 'starting')); });
-});
-
-describe('botState', () => {
-  it('maps session states to bot states', () => {
-    expect(botState(fakeSession('a', { state: 'waiting_permission' }))).toBe('approval');
-    expect(botState(fakeSession('a', { state: 'waiting_input' }))).toBe('question');
-    expect(botState(fakeSession('a', { state: 'exited', exitCode: 0 }))).toBe('done');
-    expect(botState(fakeSession('a', { state: 'exited', exitCode: 2 }))).toBe('error');
-    expect(botState(fakeSession('a', { state: 'error' }))).toBe('error');
-    expect(botState(fakeSession('a', { source: 'hook_only', tmuxSession: null }))).toBe('readonly');
-    expect(botState(fakeSession('a', { state: 'idle' }))).toBe('working');
-  });
-});
-
-describe('<Bot>', () => {
-  it('renders an svg with a descriptive label and the requested size', () => {
-    render(<Bot tool="claude" state="approval" pose={1} size={32} theme="dark" />);
-    const svg = screen.getByRole('img', { name: /claude bot, needs your approval, on the ledge/ });
-    expect(svg).toHaveAttribute('width', '32');
-  });
-  it('uses the status color for the eyes', () => {
-    const { container } = render(<Bot tool="codex" state="question" pose={1} size={20} theme="dark" />);
-    const eyes = container.querySelector('[data-layer="eyes-round"]');
-    expect(eyes).toHaveAttribute('fill', 'var(--warning)');
-    expect(eyes).toHaveStyle({ opacity: '1' });
-    expect(container.querySelector('[data-layer="eyes-scan"]')).toHaveStyle({ opacity: '0' });
-  });
-  it('changes head shape with the tool', () => {
-    const a = render(<Bot tool="claude" state="working" pose={1} size={20} theme="dark" />).container.querySelector('[data-layer="head"]')!.getAttribute('d');
-    const b = render(<Bot tool="cursor" state="working" pose={1} size={20} theme="dark" />).container.querySelector('[data-layer="head"]')!.getAttribute('d');
-    expect(a).not.toBe(b);
-  });
-});
-```
-
-- [ ] **Step 2: Run the tests to verify they fail**
-
-Run: `pnpm --filter overlay test bot`
-Expected: FAIL, modules not found.
-
-- [ ] **Step 3: Implement**
-
-`apps/overlay/src/bots/poseFor.ts`:
-```ts
-import type { Session, SessionState } from '@ledge/protocol';
-export type BotState = 'working' | 'question' | 'approval' | 'done' | 'error' | 'readonly';
-const STATE_INDEX: Record<SessionState, number> = { starting: 0, working: 0, waiting_input: 1, waiting_permission: 2, idle: 0, exited: 3, error: 4 };
-function hash(s: string): number { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
-export function poseFor(name: string, state: SessionState): 1 | 2 | 3 {
-  return ((hash(name) + STATE_INDEX[state]) % 3 + 1) as 1 | 2 | 3;
-}
-export function botState(s: Session): BotState {
-  if (s.state === 'error') return 'error';
-  if (s.state === 'exited') return typeof s.exitCode === 'number' && s.exitCode !== 0 ? 'error' : 'done';
-  if (s.state === 'waiting_permission') return 'approval';
-  if (s.state === 'waiting_input') return 'question';
-  if (s.source === 'hook_only' && !s.tmuxSession) return 'readonly';
-  return 'working';
-}
-```
-
-`apps/overlay/src/bots/Bot.tsx`: port `project/Bot.dc.html` from the canvas. Keep its `heads`, eye paths, pose table (`working1..readonly1`) and keyframes verbatim; replace the `{{hole}}` style strings with React style objects and the hard-coded colors with CSS variables: body `var(--secondary)`, line `var(--border)` (use `#ffffff40` in dark via `var(--input)`), bg `var(--well)`, eye colors `var(--info)`, `var(--warning)`, `var(--danger-text)`, `var(--success)`, `var(--muted-foreground)`. Every layer `<path>` gets `data-layer="<name>"` (`head`, `eyes-scan`, `eyes-round`, `eyes-tilt`, `eyes-up`, `eyes-down`, `eyes-dots`, `eyes-ticks`, `eyes-closed`, `eyes-happy`, `eyes-x`, `eyes-sad`, `brow`, `fist`, `rings`, `smoke`, `dots`, `bubble`, `z`, `ledge`, `hands1`, `card`) and `style={{ opacity: on ? 1 : 0, transition: transition([['opacity', on ? 'fadeIn' : 'fadeOut', 0], ['fill', 'hover'], ['stroke', 'hover']]), animation: on ? anim : undefined }}`. The keyframes go in a `<style>` tag rendered once (module-level flag). Signature:
+In `bot.test.tsx`, cover these assertions with `fakeSession` and Testing Library:
 
 ```tsx
-export interface BotProps { tool: Tool; state: BotState; pose: 1 | 2 | 3; size: number; theme: 'dark' | 'light'; className?: string }
-export function Bot({ tool, state, pose, size, theme, className }: BotProps): JSX.Element
+expect(botState(fakeSession('a', { state: 'starting' }))).toBe('starting');
+expect(botState(fakeSession('a', { state: 'idle' }))).toBe('idle');
+expect(botState(fakeSession('a', { state: 'working' }))).toBe('working');
+expect(botState(fakeSession('a', { state: 'waiting_permission' }))).toBe('approval');
+expect(botState(fakeSession('a', { state: 'waiting_input' }))).toBe('question');
+expect(botState(fakeSession('a', { state: 'exited', exitCode: 2 }))).toBe('done');
+expect(botState(fakeSession('a', { state: 'error' }))).toBe('error');
+expect(botState(fakeSession('a', { state: 'working', source: 'hook_only', tmuxSession: null }))).toBe('working');
+expect(materialFor('dark')).toBe('signal');
+expect(materialFor('light')).toBe('pebble');
+
+const props = { tool: 'claude' as const, state: 'idle' as const, pose: 1 as const, size: 32, seed: 'session-a' };
+const { container, rerender } = render(<Bot {...props} theme="dark" />);
+const svg = container.querySelector('svg');
+expect(svg).toHaveAttribute('data-material', 'signal');
+rerender(<Bot {...props} theme="light" />);
+expect(container.querySelector('svg')).toBe(svg);
+expect(svg).toHaveAttribute('data-material', 'pebble');
+expect(svg).toHaveAttribute('data-state', 'idle');
 ```
-and the label is `${tool} bot, ${LABELS[key]}` with `LABELS` copied from the canvas file's `label` fields (`'needs your approval, on the ledge'`, `'has a question, brow up'`, …).
 
-- [ ] **Step 4: Run the tests to verify they pass**
+Add separate tests for different tool silhouettes, all seven semantic expressions, unique gradient IDs across instances, a 12 px simplified avatar, a 48 px detailed avatar, and read-only styling without loss of state. Assert that the `idle` smile and `done` closed-eye layers differ.
 
-Run: `pnpm --filter overlay test bot`
-Expected: PASS, 7 tests.
+- [ ] **Step 2: Run tests before implementation**
 
-- [ ] **Step 5: Commit**
+Run `pnpm --filter overlay test bot`; expect failures for missing modules/behavior.
 
-```bash
-git add apps/overlay/src/bots apps/overlay/test/bot.test.tsx
-git commit -m "feat(overlay): Bot mascot with three poses per state and crossfaded transitions"
-```
+- [ ] **Step 3: Port the geometry, material tokens and persistent layers**
+
+Implement the interfaces above. Add `--bot-shell-top`, `--bot-shell-bottom`, `--bot-shell-line`, `--bot-visor` with the exact theme values in spec section 6. Add separate `--bot-eye-*` tokens for the seven expressions; keep badge colors in the existing semantic tokens. Import `bots.css` once from `base.css`, not from a module-level render flag. Use `useId()` for each SVG gradient reference. Keep head, pose, gaze, eyes and hand groups mounted across theme/state changes.
+
+At ≤20 px, use the cropped head viewBox, hide feet/antenna/hand/shadow and stop ambient movement. At 32/48 px, preserve the approved layers. Material interpolation is 240 ms, eye opacity 260 ms, posture 300 ms, with the 12/16/20/32/48 px silhouettes taken from the approved reference. Do not import the studio layout into the product.
+
+- [ ] **Step 4: Pin and implement the ambient motion lifecycle**
+
+In `bot-motion.test.tsx`, use fake timers with motion explicitly enabled. Assert deterministic but different schedules for two seeds; a theme-only rerender preserves scheduled deadlines; a new approval state triggers exactly one hand gesture; a rename leaves the seed unchanged; unmount releases all scheduled work. Then verify that read-only, frozen, exited, error, small-size, hidden/inactive and reduced-motion cases start no ambient timers.
+
+Use spec ranges: respiration 4.8–6.4 s, maximum vertical movement 0.7 SVG unit, rotation ±0.3°, stretch 1.4%; blink 180 ms every 3.4–6.7 s; gaze ±1.4 SVG unit every 2.4–4.5 s with 450 ms transition; one 850 ms hand gesture; one 650 ms nod for a received decision. State remains a daemon input, never a timer output. Connect the motion preference to CSS as well as JS scheduling.
+
+- [ ] **Step 5: Verify and commit the component**
+
+Run `pnpm --filter overlay test bot && pnpm --filter overlay typecheck`; expect all assertions to pass. In browser preview, compare the three tools in dark/Signal and light/Galet at 12, 16, 20, 32 and 48 px with the approved local mockup; check reduced motion and stable SVG identity during theme changes. Commit the component, tokens, preference hook and tests together.
 
 ---
 
 ### Task 4: Pure geometry and the surface state machine
+
+**Revision 2 integration requirement:** the machine/controller snippets below are the initial scaffold, not the final timing contract. Implement this task together with Task 13: replace cancel/restart-on-hover with remaining-time pause/resume, gate acknowledgement on daemon confirmation, and guard focus/visibility and stale events. The old short restart and unconditional `holdElapsed` examples must not ship; update their tests to the Task 13 assertions before acceptance.
 
 **Files:**
 - Create: `apps/overlay/src/surface/geometry.ts`, `apps/overlay/src/surface/machine.ts`, `apps/overlay/src/surface/controller.ts`
 - Test: `apps/overlay/test/geometry.test.ts`, `apps/overlay/test/machine.test.ts`
 
 **Interfaces:**
-- Produces (geometry): `SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 56, headerH: 56, margin: 40 }`; `slotSizes(n): { big, small, gap }` (20/12/5 up to 5 bots, 18/11/3 after); `layout(input: { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; sessionH?: number; reading?: boolean }): Layout` with `Layout = { top: number; w: number; h: number; slots: Array<{ id: string; size: number; center: number }>; handle: { top: number; h: number }; hotZones: Array<{ top: number; h: number }> }`.
+- Produces (geometry): `SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 56, margin: 40 }`; `slotSizes(n): { big, small, gap }` (20/12/5 up to 5 bots, 18/11/3 after); `layout(input: { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; bubbleH?: number; sessionH?: number; reading?: boolean }): Layout` with `Layout = { top: number; w: number; h: number; slots: Array<{ id: string; size: number; center: number }>; handle: { top: number; h: number }; hotZones: Array<{ top: number; h: number }> }`.
 - Produces (machine): `type Mode = 'handle' | 'bubble' | 'list' | 'session'`; `type SurfaceState = { mode: Mode; selectedId: string | null; bubbleId: string | null; queue: string[]; openedBy: 'mouse' | 'keyboard' | null; hot: boolean; reading: boolean; typing: boolean }`; `type SurfaceEvent = { type: 'ask'; id: string } | { type: 'askCleared'; id: string } | { type: 'removed'; id: string; remaining: string[] } | { type: 'edgeEnter' } | { type: 'edgeLeave' } | { type: 'dwellElapsed' } | { type: 'surfaceEnter' } | { type: 'surfaceLeave' } | { type: 'leaveElapsed' } | { type: 'botClick'; id: string } | { type: 'rowClick'; id: string } | { type: 'bubbleClick' } | { type: 'bubbleElapsed' } | { type: 'decidedInBubble' } | { type: 'holdElapsed' } | { type: 'back' } | { type: 'close' } | { type: 'shortcut' } | { type: 'typing'; on: boolean } | { type: 'reading'; on: boolean }`; `transition(state, event): { state: SurfaceState; effects: Effect[] }` where `Effect = { type: 'startTimer'; name: 'dwell' | 'leave' | 'bubble' | 'hold' | 'unfold'; ms: number } | { type: 'cancelTimer'; name: ... }`; `initialSurface(): SurfaceState`.
-- Produces (controller): `createSurfaceController(opts: { onState(s: SurfaceState): void; setTimeout?: typeof setTimeout; clearTimeout?: typeof clearTimeout }): { dispatch(e: SurfaceEvent): void; state(): SurfaceState; dispose(): void }` running the effects with real timers: `dwell` 180, `leave` 500, `bubble` 4000, `hold` 900, `unfold` 260 (the bot grows first, then `ask` opens the bubble after the `unfold` timer).
+- Produces (controller): `createSurfaceController(opts: { onState(s: SurfaceState): void; setTimeout?: typeof setTimeout; clearTimeout?: typeof clearTimeout }): { dispatch(e: SurfaceEvent): void; state(): SurfaceState; dispose(): void }` running the effects with real timers: `dwell` 180, `leave` 500, `bubble` 4000, `hold` 900, `unfold` 540 (the bot grows first, then `ask` opens the bubble after the `unfold` timer).
 
 Machine rules (the spec, section 5):
 - `ask` while `handle`: push to `queue` (oldest first); start `unfold`; on `unfold` elapsed with mode still `handle` → `bubble` for `queue[0]`, start `bubble` 4000.
@@ -660,9 +624,9 @@ Machine rules (the spec, section 5):
 - `askCleared`: drop from the queue; if it was the bubble's bot → back to `handle` (or `bubble` for the next queued ask, with a fresh timer).
 - `edgeEnter` in `handle` (and not `hot`): `hot = true`, start `dwell`; `dwellElapsed` with `hot` and mode `handle` → `list`, `openedBy: 'mouse'`, `hot = false`. If an `ask` arrived during the dwell, the list opens anyway (no bubble over it: `unfold` is cancelled).
 - `edgeLeave`: `hot = false`, cancel `dwell`.
-- `surfaceEnter`: cancel `leave`; in `bubble` cancel `bubble` (pause). `surfaceLeave`: in `list` with `openedBy: 'mouse'` and not `typing` → start `leave` 500; in `bubble` → start `bubble` 1500. `leaveElapsed` in `list` → `handle`.
+- `surfaceEnter`: cancel `leave`; in `bubble` pause its clock, preserving the remainder. `surfaceLeave`: in `list` with `openedBy: 'mouse'`, no typing and no focus inside → start `leave` 500; in `bubble` → resume the remainder only when neither focus nor document visibility keeps it paused. `leaveElapsed` rechecks these guards before folding.
 - `botClick`/`rowClick`/`bubbleClick` → `session` with `selectedId`, cancel every timer, `bubbleId = null`.
-- `decidedInBubble` → start `hold` 900 (bubble stays, bot changes pose); `holdElapsed` → `handle`, drop the queue head.
+- `decidedInBubble` → pause the bubble and begin acknowledgement; advance only after both the 900 ms minimum and a matching daemon confirmation. A timer alone must not remove the pending request (see Task 13).
 - `bubbleElapsed` → `handle` (the ask stays queued, the bot stays grown).
 - `back` in `session` → `list`; `close` → `handle` (cancel timers, `reading = false`); `shortcut` → `list` with `openedBy: 'keyboard'` when `handle`, else `handle`.
 - `removed` → drop from the queue; if `selectedId` was removed → `list` when `remaining.length > 0`, else `handle`; if `bubbleId` was removed → `handle`.
@@ -799,7 +763,7 @@ describe('controller timers', () => {
     const states: string[] = [];
     const c = createSurfaceController({ onState: s => states.push(s.mode), setTimeout: ((fn: () => void, ms: number) => { timers.push({ ms, fn }); return timers.length; }) as never, clearTimeout: (() => {}) as never });
     c.dispatch({ type: 'ask', id: 'a' });
-    expect(timers.at(-1)!.ms).toBe(260); timers.at(-1)!.fn();
+    expect(timers.at(-1)!.ms).toBe(540); timers.at(-1)!.fn();
     expect(c.state().mode).toBe('bubble');
     expect(timers.at(-1)!.ms).toBe(4000); timers.at(-1)!.fn();
     expect(c.state().mode).toBe('handle');
@@ -818,7 +782,7 @@ Expected: FAIL, modules not found.
 
 `apps/overlay/src/surface/geometry.ts`:
 ```ts
-export const SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 56, headerH: 56, footerH: 48, margin: 40, stripW: 6, stripH: 60 } as const;
+export const SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 56, footerH: 48, margin: 40, stripW: 6, stripH: 60 } as const;
 export type Mode = 'handle' | 'bubble' | 'list' | 'session';
 export interface Slot { id: string; size: number; center: number }
 export interface Layout { top: number; w: number; h: number; slots: Slot[]; handle: { top: number; h: number }; hotZones: Array<{ top: number; h: number }> }
@@ -829,7 +793,7 @@ export function slotSizes(n: number): { big: number; small: number; gap: number 
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-export function layout(input: { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; sessionH?: number; reading?: boolean }): Layout {
+export function layout(input: { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; bubbleH?: number; sessionH?: number; reading?: boolean }): Layout {
   const { bots, mode, screenH } = input;
   const n = bots.length; const { big, small, gap } = slotSizes(n);
   const centerY = screenH / 2;
@@ -843,8 +807,9 @@ export function layout(input: { bots: Array<{ id: string; pending: boolean }>; m
   if (mode === 'handle') return { top: handleTop, w: n === 0 ? SIZES.stripW : SIZES.handleW, h: handleH, slots, handle, hotZones };
   if (mode === 'bubble') {
     const slot = slots.find(s => s.id === input.bubbleId) ?? slots[0];
-    const top = clamp(Math.round((slot?.center ?? centerY) - 38), SIZES.margin, screenH - SIZES.margin - SIZES.bubbleH);
-    return { top, w: SIZES.bubbleW, h: SIZES.bubbleH, slots, handle, hotZones };
+    const h = Math.min(maxH, input.bubbleH ?? SIZES.bubbleH);
+    const top = clamp(Math.round((slot?.center ?? centerY) - 38), SIZES.margin, screenH - SIZES.margin - h);
+    return { top, w: SIZES.bubbleW, h, slots, handle, hotZones };
   }
   const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + 16 + n * SIZES.rowH + SIZES.footerH : (input.sessionH ?? 480));
   const top = clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h);
@@ -870,7 +835,7 @@ export type SurfaceEvent =
   | { type: 'decidedInBubble' } | { type: 'holdElapsed' } | { type: 'back' } | { type: 'close' } | { type: 'shortcut' }
   | { type: 'typing'; on: boolean } | { type: 'reading'; on: boolean };
 
-export const TIMERS: Record<TimerName, number> = { dwell: 180, leave: 500, bubble: 4000, hold: 900, unfold: 260 };
+export const TIMERS: Record<TimerName, number> = { dwell: 180, leave: 500, bubble: 4000, hold: 900, unfold: 540 };
 export const initialSurface = (): SurfaceState => ({ mode: 'handle', selectedId: null, bubbleId: null, queue: [], openedBy: null, hot: false, reading: false, typing: false });
 
 const start = (name: TimerName, ms = TIMERS[name]): Effect => ({ type: 'startTimer', name, ms });
@@ -970,7 +935,7 @@ git commit -m "feat(overlay): pure surface geometry and mode machine with timers
 - Test: `apps/overlay/test/handle.test.tsx`
 
 **Interfaces:**
-- Produces: `<Button variant="primary"|"outline"|"ghost"|"secondary" size="md"|"sm"|"icon" aria-label? onClick>` (36 px, 32 px, 36×36); `<Badge state: BotState>` renders the dot and the word (`Approval`, `Question`, `Running`, `Done`, `Error`, `Read only`) on its soft ground; `<Kbd>Y</Kbd>`; `<Handle bots: HandleBot[] slots: Slot[] big: number visible: boolean hoverId: string|null onHover(id|null) onOpen(id) />` where `HandleBot = { id: string; name: string; tool: Tool; state: BotState; pose: 1|2|3; pending: boolean; tip: string }`; `<Tooltip bot: HandleBot | null; y: number />`.
+- Produces: `<Button variant="primary"|"outline"|"ghost"|"secondary" size="md"|"sm"|"icon" aria-label? onClick>` (36 px, 32 px, 36×36); `<Badge state: BotState>` renders the dot and the word (`Starting`, `Approval`, `Question`, `Running`, `Available`, `Done`, `Error`, `Read only`) on its soft ground; `<Kbd>Y</Kbd>`; `<Handle bots: HandleBot[] slots: Slot[] big: number visible: boolean hoverId: string|null onHover(id|null) onOpen(id) />` where `HandleBot = { id: string; name: string; tool: Tool; state: BotState; pose: 1|2|3; pending: boolean; readOnly?: boolean; tip: string }`; `<Tooltip bot: HandleBot | null; y: number />`.
 - Handle rules: quiet bots at `small` (scale `small/big` of a `big` sprite), opacity 0.8 (0.55 for `done` and `readonly`); pending bots at `big`, opacity 1, with a 2 px tick at `left: -4px` in the status color; hover scales ×1.25 with the `pop` curve, background `var(--sidebar-accent)`; `aria-label` "<Name> <label>, open"; a bot that leaves the team collapses its box to 0 with a negative margin so the stack closes smoothly.
 
 - [ ] **Step 1: Write the failing test**
@@ -1060,7 +1025,9 @@ import { transition } from '../motion';
 export const BADGE: Record<BotState, { bg: string; fg: string; word: string; pulse?: boolean }> = {
   approval: { bg: 'var(--status-danger-soft)', fg: 'var(--danger-text)', word: 'Approval' },
   question: { bg: 'var(--status-warning-soft)', fg: 'var(--warning)', word: 'Question' },
-  working: { bg: 'var(--status-info-soft)', fg: 'var(--info)', word: 'Running', pulse: true },
+  starting: { bg: 'var(--status-info-soft)', fg: 'var(--info)', word: 'Starting' },
+  idle: { bg: 'var(--status-success-soft)', fg: 'var(--success)', word: 'Available' },
+  working: { bg: 'var(--status-info-soft)', fg: 'var(--info)', word: 'Running' },
   done: { bg: 'var(--status-success-soft)', fg: 'var(--success)', word: 'Done' },
   error: { bg: 'var(--status-danger-soft)', fg: 'var(--danger-text)', word: 'Error' },
   readonly: { bg: 'transparent', fg: 'var(--muted-foreground)', word: 'Read only' }
@@ -1095,8 +1062,8 @@ import { transition } from '../motion';
 import type { Slot } from './geometry';
 import { slotSizes } from './geometry';
 
-export interface HandleBot { id: string; name: string; tool: Tool; state: BotState; pose: 1 | 2 | 3; pending: boolean; tip: string }
-const LABEL: Record<BotState, string> = { approval: 'needs your approval', question: 'has a question', working: 'working', done: 'done', error: 'error', readonly: 'read only' };
+export interface HandleBot { id: string; name: string; tool: Tool; state: BotState; pose: 1 | 2 | 3; pending: boolean; readOnly?: boolean; tip: string }
+const LABEL: Record<BotState, string> = { starting: 'starting', idle: 'available', approval: 'needs your approval', question: 'has a question', working: 'working', done: 'done', error: 'error', readonly: 'read only' };
 
 export function Handle({ bots, slots, big, visible, hoverId, onHover, onOpen, theme = 'dark' }: { bots: HandleBot[]; slots: Slot[]; big: number; visible: boolean; hoverId: string | null; onHover: (id: string | null) => void; onOpen: (id: string) => void; theme?: 'dark' | 'light' }) {
   const { small, gap } = slotSizes(bots.length);
@@ -1114,7 +1081,7 @@ export function Handle({ bots, slots, big, visible, hoverId, onHover, onOpen, th
               transition: transition([['width', 'grow', 0], ['height', 'grow', 0], ['margin-top', 'grow', 0], ['opacity', 'fadeIn', on ? 80 : 0], ['background-color', 'hover']]) }}>
             <span data-tick style={{ position: 'absolute', left: -4, top: 2, bottom: 2, width: 2, borderRadius: '0 2px 2px 0', background: BADGE[b.state].fg, opacity: b.pending ? 1 : 0, transition: transition([['opacity', 'fadeIn', b.pending ? 160 : 0], ['background-color', 'hover']]) }} />
             <span data-sprite style={{ display: 'inline-flex', lineHeight: 0, transform: `scale(${hov ? base * 1.25 : base})`, transition: transition([['transform', b.pending || hov ? 'pop' : 'shrink', 0]]) }}>
-              <Bot tool={b.tool} state={b.state} pose={b.pose} size={big} theme={theme} />
+              <Bot seed={b.id} readOnly={b.readOnly} tool={b.tool} state={b.state} pose={b.pose} size={big} theme={theme} />
             </span>
           </button>
         );
@@ -1236,9 +1203,9 @@ export function Bubble({ session, moreCount, visible, paused, onOpen, onDecide, 
   const first = session?.pending?.options?.[0];
   const title = session ? `${session.name} ${isQ ? 'has a question' : 'needs your approval'}` : '';
   return (
-    <div data-layer="bubble" style={{ position: 'absolute', left: 0, top: 0, width: 336, height: 128, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px 12px', opacity: visible ? 1 : 0, transform: `translateX(${visible ? 0 : -12}px)`, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut'], ['transform', visible ? 'grow' : 'fadeOut', visible ? 140 : 0]]) }}>
+    <div data-layer="bubble" style={{ position: 'absolute', left: 0, top: 0, width: 336, height: 'auto', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px 12px', opacity: visible ? 1 : 0, transform: `translateX(${visible ? 0 : -12}px)`, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut'], ['transform', visible ? 'grow' : 'fadeOut', visible ? 140 : 0]]) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {session && <Bot tool={session.tool} state={st} pose={poseFor(session.name, session.state)} size={48} theme={theme} />}
+        {session && <Bot seed={session.id} readOnly={session.source === 'hook_only'} tool={session.tool} state={st} pose={poseFor(session.id, session.state)} size={48} theme={theme} />}
         <a href="#open" onClick={e => { e.preventDefault(); onOpen(); }} style={{ display: 'flex', flexDirection: 'column', gap: 4, flexGrow: 1, minWidth: 0, textDecoration: 'none', color: 'inherit' }}>
           <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 500 }}>{title}</span>
           <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{session?.pending?.text} · {session?.project}{moreCount > 0 && <span> · +{moreCount} more</span>}</span>
@@ -1281,7 +1248,7 @@ git commit -m "feat(overlay): bubble with decide-in-place and the draining timer
 - Test: `apps/overlay/test/list.test.tsx`
 
 **Interfaces:**
-- Produces: `<SessionList sessions: Session[]; visible: boolean; numbered: boolean; selectedId: string | null; dnd: boolean; onToggleDnd(); onOpen(id); onClose(); onHoverRow?(id|null) theme? />`. Header: "Ledge", "<N> bots · <M> waiting for you" or "nothing waiting", buttons `Do not disturb` (icon, `aria-pressed`), `Settings` (icon, no-op in V1), `Collapse` (icon). Rows: 56 px, bot at 32 px, project, "<Name> · <Tool> · <age> · <hint>", `Badge`; the oldest pending row has `background: var(--secondary)` and a 2 px `var(--sidebar-primary)` leading bar; `numbered` adds a `Kbd` with the row index (1 to 9) at the left; rows cascade in: `opacity`/`translateX(-10px)` with `fadeIn` delayed `150 + i*24` ms when `visible`. Footer: the DND switch (a `label` + hidden checkbox) and `Ctrl+Alt+L`. The row hint is the pending text when pending, else `started without ledge` for `hook_only`, `exited <code>` for exited, `running` otherwise.
+- Produces: `<SessionList sessions: Session[]; visible: boolean; numbered: boolean; selectedId: string | null; dnd: boolean; onToggleDnd(); onOpen(id); onClose(); onHoverRow?(id|null) theme? />`. Header: "Ledge", "<N> bots · <M> waiting for you" or "nothing waiting", buttons `Do not disturb` (icon, `aria-pressed`), `Settings` (icon, no-op in V1), `Collapse` (icon). Rows: 58 px, bot at 32 px, project, "<Name> · <Tool> · <age> · <hint>", `Badge`; the oldest pending row has `background: var(--secondary)` and a 2 px `var(--sidebar-primary)` leading bar; `numbered` adds a `Kbd` with the row index (1 to 9) at the left; rows cascade in: `opacity`/`translateX(-10px)` with `fadeIn` delayed `150 + i*24` ms when `visible`. Footer: the DND switch (a `label` + hidden checkbox) and `Ctrl+Alt+L`. The row hint is the pending text when pending, else `started without ledge` for `hook_only`, `exited <code>` for exited, `running` otherwise.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1383,10 +1350,10 @@ export function SessionList({ sessions, visible, numbered, selectedId, dnd, onTo
           const pending = isPending(s); const hi = s.id === oldestAsk; const delay = 150 + i * 24;
           return (
             <button key={s.id} type="button" aria-label={`${s.project}, ${s.name}, open`} aria-current={selectedId === s.id ? 'true' : undefined} data-delay={delay} onClick={() => onOpen(s.id)} onMouseEnter={() => onHoverRow?.(s.id)} onMouseLeave={() => onHoverRow?.(null)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, height: 56, boxSizing: 'border-box', padding: `0 16px 0 ${numbered ? 10 : 14}px`, border: 'none', borderLeft: `2px solid ${hi ? 'var(--sidebar-primary)' : 'transparent'}`, background: hi ? 'var(--secondary)' : selectedId === s.id ? 'var(--sidebar-accent)' : 'transparent', textAlign: 'left', color: 'var(--sidebar-foreground)', cursor: 'pointer', width: '100%', opacity: visible ? 1 : 0, transform: `translateX(${visible ? 0 : -10}px)`,
+              style={{ display: 'flex', alignItems: 'center', gap: 12, height: 58, boxSizing: 'border-box', padding: `0 16px 0 ${numbered ? 10 : 14}px`, border: 'none', borderLeft: `2px solid ${hi ? 'var(--sidebar-primary)' : 'transparent'}`, background: hi ? 'var(--secondary)' : selectedId === s.id ? 'var(--sidebar-accent)' : 'transparent', textAlign: 'left', color: 'var(--sidebar-foreground)', cursor: 'pointer', width: '100%', opacity: visible ? 1 : 0, transform: `translateX(${visible ? 0 : -10}px)`,
                 transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? delay : 0], ['transform', visible ? 'grow' : 'fadeOut', visible ? delay : 0], ['background-color', 'hover'], ['border-color', 'hover']]) }}>
               {numbered && i < 9 && <Kbd accent={hi}>{i + 1}</Kbd>}
-              <Bot tool={s.tool} state={botState(s)} pose={poseFor(s.name, s.state)} size={32} theme={theme} />
+              <Bot seed={s.id} readOnly={s.source === 'hook_only'} tool={s.tool} state={botState(s)} pose={poseFor(s.id, s.state)} size={32} theme={theme} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1, minWidth: 0 }}>
                 <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.project}</span>
                 <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name} · {toolName(s.tool)} · {relativeTime(s.startedAt, now)} · {rowHint(s)}</span>
@@ -1434,7 +1401,7 @@ git commit -m "feat(overlay): session list with cascade, oldest-ask highlight an
 
 **Interfaces:**
 - Produces: `<SessionView session: Session; preview: string[]; visible: boolean; reading: boolean; draft: string; onDraft(text); onBack(); onClose(); onDecide(d); onReply(text); onInterrupt(); onKill(); onFocus(); onToggleReading() theme? />` and `measureSessionH(session, reading): number` (header 56 + ask card (permission 168 / question 48 + 64 per option + 56) + preview 240 + reply 100; used by the surface for the panel height, capped by geometry).
-- Behaviour: header with Back, the bot at 32 px, "<Name> · <project>", "<Tool> · <age>", `Reading mode` toggle (icon, `aria-pressed`), `Focus terminal tab` (icon), `Close` (icon). Ask card folds (`max-height` + opacity, shrink curve, 80 ms delay) when `session.pending` disappears. Permission: badge, "<Name> wants to run", the command in a mono well, `Always for this session` (ghost sm, V1: sends `accept` too), `Deny`, `Approve`. Question: badge, the question, radio options with the first checked, an `Other…` text input, `Answer` (primary) which sends the option number or the typed text. Preview: "Terminal · last 30 lines · read only", a mono well with the lines. Reply: input bound to `draft` (lives in the parent so it survives reconnects), `Enter` sends, `Send` icon button, "Interrupt" (outline sm, shows `Esc` kbd) when `working`, `Kill session` (ghost sm, danger text) always. `error` state shows the badge `Error` and the text "the terminal did not take it, try again or open the tab" above the actions, buttons enabled.
+- Behaviour: header with Back, the bot at 32 px, "<Name> · <project>", "<Tool> · <age>", `Reading mode` toggle (icon, `aria-pressed`), `Focus terminal tab` (icon), `Close` (icon). Ask card folds (`max-height` + opacity, 300 ms exit, 180 ms delay; see Task 13 for acknowledgement/confirmation sequencing) when `session.pending` disappears. Permission: badge, "<Name> wants to run", the command in a mono well, `Always for this session` (disabled with an explanation unless the adapter supports confirmed scoped authorization), `Deny`, `Approve`. Question: badge, the question, radio options with the first checked, an `Other…` text input, `Answer` (primary) which sends the option number or the typed text. Preview: "Terminal · last 30 lines · read only", a mono well with the lines. Reply: input bound to `draft` (lives in the parent so it survives reconnects), `Enter` sends, `Send` icon button, "Interrupt" (outline sm, shows `Esc` kbd) when `working`, `Kill session` (ghost sm, danger text) always. `error` state shows the badge `Error` and the text "the terminal did not take it, try again or open the tab" above the actions, buttons enabled.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1533,7 +1500,7 @@ export function SessionView(p: { session: Session; preview: string[]; visible: b
     <div data-layer="session" style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? 120 : 0]]) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 56, boxSizing: 'border-box', padding: '0 8px', borderBottom: '1px solid var(--sidebar-border)' }}>
         <Button variant="ghost" size="icon" aria-label="Back to sessions" onClick={p.onBack}><Icon d={I.back} /></Button>
-        <Bot tool={s.tool} state={st} pose={poseFor(s.name, s.state)} size={32} theme={p.theme ?? 'dark'} />
+        <Bot seed={s.id} readOnly={s.source === 'hook_only'} tool={s.tool} state={st} pose={poseFor(s.id, s.state)} size={32} theme={p.theme ?? 'dark'} />
         <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
           <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name} · {s.project}</span>
           <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{toolName(s.tool)} · {relativeTime(s.startedAt, p.now)}</span>
@@ -1568,7 +1535,7 @@ export function SessionView(p: { session: Session; preview: string[]; visible: b
               <div>{s.name} wants to run</div>
               <div style={well}>{pending?.text}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Button variant="ghost" size="sm" onClick={() => p.onDecide('accept')}>Always for this session</Button>
+                <Button variant="ghost" size="sm" disabled title="Scoped authorization is not supported by this adapter">Always for this session</Button>
                 <span style={{ flexGrow: 1 }} />
                 <Button variant="outline" onClick={() => p.onDecide('deny')}>Deny</Button>
                 <Button variant="primary" onClick={() => p.onDecide('accept')}><Icon d={I.check} />Approve</Button>
@@ -1794,7 +1761,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
     prevIds.current = ids; prevPending.current = pend;
   }, [sessions, dnd]);
 
-  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.name, s.state), pending: isPending(s), tip: isPending(s) ? `${botState(s) === 'question' ? 'has a question' : 'needs your approval'} · ${s.pending?.text ?? ''}` : rowHint(s) })), [sessions]);
+  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), readOnly: s.source === 'hook_only', tip: isPending(s) ? `${botState(s) === 'question' ? 'has a question' : 'needs your approval'} · ${s.pending?.text ?? ''}` : rowHint(s) })), [sessions]);
   const selected = st.selectedId ? byId.get(st.selectedId) ?? null : null;
   const bubbleSession = st.bubbleId ? byId.get(st.bubbleId) ?? null : null;
   const geo = layout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, sessionH: selected ? measureSessionH(selected, st.reading) : 480, reading: st.reading });
@@ -1821,10 +1788,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
         <Bubble session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={false} onOpen={() => ctl.current.dispatch({ type: 'bubbleClick' })}
           onDecide={d => { if (st.bubbleId) { decide(st.bubbleId, d); ctl.current.dispatch({ type: 'decidedInBubble' }); } }} onReply={t => { if (st.bubbleId) { reply(st.bubbleId, t); ctl.current.dispatch({ type: 'decidedInBubble' }); } }} theme={theme} />
         <div data-panel style={{ position: 'absolute', inset: 0, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>
-          <div style={{ position: 'absolute', inset: 0, transform: `translateX(${st.mode === 'session' ? -28 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
+          <div style={{ position: 'absolute', inset: 0, transform: `translateX(${st.mode === 'session' ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SessionList sessions={sessions} visible={st.mode === 'list'} numbered={st.openedBy === 'keyboard'} selectedId={st.selectedId} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={id => ctl.current.dispatch({ type: 'rowClick', id })} onClose={() => ctl.current.dispatch({ type: 'close' })} theme={theme} />
           </div>
-          <div style={{ position: 'absolute', inset: 0, transform: `translateX(${st.mode === 'session' ? 0 : 28}px)`, transition: transition([['transform', 'grow', 0]]) }}>
+          <div style={{ position: 'absolute', inset: 0, transform: `translateX(${st.mode === 'session' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             {selected && <SessionView session={selected} preview={previews.get(selected.id) ?? []} visible={st.mode === 'session'} reading={st.reading} draft={drafts[selected.id] ?? ''} onDraft={t => { setDrafts(x => ({ ...x, [selected.id]: t })); ctl.current.dispatch({ type: 'typing', on: t.length > 0 }); }}
               onBack={() => ctl.current.dispatch({ type: 'back' })} onClose={() => ctl.current.dispatch({ type: 'close' })} onDecide={d => decide(selected.id, d)} onReply={t => reply(selected.id, t)} onInterrupt={() => send({ type: 'session.interrupt', id: selected.id })} onKill={() => send({ type: 'session.kill', id: selected.id })}
               onFocus={() => { send({ type: 'session.focus', id: selected.id }); focusTerminal(selected.title); }} onToggleReading={() => ctl.current.dispatch({ type: 'reading', on: !st.reading })} theme={theme} />}
@@ -1891,7 +1858,7 @@ git commit -m "feat(overlay): the living surface wired to the daemon, with the e
 - Test: `apps/overlay/test/keyboard.test.tsx`
 
 **Interfaces:**
-- Produces: `useKeyboard(opts: { enabled: boolean; mode: Mode; sessions: Session[]; focusedId: string | null; onFocus(id|null); onOpen(id); onDecide(id, d); onNextAsk(); onClose(); onReplyFocus(); onToggleDnd(); onHelp() })` bound to `window` `keydown` while `enabled` (list or session opened by keyboard, and no text input focused): `j`/`ArrowDown`, `k`/`ArrowUp` move the focus, `1`–`9` focus a row, `Enter` opens, `y` approves and `n` denies when the focused row's ask is a permission (a question opens the row instead), `Tab` focuses the next pending row, `r` focuses the reply field, `d` toggles dnd, `Escape` closes, `?` toggles the coachmark.
+- Produces: `useKeyboard(opts: { enabled: boolean; mode: Mode; sessions: Session[]; focusedId: string | null; onFocus(id|null); onOpen(id); onDecide(id, d); onNextAsk(); onClose(); onReplyFocus(); onToggleDnd(); onHelp() })` bound to `window` `keydown` while `enabled` (list or session opened by keyboard, and no text input focused): `j`/`ArrowDown`, `k`/`ArrowUp` move the focus, `1`–`9` focus a row, `Enter` opens, `y` approves and `n` denies when the focused row's ask is a permission (a question opens the row instead), `Alt+ArrowRight` focuses the next pending row; Tab/Shift+Tab remain native, `r` focuses the reply field, `d` toggles dnd, `Escape` closes, `?` toggles the coachmark.
 - `Coachmark` is anchored under the focused row, shown on the first three keyboard opens (`localStorage['ledge.coachmarks']` counter) and on `?`; "Got it" dismisses.
 
 - [ ] **Step 1: Write the failing test**
@@ -1923,7 +1890,8 @@ describe('useKeyboard', () => {
     press('n'); expect(h.onDecide).toHaveBeenCalledWith('a', 'deny');
     rerender({ focusedId: 'b' }); press('y'); expect(h.onOpen).toHaveBeenCalledWith('b');
     press('Enter'); expect(h.onOpen).toHaveBeenLastCalledWith('b');
-    press('Tab'); expect(h.onNextAsk).toHaveBeenCalled();
+    press('Tab'); expect(h.onNextAsk).not.toHaveBeenCalled();
+    press('ArrowRight', { altKey: true }); expect(h.onNextAsk).toHaveBeenCalled();
     press('Escape'); expect(h.onClose).toHaveBeenCalled();
     press('?'); expect(h.onHelp).toHaveBeenCalled();
     press('d'); expect(h.onToggleDnd).toHaveBeenCalled();
@@ -1954,7 +1922,7 @@ import type { Session } from '@ledge/protocol';
 import type { Mode } from '../surface/geometry';
 
 const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
-const typing = () => { const el = document.activeElement; return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable); };
+const typing = () => { const el = document.activeElement; return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || (el as HTMLElement).isContentEditable); };
 
 export function useKeyboard(o: { enabled: boolean; mode: Mode; sessions: Session[]; focusedId: string | null; onFocus: (id: string | null) => void; onOpen: (id: string) => void; onDecide: (id: string, d: 'accept' | 'deny') => void; onNextAsk: () => void; onClose: () => void; onReplyFocus: () => void; onToggleDnd: () => void; onHelp: () => void }) {
   useEffect(() => {
@@ -1969,7 +1937,7 @@ export function useKeyboard(o: { enabled: boolean; mode: Mode; sessions: Session
       else if (/^[1-9]$/.test(k)) { const id = ids[Number(k) - 1]; if (id) o.onFocus(id); }
       else if (k === 'Enter') { if (focused) o.onOpen(focused.id); }
       else if (k === 'y' || k === 'n') { if (focused && isPending(focused)) { if (focused.pending?.kind === 'permission' || focused.pending?.kind === 'diff' || focused.pending?.kind === 'plan') o.onDecide(focused.id, k === 'y' ? 'accept' : 'deny'); else o.onOpen(focused.id); } }
-      else if (k === 'Tab') { e.preventDefault(); o.onNextAsk(); }
+      else if (e.altKey && k === 'ArrowRight') { o.onNextAsk(); }
       else if (k === 'r') { o.onReplyFocus(); }
       else if (k === 'd') { o.onToggleDnd(); }
       else if (k === 'Escape') { o.onClose(); }
@@ -1993,7 +1961,7 @@ export function Coachmark({ visible, top, onDismiss }: { visible: boolean; top: 
     <div role="dialog" aria-label="Keyboard" aria-hidden={!visible} style={{ position: 'absolute', left: 44, top, width: 300, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--popover)', border: '1px solid var(--input)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-overlay)', opacity: visible ? 1 : 0, transform: `translateY(${visible ? 0 : -6}px)`, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut'], ['transform', 'grow', visible ? 140 : 0]]) }}>
       <span style={{ fontSize: 13, fontWeight: 500 }}>Move with the keyboard</span>
       <span style={{ fontSize: 12, lineHeight: '18px', color: 'var(--muted-foreground)', display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'center' }}>
-        <span><Kbd>J</Kbd> <Kbd>K</Kbd> up and down</span><span><Kbd>Tab</Kbd> next ask</span><span><Kbd>1</Kbd>…<Kbd>9</Kbd> jump</span><span><Kbd>Y</Kbd> <Kbd>N</Kbd> decide</span><span><Kbd>Esc</Kbd> close</span>
+        <span><Kbd>J</Kbd> <Kbd>K</Kbd> up and down</span><span><Kbd>Alt →</Kbd> next ask</span><span><Kbd>1</Kbd>…<Kbd>9</Kbd> jump</span><span><Kbd>Y</Kbd> <Kbd>N</Kbd> decide</span><span><Kbd>Esc</Kbd> close</span>
       </span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Shown on the first three keyboard opens</span><span style={{ flexGrow: 1 }} />
@@ -2208,7 +2176,7 @@ pnpm --filter overlay tauri dev
 pnpm --filter overlay tauri build    # NSIS installer in src-tauri/target/release/bundle
 
 ## Keys
-Ctrl+Alt+L open/close · J K move · 1-9 jump · Enter open · Y N decide · Tab next ask · R reply · D do not disturb · Esc close · ? keys · Ctrl+Alt+T theme
+Ctrl+Alt+L open/close · J K move · 1-9 jump · Enter open · Y N decide · Alt+Right next ask · R reply · D do not disturb · Esc close · ? keys · Ctrl+Alt+T theme
 
 ## Known V1 limits
 Focus brings the Windows Terminal window forward; it does not switch to the exact tab yet.
@@ -2225,8 +2193,55 @@ git push
 
 ---
 
+### Task 13: Approved prototype integration and acceptance gate
+
+**Files:**
+- Modify: `apps/overlay/src/motion.ts`, `src/App.tsx`, `src/surface/geometry.ts`, `machine.ts`, `controller.ts`, `Surface.tsx`, `Handle.tsx`, `Bubble.tsx`, `SessionList.tsx`, `SessionView.tsx`, `src/keyboard/useKeyboard.ts`, `Coachmark.tsx`
+- Create: `apps/overlay/src/surface/SettingsView.tsx`, `HelpView.tsx`, `useMeasuredHeight.ts`
+- Test: `apps/overlay/test/prototype-parity.test.tsx`, `test/machine.test.ts`, `test/keyboard.test.tsx`, `test/theme.test.tsx`, `test/bubble.test.tsx`, `test/session.test.tsx`
+
+**Interfaces:**
+- `useMeasuredHeight(ref: RefObject<HTMLElement | null>, active: boolean): number` observes content size with `ResizeObserver`; disconnect on unmount. Add optional `bubbleH?: number` to `layout` and pass the measured bubble height from `Surface`. `SIZES.bubbleH` is an initial measurement fallback only, never a fixed render height. Keep the content width stable while the outer surface interpolates.
+- The existing surface/controller contract gains monotonic `now(): number`, `pauseTimer`/`resumeTimer` effects for the bubble, `focusWithin` and visibility events, and a navigation/request revision for delayed effects. Pausing preserves the deadline remainder. Add `settings`/`help` to `Mode`, with back navigation inside the same surface. Close on Escape only after returning from a detail view to the list.
+- All rendered `Bot` instances receive the stable session/helper `seed`, actual `theme`, explicit read-only state and effective frozen/reduced-motion flags. A single app-level motion preference drives all layers, including helpers and queue avatars.
+- The existing decision callbacks remain transport commands. A presentation-only acknowledgement phase locks repeated actions; it releases/advances only after the matching daemon update confirms resolution. A terminal error unlocks recovery instead of displaying success. Do not add a local state transition to working/idle on a visual timeout.
+
+- [ ] **Step 1: Add behavior tests against the approved reference**
+
+Name tests for these concrete conditions:
+
+1. `theme changes material without replacing SVG or resetting state`: dark has `data-material="signal"`, light has `pebble`; the SVG node, seed and logical state are unchanged.
+2. `bubble retains its remaining time`: after 1,000 ms, hover for 5,000 ms, then leave; it remains visible for 2,999 ms and closes after the next 1 ms. Repeat with keyboard focus and hidden document. Closing preserves the pending request.
+3. `a late confirmation cannot steal focus`: decide for A, manually open B, then deliver A's confirmation; B and its draft stay open. Double-clicking sends one command.
+4. `decision timing does not fabricate success`: after 900 ms with no daemon confirmation the operation is still unconfirmed; after an error no success expression/report is shown. A confirmed refusal can become available but never acquires invented test results.
+5. `large and empty teams fit`: 0 sessions produces a 6×60 px handle; 12 sessions retain all waiting bots and collapse only resting bots; text and actions in a multi-line bubble fit its measured height.
+6. `native Tab and scoped shortcuts coexist`: Tab/Shift+Tab are not prevented; Alt+ArrowRight chooses the next pending request; hidden layers are not focusable; J/K/Y/N do nothing while typing or choosing an option.
+7. `drafts survive view and connection changes`: populate a draft, return to the list, change theme, toggle reading, reconnect, reopen; the exact text remains. Offline/read-only disables every send/decision path including shortcuts.
+8. `reduced motion keeps interactions functional`: no ambient timers/animation under app or OS preference, but the bubble still expires after 4,000 ms of active time and replies still work. Hiding/unmounting a view releases its animation work.
+
+- [ ] **Step 2: Run the focused tests and confirm the missing behavior**
+
+Run `pnpm --filter overlay test prototype-parity machine keyboard theme bubble session`. Failures must identify the revised behavior, not missing unrelated fixtures.
+
+- [ ] **Step 3: Complete geometry, clocks and transitions**
+
+Use the measured-height interface above and preserve the 336/380/420/560 px widths. Replace reset-on-leave bubble timing with the controller's remaining-time clock and feed the same remainder to the visible bar. The countdown must be independent of `ms()` animation scaling. Use 540 ms for the complete grow-then-unfold sequence. Replace the older 28 px view slide with 12 px. Implement the 650 ms nod, the 180+300 ms card exit and the ≥900 ms confirmation-gated advance. Navigation, disconnect, request replacement/removal and unmount invalidate stale callbacks.
+
+- [ ] **Step 4: Wire settings, focus and state fidelity**
+
+Render settings/help inside the same surface, with shared theme, DND and motion preference controls. Mark inactive layers `inert`, preserve native Tab and restore focus to a visible control after transition. Drafts are keyed by session ID. Do not collapse an auto-advanced list while focus/pointer remains in it. Remove unconditional pulsing badges, use calm static status labels and freeze stale avatars when disconnected. Expose the known session expression with read-only/frozen modifiers rather than inventing a working state.
+
+Disable scoped “Always” controls when the adapter does not confirm scoped authorization; the older one-shot callback is not an implementation of that promise. The richer cards, helper routing, finished-session actions and queue guards are integrated by Plan 3's revised Tasks 4–7 and acceptance Task 9.
+
+- [ ] **Step 5: Verify the base overlay and hand off the rich screens**
+
+Run `pnpm --filter overlay test && pnpm --filter overlay typecheck`. Compare the approved overview, permission, question, read-only and team/connection scenarios in both themes, including reduced motion. Plan 3 Task 9 completes the remaining seven scenario checks. Capture screenshots at 12/16/20/32/48 px avatar sizes with animation frozen, then manually inspect real-time motion; a still screenshot does not verify fluidity. Commit only after the behavior tests and visual checks pass.
+
+---
+
 ## Self-review notes
 
 - Spec coverage: section 5 surface/handle/bubble/list/session/keyboard → Tasks 4 to 10; section 6 bots → Task 3; section 7 motion → Task 1 and every component's `transition()`; section 8 overlay errors (unreachable, frozen bots, snapshot replaces state, removed bots fold) → Tasks 2 and 9; section 9 overlay tests (components on a mock daemon, animations zeroed, scenarios named after board 9) → every task; Tauri → Task 11. Deferred to Plan 3: diff, plan and report cards, long command view, finished summary, sub-agents, queue bandeau, reading-mode content.
 - Names consistent across tasks: `layout`, `slotSizes`, `SIZES`, `transition`, `createSurfaceController`, `useDaemon`, `attachClient`, `createDaemonClient`, `botState`, `poseFor`, `Handle`, `HandleBot`, `Bubble`, `SessionList`, `rowHint`, `SessionView`, `measureSessionH`, `useKeyboard`, `setFrame`, `focusTerminal`.
+- Revision 2 coverage: approved material/state/motion model → revised Task 3; measured geometry, countdown/focus, preferences, confirmation and draft invariants → mandatory Task 13; rich-screen parity → Plan 3 Task 9. The standalone prototype is a visual reference, not daemon or adapter implementation.
 - Review Focus pins: 1 → Task 9 "a removed session that is open falls back to the list" and Task 4 `removed`; 2 → Task 4 "a second ask queues" and Task 6 "+N more"; 3 → Task 4 "an ask during the dwell"; 4 → Task 9 "a draft survives a daemon disconnect"; 5 → Task 4 geometry "never exceeds the screen minus margins" and the list's `overflowY: auto` in Task 7.

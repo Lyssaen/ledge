@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr" data-theme="dark" data-reduced="false">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ledge — Prototype interactif</title>
+  <link rel="stylesheet" href="prototype/prototype.css">
+  <link rel="stylesheet" href="prototype/mascot.css">
+</head>
+<body>
+  <header class="studio-header">
+    <a class="brand" href="mascots.html" aria-label="Ledge, étude des mascottes"><i></i>ledge<span>.</span></a>
+    <span class="header-divider"></span><span class="small muted">L’atelier des maquettes</span>
+    <span class="version">02 · Validé</span>
+    <button id="theme-toggle" class="quiet">◐ <span>Mode clair</span></button>
+  </header>
+  <main class="studio">
+    <div class="intro"><div><div class="eyebrow">Une présence qui suit votre travail</div><h1>Ledge, en situation.</h1><p>Choisissez un scénario. Ouvrez une session. Répondez à vos compagnons.</p></div><button id="reset" class="secondary">↺ Réinitialiser</button></div>
+    <div class="playground">
+      <aside class="scenario-rail" aria-label="Scénarios à tester">
+        <div class="rail-heading"><span class="eyebrow">Parcours à essayer</span><span class="small muted">12 vues</span></div>
+        <nav id="scenarios" aria-label="Choisir un scénario"></nav>
+        <div class="rail-settings">
+          <div class="material"><span data-avatar="theme-demo" data-size="38"></span><div><strong id="material-name">Signal</strong><span id="material-description">Contours précis · mode sombre</span></div></div>
+          <label class="switch-line"><span>Mouvements réduits</span><input type="checkbox" id="reduce-motion" role="switch"></label>
+          <label class="switch-line"><span>Ne pas déranger</span><input type="checkbox" id="studio-dnd" role="switch"></label>
+          <button id="keyboard-help" class="quiet full">⌘ Raccourcis clavier</button>
+        </div>
+      </aside>
+      <section class="preview" aria-label="Maquette de Ledge">
+        <div class="preview-toolbar"><div class="row"><span class="connection-dot" id="connection-dot"></span><span class="small" id="preview-label">Bureau de démonstration</span></div><div class="view-tabs" aria-label="Vues de Ledge"><button data-view="handle" aria-pressed="false">Poignée</button><button data-view="list" aria-pressed="true">Liste</button><button data-view="bubble" aria-pressed="false">Bulle</button><button data-view="session" aria-pressed="false">Session</button></div></div>
+        <div class="desktop" id="desktop">
+          <div class="desktop-wallpaper" aria-hidden="true"><span>Un œil sur vos agents.<br>L’esprit à votre travail.</span><i></i></div>
+          <div class="editor" aria-hidden="true"><div class="editor-title"><span class="window-dots">● ● ●</span><span class="mono">harness-assistant</span><span>⌕</span></div><div class="editor-body"><div class="editor-tree"><span>EXPLORATEUR</span><p>⌄ harness-assistant</p><p>　⌄ apps</p><p>　　⌄ overlay</p><p class="file-active">　　 Bot.tsx</p><p>　　 Surface.tsx</p><p>　　 motion.ts</p><p>　⌄ packages</p><p>　　protocol</p><p>　⌄ docs</p></div><div class="editor-code"><div class="editor-file">Bot.tsx <span>×</span></div><pre><em>01</em> <b>import</b> { Bot } <b>from</b> './bots';
+<em>02</em>
+<em>03</em> <b>export function</b> Session() {
+<em>04</em>   <b>return</b> (
+<em>05</em>     &lt;<strong>Bot</strong>
+<em>06</em>       tool=<u>"claude"</u>
+<em>07</em>       state=<u>"working"</u>
+<em>08</em>       name=<u>"Otto"</u>
+<em>09</em>     /&gt;
+<em>10</em>   );
+<em>11</em> }</pre><div class="editor-terminal"><span>TERMINAL</span><p>❯ ledge claude</p><p class="muted">Session Otto · connected</p><p>╰─ À vos côtés, discrètement.</p></div></div></div><div class="editor-status"><span>⑂ design/companions</span><span>TypeScript React　 UTF-8</span></div></div>
+          <div class="edge-zone" id="edge-zone" aria-hidden="true"></div>
+          <section class="surface" id="surface" data-mode="list" aria-label="Ledge, sessions d’agents" tabindex="-1">
+            <div class="surface-view" id="view-handle" data-layer="handle" inert><div id="handle-bots" class="handle-bots"></div></div>
+            <div class="surface-view" id="view-list" data-layer="list">
+              <div class="panel-header"><div><strong class="panel-brand">Ledge<span>.</span></strong><p class="panel-subtitle" id="list-summary"></p></div><div class="row tight"><button class="icon dnd-button" data-action="dnd" aria-label="Activer Ne pas déranger" aria-pressed="false">◔</button><button class="icon" data-action="settings" aria-label="Réglages">⚙</button><button class="icon" data-action="close" aria-label="Replier Ledge">‹</button></div></div>
+              <div class="connection-banner" id="connection-banner" hidden>Connexion perdue · les derniers états connus sont figés.</div>
+              <div id="session-list" class="session-list"></div>
+              <div class="empty-state" id="empty-state" hidden><span data-avatar="empty-demo" data-size="60"></span><strong>Un peu de calme.</strong><p>Lancez une session pour retrouver<br>votre compagnon ici.</p><code>ledge claude</code></div>
+              <div class="queue-summary" id="queue-summary" hidden><span>✓ Tout est à jour.</span><span>Aucune demande en attente</span></div>
+              <footer class="panel-footer"><button class="text-button dnd-button" data-action="dnd" aria-pressed="false">◔ Ne pas déranger</button><kbd>Ctrl Alt L</kbd></footer>
+            </div>
+            <div class="surface-view" id="view-bubble" data-layer="bubble" inert>
+              <div class="bubble-main"><span data-avatar="active-bubble" data-size="48"></span><button class="bubble-copy" data-action="open-bubble"><strong id="bubble-title"></strong><span id="bubble-text"></span></button><button class="icon" data-action="close" aria-label="Fermer la notification">×</button></div>
+              <div class="code-well" id="bubble-command"></div><div class="bubble-actions" id="bubble-actions"></div><div class="bubble-meta"><button data-action="next" id="bubble-more" class="text-button"></button><span id="bubble-timer-label">Survolez pour garder ouvert</span></div><div class="bubble-timer"><div id="bubble-timer-fill"></div></div>
+            </div>
+            <div class="surface-view" id="view-session" data-layer="session" inert>
+              <div class="panel-header session-header"><button class="icon" data-action="back" aria-label="Retour à la liste">‹</button><span data-avatar="active-header" data-size="32"></span><div class="session-heading"><strong id="session-title"></strong><p class="panel-subtitle" id="session-subtitle"></p></div><button class="icon" id="reading-toggle" data-action="reading" aria-label="Activer le mode lecture" aria-pressed="false">⤢</button><button class="icon" data-action="terminal" aria-label="Voir le terminal simulé">↗</button><button class="icon" data-action="close" aria-label="Replier Ledge">×</button></div>
+              <div id="queue-bar" class="queue-bar" hidden><span id="queue-position"></span><div id="queue-avatars" class="row tight"></div><button class="text-button" data-action="next">Suivant →</button></div>
+              <div class="session-content" id="session-content"></div>
+              <div class="session-reply" id="session-reply"><label class="sr-only" for="reply">Répondre à la session</label><textarea id="reply" rows="1" placeholder="Une instruction pour votre compagnon…"></textarea><button id="send-reply" class="icon primary" data-action="send" aria-label="Envoyer le message">↑</button></div>
+              <div class="auto-next-line" id="auto-next-line"><label><input id="auto-next" type="checkbox" checked> Passer à la prochaine demande après ma réponse</label></div>
+            </div>
+            <div class="surface-view" id="view-settings" data-layer="settings" inert><div class="panel-header"><button class="icon" data-action="back" aria-label="Retour à la liste">‹</button><strong>Votre Ledge</strong><button class="icon" data-action="close" aria-label="Replier">×</button></div><div class="settings-body"><p class="muted">Une présence adaptée à votre concentration.</p><label class="settings-item"><span><strong>Ne pas déranger</strong><small>Les demandes restent dans la poignée.</small></span><input type="checkbox" id="settings-dnd" role="switch"></label><label class="settings-item"><span><strong>Mouvements réduits</strong><small>Les états restent lisibles sans animation.</small></span><input type="checkbox" id="settings-motion" role="switch"></label><button class="settings-theme" data-action="theme"><span><strong id="settings-theme-label">Thème sombre · Signal</strong><small>Changer le thème et la matière des mascottes</small></span><span>◐</span></button><div class="settings-note">Les préférences s’appliquent à cette démonstration.</div></div></div>
+            <div class="surface-view" id="view-help" data-layer="help" inert><div class="panel-header"><button class="icon" data-action="back" aria-label="Retour à la liste">‹</button><strong>Au bout des doigts.</strong><button class="icon" data-action="close" aria-label="Replier">×</button></div><div class="help-body"><p class="muted">Cliquez d’abord dans la maquette. Les raccourcis restent locaux à cet onglet.</p><dl><dt>Ouvrir la liste</dt><dd><kbd>Ctrl Alt L</kbd></dd><dt>Choisir une session</dt><dd><kbd>J</kbd> <kbd>K</kbd> ou <kbd>1–9</kbd></dd><dt>Ouvrir la sélection</dt><dd><kbd>Entrée</kbd></dd><dt>Autoriser / refuser</dt><dd><kbd>Y</kbd> <kbd>N</kbd></dd><dt>Demande suivante</dt><dd><kbd>Alt →</kbd></dd><dt>Répondre</dt><dd><kbd>R</kbd></dd><dt>Ne pas déranger</dt><dd><kbd>D</kbd></dd><dt>Retour / replier</dt><dd><kbd>Échap</kbd></dd></dl><p class="small muted">Tab conserve la navigation accessible entre les boutons.</p></div></div>
+          </section>
+          <div class="desktop-note" id="desktop-note"><span class="mini-dot"></span>Simulation locale · aucune commande exécutée</div>
+        </div>
+        <div class="preview-status" role="status" aria-live="polite"><span class="status-mark">↳</span><span id="status">Ouvrez Otto pour autoriser sa commande, ou Nova pour répondre à sa question.</span><span id="tested-count" class="tested-count">0 action testée</span></div>
+      </section>
+    </div>
+    <section class="motion-notes" aria-label="Intentions du prototype"><article><span>01 / MATIÈRE</span><h2>Signal la nuit. Galet le jour.</h2><p>La matière accompagne le thème. Les formes, les expressions et l’identité des sessions restent stables.</p></article><article><span>02 / CONTINUITÉ</span><h2>Un seul point d’ancrage.</h2><p>La poignée s’ouvre et se replie sur elle-même. Le contenu arrive après la forme, sans rebond du panneau.</p></article><article><span>03 / ATTENTION</span><h2>Un geste, puis du calme.</h2><p>Les regards, les respirations et les clignements ont des rythmes distincts. Votre réponse reçoit un bref acquiescement.</p></article></section>
+    <footer class="studio-footer"><span>Direction validée · Signal en sombre, Galet en clair · sessions et résultats simulés.</span><span>Référence de la spécification révisée et des plans d’implémentation.</span></footer>
+  </main>
+  <script src="prototype/mascot-svg.js"></script>
+  <script src="prototype/mascots.js"></script>
+  <script src="prototype/prototype.js"></script>
+</body>
+</html>

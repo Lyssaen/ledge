@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="fr" data-theme="dark" data-reduced="false">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ledge — Prototype interactif</title>
+  <style>
+:root{color-scheme:dark;--background:oklch(.145 0 0);--foreground:oklch(.985 0 0);--sidebar:oklch(.205 0 0);--secondary:oklch(.274 .006 286.033);--muted:oklch(.708 0 0);--border:#ffffff1a;--primary:oklch(.444 .177 26.899);--red:oklch(.704 .191 22.216);--info:#60a5fa;--warning:#fbbf24;--success:#34d399;--well:oklch(.145 0 0);--grow:cubic-bezier(.22,1,.36,1);--shrink:cubic-bezier(.65,0,.35,1);--pop:cubic-bezier(.34,1.3,.64,1);--shadow:0 24px 60px -12px #000b;--desktop:#101316;--editor:#171a1e;--desktop-text:#a2a9b0;--grid:#ffffff03}
+:root[data-theme="light"]{color-scheme:light;--background:#f8f7f5;--foreground:oklch(.145 0 0);--sidebar:oklch(.985 0 0);--secondary:oklch(.967 .001 286.375);--muted:#626264;--border:#0000001c;--primary:oklch(.505 .213 27.518);--red:oklch(.505 .213 27.518);--info:#2563eb;--warning:#9b5900;--success:#047857;--well:#f0efed;--shadow:0 24px 60px -12px #27232335;--desktop:#e8e7e3;--editor:#f9f9f7;--desktop-text:#636a70;--grid:#00000005}
+*{box-sizing:border-box}body{margin:0;font:13px/1.5 'Geist',Inter,system-ui,sans-serif;color:var(--foreground);background:var(--background)}button,input,textarea{font:inherit}button{color:inherit;cursor:pointer;border:1px solid var(--border);border-radius:7px;background:var(--sidebar);padding:8px 12px;transition:background 150ms,color 150ms,border-color 150ms}button:hover{background:var(--secondary)}button:disabled{cursor:default;opacity:.45}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--red);outline-offset:3px}input[type="checkbox"],input[type="radio"]{accent-color:var(--red);cursor:pointer}button[hidden],[hidden]{display:none!important}h1,h2,h3,p{margin:0}a{color:inherit}strong{font-weight:550}.mono,code,pre,kbd{font-family:'Geist Mono',ui-monospace,monospace}.muted{color:var(--muted)}.small{font-size:11px}.row{display:flex;align-items:center;gap:12px}.tight{gap:5px}.full{width:100%}.eyebrow{font-size:9px;text-transform:uppercase;letter-spacing:1.6px;color:var(--muted)}.primary{background:var(--primary);border-color:transparent;color:#fff}.primary:hover{background:color-mix(in srgb,var(--primary),#000 12%)}.quiet,.text-button{background:transparent;border-color:transparent}.text-button{padding:0;font-size:10px;color:var(--muted)}.text-button:hover{background:transparent;color:var(--foreground)}.icon{width:29px;height:29px;display:inline-flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;background:transparent;border-color:transparent;font-size:17px}.icon:hover{background:var(--secondary)}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}kbd{font-size:9px;padding:2px 4px;color:var(--muted);border:1px solid var(--border);border-radius:4px;white-space:nowrap}
+.studio-header{height:64px;display:flex;align-items:center;gap:20px;padding:0 38px;border-bottom:1px solid var(--border)}.brand{text-decoration:none;font-size:23px;font-weight:650;letter-spacing:-1px;display:flex;align-items:center;gap:4px}.brand i{height:21px;width:10px;border-radius:0 7px 7px 0;background:var(--red);margin-right:5px}.brand span{color:var(--red)}.header-divider{width:1px;height:16px;background:var(--border)}.version{font-size:10px;color:var(--muted);border:1px solid var(--border);padding:3px 9px;border-radius:20px;margin-left:auto}#theme-toggle{font-size:11px}.studio{max-width:1516px;padding:30px 38px 24px;margin:auto}.intro{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px;gap:18px}.intro h1{font-size:31px;font-weight:550;letter-spacing:-1.3px;margin:8px 0}.intro p{color:var(--muted);font-size:12px}.secondary{font-size:11px;background:transparent}.playground{display:grid;grid-template-columns:230px minmax(0,1fr);border:1px solid var(--border);border-radius:13px;overflow:hidden}.scenario-rail{padding:20px 14px 14px;background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column}.rail-heading{display:flex;justify-content:space-between;padding:0 4px 14px;align-items:center}.rail-heading .small{font-size:9px}#scenarios{display:flex;flex-direction:column;gap:3px}.scenario-button{display:flex;align-items:center;gap:10px;text-align:left;font-size:11px;padding:8px 10px;border:1px solid transparent;background:transparent;min-height:38px}.scenario-button span:first-child{font:9px ui-monospace,monospace;color:var(--muted);width:15px}.scenario-button span:last-child{margin-left:auto;color:var(--muted)}.scenario-button[aria-pressed="true"]{background:var(--secondary);border-color:var(--border)}.scenario-button[aria-pressed="true"] span:first-child{color:var(--red)}.rail-settings{border-top:1px solid var(--border);padding:17px 4px 0;margin-top:18px}.material{display:flex;align-items:center;gap:8px;margin-bottom:16px}.material strong{font-size:12px;display:block}.material span:not([data-avatar]){font-size:9px;color:var(--muted);display:block}.switch-line{display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--muted);margin:12px 0}.switch-line input{margin:0}#keyboard-help{font-size:10px;margin-top:4px}.preview{min-width:0;display:flex;flex-direction:column}.preview-toolbar{height:48px;display:flex;justify-content:space-between;align-items:center;padding:0 18px;border-bottom:1px solid var(--border);gap:10px}.connection-dot{width:5px;height:5px;border-radius:50%;background:var(--success)}.connection-dot.offline{background:var(--red)}.view-tabs{display:flex;gap:3px}.view-tabs button{border:0;background:transparent;color:var(--muted);font-size:10px;padding:5px 9px;border-radius:5px}.view-tabs button[aria-pressed="true"]{background:var(--secondary);color:var(--foreground)}.desktop{position:relative;min-height:688px;flex:1;overflow:hidden;background:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px),var(--desktop);background-size:32px 32px,32px 32px,auto}.desktop-wallpaper{position:absolute;inset:0;overflow:hidden}.desktop-wallpaper>span{position:absolute;right:44px;top:48px;font-size:27px;line-height:1.2;letter-spacing:-1px;color:var(--desktop-text);opacity:.32}.desktop-wallpaper i{position:absolute;right:-200px;bottom:-330px;width:800px;height:800px;border:1px solid var(--border);border-radius:50%;box-shadow:0 0 0 100px var(--grid),0 0 0 200px var(--grid)}.editor{position:absolute;top:165px;left:135px;right:34px;bottom:75px;border:1px solid var(--border);border-radius:9px;overflow:hidden;background:var(--editor);color:var(--desktop-text);opacity:.5;box-shadow:0 16px 70px #0001;pointer-events:none}.editor-title{height:35px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding:0 12px;font-size:9px}.window-dots{letter-spacing:3px;font-size:8px;opacity:.5}.editor-body{display:flex;height:calc(100% - 60px)}.editor-tree{width:140px;flex-shrink:0;border-right:1px solid var(--border);padding:15px 0;font-size:9px}.editor-tree>span{font-size:8px;letter-spacing:1px;display:block;padding:0 13px 13px}.editor-tree p{line-height:2.6;padding:0 10px;white-space:nowrap}.editor-tree .file-active{background:var(--secondary)}.editor-code{min-width:0;flex:1;display:flex;flex-direction:column}.editor-file{padding:9px 14px;border-bottom:1px solid var(--border);font-size:9px}.editor-file span{margin-left:36px}.editor pre{font-size:10px;line-height:1.85;white-space:pre;margin:15px}.editor pre em{font-style:normal;opacity:.4;margin-right:10px}.editor pre b{font-weight:400;color:#b995c7}.editor pre u{color:#abbe9d;text-decoration:none}.editor-terminal{border-top:1px solid var(--border);padding:12px 15px;margin-top:auto;font:9px/2 ui-monospace,monospace;min-height:110px}.editor-terminal>span{font-size:8px;display:block;margin-bottom:8px;letter-spacing:1px}.editor-status{height:25px;border-top:1px solid var(--border);padding:5px 10px;display:flex;justify-content:space-between;font-size:8px}.desktop-note{position:absolute;bottom:18px;right:20px;display:flex;align-items:center;gap:7px;font-size:9px;color:var(--desktop-text)}.mini-dot{width:4px;height:4px;border-radius:50%;background:currentColor}.edge-zone{position:absolute;left:0;top:16%;bottom:16%;width:14px;z-index:1}.preview-status{display:flex;align-items:center;gap:10px;min-height:54px;padding:13px 18px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}.status-mark{color:var(--red);font-size:18px}.tested-count{margin-left:auto;white-space:nowrap;font:9px ui-monospace,monospace}.motion-notes{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:30px}.motion-notes article{border-top:1px solid var(--border);padding-top:16px}.motion-notes article>span{font:9px ui-monospace,monospace;color:var(--red)}.motion-notes h2{font-size:13px;font-weight:550;margin:8px 0}.motion-notes p{font-size:11px;color:var(--muted);line-height:1.8}.studio-footer{display:flex;justify-content:space-between;gap:20px;margin-top:28px;padding-top:18px;border-top:1px solid var(--border);font-size:9px;color:var(--muted)}
+/* The surface owns its geometry. View content is revealed after its shape settles. */
+.surface{position:absolute;left:0;top:50%;transform:translateY(-50%);width:380px;height:348px;max-width:calc(100% - 20px);border:1px solid var(--border);border-left:0;background:var(--sidebar);border-radius:0 14px 14px 0;box-shadow:var(--shadow);overflow:hidden;z-index:2;transition:width 320ms var(--grow),height 320ms var(--grow);outline:none}.surface.shrinking{transition-duration:260ms;transition-timing-function:var(--shrink);transition-delay:60ms}.surface-view{position:absolute;left:0;top:0;width:var(--content-width,380px);max-height:var(--max-height,640px);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;opacity:0;visibility:hidden;pointer-events:none;transform:translateX(12px);transition:opacity 100ms,transform 100ms,visibility 100ms}.surface-view.active{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition:opacity 180ms 140ms,transform 260ms var(--grow) 100ms,visibility 0s}.surface-view.content-leaving{opacity:0;transform:translateY(-5px);transition:opacity 100ms,transform 100ms}.surface[data-mode="handle"]{overflow:visible}.surface[data-mode="handle"] .surface-view{overflow:visible}.panel-header{padding:17px 17px 13px;display:flex;align-items:center;justify-content:space-between;gap:8px}.panel-brand{font-size:16px;letter-spacing:-.5px}.panel-brand span{color:var(--red)}.panel-subtitle{font-size:10px;color:var(--muted);margin-top:3px}.panel-footer{border-top:1px solid var(--border);padding:11px 17px;display:flex;align-items:center;justify-content:space-between}.panel-footer .text-button{font-size:10px}.session-list{padding:2px 0 7px}.session-row{height:58px;width:100%;border:0;border-radius:0;display:flex;align-items:center;gap:11px;padding:0 17px;background:transparent;position:relative;text-align:left}.session-row.selected{background:var(--secondary)}.session-row.selected:before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--red)}.session-row.entering{animation:row-in 260ms var(--grow) both;animation-delay:calc(var(--index) * 24ms)}.session-row .row-copy{flex:1;min-width:0}.session-row strong{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.session-row small{font-size:9px;color:var(--muted);display:block;margin-top:3px}.session-row .number{display:none;position:absolute;left:5px;font-size:8px;color:var(--muted)}.keyboard-nav .session-row .number{display:block}.keyboard-nav .session-row{padding-left:20px}.badge{display:inline-block;font-size:9px;line-height:1.6;border-radius:5px;padding:3px 7px;color:var(--info);background:color-mix(in srgb,currentColor 10%,transparent);white-space:nowrap}.badge[data-state="waiting_permission"],.badge[data-state="error"]{color:var(--red)}.badge[data-state="waiting_input"]{color:var(--warning)}.badge[data-state="idle"]{color:var(--success)}.badge[data-state="exited"]{color:var(--muted)}.queue-summary{margin:4px 14px 12px;padding:9px 11px;border-radius:6px;background:color-mix(in srgb,var(--success) 8%,transparent);color:var(--success);font-size:10px;display:flex;justify-content:space-between}.queue-summary span:last-child{font-size:9px}.connection-banner{padding:9px 15px;background:color-mix(in srgb,var(--red) 8%,transparent);color:var(--red);font-size:10px}.empty-state{padding:22px 24px 32px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}.empty-state p{font-size:11px;color:var(--muted)}.empty-state code{font-size:11px;background:var(--well);border:1px solid var(--border);border-radius:6px;padding:8px 14px}.handle-bots{width:27px;display:flex;flex-direction:column;align-items:center;padding:11px 0;gap:7px}.handle-bot{padding:0;min-width:22px;min-height:16px;background:transparent;border:0;display:flex;justify-content:center;align-items:center;position:relative}.handle-bot .bot{transition:transform 260ms var(--pop),width 280ms var(--grow),height 280ms var(--grow)}.handle-bot:hover .bot{transform:scale(1.25)}.handle-bot.waiting:before{content:'';position:absolute;left:-3px;height:100%;width:2px;background:var(--red);border-radius:2px}.handle-bot.question:before{background:var(--warning)}.handle-bot .tooltip{position:absolute;left:35px;top:50%;transform:translateY(-50%);background:var(--sidebar);border:1px solid var(--border);padding:7px 10px;border-radius:6px;box-shadow:var(--shadow);white-space:nowrap;font-size:10px;opacity:0;pointer-events:none;transition:opacity 150ms;z-index:4}.handle-bot:hover .tooltip,.handle-bot:focus-visible .tooltip{opacity:1}.handle-more{font:8px ui-monospace,monospace;padding:1px 0;border:0;background:transparent}.handle-empty{height:58px;width:5px}.surface.empty-handle{box-shadow:none}.handle-bot.alerting .bot{animation:attention 280ms var(--pop)}
+#view-bubble{padding:17px 17px 11px}.bubble-main{display:flex;align-items:center;gap:10px;margin-bottom:12px}.bubble-copy{flex:1;border:0;padding:0;background:transparent;text-align:left;min-width:0}.bubble-copy strong{font-size:12px;display:block}.bubble-copy span{font-size:10px;color:var(--muted);display:block;margin-top:4px}.bubble-main>.icon{align-self:flex-start;font-size:14px;width:20px;height:20px}.code-well{background:var(--well);border:1px solid var(--border);border-radius:7px;padding:12px;font:11px/1.7 ui-monospace,monospace;overflow-wrap:anywhere;white-space:pre-wrap}.bubble-actions{display:flex;gap:7px;justify-content:flex-end;margin-top:12px}.bubble-actions button{font-size:11px;padding:6px 11px}.bubble-meta{display:flex;justify-content:space-between;gap:8px;font-size:8px;color:var(--muted);margin-top:12px}.bubble-timer{height:2px;position:absolute;left:0;right:0;bottom:0;background:var(--border)}.bubble-timer>div{height:100%;background:var(--red);transform-origin:left;transform:scaleX(var(--remaining,1))}.session-header{justify-content:flex-start;padding:13px 13px 12px;gap:7px;border-bottom:1px solid var(--border)}.session-header>.icon:first-child{margin-left:-4px}.session-heading{flex:1;min-width:0}.session-heading strong{font-size:12px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.session-header .icon{font-size:15px;width:25px;height:25px}.queue-bar{display:flex;align-items:center;gap:9px;padding:10px 16px;background:color-mix(in srgb,var(--red) 4%,transparent);border-bottom:1px solid var(--border);font-size:10px}.queue-bar>.text-button{margin-left:auto}.queue-avatar{border:0;background:transparent;padding:0;line-height:0}.queue-avatar[aria-current="true"]{outline:1px solid var(--red);outline-offset:2px;border-radius:50%}.session-content{padding:16px}.session-content .section-eyebrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}.session-content h2{font-size:17px;line-height:1.4;font-weight:550;letter-spacing:-.35px;margin-bottom:7px}.session-content p{font-size:12px;line-height:1.75;color:var(--muted);margin-bottom:12px}.request-card{border:1px solid var(--border);background:var(--well);border-radius:9px;padding:14px;margin-top:14px;overflow:hidden}.request-card .code-well{background:var(--sidebar)}.request-card h3{font-size:12px;font-weight:550;margin-bottom:9px}.request-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-top:14px}.request-actions button{font-size:11px;padding:7px 12px}.checkbox-line{display:flex;gap:7px;align-items:center;font-size:10px;color:var(--muted);margin-top:12px}.checkbox-line input{margin:0}.scope-note{font-size:9px;color:var(--muted);margin:8px 0 0}.session-reply{display:flex;align-items:flex-end;gap:8px;padding:11px 14px;border-top:1px solid var(--border)}textarea{color:var(--foreground);background:transparent;border:0;resize:vertical;max-height:100px;min-height:30px;font-size:11px;line-height:1.6;flex:1;padding:6px 0;width:100%;outline-offset:1px!important}textarea::placeholder{color:var(--muted)}.session-reply .primary{border-color:transparent;flex-shrink:0}.auto-next-line{padding:0 16px 12px;font-size:9px;color:var(--muted)}.auto-next-line label{display:flex;align-items:center;gap:6px}.auto-next-line input{margin:0}.options{display:flex;flex-direction:column;gap:7px;margin-top:14px}.option{border:1px solid var(--border);border-radius:7px;padding:10px 11px;display:flex;align-items:flex-start;gap:9px;cursor:pointer}.option:has(input:checked){border-color:var(--red);background:color-mix(in srgb,var(--red) 5%,transparent)}.option input{margin:3px 0 0}.option strong{font-size:11px;display:block}.option small{font-size:10px;color:var(--muted);display:block;margin-top:3px}.recommended{font-size:8px;color:var(--red);margin-left:5px}.custom-answer{background:var(--well);border:1px solid var(--border);border-radius:6px;padding:9px 10px;width:100%;font-size:11px;color:var(--foreground);margin-top:8px}.diff-file{border:1px solid var(--border);border-radius:7px;margin-top:10px;overflow:hidden}.diff-file summary{cursor:pointer;padding:10px 12px;font:10px ui-monospace,monospace;background:var(--well)}.diff-count{float:right;color:var(--success)}.diff-lines{font:10px/1.9 ui-monospace,monospace;overflow:auto}.diff-lines>div{padding:1px 12px;white-space:pre}.diff-lines .added{color:var(--success);background:color-mix(in srgb,var(--success) 8%,transparent)}.diff-lines .removed{color:var(--red);background:color-mix(in srgb,var(--red) 8%,transparent)}.plan-list{counter-reset:step;padding:0;margin:16px 0;list-style:none}.plan-list li{position:relative;padding:0 0 18px 31px;counter-increment:step}.plan-list li:before{content:counter(step);position:absolute;left:0;top:0;border:1px solid var(--border);border-radius:50%;width:20px;height:20px;text-align:center;font:10px/20px ui-monospace,monospace;color:var(--muted)}.plan-list strong{display:block;font-size:12px}.plan-list small{font-size:10px;color:var(--muted)}.report-list{font-size:12px;line-height:1.8;padding-left:17px;margin:12px 0}.report-list li{margin:6px 0}.report-list code{font-size:10px;color:var(--red)}.report-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:16px 0}.report-summary>div{background:var(--well);border:1px solid var(--border);border-radius:7px;padding:11px}.report-summary strong{font-size:18px;font-weight:500;display:block}.report-summary span{font-size:9px;color:var(--muted)}.quick-replies{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}.quick-replies button{font-size:10px;padding:5px 8px;background:transparent}.terminal-preview{margin-top:14px;border:1px solid var(--border);border-radius:7px;overflow:hidden}.terminal-preview summary{font-size:10px;color:var(--muted);padding:9px 12px;cursor:pointer;background:var(--well)}.terminal-preview pre{margin:0;padding:12px;font:10px/1.8 ui-monospace,monospace;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto}.terminal-preview.expanded pre{max-height:270px}.terminal-disclaimer{font-size:9px;color:var(--muted);margin-top:8px}.working-bar{height:3px;background:var(--secondary);border-radius:4px;overflow:hidden;margin:14px 0}.working-bar span{width:32%;height:100%;display:block;background:var(--info);border-radius:4px;animation:work-progress 2.4s ease-in-out infinite}.working-time{font:10px ui-monospace,monospace;color:var(--muted)}.helper-tree{margin:14px 0 0 8px;padding-left:14px;border-left:1px solid var(--border)}.helper-row{display:flex;align-items:center;gap:8px;font-size:11px;position:relative;padding:8px 0}.helper-row:before{content:'';position:absolute;left:-15px;width:9px;height:1px;background:var(--border)}.helper-row .helper-label{flex:1}.helper-row small{font-size:9px;color:var(--muted);display:block}.helper-request{margin:3px 0 10px;padding:12px;border:1px solid var(--border);border-radius:7px;background:var(--well)}.helper-request p{font-size:10px;margin:0 0 8px}.helper-request code{font-size:10px}.helper-request .request-actions{margin-top:9px}.inline-confirmation{font-size:10px;color:var(--success);margin-top:12px}.error-block{border-left:2px solid var(--red);padding:10px 12px;background:color-mix(in srgb,var(--red) 7%,transparent);font:10px/1.7 ui-monospace,monospace;border-radius:0 7px 7px 0;margin-top:14px}.readonly-note{padding:13px;background:var(--well);border:1px dashed var(--border);border-radius:8px;font-size:11px;color:var(--muted);line-height:1.8;margin-top:14px}.settings-body,.help-body{padding:5px 20px 22px}.settings-body>p,.help-body>p{font-size:11px;line-height:1.8;margin-bottom:12px}.settings-item{display:flex;justify-content:space-between;align-items:center;padding:17px 0;border-bottom:1px solid var(--border);gap:14px}.settings-item strong,.settings-theme strong{display:block;font-size:12px}.settings-item small,.settings-theme small{display:block;font-size:10px;color:var(--muted);margin-top:5px}.settings-theme{display:flex;justify-content:space-between;align-items:center;text-align:left;border:0;background:transparent;padding:17px 0;width:100%;border-radius:0}.settings-theme:hover{background:transparent}.settings-note{font-size:9px;color:var(--muted);margin-top:18px}.help-body dl{display:grid;grid-template-columns:1fr auto;gap:13px;margin:22px 0}.help-body dt{font-size:11px}.help-body dd{margin:0;text-align:right}.reading-mode .session-content{font-size:14px;line-height:1.5;padding:22px}.reading-mode .session-content p,.reading-mode .report-list{font-size:14px}.reading-mode .diff-lines{font-size:12px}.request-card.resolving{animation:resolve-card 300ms var(--shrink) 180ms forwards}.acknowledgement{display:flex;align-items:center;gap:9px;color:var(--success);font-size:11px;margin-top:12px}.offline .bot *{animation-play-state:paused!important}.offline .bot{opacity:.5}.surface-view.is-readonly .session-reply{display:none}
+@keyframes row-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}@keyframes work-progress{0%{transform:translateX(-110%)}100%{transform:translateX(420%)}}@keyframes resolve-card{to{opacity:0;transform:translateY(-6px)}}@keyframes attention{50%{transform:scale(1.13)}}
+@property --shell-top{syntax:'<color>';inherits:true;initial-value:#f0eee6}@property --shell-bottom{syntax:'<color>';inherits:true;initial-value:#b7b7b0}@property --visor{syntax:'<color>';inherits:true;initial-value:#22292b}
+html[data-theme="dark"] .bot{--shell-top:#34434b;--shell-bottom:#273238;--shell-line:#859397;--visor:#172124}html[data-theme="dark"] .bot .shine{opacity:0}html[data-theme="dark"] .bot .shell{stroke-width:1.5}html[data-theme="light"] .bot{--shell-top:#f0eee6;--shell-bottom:#b7b7b0;--shell-line:#fff9;--visor:#22292b}html[data-theme="light"] .bot .shine{opacity:1}html .bot{transition:--shell-top 240ms,--shell-bottom 240ms,--visor 240ms,opacity 180ms}html .bot .shell,html .bot .shine{transition:stroke 240ms,opacity 240ms}html .bot[data-state="waiting_permission"] .pose{transform:rotate(var(--tilt,-4deg)) translateY(-1px)}html .bot[data-state="waiting_input"] .pose{transform:rotate(var(--tilt,5deg))}html .bot[data-state="waiting_permission"] .arm{transition-delay:180ms}
+html[data-reduced="true"] *,html[data-reduced="true"] *:before{animation:none!important;transition:none!important}.paused *{animation-play-state:paused!important}@media(prefers-reduced-motion:reduce){*,*:before{animation:none!important;transition:none!important}}
+@media(min-height:1000px){.desktop{min-height:730px}}@media(max-width:1100px){.studio{padding:24px}.studio-header{padding:0 24px}.playground{grid-template-columns:200px minmax(0,1fr)}.scenario-rail{padding:18px 9px 12px}.preview-toolbar{padding:0 12px}#preview-label{font-size:9px}.desktop-wallpaper>span{font-size:23px}.editor-tree{width:110px}.editor{left:75px;right:20px}.tested-count{display:none}}@media(max-width:800px){.studio-header{gap:12px}.studio{padding:20px 16px}.playground{grid-template-columns:1fr}.scenario-rail{border-right:0;border-bottom:1px solid var(--border);padding:13px}.rail-heading{padding-bottom:10px}#scenarios{display:grid;grid-template-columns:repeat(4,1fr);gap:3px}.scenario-button{font-size:10px;gap:7px;padding:7px 8px;min-height:34px}.scenario-button span:last-child{display:none}.rail-settings{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-top:10px;margin-top:10px}.material{margin:0;gap:5px}.material [data-avatar]{display:none}.material span:not([data-avatar]){display:none}.switch-line{margin:0;gap:10px}#keyboard-help{width:auto;margin:0;margin-left:auto}.desktop{min-height:650px}.intro h1{font-size:28px}.desktop-wallpaper>span{font-size:23px;right:26px}.motion-notes{gap:20px}.studio-footer{flex-direction:column;gap:5px}}@media(max-width:480px){.studio-header{padding:0 16px;height:58px}.studio-header>.small,.header-divider{display:none}.version{font-size:9px}.intro{align-items:flex-end}.intro .eyebrow{font-size:8px}.intro h1{font-size:26px}.intro p{font-size:11px;max-width:210px}#reset{font-size:9px;padding:6px 8px;white-space:nowrap}#scenarios{grid-template-columns:repeat(3,1fr)}.scenario-button{font-size:9px;gap:5px}.scenario-button span:first-child{font-size:8px;width:12px}.rail-settings{gap:10px}.switch-line{font-size:9px}#keyboard-help{display:none}.preview-toolbar{padding:0 9px}.preview-toolbar>.row{gap:6px}#preview-label{font-size:8px}.view-tabs{gap:0}.view-tabs button{padding:5px 6px;font-size:9px}.desktop{min-height:630px}.desktop-wallpaper>span{font-size:20px;top:30px}.editor{left:38px;right:14px;top:130px}.editor-tree{display:none}.desktop-note{right:12px;font-size:8px}.preview-status{font-size:10px;padding:10px 12px}.motion-notes{grid-template-columns:1fr;gap:18px}.session-row{padding:0 12px;gap:8px}.session-row strong{font-size:11px}.session-row small{font-size:8px}.session-row .badge{font-size:8px;padding:3px 5px}.session-header{gap:4px;padding-left:10px;padding-right:8px}.session-header .icon{width:23px}.session-heading strong{font-size:11px}.session-heading .panel-subtitle{font-size:9px}.queue-bar{padding:9px 12px;font-size:9px}.queue-bar .row{gap:3px}.panel-header{padding-left:14px;padding-right:14px}.auto-next-line{font-size:8px}.reading-mode .session-content{padding:16px}.studio-footer{font-size:8px}}
+
+</style>
+  <style>
+.bot{display:block;flex-shrink:0;--eye:#b8e3dc;--shell-top:#f0eee6;--shell-bottom:#b7b7b0;--shell-line:#fff9;--visor:#22292b;overflow:visible}.bot .body{transform-origin:48px 72px;animation:breathe var(--breath,5.4s) ease-in-out infinite;animation-delay:var(--phase,0s)}.bot .pose{transform-origin:48px 59px;transition:transform 300ms var(--grow)}.bot .gaze{transition:transform 450ms var(--grow);transform:translate(var(--gx,0px),var(--gy,0px))}.bot .eye-blink{transform-origin:48px 48px}.bot .eye-open,.bot .eye-happy,.bot .eye-error,.bot .eye-sleep{transition:opacity 260ms var(--grow),transform 260ms var(--grow);transform-origin:48px 49px}.bot .eye-happy,.bot .eye-error,.bot .eye-sleep{opacity:0}.bot .eye-open{fill:var(--eye)}.bot .eye-happy,.bot .eye-error,.bot .eye-sleep{stroke:var(--eye);stroke-width:3.4;stroke-linecap:round;fill:none}.bot .visor{fill:var(--visor);stroke:#0005;stroke-width:1}.bot .shell{stroke:var(--shell-line);stroke-width:.8}.bot .shine{fill:none;stroke:#fff7;stroke-width:1.25;stroke-linecap:round}.bot .arm{fill:var(--shell-bottom);stroke:var(--shell-line);stroke-width:.7;transform-origin:75px 66px;transition:transform 300ms var(--grow),opacity 180ms;opacity:0}.bot .antenna{stroke:var(--shell-bottom);stroke-width:2;stroke-linecap:round}.bot .antenna-light{fill:var(--eye);transition:fill 150ms}.bot .ground{fill:#000;opacity:.16}.bot .feet{fill:var(--shell-bottom)}.bot .reflection{fill:#fff;opacity:.035}.bot[data-state="working"]{--eye:#90c7f2}.bot[data-state="starting"]{--eye:#90c7f2}.bot[data-state="waiting_permission"]{--eye:#f2b09c}.bot[data-state="waiting_permission"] .pose{transform:rotate(-4deg) translateY(-1px)}.bot[data-state="waiting_permission"] .arm{opacity:1;transform:rotate(-22deg) translateY(-5px)}.bot[data-state="waiting_input"]{--eye:#f6d487}.bot[data-state="waiting_input"] .pose{transform:rotate(5deg)}.bot[data-state="waiting_input"] .eye-open{transform:scaleY(1.2)}.bot[data-state="idle"]{--eye:#a9dfc7}.bot[data-state="idle"] .eye-open,.bot[data-state="exited"] .eye-open,.bot[data-state="error"] .eye-open{opacity:0}.bot[data-state="idle"] .eye-happy{opacity:1}.bot[data-state="exited"] .eye-sleep{opacity:1}.bot[data-state="exited"]{--eye:#a3aaa9;opacity:.55}.bot[data-state="exited"] .body{animation:none}.bot[data-state="error"]{--eye:#ffab9f}.bot[data-state="error"] .eye-error{opacity:1}.bot[data-state="error"] .pose{transform:rotate(-7deg) translateY(2px)}.bot[data-state="error"] .body{animation:none}.bot[data-readonly="true"] .shell{stroke-dasharray:3 3;stroke:#adb3b2;stroke-width:1.3}.bot[data-readonly="true"]{opacity:.6}.bot[data-readonly="true"] .body{animation:none}.bot[data-small="true"] .arm,.bot[data-small="true"] .feet,.bot[data-small="true"] .shine,.bot[data-small="true"] .ground,.bot[data-small="true"] .antenna,.bot[data-small="true"] .antenna-light{display:none}.bot[data-small="true"] .eye-open{transform:scale(1.1)}.bot[data-small="true"] .body{animation:none}.bot.blink .eye-blink{animation:blink 180ms ease-in-out}.bot.nod .pose{animation:nod 650ms var(--grow)}.bot.ask .arm{animation:ask 850ms var(--grow)}
+@keyframes breathe{0%,100%{transform:translateY(0) rotate(-.3deg) scaleY(1)}50%{transform:translateY(-.7px) rotate(.3deg) scaleY(1.014)}}@keyframes blink{0%,100%{transform:scaleY(1)}45%,60%{transform:scaleY(.08)}}@keyframes nod{0%,100%{transform:rotate(0)}35%{transform:translateY(3px) rotate(5deg)}65%{transform:translateY(-1px) rotate(-2deg)}}@keyframes ask{0%,100%{transform:rotate(-22deg) translateY(-5px)}35%{transform:rotate(-42deg) translateY(-7px)}65%{transform:rotate(-16deg) translateY(-5px)}}
+
+
+</style>
+</head>
+<body>
+  <header class="studio-header">
+    <a class="brand" href="mascots.html" aria-label="Ledge, étude des mascottes"><i></i>ledge<span>.</span></a>
+    <span class="header-divider"></span><span class="small muted">L’atelier des maquettes</span>
+    <span class="version">02 · Validé</span>
+    <button id="theme-toggle" class="quiet">◐ <span>Mode clair</span></button>
+  </header>
+  <main class="studio">
+    <div class="intro"><div><div class="eyebrow">Une présence qui suit votre travail</div><h1>Ledge, en situation.</h1><p>Choisissez un scénario. Ouvrez une session. Répondez à vos compagnons.</p></div><button id="reset" class="secondary">↺ Réinitialiser</button></div>
+    <div class="playground">
+      <aside class="scenario-rail" aria-label="Scénarios à tester">
+        <div class="rail-heading"><span class="eyebrow">Parcours à essayer</span><span class="small muted">12 vues</span></div>
+        <nav id="scenarios" aria-label="Choisir un scénario"></nav>
+        <div class="rail-settings">
+          <div class="material"><span data-avatar="theme-demo" data-size="38"></span><div><strong id="material-name">Signal</strong><span id="material-description">Contours précis · mode sombre</span></div></div>
+          <label class="switch-line"><span>Mouvements réduits</span><input type="checkbox" id="reduce-motion" role="switch"></label>
+          <label class="switch-line"><span>Ne pas déranger</span><input type="checkbox" id="studio-dnd" role="switch"></label>
+          <button id="keyboard-help" class="quiet full">⌘ Raccourcis clavier</button>
+        </div>
+      </aside>
+      <section class="preview" aria-label="Maquette de Ledge">
+        <div class="preview-toolbar"><div class="row"><span class="connection-dot" id="connection-dot"></span><span class="small" id="preview-label">Bureau de démonstration</span></div><div class="view-tabs" aria-label="Vues de Ledge"><button data-view="handle" aria-pressed="false">Poignée</button><button data-view="list" aria-pressed="true">Liste</button><button data-view="bubble" aria-pressed="false">Bulle</button><button data-view="session" aria-pressed="false">Session</button></div></div>
+        <div class="desktop" id="desktop">
+          <div class="desktop-wallpaper" aria-hidden="true"><span>Un œil sur vos agents.<br>L’esprit à votre travail.</span><i></i></div>
+          <div class="editor" aria-hidden="true"><div class="editor-title"><span class="window-dots">● ● ●</span><span class="mono">harness-assistant</span><span>⌕</span></div><div class="editor-body"><div class="editor-tree"><span>EXPLORATEUR</span><p>⌄ harness-assistant</p><p>　⌄ apps</p><p>　　⌄ overlay</p><p class="file-active">　　 Bot.tsx</p><p>　　 Surface.tsx</p><p>　　 motion.ts</p><p>　⌄ packages</p><p>　　protocol</p><p>　⌄ docs</p></div><div class="editor-code"><div class="editor-file">Bot.tsx <span>×</span></div><pre><em>01</em> <b>import</b> { Bot } <b>from</b> './bots';
+<em>02</em>
+<em>03</em> <b>export function</b> Session() {
+<em>04</em>   <b>return</b> (
+<em>05</em>     &lt;<strong>Bot</strong>
+<em>06</em>       tool=<u>"claude"</u>
+<em>07</em>       state=<u>"working"</u>
+<em>08</em>       name=<u>"Otto"</u>
+<em>09</em>     /&gt;
+<em>10</em>   );
+<em>11</em> }</pre><div class="editor-terminal"><span>TERMINAL</span><p>❯ ledge claude</p><p class="muted">Session Otto · connected</p><p>╰─ À vos côtés, discrètement.</p></div></div></div><div class="editor-status"><span>⑂ design/companions</span><span>TypeScript React　 UTF-8</span></div></div>
+          <div class="edge-zone" id="edge-zone" aria-hidden="true"></div>
+          <section class="surface" id="surface" data-mode="list" aria-label="Ledge, sessions d’agents" tabindex="-1">
+            <div class="surface-view" id="view-handle" data-layer="handle" inert><div id="handle-bots" class="handle-bots"></div></div>
+            <div class="surface-view" id="view-list" data-layer="list">
+              <div class="panel-header"><div><strong class="panel-brand">Ledge<span>.</span></strong><p class="panel-subtitle" id="list-summary"></p></div><div class="row tight"><button class="icon dnd-button" data-action="dnd" aria-label="Activer Ne pas déranger" aria-pressed="false">◔</button><button class="icon" data-action="settings" aria-label="Réglages">⚙</button><button class="icon" data-action="close" aria-label="Replier Ledge">‹</button></div></div>
+              <div class="connection-banner" id="connection-banner" hidden>Connexion perdue · les derniers états connus sont figés.</div>
+              <div id="session-list" class="session-list"></div>
+              <div class="empty-state" id="empty-state" hidden><span data-avatar="empty-demo" data-size="60"></span><strong>Un peu de calme.</strong><p>Lancez une session pour retrouver<br>votre compagnon ici.</p><code>ledge claude</code></div>
+              <div class="queue-summary" id="queue-summary" hidden><span>✓ Tout est à jour.</span><span>Aucune demande en attente</span></div>
+              <footer class="panel-footer"><button class="text-button dnd-button" data-action="dnd" aria-pressed="false">◔ Ne pas déranger</button><kbd>Ctrl Alt L</kbd></footer>
+            </div>
+            <div class="surface-view" id="view-bubble" data-layer="bubble" inert>
+              <div class="bubble-main"><span data-avatar="active-bubble" data-size="48"></span><button class="bubble-copy" data-action="open-bubble"><strong id="bubble-title"></strong><span id="bubble-text"></span></button><button class="icon" data-action="close" aria-label="Fermer la notification">×</button></div>
+              <div class="code-well" id="bubble-command"></div><div class="bubble-actions" id="bubble-actions"></div><div class="bubble-meta"><button data-action="next" id="bubble-more" class="text-button"></button><span id="bubble-timer-label">Survolez pour garder ouvert</span></div><div class="bubble-timer"><div id="bubble-timer-fill"></div></div>
+            </div>
+            <div class="surface-view" id="view-session" data-layer="session" inert>
+              <div class="panel-header session-header"><button class="icon" data-action="back" aria-label="Retour à la liste">‹</button><span data-avatar="active-header" data-size="32"></span><div class="session-heading"><strong id="session-title"></strong><p class="panel-subtitle" id="session-subtitle"></p></div><button class="icon" id="reading-toggle" data-action="reading" aria-label="Activer le mode lecture" aria-pressed="false">⤢</button><button class="icon" data-action="terminal" aria-label="Voir le terminal simulé">↗</button><button class="icon" data-action="close" aria-label="Replier Ledge">×</button></div>
+              <div id="queue-bar" class="queue-bar" hidden><span id="queue-position"></span><div id="queue-avatars" class="row tight"></div><button class="text-button" data-action="next">Suivant →</button></div>
+              <div class="session-content" id="session-content"></div>
+              <div class="session-reply" id="session-reply"><label class="sr-only" for="reply">Répondre à la session</label><textarea id="reply" rows="1" placeholder="Une instruction pour votre compagnon…"></textarea><button id="send-reply" class="icon primary" data-action="send" aria-label="Envoyer le message">↑</button></div>
+              <div class="auto-next-line" id="auto-next-line"><label><input id="auto-next" type="checkbox" checked> Passer à la prochaine demande après ma réponse</label></div>
+            </div>
+            <div class="surface-view" id="view-settings" data-layer="settings" inert><div class="panel-header"><button class="icon" data-action="back" aria-label="Retour à la liste">‹</button><strong>Votre Ledge</strong><button class="icon" data-action="close" aria-label="Replier">×</button></div><div class="settings-body"><p class="muted">Une présence adaptée à votre concentration.</p><label class="settings-item"><span><strong>Ne pas déranger</strong><small>Les demandes restent dans la poignée.</small></span><input type="checkbox" id="settings-dnd" role="switch"></label><label class="settings-item"><span><strong>Mouvements réduits</strong><small>Les états restent lisibles sans animation.</small></span><input type="checkbox" id="settings-motion" role="switch"></label><button class="settings-theme" data-action="theme"><span><strong id="settings-theme-label">Thème sombre · Signal</strong><small>Changer le thème et la matière des mascottes</small></span><span>◐</span></button><div class="settings-note">Les préférences s’appliquent à cette démonstration.</div></div></div>
+            <div class="surface-view" id="view-help" data-layer="help" inert><div class="panel-header"><button class="icon" data-action="back" aria-label="Retour à la liste">‹</button><strong>Au bout des doigts.</strong><button class="icon" data-action="close" aria-label="Replier">×</button></div><div class="help-body"><p class="muted">Cliquez d’abord dans la maquette. Les raccourcis restent locaux à cet onglet.</p><dl><dt>Ouvrir la liste</dt><dd><kbd>Ctrl Alt L</kbd></dd><dt>Choisir une session</dt><dd><kbd>J</kbd> <kbd>K</kbd> ou <kbd>1–9</kbd></dd><dt>Ouvrir la sélection</dt><dd><kbd>Entrée</kbd></dd><dt>Autoriser / refuser</dt><dd><kbd>Y</kbd> <kbd>N</kbd></dd><dt>Demande suivante</dt><dd><kbd>Alt →</kbd></dd><dt>Répondre</dt><dd><kbd>R</kbd></dd><dt>Ne pas déranger</dt><dd><kbd>D</kbd></dd><dt>Retour / replier</dt><dd><kbd>Échap</kbd></dd></dl><p class="small muted">Tab conserve la navigation accessible entre les boutons.</p></div></div>
+          </section>
+          <div class="desktop-note" id="desktop-note"><span class="mini-dot"></span>Simulation locale · aucune commande exécutée</div>
+        </div>
+        <div class="preview-status" role="status" aria-live="polite"><span class="status-mark">↳</span><span id="status">Ouvrez Otto pour autoriser sa commande, ou Nova pour répondre à sa question.</span><span id="tested-count" class="tested-count">0 action testée</span></div>
+      </section>
+    </div>
+    <section class="motion-notes" aria-label="Intentions du prototype"><article><span>01 / MATIÈRE</span><h2>Signal la nuit. Galet le jour.</h2><p>La matière accompagne le thème. Les formes, les expressions et l’identité des sessions restent stables.</p></article><article><span>02 / CONTINUITÉ</span><h2>Un seul point d’ancrage.</h2><p>La poignée s’ouvre et se replie sur elle-même. Le contenu arrive après la forme, sans rebond du panneau.</p></article><article><span>03 / ATTENTION</span><h2>Un geste, puis du calme.</h2><p>Les regards, les respirations et les clignements ont des rythmes distincts. Votre réponse reçoit un bref acquiescement.</p></article></section>
+    <footer class="studio-footer"><span>Direction validée · Signal en sombre, Galet en clair · sessions et résultats simulés.</span><span>Référence de la spécification révisée et des plans d’implémentation.</span></footer>
+  </main>
+  <script>
+/* SVG factory reused from the approved visual direction study. */
+window.LedgeMascotSVG = (() => {
+ let uid=0;
+ const names={claude:"Otto",codex:"Nova",cursor:"Pim"};
+ const tools={claude:"Claude Code",codex:"Codex",cursor:"Cursor Agent"};
+ const states=Object.fromEntries(Object.entries({starting:"Démarrage",working:"Au travail",waiting_permission:"Votre accord",waiting_input:"Une question",idle:"Disponible",error:"Erreur",exited:"Terminée"}).map(([key,label])=>[key,{label}]));
+  function hash(str){return [...str].reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0,7)}
+  function botMarkup(tool,state,size,seed){
+    const id=++uid, h=hash(seed||names[tool]), small=size<=20;
+    const shell=tool==='codex'?'<ellipse class="shell" cx="48" cy="49" rx="32" ry="31" fill="url(#shell-'+id+')"/>':tool==='cursor'?'<path class="shell" d="M23 77 Q14 78 17 66 L30 22 Q33 12 42 20 L79 54 Q88 63 77 67 L58 71 46 83 Q40 88 36 80 L32 73Z" fill="url(#shell-'+id+')"/>':'<rect class="shell" x="15" y="22" width="66" height="56" rx="20" fill="url(#shell-'+id+')"/>';
+    return '<svg class="bot" role="img" aria-label="'+tools[tool]+' · '+states[state].label+'" width="'+size+'" height="'+size+'" viewBox="'+(small?'12 16 72 68':'0 0 96 96')+'" data-tool="'+tool+'" data-state="'+state+'" data-small="'+small+'" data-seed="'+h+'" style="--phase:-'+(h%43)/10+'s;--breath:'+(4.8+h%17/10)+'s"><defs><linearGradient id="shell-'+id+'" x1=".2" y1="0" x2=".75" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="var(--shell-top)"/><stop offset="1" stop-color="var(--shell-bottom)"/></linearGradient></defs><ellipse class="ground" cx="48" cy="88" rx="25" ry="3"/><g class="body"><g class="pose"><g class="antenna-group"><path class="antenna" d="M49 22V14"/><circle class="antenna-light" cx="49" cy="12" r="3"/></g><g class="feet"><rect x="29" y="75" width="13" height="8" rx="4"/><rect x="54" y="75" width="13" height="8" rx="4"/></g>'+shell+'<path class="shine" d="'+(tool==='codex'?'M25 32Q35 19 51 22':tool==='cursor'?'M27 41 34 24Q35 23 37 25':'M25 36Q27 28 38 28H59')+'"/><rect class="visor" x="25" y="35" width="47" height="29" rx="13"/><path class="reflection" d="M39 37H60Q68 37 69 44H28Q29 37 39 37"/><g class="gaze"><g class="eye-blink"><g class="eye-open"><rect x="36" y="43" width="6" height="12" rx="3"/><rect x="55" y="43" width="6" height="12" rx="3"/></g><path class="eye-happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51"/><path class="eye-error" d="m35 45 8 3m11 0 8-3M38 54h2m16 0h2"/><path class="eye-sleep" d="M35 50q4 3 8 0m11 0q4 3 8 0"/></g></g><ellipse class="arm" cx="79" cy="63" rx="5" ry="8"/></g></g></svg>';
+  }
+
+return botMarkup;
+})();
+
+
+</script>
+  <script>
+/* Animation controller for this design prototype; no service connection. */
+window.LedgeMascots = (() => {
+  const labels = {starting:'Démarrage',working:'Au travail',waiting_permission:'Votre accord',waiting_input:'Une question',idle:'Disponible',error:'Erreur',exited:'Terminée'};
+  const media = matchMedia('(prefers-reduced-motion: reduce)');
+  const clocks = new WeakMap();
+  const reduced = () => document.documentElement.dataset.reduced === 'true' || media.matches;
+  function update(slot, session, size = 32) {
+    const identity = session.id + ':' + session.tool;
+    if (slot.dataset.identity !== identity) {
+      slot.innerHTML = window.LedgeMascotSVG(session.tool, session.state, size, session.name);
+      slot.dataset.identity = identity;
+    }
+    const bot = slot.querySelector('.bot');
+    const changed = bot.dataset.state !== session.state;
+    bot.dataset.state = session.state;
+    bot.dataset.readonly = String(Boolean(session.readonly));
+    bot.setAttribute('aria-label', session.name + ' · ' + labels[session.state] + (session.readonly ? ' · lecture seule' : ''));
+    bot.setAttribute('width', size);
+    bot.setAttribute('height', size);
+    bot.setAttribute('viewBox', size <= 20 ? '12 16 72 68' : '0 0 96 96');
+    bot.dataset.small = String(size <= 20);
+    const seed = Number(bot.dataset.seed);
+    bot.style.setProperty('--tilt', (session.state === 'waiting_input' ? [4, -3, 6] : [-4, 3, -2])[seed % 3] + 'deg');
+    if (changed) {
+      bot.style.setProperty('--gx', '0px');
+      bot.style.setProperty('--gy', '0px');
+      bot.classList.remove('ask', 'nod', 'blink');
+      if (session.state === 'waiting_permission' && !reduced() && !session.readonly) {
+        requestAnimationFrame(() => { if (bot.isConnected) bot.classList.add('ask'); });
+      }
+    }
+  }
+  function nod(id) {
+    if (reduced()) return;
+    document.querySelectorAll('[data-identity]').forEach(slot => {
+      if (slot.dataset.identity.split(':')[0] !== id) return;
+      const bot = slot.querySelector('.bot');
+      bot.classList.remove('ask', 'nod');
+      void bot.getBoundingClientRect();
+      bot.classList.add('nod');
+      setTimeout(() => bot.classList.remove('nod'), 750);
+    });
+  }
+  setInterval(() => {
+    if (document.hidden || reduced() || document.documentElement.classList.contains('offline')) return;
+    const now = performance.now();
+    document.querySelectorAll('.bot').forEach(bot => {
+      if (bot.closest('[inert]') || bot.dataset.small === 'true' || bot.dataset.readonly === 'true' || ['exited','error'].includes(bot.dataset.state)) return;
+      const box = bot.getBoundingClientRect();
+      if (box.bottom < 0 || box.top > innerHeight || !box.width) return;
+      const seed = Number(bot.dataset.seed);
+      let clock = clocks.get(bot);
+      if (!clock) { clock = {blink:now + 1400 + seed % 3500, look:now + 800 + seed % 1800, cycle:0}; clocks.set(bot, clock); }
+      if (now >= clock.blink) {
+        bot.classList.remove('blink');
+        void bot.getBoundingClientRect();
+        bot.classList.add('blink');
+        clock.cycle++;
+        clock.blink = now + 3400 + (seed + clock.cycle * 997) % 3300;
+      }
+      if (now >= clock.look) {
+        const focused = bot.dataset.state === 'working';
+        bot.style.setProperty('--gx', focused ? (clock.cycle % 2 ? '1.4px' : '-1.4px') : '0px');
+        bot.style.setProperty('--gy', focused ? '.3px' : '0px');
+        clock.look = now + 2400 + (seed + clock.cycle * 557) % 2100;
+      }
+    });
+  }, 180);
+  document.addEventListener('visibilitychange', () => document.documentElement.classList.toggle('paused', document.hidden));
+  return {update, nod, reduced};
+})();
+
+</script>
+  <script>
+/* Ledge design prototype: all sessions and results are fictional and stay in this tab. */
+(() => {
+  'use strict';
+  const $ = (s, root = document) => root.querySelector(s);
+  const $$ = (s, root = document) => [...root.querySelectorAll(s)];
+  const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const bots = window.LedgeMascots;
+  const toolNames = {claude:'Claude Code',codex:'Codex',cursor:'Cursor Agent'};
+  const labels = {starting:'Démarrage',working:'Au travail',waiting_permission:'Votre accord',waiting_input:'Une question',idle:'Disponible',error:'Erreur',exited:'Terminée'};
+  const scenarios = [
+    ['overview','Vue d’ensemble','Quatre sessions, deux demandes. Ouvrez Otto ou Nova pour leur répondre.'],
+    ['permission','Autorisation','Autorisez ou refusez la commande. Observez le geste avant la reprise du travail.'],
+    ['question','Question','Choisissez une réponse ou saisissez votre propre proposition.'],
+    ['diff','Revue de fichiers','Dépliez les fichiers, essayez le mode lecture, puis acceptez ou refusez les modifications.'],
+    ['plan','Validation de plan','Lisez les étapes. Approuvez le plan ou demandez une modification.'],
+    ['helpers','Sous-agents','Le parent travaille pendant que Lu attend une autorisation. Répondez directement à Lu.'],
+    ['long','Commande longue','La sortie évolue. Vous pouvez interrompre la commande ou simuler sa fin.'],
+    ['report','Rapport reçu','Passez en mode lecture, consultez le terminal ou envoyez une nouvelle instruction.'],
+    ['error','Erreur','L’erreur reste visible et calme. Consultez le terminal simulé ou réessayez.'],
+    ['exited','Session terminée','La session ne bouge plus. Continuer crée une nouvelle session dans cette démonstration.'],
+    ['readonly','Lecture seule','Une session sans lanceur reste visible ; ses actions de réponse sont indisponibles.'],
+    ['team','Équipe & connexion','Essayez 0, 5 ou 12 sessions, puis coupez la connexion simulée.']
+  ];
+  let sessions = [], activeId = 'otto', mode = 'list', reading = false, dnd = false, offline = false;
+  let scenario = 'overview', epoch = 0, timers = new Set(), transitionTimer, hoverTimer, leaveTimer;
+  let bubble = null, bubbleRemaining = 4000, bubbleHover = false, lastTick = performance.now();
+  let busy = new Set(), tests = new Set(), selectedRow = 0, navigationVersion = 0;
+  let drafts = new Map(), customAnswers = new Map(), answers = new Map(), grants = new Set();
+  let longTicks = 0, motionOverride = false, newSessionIndex = 0;
+  const osMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const surface = $('#surface'), desktop = $('#desktop');
+  const sessionById = id => sessions.find(s => s.id === id);
+  const active = () => sessionById(activeId);
+  const interactive = s => s && !offline && !s.readonly && !busy.has(s.id);
+  const delay = (fn, duration) => {
+    const generation = epoch;
+    const timer = setTimeout(() => { timers.delete(timer); if (generation === epoch) fn(); }, duration);
+    timers.add(timer); return timer;
+  };
+  function cancelTimers() { timers.forEach(clearTimeout); timers.clear(); clearTimeout(hoverTimer); clearTimeout(leaveTimer); }
+  function announce(message) { $('#status').textContent = message; }
+  function record(action) { tests.add(action); $('#tested-count').textContent = tests.size + ' action' + (tests.size > 1 ? 's testées' : ' testée'); }
+  const avatar = (key, size = 32) => `<span data-avatar="${escape(key)}" data-size="${size}"></span>`;
+  const badge = s => `<span class="badge" data-state="${s.state}">${s.readonly ? 'Lecture seule' : labels[s.state]}</span>`;
+  function pendingEntries() {
+    return sessions.flatMap(s => [
+      ...(s.pending && !s.readonly ? [{id:s.id,sessionId:s.id,kind:s.pending,at:s.pendingAt || 0}] : []),
+      ...(s.helpers || []).filter(h => h.pending).map(h => ({id:h.id,sessionId:s.id,helperId:h.id,kind:h.pending,at:h.pendingAt || 0}))
+    ]).sort((a,b) => a.at - b.at);
+  }
+  function resolveAvatar(key) {
+    if (key === 'theme-demo') return {id:'theme-demo',name:'Signal',tool:'claude',state:'idle'};
+    if (key === 'empty-demo') return {id:'empty-demo',name:'Ledge',tool:'codex',state:'idle'};
+    if (key === 'active-header') return active();
+    if (key === 'active-bubble') return bubble ? sessionById(bubble.sessionId)?.helpers?.find(h => h.id === bubble.helperId) || sessionById(bubble.sessionId) : active();
+    return sessionById(key) || sessions.flatMap(s => s.helpers || []).find(h => h.id === key);
+  }
+  function refreshAvatars(root = document) {
+    $$('[data-avatar]', root).forEach(slot => {
+      const s = resolveAvatar(slot.dataset.avatar);
+      if (s) bots.update(slot, s, Number(slot.dataset.size));
+    });
+  }
+  function baseSessions() {
+    return [
+      {id:'otto',name:'Otto',tool:'claude',project:'harness-assistant',age:'2 min',state:'waiting_permission',pending:'permission',pendingAt:1,command:'pnpm test --filter overlay'},
+      {id:'nova',name:'Nova',tool:'codex',project:'design-system',age:'8 min',state:'waiting_input',pending:'question',pendingAt:2,command:'Choisir le thème par défaut'},
+      {id:'pim',name:'Pim',tool:'cursor',project:'landing-page',age:'12 min',state:'working',kind:'long',command:'pnpm build'},
+      {id:'bix',name:'Bix',tool:'claude',project:'documentation',age:'18 min',state:'idle',kind:'report'}
+    ];
+  }
+  function renderRows(rebuild = false) {
+    const list = $('#session-list');
+    if (rebuild) {
+      list.innerHTML = sessions.map((s,i) => `<button class="session-row entering" data-session="${s.id}" style="--index:${i}"><span class="number">${i+1}</span>${avatar(s.id)}<span class="row-copy"><strong>${escape(s.project)}</strong><small>${escape(s.name)} · ${toolNames[s.tool]} · ${s.age}</small></span><span class="row-badge"></span></button>`).join('');
+    }
+    $$('.session-row').forEach((row,i) => {
+      const s = sessions[i];
+      row.classList.toggle('selected', s.id === activeId);
+      row.setAttribute('aria-label', `${s.name} · ${s.project} · ${s.readonly ? 'Lecture seule' : labels[s.state]}`);
+      $('.row-badge', row).innerHTML = badge(s);
+    });
+    const count = pendingEntries().length;
+    $('#list-summary').textContent = `${sessions.length} session${sessions.length > 1 ? 's' : ''} · ${count ? count + ' demande' + (count > 1 ? 's' : '') + ' pour vous' : 'tout est à jour'}`;
+    $('#empty-state').hidden = sessions.length > 0;
+    $('#queue-summary').hidden = !sessions.length || count > 0 || !tests.size;
+    renderHandle();
+    refreshAvatars($('#view-list'));
+  }
+  function renderHandle() {
+    const host = $('#handle-bots'), dense = sessions.length > 5;
+    const visible = sessions.length > 10 ? sessions.filter((s,i) => s.pending || i < 5) : sessions;
+    const keys = visible.map(s => s.id).join(',');
+    if (host.dataset.keys !== keys || !host.children.length) {
+      host.dataset.keys = keys;
+      host.innerHTML = visible.map(s => `<button class="handle-bot" data-session="${s.id}">${avatar(s.id,12)}<span class="tooltip"></span></button>`).join('') + (visible.length < sessions.length ? `<button class="handle-more" data-action="list">+${sessions.length-visible.length}</button>` : '') + (!sessions.length ? '<div class="handle-empty"></div>' : '');
+    }
+    $$('.handle-bot',host).forEach(button => {
+      const s = sessionById(button.dataset.session);
+      button.classList.toggle('waiting', Boolean(s.pending));
+      button.classList.toggle('question', s.state === 'waiting_input');
+      $('[data-avatar]',button).dataset.size = s.pending ? (dense ? '18' : '20') : (dense ? '11' : '12');
+      $('.tooltip',button).textContent = `${s.name} · ${labels[s.state]} · ouvrir`;
+      button.setAttribute('aria-label', `${s.name} · ${labels[s.state]} · ouvrir la session`);
+    });
+    refreshAvatars(host);
+  }
+  function fitSurface() {
+    const layer = $(`[data-layer="${mode}"]`);
+    const available = Math.max(250,desktop.clientHeight - 44);
+    const width = Math.min(mode === 'handle' ? (sessions.length ? 28 : 6) : mode === 'bubble' ? 336 : mode === 'session' ? (reading ? 560 : 420) : 380, desktop.clientWidth - 20);
+    const oldWidth = surface.getBoundingClientRect().width, oldHeight = surface.getBoundingClientRect().height;
+    layer.style.setProperty('--content-width', width + 'px');
+    layer.style.setProperty('--max-height', available + 'px');
+    const height = Math.min(layer.scrollHeight,available);
+    surface.classList.toggle('shrinking',width < oldWidth || height < oldHeight);
+    surface.classList.toggle('empty-handle',mode === 'handle' && !sessions.length);
+    surface.style.width = width + 'px';
+    surface.style.height = Math.max(height,mode === 'handle' ? 60 : 80) + 'px';
+  }
+  function setMode(next, {manual = true, focus = false} = {}) {
+    if (next === 'session' && !active()) next = 'list';
+    if (next === 'bubble' && !bubble) {
+      bubble = pendingEntries()[0];
+      if (!bubble) { announce('Aucune demande en attente. Utilisez « Simuler une demande » pour en créer une.'); next = 'list'; }
+      else { activeId = bubble.sessionId; bubbleRemaining = 4000; renderBubble(); }
+    }
+    if (manual) navigationVersion++;
+    clearTimeout(transitionTimer);
+    clearTimeout(leaveTimer);
+    const previous = mode;
+    mode = next;
+    surface.dataset.mode = next;
+    $$('.surface-view').forEach(view => {const visible = view.dataset.layer === next;view.classList.toggle('active',visible);view.inert = !visible;});
+    $$('.view-tabs button').forEach(b => b.setAttribute('aria-pressed',b.dataset.view === next));
+    if (next === 'list') renderRows();
+    if (next === 'session') renderSession();
+    if (next !== 'bubble') bubbleHover = false;
+    surface.classList.toggle('reading-mode', next === 'session' && reading);
+    fitSurface();
+    if (focus) {
+      transitionTimer = setTimeout(() => { if (mode === next) ($('button:not([disabled]), textarea', $(`[data-layer="${mode}"]`)) || surface).focus({preventScroll:true}); }, bots.reduced() ? 0 : 350);
+    } else if (previous !== next && surface.contains(document.activeElement) && document.activeElement.closest('[inert]')) surface.focus({preventScroll:true});
+  }
+  function openSession(id, {focus = false, manual = true} = {}) {
+    if (!sessionById(id)) return;
+    saveDraft();activeId = id;selectedRow = sessions.findIndex(s => s.id === id);bubble = null;
+    renderRows();setMode('session',{focus,manual});record('ouvrir');
+  }
+  function saveDraft() { if (mode === 'session' && active()) drafts.set(activeId,$('#reply').value); }
+  function terminalMarkup(s, expanded = false) {
+    const log = s.terminal || (s.state === 'error' ? '❯ pnpm test --filter overlay\nError: connection to test runner lost\nProcess exited with code 1' : s.state === 'exited' ? 'Session ended · exit code 0' : s.state === 'working' ? `❯ ${s.command || 'pnpm test'}\n› Préparation de l’environnement…\n› Traitement en cours…` : s.outcome === 'denied' ? 'Action refusée par l’utilisateur.\nAucune commande exécutée.' : '✓ Bot.spec.tsx · 8 tests\n✓ Surface.spec.tsx · 4 tests\n12 tests passed · résultat simulé');
+    return `<details class="terminal-preview ${expanded?'expanded':''}" ${expanded?'open':''}><summary>› Aperçu du terminal <span class="muted">· simulation</span></summary><pre id="terminal-output">${escape(log)}</pre></details>`;
+  }
+  const actionButtons = (kind, disabled = false) => `<div class="request-actions"><button data-action="deny" ${disabled?'disabled':''}>${kind === 'plan' ? 'Le modifier' : 'Refuser'}</button><button class="primary" data-action="approve" ${disabled?'disabled':''}>${kind === 'diff' ? 'Appliquer' : kind === 'plan' ? 'Approuver le plan' : 'Autoriser'} <span class="muted-key">Y</span></button></div>`;
+  function sessionBody(s) {
+    const disabled = !interactive(s);
+    const top = `<div class="section-eyebrow"><span>${s.pending ? 'À vous de jouer' : s.state === 'working' ? 'En cours' : s.state === 'error' ? 'À examiner' : 'Session'} ${s.guessed ? '· état estimé' : ''}</span>${badge(s)}</div>`;
+    if (s.readonly) return top + `<h2>Visible, en lecture seule.</h2><p>${s.name} a été lancé sans le lanceur Ledge.</p><div class="readonly-note">Son état reste visible. Pour répondre à cette session, retrouvez son terminal d’origine.<br><br>Pour une prochaine session interactive :<br><code>ledge ${s.tool === 'claude' ? 'claude' : s.tool}</code></div>`;
+    if (s.pending === 'permission') return top + `<h2>${s.name} souhaite lancer une commande.</h2><p>Les tests vérifieront les composants et les transitions de l’interface.</p><section class="request-card"><h3>Exécution dans ${escape(s.project)}</h3><div class="code-well">${escape(s.command)}</div><label class="checkbox-line"><input type="checkbox" id="grant-session" ${grants.has(s.id)?'checked':''} ${disabled?'disabled':''}> Toujours pour cette session simulée</label>${actionButtons('permission',disabled)}</section><p class="scope-note">La décision concerne cette commande uniquement, sauf si vous cochez l’option.</p>`;
+    if (s.pending === 'question') return top + `<h2>Quel thème utiliser par défaut ?</h2><p>${s.name} prépare les composants. Choisissez l’expérience de départ ; les deux thèmes resteront disponibles.</p><div class="options">${[['dark','Sombre · Signal','Contours précis, reflets discrets.'],['light','Clair · Galet','Coque ivoire et lumière douce.'],['system','Suivre le système','S’adapter au thème de votre ordinateur.']].map(([value,title,description],i)=>`<label class="option"><input type="radio" name="answer" value="${value}" ${(answers.get(s.id)||'dark')===value?'checked':''} ${disabled?'disabled':''}><span><strong>${title}${i===0?'<span class="recommended">Recommandé</span>':''}</strong><small>${description}</small></span></label>`).join('')}</div><input id="custom-answer" class="custom-answer" aria-label="Autre réponse" placeholder="Ou proposez autre chose…" value="${escape(customAnswers.get(s.id)||'')}" ${disabled?'disabled':''}><div class="request-actions"><button class="primary" data-action="answer" ${disabled?'disabled':''}>Envoyer la réponse →</button></div>`;
+    if (s.pending === 'diff') return top + `<h2>Un regard sur les changements ?</h2><p>${s.name} propose les matières Signal et Galet et ajuste les mouvements des compagnons.</p><details class="diff-file" open><summary>src/bots/Bot.tsx <span class="diff-count">+3 −1</span></summary><div class="diff-lines"><div class="removed">− material="default"</div><div class="added">+ material={dark ? 'signal' : 'pebble'}</div><div class="added">+ motion="subtle"</div><div class="added">+ blinkSeed={session.id}</div></div></details><details class="diff-file"><summary>src/styles/motion.css <span class="diff-count">+2 −1</span></summary><div class="diff-lines"><div class="removed">− animation: bounce 1s infinite;</div><div class="added">+ animation: breathe 5.4s ease-in-out;</div><div class="added">+ transition: transform 300ms var(--grow);</div></div></details><label class="checkbox-line"><input type="checkbox" id="grant-files" ${disabled?'disabled':''}> Toujours pour ces deux fichiers simulés</label>${actionButtons('diff',disabled)}<p class="scope-note">Extrait fictif destiné à tester la revue de fichiers.</p>`;
+    if (s.pending === 'plan') return top + `<h2>Une présence plus naturelle.</h2><p>${s.name} vous propose trois étapes pour intégrer les compagnons dans les vues de Ledge.</p><ol class="plan-list"><li><strong>Accorder les matières au thème</strong><small>Signal en sombre, Galet en clair · Bot.tsx</small></li><li><strong>Décomposer les gestes</strong><small>Regard, inclinaison, main, puis retour au calme.</small></li><li><strong>Vérifier les petites tailles</strong><small>Poignée, liste, bulle et mouvements réduits.</small></li></ol><div class="code-well">Hors périmètre : daemon, hooks et transport.</div>${actionButtons('plan',disabled)}<p class="scope-note">L’approbation ici teste le parcours. Elle ne valide pas les documents du projet.</p>`;
+    if (s.state === 'error') return top + `<h2>La commande s’est arrêtée.</h2><p>${s.name} a rencontré un problème. Rien n’est relancé automatiquement.</p><div class="error-block">Le processus de test ne répond plus.<br>Code de sortie : 1 · erreur simulée</div>${terminalMarkup(s)}<div class="request-actions"><button data-action="terminal">Voir le terminal</button><button class="primary" data-action="retry" ${disabled?'disabled':''}>Réessayer</button></div>`;
+    if (s.state === 'exited') return top + `<h2>À bientôt, ${s.name}.</h2><p>Cette session est terminée. Son dernier résultat reste consultable.</p><div class="report-summary"><div><strong>18 min</strong><span>Durée</span></div><div><strong>3</strong><span>Fichiers</span></div><div><strong>12</strong><span>Tests simulés</span></div></div><div class="code-well">Bot.tsx<br>motion.css<br>Bot.spec.tsx</div>${terminalMarkup(s)}<div class="request-actions"><button data-action="terminal">Terminal simulé</button><button class="primary" data-action="continue" ${disabled?'disabled':''}>Continuer avec ${s.name}</button></div><p class="scope-note">Dans cette maquette, « Continuer » crée une nouvelle session. La retraite automatique après 10 minutes n’est pas simulée.</p>`;
+    if (s.helpers) return top + `<h2>Une petite équipe, au travail.</h2><p>${s.name} coordonne deux sous-agents. Chacun garde son état et ses demandes.</p><div class="helper-tree">${s.helpers.map(h=>`<div class="helper-row">${avatar(h.id,20)}<span class="helper-label"><strong>${h.name}</strong><small>${h.task}</small></span>${badge(h)}</div>${h.pending?`<div class="helper-request"><p>${h.name} souhaite vérifier les contrastes.</p><code>pnpm test:contrast</code><div class="request-actions"><button data-action="helper-deny" data-helper="${h.id}" ${disabled||busy.has(h.id)?'disabled':''}>Refuser</button><button class="primary" data-action="helper-approve" data-helper="${h.id}" ${disabled||busy.has(h.id)?'disabled':''}>Autoriser</button></div></div>`:''}`).join('')}</div>${terminalMarkup(s)}`;
+    if (s.state === 'working' || s.state === 'starting') return top + `<h2>${s.state === 'starting' ? 'La session se prépare.' : 'Concentré sur sa tâche.'}</h2><p>${s.name} ${s.state==='starting'?'initialise son environnement.':'travaille. Vous pouvez consulter sa sortie sans interrompre son activité.'}</p><div class="code-well">${escape(s.command || 'Préparation de la session…')}</div><div class="working-bar" aria-label="Travail en cours, progression indéterminée"><span></span></div><div class="row" style="justify-content:space-between"><span class="working-time" id="elapsed">${String(Math.floor(longTicks / 60)).padStart(2,'0')}:${String(longTicks%60).padStart(2,'0')}</span><label class="checkbox-line" style="margin:0"><input id="follow-output" type="checkbox" checked> Suivre la sortie</label></div>${terminalMarkup(s,true)}<div class="request-actions"><button data-action="interrupt" ${disabled?'disabled':''}>Interrompre</button></div>`;
+    if (['denied','interrupted','change'].includes(s.outcome)) return top + `<h2>${s.outcome==='denied'?'Décision reçue.':s.outcome==='interrupted'?'La commande est interrompue.':'Le plan attend vos ajustements.'}</h2><p>${s.outcome==='denied'?'L’action a été refusée. Aucune commande ni modification n’a été exécutée.':s.outcome==='interrupted'?'Le travail simulé s’est arrêté à votre demande. La session reste disponible.':'Indiquez ce que vous souhaitez changer dans le champ ci-dessous.'}</p><div class="code-well">${s.outcome==='change'?'En attente de vos instructions.':'Prêt pour votre prochaine instruction.'}</div>${terminalMarkup(s)}`;
+    return top + `<h2>Les compagnons ont trouvé leur place.</h2><p>${s.name} a terminé son tour. Voici le résultat simulé pour tester la lecture d’un rapport.</p><ul class="report-list"><li>Les matières suivent le thème : <strong>Signal</strong> en sombre, <strong>Galet</strong> en clair.</li><li>Les expressions restent lisibles de <code>12 px</code> à <code>48 px</code>.</li><li>Les gestes sont décalés entre les sessions et respectent les mouvements réduits.</li></ul><div class="report-summary"><div><strong>3</strong><span>Fichiers</span></div><div><strong>12</strong><span>Tests simulés</span></div><div><strong>0</strong><span>Erreur simulée</span></div></div>${s.lastReply?`<div class="inline-confirmation">Votre instruction : ${escape(s.lastReply)}</div>`:''}${terminalMarkup(s)}<div class="quick-replies"><button data-action="quick-reply" data-text="Vérifie les petites tailles">Vérifier les petites tailles</button><button data-action="quick-reply" data-text="Affiner les transitions">Affiner les transitions</button></div>`;
+  }
+  function renderSession() {
+    const s = active();if (!s) return;
+    $('#session-title').textContent = `${s.name} · ${s.project}`;
+    $('#session-subtitle').textContent = `${toolNames[s.tool]} · ${s.age}${offline?' · hors connexion':''}`;
+    $('#session-content').innerHTML = sessionBody(s);
+    $('#view-session').classList.toggle('is-readonly',Boolean(s.readonly));
+    $('#reply').value = drafts.get(s.id) || '';
+    $('#reply').disabled = !interactive(s) || s.state === 'exited';
+    $('#send-reply').disabled = !interactive(s) || s.state === 'exited';
+    $('[data-action="terminal"]',$('.session-header')).disabled = Boolean(s.readonly);
+    $('#auto-next-line').hidden = !pendingEntries().length || Boolean(s.readonly);
+    $('#reading-toggle').setAttribute('aria-pressed',String(reading));
+    $('#reading-toggle').setAttribute('aria-label',reading?'Quitter le mode lecture':'Activer le mode lecture');
+    renderQueue();refreshAvatars($('#view-session'));
+  }
+  function renderQueue() {
+    const queue = pendingEntries(), index = queue.findIndex(e=>e.sessionId===activeId);
+    $('#queue-bar').hidden = queue.length < 2;
+    $('#queue-position').textContent = `${index < 0 ? '—' : index+1} / ${queue.length} pour vous`;
+    $('#queue-avatars').innerHTML = queue.map(e=>`<button class="queue-avatar" data-session="${e.sessionId}" aria-label="Ouvrir ${escape(sessionById(e.sessionId).name)}" aria-current="${e.sessionId===activeId}">${avatar(e.helperId||e.sessionId,20)}</button>`).join('');
+  }
+  function renderBubble() {
+    if (!bubble) return;
+    const parent = sessionById(bubble.sessionId), s = bubble.helperId ? parent?.helpers?.find(h=>h.id===bubble.helperId) : parent;
+    if (!s) return;
+    $('#bubble-title').textContent = `${s.name} ${bubble.kind==='question'?'a une question':'attend votre accord'}`;
+    $('#bubble-text').textContent = parent.project + ' · ' + (bubble.helperId?'sous-agent':toolNames[parent.tool]);
+    $('#bubble-command').textContent = bubble.kind==='permission' ? s.command || 'pnpm test:contrast' : bubble.kind==='question' ? 'Quel thème utiliser par défaut ?' : bubble.kind==='diff' ? '2 fichiers modifiés · revue nécessaire' : '3 étapes proposées · à lire';
+    $('#bubble-actions').innerHTML = bubble.kind==='permission' ? `<button data-action="bubble-deny" ${offline?'disabled':''}>Refuser</button><button class="primary" data-action="bubble-approve" ${offline?'disabled':''}>Autoriser</button>` : bubble.kind==='question' ? `<button data-action="close">Plus tard</button><button class="primary" data-action="bubble-answer" ${offline?'disabled':''}>Sombre · Signal</button>` : '<button class="primary" data-action="open-bubble">Examiner →</button>';
+    const extra = pendingEntries().length-1;
+    $('#bubble-more').textContent = extra>0?`+${extra} autre${extra>1?'s':''}`:'';
+    $('#bubble-more').hidden = extra<=0;
+    refreshAvatars($('#view-bubble'));
+  }
+  function refresh({content = true,rebuild = false} = {}) {
+    renderRows(rebuild);
+    if (content && mode==='session') renderSession();
+    if (mode==='bubble') renderBubble();
+    refreshAvatars();fitSurface();
+  }
+  function nextRequest() {
+    const entries = pendingEntries();if (!entries.length) { setMode('list');announce('Tout est à jour. Aucune demande en attente.');return; }
+    const at = entries.findIndex(e=>e.sessionId===activeId);
+    const next = entries[(at+1)%entries.length];openSession(next.sessionId,{focus:true});record('file-attente');
+  }
+  function finishWork(id) {
+    const s = sessionById(id);if (!s || s.state!=='working' || offline) return;
+    s.state='idle';s.pending=null;s.kind='report';s.outcome='complete';
+    s.terminal='✓ Bot.spec.tsx · 8 tests\n✓ Surface.spec.tsx · 4 tests\n12 tests passed · résultat simulé';
+    refresh({content:activeId===id});
+    announce(`${s.name} a terminé son tour simulé. Son rapport est disponible.`);
+  }
+  function decide(accepted, {helperId, text, planChange = false} = {}) {
+    const parent = bubble && mode==='bubble' ? sessionById(bubble.sessionId) : active();
+    const helper = helperId || (mode==='bubble' ? bubble?.helperId : null);
+    const s = helper ? parent?.helpers?.find(h=>h.id===helper) : parent;
+    if (!s || !parent || !interactive(parent) || busy.has(s.id) || !s.pending) return;
+    const fromMode=mode, revision=navigationVersion, nextEnabled=$('#auto-next').checked;
+    const pendingKind=s.pending;
+    s.requestKind=pendingKind;
+    if (pendingKind==='permission' && $('#grant-session')?.checked) grants.add(s.id);
+    if (pendingKind==='diff' && $('#grant-files')?.checked) grants.add(s.id+':files');
+    busy.add(s.id);bots.nod(s.id);bubbleRemaining=Infinity;
+    $$('button,input',fromMode==='bubble'?$('#view-bubble'):$('#session-content')).forEach(b=>b.disabled=true);
+    const request=$('.request-card');if(request)request.classList.add('resolving');
+    announce(`${s.name} a reçu ${accepted?'votre accord':'votre décision'}. Un signe de tête, puis la suite.`);
+    record(accepted?(pendingKind==='question'?'réponse':'accord'):'refus');
+    delay(()=>{
+      busy.delete(s.id);s.pending=null;s.state=accepted?'working':'idle';s.outcome=accepted?'':planChange?'change':'denied';
+      if(text)s.lastReply=text;
+      if(accepted)s.command=pendingKind==='question'?'Préparer le thème choisi…':s.command||'Appliquer les changements…';
+      else s.terminal=planChange?'Plan non approuvé. En attente de modifications.':'Action refusée. Aucune commande exécutée.';
+      const closingBubble=mode==='bubble'&&bubble?.id===s.id;
+      if(closingBubble)bubble=null;
+      refresh({content:activeId===parent.id});
+      const stillHere=revision===navigationVersion;
+      if(closingBubble)setMode('handle',{manual:false});
+      else if(stillHere && fromMode==='session' && nextEnabled && !planChange){
+        const next=pendingEntries()[0];
+        if(next)openSession(next.sessionId,{manual:false,focus:true});
+        else{setMode('list',{manual:false,focus:true});announce('Tout est à jour. Vos compagnons peuvent reprendre.');const rev=navigationVersion;delay(()=>{if(mode==='list'&&rev===navigationVersion&&!surface.matches(':hover')&&!surface.contains(document.activeElement))setMode('handle',{manual:false});},2000);}
+      }
+      if(planChange){announce('Indiquez les ajustements souhaités dans le champ de réponse.');$('#reply').focus();}
+      if(accepted)delay(()=>{
+        if(helper){if(!offline){s.state='idle';s.outcome='complete';refresh({content:activeId===parent.id});}}
+        else finishWork(s.id);
+      },3000);
+    },bots.reduced()?0:900);
+  }
+  function sendReply(text) {
+    const s=active();if(!interactive(s)||s.state==='exited'||!text.trim())return;
+    s.lastReply=text.trim();s.pending=null;s.state='working';s.outcome='';s.command='Traiter votre instruction…';
+    drafts.delete(s.id);$('#reply').value='';refresh();bots.nod(s.id);record('message');announce(`${s.name} a reçu : « ${text.trim()} »`);
+    delay(()=>finishWork(s.id),3400);
+  }
+  function simulateArrival() {
+    if(offline){announce('Rétablissez la connexion simulée avant de créer une demande.');return;}
+    if(!sessions.length)loadScenario('permission');
+    const preferred=active();
+    const s=preferred&&!preferred.readonly&&preferred.state!=='exited'?preferred:sessions.find(s=>!s.readonly&&s.state!=='exited');if(!s)return;
+    epoch++;cancelTimers();busy.clear();
+    const kind=s.requestKind||s.pending||'permission';
+    s.state='working';s.pending=null;s.kind='long';activeId=s.id;bubble=null;
+    refresh();setMode('handle');const revision=navigationVersion;
+    announce('La session travaille. Une nouvelle demande arrivera dans un instant…');
+    delay(()=>{
+      if((kind==='permission'&&grants.has(s.id))||(kind==='diff'&&grants.has(s.id+':files'))){
+        announce('Votre autorisation mémorisée est réutilisée pour cette même action simulée.');
+        delay(()=>finishWork(s.id),2300);return;
+      }
+      s.pending=kind;s.state=kind==='question'?'waiting_input':'waiting_permission';s.command='pnpm test --filter overlay';s.pendingAt=Date.now();
+      refresh({content:mode==='session'&&activeId===s.id});
+      const button=$(`.handle-bot[data-session="${s.id}"]`);button?.classList.add('alerting');
+      announce(dnd?'Nouvelle demande. Ne pas déranger est actif : elle reste dans la poignée.':`${s.name} a besoin de votre accord.`);
+      delay(()=>{
+        button?.classList.remove('alerting');
+        if(mode==='handle'&&!dnd&&!offline&&revision===navigationVersion){bubble=pendingEntries()[0];bubbleRemaining=4000;renderBubble();setMode('bubble',{manual:false});}
+      },bots.reduced()?0:540);
+    },1300);
+  }
+  function syncSettings() {
+    $('#studio-dnd').checked=dnd;$('#settings-dnd').checked=dnd;
+    $$('.dnd-button').forEach(b=>{b.setAttribute('aria-pressed',String(dnd));b.setAttribute('aria-label',dnd?'Désactiver Ne pas déranger':'Activer Ne pas déranger')});
+    const reduced=document.documentElement.dataset.reduced==='true'||osMotion.matches;
+    $('#reduce-motion').checked=reduced;$('#settings-motion').checked=reduced;
+  }
+  function setDnd(value) {dnd=value;syncSettings();announce(dnd?'Ne pas déranger : les nouvelles demandes restent dans la poignée.':'Les nouvelles demandes pourront ouvrir une bulle.');record('ne-pas-déranger');}
+  function setMotion(value) {motionOverride=true;document.documentElement.dataset.reduced=String(value);syncSettings();announce(osMotion.matches&&!value?'Votre système demande des mouvements réduits ; cette préférence reste respectée.':value?'Mouvements réduits. Les états restent indiqués par les expressions et les libellés.':'Les mouvements discrets sont réactivés.');record('mouvement');}
+  function setTheme() {
+    const light=document.documentElement.dataset.theme!=='light';document.documentElement.dataset.theme=light?'light':'dark';
+    $('#theme-toggle span').textContent=light?'Mode sombre':'Mode clair';$('#theme-toggle').setAttribute('aria-label',light?'Passer au mode sombre, mascottes Signal':'Passer au mode clair, mascottes Galet');
+    $('#material-name').textContent=light?'Galet':'Signal';$('#material-description').textContent=light?'Coque ivoire · mode clair':'Contours précis · mode sombre';
+    $('#settings-theme-label').textContent=light?'Thème clair · Galet':'Thème sombre · Signal';
+    record('thème');announce(light?'Mode clair : Galet. Les sessions conservent leur état.':'Mode sombre : Signal. Les sessions conservent leur état.');
+  }
+  function setOffline(value) {
+    offline=value;document.documentElement.classList.toggle('offline',value);
+    $('#connection-banner').hidden=!value;$('#connection-dot').classList.toggle('offline',value);
+    $('#preview-label').textContent=value?'Connexion simulée interrompue':'Bureau de démonstration';
+    $('#toggle-connection').textContent=value?'Rétablir la connexion':'Couper la connexion';
+    if(value){cancelTimers();busy.clear();bubble=null;if(mode==='bubble')setMode('handle');}
+    refresh();announce(value?'Connexion perdue : les derniers états sont figés, les réponses sont désactivées.':'Connexion rétablie. Vous pouvez reprendre vos interactions.');record('connexion');
+  }
+  function loadScenario(key) {
+    saveDraft();epoch++;cancelTimers();busy.clear();bubble=null;reading=false;longTicks=0;drafts.clear();answers.clear();customAnswers.clear();grants.clear();
+    scenario=key;sessions=baseSessions();activeId='otto';selectedRow=0;navigationVersion++;
+    offline=false;document.documentElement.classList.remove('offline');$('#connection-banner').hidden=true;$('#connection-dot').classList.remove('offline');$('#preview-label').textContent='Bureau de démonstration';$('#toggle-connection').textContent='Couper la connexion';
+    if(key!=='overview'){sessions.forEach(s=>{s.pending=null;if(s.state.startsWith('waiting'))s.state='working';});}
+    const s=sessions[0];
+    if(['permission','diff','plan'].includes(key)){s.state='waiting_permission';s.pending=key;s.pendingAt=1;}
+    if(key==='question'){activeId='nova';sessions[1].state='waiting_input';sessions[1].pending='question';sessions[1].pendingAt=1;}
+    if(key==='helpers'){s.state='working';s.helpers=[{id:'lu',name:'Lu',tool:'codex',state:'waiting_permission',pending:'permission',pendingAt:1,task:'Contrastes et accessibilité',command:'pnpm test:contrast'},{id:'pip',name:'Pip',tool:'cursor',state:'working',task:'Transitions de la surface'}];}
+    if(key==='long'){activeId='pim';sessions[2].kind='long';}
+    if(key==='report'){activeId='bix';}
+    if(key==='error'){s.state='error';s.outcome='error';}
+    if(key==='exited'){s.state='exited';s.outcome='complete';}
+    if(key==='readonly'){s.readonly=true;s.state='working';}
+    if(key==='team')makeTeam(12,false);
+    $$('[data-scenario]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.scenario===key));
+    $('#team-controls').hidden=key!=='team';$('#finish-simulation').hidden=key!=='long';
+    renderRows(true);refreshAvatars();setMode(key==='overview'||key==='team'?'list':'session');
+    announce(scenarios.find(s=>s[0]===key)[2]);
+    $('#auto-next').checked=true;
+  }
+  function makeTeam(count,refreshView=true) {
+    epoch++;cancelTimers();busy.clear();bubble=null;
+    const names=['Otto','Nova','Pim','Bix','Lu','Milo','Ada','Nox','Pip','Sol','Mina','Tao'];
+    sessions=Array.from({length:count},(_,i)=>({id:'team-'+i,name:names[i],tool:['claude','codex','cursor'][i%3],project:['harness-assistant','design-system','landing-page'][i%3],age:(i+1)+' min',state:i===1||i===7||i===10?'waiting_permission':i%3===0?'idle':'working',pending:i===1||i===7||i===10?'permission':null,pendingAt:i,command:'pnpm test'}));
+    activeId=sessions[0]?.id||'';selectedRow=0;
+    if(refreshView){renderRows(true);setMode('list');announce(`${count} sessions. Les demandes restent visibles dans la poignée, même quand les sessions au repos sont regroupées.`);record('équipe');}
+  }
+  function showTerminal() {
+    if(!active()||active().readonly)return;
+    let details=$('.terminal-preview',$('#session-content'));
+    if(!details){$('#session-content').insertAdjacentHTML('beforeend',terminalMarkup(active(),true));details=$('.terminal-preview',$('#session-content'));}
+    details.open=true;fitSurface();details.scrollIntoView({block:'nearest',behavior:bots.reduced()?'instant':'smooth'});
+    announce('Aperçu du terminal simulé. Aucune fenêtre ni commande réelle n’est ouverte.');record('terminal');
+  }
+  function handleAction(action,target) {
+    if(action==='close'){saveDraft();bubble=null;setMode('handle',{focus:true});}
+    if(action==='back'||action==='list'){saveDraft();bubble=null;setMode('list',{focus:true});}
+    if(action==='settings')setMode('settings',{focus:true});
+    if(action==='dnd')setDnd(!dnd);
+    if(action==='theme')setTheme();
+    if(action==='reading'){reading=!reading;setMode('session');record('lecture');}
+    if(action==='next')nextRequest();
+    if(action==='open-bubble'&&bubble)openSession(bubble.sessionId,{focus:true});
+    if(action==='approve'||action==='bubble-approve')decide(true);
+    if(action==='deny'||action==='bubble-deny')decide(false,{planChange:active()?.pending==='plan'});
+    if(action==='answer'){const value=$('#custom-answer')?.value.trim()||({dark:'Sombre · Signal',light:'Clair · Galet',system:'Suivre le système'}[$('input[name="answer"]:checked')?.value]);decide(true,{text:value});}
+    if(action==='bubble-answer')decide(true,{text:'Sombre · Signal'});
+    if(action==='helper-approve'||action==='helper-deny')decide(action==='helper-approve',{helperId:target.dataset.helper});
+    if(action==='send')sendReply($('#reply').value);
+    if(action==='quick-reply')sendReply(target.dataset.text);
+    if(action==='terminal')showTerminal();
+    if(action==='retry'&&interactive(active())){const s=active();s.state='working';s.outcome='';s.command='pnpm test --filter overlay';refresh();announce('Nouvelle tentative simulée en cours.');delay(()=>finishWork(s.id),3200);record('réessayer');}
+    if(action==='interrupt'&&interactive(active())){const s=active();s.state='idle';s.pending=null;s.outcome='interrupted';s.terminal='Process interrupted by user.\nAucun résultat de réussite.';refresh();record('interruption');announce(`${s.name} a interrompu son travail. La session reste disponible.`);}
+    if(action==='continue'&&interactive(active())){
+      const old=active(),fresh={...old,id:old.id+'-next-'+(++newSessionIndex),state:'starting',outcome:'',age:'0 min',pending:null};delete fresh.terminal;
+      sessions.push(fresh);activeId=fresh.id;renderRows(true);setMode('session');record('continuer');announce('Une nouvelle session démarre ; la précédente reste terminée.');
+      delay(()=>{fresh.state='working';fresh.command='Reprendre le travail…';refresh();delay(()=>finishWork(fresh.id),2800);},700);
+    }
+  }
+  $('#scenarios').innerHTML=scenarios.map(([id,name],i)=>`<button class="scenario-button" data-scenario="${id}" aria-pressed="${i===0}"><span>${String(i+1).padStart(2,'0')}</span>${name}<span>↗</span></button>`).join('');
+  $('.rail-settings').insertAdjacentHTML('beforeend','<button id="simulate-arrival" class="secondary full" style="margin-top:12px">Simuler une demande ↗</button><button id="finish-simulation" class="secondary full" style="margin-top:7px" hidden>Simuler la fin du travail</button><div id="team-controls" hidden><div class="row tight" style="margin-top:12px"><button data-count="0">0</button><button data-count="5">5</button><button data-count="12">12 sessions</button></div><button id="toggle-connection" class="secondary full" style="margin-top:7px">Couper la connexion</button></div>');
+  document.addEventListener('click',event=>{
+    const target=event.target.closest('button');if(!target||target.disabled)return;
+    if(target.dataset.scenario)loadScenario(target.dataset.scenario);
+    if(target.dataset.session)openSession(target.dataset.session,{focus:true});
+    if(target.dataset.view){saveDraft();bubble=null;setMode(target.dataset.view,{focus:true});}
+    if(target.dataset.action)handleAction(target.dataset.action,target);
+    if(target.dataset.count!==undefined)makeTeam(Number(target.dataset.count));
+  });
+  $('#theme-toggle').addEventListener('click',setTheme);
+  $('#reset').addEventListener('click',()=>{tests.clear();$('#tested-count').textContent='0 action testée';loadScenario('overview');});
+  $('#simulate-arrival').addEventListener('click',simulateArrival);
+  $('#finish-simulation').addEventListener('click',()=>{finishWork(activeId);record('fin-travail');});
+  $('#toggle-connection').addEventListener('click',()=>setOffline(!offline));
+  $('#keyboard-help').addEventListener('click',()=>setMode('help',{focus:true}));
+  ['#studio-dnd','#settings-dnd'].forEach(id=>$(id).addEventListener('change',e=>setDnd(e.target.checked)));
+  ['#reduce-motion','#settings-motion'].forEach(id=>$(id).addEventListener('change',e=>setMotion(e.target.checked)));
+  osMotion.addEventListener('change',()=>{if(!motionOverride)document.documentElement.dataset.reduced=String(osMotion.matches);syncSettings();});
+  $('#reply').addEventListener('input',()=>{if(active())drafts.set(activeId,$('#reply').value);});
+  $('#session-content').addEventListener('input',event=>{if(event.target.id==='custom-answer')customAnswers.set(activeId,event.target.value);if(event.target.name==='answer')answers.set(activeId,event.target.value);});
+  $('#session-content').addEventListener('toggle',()=>requestAnimationFrame(fitSurface),true);
+  $('#reply').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendReply(event.target.value);}});
+  $('#edge-zone').addEventListener('pointerenter',()=>{clearTimeout(leaveTimer);if(mode==='handle')hoverTimer=setTimeout(()=>{if(mode==='handle'){setMode('list',{manual:false});surface.dataset.hoverOpened='true';}},180);});
+  $('#edge-zone').addEventListener('pointerleave',()=>clearTimeout(hoverTimer));
+  surface.addEventListener('pointerenter',()=>{clearTimeout(leaveTimer);bubbleHover=true;});
+  surface.addEventListener('pointerleave',()=>{bubbleHover=false;if(mode==='list'&&surface.dataset.hoverOpened==='true')leaveTimer=setTimeout(()=>{if(mode==='list'&&!surface.contains(document.activeElement)){setMode('handle',{manual:false});delete surface.dataset.hoverOpened;}},500);});
+  document.addEventListener('keydown',event=>{
+    const editing=/INPUT|TEXTAREA|SELECT/.test(event.target.tagName)||event.target.isContentEditable;
+    if(event.ctrlKey&&event.altKey&&event.key.toLowerCase()==='l'){event.preventDefault();surface.classList.add('keyboard-nav');setMode('list',{focus:true});record('clavier');return;}
+    if(editing)return;
+    if(event.key==='Escape'&&surface.contains(event.target)){event.preventDefault();saveDraft();setMode(mode==='session'||mode==='settings'||mode==='help'?'list':'handle',{focus:true});return;}
+    if(!surface.contains(event.target))return;
+    const key=event.key.toLowerCase();
+    if(key==='?' ){event.preventDefault();setMode('help',{focus:true});}
+    if(key==='d'){event.preventDefault();setDnd(!dnd);}
+    if(event.altKey&&event.key==='ArrowRight'){event.preventDefault();nextRequest();}
+    if(mode==='list'&&['j','k','arrowdown','arrowup'].includes(key)&&sessions.length){event.preventDefault();selectedRow=(selectedRow+(['j','arrowdown'].includes(key)?1:-1)+sessions.length)%sessions.length;activeId=sessions[selectedRow].id;renderRows();surface.classList.add('keyboard-nav');$(`.session-row[data-session="${activeId}"]`).focus();}
+    if(mode==='list'&&/^[1-9]$/.test(key)&&sessions[Number(key)-1]){event.preventDefault();openSession(sessions[Number(key)-1].id,{focus:true});}
+    if(key==='r'&&mode==='session'&&!$('#reply').disabled){event.preventDefault();$('#reply').focus();}
+    if(key==='o'&&mode==='session'){event.preventDefault();showTerminal();}
+    if(['y','n'].includes(key)&&['session','bubble','list'].includes(mode)){
+      const s=mode==='bubble'?sessionById(bubble?.sessionId):active();
+      if(s?.pending&&s.pending!=='question'){event.preventDefault();decide(key==='y',{planChange:key==='n'&&s.pending==='plan'});}
+    }
+  });
+  setInterval(()=>{
+    const now=performance.now(),elapsed=now-lastTick;lastTick=now;
+    if(mode!=='bubble'||document.hidden||bubbleHover||surface.contains(document.activeElement)||busy.size||!Number.isFinite(bubbleRemaining))return;
+    bubbleRemaining-=elapsed;$('#bubble-timer-fill').style.setProperty('--remaining',String(Math.max(0,bubbleRemaining/4000)));
+    if(bubbleRemaining<=0){bubble=null;setMode('handle',{manual:false});announce('La bulle s’est repliée. La demande reste disponible dans la poignée.');}
+  },50);
+  setInterval(()=>{
+    if(document.hidden||offline||scenario!=='long')return;
+    const s=sessionById('pim');if(!s||s.state!=='working')return;
+    longTicks++;
+    const lines=['› Résolution des dépendances…','› Compilation des composants…','› Vérification des types…','› Préparation des ressources…','› Assemblage du bundle…'];
+    if(longTicks%3===0)s.terminal=`❯ pnpm build\n${lines.slice(0,Math.min(5,Math.floor(longTicks/3))).join('\n')}\n› Travail en cours · ${longTicks}s (simulé)`;
+    if(activeId===s.id&&mode==='session'){
+      if($('#elapsed'))$('#elapsed').textContent=String(Math.floor(longTicks/60)).padStart(2,'0')+':'+String(longTicks%60).padStart(2,'0');
+      const output=$('#terminal-output');if(output&&s.terminal){output.textContent=s.terminal;if($('#follow-output')?.checked)output.scrollTop=output.scrollHeight;}
+    }
+  },1000);
+  new ResizeObserver(()=>requestAnimationFrame(fitSurface)).observe(desktop);
+  document.documentElement.dataset.reduced=String(osMotion.matches);syncSettings();loadScenario('overview');
+})();
+
+</script>
+</body>
+</html>
+
