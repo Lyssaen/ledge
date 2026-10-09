@@ -15,6 +15,11 @@ describe('names', () => {
     expect(pickName(['Otto'], 'otto')).toBe('Otto-2');
     expect(pickName([], 'zed')).toBe('Zed');
   });
+  it('treats a blank preferred name as no preference', () => {
+    expect(pickName([], '   ')).toBe(NAMES[0]);
+    expect(pickName([NAMES[0]!], '')).toBe(NAMES[1]);
+    expect(pickName([], '  zed  ')).toBe('Zed');
+  });
   it('suffixes when all 64 are taken', () => {
     expect(pickName(NAMES)).toBe(NAMES[0] + '-2');
   });

@@ -13,8 +13,10 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 export function pickName(taken: Iterable<string>, preferred?: string): string {
   const used = new Set(taken);
   const free = (n: string) => !used.has(n);
-  if (preferred) {
-    const base = cap(preferred.trim());
+  // A blank --name is no preference, not an empty name (which the session schema rejects).
+  const wanted = preferred?.trim();
+  if (wanted) {
+    const base = cap(wanted);
     if (free(base)) return base;
     for (let i = 2; ; i++) if (free(`${base}-${i}`)) return `${base}-${i}`;
   }
