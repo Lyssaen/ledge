@@ -29,14 +29,30 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
   }
 
+  const inFlight = new Set<string>();
+
   async function injectAndVerify(id: string, plan: KeyPlan): Promise<void> {
     const s = store.get(id);
     if (!s) throw new Error(`unknown session ${id}`);
-    const adapter = adapterFor(s.tool);
-    await runPlan(s, plan);
-    const gone = await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
-    if (gone) store.apply(id, { name: 'Decided', at: now(), source: 'daemon' });
-    else store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: 'the terminal did not take it' });
+    if (inFlight.has(id)) throw new Error('a decision is already in progress');
+    inFlight.add(id);
+    try {
+      const adapter = adapterFor(s.tool);
+      const decided = s.pending;
+      const stillTheSame = () => {
+        const cur = store.get(id)?.pending;
+        return cur === decided || (!!cur && !!decided && cur.kind === decided.kind && cur.text === decided.text);
+      };
+      try { await runPlan(s, plan); }
+      catch (e) {
+        store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: (e as Error).message });
+        throw e;
+      }
+      const gone = await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
+      if (!stillTheSame()) return; // a newer prompt arrived meanwhile: leave it alone
+      if (gone) store.apply(id, { name: 'Decided', at: now(), source: 'daemon' });
+      else store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: 'the terminal did not take it' });
+    } finally { inFlight.delete(id); }
   }
 
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
@@ -86,6 +102,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   }
 
   wss.on('connection', ws => {
+    ws.on('error', e => log(`socket error: ${e.message}`));
     send(ws, { type: 'snapshot', sessions: store.all() });
     ws.on('message', data => {
       let msg: ClientMessage;

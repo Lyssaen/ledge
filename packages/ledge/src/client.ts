@@ -36,6 +36,8 @@ export function connect(opts: { port?: number; host?: string; timeoutMs?: number
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => { ws.terminate(); reject(new Error('connect timeout')); }, opts.timeoutMs ?? 1000);
     ws.once('open', () => { clearTimeout(t); resolve(client); });
-    ws.once('error', e => { clearTimeout(t); reject(e); });
+    let settled = false;
+    ws.once('open', () => { settled = true; });
+    ws.on('error', e => { if (!settled) { settled = true; clearTimeout(t); reject(e); } });
   });
 }

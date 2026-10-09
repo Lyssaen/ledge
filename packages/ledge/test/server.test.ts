@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { connect as tcp } from 'node:net';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { startServer } from '../src/daemon/server.js';
@@ -113,6 +114,52 @@ describe('server', () => {
     for (let i = 0; i < 100; i++) ids.push((await c.next('session.removed', 200)).id);
     expect(ids[0]).toBe('r50'); expect(ids[99]).toBe('r149');
     await expect(c.next('session.removed', 100)).rejects.toThrow(/timeout/);
+    c.close();
+  });
+
+  it('survives a protocol violation on a raw socket', async () => {
+    await new Promise<void>(res => {
+      const sock = tcp(srv.port, '127.0.0.1', () => {
+        sock.write(`GET / HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`);
+        setTimeout(() => { sock.write(Buffer.from([0x81, 0x02, 0x68, 0x69])); setTimeout(() => { sock.destroy(); res(); }, 150); }, 100);
+      });
+    });
+    const c = await connect({ port: srv.port });
+    await c.next('snapshot'); c.close();
+  });
+
+  it('two decides back-to-back inject once', async () => {
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    const err = await c.next('error');
+    expect(err.message).toMatch(/already in progress/);
+    await c.next('session.updated', 3000);
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '1'], ['keys', 'ledge-a', 'Enter']]);
+    c.close();
+  });
+
+  it('does not apply Decided over a newer pending', async () => {
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    await new Promise(r => setTimeout(r, 100));
+    store.apply('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'rm -rf x' });
+    await new Promise(r => setTimeout(r, 800));
+    expect(store.get('a')?.state).toBe('waiting_permission');
+    expect(store.get('a')?.pending?.text).toBe('rm -rf x');
+    c.close();
+  });
+
+  it('a failing key plan marks the session error and replies with an error', async () => {
+    store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: 'bad\nline' });
+    tmux.sendText = async () => { throw new Error('no newlines'); };
+    const err = await c.next('error');
+    expect(err.message).toMatch(/newlines/);
+    expect(store.get('a')?.state).toBe('error');
     c.close();
   });
 
