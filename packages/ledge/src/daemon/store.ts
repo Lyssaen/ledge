@@ -11,6 +11,7 @@ export class Store {
   private sessions = new Map<string, Session>();
   private listeners = new Set<(c: StoreChange) => void>();
   private timer: NodeJS.Timeout | null = null;
+  private saving: Promise<void> = Promise.resolve();
   private readonly journalPath: string;
 
   constructor(opts: { journalPath?: string } = {}) {
@@ -60,8 +61,14 @@ export class Store {
     return () => this.listeners.delete(listener);
   }
 
-  async save(): Promise<void> {
+  save(): Promise<void> {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    const run = this.saving.then(() => this.write());
+    this.saving = run.catch(() => undefined);
+    return run;
+  }
+
+  private async write(): Promise<void> {
     await mkdir(dirname(this.journalPath), { recursive: true });
     const tmp = `${this.journalPath}.tmp`;
     await writeFile(tmp, JSON.stringify({ savedAt: new Date().toISOString(), sessions: this.all() }, null, 2));

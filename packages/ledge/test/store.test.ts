@@ -56,3 +56,12 @@ describe('Store', () => {
     expect(s.all().map(x => x.id)).toEqual(['ok']);
   });
 });
+
+describe('Store save serialization', () => {
+  it('overlapping save() calls both resolve and leave a valid journal', async () => {
+    const s = new Store(); s.upsert(mk('a'));
+    await Promise.all([s.save(), s.save(), s.save()]);
+    const s2 = new Store(); await s2.load();
+    expect(s2.get('a')?.id).toBe('a');
+  });
+});
