@@ -1,0 +1,9 @@
+● Which migration strategy for the invoices table?
+
+╭──────────────────────────────────────────────────────────────╮
+│ Which migration strategy for the invoices table?             │
+│ ❯ 1. Backfill in place (Recommended)                         │
+│   2. Shadow table and swap                                   │
+│   3. Dual write for a week                                   │
+│   4. Other                                                   │
+╰──────────────────────────────────────────────────────────────╯

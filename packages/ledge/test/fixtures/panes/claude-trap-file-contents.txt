@@ -1,0 +1,7 @@
+● Read(test/fixtures/panes/claude-permission.txt)
+  ⎿  Read 9 lines
+     │ Do you want to proceed?
+     │ ❯ 1. Yes
+     │   2. Yes, and don't ask again for npm test
+
+● Thinking…
