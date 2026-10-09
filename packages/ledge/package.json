@@ -1,0 +1,22 @@
+{
+  "name": "ledge",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "ledge": "./dist/cli/index.js" },
+  "scripts": {
+    "dev": "tsx src/cli/index.ts",
+    "build": "tsup src/cli/index.ts --format esm --target node22 --out-dir dist/cli --clean",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ledge/protocol": "workspace:*",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "@types/ws": "^8.5.12",
+    "tsup": "^8.3.0"
+  }
+}

@@ -36,6 +36,7 @@ export const SessionSchema = z.object({
   helpers: z.array(HelperSchema).default([]),
   startedAt: z.string().datetime(),
   lastActivityAt: z.string().datetime(),
+  lastHookAt: z.string().datetime().optional(),
   exitCode: z.number().int().nullable().optional(),
   exitedAt: z.string().datetime().optional(),
   lastError: z.string().optional(),
