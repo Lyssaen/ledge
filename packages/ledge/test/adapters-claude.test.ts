@@ -14,6 +14,17 @@ describe('claude adapter: detection', () => {
     const pane = '● Read(a)\n  ⎿  Read 3 lines\n\n● Bash(npm test)\n  ⎿  Run tests\n\n' + fx('claude-permission').split('\n').slice(3).join('\n');
     expect(claudeAdapter.detectPrompt(pane)?.text).toBe('Bash(npm test)');
   });
+  it('reads only the last box: a stale box higher in the capture is not merged in', () => {
+    const pane = fx('claude-question') + '\n\n● User answered: Shadow table and swap\n\n' + fx('claude-permission');
+    expect(claudeAdapter.detectPrompt(pane)).toEqual({ kind: 'permission', text: 'Bash(npm test)', options: ['Yes', "Yes, and don't ask again for npm test", 'No, and tell Claude what to do differently (esc)'] });
+  });
+  it('a stale box above a live one does not hide the live question', () => {
+    const pane = fx('claude-permission') + '\n\n● Bash(npm test)\n  ⎿  ok\n\n' + fx('claude-question');
+    const m = claudeAdapter.detectPrompt(pane);
+    expect(m?.kind).toBe('question');
+    expect(m?.text).toBe('Which migration strategy for the invoices table?');
+    expect(m?.options).toEqual(['Backfill in place (Recommended)', 'Shadow table and swap', 'Dual write for a week', 'Other']);
+  });
   it('detects a question with its options', () => {
     const m = claudeAdapter.detectPrompt(fx('claude-question'));
     expect(m?.kind).toBe('question');

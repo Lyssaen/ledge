@@ -8,28 +8,37 @@ const OPTION = /^(?:❯\s)?(\d+)\.\s(.+)$/;
 const PERMISSION_QUESTION = /^Do you want to proceed\??$/;
 const TOOL_CALL = /^●\s([A-Z][A-Za-z]+\([^)]*\))/;
 
-function boxLines(pane: string): string[] {
-  return pane.split('\n').map(l => l.replace(/\s+$/, '')).filter(l => BOX_LINE.test(l)).map(l => l.match(BOX_LINE)![1]!.trim());
+const isBoxLine = (l: string) => BOX_LINE.test(l.replace(/\s+$/, ''));
+
+/** The last contiguous run of box lines: a stale box higher in the capture is never merged in. */
+function lastBox(pane: string): { start: number; lines: string[] } | null {
+  const all = pane.split('\n');
+  let end = all.length - 1;
+  while (end >= 0 && !isBoxLine(all[end]!)) end--;
+  if (end < 0) return null;
+  let start = end;
+  while (start > 0 && isBoxLine(all[start - 1]!)) start--;
+  const lines = all.slice(start, end + 1).map(l => l.replace(/\s+$/, '').match(BOX_LINE)![1]!.trim());
+  return { start, lines };
 }
 
-function parseBox(pane: string): { question: string; options: string[] } | null {
-  const lines = boxLines(pane);
-  if (lines.length < 2) return null;
-  const question = lines[0]!;
+function parseBox(pane: string): { start: number; question: string; options: string[] } | null {
+  const box = lastBox(pane);
+  if (!box || box.lines.length < 2) return null;
+  const question = box.lines[0]!;
   const options: string[] = [];
-  for (const l of lines.slice(1)) {
+  for (const l of box.lines.slice(1)) {
     const m = l.match(OPTION);
     if (m) options.push(m[2]!.trim());
   }
   if (options.length === 0) return null;
-  return { question, options };
+  return { start: box.start, question, options };
 }
 
 // The tool call being approved is the last one above the box, not the first in scrollback.
-function lastToolCallBeforeBox(pane: string): string | null {
+function lastToolCallBefore(pane: string, boxStart: number): string | null {
   const lines = pane.split('\n');
-  const boxStart = lines.findIndex(l => BOX_LINE.test(l.replace(/\s+$/, '')));
-  for (let i = (boxStart < 0 ? lines.length : boxStart) - 1; i >= 0; i--) {
+  for (let i = boxStart - 1; i >= 0; i--) {
     const m = lines[i]!.match(TOOL_CALL);
     if (m) return m[1]!;
   }
@@ -40,7 +49,7 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   const box = parseBox(pane);
   if (!box) return null;
   if (PERMISSION_QUESTION.test(box.question)) {
-    const call = lastToolCallBeforeBox(pane);
+    const call = lastToolCallBefore(pane, box.start);
     return { kind: 'permission', text: call ?? box.question, options: box.options };
   }
   return { kind: 'question', text: box.question, options: box.options };
