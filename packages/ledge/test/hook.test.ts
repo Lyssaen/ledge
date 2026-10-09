@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { mapClaudeHook, runHook } from '../src/cli/hook.js';
 import { startServer } from '../src/daemon/server.js';
@@ -45,6 +46,19 @@ describe('mapClaudeHook', () => {
 });
 
 describe('runHook', () => {
+  it('falls back to session_id when LEDGE_SESSION is empty', () => {
+    process.env.LEDGE_SESSION = '';
+    expect(mapClaudeHook('Stop', { session_id: 'uuid-1' }, at)?.id).toBe('uuid-1');
+  });
+  it('stays within one timeoutMs against a server that accepts and never answers', async () => {
+    const srv = createServer(() => {});
+    await new Promise<void>(r => srv.listen(0, '127.0.0.1', r));
+    const port = (srv.address() as { port: number }).port;
+    const t0 = Date.now();
+    await runHook('Stop', JSON.stringify({ session_id: 's' }), { port, timeoutMs: 150 });
+    expect(Date.now() - t0).toBeLessThan(220);
+    srv.close();
+  });
   it('returns quickly and never throws when no daemon listens', async () => {
     const t0 = Date.now();
     await expect(runHook('Stop', JSON.stringify({ session_id: 's' }), { port: 1, timeoutMs: 150 })).resolves.toBeUndefined();

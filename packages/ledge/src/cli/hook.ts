@@ -16,7 +16,7 @@ function describeTool(tool: string | undefined, input: unknown): string {
 export function mapClaudeHook(eventName: string, payload: unknown, at: string): { id: string; event: SessionEvent } | null {
   if (!payload || typeof payload !== 'object') return null;
   const p = payload as Payload;
-  const id = process.env.LEDGE_SESSION ?? str(p.session_id);
+  const id = process.env.LEDGE_SESSION || str(p.session_id);
   if (!id) return null;
   const tool = str(p.tool_name);
   const base = { at, source: 'hook' as const };
@@ -48,14 +48,15 @@ export function mapClaudeHook(eventName: string, payload: unknown, at: string): 
 /** Always resolves, always fast: a hook must never slow the agent down. */
 export async function runHook(eventName: string, stdin: string, opts: { port?: number; timeoutMs?: number } = {}): Promise<void> {
   const timeoutMs = opts.timeoutMs ?? 100;
+  const deadline = Date.now() + timeoutMs;
   try {
     const payload = JSON.parse(stdin || '{}');
     const mapped = mapClaudeHook(eventName, payload, new Date().toISOString());
     if (!mapped) { log(`hook ${eventName} ignored: unknown event or malformed payload`); return; }
     const client = await connect({ port: opts.port, timeoutMs });
     client.send({ type: 'session.event', id: mapped.id, event: mapped.event });
-    // close() resolves once the handshake completes, i.e. after the send is flushed
-    await Promise.race([client.close(), new Promise(r => setTimeout(r, timeoutMs))]);
+    // close() resolves once the handshake completes, i.e. after the send is flushed; one shared deadline
+    await Promise.race([client.close(), new Promise(r => setTimeout(r, Math.max(0, deadline - Date.now())))]);
   } catch (e) {
     log(`hook ${eventName} dropped: ${(e as Error).message}`);
   }

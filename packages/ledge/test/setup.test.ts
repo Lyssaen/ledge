@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mergeClaudeHooks, runSetup, CLAUDE_EVENTS } from '../src/cli/setup.js';
@@ -36,6 +36,23 @@ describe('runSetup', () => {
     expect(JSON.parse(first).hooks.Stop).toHaveLength(1);
     expect((await runSetup({ settingsPath: p })).join('\n')).toContain('already present');
     expect(readFileSync(p, 'utf8')).toBe(first);
+  });
+  it.each([
+    ['null root', 'null', 'root is not an object'],
+    ['array root', '[]', 'root is not an object'],
+    ['object event', '{"hooks":{"Stop":{"a":1}}}', 'hooks.Stop is not an array'],
+    ['string event', '{"hooks":{"Stop":"abc"}}', 'hooks.Stop is not an array'],
+    ['array hooks', '{"hooks":[]}', '"hooks" is not an object']
+  ])('refuses malformed shape (%s) and leaves the file untouched', async (_n, content, msg) => {
+    const d = tmp(); const p = join(d, 'settings.json');
+    writeFileSync(p, content);
+    await expect(runSetup({ settingsPath: p })).rejects.toThrow(`${msg}, not modified`);
+    expect(readFileSync(p, 'utf8')).toBe(content);
+  });
+  it('leaves no temp file behind after writing', async () => {
+    const d = tmp(); const p = join(d, 'settings.json');
+    await runSetup({ settingsPath: p });
+    expect(readdirSync(d).filter(f => f.endsWith('.tmp'))).toEqual([]);
   });
   it('refuses an existing settings.json that is not valid JSON and leaves it untouched', async () => {
     const d = tmp(); const p = join(d, 'settings.json');
