@@ -48,7 +48,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: (e as Error).message });
         throw e;
       }
-      const gone = await verifyGone(async () => (await tmux.capture(s.tmuxSession!, 5)) ?? '', p => adapter.promptStillVisible(p), opts.verify);
+      const gone = await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
       if (!stillTheSame()) return; // a newer prompt arrived meanwhile: leave it alone
       if (gone) store.apply(id, { name: 'Decided', at: now(), source: 'daemon' });
       else store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: 'the terminal did not take it' });

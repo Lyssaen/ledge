@@ -86,6 +86,18 @@ describe('server', () => {
     c.close();
   });
 
+  it('a failed capture is not read as prompt gone: session goes to error, nothing re-sent', async () => {
+    tmux = fakeTmux({ 'ledge-a': [PROMPT] }); tmux.capture = async () => null;
+    await srv.close(); srv = await startServer({ store, tmux, port: 0 });
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    const upd = await c.next('session.updated', 3000);
+    expect(upd.session.state).toBe('error');
+    expect(tmux.sent.length).toBe(2);
+    c.close();
+  });
+
   it('reply types the text literally then Enter', async () => {
     store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');

@@ -4,7 +4,8 @@ import { PROTOCOL_PORT, parseServerMessage, type ClientMessage, type ServerMessa
 export interface Client {
   send(msg: ClientMessage): void;
   next<T extends ServerMessage['type']>(type: T, timeoutMs?: number): Promise<Extract<ServerMessage, { type: T }>>;
-  close(): void;
+  /** Resolves once the close handshake completes (so queued sends are flushed). */
+  close(): Promise<void>;
 }
 
 export function connect(opts: { port?: number; host?: string; timeoutMs?: number } = {}): Promise<Client> {
@@ -31,7 +32,7 @@ export function connect(opts: { port?: number; host?: string; timeoutMs?: number
         waiters.push(w);
       });
     },
-    close: () => ws.close()
+    close: () => new Promise<void>(res => { if (ws.readyState === WebSocket.CLOSED) return res(); ws.once('close', () => res()); ws.close(); })
   };
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => { ws.terminate(); reject(new Error('connect timeout')); }, opts.timeoutMs ?? 1000);
