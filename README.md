@@ -10,3 +10,9 @@ A living handle on the left edge of your Windows screen that follows every agent
 - Revised implementation plans: [WSL core](docs/superpowers/plans/2026-10-09-ledge-core-wsl.md), [overlay and mascots](docs/superpowers/plans/2026-10-09-ledge-overlay.md), [adapters and rich screens](docs/superpowers/plans/2026-10-09-ledge-adapters-and-screens.md). Design is approved; production implementation remains to be done.
 
 Personal project. Windows host + WSL2 only.
+
+## Packages
+
+- `packages/protocol`: zod schemas shared by the daemon, the CLI and the overlay.
+- `packages/ledge`: the `ledge` CLI (launcher, daemon, hook receiver). See `packages/ledge/README.md`.
+- `apps/overlay`: the Windows overlay (next plan).
