@@ -58,7 +58,7 @@ describe('reduce: pending rules', () => {
   });
   it('ExitPlanMode sets a plan pending', () => {
     const next = reduce(session('working'), ev('PreToolUse', { tool: 'ExitPlanMode', text: 'Fix three findings' }));
-    expect(next.pending?.kind).toBe('plan');
+    expect(next.pending).toEqual({ kind: 'plan', text: 'the plan', source: 'hook' });
   });
   it('Edit permission sets a diff pending', () => {
     const next = reduce(session('working'), ev('PermissionRequest', { tool: 'Edit', text: 'src/daemon/state.ts' }));
@@ -143,12 +143,19 @@ describe('reduce: rulings', () => {
   it('a PermissionRequest over a hook plan pending keeps kind plan', () => {
     const s = session('waiting_permission', { pending: { kind: 'plan', text: 'the plan', source: 'hook' } });
     const next = reduce(s, ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));
-    expect(next.pending?.kind).toBe('plan');
+    expect(next.pending).toEqual({ kind: 'plan', text: 'the plan', source: 'hook' });
   });
   it('a PermissionRequest over a hook question pending keeps kind question', () => {
     const s = session('waiting_input', { pending: { kind: 'question', text: 'Which?', options: ['a'], source: 'hook' } });
     const next = reduce(s, ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));
-    expect(next.pending?.kind).toBe('question');
+    expect(next.pending).toEqual({ kind: 'question', text: 'Which?', options: ['a'], source: 'hook' });
     expect(next.state).toBe('waiting_input');
+  });
+  it('a late PaneGone after SessionEnd keeps exitCode and lastActivityAt', () => {
+    const s = reduce(session('working'), ev('SessionEnd', { exitCode: 1 }));
+    const next = reduce(s, ev('PaneGone', { source: 'daemon', at: later(9000) }));
+    expect(next).toBe(s);
+    expect(next.exitCode).toBe(1);
+    expect(next.lastActivityAt).toBe(later(5000));
   });
 });

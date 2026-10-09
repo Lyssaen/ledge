@@ -32,7 +32,8 @@ function mergePending(current: Pending | undefined, incoming: Pending): Pending 
   if (current.source === 'hook' && incoming.source === 'pane') return current;
   if (incoming.source === 'hook' && current.source === 'pane') return incoming;
   // A permission/diff request over a richer hook pending (plan, question) keeps that kind.
-  const kind = current.kind === 'plan' || current.kind === 'question' ? current.kind : incoming.kind;
+  if (current.source === 'hook' && (current.kind === 'plan' || current.kind === 'question') && incoming.source === 'hook') return current;
+  const kind = incoming.kind;
   return { ...current, ...incoming, kind, text: incoming.text || current.text, tool: incoming.tool ?? current.tool, options: incoming.options ?? current.options };
 }
 
@@ -42,7 +43,7 @@ function samePending(a: Pending, b: Pending): boolean {
 }
 
 export function reduce(s: Session, ev: SessionEvent): Session {
-  if (s.state === 'exited' && ev.name !== 'SessionEnd' && ev.name !== 'PaneGone') return s;
+  if (s.state === 'exited') return s;
   const at = ev.at;
   const lastHookAt = s.lastHookAt;
 
