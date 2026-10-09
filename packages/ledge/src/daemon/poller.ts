@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { Session } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor as defaultAdapterFor } from '../adapters/index.js';
@@ -17,6 +18,7 @@ export function startPoller(opts: {
   const deadCheckMs = opts.deadCheckMs ?? 5000;
   const retireMs = opts.retireMs ?? 10 * 60 * 1000;
   const hashes = new Map<string, string>();
+  const matches = new Map<string, NonNullable<ReturnType<ReturnType<typeof defaultAdapterFor>['detectPrompt']>>>();
   let lastDeadCheck = 0;
   let running = false;
 
@@ -27,25 +29,45 @@ export function startPoller(opts: {
       const deadCheck = t - lastDeadCheck >= deadCheckMs;
       if (deadCheck) lastDeadCheck = t;
       for (const s of store.all()) {
-        if (s.state === 'exited') {
-          hashes.delete(s.id);
-          if (s.exitedAt && t - Date.parse(s.exitedAt) > retireMs) store.remove(s.id);
-          continue;
-        }
-        if (!s.tmuxSession) continue;
-        if (deadCheck && !(await tmux.hasSession(s.tmuxSession))) { store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' }); hashes.delete(s.id); continue; }
-        const pane = await tmux.capture(s.tmuxSession, PREVIEW_LINES);
-        const h = createHash('sha1').update(pane).digest('hex');
-        if (hashes.get(s.id) === h) continue;
-        hashes.set(s.id, h);
-        store.apply(s.id, { name: 'PaneChanged', at: now(), source: 'pane' });
-        opts.broadcastPreview?.(s.id, pane.split('\n'));
-        let adapter; try { adapter = adapterFor(s.tool); } catch { continue; }
-        const m = adapter.detectPrompt(pane);
-        if (m) store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options });
+        try { await pollOne(s, t, deadCheck); }
+        catch (e) { log(`poll failed for ${s.id}: ${(e as Error).message}`); }
       }
-    } catch (e) { log(`poll failed: ${(e as Error).message}`); }
-    finally { running = false; }
+    } finally { running = false; }
+  }
+
+  async function pollOne(s: Session, t: number, deadCheck: boolean): Promise<void> {
+    if (s.state === 'exited') {
+      hashes.delete(s.id); matches.delete(s.id);
+      if (s.exitedAt && t - Date.parse(s.exitedAt) > retireMs) store.remove(s.id);
+      return;
+    }
+    if (!s.tmuxSession) return;
+    if (deadCheck && !(await tmux.hasSession(s.tmuxSession))) {
+      store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' });
+      hashes.delete(s.id); matches.delete(s.id);
+      return;
+    }
+    const pane = await tmux.capture(s.tmuxSession, PREVIEW_LINES);
+    if (pane === null) return; // capture failed: not a content change
+    const h = createHash('sha1').update(pane).digest('hex');
+    const prev = hashes.get(s.id);
+    if (prev === h) {
+      // Unchanged pane: re-apply a remembered prompt only if nothing is pending (a hook may have
+      // shadowed it inside the priority window). The reducer keeps no-ops identical.
+      const m = matches.get(s.id);
+      if (m && !store.get(s.id)?.pending) store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options });
+      return;
+    }
+    hashes.set(s.id, h);
+    if (prev !== undefined) {
+      store.apply(s.id, { name: 'PaneChanged', at: now(), source: 'pane' });
+      opts.broadcastPreview?.(s.id, pane.split('\n'));
+    }
+    let adapter; try { adapter = adapterFor(s.tool); } catch { return; }
+    const m = adapter.detectPrompt(pane);
+    if (!m) { matches.delete(s.id); return; }
+    matches.set(s.id, m);
+    store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options });
   }
 
   const timer = setInterval(() => { void tick(); }, opts.intervalMs ?? 1000);

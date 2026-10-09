@@ -11,8 +11,10 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const store = new Store();
   await store.load();
   const tmux = opts.tmux ?? realTmux(opts.tmuxSocket ?? 'ledge');
-  const live = new Set(await tmux.listSessions());
-  for (const s of store.all()) {
+  let live: Set<string> | null = null;
+  try { live = new Set(await tmux.listSessions()); }
+  catch (e) { log(`startup prune skipped, tmux unavailable: ${(e as Error).message}`); }
+  if (live) for (const s of store.all()) {
     if (s.tmuxSession && !live.has(s.tmuxSession)) store.remove(s.id);
   }
   const server = await startServer({ store, tmux, port: opts.port });

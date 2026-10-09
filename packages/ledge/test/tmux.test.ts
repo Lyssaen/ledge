@@ -37,7 +37,7 @@ describe('tmux', () => {
     await tmux.newSession({ name: n, cwd: '/tmp', env: {}, command: ['sh', '-c', 'for i in $(seq 1 40); do echo line$i; done; cat'] });
     await sleep(400);
     const out = await tmux.capture(n, 5);
-    expect(out.split('\n')).toEqual(['line36', 'line37', 'line38', 'line39', 'line40']);
+    expect(out!.split('\n')).toEqual(['line36', 'line37', 'line38', 'line39', 'line40']);
     await tmux.killSession(n);
   });
   it('sends a trailing or lone semicolon literally', async () => {
@@ -49,7 +49,7 @@ describe('tmux', () => {
     await tmux.sendText(n, ';');
     await tmux.sendKeys(n, ['Enter']);
     await sleep(300);
-    expect((await tmux.capture(n, 10)).split('\n')).toEqual(['echo hi;', 'echo hi;', ';', ';']);
+    expect((await tmux.capture(n, 10))!.split('\n')).toEqual(['echo hi;', 'echo hi;', ';', ';']);
     await tmux.killSession(n);
   });
   it('rejects text containing newlines', async () => {
@@ -63,7 +63,7 @@ describe('tmux', () => {
     await sleep(100);
     await expect(tmux.sendText('ledge-p1', 'leak')).rejects.toThrow();
     await expect(tmux.sendKeys('ledge-p1', ['Enter'])).rejects.toThrow();
-    expect(await tmux.capture('ledge-p1', 5)).toBe('');
+    expect(await tmux.capture('ledge-p1', 5)).toBeNull();
     await tmux.sendText('ledge-p10', 'ok');
     await sleep(200);
     expect(await tmux.capture('ledge-p10', 5)).toBe('ok');
@@ -79,5 +79,11 @@ describe('tmux', () => {
   });
   it('builds attach args for the dedicated server', () => {
     expect(tmux.attachArgs('ledge-x')).toEqual(['-L', socket, '-f', expect.stringContaining('tmux.conf'), 'attach-session', '-t', '=ledge-x']);
+  });
+});
+
+describe('tmux no server', () => {
+  it('listSessions is empty when no server runs on the socket', async () => {
+    expect(await realTmux(`ledge-test-none-${process.pid}`).listSessions()).toEqual([]);
   });
 });

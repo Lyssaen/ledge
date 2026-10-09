@@ -5,8 +5,10 @@ export interface Tmux {
   newSession(opts: { name: string; cwd: string; env: Record<string, string>; command: string[] }): Promise<void>;
   sendText(name: string, text: string): Promise<void>;
   sendKeys(name: string, keys: string[]): Promise<void>;
-  capture(name: string, lines: number): Promise<string>;
+  /** Last `lines` lines, or null when the capture failed (distinct from an empty pane). */
+  capture(name: string, lines: number): Promise<string | null>;
   hasSession(name: string): Promise<boolean>;
+  /** Empty when no tmux server runs; throws on any other failure. */
   listSessions(): Promise<string[]>;
   killSession(name: string): Promise<void>;
   attachArgs(name: string): string[];
@@ -44,7 +46,7 @@ export function realTmux(socket = 'ledge'): Tmux {
     async capture(name, lines) {
       // History included, then trimmed to exactly the last `lines` lines.
       const r = await t(['capture-pane', '-p', '-J', '-t', `=${name}:`, '-S', String(-lines)]);
-      if (r.code !== 0) return '';
+      if (r.code !== 0) return null;
       return r.stdout.replace(/\s+$/g, '').split('\n').slice(-lines).join('\n');
     },
     async hasSession(name) {
@@ -52,7 +54,10 @@ export function realTmux(socket = 'ledge'): Tmux {
     },
     async listSessions() {
       const r = await t(['list-sessions', '-F', '#{session_name}']);
-      return r.code === 0 ? r.stdout.split('\n').map(s => s.trim()).filter(Boolean) : [];
+      if (r.code === 0) return r.stdout.split('\n').map(s => s.trim()).filter(Boolean);
+      // No server is the only failure that legitimately means "no sessions".
+      if (/no server running|error connecting to/i.test(r.stderr)) return [];
+      throw new Error(`tmux list-sessions failed: ${r.stderr.trim()}`);
     },
     async killSession(name) { await t(['kill-session', '-t', `=${name}`]); },
     attachArgs(name) { return [...base(), 'attach-session', '-t', `=${name}`]; }

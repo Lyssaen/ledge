@@ -14,24 +14,26 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
   state: 'working', helpers: [], startedAt: now(), lastActivityAt: now(), source: 'launcher', ...extra
 });
 const PROMPT = '╭──╮\n│ Do you want to proceed? │\n│ ❯ 1. Yes │\n╰──╯';
+const failing: Record<string, true> = {}; const throwing: Record<string, true> = {};
 function fakeTmux(panes: Record<string, string>): Tmux {
   return {
     async newSession() {}, async sendText() {}, async sendKeys() {},
-    async capture(n) { return panes[n] ?? ''; }, async hasSession(n) { return n in panes; },
+    async capture(n) { if (n in failing) return null; if (n in throwing) throw new Error('boom'); return panes[n] ?? ''; }, async hasSession(n) { return n in panes; },
     async listSessions() { return Object.keys(panes); }, async killSession(n) { delete panes[n]; }, attachArgs: () => []
   };
 }
 let store: Store; let panes: Record<string, string>; let previews: string[][];
-beforeEach(() => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-')); store = new Store(); panes = {}; previews = []; clock = T0; });
+beforeEach(() => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-')); store = new Store(); panes = {}; previews = []; clock = T0; for (const k of Object.keys(failing)) delete failing[k]; for (const k of Object.keys(throwing)) delete throwing[k]; });
 
 describe('poller', () => {
-  it('bumps lastActivityAt only when the pane content changes, and broadcasts the preview', async () => {
+  it('seeds the hash on first sighting, then bumps lastActivityAt only on change and broadcasts the preview', async () => {
     panes['ledge-a'] = 'line one'; store.upsert(mk('a'));
     const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, lines) => previews.push(lines) });
     clock += 1000; await p.tick();
-    expect(store.get('a')!.lastActivityAt).toBe(now());
+    expect(store.get('a')!.lastActivityAt).toBe(new Date(T0).toISOString());
+    expect(previews).toEqual([]);
     clock += 1000; await p.tick();
-    expect(store.get('a')!.lastActivityAt).toBe(new Date(T0 + 1000).toISOString());
+    expect(store.get('a')!.lastActivityAt).toBe(new Date(T0).toISOString());
     panes['ledge-a'] = 'line one\nline two'; clock += 1000; await p.tick();
     expect(store.get('a')!.lastActivityAt).toBe(now());
     expect(previews.at(-1)).toEqual(['line one', 'line two']);
@@ -73,6 +75,39 @@ describe('poller prompt handling', () => {
     store.onChange(() => updates++);
     clock += 1000; await p.tick(); clock += 1000; await p.tick();
     expect(updates).toBe(0);
+    p.stop();
+  });
+});
+
+describe('poller robustness', () => {
+  it('re-applies a prompt shadowed by a recent hook once the guard window passes, on an unchanged pane', async () => {
+    panes['ledge-a'] = 'idle'; store.upsert(mk('a'));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
+    clock += 1000; await p.tick(); // seed
+    store.apply('a', { name: 'PreToolUse', at: now(), source: 'hook', tool: 'Bash' } as never);
+    clock += 1000; panes['ledge-a'] = PROMPT; await p.tick();
+    expect(store.get('a')!.state).toBe('working');
+    clock += 2000; await p.tick();
+    expect(store.get('a')!.state).toBe('waiting_permission');
+    expect(store.get('a')!.pending?.source).toBe('pane');
+    p.stop();
+  });
+  it('skips a session whose capture failed: no activity bump, no preview', async () => {
+    panes['ledge-a'] = 'x'; store.upsert(mk('a'));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, l) => previews.push(l) });
+    clock += 1000; await p.tick();
+    failing['ledge-a'] = true; clock += 1000; await p.tick();
+    expect(store.get('a')!.lastActivityAt).toBe(new Date(T0).toISOString());
+    expect(previews).toEqual([]);
+    p.stop();
+  });
+  it('one throwing session does not abort the tick for later sessions', async () => {
+    panes['ledge-a'] = 'x'; panes['ledge-b'] = PROMPT;
+    store.upsert(mk('a')); store.upsert(mk('b'));
+    throwing['ledge-a'] = true;
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
+    clock += 5000; await p.tick();
+    expect(store.get('b')!.state).toBe('waiting_permission');
     p.stop();
   });
 });
