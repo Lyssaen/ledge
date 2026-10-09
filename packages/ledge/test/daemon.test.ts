@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { startDaemon } from '../src/daemon/index.js';
-import { realTmux, run } from '../src/tmux.js';
+import { realTmux } from '../src/tmux.js';
+import { killTestServer } from './helpers.js';
 import { connect } from '../src/client.js';
 import { ensureLedgeDir } from '../src/paths.js';
 
@@ -36,6 +37,6 @@ describe('startDaemon', () => {
         c.close();
         expect(snap.map(s => s.id).sort()).toEqual(['hook', 'live']);
       } finally { await d2.stop(); }
-    } finally { await run(['-L', socket, 'kill-server']); }
+    } finally { await killTestServer(socket); }
   });
 });

@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store } from '../src/daemon/store.js';
 import { startServer } from '../src/daemon/server.js';
 import { startPoller } from '../src/daemon/poller.js';
-import { realTmux, run } from '../src/tmux.js';
+import { killTestServer, until } from './helpers.js';
+import { realTmux } from '../src/tmux.js';
 import { ensureLedgeDir } from '../src/paths.js';
 import { connect } from '../src/client.js';
 import { createSession } from '../src/cli/launch.js';
@@ -15,9 +16,6 @@ const agent = fileURLToPath(new URL('./fake-agent.mjs', import.meta.url));
 const socket = `ledge-e2e-${process.pid}-${Date.now()}`;
 const tmux = realTmux(socket);
 let srv: Awaited<ReturnType<typeof startServer>>; let poller: ReturnType<typeof startPoller>; let store: Store;
-/** Kill a throwaway tmux server and remove its socket file (tmux leaves it behind). */
-const killTestServer = async (socket: string) => { await run(['-L', socket, 'kill-server']); rmSync(join(process.env.TMUX_TMPDIR ?? '/tmp', `tmux-${process.getuid!()}`, socket), { force: true }); };
-const until = async (pred: () => boolean | Promise<boolean>, ms = 4000) => { const t0 = Date.now(); while (!(await pred())) { if (Date.now() - t0 > ms) throw new Error('timeout'); await new Promise(r => setTimeout(r, 50)); } };
 
 beforeAll(async () => {
   process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-')); await ensureLedgeDir();

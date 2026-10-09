@@ -2,20 +2,18 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, createConnection } from 'node:net';
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseLaunchArgs, ensureDaemon, attachEnv, launch } from '../src/cli/launch.js';
 import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
-import { realTmux, run, type Tmux } from '../src/tmux.js';
+import { killTestServer, until } from './helpers.js';
+import { realTmux, type Tmux } from '../src/tmux.js';
 
 const agent = fileURLToPath(new URL('./fake-agent.mjs', import.meta.url));
 const noop: Tmux = { async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return ''; }, async hasSession() { return false; }, async listSessions() { return []; }, async killSession() {}, attachArgs: () => [] };
-/** Kill a throwaway tmux server and remove its socket file (tmux leaves it behind). */
-const killTestServer = async (socket: string) => { await run(['-L', socket, 'kill-server']); rmSync(join(process.env.TMUX_TMPDIR ?? '/tmp', `tmux-${process.getuid!()}`, socket), { force: true }); };
-const until = async (pred: () => boolean | Promise<boolean>, ms = 4000) => { const t0 = Date.now(); while (!(await pred())) { if (Date.now() - t0 > ms) throw new Error('timeout'); await new Promise(r => setTimeout(r, 50)); } };
 const freePort = async () => { const s = createServer(); await new Promise<void>(r => s.listen(0, '127.0.0.1', r)); const p = (s.address() as { port: number }).port; await new Promise(r => s.close(r)); return p; };
 
 /** Runs the real `tmux attach` inside a pseudo-terminal (util-linux `script`), like a user's terminal tab. */

@@ -1,20 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { realTmux, run } from '../src/tmux.js';
+import { realTmux } from '../src/tmux.js';
+import { killTestServer, testSocketPath } from './helpers.js';
 import { ensureLedgeDir } from '../src/paths.js';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const socket = 'ledge-test-' + process.pid;
+const socket = `ledge-test-${process.pid}-${Date.now()}`;
 const tmux = realTmux(socket);
 const name = 'ledge-t1';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 beforeAll(async () => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-')); await ensureLedgeDir(); });
-afterAll(async () => {
-  for (const s of await tmux.listSessions()) await tmux.killSession(s);
-  await run(['-L', socket, 'kill-server']);
-});
+afterAll(async () => { await killTestServer(socket); });
 
 describe('tmux', () => {
   it('creates a session running a command with env and cwd', async () => {
@@ -79,6 +77,18 @@ describe('tmux', () => {
   });
   it('builds attach args for the dedicated server', () => {
     expect(tmux.attachArgs('ledge-x')).toEqual(['-L', socket, '-f', expect.stringContaining('tmux.conf'), 'attach-session', '-t', '=ledge-x']);
+  });
+});
+
+describe('test helpers', () => {
+  it('killTestServer kills the throwaway server and removes its socket file', async () => {
+    const sock = `ledge-test-helper-${process.pid}-${Date.now()}`;
+    const t = realTmux(sock);
+    await t.newSession({ name: 'h', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
+    expect(existsSync(testSocketPath(sock))).toBe(true);
+    await killTestServer(sock);
+    expect(await t.listSessions()).toEqual([]);
+    expect(existsSync(testSocketPath(sock))).toBe(false);
   });
 });
 
