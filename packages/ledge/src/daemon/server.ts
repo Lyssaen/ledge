@@ -91,14 +91,23 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     switch (msg.type) {
       case 'snapshot.request': return send(ws, { type: 'snapshot', sessions: store.all() });
       case 'session.register': {
-        const existing = store.get(msg.session.id);
+        let incoming = msg.session;
+        const existing = store.get(incoming.id);
+        // Two launchers can pick the same name from the same snapshot: the first to register keeps it.
+        const others = store.all().filter(o => o.id !== incoming.id);
+        if (others.some(o => o.state !== 'exited' && o.name === incoming.name)) {
+          const old = incoming.name;
+          const name = pickName(others.map(o => o.name));
+          const title = incoming.title.startsWith(`${old} ·`) ? `${name}${incoming.title.slice(old.length)}` : incoming.title;
+          incoming = { ...incoming, name, title };
+        }
         if (existing && existing.source === 'hook_only') {
           // What the hooks already learned wins over the launcher's fresh record, exit included.
           store.upsert({
-            ...existing, ...msg.session, state: existing.state, pending: existing.pending, lastActivityAt: existing.lastActivityAt,
+            ...existing, ...incoming, state: existing.state, pending: existing.pending, lastActivityAt: existing.lastActivityAt,
             lastHookAt: existing.lastHookAt, exitCode: existing.exitCode, exitedAt: existing.exitedAt, source: 'launcher'
           });
-        } else store.upsert(msg.session);
+        } else store.upsert(incoming);
         return;
       }
       case 'session.event': {

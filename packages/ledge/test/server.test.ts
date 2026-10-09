@@ -89,6 +89,27 @@ describe('server', () => {
     c.close();
   });
 
+  it('register re-picks a name already held by another live session and broadcasts the stored one', async () => {
+    store.upsert(mk('a', { name: 'Otto' }));
+    store.upsert(mk('x', { name: 'Pim', state: 'exited' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.register', session: mk('b', { name: 'Otto', title: 'Otto · harness-assistant' }) });
+    const upd = await c.next('session.updated');
+    expect(upd.session.id).toBe('b');
+    expect(upd.session.name).toBe('Nova');
+    expect(upd.session.title).toBe('Nova · harness-assistant');
+    expect(store.get('b')?.name).toBe('Nova');
+    c.close();
+  });
+
+  it('register keeps a name only held by an exited session', async () => {
+    store.upsert(mk('a', { name: 'Otto', state: 'exited' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.register', session: mk('b', { name: 'Otto' }) });
+    expect((await c.next('session.updated')).session.name).toBe('Otto');
+    c.close();
+  });
+
   it('decide accept types 1, Enter, verifies the prompt is gone and applies Decided', async () => {
     store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
