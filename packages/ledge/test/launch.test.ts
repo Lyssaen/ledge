@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createServer } from 'node:net';
+import { createServer, createConnection } from 'node:net';
+import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,6 +64,26 @@ describe('ensureDaemon', () => {
     expect(r.client).not.toBeNull();
     await r.client!.close(); await srv!.close();
   });
+  it('a Ledge daemon slower than 400 ms to answer is still a Ledge daemon, not another program', async () => {
+    const srv = await startServer({ store: new Store(), tmux: noop, port: 0 });
+    // A proxy that holds every connection for 600 ms before reaching the daemon.
+    const slow = createServer(sock => { sock.pause(); setTimeout(() => { const up = createConnection({ host: '127.0.0.1', port: srv.port }, () => { sock.pipe(up); up.pipe(sock); sock.resume(); }); up.on('error', () => sock.destroy()); sock.on('error', () => up.destroy()); }, 600); });
+    await new Promise<void>(r => slow.listen(0, '127.0.0.1', r));
+    const spawnDaemon = vi.fn();
+    const r = await ensureDaemon({ port: (slow.address() as { port: number }).port, spawnDaemon });
+    expect(r.client).not.toBeNull();
+    expect(spawnDaemon).not.toHaveBeenCalled();
+    await r.client!.close(); slow.close(); await srv.close();
+  });
+  it('a WebSocket server that never sends a Ledge snapshot is foreign', async () => {
+    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    await new Promise<void>(r => wss.once('listening', r));
+    wss.on('connection', ws => ws.send(JSON.stringify({ hello: 'world' })));
+    const r = await ensureDaemon({ port: (wss.address() as { port: number }).port, spawnDaemon: vi.fn(), timeoutMs: 300 });
+    expect(r).toEqual({ client: null, reason: 'foreign' });
+    for (const c of wss.clients) c.terminate();
+    await new Promise(r => wss.close(r));
+  });
   it('gives up with "unreachable" after three retries', async () => {
     const port = await freePort();
     const spawnDaemon = vi.fn();
@@ -120,6 +141,24 @@ describe('launch', () => {
     expect(await tmux.hasSession(only().tmuxSession!)).toBe(true);
   });
 
+  it('returns the exit code of an agent that exits before the attach even starts', async () => {
+    const code = await launch('claude', [], { port: srv.port, tmuxSocket: socket, cwd: '/tmp', command: ['sh', '-c', 'exit 9'], attach: ptyAttach });
+    expect(code).toBe(9);
+    await until(() => store.all()[0]?.state === 'exited');
+    expect(only().exitCode).toBe(9);
+    expect(readdirSync(process.env.LEDGE_HOME!).filter(f => f.startsWith('exit-'))).toEqual([]);
+  });
+
+  it('after a detach, an exit while someone else is attached still ends the session', async () => {
+    const code = await launch('claude', [], { port: srv.port, tmuxSocket: socket, cwd: '/tmp', command: ['node', agent, 'work', '1000', 'exit', '0'], attach: async () => 0 });
+    expect(code).toBe(0);
+    const name = only().tmuxSession!;
+    // The user re-attaches by hand (the launcher's own hint), then the agent exits.
+    const manual = await ptyAttach(realTmux(socket).attachArgs(name), attachEnv(process.env));
+    expect(manual).toBe(0);
+    expect(await tmux.hasSession(name)).toBe(false);
+  });
+
   it('a failed attach never unregisters a live agent', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const code = await launch('claude', [], { port: srv.port, tmuxSocket: socket, cwd: '/tmp', command: ['node', agent, 'work', '60000'], attach: async () => 1 });
@@ -141,6 +180,19 @@ describe('launch', () => {
       expect(err).toHaveBeenCalledWith(`ledge: port ${port} is used by another program, session not tracked`);
       expect(spawnDaemon).not.toHaveBeenCalled();
     } finally { foreign.close(); }
+  });
+
+  it('falls back to an untracked launch when the daemon stops answering during session creation', async () => {
+    // Speaks just enough Ledge to pass ensureDaemon, then ignores snapshot.request.
+    const mute = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    await new Promise<void>(r => mute.once('listening', r));
+    mute.on('connection', ws => ws.send(JSON.stringify({ type: 'snapshot', sessions: [] })));
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const code = await launch('claude', [], { port: (mute.address() as { port: number }).port, tmuxSocket: socket, cwd: '/tmp', command: ['node', agent, 'exit', '4'], attach: ptyAttach });
+      expect(code).toBe(4);
+      expect(err).toHaveBeenCalledWith('ledge: daemon not responding, session not tracked');
+    } finally { for (const c of mute.clients) c.terminate(); await new Promise(r => mute.close(r)); }
   });
 
   it('when no daemon can be reached, says so and still runs the agent', async () => {

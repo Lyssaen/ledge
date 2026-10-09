@@ -1,11 +1,12 @@
 import { spawn } from 'node:child_process';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
+import { readFile, rm } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { createConnection } from 'node:net';
 import type { Session, Tool } from '@ledge/protocol';
 import { PROTOCOL_PORT } from '@ledge/protocol';
 import { connect, type Client } from '../client.js';
-import { realTmux, run, type Tmux } from '../tmux.js';
+import { realTmux, type Tmux } from '../tmux.js';
 import { ensureLedgeDir, paths } from '../paths.js';
 import { pickName } from '../names.js';
 import { log } from '../log.js';
@@ -39,27 +40,60 @@ function spawnDetachedDaemon(): void {
   child.unref();
 }
 
-export type DaemonConnection = { client: Client } | { client: null; reason: 'foreign' | 'unreachable' };
+export type DaemonConnection = { client: Client } | { client: null; reason: 'foreign' | 'unresponsive' | 'unreachable' };
 
-export async function ensureDaemon(opts: { port?: number; spawnDaemon?: () => void; retryDelayMs?: number } = {}): Promise<DaemonConnection> {
+type Probe = { client: Client } | { client: null; state: 'refused' | 'timeout' | 'foreign' };
+
+/** Bounded close: a hung peer must not stall the launcher for ws's 30 s close timeout. */
+const closeQuietly = (c: Client) => Promise.race([c.close(), sleep(500)]);
+
+/**
+ * Connect and wait for the snapshot a Ledge daemon sends on connect. A refused connection means
+ * nothing listens; a WebSocket that fails the handshake or never sends a valid snapshot is foreign;
+ * a handshake that does not complete in time is a busy (or hung) listener, not proof of a foreign one.
+ */
+async function probe(port: number, timeoutMs: number): Promise<Probe> {
+  let client: Client;
+  try { client = await connect({ port, timeoutMs }); }
+  catch (e) {
+    if ((e as Error).message === 'connect timeout') return { client: null, state: 'timeout' };
+    // The error code alone is not reliable (a refused connect can surface as ECONNRESET): ask TCP.
+    return { client: null, state: (await portOpen(port)) ? 'foreign' : 'refused' };
+  }
+  try { await client.next('snapshot', timeoutMs); return { client }; }
+  catch { void closeQuietly(client); return { client: null, state: 'foreign' }; }
+}
+
+export async function ensureDaemon(opts: { port?: number; spawnDaemon?: () => void; retryDelayMs?: number; timeoutMs?: number } = {}): Promise<DaemonConnection> {
   await ensureLedgeDir();
   const port = opts.port ?? PROTOCOL_PORT;
-  try { return { client: await connect({ port, timeoutMs: 400 }) }; } catch { /* not running or not ours */ }
-  if (await portOpen(port)) { log(`port ${port} is open but does not speak the Ledge protocol`); return { client: null, reason: 'foreign' }; }
+  const timeoutMs = opts.timeoutMs ?? 2000;
+  const first = await probe(port, timeoutMs);
+  if (first.client) return { client: first.client };
+  if (first.state === 'foreign') { log(`port ${port} is open but does not speak the Ledge protocol`); return { client: null, reason: 'foreign' }; }
+  if (first.state === 'timeout') { log(`port ${port} accepted a connection but did not answer within ${timeoutMs} ms`); return { client: null, reason: 'unresponsive' }; }
   (opts.spawnDaemon ?? spawnDetachedDaemon)();
   for (let i = 0; i < 3; i++) {
     await sleep(opts.retryDelayMs ?? 500);
-    try { return { client: await connect({ port, timeoutMs: 400 }) }; } catch { /* retry */ }
+    const r = await probe(port, timeoutMs);
+    if (r.client) return { client: r.client };
   }
   return { client: null, reason: 'unreachable' };
 }
 
-export async function createSession(opts: { tool: Tool; args: string[]; command?: string[]; name?: string; cwd: string; tmux: Tmux; client: Client | null; now?: () => string }): Promise<Session> {
+/** Where the wrapped agent leaves its exit code (see createSession's `recordExit`). */
+export function exitFile(id: string): string { return join(paths().dir, `exit-${id}`); }
+
+/** The daemon accepted the connection but failed during session creation: launch untracked instead. */
+export class DaemonError extends Error {}
+
+export async function createSession(opts: { tool: Tool; args: string[]; command?: string[]; recordExit?: boolean; name?: string; cwd: string; tmux: Tmux; client: Client | null; now?: () => string }): Promise<Session> {
   const now = opts.now ?? (() => new Date().toISOString());
   const takenNames: string[] = []; const takenIds = new Set<string>();
   if (opts.client) {
-    opts.client.send({ type: 'snapshot.request' });
-    const snap = await opts.client.next('snapshot');
+    let snap;
+    try { opts.client.send({ type: 'snapshot.request' }); snap = await opts.client.next('snapshot'); }
+    catch (e) { throw new DaemonError(`daemon did not answer: ${(e as Error).message}`); }
     for (const s of snap.sessions) { takenNames.push(s.name); takenIds.add(s.id); }
   }
   let id: string; do id = randomBytes(2).toString('hex'); while (takenIds.has(id));
@@ -67,11 +101,16 @@ export async function createSession(opts: { tool: Tool; args: string[]; command?
   const project = basename(opts.cwd) || opts.cwd;
   const tmuxSession = `ledge-${id}`;
   // `command` replaces the agent binary entirely (tests run a fake agent); `args` are always agent args.
-  const command = opts.command ?? [AGENT_BIN[opts.tool], ...opts.args];
+  const agent = opts.command ?? [AGENT_BIN[opts.tool], ...opts.args];
+  // With recordExit, sh runs the agent with its argv untouched ("$@") and writes its exit code to
+  // the file passed as $0, so the session can die naturally and the code is still readable.
+  const command = opts.recordExit ? ['sh', '-c', '"$@"; echo $? > "$0"', exitFile(id), ...agent] : agent;
   await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: { LEDGE_SESSION: id, LEDGE_NAME: name }, command });
   const at = now();
   const session: Session = { id, name, tool: opts.tool, cwd: opts.cwd, project, title: `${name} · ${project}`, tmuxSession, state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher' };
-  opts.client?.send({ type: 'session.register', session });
+  // The agent already runs: a lost register only means an untracked session, never a failed launch.
+  try { opts.client?.send({ type: 'session.register', session }); }
+  catch (e) { log(`register failed for ${id}: ${(e as Error).message}`); }
   return session;
 }
 
@@ -89,24 +128,13 @@ function attachInherit(args: string[], env: NodeJS.ProcessEnv): Promise<number> 
   });
 }
 
-/**
- * Keep the pane after the agent exits so its exit status can be read, and end the attach then:
- * when someone is attached, the pane-died hook detaches them (the launcher reads the status and
- * kills the session); when nobody is (the user detached earlier), the hook kills the session.
- */
-async function armExitStatus(socket: string, name: string): Promise<void> {
-  const t = (args: string[]) => run(['-L', socket, '-f', paths().tmuxConf, ...args]);
-  await t(['set-option', '-t', `=${name}:`, 'remain-on-exit', 'on']);
-  await t(['set-hook', '-t', `=${name}:`, 'pane-died', `if-shell -F '#{session_attached}' 'detach-client -s =${name}' 'kill-session -t =${name}'`]);
-}
-
-/** `{ dead: false }` while the agent runs, `{ dead: true, code }` once it exited, null when the session is gone. */
-async function paneStatus(socket: string, name: string): Promise<{ dead: boolean; code: number | null } | null> {
-  const r = await run(['-L', socket, '-f', paths().tmuxConf, 'display-message', '-p', '-t', `=${name}:`, '#{pane_dead} #{pane_dead_status}']);
-  if (r.code !== 0) return null;
-  const [dead, status] = r.stdout.trim().split(' ');
-  const code = status !== undefined && /^\d+$/.test(status) ? Number(status) : null;
-  return { dead: dead === '1', code };
+async function readExitCode(id: string): Promise<number | null> {
+  const file = exitFile(id);
+  let raw: string | null = null;
+  try { raw = await readFile(file, 'utf8'); } catch { /* the agent never finished writing it */ }
+  await rm(file, { force: true });
+  const t = raw?.trim();
+  return t && /^\d+$/.test(t) ? Number(t) : null;
 }
 
 export interface LaunchOptions {
@@ -121,40 +149,51 @@ export interface LaunchOptions {
   retryDelayMs?: number;
 }
 
+const UNTRACKED: Record<'foreign' | 'unresponsive' | 'unreachable', (port: number) => string> = {
+  foreign: port => `ledge: port ${port} is used by another program, session not tracked`,
+  unresponsive: () => 'ledge: daemon not responding, session not tracked',
+  unreachable: () => 'ledge: daemon not running, session not tracked'
+};
+
 export async function launch(tool: Tool, argv: string[], opts: LaunchOptions = {}): Promise<number> {
   await ensureLedgeDir();
   const { name, args } = parseLaunchArgs(argv);
   const port = opts.port ?? PROTOCOL_PORT;
   const socket = opts.tmuxSocket ?? TMUX_SOCKET;
   const tmux = realTmux(socket);
+  const cwd = opts.cwd ?? process.cwd();
   const daemon = await ensureDaemon({ port, spawnDaemon: opts.spawnDaemon, retryDelayMs: opts.retryDelayMs });
-  if (!daemon.client) {
-    console.error(daemon.reason === 'foreign'
-      ? `ledge: port ${port} is used by another program, session not tracked`
-      : 'ledge: daemon not running, session not tracked');
+  let client = daemon.client;
+  if (!daemon.client) console.error(UNTRACKED[daemon.reason](port));
+  const create = (c: Client | null) => createSession({ tool, args, command: opts.command, recordExit: true, name, cwd, tmux, client: c });
+  let session: Session;
+  try { session = await create(client); }
+  catch (e) {
+    if (!(e instanceof DaemonError)) throw e;
+    log(e.message);
+    if (client) void closeQuietly(client);
+    client = null;
+    console.error(UNTRACKED.unresponsive(port));
+    session = await create(null);
   }
-  const session = await createSession({ tool, args, command: opts.command, name, cwd: opts.cwd ?? process.cwd(), tmux, client: daemon.client });
   // The daemon broadcasts every update and preview: do not hold a connection for the agent's whole life.
-  await daemon.client?.close();
+  if (client) await closeQuietly(client);
   const tmuxName = session.tmuxSession!;
-  await armExitStatus(socket, tmuxName);
   if (process.stdout.isTTY) process.stdout.write(`\u001b]0;${session.title}\u0007`); // rename the Windows Terminal tab
 
   const attachCode = await (opts.attach ?? attachInherit)(tmux.attachArgs(tmuxName), attachEnv(process.env));
-  const status = await paneStatus(socket, tmuxName);
-  if (status && !status.dead) {
+  if (await tmux.hasSession(tmuxName)) {
     // Detached (or the attach failed): the agent keeps running, tracked by the daemon.
     if (attachCode !== 0) console.error(`ledge: could not attach; ${session.name} keeps running in tmux session ${tmuxName} (tmux -L ${socket} attach -t ${tmuxName})`);
     return attachCode;
   }
-  const exitCode = status?.code ?? null;
-  if (status) await tmux.killSession(tmuxName);
-  if (daemon.client) {
+  const exitCode = await readExitCode(session.id);
+  if (client) {
     // A fresh connection: the daemon may have restarted while the agent ran.
     try {
       const c = await connect({ port, timeoutMs: 800 });
       c.send({ type: 'session.unregister', id: session.id, exitCode });
-      await c.close();
+      await closeQuietly(c);
     } catch { /* daemon gone: the poller marks the session exited when it comes back */ }
   }
   return exitCode ?? 1;
