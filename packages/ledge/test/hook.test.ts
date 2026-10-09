@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { mapClaudeHook, runHook } from '../src/cli/hook.js';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
+import { connect } from '../src/client.js';
 
 const at = '2026-10-09T18:00:00.000Z';
 let home: string;
@@ -38,6 +39,19 @@ describe('mapClaudeHook', () => {
   });
   it('maps SessionEnd with no code', () => {
     expect(mapClaudeHook('SessionEnd', { session_id: 's' }, at)?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', exitCode: null });
+  });
+  describe('SessionEnd per reason', () => {
+    const reasons = ['clear', 'resume', 'logout', 'prompt_input_exit', 'other'];
+    it.each(reasons)('under the launcher (LEDGE_SESSION set), reason %s is not mapped', reason => {
+      process.env.LEDGE_SESSION = '7f3a';
+      expect(mapClaudeHook('SessionEnd', { session_id: 's', reason }, at)).toBeNull();
+    });
+    it.each(['clear', 'resume'])('hook only, reason %s is ignored (the agent keeps running)', reason => {
+      expect(mapClaudeHook('SessionEnd', { session_id: 's', reason }, at)).toBeNull();
+    });
+    it.each(['logout', 'prompt_input_exit', 'other'])('hook only, reason %s stays terminal', reason => {
+      expect(mapClaudeHook('SessionEnd', { session_id: 's', reason }, at)?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', exitCode: null });
+    });
   });
   it('returns null for an unknown event or malformed payload', () => {
     expect(mapClaudeHook('Whatever', { session_id: 's' }, at)).toBeNull();
@@ -82,6 +96,43 @@ describe('runHook', () => {
     await new Promise(r => setTimeout(r, 50));
     expect(store.get('live-1')?.state).toBe('idle');
     await srv.close();
+  });
+});
+
+describe('SessionEnd against a live daemon', () => {
+  it('a launcher session survives Claude SessionEnd and unregister records the real exit code', async () => {
+    const store = new Store();
+    const srv = await startServer({ store, tmux: {} as never, port: 0 });
+    try {
+      store.upsert({ id: '7f3a', name: 'Otto', tool: 'claude', cwd: '/w', project: 'w', title: 'Otto · w', tmuxSession: 'ledge-7f3a', state: 'working', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher' });
+      process.env.LEDGE_SESSION = '7f3a';
+      await runHook('SessionEnd', JSON.stringify({ session_id: 'uuid', reason: 'clear' }), { port: srv.port });
+      await runHook('SessionEnd', JSON.stringify({ session_id: 'uuid', reason: 'prompt_input_exit' }), { port: srv.port });
+      await new Promise(r => setTimeout(r, 50));
+      expect(store.get('7f3a')?.state).toBe('working');
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.unregister', id: '7f3a', exitCode: 3 });
+      const upd = await c.next('session.updated');
+      expect(upd.session.state).toBe('exited');
+      expect(upd.session.exitCode).toBe(3);
+      await c.close();
+    } finally { await srv.close(); }
+  });
+  it('register keeps the exit of a hook_only session that already ended', async () => {
+    const store = new Store();
+    const srv = await startServer({ store, tmux: {} as never, port: 0 });
+    try {
+      const ended = { id: 'b', name: 'Pim', tool: 'claude' as const, cwd: '', project: 'unknown', title: 'untracked session', tmuxSession: null, state: 'exited' as const, helpers: [], startedAt: at, lastActivityAt: at, exitCode: 2, exitedAt: at, source: 'hook_only' as const };
+      store.upsert(ended);
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.register', session: { ...ended, state: 'starting', exitCode: null, exitedAt: undefined, tmuxSession: 'ledge-b', source: 'launcher' } });
+      const upd = await c.next('session.updated');
+      expect(upd.session.source).toBe('launcher');
+      expect(upd.session.state).toBe('exited');
+      expect(upd.session.exitCode).toBe(2);
+      expect(upd.session.exitedAt).toBe(at);
+      await c.close();
+    } finally { await srv.close(); }
   });
 });
 

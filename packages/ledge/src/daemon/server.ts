@@ -81,7 +81,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.register': {
         const existing = store.get(msg.session.id);
         if (existing && existing.source === 'hook_only') {
-          store.upsert({ ...existing, ...msg.session, state: existing.state, pending: existing.pending, lastActivityAt: existing.lastActivityAt, source: 'launcher' });
+          // What the hooks already learned wins over the launcher's fresh record, exit included.
+          store.upsert({
+            ...existing, ...msg.session, state: existing.state, pending: existing.pending, lastActivityAt: existing.lastActivityAt,
+            lastHookAt: existing.lastHookAt, exitCode: existing.exitCode, exitedAt: existing.exitedAt, source: 'launcher'
+          });
         } else store.upsert(msg.session);
         return;
       }

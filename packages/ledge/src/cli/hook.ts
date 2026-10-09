@@ -13,9 +13,13 @@ function describeTool(tool: string | undefined, input: unknown): string {
   return str(i.description) ?? JSON.stringify(i).slice(0, 200);
 }
 
+/** SessionEnd reasons after which the same agent process keeps running (Claude Code 2.1). */
+const NON_TERMINAL_END_REASONS = new Set(['clear', 'resume']);
+
 export function mapClaudeHook(eventName: string, payload: unknown, at: string): { id: string; event: SessionEvent } | null {
   if (!payload || typeof payload !== 'object') return null;
   const p = payload as Payload;
+  const launched = !!process.env.LEDGE_SESSION;
   const id = process.env.LEDGE_SESSION || str(p.session_id);
   if (!id) return null;
   const tool = str(p.tool_name);
@@ -24,7 +28,12 @@ export function mapClaudeHook(eventName: string, payload: unknown, at: string): 
     case 'SessionStart': return { id, event: { name: 'SessionStart', ...base } };
     case 'UserPromptSubmit': return { id, event: { name: 'UserPromptSubmit', ...base } };
     case 'Stop': return { id, event: { name: 'Stop', ...base } };
-    case 'SessionEnd': return { id, event: { name: 'SessionEnd', ...base, exitCode: null } };
+    case 'SessionEnd':
+      // Under the launcher, the exit belongs to session.unregister (real exit code) and PaneGone:
+      // Claude's SessionEnd also fires on /clear, /resume and logout while the process lives on.
+      if (launched) return null;
+      if (NON_TERMINAL_END_REASONS.has(str(p.reason) ?? '')) return null;
+      return { id, event: { name: 'SessionEnd', ...base, exitCode: null } };
     case 'PermissionRequest': return { id, event: { name: 'PermissionRequest', ...base, tool, text: describeTool(tool, p.tool_input) } };
     case 'PreToolUse': {
       if (tool === 'AskUserQuestion') {
@@ -52,7 +61,7 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
   try {
     const payload = JSON.parse(stdin || '{}');
     const mapped = mapClaudeHook(eventName, payload, new Date().toISOString());
-    if (!mapped) { log(`hook ${eventName} ignored: unknown event or malformed payload`); return; }
+    if (!mapped) { log(`hook ${eventName} ignored: unknown event, malformed payload or non-terminal SessionEnd`); return; }
     const client = await connect({ port: opts.port, timeoutMs });
     client.send({ type: 'session.event', id: mapped.id, event: mapped.event });
     // close() resolves once the handshake completes, i.e. after the send is flushed; one shared deadline
