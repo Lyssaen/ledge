@@ -51,13 +51,22 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   const inFlight = new Set<string>();
 
-  async function injectAndVerify(id: string, plan: KeyPlan): Promise<void> {
+  /**
+   * With `requirePrompt`, fail closed: the prompt must be on screen before anything is typed, else a
+   * stale pending (or a dialog the adapter cannot read) would get keys meant for something else and
+   * the "prompt gone" check would then report success.
+   */
+  async function injectAndVerify(id: string, plan: KeyPlan, requirePrompt: boolean): Promise<void> {
     const s = store.get(id);
     if (!s) throw new Error(`unknown session ${id}`);
     if (inFlight.has(id)) throw new Error('a decision is already in progress');
     inFlight.add(id);
     try {
       const adapter = adapterFor(s.tool);
+      if (requirePrompt) {
+        const before = s.tmuxSession ? await tmux.capture(s.tmuxSession, 5) : null;
+        if (before === null || !adapter.promptStillVisible(before)) throw new Error(NO_PROMPT);
+      }
       const decided = s.pending;
       const stillTheSame = () => {
         const cur = store.get(id)?.pending;
@@ -76,6 +85,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   }
 
   const READ_ONLY = 'session started without ledge, read only';
+  const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
 
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
@@ -106,12 +116,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
         if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
         if (!s.pending) return send(ws, { type: 'error', id: msg.id, message: 'nothing to decide' });
-        return injectAndVerify(msg.id, adapterFor(s.tool).keysFor(msg.decision, s.pending));
+        return injectAndVerify(msg.id, adapterFor(s.tool).keysFor(msg.decision, s.pending), true);
       }
       case 'session.reply': {
         const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
         if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
-        return injectAndVerify(msg.id, adapterFor(s.tool).replyPlan(msg.text));
+        // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
+        if (s.pending && s.pending.kind !== 'question') return send(ws, { type: 'error', id: msg.id, message: `a ${s.pending.kind} prompt takes accept or deny, not a reply` });
+        if (msg.text.trim() === '') return send(ws, { type: 'error', id: msg.id, message: 'empty reply' });
+        // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
+        return injectAndVerify(msg.id, adapterFor(s.tool).replyPlan(msg.text), !!s.pending);
       }
       case 'session.interrupt': {
         const s = store.get(msg.id);

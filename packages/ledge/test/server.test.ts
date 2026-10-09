@@ -112,8 +112,10 @@ describe('server', () => {
     c.close();
   });
 
-  it('a failed capture is not read as prompt gone: session goes to error, nothing re-sent', async () => {
-    tmux = fakeTmux({ 'ledge-a': [PROMPT] }); tmux.capture = async () => null;
+  it('a failed capture after injecting is not read as prompt gone: session goes to error, nothing re-sent', async () => {
+    tmux = fakeTmux({ 'ledge-a': [PROMPT] });
+    const realCapture = tmux.capture; let captures = 0;
+    tmux.capture = async (n, l) => (captures++ === 0 ? realCapture(n, l) : null);
     await srv.close(); srv = await startServer({ store, tmux, port: 0 });
     store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
@@ -121,6 +123,62 @@ describe('server', () => {
     const upd = await c.next('session.updated', 3000);
     expect(upd.session.state).toBe('error');
     expect(tmux.sent.length).toBe(2);
+    c.close();
+  });
+
+  describe('fail closed when no prompt is on screen', () => {
+    const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
+    async function expectRefused(pane: string | null, msg: object, pending: Session['pending']) {
+      tmux = fakeTmux({ 'ledge-a': [pane ?? ''] }); if (pane === null) tmux.capture = async () => null;
+      await srv.close(); srv = await startServer({ store, tmux, port: 0 });
+      const before = mk('a', { state: pending?.kind === 'question' ? 'waiting_input' : 'waiting_permission', pending });
+      store.upsert(before);
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send(msg as never);
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: NO_PROMPT });
+      expect(tmux.sent).toEqual([]);
+      expect(store.get('a')).toEqual(before);
+      await expect(c.next('session.updated', 200)).rejects.toThrow(/timeout/);
+      c.close();
+    }
+    const perm = { kind: 'permission' as const, text: 'npm test', source: 'hook' as const };
+    const question = { kind: 'question' as const, text: 'Which?', source: 'hook' as const };
+    it('decide on a stale pending (agent already working) injects nothing', () =>
+      expectRefused('● Bash(npm test)\n  Running…', { type: 'session.decide', id: 'a', decision: 'accept' }, perm));
+    it('decide when the capture fails injects nothing', () =>
+      expectRefused(null, { type: 'session.decide', id: 'a', decision: 'deny' }, perm));
+    it('reply to a question whose dialog is not on screen injects nothing', () =>
+      expectRefused('> ', { type: 'session.reply', id: 'a', text: 'shadow table' }, question));
+  });
+
+  it('a reply with no pending (your turn) is typed without a prompt check', async () => {
+    tmux = fakeTmux({ 'ledge-a': ['> '] }); await srv.close(); srv = await startServer({ store, tmux, port: 0 });
+    store.upsert(mk('a', { state: 'idle' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: 'run the tests' });
+    await c.next('session.updated', 3000);
+    expect(tmux.sent).toEqual([['text', 'ledge-a', 'run the tests'], ['keys', 'ledge-a', 'Enter']]);
+    c.close();
+  });
+
+  it.each(['permission', 'diff', 'plan'] as const)('refuses a reply to a %s prompt, nothing injected', async kind => {
+    const before = mk('a', { state: 'waiting_permission', pending: { kind, text: 'x', source: 'hook' } });
+    store.upsert(before);
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: 'yes please' });
+    const err = await c.next('error');
+    expect(err.id).toBe('a'); expect(err.message).toMatch(/accept or deny/);
+    expect(tmux.sent).toEqual([]);
+    expect(store.get('a')).toEqual(before);
+    c.close();
+  });
+
+  it.each(['   ', '\n\n', ' \r\n \n\t'])('refuses a reply that is empty once flattened (%j)', async text => {
+    store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text });
+    expect((await c.next('error')).message).toBe('empty reply');
+    expect(tmux.sent).toEqual([]);
     c.close();
   });
 
