@@ -31,16 +31,19 @@ export function realTmux(socket = 'ledge'): Tmux {
       if (r.code !== 0) throw new Error(`tmux new-session failed: ${r.stderr.trim()}`);
     },
     async sendText(name, text) {
-      const r = await t(['send-keys', '-t', name, '-l', '--', text]);
+      if (/[\r\n]/.test(text)) throw new Error('sendText: text must not contain newlines; flatten it first');
+      // tmux treats an argv element ending in ';' as a command separator; '\;' sends a literal ';'.
+      const arg = text.endsWith(';') ? `${text.slice(0, -1)}\\;` : text;
+      const r = await t(['send-keys', '-t', `=${name}:`, '-l', '--', arg]);
       if (r.code !== 0) throw new Error(`tmux send-keys failed: ${r.stderr.trim()}`);
     },
     async sendKeys(name, keys) {
-      const r = await t(['send-keys', '-t', name, ...keys]);
+      const r = await t(['send-keys', '-t', `=${name}:`, ...keys]);
       if (r.code !== 0) throw new Error(`tmux send-keys failed: ${r.stderr.trim()}`);
     },
     async capture(name, lines) {
       // History included, then trimmed to exactly the last `lines` lines.
-      const r = await t(['capture-pane', '-p', '-J', '-t', name, '-S', String(-lines)]);
+      const r = await t(['capture-pane', '-p', '-J', '-t', `=${name}:`, '-S', String(-lines)]);
       if (r.code !== 0) return '';
       return r.stdout.replace(/\s+$/g, '').split('\n').slice(-lines).join('\n');
     },
@@ -52,6 +55,6 @@ export function realTmux(socket = 'ledge'): Tmux {
       return r.code === 0 ? r.stdout.split('\n').map(s => s.trim()).filter(Boolean) : [];
     },
     async killSession(name) { await t(['kill-session', '-t', `=${name}`]); },
-    attachArgs(name) { return [...base(), 'attach-session', '-t', name]; }
+    attachArgs(name) { return [...base(), 'attach-session', '-t', `=${name}`]; }
   };
 }

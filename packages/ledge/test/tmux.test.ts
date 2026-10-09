@@ -40,6 +40,35 @@ describe('tmux', () => {
     expect(out.split('\n')).toEqual(['line36', 'line37', 'line38', 'line39', 'line40']);
     await tmux.killSession(n);
   });
+  it('sends a trailing or lone semicolon literally', async () => {
+    const n = 'ledge-t3';
+    await tmux.newSession({ name: n, cwd: '/tmp', env: {}, command: ['cat'] });
+    await sleep(200);
+    await tmux.sendText(n, 'echo hi;');
+    await tmux.sendKeys(n, ['Enter']);
+    await tmux.sendText(n, ';');
+    await tmux.sendKeys(n, ['Enter']);
+    await sleep(300);
+    expect((await tmux.capture(n, 10)).split('\n')).toEqual(['echo hi;', 'echo hi;', ';', ';']);
+    await tmux.killSession(n);
+  });
+  it('rejects text containing newlines', async () => {
+    await expect(tmux.sendText(name, 'a\nb')).rejects.toThrow(/newline/);
+    await expect(tmux.sendText(name, 'a\rb')).rejects.toThrow(/newline/);
+  });
+  it('does not prefix-match other sessions', async () => {
+    for (const n of ['ledge-p1', 'ledge-p10']) await tmux.newSession({ name: n, cwd: '/tmp', env: {}, command: ['cat'] });
+    await sleep(200);
+    await tmux.killSession('ledge-p1');
+    await sleep(100);
+    await expect(tmux.sendText('ledge-p1', 'leak')).rejects.toThrow();
+    await expect(tmux.sendKeys('ledge-p1', ['Enter'])).rejects.toThrow();
+    expect(await tmux.capture('ledge-p1', 5)).toBe('');
+    await tmux.sendText('ledge-p10', 'ok');
+    await sleep(200);
+    expect(await tmux.capture('ledge-p10', 5)).toBe('ok');
+    await tmux.killSession('ledge-p10');
+  });
   it('reports a missing session', async () => {
     expect(await tmux.hasSession('ledge-nope')).toBe(false);
   });
@@ -49,6 +78,6 @@ describe('tmux', () => {
     expect(await tmux.hasSession(name)).toBe(false);
   });
   it('builds attach args for the dedicated server', () => {
-    expect(tmux.attachArgs('ledge-x')).toEqual(['-L', socket, '-f', expect.stringContaining('tmux.conf'), 'attach-session', '-t', 'ledge-x']);
+    expect(tmux.attachArgs('ledge-x')).toEqual(['-L', socket, '-f', expect.stringContaining('tmux.conf'), 'attach-session', '-t', '=ledge-x']);
   });
 });
