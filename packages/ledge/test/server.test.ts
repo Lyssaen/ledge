@@ -201,6 +201,27 @@ describe('server', () => {
     c.close();
   });
 
+  it('refuses decide, reply, interrupt and kill on a hook_only session, with no state change', async () => {
+    const ro = mk('h', { tmuxSession: null, source: 'hook_only', state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } });
+    store.upsert(ro);
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    const msgs = [
+      { type: 'session.decide', id: 'h', decision: 'accept' },
+      { type: 'session.reply', id: 'h', text: 'hello' },
+      { type: 'session.interrupt', id: 'h' },
+      { type: 'session.kill', id: 'h' }
+    ] as const;
+    for (const m of msgs) {
+      c.send(m);
+      const err = await c.next('error');
+      expect(err).toEqual({ type: 'error', id: 'h', message: 'session started without ledge, read only' });
+    }
+    expect(store.get('h')).toEqual(ro);
+    expect(tmux.sent).toEqual([]);
+    await expect(c.next('session.updated', 200)).rejects.toThrow(/timeout/);
+    c.close();
+  });
+
   it('answers bad input with an error message and keeps serving', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.decide', id: 'zzz', decision: 'maybe' } as never);

@@ -75,6 +75,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     } finally { inFlight.delete(id); }
   }
 
+  const READ_ONLY = 'session started without ledge, read only';
+
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case 'snapshot.request': return send(ws, { type: 'snapshot', sessions: store.all() });
@@ -102,20 +104,25 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       case 'session.decide': {
         const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
+        if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
         if (!s.pending) return send(ws, { type: 'error', id: msg.id, message: 'nothing to decide' });
         return injectAndVerify(msg.id, adapterFor(s.tool).keysFor(msg.decision, s.pending));
       }
       case 'session.reply': {
         const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
+        if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
         return injectAndVerify(msg.id, adapterFor(s.tool).replyPlan(msg.text));
       }
       case 'session.interrupt': {
-        const s = store.get(msg.id); if (!s?.tmuxSession) return;
+        const s = store.get(msg.id);
+        if (s?.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
+        if (!s?.tmuxSession) return;
         await tmux.sendKeys(s.tmuxSession, adapterFor(s.tool).interruptKeys());
         return;
       }
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;
+        if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
         if (s.tmuxSession) await tmux.killSession(s.tmuxSession);
         store.apply(msg.id, { name: 'PaneGone', at: now(), source: 'daemon' });
         return;
