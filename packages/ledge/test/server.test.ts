@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { connect as tcp } from 'node:net';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
-import { startServer } from '../src/daemon/server.js';
+import WebSocket from 'ws';
+import { startServer, ALLOWED_ORIGINS } from '../src/daemon/server.js';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 
@@ -35,6 +36,31 @@ beforeEach(async () => {
   srv = await startServer({ store, tmux, port: 0 });
 });
 afterEach(async () => { await srv.close(); });
+
+/** Opens a raw WebSocket with the given Origin; resolves with 'open' or the HTTP status of the refusal. */
+function handshake(port: number, origin?: string): Promise<'open' | number> {
+  return new Promise(res => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, origin ? { origin } : {});
+    ws.once('open', () => { ws.terminate(); res('open'); });
+    ws.once('unexpected-response', (_req, r) => { res(r.statusCode ?? 0); ws.terminate(); });
+    ws.once('error', () => {});
+  });
+}
+
+describe('server: origin check', () => {
+  it('refuses a handshake from a foreign web page', async () => {
+    expect(await handshake(srv.port, 'https://evil.example')).toBe(401);
+    expect(await handshake(srv.port, 'http://localhost:3000')).toBe(401);
+    expect(await handshake(srv.port, 'null')).toBe(401);
+  });
+  it('accepts every allowlisted overlay origin', async () => {
+    expect(ALLOWED_ORIGINS).toEqual(['tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420']);
+    for (const o of ALLOWED_ORIGINS) expect(await handshake(srv.port, o)).toBe('open');
+  });
+  it('accepts a Node client that sends no Origin', async () => {
+    expect(await handshake(srv.port)).toBe('open');
+  });
+});
 
 describe('server', () => {
   it('sends a snapshot on connect and broadcasts updates', async () => {

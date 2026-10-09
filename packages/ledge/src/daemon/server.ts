@@ -1,3 +1,4 @@
+import type { IncomingMessage } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type ServerMessage, type Session } from '@ledge/protocol';
 import type { Store } from './store.js';
@@ -8,12 +9,31 @@ import { reduce } from './state.js';
 import { pickName } from '../names.js';
 import { log } from '../log.js';
 
+/**
+ * Origins allowed to open a WebSocket: the Tauri overlay (packaged and dev server). A browser always
+ * sends Origin, so any web page is refused; Node clients (hook, launcher, status) send none and pass.
+ */
+export const ALLOWED_ORIGINS: readonly string[] = [
+  'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420'
+];
+
+export function originAllowed(origin: string | undefined): boolean {
+  return origin === undefined || ALLOWED_ORIGINS.includes(origin);
+}
+
 export interface ServerHandle { port: number; close(): Promise<void>; broadcast(msg: ServerMessage): void }
 
 export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number } }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
-  const wss = new WebSocketServer({ host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT });
+  const wss = new WebSocketServer({
+    host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT,
+    verifyClient: ({ req }: { req: IncomingMessage }) => {
+      const ok = originAllowed(req.headers.origin);
+      if (!ok) log(`refused a connection from origin ${String(req.headers.origin)}`);
+      return ok;
+    }
+  });
   await new Promise<void>((res, rej) => { wss.once('listening', res); wss.once('error', rej); });
   const port = (wss.address() as { port: number }).port;
 
