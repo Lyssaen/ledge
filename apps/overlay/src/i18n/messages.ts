@@ -1,0 +1,196 @@
+import type { BotState } from '../bots/poseFor';
+
+/**
+ * Every user-visible string of the overlay, aria-labels and tooltips included, in French (the default) and English.
+ * `en` is typed as `Messages` (the shape of `fr`): a key missing or extra on either side is a type error. Plurals are
+ * explicit (`plural`), never guessed by appending an "s".
+ */
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
+const fr = {
+  lang: { label: 'Langue', hint: 'La langue de Ledge.', fr: 'Français', en: 'English' },
+  time: { seconds: (n: number) => `${n} s`, minutes: (n: number) => `${n} min`, hours: (n: number) => `${n} h`, locale: 'fr-FR' },
+  state: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
+  /** The bot's accessible state, read after the tool name. */
+  botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
+  botReadOnly: 'Lecture seule',
+  botNotLive: 'Figé',
+  /** The handle's bot buttons: "<Name> <label>, open". */
+  handleLabel: { starting: 'démarre', idle: 'disponible', approval: 'attend votre accord', question: 'a une question', working: 'au travail', done: 'terminée', error: 'en erreur', readonly: 'en lecture seule' } as Record<BotState, string>,
+  open: 'ouvrir',
+  clickToOpen: 'cliquer pour ouvrir',
+  hint: { startedWithoutLedge: 'lancée sans Ledge', exited: (code: string) => `terminée (code ${code})`, error: 'erreur', available: 'disponible', running: 'au travail' },
+  offline: 'Hors connexion : reconnexion au daemon',
+  readOnlyBlocked: 'Lecture seule : lancée sans Ledge, répondez dans son terminal',
+  unreachable: 'daemon injoignable, nouvelle tentative',
+  lost: 'La connexion a été perdue avant la réponse du terminal',
+  notTaken: 'Le terminal ne l’a pas pris en compte',
+  list: {
+    summary: (n: number, waiting: number) => `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} ${plural(waiting, 'demande', 'demandes')} pour vous` : 'tout est à jour'}`,
+    dnd: 'Ne pas déranger', settings: 'Réglages', collapse: 'Replier', help: 'Raccourcis clavier',
+    row: (project: string, name: string) => `${project}, ${name}, ouvrir`,
+    approve: 'Autoriser', deny: 'Refuser', openRow: 'Ouvrir'
+  },
+  detail: { back: 'Retour aux sessions', close: 'Fermer' },
+  session: {
+    reading: 'Mode lecture', focusTerminal: 'Voir l’onglet du terminal', close: 'Fermer',
+    eyebrow: { ask: 'À vous de jouer', working: 'En cours', error: 'À examiner', session: 'Session' },
+    title: {
+      permission: (name: string) => `${name} souhaite lancer une commande.`,
+      diff: (name: string) => `${name} propose des modifications.`,
+      plan: (name: string) => `${name} propose un plan.`,
+      readonly: 'Visible, en lecture seule.',
+      starting: 'La session se prépare.', working: 'Concentré sur sa tâche.', idle: 'En attente de vos instructions.',
+      error: 'La session a rencontré un problème.', exited: 'Cette session est terminée.'
+    },
+    readonlyLead: (name: string) => `${name} a été lancé sans le lanceur Ledge.`,
+    readonlyNote: 'Son état reste visible. Pour répondre à cette session, retrouvez son terminal d’origine.',
+    readonlyNext: 'Pour une prochaine session interactive :',
+    runIn: (project: string) => `Exécution dans ${project}`,
+    reviewIn: (project: string) => `À relire dans ${project}`,
+    reviewHint: 'Relisez-le dans l’aperçu du terminal ci-dessous.',
+    always: 'Toujours pour cette session',
+    alwaysWhy: 'Aucun outil ne confirme encore une autorisation durable : chaque demande se décide une à une.',
+    scope: 'La décision concerne cette commande uniquement : « Toujours » n’est pas encore pris en charge.',
+    allow: 'Autoriser', deny: 'Refuser',
+    options: 'Options',
+    other: 'Autre', otherAnswer: 'Autre réponse', otherPlaceholder: 'Ou proposez autre chose…',
+    otherWhy: 'Réponse libre pas encore prise en charge : répondez dans le terminal',
+    send: 'Envoyer la réponse →',
+    failed: (why: string) => `${why}. Réessayez ou ouvrez l’onglet.`,
+    terminal: 'Aperçu du terminal', terminalNote: '30 dernières lignes · lecture seule',
+    replyLabel: (name: string) => `Répondre à ${name}`,
+    replyPlaceholder: (_name: string) => 'Une instruction pour votre compagnon…',
+    sendReply: 'Envoyer',
+    hintPrompt: (kind: string) => `${kind === 'permission' ? 'Autorisez ou refusez la commande' : kind === 'diff' ? 'Acceptez ou refusez les modifications' : 'Acceptez ou refusez le plan'} avant de répondre`,
+    hintQuestion: 'Une question se répond par une option ; le reste, dans son terminal',
+    hintFree: 'Entrée envoie le texte au terminal tel quel',
+    interrupt: 'Interrompre', kill: 'Arrêter la session'
+  },
+  bubble: {
+    question: (name: string) => `${name} a une question`,
+    review: (name: string, kind: string) => `${name} propose ${kind === 'diff' ? 'des modifications' : 'un plan'} à relire`,
+    approval: (name: string) => `${name} attend votre accord`,
+    more: (n: number) => `+${n} ${plural(n, 'autre', 'autres')}`,
+    failed: (why: string) => `${why}. Réessayez ou ouvrez la session.`,
+    lostDefault: 'La décision n’a pas été transmise',
+    pending: 'Envoyé, en attente du terminal', confirmed: 'Reçu',
+    later: 'Plus tard', reviewAction: 'Relire', deny: 'Refuser', approve: 'Autoriser',
+    answer: (opt: string) => `Répondre : ${opt}`, firstOption: 'première option'
+  },
+  settings: {
+    title: 'Votre Ledge', size: 'Taille', sizeHint: 'Agrandit tout l’overlay pour les grands écrans.', auto: (p: string) => `Auto (${p})`,
+    dnd: 'Ne pas déranger', dndHint: 'Les demandes restent dans la poignée.',
+    reduced: 'Mouvements réduits', reducedHint: 'Les états restent lisibles sans animation.',
+    osReduced: 'Votre système demande des mouvements réduits ; Ledge continue de le respecter.',
+    themeLight: 'Thème clair · Galet', themeDark: 'Thème sombre · Signal', themeHint: 'Changer le thème et la matière des mascottes'
+  },
+  help: {
+    title: 'Au bout des doigts.',
+    keys: [['Ouvrir la liste', ['Ctrl Alt L']], ['Choisir une session', ['J', 'K', '1–9']], ['Ouvrir la sélection', ['Entrée']], ['Autoriser / refuser', ['Y', 'N']],
+      ['Demande suivante', ['Alt →']], ['Répondre', ['R']], ['Ouvrir l’onglet du terminal', ['O']], ['Ne pas déranger', ['D']], ['Retour, puis replier', ['Échap']]] as Array<[string, string[]]>,
+    tab: 'Tab conserve la navigation entre les contrôles.'
+  },
+  coach: {
+    label: 'Clavier', title: 'Naviguer au clavier', ok: 'Compris',
+    upDown: 'monter et descendre', nextAsk: 'demande suivante', jump: 'aller à', decide: 'décider', close: 'fermer', esc: 'Échap',
+    note: 'Affiché aux trois premières ouvertures au clavier'
+  },
+  shortcut: 'Ctrl Alt L'
+};
+
+export type Messages = typeof fr;
+
+const en: Messages = {
+  lang: { label: 'Language', hint: 'The language of Ledge.', fr: 'Français', en: 'English' },
+  time: { seconds: (n: number) => `${n}s`, minutes: (n: number) => `${n}m`, hours: (n: number) => `${n}h`, locale: 'en-US' },
+  state: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
+  botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },
+  botReadOnly: 'Read-only',
+  botNotLive: 'Not live',
+  handleLabel: { starting: 'starting', idle: 'available', approval: 'needs your approval', question: 'has a question', working: 'working', done: 'done', error: 'error', readonly: 'read only' },
+  open: 'open',
+  clickToOpen: 'click to open',
+  hint: { startedWithoutLedge: 'started without ledge', exited: (code: string) => `exited ${code}`, error: 'error', available: 'available', running: 'running' },
+  offline: 'Offline: reconnecting to the daemon',
+  readOnlyBlocked: 'Read only: started without Ledge, answer in its terminal',
+  unreachable: 'daemon unreachable, retrying',
+  lost: 'The connection dropped before the terminal answered',
+  notTaken: 'The terminal did not take it',
+  list: {
+    summary: (n: number, waiting: number) => `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} waiting for you` : 'nothing waiting'}`,
+    dnd: 'Do not disturb', settings: 'Settings', collapse: 'Collapse', help: 'Keyboard shortcuts',
+    row: (project: string, name: string) => `${project}, ${name}, open`,
+    approve: 'Approve', deny: 'Deny', openRow: 'Open'
+  },
+  detail: { back: 'Back to sessions', close: 'Close' },
+  session: {
+    reading: 'Reading mode', focusTerminal: 'Focus terminal tab', close: 'Close',
+    eyebrow: { ask: 'Your turn', working: 'In progress', error: 'To check', session: 'Session' },
+    title: {
+      permission: (name: string) => `${name} wants to run a command.`,
+      diff: (name: string) => `${name} proposes changes.`,
+      plan: (name: string) => `${name} proposes a plan.`,
+      readonly: 'Visible, read only.',
+      starting: 'The session is starting.', working: 'Focused on its task.', idle: 'Waiting for your instructions.',
+      error: 'The session ran into a problem.', exited: 'This session has ended.'
+    },
+    readonlyLead: (name: string) => `${name} was started without the Ledge launcher.`,
+    readonlyNote: 'Its state stays visible. To answer this session, go back to its own terminal.',
+    readonlyNext: 'For your next interactive session:',
+    runIn: (project: string) => `Run in ${project}`,
+    reviewIn: (project: string) => `To review in ${project}`,
+    reviewHint: 'Review it in the terminal preview below.',
+    always: 'Always for this session',
+    alwaysWhy: 'No tool confirms a lasting authorization yet: each request is decided on its own.',
+    scope: 'The decision covers this command only: “Always” is not supported yet.',
+    allow: 'Approve', deny: 'Deny',
+    options: 'Options',
+    other: 'Other', otherAnswer: 'Other answer', otherPlaceholder: 'Other…',
+    otherWhy: 'answer in the terminal',
+    send: 'Answer',
+    failed: (why: string) => `${why}, try again or open the tab`,
+    terminal: 'Terminal preview', terminalNote: 'last 30 lines · read only',
+    replyLabel: (name: string) => `Reply to ${name}`,
+    replyPlaceholder: (name: string) => `Reply to ${name}…`,
+    sendReply: 'Send',
+    hintPrompt: (kind: string) => `Approve or deny the ${kind} first, then reply`,
+    hintQuestion: 'A question takes an option number; answer anything else in its terminal',
+    hintFree: 'Enter sends to the terminal as typed',
+    interrupt: 'Interrupt', kill: 'Kill session'
+  },
+  bubble: {
+    question: (name: string) => `${name} has a question`,
+    review: (name: string, kind: string) => `${name} has a ${kind} to review`,
+    approval: (name: string) => `${name} needs your approval`,
+    more: (n: number) => `+${n} more`,
+    failed: (why: string) => `${why}. Try again or open the session.`,
+    lostDefault: 'The decision was not delivered',
+    pending: 'Sent, waiting for the terminal', confirmed: 'Received',
+    later: 'Later', reviewAction: 'Review', deny: 'Deny', approve: 'Approve',
+    answer: (opt: string) => `Answer: ${opt}`, firstOption: 'first option'
+  },
+  settings: {
+    title: 'Your Ledge', size: 'Size', sizeHint: 'Scale the whole overlay for large screens.', auto: (p: string) => `Auto (${p})`,
+    dnd: 'Do not disturb', dndHint: 'New asks stay in the handle.',
+    reduced: 'Reduced motion', reducedHint: 'States stay readable without animation.',
+    osReduced: 'Your system asks for reduced motion; Ledge keeps respecting it.',
+    themeLight: 'Light theme · Pebble', themeDark: 'Dark theme · Signal', themeHint: 'Switch the theme and the mascot material'
+  },
+  help: {
+    title: 'Keyboard',
+    keys: [['Open the list', ['Ctrl Alt L']], ['Choose a session', ['J', 'K', '1–9']], ['Open the selection', ['Enter']], ['Approve or deny', ['Y', 'N']],
+      ['Next ask', ['Alt →']], ['Reply', ['R']], ['Open the terminal tab', ['O']], ['Do not disturb', ['D']], ['Back, then collapse', ['Esc']]],
+    tab: 'Tab keeps moving between the controls.'
+  },
+  coach: {
+    label: 'Keyboard', title: 'Move with the keyboard', ok: 'Got it',
+    upDown: 'up and down', nextAsk: 'next ask', jump: 'jump', decide: 'decide', close: 'close', esc: 'Esc',
+    note: 'Shown on the first three keyboard opens'
+  },
+  shortcut: 'Ctrl Alt L'
+};
+
+export type Lang = 'fr' | 'en';
+export const LANGS: readonly Lang[] = ['fr', 'en'];
+export const MESSAGES: Record<Lang, Messages> = { fr, en };

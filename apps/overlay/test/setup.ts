@@ -1,6 +1,11 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { setFallbackLang } from '../src/i18n/lang';
+
+// The app defaults to French; the unit suite predates the French copy and reads English unless a test asks for French
+// (`ledge.lang` = 'fr' or a <LangProvider lang="fr">).
+setFallbackLang('en');
 
 afterEach(cleanup);
 
