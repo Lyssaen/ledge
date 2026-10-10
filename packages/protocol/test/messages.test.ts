@@ -35,6 +35,18 @@ describe('protocol', () => {
     for (const m of msgs) expect(parseClientMessage(m).type).toBe(m.type);
   });
 
+  it('accepts the post-tool, stop-failure and subagent hook events', () => {
+    for (const name of ['PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop']) {
+      const m = parseClientMessage({ type: 'session.event', id: '7f3a', event: { name, at: '2026-10-09T18:02:00.000Z', source: 'hook', helperId: 'a1' } });
+      expect(m.type).toBe('session.event');
+    }
+  });
+
+  it('accepts a helper-routed pending and helpers with a state', () => {
+    const s = { ...session, pending: { ...session.pending, helperId: 'a1' }, helpers: [{ id: 'a1', kind: 'Explore', task: '', state: 'exited' }] };
+    expect(SessionSchema.parse(s)).toEqual(s);
+  });
+
   it('rejects a decision outside accept/deny', () => {
     expect(() => parseClientMessage({ type: 'session.decide', id: 'x', decision: 'maybe' })).toThrow();
   });

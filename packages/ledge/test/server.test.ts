@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { connect as tcp } from 'node:net';
@@ -73,6 +73,27 @@ describe('server', () => {
     const upd = await c.next('session.updated');
     expect(upd.session.state).toBe('idle');
     c.close();
+  });
+
+  it('a PostToolUse clears a stale pending answered in the terminal and broadcasts working', async () => {
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'a', event: { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Bash' } });
+    const upd = await c.next('session.updated');
+    expect(upd.session.state).toBe('working');
+    expect(upd.session.pending).toBeUndefined();
+    await c.close();
+  });
+
+  it('logs a helper permission that is not routed because the parent already has a pending', async () => {
+    const pending = { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } as const;
+    store.upsert(mk('a', { state: 'waiting_permission', pending }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'a', event: { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Edit', text: 'a.ts', helperId: 'h1' } });
+    await c.next('session.updated');
+    expect(store.get('a')?.pending).toEqual(pending);
+    expect(readFileSync(join(process.env.LEDGE_HOME!, 'daemon.log'), 'utf8')).toContain('helper h1 permission for Edit not routed');
+    await c.close();
   });
 
   it('register upgrades a hook_only session created by an early hook', async () => {

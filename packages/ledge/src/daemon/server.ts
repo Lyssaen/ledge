@@ -117,6 +117,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           const base: Session = { id: msg.id, name: pickName(taken), tool: 'claude', cwd: '', project: 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
           store.upsert(reduce(base, msg.event));
         } else store.apply(msg.id, msg.event);
+        const ev = msg.event;
+        if (ev.name === 'PermissionRequest' && ev.helperId && store.get(msg.id)?.pending?.helperId !== ev.helperId) {
+          log(`helper ${ev.helperId} permission for ${ev.tool ?? 'a tool'} not routed: ${msg.id} already has a pending request`);
+        }
         return;
       }
       case 'session.unregister':

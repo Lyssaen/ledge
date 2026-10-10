@@ -4,7 +4,7 @@ import { SessionSchema } from './session.js';
 export const PROTOCOL_PORT = 47831;
 
 export const SessionEventSchema = z.object({
-  name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided']),
+  name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop']),
   at: z.string().datetime(),
   source: z.enum(['hook', 'pane', 'daemon']),
   tool: z.string().optional(),
