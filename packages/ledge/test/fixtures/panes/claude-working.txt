@@ -1,0 +1,7 @@
+● Read(src/daemon/state.ts)
+  ⎿  Read 184 lines
+
+● I'll run the test suite to confirm the state machine transitions.
+
+● Bash(npm test)
+  ⎿  Running…

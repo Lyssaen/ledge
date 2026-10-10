@@ -1,0 +1,14 @@
+❯ what does the permission dialog look like?
+
+● It asks a question and lists numbered choices, for example:
+
+  Do you want to proceed?
+  ❯ 1. Yes
+    2. No
+
+  You pick one with the arrow keys or by typing its number.
+
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
