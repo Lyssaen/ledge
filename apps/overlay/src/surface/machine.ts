@@ -10,6 +10,8 @@ export interface SurfaceState {
   /** Facts about the surface that hold the bubble clock (and guard the list's leave timer). */
   hovering: boolean; focusWithin: boolean; hidden: boolean;
   ack: Ack | null;
+  /** The bubble id whose decision ended in a terminal error: recovery is unlocked, no success is shown. */
+  failed: string | null;
   /** Bumped whenever the view context (mode, bubble, selection) changes; delayed events carrying an older rev are ignored. */
   rev: number;
 }
@@ -25,7 +27,8 @@ export type SurfaceEvent =
   | { type: 'surfaceEnter' } | { type: 'surfaceLeave' } | Elapsed<'leaveElapsed'>
   | { type: 'focusWithin'; on: boolean } | { type: 'visibility'; hidden: boolean }
   | { type: 'botClick'; id: string } | { type: 'rowClick'; id: string } | { type: 'bubbleClick' } | Elapsed<'bubbleElapsed'>
-  | { type: 'decidedInBubble' } | Elapsed<'holdElapsed'> | { type: 'back' } | { type: 'close' } | { type: 'shortcut' }
+  | { type: 'decidedInBubble' } | Elapsed<'holdElapsed'> | { type: 'decisionFailed'; id: string }
+  | { type: 'back' } | { type: 'close' } | { type: 'shortcut' } | { type: 'settings' } | { type: 'help' }
   | { type: 'typing'; on: boolean } | { type: 'reading'; on: boolean } | { type: 'dnd'; on: boolean };
 
 /** Functional durations: independent of the `ms()` animation scaling. */
@@ -35,7 +38,7 @@ export const ELAPSED: Record<TimerName, 'dwellElapsed' | 'leaveElapsed' | 'bubbl
 
 export const initialSurface = (): SurfaceState => ({
   mode: 'handle', selectedId: null, bubbleId: null, queue: [], openedBy: null, hot: false, reading: false, typing: false,
-  hovering: false, focusWithin: false, hidden: false, ack: null, rev: 0
+  hovering: false, focusWithin: false, hidden: false, ack: null, failed: null, rev: 0
 });
 
 type Result = { state: SurfaceState; effects: Effect[] };
@@ -44,11 +47,13 @@ const cancel = (name: TimerName): Effect => ({ type: 'cancelTimer', name });
 const cancelAll: Effect[] = (['dwell', 'leave', 'bubble', 'hold', 'unfold'] as TimerName[]).map(cancel);
 const same = (s: SurfaceState): Result => ({ state: s, effects: [] });
 const held = (s: SurfaceState) => s.hovering || s.focusWithin || s.hidden;
-const toHandle = (s: SurfaceState): SurfaceState => ({ ...s, mode: 'handle', bubbleId: null, selectedId: null, openedBy: null, hot: false, reading: false, typing: false, ack: null });
-const open = (s: SurfaceState, id: string): Result => ({ state: { ...s, mode: 'session', selectedId: id, bubbleId: null, hot: false, ack: null }, effects: cancelAll });
+const toHandle = (s: SurfaceState): SurfaceState => ({ ...s, mode: 'handle', bubbleId: null, selectedId: null, openedBy: null, hot: false, reading: false, typing: false, ack: null, failed: null });
+const open = (s: SurfaceState, id: string): Result => ({ state: { ...s, mode: 'session', selectedId: id, bubbleId: null, hot: false, ack: null, failed: null }, effects: cancelAll });
+/** Panels opened inside the same surface; Escape/back from a detail view returns to the list. */
+const detail = (m: Mode) => m === 'session' || m === 'settings' || m === 'help';
 /** Shows the bubble for `id` with a fresh clock, paused straight away if something already holds it. */
 const showBubble = (s: SurfaceState, id: string, extra: Effect[] = []): Result => ({
-  state: { ...s, mode: 'bubble', bubbleId: id, ack: null },
+  state: { ...s, mode: 'bubble', bubbleId: id, ack: null, failed: null },
   effects: [...extra, start('bubble'), ...(held(s) ? [{ type: 'pauseTimer', name: 'bubble' } as Effect] : [])]
 });
 /** Leaves the bubble after a resolved ask: next queued ask, or the handle. */
@@ -61,7 +66,7 @@ const holdEffects = (before: SurfaceState, after: SurfaceState): Effect[] => {
   if (after.mode !== 'bubble' || after.ack || held(before) === held(after)) return [];
   return [{ type: held(after) ? 'pauseTimer' : 'resumeTimer', name: 'bubble' }];
 };
-const listMayFold = (s: SurfaceState) => s.mode === 'list' && s.openedBy === 'mouse' && !s.typing && !s.focusWithin && !s.hovering;
+const listMayFold = (s: SurfaceState) => (s.mode === 'list' || s.mode === 'settings' || s.mode === 'help') && s.openedBy === 'mouse' && !s.typing && !s.focusWithin && !s.hovering;
 /** A daemon confirmation (askCleared or removal) for the acknowledged id. */
 const confirm = (s: SurfaceState, queue: string[]): Result => {
   const ack = { ...s.ack!, confirmed: true };
@@ -126,7 +131,17 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
       const next = { ...s, ack: { ...s.ack, minElapsed: true } };
       return next.ack.confirmed ? advance(next) : same(next);
     }
-    case 'back': return s.mode === 'session' ? { state: { ...s, mode: 'list', selectedId: null, reading: false }, effects: [] } : same(s);
+    /* A terminal error for the acknowledged decision: unlock the actions (never a success), and give a fresh clock to retry. */
+    case 'decisionFailed': {
+      if (s.mode !== 'bubble' || s.bubbleId !== e.id) return same(s);
+      if (s.ack?.id !== e.id) return s.failed === e.id ? same(s) : same({ ...s, failed: e.id });
+      return { state: { ...s, ack: null, failed: e.id }, effects: [cancel('hold'), start('bubble'), ...(held(s) ? [{ type: 'pauseTimer', name: 'bubble' } as Effect] : [])] };
+    }
+    case 'settings': case 'help': {
+      if (s.mode === 'handle' || s.mode === 'bubble' || s.mode === e.type) return same(s);
+      return { state: { ...s, mode: e.type, selectedId: null, reading: false }, effects: [cancel('leave')] };
+    }
+    case 'back': return detail(s.mode) ? { state: { ...s, mode: 'list', selectedId: null, reading: false }, effects: [] } : same(s);
     case 'close': return { state: toHandle(s), effects: cancelAll };
     case 'shortcut': return s.mode === 'handle' ? { state: { ...s, mode: 'list', openedBy: 'keyboard', hot: false }, effects: cancelAll } : { state: toHandle(s), effects: cancelAll };
     case 'typing': return { state: { ...s, typing: e.on }, effects: e.on ? [cancel('leave')] : [] };

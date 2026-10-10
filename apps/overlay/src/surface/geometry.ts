@@ -1,5 +1,5 @@
-export const SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 56, footerH: 48, margin: 40, stripW: 6, stripH: 60 } as const;
-export type Mode = 'handle' | 'bubble' | 'list' | 'session';
+export const SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 56, footerH: 48, margin: 40, stripW: 6, stripH: 60, settingsH: 300, helpH: 420 } as const;
+export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'settings' | 'help';
 export interface Slot { id: string; size: number; center: number }
 export interface Layout { top: number; w: number; h: number; slots: Slot[]; handle: { top: number; h: number }; hotZones: Array<{ top: number; h: number }> }
 
@@ -27,6 +27,10 @@ export function layout(input: { bots: Array<{ id: string; pending: boolean }>; m
     const h = Math.min(maxH, input.bubbleH ?? SIZES.bubbleH);
     const top = clamp(Math.round((slot?.center ?? centerY) - 38), SIZES.margin, screenH - SIZES.margin - h);
     return { top, w: SIZES.bubbleW, h, slots, handle, hotZones };
+  }
+  if (mode === 'settings' || mode === 'help') {
+    const h = Math.min(maxH, mode === 'settings' ? SIZES.settingsH : SIZES.helpH);
+    return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w: SIZES.listW, h, slots, handle, hotZones };
   }
   const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + 16 + n * SIZES.rowH + (input.listExtraH ?? 0) + SIZES.footerH : (input.sessionH ?? 480));
   const top = clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h);

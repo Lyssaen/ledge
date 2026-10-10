@@ -235,3 +235,50 @@ describe('controller timers', () => {
     c.dispose(); expect(clock.pending()).toBe(0);
   });
 });
+
+describe('surface machine: decision failure and detail views', () => {
+  const bubble = () => run([{ type: 'ask', id: 'a' }, { type: 'unfoldElapsed' as never }]).s;
+  it('a terminal error for the acknowledged decision unlocks recovery, never advances as a success', () => {
+    const acked = run([{ type: 'decidedInBubble' }], bubble()).s;
+    const r = run([{ type: 'decisionFailed', id: 'a' }], acked);
+    expect(r.s.mode).toBe('bubble'); expect(r.s.bubbleId).toBe('a');
+    expect(r.s.ack).toBeNull(); expect(r.s.failed).toBe('a'); expect(r.s.queue).toEqual(['a']);
+    expect(r.effects).toEqual(['cancelTimer:hold', 'startTimer:bubble']);
+    // The 900 ms hold that was cancelled cannot advance it later, and a retry acknowledges again.
+    expect(run([{ type: 'holdElapsed', rev: acked.rev }], r.s).s).toBe(r.s);
+    const retry = run([{ type: 'decidedInBubble' }], r.s).s;
+    expect(retry.ack).toEqual({ id: 'a', minElapsed: false, confirmed: false });
+  });
+  it('a failure while something holds the bubble restarts its clock paused', () => {
+    const held = run([{ type: 'surfaceEnter' }, { type: 'decidedInBubble' }], bubble()).s;
+    expect(run([{ type: 'decisionFailed', id: 'a' }], held).effects).toEqual(['cancelTimer:hold', 'startTimer:bubble', 'pauseTimer:bubble']);
+  });
+  it('a failure for another id, or outside the bubble, changes nothing', () => {
+    const acked = run([{ type: 'decidedInBubble' }], bubble()).s;
+    expect(run([{ type: 'decisionFailed', id: 'b' }], acked).s).toBe(acked);
+    const list = run([{ type: 'shortcut' }]).s;
+    expect(run([{ type: 'decisionFailed', id: 'a' }], list).s).toBe(list);
+  });
+  it('a confirmation after the hold advances; an error after confirmation is ignored', () => {
+    const done = run([{ type: 'decidedInBubble' }, { type: 'holdElapsed' }, { type: 'askCleared', id: 'a' }], bubble()).s;
+    expect(done.mode).toBe('handle');
+    expect(run([{ type: 'decisionFailed', id: 'a' }], done).s).toBe(done);
+  });
+  it('settings and help open inside the panel; back returns to the list, then close folds', () => {
+    const list = run([{ type: 'shortcut' }]).s;
+    const settings = run([{ type: 'settings' }], list).s;
+    expect(settings.mode).toBe('settings'); expect(settings.openedBy).toBe('keyboard');
+    expect(run([{ type: 'back' }], settings).s.mode).toBe('list');
+    const help = run([{ type: 'help' }], run([{ type: 'rowClick', id: 'a' }], list).s).s;
+    expect(help.mode).toBe('help'); expect(help.selectedId).toBeNull();
+    expect(run([{ type: 'back' }, { type: 'close' }], help).s.mode).toBe('handle');
+    // Never from the handle or over a bubble.
+    expect(run([{ type: 'settings' }]).s.mode).toBe('handle');
+    expect(run([{ type: 'help' }], bubble()).s.mode).toBe('bubble');
+  });
+  it('a mouse-opened settings view folds on leave like the list, unless focus is inside', () => {
+    const open = run([{ type: 'edgeEnter' }, { type: 'dwellElapsed' as never }, { type: 'surfaceEnter' }, { type: 'settings' }]).s;
+    expect(run([{ type: 'surfaceLeave' }], open).effects).toContain('startTimer:leave');
+    expect(run([{ type: 'focusWithin', on: true }, { type: 'surfaceLeave' }], open).effects).not.toContain('startTimer:leave');
+  });
+});
