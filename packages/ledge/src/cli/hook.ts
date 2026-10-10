@@ -23,8 +23,25 @@ export function mapClaudeHook(eventName: string, payload: unknown, at: string): 
   const id = process.env.LEDGE_SESSION || str(p.session_id);
   if (!id) return null;
   const tool = str(p.tool_name);
-  const base = { at, source: 'hook' as const };
+  // agent_id is present only when the hook fires inside a subagent (absent on the main thread, even with --agent).
+  const agentId = str(p.agent_id) || undefined;
+  const base = { at, source: 'hook' as const, ...(agentId ? { helperId: agentId } : {}) };
   switch (eventName) {
+    case 'SubagentStart':
+    case 'SubagentStop': {
+      // Here agent_id names the helper itself. 2.1 sends no task; description/prompt are read if a later version adds them.
+      if (!agentId) return null;
+      const type = str(p.agent_type) || undefined;
+      const task = eventName === 'SubagentStart' ? (str(p.description) || str(p.prompt))?.split('\n')[0] : undefined;
+      return { id, event: { name: eventName, ...base, ...(type ? { tool: type } : {}), ...(task ? { text: task } : {}) } };
+    }
+    case 'PostToolUse':
+    case 'PostToolUseFailure': return { id, event: { name: eventName, ...base, tool } };
+    case 'StopFailure': {
+      const error = str(p.error); const details = str(p.error_details);
+      const text = [error, details].filter(Boolean).join(': ').slice(0, 300) || undefined;
+      return { id, event: { name: 'StopFailure', ...base, ...(text ? { text } : {}) } };
+    }
     case 'SessionStart': return { id, event: { name: 'SessionStart', ...base } };
     case 'UserPromptSubmit': return { id, event: { name: 'UserPromptSubmit', ...base } };
     case 'Stop': return { id, event: { name: 'Stop', ...base } };
@@ -61,7 +78,7 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
   try {
     const payload = JSON.parse(stdin || '{}');
     const mapped = mapClaudeHook(eventName, payload, new Date().toISOString());
-    if (!mapped) { log(`hook ${eventName} ignored: unknown event, malformed payload or non-terminal SessionEnd`); return; }
+    if (!mapped) { log(`hook ${eventName} ignored: unknown event, malformed payload, non-terminal SessionEnd or subagent event without agent_id`); return; }
     const client = await connect({ port: opts.port, timeoutMs });
     client.send({ type: 'session.event', id: mapped.id, event: mapped.event });
     // close() resolves once the handshake completes, i.e. after the send is flushed; one shared deadline

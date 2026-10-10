@@ -53,6 +53,48 @@ describe('mapClaudeHook', () => {
       expect(mapClaudeHook('SessionEnd', { session_id: 's', reason }, at)?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', exitCode: null });
     });
   });
+  // Payload shapes from Claude Code 2.1.296 (field names read from the installed binary's hook input schemas).
+  const common = { session_id: 's', transcript_path: '/h/.claude/projects/p/s.jsonl', cwd: '/w', permission_mode: 'default' };
+  it('maps PostToolUse with its tool', () => {
+    const payload = { ...common, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'npm test' }, tool_response: { stdout: 'ok' }, tool_use_id: 'toolu_1', duration_ms: 812 };
+    expect(mapClaudeHook('PostToolUse', payload, at)?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', tool: 'Bash' });
+  });
+  it('maps PostToolUseFailure with its tool', () => {
+    const payload = { ...common, hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command: 'false' }, tool_use_id: 'toolu_2', error: 'Exit code 1', is_interrupt: false };
+    expect(mapClaudeHook('PostToolUseFailure', payload, at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', tool: 'Bash' });
+  });
+  it('maps StopFailure with its error and details', () => {
+    const payload = { ...common, hook_event_name: 'StopFailure', error: 'rate_limit', error_details: '429 Too Many Requests', last_assistant_message: 'Working on it' };
+    expect(mapClaudeHook('StopFailure', payload, at)?.event).toEqual({ name: 'StopFailure', at, source: 'hook', text: 'rate_limit: 429 Too Many Requests' });
+  });
+  it('maps StopFailure with only an error code, or nothing', () => {
+    expect(mapClaudeHook('StopFailure', { ...common, error: 'overloaded' }, at)?.event.text).toBe('overloaded');
+    expect(mapClaudeHook('StopFailure', { ...common }, at)?.event.text).toBeUndefined();
+  });
+  it('maps SubagentStart to the helper id and type (2.1 sends no task)', () => {
+    const payload = { ...common, hook_event_name: 'SubagentStart', agent_id: 'a7c2e', agent_type: 'Explore' };
+    expect(mapClaudeHook('SubagentStart', payload, at)?.event).toEqual({ name: 'SubagentStart', at, source: 'hook', helperId: 'a7c2e', tool: 'Explore' });
+  });
+  it('maps SubagentStart with a description or prompt to the first line of the task', () => {
+    expect(mapClaudeHook('SubagentStart', { ...common, agent_id: 'a1', agent_type: 'general-purpose', description: 'Find the mapper\nmore' }, at)?.event.text).toBe('Find the mapper');
+    expect(mapClaudeHook('SubagentStart', { ...common, agent_id: 'a1', prompt: 'Read setup.ts\nthen' }, at)?.event.text).toBe('Read setup.ts');
+  });
+  it('maps SubagentStop to the helper id', () => {
+    const payload = { ...common, hook_event_name: 'SubagentStop', stop_hook_active: false, agent_id: 'a7c2e', agent_transcript_path: '/t/a7c2e.jsonl', agent_type: 'Explore', last_assistant_message: 'done' };
+    expect(mapClaudeHook('SubagentStop', payload, at)?.event).toEqual({ name: 'SubagentStop', at, source: 'hook', helperId: 'a7c2e', tool: 'Explore' });
+  });
+  it('drops SubagentStart/SubagentStop without agent_id', () => {
+    expect(mapClaudeHook('SubagentStart', { ...common, agent_type: 'Explore' }, at)).toBeNull();
+    expect(mapClaudeHook('SubagentStop', { ...common }, at)).toBeNull();
+  });
+  it.each(['PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure', 'Notification', 'Stop', 'StopFailure'])('tags %s fired inside a subagent with its helperId', name => {
+    const payload = { ...common, agent_id: 'a7c2e', agent_type: 'Explore', tool_name: 'Bash', tool_input: { command: 'ls' }, message: 'm' };
+    expect(mapClaudeHook(name, payload, at)?.event.helperId).toBe('a7c2e');
+  });
+  it('does not tag a main-thread event of an --agent session (agent_type without agent_id)', () => {
+    const payload = { ...common, agent_type: 'reviewer', tool_name: 'Bash', tool_input: { command: 'ls' } };
+    expect(mapClaudeHook('PreToolUse', payload, at)?.event.helperId).toBeUndefined();
+  });
   it('returns null for an unknown event or malformed payload', () => {
     expect(mapClaudeHook('Whatever', { session_id: 's' }, at)).toBeNull();
     expect(mapClaudeHook('Stop', 'not an object', at)).toBeNull();
