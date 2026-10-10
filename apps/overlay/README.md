@@ -8,9 +8,15 @@ The Windows overlay for Ledge: a handle on the left screen edge that opens into 
 pnpm --filter overlay dev                        # http://localhost:1420
 pnpm --filter overlay exec tsx test/devMock.ts   # a fake daemon on 47831 with five bots
 pnpm --filter overlay test
+pnpm --filter overlay test:e2e                   # Playwright, the real app in Chromium
 ```
 
 The dev mock needs port 47831 free: stop the real daemon first.
+
+The e2e suite (`e2e/*.spec.ts`) drives the real app with a real mouse and keyboard in Chromium; the daemon is simulated
+in the page (`e2e/daemon.ts`), so nothing needs to run on 47831. Vite is started on port 5199 (or an existing server
+there is reused). Any console error or page error fails the spec. The first run may need
+`pnpm --filter overlay exec playwright install chromium`. Traces and screenshots go to `e2e/.results/` (git-ignored).
 
 ## Build (Windows PowerShell, Rust installed)
 
@@ -38,7 +44,9 @@ The Rust side has not been compiled yet. On the first build:
    - in a session, `o` or the terminal button brings Windows Terminal forward;
    - open the list with Ctrl+Alt+L while the cursor rests on the left edge, then press Esc: it must not reopen until the cursor leaves the edge and comes back;
    - open and close transitions show no flash of misplaced content;
-   - clicks beside the surface reach the app underneath.
+   - clicks beside the surface reach the app underneath;
+   - UI scale on the 4K screen: Settings > Size shows `Auto (…)` with the expected value (work-area height / 1080 to the nearest quarter; on a 4K screen with the taskbar at the bottom: about 200% at 100% Windows scaling, 150% at 125%, 125% at 150%), the handle and bots are clearly readable, and the handle stays centered on the left edge;
+   - switching Size between Auto, 100%, 125%, 150% and 200% resizes everything live with nothing clipped or offset: the window follows the surface, the tooltip and the coachmark are fully visible, the edge bands above and below the handle still open the list, clicks beside the surface still reach the app underneath.
 4. `pnpm tauri build`: NSIS installer with the bot icon.
 
 ## Keys
@@ -58,7 +66,11 @@ The Rust side has not been compiled yet. On the first build:
 | ? | keyboard help, inside the surface (Esc returns to the list) |
 | Ctrl+Alt+T | toggle dark / light theme |
 
-Theme, do not disturb and reduced motion are also in the list's Settings view, and are remembered in `localStorage` (`ledge.theme`, `ledge.dnd`, `ledge.reducedMotion`). The OS reduced-motion preference always wins. While the daemon is unreachable, and for sessions started without Ledge (read only), every send and decision path is disabled, keys included; the terminal tab button and O still bring the terminal forward.
+Theme, do not disturb, reduced motion and size are also in the list's Settings view, and are remembered in `localStorage` (`ledge.theme`, `ledge.dnd`, `ledge.reducedMotion`, `ledge.uiScale`).
+
+## Size (UI scale)
+
+Every size is designed in CSS px for a 1080p work area. Settings > Size zooms the whole overlay: Auto, 100%, 125%, 150% or 200%. Auto takes the primary work area's height in logical px (after Windows scaling) divided by 1080, rounded to the nearest quarter, between 100% and 200%: 1080 px is 100%, 1440 px 125%, 1600 px 150%, 2160 px (4K at 100% Windows scaling) 200%. Under Tauri it is the webview zoom; the surface then lays itself out in a work area of height / scale CSS px, and the bridge multiplies every frame and edge band it sends to the shell back to monitor px (the Rust side is unchanged). In the browser (dev, e2e) a CSS `zoom` on the app root emulates it. The OS reduced-motion preference always wins. While the daemon is unreachable, and for sessions started without Ledge (read only), every send and decision path is disabled, keys included; the terminal tab button and O still bring the terminal forward.
 
 ## Known V1 limits
 
