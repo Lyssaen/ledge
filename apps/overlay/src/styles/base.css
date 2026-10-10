@@ -14,6 +14,8 @@ button, input { font-family: inherit; }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .dnd-switch:has(input:focus-visible) .dnd-track, .ledge-seg:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
 .ledge-opt:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
+/* Text fields (launch form, reply): no focus ring, the caret shows where you type. */
+.ledge-field:focus, .ledge-field:focus-visible { outline: none; }
 /* Buttons: variant colors, hover and disabled states (tokens only). */
 .ledge-btn { cursor: pointer; border: 1px solid transparent; }
 .ledge-btn[data-variant="primary"] { background: var(--primary); color: var(--primary-foreground); }
