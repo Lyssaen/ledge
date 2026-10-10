@@ -15,4 +15,4 @@ Personal project. Windows host + WSL2 only.
 
 - `packages/protocol`: zod schemas shared by the daemon, the CLI and the overlay.
 - `packages/ledge`: the `ledge` CLI (launcher, daemon, hook receiver). See `packages/ledge/README.md`.
-- `apps/overlay`: the Windows overlay (next plan).
+- `apps/overlay`: the Windows overlay (Vite + React UI and a Tauri shell). See `apps/overlay/README.md` for development, keys and the first Windows build.
