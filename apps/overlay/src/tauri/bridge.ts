@@ -108,6 +108,12 @@ export async function focusTerminal(title: string): Promise<void> {
   await invoke('focus_terminal', { title }).catch(() => {});
 }
 
+/** Whether Windows Terminal is the foreground window (the "only when the terminal is behind" sound rule). False outside Tauri. */
+export async function foregroundIsTerminal(): Promise<boolean> {
+  if (!inTauri()) return false;
+  return invoke<boolean>('foreground_is_terminal').catch(() => false);
+}
+
 /** Native edge hover. In the browser it never fires: the DOM hot zones handle the edge there. */
 export function onEdge(fn: (inside: boolean) => void): () => void {
   if (!inTauri()) return () => {};

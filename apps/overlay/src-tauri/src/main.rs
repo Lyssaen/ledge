@@ -274,6 +274,24 @@ fn focus_terminal(title: String) -> Result<bool, String> {
 #[tauri::command]
 fn focus_terminal(_title: String) -> Result<bool, String> { Ok(false) }
 
+/// Windows Terminal's top-level window class (Cascadia). Its tab titles vary; the class does not.
+#[cfg(windows)]
+#[tauri::command]
+fn foreground_is_terminal() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, GetForegroundWindow};
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() { return false; }
+        let mut buf = [0u16; 128];
+        let n = GetClassNameW(hwnd, &mut buf) as usize;
+        String::from_utf16_lossy(&buf[..n]) == "CASCADIA_HOSTING_WINDOW_CLASS"
+    }
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+fn foreground_is_terminal() -> bool { false }
+
 #[cfg(windows)]
 fn cursor_position() -> Option<(i32, i32)> {
     use windows::Win32::Foundation::POINT;
@@ -322,7 +340,7 @@ fn main() {
         .manage(HotZones::default())
         .manage(PrevForeground::default())
         .manage(Screen::default())
-        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, list_monitors, set_monitor])
+        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, list_monitors, set_monitor])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") { let _ = w.set_always_on_top(true); }
             spawn_edge_poller(app.handle().clone());

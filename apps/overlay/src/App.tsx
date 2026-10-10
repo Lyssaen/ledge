@@ -7,6 +7,7 @@ import { isTauri, listMonitors, screenHeight, setMonitor } from './tauri/bridge'
 import { autoScale, loadScale, migrateLegacyScale, resolveScale, saveScale, type ScaleTarget, type UiScale } from './scale';
 import { loadMonitor, saveMonitor, type MonitorInfo } from './monitor';
 import { LangProvider, loadLang, saveLang, type Lang } from './i18n/lang';
+import { createWebAudioPlayer } from './sounds/player';
 
 export function App() {
   const client = useMemo(() => createDaemonClient({ url: `ws://127.0.0.1:${PROTOCOL_PORT}` }), []);
@@ -19,6 +20,7 @@ export function App() {
   const [lang, setLang] = useState<Lang>(loadLang);
   const [dnd, setDnd] = useState(() => { try { return localStorage.getItem('ledge.dnd') === '1'; } catch { return false; } });
   const [theme, setTheme] = useState<'dark' | 'light'>(() => { try { return (localStorage.getItem('ledge.theme') as 'dark' | 'light') || 'dark'; } catch { return 'dark'; } });
+  const [player] = useState(() => createWebAudioPlayer());
   const tauri = isTauri();
   const handleScale = resolveScale(scales.handle, workH, 'handle');
   const panelScale = resolveScale(scales.panel, workH, 'panel');
@@ -40,7 +42,7 @@ export function App() {
       <Surface screenH={workH} handleScale={handleScale} panelScale={panelScale} scales={scales} autoScales={{ handle: autoScale(workH, 'handle'), panel: autoScale(workH, 'panel') }}
         onScale={(target, s) => setScales(x => ({ ...x, [target]: s }))} onLang={setLang}
         monitors={monitors} monitor={monitor} onMonitor={setMonitorChoice} onSettingsOpen={refreshMonitors}
-        theme={theme} client={client} dnd={dnd} onToggleDnd={() => setDnd(d => !d)} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />
+        theme={theme} client={client} dnd={dnd} soundPlayer={player} onToggleDnd={() => setDnd(d => !d)} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />
     </LangProvider>
   );
 }

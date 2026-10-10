@@ -17,6 +17,8 @@ import { useMeasuredHeight } from './useMeasuredHeight';
 import { useDaemonAsks, isPending } from './useDaemonAsks';
 import { useFocusRestore } from './useFocusRestore';
 import { useSoundPrefs } from '../sounds/preferences';
+import { useSounds } from '../sounds/useSounds';
+import { createSilentPlayer, type SoundPlayer } from '../sounds/player';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { SessionList, rowHint, EXPANDED_ROW_H } from './SessionList';
 import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
@@ -55,9 +57,11 @@ export interface SurfaceProps {
   /** The Screen setting: the monitors to choose from, the choice (null: the primary) and how to change it (live).
    *  `onSettingsOpen` fires when the Settings view opens, so the monitors can be listed again. */
   monitors?: MonitorInfo[]; monitor?: string | null; onMonitor?: (id: string | null) => void; onSettingsOpen?: () => void;
+  /** Plays the sound cues (one Web Audio player per app); a silent player when absent. */
+  soundPlayer?: SoundPlayer;
 }
 
-export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen }: SurfaceProps) {
+export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen, soundPlayer }: SurfaceProps) {
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
@@ -97,7 +101,9 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
 
   // Daemon changes drive the machine. DND keeps the bot growing in the handle but never asks for a bubble.
   // A reply the daemon rejects comes back into its draft (unless something new was typed meanwhile).
-  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, finishedBubble, onChange: (c, info) => { if (c.kind === 'finished' && info.elapsedMs !== undefined) setElapsed(x => ({ ...x, [c.id]: info.elapsedMs! })); }, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
+  const player = useMemo(() => soundPlayer ?? createSilentPlayer(), [soundPlayer]);
+  const sounds = useSounds({ player, dnd, status });
+  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, finishedBubble, onChange: (c, info) => { sounds.onChange(c); if (c.kind === 'finished' && info.elapsedMs !== undefined) setElapsed(x => ({ ...x, [c.id]: info.elapsedMs! })); }, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
 
   // DND switched on takes any bubble down and drops queued asks. Turning it off does not re-bubble asks already pending.
   useEffect(() => { if (dnd) dispatch({ type: 'dnd', on: true }); }, [dnd, dispatch]);
@@ -221,7 +227,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   /** One decision command per request: false when blocked or already in flight. */
   const decide = (id: string, d: 'accept' | 'deny'): boolean => {
     if (blockedFor(byId.get(id)) !== null || !asks.begin(id)) return false;
-    send({ type: 'session.decide', id, decision: d }); return true;
+    send({ type: 'session.decide', id, decision: d }); sounds.user(d === 'accept' ? 'accept' : 'deny'); return true;
   };
   /** A typed reply. A permission, diff or plan prompt takes Approve/Deny only (the field explains it); answering a
    *  question locks it like a decision. The draft is cleared on send and comes back if the daemon rejects it. */
@@ -230,7 +236,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
     if (!s || blockedFor(s) !== null || (s.pending && s.pending.kind !== 'question')) return;
     if (s.pending && !asks.begin(id)) return;
     asks.replied(id, text);
-    send({ type: 'session.reply', id, text }); setDrafts(x => ({ ...x, [id]: '' })); dispatch({ type: 'typing', on: false });
+    send({ type: 'session.reply', id, text }); sounds.user('accept'); setDrafts(x => ({ ...x, [id]: '' })); dispatch({ type: 'typing', on: false });
   };
   const bubbleAck: BubbleAck = st.ack ? (st.ack.confirmed ? 'confirmed' : 'pending') : st.failed && st.failed === st.bubbleId ? 'failed' : null;
   // The coachmark sits 8 px under the focused row; when that would leave the frame it flips above the row, and when

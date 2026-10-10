@@ -5,12 +5,13 @@ import { createMockDaemon, fakeSession } from './mockDaemon';
 import { createDaemonClient } from '../src/daemon/client';
 import { attachClient, daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
-import { resetSoundPrefsForTests } from '../src/sounds/preferences';
+import { DEFAULT_SOUNDS, resetSoundPrefsForTests } from '../src/sounds/preferences';
 
 let mock: Awaited<ReturnType<typeof createMockDaemon>>; let client: ReturnType<typeof createDaemonClient>; let detach: () => void;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 beforeEach(async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
+  localStorage.clear(); resetSoundPrefsForTests();
   daemonStore.reset(); mock = await createMockDaemon();
   mock.sessions.set('a', fakeSession('a')); mock.sessions.set('b', fakeSession('b', { name: 'Pim', tool: 'codex', project: 'speos-api', startedAt: '2026-10-09T18:01:00.000Z' }));
   client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never }); detach = attachClient(client); client.connect();
@@ -184,5 +185,38 @@ describe('<Surface>', () => {
     rerender(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(pim({ state: 'idle', lastActivityAt: '2026-10-09T18:09:00.000Z' })); await sleep(50); vi.advanceTimersByTime(540); });
     expect(surface()).toHaveStyle({ width: '28px' });
+  });
+
+  describe('sounds', () => {
+    const fakePlayer = () => { const played: Array<[string, number]> = []; return { played, play: (c: string, g: number) => { played.push([c, g]); } }; };
+    it('an ask knocks, a finish falls, approve ticks; a second ask within 1.5 s is silent', async () => {
+      const p = fakePlayer();
+      render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} soundPlayer={p as never} />);
+      await act(async () => { vi.advanceTimersByTime(2000); });                       // past the snapshot quiet window
+      await act(async () => { mock.upsert(pimAsks()); await sleep(50); vi.advanceTimersByTime(540); });
+      await waitFor(() => expect(p.played).toEqual([['approval', 1]]));
+      await act(async () => { mock.upsert(fakeSession('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } })); await sleep(50); });
+      expect(p.played).toHaveLength(1);                                                 // rate limited
+      fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      await waitFor(() => expect(p.played.at(-1)).toEqual(['accept', 1]));               // the user's tick always plays
+      await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); vi.advanceTimersByTime(2000); });
+      await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); });
+      await waitFor(() => expect(p.played.at(-1)).toEqual(['finished', 1]));
+    });
+    it('the snapshot on connect plays no join; DND and the switch silence everything; Sound-only finish plays without a bubble', async () => {
+      const p = fakePlayer();
+      localStorage.setItem('ledge.sounds', JSON.stringify({ ...DEFAULT_SOUNDS, categories: { ...DEFAULT_SOUNDS.categories, team: true } })); resetSoundPrefsForTests();
+      const { rerender } = render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} soundPlayer={p as never} />);
+      await act(async () => { await sleep(100); });
+      expect(p.played).toEqual([]);                                                      // two sessions in the snapshot, no pops
+      rerender(<Surface screenH={1080} theme="dark" client={client} dnd onToggleDnd={() => {}} soundPlayer={p as never} />);
+      await act(async () => { vi.advanceTimersByTime(2000); mock.upsert(pimAsks()); await sleep(50); });
+      expect(p.played).toEqual([]);
+      localStorage.setItem('ledge.finished', 'sound'); resetSoundPrefsForTests();
+      rerender(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} soundPlayer={p as never} />);
+      await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); vi.advanceTimersByTime(2000); mock.upsert(pim({ state: 'idle' })); await sleep(50); vi.advanceTimersByTime(540); });
+      await waitFor(() => expect(p.played).toEqual([['finished', 1]]));
+      expect(surface()).toHaveStyle({ width: '28px' });
+    });
   });
 });
