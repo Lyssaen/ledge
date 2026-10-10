@@ -1,4 +1,4 @@
-export const SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 56, footerH: 48, margin: 40, stripW: 6, stripH: 60, settingsH: 380, helpH: 420 } as const;
+export const SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 56, footerH: 48, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420 } as const;
 /** The surface's top + bottom border (border-box): added to a measured content height so nothing is clipped. */
 export const SURFACE_BORDER = 1;
 export const SURFACE_CHROME_Y = 2 * SURFACE_BORDER;

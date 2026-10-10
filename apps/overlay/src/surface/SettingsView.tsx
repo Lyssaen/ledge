@@ -30,8 +30,9 @@ function Switch({ label, hint, checked, onChange }: { label: string; hint: strin
 /** The UI scale as a segmented radio group: Auto (with the value it resolves to) or a fixed percentage. */
 function SizeRow({ value, auto, onChange }: { value: UiScale; auto: number; onChange?: (s: UiScale) => void }) {
   return (
-    <fieldset style={{ margin: 0, padding: '10px 0', border: 'none', minWidth: 0 }}>
-      <legend style={{ padding: 0, fontSize: 14, lineHeight: '18px', fontWeight: 500 }}>Size</legend>
+    <fieldset style={{ margin: 0, padding: '0 0 10px', border: 'none', minWidth: 0 }}>
+      {/* A fieldset's padding sits under its legend: the row's top space goes on the legend itself. */}
+      <legend style={{ padding: '10px 0 0', fontSize: 14, lineHeight: '18px', fontWeight: 500 }}>Size</legend>
       <span style={{ display: 'block', marginTop: 2, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>Scale the whole overlay for large screens.</span>
       <div style={{ display: 'flex', marginTop: 8, padding: 2, gap: 2, borderRadius: 'var(--radius-md)', background: 'var(--muted)', border: '1px solid var(--input)' }}>
         {UI_SCALES.map(s => {
