@@ -4,7 +4,7 @@ import type { DaemonError } from '../daemon/store';
 import type { DaemonStatus } from '../daemon/client';
 import type { SurfaceEvent } from './machine';
 import { useI18n } from '../i18n/lang';
-import { changeOf, isPending, sameRequest, type SessionChange } from '../daemon/changes';
+import { changeOf, isBusy, isPending, sameRequest, type SessionChange } from '../daemon/changes';
 
 export { isPending };
 /** A request the surface still tracks: waiting, or failed (state `error`) with its request kept for a retry. */
@@ -53,8 +53,9 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
     for (const s of sessions) {
       const was = before.get(s.id);
       const change = changeOf(was, s);
-      // The turn clock starts when a bot sets to work from rest; a permission answered mid-turn does not restart it.
-      if (s.state === 'working' && (!was || was.state === 'idle' || was.state === 'starting')) workingSince.current.set(s.id, Date.now());
+      // The turn clock starts when a bot sets to work from rest; a permission answered mid-turn, or a new prompt while
+      // helpers still work under a resting parent, does not restart it.
+      if (s.state === 'working' && (!was || (was.state === 'idle' && !isBusy(was)) || was.state === 'starting')) workingSince.current.set(s.id, Date.now());
       if (change) {
         const since = workingSince.current.get(s.id);
         const elapsedMs = change.kind === 'finished' && since !== undefined ? Date.now() - since : undefined;

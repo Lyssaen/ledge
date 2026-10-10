@@ -14,6 +14,13 @@ describe('changeOf', () => {
     expect(changeOf(s({ state: 'idle' }), s({ state: 'idle' }))).toBeNull();
     expect(changeOf(s({ state: 'waiting_permission', pending: ask }), s({ state: 'idle' }))).toBeNull();
   });
+  it('a parent resting while its helpers still work finishes only when the last helper stops', () => {
+    const helper = (state: 'working' | 'exited' | 'idle') => ({ id: 'h1', kind: 'Explore', task: 'scan', state });
+    expect(changeOf(s({ state: 'working', helpers: [helper('working')] }), s({ state: 'idle', helpers: [helper('working')] }))).toBeNull();
+    expect(changeOf(s({ state: 'idle', helpers: [helper('working')] }), s({ state: 'idle', helpers: [helper('exited')] }))).toEqual({ kind: 'finished', id: 'a' });
+    expect(changeOf(s({ state: 'idle', helpers: [helper('working')] }), s({ state: 'idle', helpers: [helper('idle')] }))).toEqual({ kind: 'finished', id: 'a' });
+    expect(changeOf(s({ state: 'working', helpers: [helper('exited')] }), s({ state: 'idle', helpers: [helper('exited')] }))).toEqual({ kind: 'finished', id: 'a' });
+  });
   it('a new request is an ask, typed by the state; the same request again is nothing', () => {
     expect(changeOf(s({ state: 'working' }), s({ state: 'waiting_permission', pending: ask }))).toEqual({ kind: 'asked', id: 'a', ask: 'approval' });
     expect(changeOf(s({ state: 'working' }), s({ state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } }))).toEqual({ kind: 'asked', id: 'a', ask: 'question' });
