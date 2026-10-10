@@ -35,6 +35,15 @@ describe('<SessionView>', () => {
     expect(container.querySelector('[data-ask]')).toHaveStyle({ maxHeight: '0px', opacity: '0' });
     expect(screen.getByText('npm test')).toBeInTheDocument();
   });
+  it('the ask card uses a different transition to open than to exit', () => {
+    const { rerender, container } = render(<SessionView {...base} session={perm} />);
+    const open = (container.querySelector('[data-ask]') as HTMLElement).style.transition;
+    rerender(<SessionView {...base} session={{ ...perm, state: 'working', pending: undefined }} />);
+    const exit = (container.querySelector('[data-ask]') as HTMLElement).style.transition;
+    expect(open).toContain('cubic-bezier(.22,1,.36,1)');
+    expect(exit).toContain('cubic-bezier(.65,0,.35,1)');
+    expect(exit).not.toBe(open);
+  });
   it('reply field is controlled by the parent draft and sends on Enter', () => {
     const onReply = vi.fn(), onDraft = vi.fn();
     render(<SessionView {...base} session={{ ...perm, state: 'working', pending: undefined }} draft="keep going" onDraft={onDraft} onReply={onReply} />);

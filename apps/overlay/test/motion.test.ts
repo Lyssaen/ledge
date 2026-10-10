@@ -13,4 +13,8 @@ describe('motion', () => {
     expect(MOTION.shrink).toEqual({ ms: 260, ease: 'cubic-bezier(.65,0,.35,1)', delayMs: 60 });
     expect(MOTION.pop.ease).toBe('cubic-bezier(.34,1.3,.64,1)');
   });
+  it('card exit is 300 ms after 180 ms', () => {
+    expect(MOTION.cardExit).toEqual({ ms: 300, ease: 'cubic-bezier(.65,0,.35,1)', delayMs: 180 });
+    expect(transition([['max-height', 'cardExit']])).toBe('max-height 0ms cubic-bezier(.65,0,.35,1) 0ms');
+  });
 });

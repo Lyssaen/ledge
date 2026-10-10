@@ -29,13 +29,13 @@ function QuestionCard({ pending, onReply }: { pending: Pending; onReply: (t: str
       <fieldset style={{ margin: 0, padding: 0, border: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <legend style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Options</legend>
         {opts.map((o, i) => (
-          <label key={o} style={row(choice === i, '10px 14px')}>
+          <label key={o} className="ledge-opt" style={row(choice === i, '10px 14px')}>
             <input type="radio" name="opt" checked={choice === i} onChange={() => setChoice(i)} /> <span style={{ fontWeight: 500 }}>{o}</span>
           </label>
         ))}
-        <label style={row(choice === 'other', '6px 14px')}>
+        <label className="ledge-opt" style={row(choice === 'other', '6px 14px')}>
           <input type="radio" name="opt" aria-label="Other" checked={choice === 'other'} onChange={() => setChoice('other')} />
-          <input type="text" placeholder="Other…" value={other} onChange={e => { setOther(e.target.value); setChoice('other'); }} style={{ flexGrow: 1, minWidth: 0, height: 28, background: 'transparent', color: 'inherit', border: 'none', outline: 'none', fontSize: 14 }} />
+          <input type="text" placeholder="Other…" value={other} onChange={e => { setOther(e.target.value); setChoice('other'); }} style={{ flexGrow: 1, minWidth: 0, height: 28, background: 'transparent', color: 'inherit', border: 'none', fontSize: 14 }} />
         </label>
       </fieldset>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}><Button variant="primary" onClick={() => onReply(choice === 'other' ? other : String(choice + 1))}>Answer</Button></div>
@@ -67,7 +67,7 @@ export function SessionView(p: { session: Session; preview: string[]; visible: b
         <Button variant="ghost" size="icon" aria-label="Close" onClick={p.onClose}><Icon d={I.close} /></Button>
       </div>
 
-      <div data-ask inert={!pending} style={{ flexShrink: 0, maxHeight: pending ? `${260 + (pending.options?.length ?? 0) * 64}px` : '0px', opacity: pending ? 1 : 0, overflow: 'hidden', transition: transition([['max-height', 'shrink', 180], ['opacity', 'fadeOut', 180]]) }}>
+      <div data-ask inert={!pending} style={{ flexShrink: 0, maxHeight: pending ? `${260 + (pending.options?.length ?? 0) * 64}px` : '0px', opacity: pending ? 1 : 0, overflow: 'hidden', transition: pending ? transition([['max-height', 'grow'], ['opacity', 'fadeIn', 0]]) : transition([['max-height', 'cardExit'], ['opacity', 'cardExit']]) }}>
         {shown && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16, borderBottom: rule }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

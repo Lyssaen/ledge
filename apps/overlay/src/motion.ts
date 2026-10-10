@@ -1,6 +1,7 @@
 export const MOTION = {
   grow: { ms: 320, ease: 'cubic-bezier(.22,1,.36,1)', delayMs: 0 },
   shrink: { ms: 260, ease: 'cubic-bezier(.65,0,.35,1)', delayMs: 60 },
+  cardExit: { ms: 300, ease: 'cubic-bezier(.65,0,.35,1)', delayMs: 180 },
   pop: { ms: 260, ease: 'cubic-bezier(.34,1.3,.64,1)', delayMs: 0 },
   fadeIn: { ms: 180, ease: 'ease-out', delayMs: 140 },
   fadeOut: { ms: 100, ease: 'ease-in', delayMs: 0 },
