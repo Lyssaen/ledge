@@ -21,7 +21,16 @@ The daemon is spawned from the built CLI (`dist/cli/index.js`), so rebuild after
 ledge claude            # start Claude Code in a tracked tmux session (tab renamed to the bot)
 ledge claude --name max # pick the bot's name
 ledge status            # list bots and what they wait for
-ledge daemon            # run the daemon in the foreground (normally auto-started)
+ledge daemon            # run the daemon in the foreground (normally run by the systemd service)
+```
+
+`ledge setup` installs `ledge-daemon.service` as a systemd user unit, starts it and enables linger, so the daemon runs from WSL boot and restarts after a crash. Rerun it after a node upgrade or a repository move: the unit is rewritten and the service restarted. Useful commands:
+
+```sh
+systemctl --user status ledge-daemon.service
+journalctl --user -u ledge-daemon.service -f
+systemctl --user restart ledge-daemon.service   # after pnpm --filter ledge build
+systemctl --user disable --now ledge-daemon.service   # back to on-demand start by ledge claude
 ```
 
 ## Where things live
@@ -31,6 +40,7 @@ ledge daemon            # run the daemon in the foreground (normally auto-starte
 ~/.ledge/sessions.json  journal, reloaded when the daemon restarts
 ~/.ledge/daemon.log     dropped hooks, failed injections, poll errors
 ~/.ledge/daemon.pid     PID of the running daemon, removed when it stops cleanly
+~/.config/systemd/user/ledge-daemon.service   user unit written by `ledge setup`
 ~/.ledge/exit-<id>      transient: the agent's exit code, written by the launcher's wrapper when the agent ends and read and deleted by `ledge claude`
 ```
 

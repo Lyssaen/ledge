@@ -165,7 +165,7 @@ sequenceDiagram
 
 Points worth knowing:
 
-- **Daemon discovery.** The launcher probes the port. A refused connection means nothing listens, so it spawns `ledge daemon` detached and retries three times at 500 ms. An open port that does not answer with a valid snapshot is treated as a foreign program and the session runs untracked.
+- **Daemon lifetime.** `ledge setup` installs a systemd user service (`ledge-daemon.service`, `Restart=on-failure`) and enables linger, so the daemon runs from WSL boot, before any shell is open, and comes back after a crash. The launcher still probes the port: a refused connection means nothing listens (service disabled or no systemd), so it spawns `ledge daemon` detached and retries three times at 500 ms. An open port that does not answer with a valid snapshot is treated as a foreign program and the session runs untracked.
 - **Exit code.** The agent runs under `sh -c '"$@"; echo $? > ~/.ledge/exit-<id>'`, so the tmux session can end naturally and the launcher still returns the agent's real exit code.
 - **Hook priority.** For 2 s after any hook, prompts detected in the pane are ignored, so a hook's richer description always wins over the pane's guess. Without hooks (a session started with plain `claude`, `source: hook_only`), the pane still gives a read-only view.
 - **Rest from the pane.** Some turns end with no hook: a denied request, an Esc. When the pane shows the input box with no running turn (`esc to interrupt` gone) and no dialog for 2 s, outside the hook priority window, the session goes `idle` and a request answered or dismissed in the terminal is dropped. A helper's routed request is left alone.
@@ -238,6 +238,8 @@ WSL side, under `~/.ledge` (or `$LEDGE_HOME`):
 | `daemon.pid` | PID of the running daemon, removed on a clean stop. |
 | `exit-<id>` | Transient: the agent's exit code, written by the launcher's wrapper and consumed by `ledge claude`. |
 
+`~/.config/systemd/user/ledge-daemon.service` runs the daemon with the real node binary (resolved through the fnm symlink) and the built CLI; rerun `ledge setup` after changing the node version or moving the repository, it rewrites the unit and restarts the service.
+
 `ledge setup` also edits `~/.claude/settings.json` to add one `ledge hook <Event>` command hook (5 s timeout) for each of: SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, Notification, Stop, SessionEnd, PostToolUse, PostToolUseFailure, StopFailure, SubagentStart, SubagentStop.
 
 Windows side, the overlay keeps its preferences in the WebView's `localStorage`: `ledge.lang`, `ledge.theme`, `ledge.dnd`, `ledge.monitor`, `ledge.reducedMotion`, `ledge.handleScale`, `ledge.panelScale` and `ledge.coachmarks`.
@@ -262,6 +264,8 @@ mkdir -p ~/.local/bin
 ln -sf "$PWD/packages/ledge/dist/cli/index.js" ~/.local/bin/ledge   # ~/.local/bin must be on the PATH Claude Code uses for hooks
 ledge setup
 ```
+
+`ledge setup` also installs and starts `ledge-daemon.service` (systemd user unit) and enables linger, so the daemon runs as soon as WSL boots. WSL needs `systemd=true` in `/etc/wsl.conf`; without it, setup says so and `ledge claude` keeps starting the daemon on demand.
 
 Then `ledge claude` (or `ledge claude --name max`), `ledge status`, `ledge daemon` to run it in the foreground. Details in [packages/ledge/README.md](packages/ledge/README.md). Needs Node 22 and tmux in WSL; no root.
 
