@@ -117,6 +117,18 @@ describe('parseReply', () => {
     expect(kindOf('Follow-ups')).toBe('next');
     expect(kindOf('Context')).toBe('other');
   });
+  it('reads a pipe table into a header and rows; cells keep inline markdown and escaped pipes', () => {
+    const d = parseReply('Results\n\n| Suite | Result |\n|:---|---:|\n| overlay typecheck + `vitest` | pass |\n| a \\| b | 507 tests, 17 files, pass |\n\nDone.');
+    expect(d.title).toBe('Results');
+    expect(d.sections[0]!.blocks[0]).toEqual({ type: 'table', header: ['Suite', 'Result'], rows: [['overlay typecheck + `vitest`', 'pass'], ['a | b', '507 tests, 17 files, pass']] });
+    expect(d.sections[0]!.blocks[1]).toEqual({ type: 'p', text: 'Done.' });
+    expect(d.structured).toBe(true);
+  });
+  it('a pipe line without a separator under it stays prose; a short row is padded, a long one is cut', () => {
+    expect(parseReply('a | b\nc').sections[0]!.blocks[0]).toEqual({ type: 'p', text: 'a | b c' });
+    const d = parseReply('| x | y |\n| - | - |\n| 1 |\n| 2 | 3 | 4 |');
+    expect(d.sections[0]!.blocks[0]).toEqual({ type: 'table', header: ['x', 'y'], rows: [['1', ''], ['2', '3']] });
+  });
   it('is safe on empty or odd input', () => {
     expect(parseReply('').sections).toEqual([]);
     expect(parseReply('   \n\n').structured).toBe(false);

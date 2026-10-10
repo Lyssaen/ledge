@@ -76,6 +76,17 @@ export function ReplyCard({ doc, raw, t, onDraft, onFocusReply }: ReplyCardProps
   };
   const renderBlock = (b: Block, kind: Section['kind'], key: number): ReactNode => {
     if (b.type === 'code') return <pre key={key} className="mono ledge-scroll" style={{ margin: 0, padding: '10px 12px', background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 12, lineHeight: '18px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 260, overflow: 'auto' }}>{b.text}</pre>;
+    if (b.type === 'table') {
+      const cell: React.CSSProperties = { padding: '7px 10px', textAlign: 'left', verticalAlign: 'top', overflowWrap: 'anywhere' };
+      return (
+        <div key={key} className="ledge-scroll" style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+          <table data-table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13, lineHeight: '18px' }}>
+            <thead><tr>{b.header.map((h, i) => <th key={i} scope="col" style={{ ...cell, fontSize: 12, fontWeight: 500, color: 'var(--muted-foreground)', background: 'var(--well)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{inline(h)}</th>)}</tr></thead>
+            <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} style={{ ...cell, borderTop: i > 0 ? '1px solid var(--border)' : undefined }}>{inline(c)}</td>)}</tr>)}</tbody>
+          </table>
+        </div>
+      );
+    }
     if (b.type === 'p') {
       if (b.q !== undefined) { const q = doc.questions[b.q]!; return <QuestionCard key={key} text={q.text} options={q.options} n={b.q} total={doc.questions.length} answer={answers[b.q]} onAnswer={o => answer(b.q!, o)} onFree={onFocusReply} t={t} />; }
       return <p key={key} style={{ margin: 0, fontSize: 14, lineHeight: '21px', overflowWrap: 'anywhere' }}>{inline(b.text)}</p>;

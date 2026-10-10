@@ -9,7 +9,8 @@ export type Item = { text: string; sub: string[]; checked?: boolean; q?: number 
 export type Block =
   | { type: 'p'; text: string; q?: number }
   | { type: 'code'; text: string }
-  | { type: 'list'; ordered: boolean; items: Item[] };
+  | { type: 'list'; ordered: boolean; items: Item[] }
+  | { type: 'table'; header: string[]; rows: string[][] };
 export type Section = { kind: SectionKind; title?: string; blocks: Block[] };
 export type Question = { text: string; options: string[] };
 export type ReplyDoc = { title?: string; lead?: string; sections: Section[]; questions: Question[]; structured: boolean };
@@ -23,6 +24,10 @@ const ORDERED = /^\s*\d+[.)]\s/;
 const CHECK = /^\[([ xX])\]\s+/;
 const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
 const FENCE = /^\s*(```|~~~)/;
+/** A GFM table opens on a row followed by its separator (`|---|:--:|`), with the same number of cells. */
+const TABLE_SEP = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+const UNESCAPED_PIPE = /(?<!\\)\|/;
+const cells = (line: string) => line.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(UNESCAPED_PIPE).map(c => c.trim().replace(/\\\|/g, '|'));
 const TITLE_MAX = 110;
 const OPTION_MAX = 80;
 
@@ -39,7 +44,7 @@ export function kindOf(title: string): SectionKind {
   return KINDS.find(([, re]) => re.test(t))?.[0] ?? 'other';
 }
 
-/** Lines to raw blocks: headings, paragraphs, lists (one level of nesting) and fenced code. */
+/** Lines to raw blocks: headings, paragraphs, lists (one level of nesting), tables and fenced code. */
 function tokenize(text: string): Raw[] {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const out: Raw[] = [];
@@ -56,6 +61,19 @@ function tokenize(text: string): Raw[] {
       for (i++; i < lines.length && !lines[i]!.trim().startsWith(fence[1]!); i++) body.push(lines[i]!);
       out.push({ type: 'code', text: body.join('\n').replace(/\s+$/, '') });
       continue;
+    }
+    const sep = lines[i + 1];
+    if (UNESCAPED_PIPE.test(line) && sep !== undefined && TABLE_SEP.test(sep)) {
+      const header = cells(line);
+      if (cells(sep).length === header.length) {
+        flushPara(); flushList();
+        const rows: string[][] = [];
+        // Rows follow until a line without a pipe; each is squared to the header (short ones padded, long ones cut).
+        for (i += 2; i < lines.length && lines[i]!.trim() !== '' && UNESCAPED_PIPE.test(lines[i]!); i++) rows.push(Array.from({ length: header.length }, (_, c) => cells(lines[i]!)[c] ?? ''));
+        i--;
+        out.push({ type: 'table', header, rows });
+        continue;
+      }
     }
     if (line.trim() === '') { flushPara(); continue; } // a list survives blank lines between its items
     if (RULE.test(line)) { flushPara(); flushList(); continue; }

@@ -107,6 +107,17 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
     expect(container.querySelector('[data-eyebrow]')).toHaveTextContent('Session');
     expect(shownReply({ ...idle, state: 'error' })).toBeUndefined();
   });
+  it('a pipe table reads as a table with its header and cells', () => {
+    const tabled = fakeSession('r', { state: 'idle', lastReply: { text: 'Results\n\n| Suite | Result |\n|---|---|\n| overlay `vitest` | pass |\n| ledge daemon | 507 tests, pass |', at } });
+    const { container } = render(<SessionView {...base} session={tabled} />);
+    const table = container.querySelector('[data-table]') as HTMLElement;
+    expect(table.tagName).toBe('TABLE');
+    expect(within(table).getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Suite', 'Result']);
+    expect(within(table).getAllByRole('row')).toHaveLength(3);
+    expect(within(table).getByRole('cell', { name: '507 tests, pass' })).toBeInTheDocument();
+    expect(within(table).getByText('vitest').tagName).toBe('CODE');
+    expect(container.textContent).not.toContain('|---|');
+  });
   it('estimates a taller view for a reply', () => {
     expect(measureSessionH(idle, false)).toBeGreaterThan(measureSessionH(fakeSession('n', { state: 'idle', startedAt: T0 }), false));
   });
