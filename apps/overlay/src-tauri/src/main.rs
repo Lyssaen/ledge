@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
+use tauri::{Emitter, Manager, WebviewWindow};
 
 /// Emitted on every enter/leave transition of the cursor over the edge hot zones; payload `{ "inside": bool }`.
 pub const EDGE_EVENT: &str = "ledge://edge";
@@ -21,9 +21,10 @@ pub struct Band {
     pub h: f64,
 }
 
-/// The bands the webview last reported; empty while the surface is not the bare handle.
+/// The bands the webview last reported (empty while the surface is not the bare handle) and a generation bumped on
+/// every report, so the poller knows the zones were (re)armed.
 #[derive(Default)]
-struct HotZones(Mutex<Vec<Band>>);
+struct HotZones(Mutex<(Vec<Band>, u64)>);
 
 #[derive(Clone, Serialize)]
 struct EdgePayload {
@@ -65,7 +66,18 @@ pub fn edge_inside(cursor: (i32, i32), area: Area, zones: &[Band]) -> bool {
     zones.iter().any(|b| b.h > 0.0 && y >= b.top && y < b.top + b.h)
 }
 
-/// Moves and resizes the window to `(0, top)` on the primary monitor's work area, `width` x `height` (logical px).
+/// One edge-poll step. `prev` is the last state reported (or taken as baseline), `now` the cursor's state against the
+/// current zones, `rearmed` whether the zones were reported again since the previous step. Returns the new state and
+/// the event to emit, if any. A re-arm never produces an enter: a cursor resting on the edge when the list closes
+/// becomes the baseline, and only a real leave then re-entry opens it again. Leaves always go out.
+pub fn edge_step(prev: bool, now: bool, rearmed: bool) -> (bool, Option<bool>) {
+    if now == prev { return (now, None); }
+    if now && rearmed { return (true, None); }
+    (now, Some(now))
+}
+
+/// Moves and resizes the window to `(0, top)` on the primary monitor's work area, `width` x `height` (logical px),
+/// in one native call so the webview never sees the new position with the old size.
 /// The webview reports the bounding frame of everything it draws (surface, tooltip, status, coachmark).
 #[tauri::command]
 async fn set_frame(window: WebviewWindow, top: i32, width: u32, height: u32) -> Result<(), String> {
@@ -75,15 +87,31 @@ async fn set_frame(window: WebviewWindow, top: i32, width: u32, height: u32) -> 
         .map(|m| area_of(&m))
         .unwrap_or(Area { edge_x: 0, x: 0, y: 0, scale: 1.0 });
     let (x, y, w, h) = frame_rect(area, top, width, height);
-    window.set_position(PhysicalPosition::new(x, y)).map_err(|e| e.to_string())?;
-    window.set_size(PhysicalSize::new(w, h)).map_err(|e| e.to_string())
+    place_window(&window, x, y, w, h)
+}
+
+#[cfg(windows)]
+fn place_window(window: &WebviewWindow, x: i32, y: i32, w: u32, h: u32) -> Result<(), String> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER};
+    // Tauri's HWND may come from another `windows` crate version: go through the raw handle.
+    let raw = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+    let hwnd = HWND(raw as *mut core::ffi::c_void);
+    unsafe { SetWindowPos(hwnd, HWND::default(), x, y, w as i32, h as i32, SWP_NOACTIVATE | SWP_NOZORDER) }.map_err(|e| e.to_string())
+}
+
+#[cfg(not(windows))]
+fn place_window(window: &WebviewWindow, x: i32, y: i32, w: u32, h: u32) -> Result<(), String> {
+    window.set_position(tauri::PhysicalPosition::new(x, y)).map_err(|e| e.to_string())?;
+    window.set_size(tauri::PhysicalSize::new(w, h)).map_err(|e| e.to_string())
 }
 
 /// Replaces the edge bands the cursor poller watches.
 #[tauri::command]
 fn set_hot_zones(zones: Vec<Band>, state: tauri::State<'_, HotZones>) {
     if let Ok(mut z) = state.0.lock() {
-        *z = zones;
+        z.0 = zones;
+        z.1 = z.1.wrapping_add(1);
     }
 }
 
@@ -142,6 +170,7 @@ fn cursor_position() -> Option<(i32, i32)> { None }
 fn spawn_edge_poller(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut inside = false;
+        let mut seen_gen: u64 = 0;
         let mut area: Option<Area> = None;
         let mut tick: u32 = 0;
         loop {
@@ -151,10 +180,12 @@ fn spawn_edge_poller(app: tauri::AppHandle) {
             }
             tick = tick.wrapping_add(1);
             let (Some(a), Some(c)) = (area, cursor_position()) else { continue };
-            let zones = match app.state::<HotZones>().0.lock() { Ok(z) => z.clone(), Err(_) => continue };
-            let now = edge_inside(c, a, &zones);
-            if now != inside {
-                inside = now;
+            let (zones, gen) = match app.state::<HotZones>().0.lock() { Ok(z) => z.clone(), Err(_) => continue };
+            let rearmed = gen != seen_gen;
+            seen_gen = gen;
+            let (next, emit) = edge_step(inside, edge_inside(c, a, &zones), rearmed);
+            inside = next;
+            if let Some(inside) = emit {
                 let _ = app.emit(EDGE_EVENT, EdgePayload { inside });
             }
         }
@@ -177,7 +208,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{edge_inside, frame_rect, title_matches, Area, Band};
+    use super::{edge_inside, edge_step, frame_rect, title_matches, Area, Band};
 
     #[test] fn matches_bot_title_or_terminal() {
         assert!(title_matches("Otto · harness-assistant - Windows Terminal", "Otto · harness-assistant"));
@@ -202,5 +233,17 @@ mod tests {
         assert!(!edge_inside((0, 450), AREA, &zones)); // empty band
         assert!(!edge_inside((-1, 90), AREA, &zones)); // a monitor to the left
         assert!(!edge_inside((0, 90), AREA, &[]));
+    }
+
+    #[test] fn a_rearm_never_enters_but_a_real_reentry_does() {
+        // Cursor resting on the edge while the list closes and the zones come back: baseline, no event.
+        assert_eq!(edge_step(false, true, true), (true, None));
+        // It stays there: nothing.
+        assert_eq!(edge_step(true, true, false), (true, None));
+        // It leaves, then comes back: leave, then enter.
+        assert_eq!(edge_step(true, false, false), (false, Some(false)));
+        assert_eq!(edge_step(false, true, false), (true, Some(true)));
+        // Zones disarmed (list opened) while inside: the leave still goes out.
+        assert_eq!(edge_step(true, false, true), (false, Some(false)));
     }
 }

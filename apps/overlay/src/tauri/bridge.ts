@@ -33,7 +33,7 @@ const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T
 };
 
 // Frames are sent one after the other: async commands may otherwise land out of order and leave the window at an
-// older frame than the content offset that follows the resolved promise.
+// older frame than the page offset, which is committed with each request.
 let lastFrame = '';
 let frameChain: Promise<unknown> = Promise.resolve();
 /** Moves and sizes the native window. Resolves true once the shell applied it (false in the browser or on failure). */

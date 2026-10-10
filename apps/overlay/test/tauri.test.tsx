@@ -148,7 +148,7 @@ describe('<Surface> under Tauri', () => {
     expect(native.invoke).not.toHaveBeenCalled();
   });
 
-  it('sends the bounding frame and offsets the page by its top once the shell applied it', async () => {
+  it('sends the bounding frame and offsets the page by its top', async () => {
     await mount({ tauri: true });
     // Two quiet bots: the handle is 45 px tall at 518 on a 1080 px work area.
     expect(surface()).toHaveStyle({ top: '518px', width: '28px', height: '45px' });
@@ -156,6 +156,37 @@ describe('<Surface> under Tauri', () => {
     await waitFor(() => expect(content()).toHaveStyle({ top: `-${518 - FRAME_PAD.top}px` }));
     // No DOM hot zones: they would lie outside the window.
     expect(document.querySelectorAll('[data-hotzone]')).toHaveLength(0);
+  });
+
+  it('the page offset is committed with the set_frame request, not after the shell answers', async () => {
+    // The shell answers only when the test says so, and every request records the offset the page already shows when
+    // it goes out.
+    const seen: Array<{ top: number; offset: string | undefined }> = [];
+    const pending: Array<() => void> = [];
+    const answer = () => act(async () => { while (pending.length) pending.shift()!(); await Promise.resolve(); });
+    native.invoke.mockImplementation((cmd: string, a?: unknown) => {
+      if (cmd !== 'set_frame') return Promise.resolve(undefined);
+      seen.push({ top: (a as { top: number }).top, offset: content()?.style.top });
+      return new Promise<undefined>(r => pending.push(() => r(undefined)));
+    });
+    await mount({ tauri: true });
+    const handleTop = 518 - FRAME_PAD.top;
+    await waitFor(() => expect(seen.at(-1)).toEqual({ top: handleTop, offset: `-${handleTop}px` }));
+    expect(content()).toHaveStyle({ top: `-${handleTop}px` }); // still unanswered
+    await answer();
+    // Handle to list: the list frame holds the handle frame, so it applies at once, offset first.
+    await waitFor(() => expect(native.shortcut).not.toBeNull());
+    await act(async () => { native.shortcut!({ state: 'Pressed' }); });
+    const listTop = parseFloat(surface().style.top) - FRAME_PAD.top;
+    expect(listTop).toBeLessThan(handleTop);
+    expect(content()).toHaveStyle({ top: `-${listTop}px` });
+    await waitFor(() => expect(seen.at(-1)).toEqual({ top: listTop, offset: `-${listTop}px` }));
+    await answer();
+    // List to handle (no settle with VITE_LEDGE_MOTION=0): straight back, offset first.
+    await act(async () => { native.shortcut!({ state: 'Pressed' }); });
+    expect(content()).toHaveStyle({ top: `-${handleTop}px` });
+    await answer(); // the bridge sends frames one after the other: this one waited for the list frame's answer
+    await waitFor(() => expect(seen.at(-1)).toEqual({ top: handleTop, offset: `-${handleTop}px` }));
   });
 
   it('the hovered bot tooltip widens the frame beside the handle', async () => {
@@ -191,5 +222,33 @@ describe('<Surface> under Tauri', () => {
     expect(surface()).toHaveAttribute('data-mode', 'bubble');
     await act(async () => { await sleep(20); });
     expect(calls('focus_overlay')).toHaveLength(1);
+  });
+});
+
+describe('useNativeFrame', () => {
+  beforeEach(() => { vi.useFakeTimers(); enterTauri(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('a shrink holds the union through the settle time, each step with its offset already committed', async () => {
+    vi.resetModules();
+    const { useNativeFrame } = await import('../src/tauri/useNativeFrame');
+    const log: string[] = [];
+    native.invoke.mockImplementation(async (cmd: string, a?: unknown) => {
+      if (cmd === 'set_frame') log.push(`${JSON.stringify(a)} offset=${document.querySelector('[data-off]')?.textContent}`);
+    });
+    function Probe({ f }: { f: { top: number; w: number; h: number } }) { return <span data-off>{useNativeFrame(f, 320)}</span>; }
+    const list = { top: 292, w: 396, h: 500 }, handle = { top: 510, w: 44, h: 77 };
+    const { rerender } = render(<Probe f={list} />);
+    expect(screen.getByText('292')).toBeInTheDocument(); // committed in the same pass, no shell answer needed
+    rerender(<Probe f={handle} />);
+    expect(screen.getByText('292')).toBeInTheDocument(); // the union keeps the list's top
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    act(() => { vi.advanceTimersByTime(319); });
+    expect(screen.getByText('292')).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.getByText('510')).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    // The union equals the list frame here, so the bridge does not resend it.
+    expect(log).toEqual(['{"top":292,"width":396,"height":500} offset=292', '{"top":510,"width":44,"height":77} offset=510']);
   });
 });
