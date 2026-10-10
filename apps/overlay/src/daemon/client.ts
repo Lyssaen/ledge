@@ -22,10 +22,10 @@ export function createDaemonClient(opts: { url: string; WebSocketImpl?: WsCtor; 
     sock.onopen = () => { backoff = min; setStatus('open'); };
     sock.onmessage = ev => { try { const m = parseServerMessage(JSON.parse(String(ev.data))); msgFns.forEach(f => f(m)); } catch { /* ignore malformed */ } };
     sock.onerror = () => { /* onclose follows */ };
-    sock.onclose = () => { if (ws === sock) ws = null; setStatus('unreachable'); schedule(); };
+    sock.onclose = () => { if (ws !== sock) return; ws = null; setStatus('unreachable'); schedule(); };
   }
   return {
-    connect: () => { closed = false; open(); },
+    connect: () => { closed = false; if (timer) { clearTimeout(timer); timer = null; } const old = ws; ws = null; old?.close(); open(); },
     close: () => { closed = true; if (timer) clearTimeout(timer); ws?.close(); ws = null; },
     send: m => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); },
     status: () => status,

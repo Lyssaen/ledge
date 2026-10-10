@@ -13,6 +13,7 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     ws.on('message', d => { try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify({ type: 'snapshot', sessions: [...sessions.values()] })); } catch { /* ignore */ } });
   });
   return {
+    get clientCount() { return [...wss.clients].filter(c => c.readyState === WebSocket.OPEN).length; },
     port, url: `ws://127.0.0.1:${port}`, sessions, received,
     upsert(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); },
     remove(id: string) { sessions.delete(id); bc({ type: 'session.removed', id }); },

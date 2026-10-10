@@ -50,4 +50,15 @@ describe('daemon client + store', () => {
     expect(mock.received).toEqual([{ type: 'session.decide', id: 'a', decision: 'accept' }]);
     client.close();
   });
+
+  it('ignores a stale socket close after close() then connect()', async () => {
+    const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never, minBackoffMs: 30, maxBackoffMs: 60 });
+    const statuses: string[] = []; client.onStatus(s => statuses.push(s));
+    client.connect(); await sleep(80);
+    client.close(); client.connect(); await sleep(250);
+    expect(client.status()).toBe('open');
+    expect(statuses).not.toContain('unreachable');
+    expect(mock.clientCount).toBe(1);
+    client.close();
+  });
 });
