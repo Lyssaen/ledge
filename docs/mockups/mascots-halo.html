@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ledge · Halo des mascottes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a sticky control bar, then full-width sections; each in-situ panel is a small "desktop" carrying its own
+   theme (Signal / Galet) so both renderings are compared side by side whatever the page theme is. */
+:root {
+  --bg: #fbfaf8; --fg: oklch(0.145 0 0); --muted: oklch(0.52 0 0); --line: oklch(0.9 0 0); --panel: #ffffff;
+  --accent: oklch(0.505 0.213 27.518); --well: oklch(0.965 0.002 90);
+  --font: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'Geist Mono', ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f0f10; --fg: oklch(0.985 0 0); --muted: oklch(0.68 0 0); --line: #ffffff1a; --panel: #161617;
+  --accent: oklch(0.637 0.237 25.331); --well: #1b1b1d; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0f0f10; --fg: oklch(0.985 0 0); --muted: oklch(0.68 0 0); --line: #ffffff1a; --panel: #161617;
+  --accent: oklch(0.637 0.237 25.331); --well: #1b1b1d; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/20px var(--font); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -0.02em; }
+h1 { font-size: 30px; line-height: 36px; font-weight: 650; }
+h2 { font-size: 19px; line-height: 26px; font-weight: 600; }
+h3 { font-size: 14px; line-height: 20px; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font: 500 11px/16px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+.lede { color: var(--muted); max-width: 62ch; }
+.brand { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; font-size: 18px; letter-spacing: -0.02em; }
+.brand i { width: 8px; height: 18px; border-radius: 0 6px 6px 0; background: var(--accent); }
+.brand span { color: var(--accent); }
+header.top { display: flex; flex-direction: column; gap: 14px; padding-bottom: 22px; }
+header.top .meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pill { font: 500 11px/18px var(--mono); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; color: var(--muted); }
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+
+/* Controls */
+.controls { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: center; box-shadow: 0 10px 30px -18px rgba(0,0,0,.35); }
+.control { display: flex; flex-direction: column; gap: 5px; }
+.control > span { font: 500 11px/14px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 2px; gap: 2px; background: var(--well); }
+.seg button { font: 500 12px/18px var(--font); padding: 3px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.seg button:focus-visible, .check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.check input { margin: 0; accent-color: var(--accent); }
+
+section { padding-block: 34px 0; display: flex; flex-direction: column; gap: 16px; }
+.sec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.sec-head p { color: var(--muted); max-width: 70ch; }
+
+/* Themed panels: the overlay's own tokens (tokens.css), scoped so both themes can live on one page. */
+.t-light {
+  --sidebar: oklch(0.985 0 0); --sidebar-foreground: oklch(0.145 0 0); --sidebar-border: oklch(0.922 0 0);
+  --sidebar-accent: oklch(0.97 0 0); --sidebar-primary: oklch(0.577 0.245 27.325); --secondary: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.556 0 0); --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.06);
+  --success: #059669; --warning: #b45309; --info: #2563eb; --danger-text: oklch(0.505 0.213 27.518);
+  --well-t: oklch(0.97 0 0); --desktop: #ecebe7; --grid: #00000010; --desktop-text: #6b6b66; --editor: #f7f6f3;
+  --bot-visor-line: #00000055; --bot-reflection: #ffffff; --bot-ground: #000000; --bot-readonly-line: #adb3b2;
+  --bot-eye-starting: #90c7f2; --bot-eye-working: #90c7f2; --bot-eye-approval: #f2b09c; --bot-eye-question: #f6d487;
+  --bot-eye-idle: #a9dfc7; --bot-eye-error: #ffab9f; --bot-eye-done: #a3aaa9;
+  /* Galet eye colours are pastel: in light theme the "eyes" halo source darkens them a little to stay visible. */
+  --halo-eye-mix: 70%;
+  color: var(--sidebar-foreground); color-scheme: light;
+}
+.t-dark {
+  --sidebar: oklch(0.205 0 0); --sidebar-foreground: oklch(0.985 0 0); --sidebar-border: #ffffff1a;
+  --sidebar-accent: oklch(0.269 0 0); --sidebar-primary: oklch(0.637 0.237 25.331); --secondary: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.708 0 0); --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08);
+  --success: #34d399; --warning: #fbbf24; --info: #60a5fa; --danger-text: oklch(0.704 0.191 22.216);
+  --well-t: oklch(0.145 0 0); --desktop: #121214; --grid: #ffffff0c; --desktop-text: #8d8d93; --editor: #19191b;
+  --bot-visor-line: #00000055; --bot-reflection: #ffffff; --bot-ground: #000000; --bot-readonly-line: #adb3b2;
+  --bot-eye-starting: #90c7f2; --bot-eye-working: #90c7f2; --bot-eye-approval: #f2b09c; --bot-eye-question: #f6d487;
+  --bot-eye-idle: #a9dfc7; --bot-eye-error: #ffab9f; --bot-eye-done: #a3aaa9;
+  --halo-eye-mix: 100%;
+  color: var(--sidebar-foreground); color-scheme: dark;
+}
+[data-material="pebble"] { --bot-shell-top: #f0eee6; --bot-shell-bottom: #b7b7b0; --bot-shell-line: #ffffff99; --bot-visor: #22292b; --bot-shine: #ffffff77; }
+[data-material="signal"] { --bot-shell-top: #34434b; --bot-shell-bottom: #273238; --bot-shell-line: #859397; --bot-visor: #172124; --bot-shine: #ffffff00; }
+
+/* ===== Mascot, ported from apps/overlay/src/bots/bots.css (static expressions, breathing only) ===== */
+.bot { display: block; flex-shrink: 0; overflow: visible; }
+.bot .shell-top { stop-color: var(--bot-shell-top); }
+.bot .shell-bottom { stop-color: var(--bot-shell-bottom); }
+.bot .body { transform-origin: 48px 72px; animation: bot-breathe var(--bot-breath, 5.4s) ease-in-out infinite; animation-delay: var(--bot-phase, 0s); }
+.bot .pose { transform-origin: 48px 59px; transform: rotate(var(--bot-tilt, 0deg)) translateY(var(--bot-lift, 0px)); }
+.bot .eye-open { fill: var(--bot-eye); }
+.bot .eye-happy, .bot .eye-error, .bot .eye-sleep { opacity: 0; fill: none; stroke: var(--bot-eye); stroke-width: 3.4; stroke-linecap: round; }
+.bot .visor { fill: var(--bot-visor); stroke: var(--bot-visor-line); stroke-width: 1; }
+.bot .shell { stroke: var(--bot-shell-line); stroke-width: .8; }
+.bot .shine { fill: none; stroke: var(--bot-shine); stroke-width: 1.25; stroke-linecap: round; }
+.bot .reflection { fill: var(--bot-reflection); opacity: .035; }
+.bot .ground { fill: var(--bot-ground); opacity: .16; }
+.bot .feet { fill: var(--bot-shell-bottom); }
+.bot .antenna { stroke: var(--bot-shell-bottom); stroke-width: 2; stroke-linecap: round; }
+.bot .antenna-light { fill: var(--bot-eye); }
+.bot .arm { fill: var(--bot-shell-bottom); stroke: var(--bot-shell-line); stroke-width: .7; transform-origin: 75px 66px; opacity: 0; }
+.bot[data-material="signal"] .shell { stroke-width: 1.5; }
+.bot[data-eyes="wide"] .eye-open { transform-origin: 48px 49px; transform: scaleY(1.2); }
+.bot[data-eyes="happy"] .eye-open, .bot[data-eyes="error"] .eye-open, .bot[data-eyes="sleep"] .eye-open { opacity: 0; }
+.bot[data-eyes="happy"] .eye-happy, .bot[data-eyes="error"] .eye-error, .bot[data-eyes="sleep"] .eye-sleep { opacity: 1; }
+.bot[data-state="approval"] .arm { opacity: 1; transform: rotate(-22deg) translateY(-5px); }
+.bot[data-state="done"] { opacity: .55; }
+.bot[data-state="done"] .body, .bot[data-state="error"] .body { animation: none; }
+.bot[data-readonly="true"] { opacity: .6; }
+.bot[data-readonly="true"] .shell { stroke: var(--bot-readonly-line); stroke-width: 1.3; stroke-dasharray: 3 3; }
+.bot[data-readonly="true"] .body { animation: none; }
+.bot[data-simplified="true"] :is(.arm, .feet, .shine, .ground, .antenna-group) { display: none; }
+.bot[data-simplified="true"] .eye-open { transform-origin: 48px 49px; transform: scale(1.1); }
+.bot[data-simplified="true"] .body { animation: none; }
+@keyframes bot-breathe { 0%, 100% { transform: translateY(0) rotate(-.3deg) scaleY(1); } 50% { transform: translateY(-.7px) rotate(.3deg) scaleY(1.014); } }
+
+/* ===== The halo proposal =====
+   One wrapper around the Bot. --halo is the state colour, --halo-a its strength, --halo-r the spread (a fraction of
+   the bot size). Three renderings are compared: veil (soft disc behind), ring (thin circle plus faint glow),
+   edge (glow hugging the silhouette). Done / read-only bots never carry a halo. */
+.halo { position: relative; display: inline-flex; line-height: 0; --halo-r: calc(var(--bot-size) * var(--halo-k, .32)); --halo-a: var(--halo-a-strong, .55); }
+.halo > .bot { position: relative; z-index: 1; }
+.halo::before { content: ''; position: absolute; inset: calc(var(--halo-r) * -1); border-radius: 50%; pointer-events: none; z-index: 0; opacity: var(--halo-on, 1); transition: opacity 180ms; }
+/* State colour: badge / tick colours by default, eye colours on request. */
+.halo[data-state="approval"] { --halo: var(--danger-text); }
+.halo[data-state="question"] { --halo: var(--warning); }
+.halo[data-state="error"]    { --halo: var(--danger-text); }
+.halo[data-state="working"], .halo[data-state="starting"] { --halo: var(--info); --halo-a: var(--halo-a-soft, .3); }
+.halo[data-state="idle"]     { --halo: var(--success); --halo-a: var(--halo-a-soft, .3); }
+.halo[data-state="done"], .halo[data-state="readonly"], .halo[data-readonly="true"] { --halo-on: 0; }
+[data-color="eyes"] .halo[data-state="approval"] { --halo: color-mix(in oklch, var(--bot-eye-approval) var(--halo-eye-mix), #7a3a2a); }
+[data-color="eyes"] .halo[data-state="question"] { --halo: color-mix(in oklch, var(--bot-eye-question) var(--halo-eye-mix), #7a5a12); }
+[data-color="eyes"] .halo[data-state="error"]    { --halo: color-mix(in oklch, var(--bot-eye-error) var(--halo-eye-mix), #7a2a22); }
+[data-color="eyes"] .halo[data-state="working"], [data-color="eyes"] .halo[data-state="starting"] { --halo: color-mix(in oklch, var(--bot-eye-working) var(--halo-eye-mix), #1f4f7a); }
+[data-color="eyes"] .halo[data-state="idle"]     { --halo: color-mix(in oklch, var(--bot-eye-idle) var(--halo-eye-mix), #1f6a4a); }
+/* Scope: waiting only (approval, question, error) or every live state. */
+[data-scope="waiting"] .halo:is([data-state="working"], [data-state="starting"], [data-state="idle"]) { --halo-on: 0; }
+/* Intensity presets on the root. */
+[data-intensity="low"]  { --halo-a-strong: .4;  --halo-a-soft: .2;  --halo-k: .26; }
+[data-intensity="mid"]  { --halo-a-strong: .55; --halo-a-soft: .3;  --halo-k: .32; }
+[data-intensity="high"] { --halo-a-strong: .75; --halo-a-soft: .42; --halo-k: .4; }
+/* Variant: veil */
+[data-halo="veil"] .halo::before { background: radial-gradient(circle closest-side, color-mix(in srgb, var(--halo) calc(var(--halo-a) * 100%), transparent) 0%, color-mix(in srgb, var(--halo) calc(var(--halo-a) * 45%), transparent) 45%, transparent 100%); }
+/* Variant: ring */
+[data-halo="ring"] .halo::before { inset: calc(var(--halo-r) * -.55); box-shadow: 0 0 0 1px color-mix(in srgb, var(--halo) calc(var(--halo-a) * 130%), transparent), 0 0 calc(var(--halo-r) * .9) calc(var(--halo-r) * .1) color-mix(in srgb, var(--halo) calc(var(--halo-a) * 55%), transparent); }
+/* Variant: edge (drop-shadow follows the silhouette; the ground shadow is hidden so it does not glow) */
+[data-halo="edge"] .halo::before { display: none; }
+[data-halo="edge"] .halo > .bot { filter: drop-shadow(0 0 calc(var(--halo-r) * .35) color-mix(in srgb, var(--halo) calc(var(--halo-a) * 170%), transparent)) drop-shadow(0 0 calc(var(--halo-r) * .9) color-mix(in srgb, var(--halo) calc(var(--halo-a) * 90%), transparent)); opacity: 1; }
+[data-halo="edge"] .halo[data-state="done"] > .bot { filter: none; opacity: .55; }
+[data-halo="edge"] .halo[data-readonly="true"] > .bot { filter: none; opacity: .6; }
+[data-halo="edge"] [data-scope="waiting"] .halo:is([data-state="working"], [data-state="starting"], [data-state="idle"]) > .bot,
+[data-halo="edge"][data-scope="waiting"] .halo:is([data-state="working"], [data-state="starting"], [data-state="idle"]) > .bot { filter: none; }
+[data-halo="edge"] .halo .ground { opacity: 0; }
+/* Off (the "before" column) */
+[data-halo-off] .halo::before { display: none; }
+[data-halo-off] .halo > .bot { filter: none !important; }
+/* Optional breathing of the halo on waiting bots: 5 s, no pulse, amplitude kept small. */
+[data-breathe="on"] .halo:is([data-state="approval"], [data-state="question"])::before { animation: halo-breathe 5s ease-in-out infinite; }
+[data-breathe="on"][data-halo="edge"] .halo:is([data-state="approval"], [data-state="question"]) > .bot { animation: halo-breathe-edge 5s ease-in-out infinite; }
+@keyframes halo-breathe { 0%, 100% { opacity: var(--halo-on, 1); transform: scale(1); } 50% { opacity: calc(var(--halo-on, 1) * .7); transform: scale(.94); } }
+@keyframes halo-breathe-edge { 0%, 100% { opacity: 1; } 50% { opacity: .82; } }
+@media (prefers-reduced-motion: reduce) { .bot *, .halo::before, .halo > .bot { animation: none !important; } }
+
+/* ===== Showcase grids ===== */
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.pair-2 { grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); }
+.panel { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--desktop); color: var(--sidebar-foreground); }
+.panel-title { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; font: 500 11px/16px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--desktop-text); border-bottom: 1px solid var(--sidebar-border); background: var(--sidebar); }
+.states { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; padding: 16px; }
+.state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 8px 12px; border-radius: 10px; }
+.state .trio { display: flex; align-items: flex-end; gap: 14px; height: 56px; }
+.state b { font-size: 12px; font-weight: 600; }
+.state small { font: 11px/14px var(--mono); color: var(--desktop-text); }
+.badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 5px; font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; background: color-mix(in srgb, currentColor 10%, transparent); }
+.badge[data-tone="approval"], .badge[data-tone="error"] { color: var(--danger-text); }
+.badge[data-tone="question"] { color: var(--warning); }
+.badge[data-tone="working"], .badge[data-tone="starting"] { color: var(--info); }
+.badge[data-tone="idle"] { color: var(--success); }
+.badge[data-tone="done"], .badge[data-tone="readonly"] { color: var(--muted-foreground); }
+
+/* Desktop stage with the overlay surface on its left edge */
+.stage { position: relative; min-height: 300px; overflow-x: auto; background: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px), var(--desktop); background-size: 24px 24px; padding: 28px 24px 28px 0; display: flex; align-items: center; }
+.stage .editor { position: absolute; left: 120px; right: 24px; top: 36px; bottom: 36px; border: 1px solid var(--sidebar-border); border-radius: 8px; background: var(--editor); opacity: .6; pointer-events: none; }
+.stage .editor pre { margin: 0; padding: 14px; font: 11px/1.8 var(--mono); color: var(--desktop-text); white-space: pre; overflow: hidden; }
+.surface { position: relative; z-index: 2; background: var(--sidebar); border: 1px solid var(--sidebar-border); border-left: 0; border-radius: 0 14px 14px 0; box-shadow: var(--shadow-overlay); flex-shrink: 0; }
+/* Handle: 28 px, bots at 12 px / 20 px when waiting, 5 px gap, 8 px vertical padding */
+.handle { width: 28px; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 0; }
+.hbot { position: relative; display: inline-flex; align-items: center; justify-content: center; opacity: .8; }
+.hbot[data-pending] { opacity: 1; }
+.hbot[data-quiet] { opacity: .55; }
+.hbot .tick { position: absolute; left: -4px; top: 2px; bottom: 2px; width: 2px; border-radius: 0 2px 2px 0; }
+/* List: 380 px, 58 px rows */
+.list { width: 380px; max-width: 100%; }
+.list-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 10px 17px; }
+.list-head .t { font-size: 18px; line-height: 22px; font-weight: 650; letter-spacing: -0.02em; }
+.list-head .t span { color: var(--sidebar-primary); }
+.list-head .s { font-size: 12px; line-height: 16px; color: var(--muted-foreground); margin-top: 4px; }
+.list-head .icons { display: flex; gap: 10px; color: var(--sidebar-foreground); opacity: .8; }
+.list-head .icons i { display: block; width: 16px; height: 16px; border: 1.5px solid currentColor; border-radius: 50%; }
+.rows { padding: 8px 0; }
+.row { display: flex; align-items: center; gap: 12px; height: 58px; padding: 0 17px 0 15px; border-left: 2px solid transparent; }
+.row[data-hi] { background: var(--secondary); border-left-color: var(--sidebar-primary); }
+.row .copy { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.row .copy b { font-size: 14px; line-height: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .copy span { font-size: 12px; line-height: 16px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-foot { display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 17px; border-top: 1px solid var(--sidebar-border); font-size: 13px; color: var(--muted-foreground); }
+.kbd { font: 500 11px/16px var(--mono); border: 1px solid var(--sidebar-border); border-radius: 5px; padding: 1px 6px; color: var(--sidebar-foreground); background: var(--well-t); }
+/* Bubble: 336 px, bot at 48 px, 2 px countdown bar */
+.bubble { width: 336px; max-width: 100%; padding: 16px 16px 14px 18px; display: flex; flex-direction: column; gap: 12px; }
+.bubble .top { display: flex; align-items: center; gap: 14px; }
+.bubble .top b { display: block; font-size: 14px; line-height: 18px; font-weight: 600; }
+.bubble .top span { display: block; font: 12px/16px var(--mono); color: var(--muted-foreground); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bubble .top .copy { min-width: 0; flex: 1; }
+.bubble .actions { display: flex; justify-content: flex-end; gap: 8px; }
+.btn { font: 500 13px/18px var(--font); padding: 5px 12px; border-radius: 8px; border: 1px solid var(--sidebar-border); background: transparent; color: var(--sidebar-foreground); }
+.btn.primary { background: var(--sidebar-primary); border-color: transparent; color: #fff; }
+.bubble .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--sidebar-border); }
+.bubble .bar i { display: block; width: 62%; height: 100%; background: var(--sidebar-primary); }
+/* Scales */
+.scales { display: flex; align-items: flex-end; gap: 28px; padding: 24px 20px; flex-wrap: wrap; }
+.scales figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.scales figcaption { font: 11px/14px var(--mono); color: var(--desktop-text); }
+.scales .ph { display: flex; align-items: center; justify-content: center; height: 64px; }
+
+/* Notes */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+.notes article { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.notes p, .notes li { color: var(--muted); font-size: 13px; line-height: 20px; }
+.notes ul { margin: 0; padding-left: 18px; }
+pre.code { margin: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--well); font: 12px/1.7 var(--mono); overflow-x: auto; color: var(--fg); }
+footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="app">
+  <header class="top">
+    <div class="meta">
+      <span class="brand"><i></i>ledge<span>.</span></span>
+      <span class="pill">Maquette · halo lumineux · à valider</span>
+    </div>
+    <span class="eyebrow">Mascottes · proposition d'intégration</span>
+    <h1>Un halo par état, pour distinguer les compagnons d'un coup d'œil.</h1>
+    <p class="lede">Le halo reprend la couleur de l'état de la session, déjà utilisée par le badge et par le trait de la poignée. Il est le plus présent sur un bot qui attend, discret sur un bot qui travaille, absent sur une session terminée ou en lecture seule. Rien dans le code n'est modifié : cette page compare trois rendus en matière Signal (sombre) et Galet (clair).</p>
+  </header>
+
+  <div class="controls" role="group" aria-label="Réglages de la maquette">
+    <div class="control"><span>Rendu</span>
+      <div class="seg" data-opt="halo">
+        <button type="button" data-v="veil" aria-pressed="true">Voile</button>
+        <button type="button" data-v="ring" aria-pressed="false">Anneau</button>
+        <button type="button" data-v="edge" aria-pressed="false">Contour</button>
+      </div>
+    </div>
+    <div class="control"><span>Intensité</span>
+      <div class="seg" data-opt="intensity">
+        <button type="button" data-v="low" aria-pressed="false">Discrète</button>
+        <button type="button" data-v="mid" aria-pressed="true">Normale</button>
+        <button type="button" data-v="high" aria-pressed="false">Marquée</button>
+      </div>
+    </div>
+    <div class="control"><span>Portée</span>
+      <div class="seg" data-opt="scope">
+        <button type="button" data-v="all" aria-pressed="true">Tous les états</button>
+        <button type="button" data-v="waiting" aria-pressed="false">En attente seulement</button>
+      </div>
+    </div>
+    <div class="control"><span>Couleur</span>
+      <div class="seg" data-opt="color">
+        <button type="button" data-v="state" aria-pressed="true">Badge / trait</button>
+        <button type="button" data-v="eyes" aria-pressed="false">Yeux du bot</button>
+      </div>
+    </div>
+    <div class="control"><span>Mouvement</span>
+      <label class="check"><input type="checkbox" id="breathe"> Le halo respire sur un bot en attente</label>
+    </div>
+  </div>
+
+  <section>
+    <div class="sec-head">
+      <h2>Les sept états, les trois silhouettes</h2>
+      <p>Bots à 40 px. Un bot terminé ou en lecture seule ne reçoit jamais de halo : son opacité réduite reste le seul signal, comme aujourd'hui.</p>
+    </div>
+    <div class="pair" id="states"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Avant / après dans la liste</h2>
+      <p>Même liste, mêmes sessions : à gauche le rendu actuel, à droite avec halo. Ligne de 58 px, bot à 32 px, badge d'état inchangé.</p>
+    </div>
+    <div class="pair pair-2" id="before-after"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>En situation</h2>
+      <p>Poignée (bots à 12 px, 20 px en attente), liste (380 px) et bulle (336 px, bot à 48 px), posées sur le bord gauche d'un bureau. Les sessions sont fictives.</p>
+    </div>
+    <div class="pair pair-2" id="situ"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Toutes les échelles</h2>
+      <p>Le halo suit la taille du bot : à 12 px il ne fait que trois ou quatre pixels de large et doit rester lisible sans dominer la poignée.</p>
+    </div>
+    <div class="pair" id="scales"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Notes pour l'intégration</h2>
+      <p>Ce qu'il faudrait toucher si le rendu est validé. Rien n'est appliqué dans ce dépôt pour l'instant.</p>
+    </div>
+    <div class="notes">
+      <article>
+        <h3>Où ça se branche</h3>
+        <ul>
+          <li>Un conteneur autour de <code>&lt;Bot&gt;</code> (ou un <code>&lt;g&gt;</code> ajouté derrière la coque dans le SVG) porte le halo ; l'état et la lecture seule sont déjà exposés par <code>data-state</code> et <code>data-readonly</code>.</li>
+          <li>La couleur vient des mêmes tokens que le badge et le trait de la poignée : rien de nouveau à inventer, un seul token <code>--halo</code> par état.</li>
+          <li>Les ids de gradient et les couches montées restent inchangés : le halo n'a aucun effet sur les transitions d'expression.</li>
+        </ul>
+      </article>
+      <article>
+        <h3>Points à trancher</h3>
+        <ul>
+          <li>Dans la poignée, un halo de 20 px déborde du cadre de 28 px ; la surface est en <code>overflow: visible</code> en mode poignée, donc le halo s'étale sur le bureau. À valider visuellement ci-dessus.</li>
+          <li>Le rendu <em>Contour</em> utilise <code>filter: drop-shadow</code> sur le SVG ; c'est le plus fidèle à la silhouette mais le plus coûteux à animer. <em>Voile</em> et <em>Anneau</em> ne coûtent qu'un pseudo-élément.</li>
+          <li>La spec impose « pas de pulsation de badge ». La respiration du halo, si elle est gardée, reste à 5 s avec une amplitude faible, coupée par <code>prefers-reduced-motion</code>.</li>
+        </ul>
+      </article>
+      <article>
+        <h3>Tokens proposés</h3>
+<pre class="code" id="tokens-code"></pre>
+      </article>
+    </div>
+  </section>
+
+  <footer>
+    <span>Maquette d'exemple · aucune modification du code de l'overlay · silhouettes et couleurs issues de <span class="mono">apps/overlay/src/bots</span></span>
+    <span class="mono">LEDGE / HALO STUDY 01</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const root = document.documentElement;
+  root.dataset.halo = 'veil'; root.dataset.intensity = 'mid'; root.dataset.scope = 'all'; root.dataset.color = 'state'; root.dataset.breathe = 'off';
+
+  /* ---- Mascot generator, ported from Bot.tsx (static) ---- */
+  const EXPR = {
+    starting: { eyes: 'open', eye: 'starting' }, working: { eyes: 'open', eye: 'working' },
+    approval: { eyes: 'open', eye: 'approval', tilt: [-4, 3, -2], lift: -1 }, question: { eyes: 'wide', eye: 'question', tilt: [4, -3, 6] },
+    idle: { eyes: 'happy', eye: 'idle' }, error: { eyes: 'error', eye: 'error', tilt: [-7, -6, -5], lift: 2 },
+    done: { eyes: 'sleep', eye: 'done' }, readonly: { eyes: 'open', eye: 'done' }
+  };
+  const SHINE = { claude: 'M25 36Q27 28 38 28H59', codex: 'M25 32Q35 19 51 22', cursor: 'M27 41 34 24Q35 23 37 25' };
+  const TOOL = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' };
+  const LABEL = { starting: 'Démarrage', working: 'Au travail', approval: 'Votre accord', question: 'Une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' };
+  let gid = 0;
+  function hash(s) { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+  function shell(tool, fill) {
+    if (tool === 'codex') return `<ellipse class="shell" cx="48" cy="49" rx="32" ry="31" fill="${fill}"/>`;
+    if (tool === 'cursor') return `<path class="shell" d="M23 77 Q14 78 17 66 L30 22 Q33 12 42 20 L79 54 Q88 63 77 67 L58 71 46 83 Q40 88 36 80 L32 73Z" fill="${fill}"/>`;
+    return `<rect class="shell" x="15" y="22" width="66" height="56" rx="20" fill="${fill}"/>`;
+  }
+  function bot({ tool, state, size, theme, seed, readOnly = false, pose }) {
+    const id = 'g' + (++gid); const e = EXPR[state]; const h = hash(seed || tool + state); const p = pose || (h % 3) + 1;
+    const simplified = size <= 20; const material = theme === 'light' ? 'pebble' : 'signal';
+    const style = `--bot-eye:var(--bot-eye-${e.eye});--bot-tilt:${(e.tilt ? e.tilt[p - 1] : 0)}deg;--bot-lift:${e.lift || 0}px;--bot-breath:${4800 + (h % 17) * 100}ms;--bot-phase:-${(h % 43) * 100}ms`;
+    const label = `${TOOL[tool]} · ${LABEL[state]}${readOnly && state !== 'readonly' ? ' · lecture seule' : ''}`;
+    return `<svg class="bot" role="img" aria-label="${label}" width="${size}" height="${size}" viewBox="${simplified ? '12 16 72 68' : '0 0 96 96'}" data-tool="${tool}" data-state="${state}" data-eyes="${e.eyes}" data-material="${material}" data-simplified="${simplified}" data-readonly="${readOnly || state === 'readonly'}" style="${style}">
+      <defs><linearGradient id="${id}" x1=".2" y1="0" x2=".75" y2="1" gradientUnits="objectBoundingBox"><stop class="shell-top"/><stop class="shell-bottom" offset="1"/></linearGradient></defs>
+      <ellipse class="ground" cx="48" cy="88" rx="25" ry="3"/>
+      <g class="body"><g class="pose">
+        <g class="antenna-group"><path class="antenna" d="M49 22V14"/><circle class="antenna-light" cx="49" cy="12" r="3"/></g>
+        <g class="feet"><rect x="29" y="75" width="13" height="8" rx="4"/><rect x="54" y="75" width="13" height="8" rx="4"/></g>
+        ${shell(tool, `url(#${id})`)}
+        <path class="shine" d="${SHINE[tool]}"/>
+        <rect class="visor" x="25" y="35" width="47" height="29" rx="13"/>
+        <path class="reflection" d="M39 37H60Q68 37 69 44H28Q29 37 39 37"/>
+        <g class="gaze"><g class="eye-blink">
+          <g class="eye-open"><rect x="36" y="43" width="6" height="12" rx="3"/><rect x="55" y="43" width="6" height="12" rx="3"/></g>
+          <path class="eye-happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51"/>
+          <path class="eye-error" d="m35 45 8 3m11 0 8-3M38 54h2m16 0h2"/>
+          <path class="eye-sleep" d="M35 50q4 3 8 0m11 0q4 3 8 0"/>
+        </g></g>
+        <ellipse class="arm" cx="79" cy="63" rx="5" ry="8"/>
+      </g></g>
+    </svg>`;
+  }
+  function halo(opts) {
+    return `<span class="halo" data-state="${opts.state}" data-readonly="${!!opts.readOnly}" style="--bot-size:${opts.size}px">${bot(opts)}</span>`;
+  }
+
+  /* ---- Fixtures ---- */
+  const STATES = ['approval', 'question', 'working', 'idle', 'error', 'starting', 'done'];
+  const TOOLS = ['claude', 'codex', 'cursor'];
+  const SESSIONS = [
+    { id: 's1', name: 'Otto', tool: 'claude', project: 'harness-assistant', state: 'approval', since: '2 min', hi: true, ask: 'pnpm vitest run packages/ledge' },
+    { id: 's2', name: 'Nova', tool: 'codex', project: 'design-system', state: 'question', since: '8 min' },
+    { id: 's3', name: 'Pim', tool: 'cursor', project: 'landing-page', state: 'working', since: '12 min' },
+    { id: 's4', name: 'Bix', tool: 'claude', project: 'documentation', state: 'idle', since: '18 min' },
+    { id: 's5', name: 'Zed', tool: 'codex', project: 'infra-scripts', state: 'done', since: '41 min' }
+  ];
+  const THEMES = [['dark', 'Signal · thème sombre'], ['light', 'Galet · thème clair']];
+
+  function panel(theme, title, inner, extraAttr = '') {
+    return `<div class="panel t-${theme}" ${extraAttr}><div class="panel-title"><span>${title}</span><span>${theme === 'dark' ? 'Signal' : 'Galet'}</span></div>${inner}</div>`;
+  }
+
+  /* States grid */
+  document.getElementById('states').innerHTML = THEMES.map(([theme, title]) => panel(theme, title,
+    `<div class="states">${STATES.map(st => `<div class="state">
+      <div class="trio">${TOOLS.map(tool => halo({ tool, state: st, size: 40, theme, seed: tool + st })).join('')}</div>
+      <span class="badge" data-tone="${st}">${LABEL[st]}</span>
+    </div>`).join('')}
+    <div class="state"><div class="trio">${TOOLS.map(tool => halo({ tool, state: 'working', size: 40, theme, seed: tool + 'ro', readOnly: true })).join('')}</div><span class="badge" data-tone="readonly">Lecture seule</span></div>
+    </div>`)).join('');
+
+  /* List */
+  function list(theme, sessions = SESSIONS) {
+    const waiting = sessions.filter(s => s.state === 'approval' || s.state === 'question').length;
+    return `<div class="surface list">
+      <div class="list-head"><div><div class="t">Ledge<span>.</span></div><div class="s">${sessions.length} sessions · ${waiting} demandes pour vous</div></div><div class="icons"><i></i><i></i><i></i></div></div>
+      <div class="rows">${sessions.map(s => `<div class="row" ${s.hi ? 'data-hi' : ''}>
+        ${halo({ tool: s.tool, state: s.state, size: 32, theme, seed: s.id, readOnly: !!s.readOnly })}
+        <div class="copy"><b>${s.project}</b><span>${s.name} · ${TOOL[s.tool]} · ${s.since}</span></div>
+        <span class="badge" data-tone="${s.readOnly ? 'readonly' : s.state}">${s.readOnly ? 'Lecture seule' : LABEL[s.state]}</span>
+      </div>`).join('')}</div>
+      <div class="list-foot"><span>◔ Ne pas déranger</span><span class="kbd">Ctrl Alt L</span></div>
+    </div>`;
+  }
+  document.getElementById('before-after').innerHTML = THEMES.map(([theme, title]) =>
+    `<div class="panel t-${theme}" data-halo-off><div class="panel-title"><span>Sans halo · ${theme === 'dark' ? 'Signal' : 'Galet'}</span><span>aujourd'hui</span></div><div class="stage" style="min-height:0;padding-block:20px">${list(theme)}</div></div>` +
+    `<div class="panel t-${theme}"><div class="panel-title"><span>Avec halo · ${theme === 'dark' ? 'Signal' : 'Galet'}</span><span>proposition</span></div><div class="stage" style="min-height:0;padding-block:20px">${list(theme)}</div></div>`
+  ).join('');
+
+  /* Handle + bubble on a desktop */
+  const CODE = `import { Bot } from './bots';\n\nexport function Session() {\n  return <Bot tool="claude"\n              state="approval"\n              seed={session.id} />;\n}\n\n> ledge claude\nSession Otto · connected\n└─ À vos côtés, discrètement.`;
+  function stage(inner) { return `<div class="stage"><div class="editor"><pre>${CODE}</pre></div>${inner}</div>`; }
+  function handle(theme) {
+    return `<div class="surface handle">${SESSIONS.map(s => {
+      const pending = s.state === 'approval' || s.state === 'question'; const size = pending ? 20 : 12; const quiet = s.state === 'done';
+      const tick = pending ? `<span class="tick" style="background:${s.state === 'approval' ? 'var(--danger-text)' : 'var(--warning)'}"></span>` : '';
+      return `<span class="hbot" ${pending ? 'data-pending' : ''} ${quiet ? 'data-quiet' : ''}>${tick}${halo({ tool: s.tool, state: s.state, size, theme, seed: s.id })}</span>`;
+    }).join('')}</div>`;
+  }
+  function bubble(theme) {
+    const s = SESSIONS[0];
+    return `<div class="surface bubble">
+      <div class="top">${halo({ tool: s.tool, state: s.state, size: 48, theme, seed: s.id })}<div class="copy"><b>${s.name} a besoin de votre accord</b><span>${s.ask}</span></div></div>
+      <div class="actions"><button type="button" class="btn">Refuser</button><button type="button" class="btn primary">Approuver</button></div>
+      <div class="bar"><i></i></div>
+    </div>`;
+  }
+  document.getElementById('situ').innerHTML = THEMES.map(([theme]) => [
+    panel(theme, 'Poignée · 28 px', stage(handle(theme))),
+    panel(theme, 'Bulle · 336 px', stage(bubble(theme)))
+  ].join('')).join('');
+
+  /* Scales */
+  document.getElementById('scales').innerHTML = THEMES.map(([theme, title]) => panel(theme, title,
+    `<div class="scales">${[12, 16, 20, 32, 48, 64].map(sz => `<figure><div class="ph">${halo({ tool: 'claude', state: 'approval', size: sz, theme, seed: 'scale' + sz })}</div><figcaption>${sz} px</figcaption></figure>`).join('')}
+     ${[12, 20, 32].map(sz => `<figure><div class="ph">${halo({ tool: 'codex', state: 'question', size: sz, theme, seed: 'q' + sz })}</div><figcaption>${sz} px · question</figcaption></figure>`).join('')}
+     ${[12, 32].map(sz => `<figure><div class="ph">${halo({ tool: 'cursor', state: 'working', size: sz, theme, seed: 'w' + sz })}</div><figcaption>${sz} px · travail</figcaption></figure>`).join('')}</div>`)).join('');
+
+  /* Controls */
+  document.querySelectorAll('.seg').forEach(seg => {
+    const opt = seg.dataset.opt;
+    seg.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
+      seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+      root.dataset[opt] = btn.dataset.v; renderTokens();
+    }));
+  });
+  const breathe = document.getElementById('breathe');
+  breathe.addEventListener('change', () => { root.dataset.breathe = breathe.checked ? 'on' : 'off'; renderTokens(); });
+
+  const INT = { low: ['.40', '.20', '.26'], mid: ['.55', '.30', '.32'], high: ['.75', '.42', '.40'] };
+  function renderTokens() {
+    const [a, soft, k] = INT[root.dataset.intensity];
+    const color = root.dataset.color === 'eyes' ? 'var(--bot-eye-approval)  /* couleur des yeux */' : 'var(--danger-text)       /* même couleur que le badge et le trait */';
+    document.getElementById('tokens-code').textContent =
+`/* tokens.css — proposition */
+--halo-alpha: ${a};        /* bot en attente, erreur */
+--halo-alpha-soft: ${soft};   /* travail, disponible${root.dataset.scope === 'waiting' ? ' (désactivé : portée « en attente »)' : ''} */
+--halo-spread: ${k};        /* rayon = taille du bot × ${k} */
+
+/* bots.css — rendu « ${{ veil: 'voile' , ring: 'anneau', edge: 'contour' }[root.dataset.halo]} » */
+.halo[data-state="approval"] { --halo: ${color}; }
+.halo[data-state="question"] { --halo: var(--warning); }
+.halo[data-state="done"], .halo[data-readonly="true"] { --halo-on: 0; }${root.dataset.breathe === 'on' ? '\n.halo[data-state="approval"]::before { animation: halo-breathe 5s ease-in-out infinite; }' : ''}`;
+  }
+  renderTokens();
+})();
+</script>
+</body>
+</html>
