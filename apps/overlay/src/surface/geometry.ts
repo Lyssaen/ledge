@@ -9,8 +9,8 @@ export function slotSizes(n: number): { big: number; small: number; gap: number 
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-/** `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. */
-export function layout(input: { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; bubbleH?: number; sessionH?: number; reading?: boolean }): Layout {
+/** `listExtraH` is the extra height of an expanded (focused) list row. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. */
+export function layout(input: { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number }): Layout {
   const { bots, mode, screenH } = input;
   const n = bots.length; const { big, small, gap } = slotSizes(n);
   const centerY = screenH / 2;
@@ -28,7 +28,7 @@ export function layout(input: { bots: Array<{ id: string; pending: boolean }>; m
     const top = clamp(Math.round((slot?.center ?? centerY) - 38), SIZES.margin, screenH - SIZES.margin - h);
     return { top, w: SIZES.bubbleW, h, slots, handle, hotZones };
   }
-  const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + 16 + n * SIZES.rowH + SIZES.footerH : (input.sessionH ?? 480));
+  const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + 16 + n * SIZES.rowH + (input.listExtraH ?? 0) + SIZES.footerH : (input.sessionH ?? 480));
   const top = clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h);
   const w = mode === 'list' ? SIZES.listW : (input.reading ? SIZES.readingW : SIZES.sessionW);
   return { top, w, h, slots, handle, hotZones };

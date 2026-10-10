@@ -42,4 +42,9 @@ describe('geometry', () => {
   it('reading mode widens the session', () => {
     expect(layout({ bots: bots(2), mode: 'session', screenH: 1080, sessionH: 500, reading: true }).w).toBe(SIZES.readingW);
   });
+  it('an expanded focused row adds its extra height to the list, still clamped', () => {
+    const base = layout({ bots: bots(3), mode: 'list', screenH: 1080 }).h;
+    expect(layout({ bots: bots(3), mode: 'list', screenH: 1080, listExtraH: 42 }).h).toBe(base + 42);
+    expect(layout({ bots: bots(30), mode: 'list', screenH: 1080, listExtraH: 42 }).h).toBe(1080 - 2 * SIZES.margin);
+  });
 });

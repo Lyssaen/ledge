@@ -6,6 +6,8 @@ import { Button } from '../ui/Button';
 import { Kbd } from '../ui/Kbd';
 import { relativeTime, toolName } from '../format';
 import { transition } from '../motion';
+import { SIZES } from './geometry';
+import { isYesNo } from '../keyboard/useKeyboard';
 
 const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
 export function rowHint(s: Session): string {
@@ -20,7 +22,10 @@ const BELL_OFF = ['M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5', 'M17 17H3s3-2 3-
 const SLIDERS = ['M21 4h-7', 'M10 4H3', 'M21 12h-9', 'M8 12H3', 'M21 20h-5', 'M12 20H3', 'M14 2v4', 'M8 10v4', 'M16 18v4'];
 const CHEVRON_LEFT = ['m15 18-6-6 6-6'];
 
-export function SessionList({ sessions, visible, numbered, selectedId, dnd, onToggleDnd, onOpen, onClose, onHoverRow, theme = 'dark', now = Date.now() }: { sessions: Session[]; visible: boolean; numbered: boolean; selectedId: string | null; dnd: boolean; onToggleDnd: () => void; onOpen: (id: string) => void; onClose: () => void; onHoverRow?: (id: string | null) => void; theme?: 'dark' | 'light'; now?: number }) {
+/** Height of a focused row carrying the inline Approve / Deny / Open actions. */
+export const EXPANDED_ROW_H = 100;
+
+export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onHoverRow, theme = 'dark', now = Date.now() }: { sessions: Session[]; visible: boolean; numbered: boolean; selectedId: string | null; focusedId?: string | null; dnd: boolean; onToggleDnd: () => void; onOpen: (id: string) => void; onDecide?: (id: string, d: 'accept' | 'deny') => void; onClose: () => void; onHoverRow?: (id: string | null) => void; theme?: 'dark' | 'light'; now?: number }) {
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
   return (
@@ -34,12 +39,15 @@ export function SessionList({ sessions, visible, numbered, selectedId, dnd, onTo
         <Button variant="ghost" size="icon" aria-label="Settings"><Icon d={SLIDERS} /></Button>
         <Button variant="ghost" size="icon" aria-label="Collapse" onClick={onClose}><Icon d={CHEVRON_LEFT} /></Button>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', padding: '8px 0', flexGrow: 1, minHeight: 0, overflowY: 'auto' }}>
+      <div data-scroll style={{ display: 'flex', flexDirection: 'column', padding: '8px 0', flexGrow: 1, minHeight: 0, overflowY: 'auto' }}>
         {sessions.map((s, i) => {
-          const pending = isPending(s); const hi = s.id === oldestAsk; const delay = 150 + i * 24;
+          const hi = s.id === oldestAsk; const delay = 150 + i * 24;
+          const focused = focusedId === s.id; const actions = focused && isYesNo(s);
+          const bg = hi ? 'var(--secondary)' : selectedId === s.id ? 'var(--sidebar-accent)' : 'transparent';
           return (
-            <button key={s.id} type="button" aria-label={`${s.project}, ${s.name}, open`} aria-current={selectedId === s.id ? 'true' : undefined} data-delay={delay} onClick={() => onOpen(s.id)} onMouseEnter={() => onHoverRow?.(s.id)} onMouseLeave={() => onHoverRow?.(null)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, height: 58, boxSizing: 'border-box', padding: `0 16px 0 ${numbered ? 10 : 14}px`, border: 'none', borderLeftWidth: 2, borderLeftStyle: 'solid', borderLeftColor: hi ? 'var(--sidebar-primary)' : 'transparent', backgroundColor: hi ? 'var(--secondary)' : selectedId === s.id ? 'var(--sidebar-accent)' : 'transparent', textAlign: 'left', color: 'var(--sidebar-foreground)', cursor: 'pointer', width: '100%', opacity: visible ? 1 : 0, transform: `translateX(${visible ? 0 : -10}px)`,
+            <div key={s.id} data-row-id={s.id} style={{ flexShrink: 0, height: actions ? EXPANDED_ROW_H : SIZES.rowH, boxSizing: 'border-box', overflow: 'hidden', backgroundColor: bg, outline: focused ? '2px solid var(--ring)' : 'none', outlineOffset: -2, transition: transition([['height', 'grow', 0], ['background-color', 'hover']]) }}>
+            <button type="button" data-row aria-label={`${s.project}, ${s.name}, open`} aria-current={selectedId === s.id ? 'true' : undefined} data-delay={delay} onClick={() => onOpen(s.id)} onMouseEnter={() => onHoverRow?.(s.id)} onMouseLeave={() => onHoverRow?.(null)}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, height: SIZES.rowH, boxSizing: 'border-box', padding: `0 16px 0 ${numbered ? 10 : 14}px`, border: 'none', borderLeftWidth: 2, borderLeftStyle: 'solid', borderLeftColor: hi ? 'var(--sidebar-primary)' : 'transparent', backgroundColor: bg, textAlign: 'left', color: 'var(--sidebar-foreground)', cursor: 'pointer', width: '100%', opacity: visible ? 1 : 0, transform: `translateX(${visible ? 0 : -10}px)`,
                 transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? delay : 0], ['transform', visible ? 'grow' : 'fadeOut', visible ? delay : 0], ['background-color', 'hover'], ['border-color', 'hover']]) }}>
               {numbered && i < 9 && <Kbd accent={hi}>{i + 1}</Kbd>}
               <Bot seed={s.id} readOnly={s.source === 'hook_only'} tool={s.tool} state={botState(s)} pose={poseFor(s.id, s.state)} size={32} theme={theme} paused={!visible} />
@@ -49,6 +57,14 @@ export function SessionList({ sessions, visible, numbered, selectedId, dnd, onTo
               </span>
               <Badge state={botState(s)} />
             </button>
+            {actions && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: EXPANDED_ROW_H - SIZES.rowH, boxSizing: 'border-box', padding: `0 16px 4px ${numbered ? 40 : 58}px` }}>
+                <Button variant="primary" size="sm" onClick={() => onDecide?.(s.id, 'accept')} style={{ height: 28, padding: '0 8px' }}>Approve <Kbd accent>Y</Kbd></Button>
+                <Button variant="outline" size="sm" onClick={() => onDecide?.(s.id, 'deny')} style={{ height: 28, padding: '0 8px' }}>Deny <Kbd>N</Kbd></Button>
+                <Button variant="ghost" size="sm" onClick={() => onOpen(s.id)} style={{ height: 28, padding: '0 8px' }}>Open <Kbd>↵</Kbd></Button>
+              </div>
+            )}
+            </div>
           );
         })}
       </div>
