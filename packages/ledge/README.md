@@ -21,6 +21,7 @@ The daemon is spawned from the built CLI (`dist/cli/index.js`), so rebuild after
 ledge claude            # start Claude Code in a tracked tmux session (tab renamed to the bot)
 ledge claude --name max # pick the bot's name
 ledge status            # list bots and what they wait for
+ledge attach <id>       # put this terminal on a running session (what the overlay opens a tab with)
 ledge daemon            # run the daemon in the foreground (normally run by the systemd service)
 ```
 
