@@ -209,6 +209,12 @@ Signal a des contours lisibles et aucun trait de reflet blanc. Galet reçoit un 
 
 Lecture seule et connexion perdue sont des modificateurs, pas des états de travail inventés : garder l’expression connue, réduire l’opacité, figer les mouvements et afficher la cause textuellement. La lecture seule utilise un contour pointillé. Une couleur seule ne suffit jamais à distinguer les états : expression, libellé et badge restent présents.
 
+### Halo
+
+Chaque session vivante porte un halo lumineux dans la couleur de son état, la même que le badge et le trait de la poignée : `--danger-text` pour l'accord attendu et l'erreur, `--warning` pour la question, `--info` pour le démarrage et le travail, `--success` pour une session disponible. Le rendu validé est le « contour » de [la maquette](../../mockups/mascots-halo.html) : deux `drop-shadow` qui épousent la silhouette, l'ombre au sol masquée pour ne pas luire. Intensité pleine (`--bot-halo-alpha` 0,55) pour un bot qui attend ou en erreur, douce (`--bot-halo-alpha-soft` 0,3) pour un bot qui travaille ou est disponible ; rayon de 0,32 fois la taille du bot (`--bot-halo-spread`), donc le halo suit l'avatar et le zoom de la poignée. Une session terminée, en lecture seule ou l'état `readonly` n'en portent jamais : leur opacité réduite reste leur seul signal.
+
+Le halo d'un bot qui attend respire : 5 s, `ease-in-out`, intensité seule (de 100 % à 70 %), décalée par bot comme sa respiration. Ce n'est pas une pulsation de badge ; les badges restent immobiles. Les mouvements réduits, la couche inactive, la vue en pause et la connexion perdue figent ou suppriment cette respiration comme les autres boucles.
+
 ### Identité, échelle et rythme
 
 - Identité stable : clé React, graine de mouvement et décalage dérivent de `session.id` ; pour un helper, de `parent.id + ':' + helper.id`. Un renommage ou un changement de thème ne synchronise pas les bots.

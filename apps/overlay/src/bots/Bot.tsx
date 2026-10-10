@@ -63,7 +63,8 @@ function Shell({ tool, fill }: { tool: Tool; fill: string }) {
 
 /**
  * Session mascot: one persistent SVG whose layers (shell, pose, gaze, eyes, accessories) stay mounted
- * across theme and state changes; only attributes and CSS variables change.
+ * across theme and state changes; only attributes and CSS variables change. A halo in the state colour
+ * (data-halo, drawn by bots.css) distinguishes live sessions at a glance.
  */
 export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, frozen = false, paused = false, reducedMotion, askKey, nodKey, className }: BotProps): JSX.Element {
   const ref = useRef<SVGSVGElement>(null);
@@ -73,6 +74,8 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
   const reduced = osReduced || (reducedMotion ?? prefs.reduced);
   const simplified = size <= 20;
   const expr = EXPRESSIONS[state];
+  /** Halo in the state colour (bots.css): every live state; never a finished or read-only session. */
+  const halo = !readOnly && state !== 'done' && state !== 'readonly';
   const { t } = useI18n();
   const h = seedHash(seed);
 
@@ -80,6 +83,7 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
   useBotNod(ref, nodKey, !reduced && !readOnly && !frozen && !paused);
 
   const style = {
+    '--bot-size': `${size}px`,
     '--bot-eye': `var(--bot-eye-${expr.eye})`,
     '--bot-tilt': `${expr.tilt?.[pose - 1] ?? 0}deg`,
     '--bot-lift': `${expr.lift ?? 0}px`,
@@ -113,6 +117,7 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
       data-material={materialFor(theme)}
       data-simplified={String(simplified)}
       data-readonly={String(readOnly || state === 'readonly')}
+      data-halo={String(halo)}
       data-frozen={String(frozen)}
       data-paused={String(paused)}
       data-reduced={String(reduced)}

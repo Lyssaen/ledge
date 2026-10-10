@@ -202,10 +202,12 @@ describe('Bot CSS pause contract', () => {
   afterEach(cleanup);
   const css = readFileSync(resolve(__dirname, '../src/bots/bots.css'), 'utf8').replace(/\s+/g, ' ');
 
-  it('holds every bot animation, including respiration, inside inert layers and paused views', () => {
-    expect(css).toContain('[inert] .bot *, .bot[data-paused="true"] * { animation-play-state: paused !important; }');
-    expect(css).toContain('.bot[data-frozen="true"] * { animation-play-state: paused !important; }');
+  it('holds every bot animation, including respiration and the halo, inside inert layers and paused views', () => {
+    expect(css).toContain('[inert] .bot, [inert] .bot *, .bot[data-paused="true"], .bot[data-paused="true"] * { animation-play-state: paused !important; }');
+    expect(css).toContain('.bot[data-frozen="true"], .bot[data-frozen="true"] * { animation-play-state: paused !important; }');
     expect(css).toMatch(/\.bot \.body \{[^}]*animation: bot-breathe/);
+    // The halo of a waiting bot breathes on the svg root itself, hence the root in the two pause selectors above.
+    expect(css).toMatch(/\.bot\[data-halo="true"\]:is\(\[data-state="approval"\], \[data-state="question"\]\) \{[^}]*animation: bot-halo-breathe/);
   });
 
   it('exposes the paused flag the rule keys on', () => {

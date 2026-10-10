@@ -133,6 +133,22 @@ describe('Bot', () => {
     expect(svg.getAttribute('aria-label')).toMatch(/Claude Code · Has a question · Read-only/);
   });
 
+  it('carries a halo in the state colour for live sessions only', () => {
+    const halo = (state: BotState, readOnly = false) => {
+      const { container } = render(<Bot {...props} state={state} readOnly={readOnly} theme="dark" />);
+      return container.querySelector('svg')!.getAttribute('data-halo');
+    };
+    for (const state of ['starting', 'working', 'approval', 'question', 'idle', 'error'] as const) expect(halo(state)).toBe('true');
+    expect(halo('done')).toBe('false');
+    expect(halo('readonly')).toBe('false');
+    expect(halo('approval', true)).toBe('false');
+  });
+
+  it('exposes its size so the halo scales with the avatar', () => {
+    const { container } = render(<Bot {...props} size={48} theme="dark" />);
+    expect(container.querySelector('svg')!.style.getPropertyValue('--bot-size')).toBe('48px');
+  });
+
   it('describes itself for assistive technology', () => {
     const { getByRole } = render(<Bot {...props} tool="cursor" state="approval" theme="dark" />);
     expect(getByRole('img', { name: 'Cursor Agent · Needs your approval' })).toBeInTheDocument();

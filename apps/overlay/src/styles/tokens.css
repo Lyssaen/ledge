@@ -53,6 +53,10 @@
   --bot-shell-top: #34434b; --bot-shell-bottom: #273238; --bot-shell-line: #859397; --bot-visor: #172124;
   --bot-shine: #ffffff00;
 }
+/* Halo (docs/mockups/mascots-halo.html, "Contour" rendering): a glow in the state's badge colour hugging the
+   silhouette. Full strength for a bot that waits or errs, softer for a live bot, none for done or read-only. */
+@property --bot-halo-a { syntax: '<number>'; inherits: false; initial-value: 0; }
+:root { --bot-halo-alpha: .55; --bot-halo-alpha-soft: .3; --bot-halo-spread: .32; }
 :root {
   --bot-visor-line: #00000055; --bot-reflection: #ffffff; --bot-ground: #000000; --bot-readonly-line: #adb3b2;
   --bot-eye-starting: #90c7f2; --bot-eye-working: #90c7f2; --bot-eye-approval: #f2b09c; --bot-eye-question: #f6d487;

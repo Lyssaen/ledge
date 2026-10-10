@@ -60,14 +60,34 @@
 .bot[data-state="done"] { opacity: .55; }
 .bot[data-state="done"] .body, .bot[data-state="error"] .body { animation: none; }
 
+/* Halo: two drop-shadows in the state colour (the badge's and the handle tick's) hugging the silhouette. Bot sets
+   --bot-size inline; the spread is a fraction of it, so the halo scales with the avatar and with the handle's zoom.
+   The ground shadow hides under a halo so it does not glow. A waiting bot's halo breathes: 5 s, strength only, offset
+   per bot like its breathing. Done, read-only and the `readonly` state carry no halo (data-halo is set by Bot). */
+.bot[data-halo="true"] {
+  --bot-halo-r: calc(var(--bot-size, 32px) * var(--bot-halo-spread, .32));
+  filter:
+    drop-shadow(0 0 calc(var(--bot-halo-r) * .35) color-mix(in srgb, var(--bot-halo) calc(var(--bot-halo-a) * 170%), transparent))
+    drop-shadow(0 0 calc(var(--bot-halo-r) * .9) color-mix(in srgb, var(--bot-halo) calc(var(--bot-halo-a) * 90%), transparent));
+}
+.bot[data-halo="true"] .ground { opacity: 0; }
+.bot[data-state="approval"], .bot[data-state="error"] { --bot-halo: var(--danger-text); --bot-halo-a: var(--bot-halo-alpha); }
+.bot[data-state="question"] { --bot-halo: var(--warning); --bot-halo-a: var(--bot-halo-alpha); }
+.bot[data-state="starting"], .bot[data-state="working"] { --bot-halo: var(--info); --bot-halo-a: var(--bot-halo-alpha-soft); }
+.bot[data-state="idle"] { --bot-halo: var(--success); --bot-halo-a: var(--bot-halo-alpha-soft); }
+.bot[data-halo="true"]:is([data-state="approval"], [data-state="question"]) {
+  animation: bot-halo-breathe 5s ease-in-out infinite;
+  animation-delay: var(--bot-phase, 0s);
+}
+
 /* Modifiers: read-only (dashed outline), frozen (connection lost), simplified (≤20 px head crop) */
 .bot[data-readonly="true"] { opacity: .6; }
 .bot[data-readonly="true"] .shell { stroke: var(--bot-readonly-line); stroke-width: 1.3; stroke-dasharray: 3 3; }
 .bot[data-readonly="true"] .body { animation: none; }
 .bot[data-frozen="true"] { opacity: .5; }
-.bot[data-frozen="true"] * { animation-play-state: paused !important; }
+.bot[data-frozen="true"], .bot[data-frozen="true"] * { animation-play-state: paused !important; }
 /* Inactive (inert) layers and explicitly paused views hold every loop in place, like the prototype's .paused rule. */
-[inert] .bot *, .bot[data-paused="true"] * { animation-play-state: paused !important; }
+[inert] .bot, [inert] .bot *, .bot[data-paused="true"], .bot[data-paused="true"] * { animation-play-state: paused !important; }
 .bot[data-simplified="true"] :is(.arm, .feet, .shine, .ground, .antenna-group) { display: none; }
 .bot[data-simplified="true"] .eye-open { transform: scale(1.1); }
 .bot[data-simplified="true"] .body { animation: none; }
@@ -89,6 +109,7 @@
   50% { transform: translateY(-.7px) rotate(.3deg) scaleY(1.014); }
 }
 @keyframes bot-blink { 0%, 100% { transform: scaleY(1); } 45%, 60% { transform: scaleY(.08); } }
+@keyframes bot-halo-breathe { 0%, 100% { --bot-halo-a: var(--bot-halo-alpha, .55); } 50% { --bot-halo-a: calc(var(--bot-halo-alpha, .55) * .7); } }
 @keyframes bot-nod {
   0%, 100% { transform: rotate(var(--bot-tilt, 0deg)) translateY(var(--bot-lift, 0px)); }
   35% { transform: translateY(3px) rotate(5deg); }
