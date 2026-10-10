@@ -40,13 +40,13 @@ The Rust side has not been compiled yet. On the first build:
    - Ctrl+Alt+L from another app opens the list and gives the overlay focus (j/k/digits/y/n work at once); pressing it again closes; an ask arriving while you type elsewhere shows the bubble without stealing focus; Ctrl+Alt+L while a bubble shows opens the list;
    - with a terminal focused, Ctrl+Alt+L, then Y, then Esc: typing reaches the terminal again at once (focus is handed back, no click needed);
    - the window grows with the surface and shrinks only after the shrink animation; the coachmark (first three keyboard opens) is fully visible;
-   - with the daemon stopped, "daemon unreachable, retrying" is fully visible beside the handle;
+   - with the daemon stopped, "daemon injoignable, nouvelle tentative" ("daemon unreachable, retrying" in English) is fully visible beside the handle;
    - in a session, `o` or the terminal button brings Windows Terminal forward;
    - open the list with Ctrl+Alt+L while the cursor rests on the left edge, then press Esc: it must not reopen until the cursor leaves the edge and comes back;
    - open and close transitions show no flash of misplaced content;
    - clicks beside the surface reach the app underneath;
-   - UI scale on the 4K screen: Settings > Size shows `Auto (…)` with the expected value (work-area height / 1080 to the nearest quarter; on a 4K screen with the taskbar at the bottom: about 200% at 100% Windows scaling, 150% at 125%, 125% at 150%), the handle and bots are clearly readable, and the handle stays centered on the left edge;
-   - switching Size between Auto, 100%, 125%, 150% and 200% resizes everything live with nothing clipped or offset: the window follows the surface, the tooltip and the coachmark are fully visible, the edge bands above and below the handle still open the list, clicks beside the surface still reach the app underneath.
+   - sizes on the 4K screen: Settings shows Handle size `Auto (200%)` and Window size `Auto (100%)` at 100% Windows scaling (see Sizes below for the rules), the handle and bots are clearly readable, the handle stays centered on the left edge, and the list opens at its base 380 px;
+   - switching each size between Auto, 100%, 125%, 150% and 200% resizes only its own part, live, with nothing clipped or offset: the handle size moves the handle, its bots, the tooltip and the edge bands; the window size moves the bubble, list, session, settings, help and coachmark; the window follows the surface, the edge bands above and below the handle still open the list, clicks beside the surface still reach the app underneath.
 4. `pnpm tauri build`: NSIS installer with the bot icon.
 
 ## Keys
@@ -66,15 +66,25 @@ The Rust side has not been compiled yet. On the first build:
 | ? | keyboard help, inside the surface (Esc returns to the list) |
 | Ctrl+Alt+T | toggle dark / light theme |
 
-Theme, do not disturb, reduced motion and size are also in the list's Settings view, and are remembered in `localStorage` (`ledge.theme`, `ledge.dnd`, `ledge.reducedMotion`, `ledge.uiScale`).
+Language, theme, do not disturb, reduced motion and the two sizes are also in the list's Settings view, and are remembered in `localStorage` (`ledge.lang`, `ledge.theme`, `ledge.dnd`, `ledge.reducedMotion`, `ledge.handleScale`, `ledge.panelScale`).
 
-## Size (UI scale)
+## Language
 
-Every size is designed in CSS px for a 1080p work area. Settings > Size zooms the whole overlay: Auto, 100%, 125%, 150% or 200%. Auto takes the primary work area's height in logical px (after Windows scaling) divided by 1080, rounded to the nearest quarter, between 100% and 200%: 1080 px is 100%, 1440 px 125%, 1600 px 150%, 2160 px (4K at 100% Windows scaling) 200%. Under Tauri it is the webview zoom; the surface then lays itself out in a work area of height / scale CSS px, and the bridge multiplies every frame and edge band it sends to the shell back to monitor px (the Rust side is unchanged). In the browser (dev, e2e) a CSS `zoom` on the app root emulates it. The OS reduced-motion preference always wins. While the daemon is unreachable, and for sessions started without Ledge (read only), every send and decision path is disabled, keys included; the terminal tab button and O still bring the terminal forward.
+The overlay speaks French (the default) and English. Settings > Langue / Language switches it live and remembers it (`ledge.lang`). Every visible string, aria-labels and tooltips included, comes from one typed catalogue, `src/i18n/messages.ts`: `fr` and `en` have the same keys (the build fails otherwise), plurals are explicit, and relative times read "2 min" in French and "2m" in English. The French copy follows the approved mockup. Messages relayed from the daemon or the terminal are shown as they come. The unit tests and most e2e specs run in English (`setFallbackLang('en')` in `test/setup.ts`, the `lang` fixture option in `e2e/fixtures.ts`); the French ones opt in.
+
+## Sizes (UI scales)
+
+Every size is designed in CSS px for a 1080p work area. Settings has two sizes, each Auto, 100%, 125%, 150% or 200%, remembered separately:
+
+- **Handle size** (`ledge.handleScale`): the resting handle on the screen edge, its bots, gaps and tick, the tooltip, the "daemon unreachable" line and the edge bands. Auto is the primary work area's height in logical px (after Windows scaling) divided by 1080, to the nearest quarter, between 100% and 200%: 1080 px is 100%, 1440 px 125%, 1600 px 150%, 2160 px (4K at 100% Windows scaling) 200%.
+- **Window size** (`ledge.panelScale`): the bubble, the list, a session, settings, help and the coachmark. Auto is the height divided by 2160, to the nearest quarter, between 100% and 200%: 100% up to a 4K work area at 100% Windows scaling, larger only on taller work areas.
+
+Changing one never changes the other. A value saved by an older version under `ledge.uiScale` is copied to both once. The page itself is never zoomed: the geometry (`scaledLayout` in `src/surface/geometry.ts`) lays the handle out in a screen of height / handle scale and the opened views in height / window scale, then multiplies each by its scale; each layer carries a CSS `zoom` of its own scale. Frames and edge bands sent to the shell are therefore plain logical px (the Rust side is unchanged). The OS reduced-motion preference always wins. While the daemon is unreachable, and for sessions started without Ledge (read only), every send and decision path is disabled, keys included; the terminal tab button and O still bring the terminal forward.
 
 ## Known V1 limits
 
 - Focus brings the Windows Terminal window forward; it does not switch to the exact tab yet.
-- Free-text answers to a question are not supported by the daemon yet: the question card's Other field is off; answer in the terminal.
+- Free-text answers to a question are not supported by the daemon yet: the question's free field ("Ou proposez autre chose…") is off; answer in the terminal.
+- "Toujours pour cette session" (allow for the session) is shown off: no adapter confirms a scoped authorization yet.
 - The review of a diff or a plan is the session's terminal preview for now.
 - The Rust shell is untested on a real Windows build until the first-build checks above pass.
