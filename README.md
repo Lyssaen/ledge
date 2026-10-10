@@ -4,6 +4,14 @@ A living handle on the left edge of your Windows screen that follows every agent
 
 Personal project. Windows host + WSL2 only.
 
+**[Take the tour](docs/tour.md)**: every screen of the overlay, captured from the real app.
+
+<p>
+  <img src="docs/screens/list-dark.png" alt="The list of sessions" width="300">
+  <img src="docs/screens/session-permission-dark.png" alt="A permission request answered from Ledge" width="300">
+  <img src="docs/screens/bubble-dark.png" alt="The bubble" width="300">
+</p>
+
 - [How it works](#how-it-works)
 - [Architecture](#architecture)
 - [Components](#components)
@@ -271,6 +279,7 @@ pnpm -r typecheck
 pnpm -r test                        # protocol, ledge (unit + tmux + end-to-end, needs tmux, no AI), overlay (vitest + jsdom)
 pnpm --filter overlay dev           # the UI alone on http://localhost:1420, against a daemon running in WSL
 pnpm --filter overlay test:e2e      # Playwright, chromium
+LEDGE_SCREENSHOTS=1 pnpm --filter overlay exec playwright test e2e/screenshots.spec.ts   # refresh docs/screens (see docs/tour.md)
 pnpm --filter overlay tauri dev     # Windows only
 ```
 
@@ -280,7 +289,7 @@ Layout:
 packages/protocol/   zod schemas, PROTOCOL_PORT
 packages/ledge/      src/cli, src/daemon, src/adapters, test/ (fixtures/panes: captured dialogs)
 apps/overlay/        src/ (React), src-tauri/ (Rust shell), e2e/ (Playwright)
-docs/                design spec, implementation plans, mockups and the approved prototype
+docs/                design spec, implementation plans, mockups, the approved prototype, and the tour with its captures
 ```
 
 ## Design documents
