@@ -339,9 +339,19 @@ describe('surface machine: decision failure and detail views', () => {
     it('a second finished notice chains after the first, oldest first, with a fresh clock', () => {
       const up = run([{ type: 'finished', id: 'a' }, unfold, { type: 'finished', id: 'b' }]);
       expect(up.s.mode).toBe('bubble'); expect(up.s.bubbleId).toBe('a'); expect(up.s.done).toEqual(['a', 'b']);
+      // Appending a different id behind the bubble touches no clock.
+      const shown = run([{ type: 'finished', id: 'a' }, unfold]).s;
+      expect(run([{ type: 'finished', id: 'b' }], shown).effects).toEqual([]);
       const next = run([{ type: 'bubbleElapsed' }], up.s);
       expect(next.s.mode).toBe('bubble'); expect(next.s.bubbleId).toBe('b'); expect(next.s.done).toEqual(['b']); expect(next.effects).toContain('startTimer:bubble');
       expect(run([{ type: 'bubbleElapsed' }], next.s).s.mode).toBe('handle');
+    });
+    it('the same session finishing again re-arms its finished bubble', () => {
+      const up = run([{ type: 'finished', id: 'a' }, unfold]).s;
+      const again = run([{ type: 'finished', id: 'a' }], up);
+      expect(again.s.mode).toBe('bubble'); expect(again.s.bubbleId).toBe('a'); expect(again.s.bubbleKind).toBe('finished');
+      expect(again.s.done).toEqual(['a']);
+      expect(again.effects).toContain('startTimer:bubble');
     });
     it('the same id twice is one notice', () => {
       expect(run([{ type: 'finished', id: 'a' }, { type: 'finished', id: 'a' }]).s.done).toEqual(['a']);

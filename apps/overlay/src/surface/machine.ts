@@ -96,6 +96,8 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
     /* A bot finished its task (working -> idle). Only the bare handle with nothing asked shows it; elsewhere the handle's
        smiling bot is the whole signal. During an edge dwell it waits like an ask. */
     case 'finished': {
+      // The session whose finished bubble is up finished again (a quick turn): the bubble stays, with a fresh clock.
+      if (s.mode === 'bubble' && s.bubbleKind === 'finished' && s.bubbleId === e.id) return showBubble(s, e.id, [], 'finished');
       // A finished bubble already up: the new notice chains behind it (an ask bubble is never replaced).
       if (s.mode === 'bubble' && s.bubbleKind === 'finished' && !s.done.includes(e.id)) return same({ ...s, done: [...s.done, e.id] });
       if (s.mode !== 'handle' || s.queue.length > 0 || s.done.includes(e.id)) return same(s);
