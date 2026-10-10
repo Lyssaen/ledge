@@ -322,4 +322,54 @@ describe('surface machine: decision failure and detail views', () => {
     const timedOut = run([{ type: 'bubbleElapsed' }], bubble()).s;
     expect(run([{ type: 'edgeEnter' }, { type: 'edgeLeave' }], timedOut).effects).not.toContain('startTimer:unfold');
   });
+
+  describe('finished bubble', () => {
+    const unfold = { type: 'unfoldElapsed' } as never;
+    it('a finish on the bare handle grows the bot, then unfolds a finished bubble with a 6 s clock', () => {
+      const r = run([{ type: 'finished', id: 'a' }]);
+      expect(r.s.mode).toBe('handle'); expect(r.s.done).toEqual(['a']); expect(r.s.unfoldDue).toBe(true); expect(r.effects).toContain('startTimer:unfold');
+      const r2 = run([unfold], r.s);
+      expect(r2.s.mode).toBe('bubble'); expect(r2.s.bubbleId).toBe('a'); expect(r2.s.bubbleKind).toBe('finished');
+      expect(r2.effects).toContain('startTimer:bubble');
+    });
+    it('the finished bubble folds after its clock and forgets the notice', () => {
+      const { s } = run([{ type: 'finished', id: 'a' }, unfold, { type: 'bubbleElapsed' }]);
+      expect(s.mode).toBe('handle'); expect(s.done).toEqual([]); expect(s.bubbleKind).toBe('ask');
+    });
+    it('a second finished notice chains after the first, oldest first, with a fresh clock', () => {
+      const up = run([{ type: 'finished', id: 'a' }, unfold, { type: 'finished', id: 'b' }]);
+      expect(up.s.mode).toBe('bubble'); expect(up.s.bubbleId).toBe('a'); expect(up.s.done).toEqual(['a', 'b']);
+      const next = run([{ type: 'bubbleElapsed' }], up.s);
+      expect(next.s.mode).toBe('bubble'); expect(next.s.bubbleId).toBe('b'); expect(next.s.done).toEqual(['b']); expect(next.effects).toContain('startTimer:bubble');
+      expect(run([{ type: 'bubbleElapsed' }], next.s).s.mode).toBe('handle');
+    });
+    it('the same id twice is one notice', () => {
+      expect(run([{ type: 'finished', id: 'a' }, { type: 'finished', id: 'a' }]).s.done).toEqual(['a']);
+    });
+    it('an ask replaces a finished bubble at once; a finish never replaces an ask bubble', () => {
+      const r = run([{ type: 'finished', id: 'a' }, unfold, { type: 'ask', id: 'b' }]);
+      expect(r.s.mode).toBe('bubble'); expect(r.s.bubbleId).toBe('b'); expect(r.s.bubbleKind).toBe('ask'); expect(r.s.done).toEqual([]);
+      const r2 = run([{ type: 'ask', id: 'b' }, unfold, { type: 'finished', id: 'a' }]);
+      expect(r2.s.bubbleId).toBe('b'); expect(r2.s.bubbleKind).toBe('ask'); expect(r2.s.done).toEqual([]);
+    });
+    it('a finish while an ask waits in the handle, or while the list or a session is open, only shows in the handle', () => {
+      expect(run([{ type: 'ask', id: 'b' }, { type: 'finished', id: 'a' }]).s.done).toEqual([]);
+      expect(run([{ type: 'edgeEnter' }, { type: 'dwellElapsed' }, { type: 'finished', id: 'a' }]).s.done).toEqual([]);
+      expect(run([{ type: 'botClick', id: 'b' }, { type: 'finished', id: 'a' }]).s.done).toEqual([]);
+    });
+    it('a finish during an edge dwell waits, and unfolds once the pointer leaves the edge', () => {
+      const r = run([{ type: 'edgeEnter' }, { type: 'finished', id: 'a' }]);
+      expect(r.s.done).toEqual(['a']); expect(r.s.unfoldDue).toBe(true); expect(r.effects.filter(e => e === 'startTimer:unfold')).toHaveLength(0);
+      expect(run([{ type: 'edgeLeave' }], r.s).effects).toContain('startTimer:unfold');
+    });
+    it('hover pauses the 6 s clock, OK (close) and Open leave it, DND drops it, removal advances it', () => {
+      const up = run([{ type: 'finished', id: 'a' }, unfold]).s;
+      expect(run([{ type: 'surfaceEnter' }], up).effects).toContain('pauseTimer:bubble');
+      expect(run([{ type: 'close' }], up).s).toMatchObject({ mode: 'handle', done: [] });
+      expect(run([{ type: 'bubbleClick' }], up).s).toMatchObject({ mode: 'session', selectedId: 'a', done: [] });
+      expect(run([{ type: 'dnd', on: true }], up).s).toMatchObject({ mode: 'handle', done: [] });
+      expect(run([{ type: 'removed', id: 'a', remaining: ['b'] }], up).s).toMatchObject({ mode: 'handle', done: [] });
+      expect(run([{ type: 'decidedInBubble' }], up).s.ack).toBeNull();
+    });
+  });
 });
