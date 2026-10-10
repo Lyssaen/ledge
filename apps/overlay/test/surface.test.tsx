@@ -113,7 +113,8 @@ describe('<Surface>', () => {
     expect(surface()).toHaveStyle({ width: '420px' });
     await act(async () => { mock.remove('a'); await sleep(50); });
     expect(surface()).toHaveStyle({ width: '380px' });
-    expect(screen.queryByText('Otto · harness-assistant')).not.toBeInTheDocument();
+    // It leaves like a Back: still drawn while it fades, but inert, so nothing in it can be reached or clicked.
+    expect(screen.getByText('Otto · harness-assistant').closest('[inert]')).not.toBeNull();
   });
 
   it('a draft survives a daemon disconnect and the session stays open', async () => {

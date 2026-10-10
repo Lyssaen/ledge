@@ -37,6 +37,8 @@ const SETTLE_MS = Math.max(MOTION.grow.ms, MOTION.shrink.delayMs + MOTION.shrink
 /** A drawn box in real px (its zoom included); 0 where layout gives nothing (jsdom). */
 const measure = (el: HTMLElement | null) => { const r = el?.getBoundingClientRect(); return { w: r?.width ?? 0, h: r?.height ?? 0 }; };
 const inside = (p: { x: number; y: number } | null, g: Layout) => p !== null && p.x >= 0 && p.x < g.w && p.y >= g.top && p.y < g.top + g.h;
+/** One shared empty preview, so a session without one keeps a stable value across renders. */
+const NO_LINES: string[] = [];
 
 
 export interface SurfaceProps {
@@ -150,11 +152,15 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), readOnly: s.source === 'hook_only', tip: isPending(s) ? `${t.handleLabel[botState(s)]} · ${s.pending?.text ?? ''}` : rowHint(s, t) })), [sessions, t]);
   const selected = st.selectedId ? byId.get(st.selectedId) ?? null : null;
   // The last open session stays mounted (inert) while the view slides out, so its content fades instead of vanishing
-  // and focus left on it is detectably stranded (see useFocusRestore). A removed session unmounts at once.
-  const [lastShownId, setLastShownId] = useState<string | null>(null);
-  if (st.selectedId && st.selectedId !== lastShownId) setLastShownId(st.selectedId);
-  const shownId = st.selectedId ?? lastShownId;
-  const shown = shownId ? byId.get(shownId) ?? null : null;
+  // and focus left on it is detectably stranded (see useFocusRestore). A session removed by the daemon leaves the same
+  // way, drawn from its last known state and preview, so the panel never flashes empty while the list fades in.
+  const [lastShown, setLastShown] = useState<{ session: Session; preview: string[] } | null>(null);
+  const shownId = st.selectedId ?? lastShown?.session.id ?? null;
+  const live = shownId ? byId.get(shownId) ?? null : null;
+  const livePreview = live ? previews.get(live.id) ?? NO_LINES : NO_LINES;
+  if (live && (live !== lastShown?.session || livePreview !== lastShown.preview)) setLastShown({ session: live, preview: livePreview });
+  const shown = live ?? (lastShown?.session.id === shownId ? lastShown.session : null);
+  const shownPreview = live ? livePreview : lastShown?.preview ?? NO_LINES;
   const bubbleSession = st.bubbleId ? byId.get(st.bubbleId) ?? null : null;
   const bubbleRef = useRef<HTMLDivElement>(null);
   const bubbleH = useMeasuredHeight(bubbleRef, st.mode === 'bubble', ps);
@@ -327,7 +333,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
             <HelpView contentRef={helpRef} visible={st.mode === 'help'} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'session' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'session' ? 'auto' : 'none', transform: `translateX(${st.mode === 'session' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            {shown && <SessionView contentRef={sessionContentRef} replyRef={sessionReplyRef} session={shown} preview={previews.get(shown.id) ?? []} visible={st.mode === 'session'} reading={st.reading} draft={drafts[shown.id] ?? ''}
+            {shown && <SessionView contentRef={sessionContentRef} replyRef={sessionReplyRef} session={shown} preview={shownPreview} visible={st.mode === 'session'} reading={st.reading} draft={drafts[shown.id] ?? ''}
               blocked={blockedFor(shown)} deciding={asks.inFlight.has(shown.id)} failure={asks.failures[shown.id]} frozen={unreachable} reducedMotion={reducedMotion}
               onDraft={t => { setDrafts(x => ({ ...x, [shown.id]: t })); dispatch({ type: 'typing', on: t.length > 0 }); }}
               onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onDecide={d => decide(shown.id, d)} onReply={t => reply(shown.id, t)}

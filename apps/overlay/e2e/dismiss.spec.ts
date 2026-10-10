@@ -58,3 +58,20 @@ test('from the session view of a read-only session, then back to the list once r
   await expectMode(page, 'list');
   await expect(layer(page, 'list').locator('[data-row-id="bix"]')).toHaveCount(0);
 });
+
+test('a session removed while open slides out with its content, never as an empty panel', async ({ page }) => {
+  const d = await fakeDaemon(page, sessions());
+  await ready(page, 3);
+  d.preview('bix', ['● Reading the speos-api routes']);
+  await openList(page);
+  await layer(page, 'list').getByRole('button', { name: 'speos-api, Bix, open' }).click();
+  await expectMode(page, 'session');
+  const view = layer(page, 'session');
+  await expect(view).toContainText('Reading the speos-api routes');
+  d.remove('bix');
+  await expectMode(page, 'list');
+  // The view leaves the way a Back does: still drawn (inert) while it fades, preview included.
+  await expect(view).toContainText('speos-api');
+  await expect(view).toContainText('Reading the speos-api routes');
+  await expect(view).toHaveAttribute('inert', '');
+});
