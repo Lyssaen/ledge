@@ -1,3 +1,4 @@
+import { DEFAULT_SOUNDS } from '../src/sounds/preferences';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import { loadMonitor, saveMonitor, resolveMonitor, type MonitorInfo } from '../src/monitor';
@@ -6,7 +7,7 @@ import { LangProvider } from '../src/i18n/lang';
 
 const main: MonitorInfo = { id: '\\\\.\\DISPLAY1', name: '\\\\.\\DISPLAY1', width: 1920, height: 1080, workH: 1032, primary: true };
 const side: MonitorInfo = { id: '\\\\.\\DISPLAY2', name: '\\\\.\\DISPLAY2', width: 2560, height: 1440, workH: 1400, primary: false };
-const base = { visible: true, theme: 'dark' as const, dnd: false, reduced: false, osReduced: false, onToggleDnd: () => {}, onReduced: () => {}, onBack: () => {}, onClose: () => {} };
+const base = { visible: true, theme: 'dark' as const, dnd: false, reduced: false, osReduced: false, onToggleDnd: () => {}, onReduced: () => {}, onBack: () => {}, onClose: () => {}, finished: 'both' as const, sounds: DEFAULT_SOUNDS, onFinished: () => {}, onSounds: () => {}, onTestSound: () => {} };
 
 describe('the Screen setting', () => {
   beforeEach(() => localStorage.clear());

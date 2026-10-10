@@ -197,8 +197,11 @@ describe('<Surface>', () => {
       await waitFor(() => expect(p.played).toEqual([['approval', 1]]));
       await act(async () => { mock.upsert(fakeSession('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } })); await sleep(50); });
       expect(p.played).toHaveLength(1);                                                 // rate limited
+      vi.advanceTimersByTime(1500);                                                      // so that only the tick is recent below
       fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
       await waitFor(() => expect(p.played.at(-1)).toEqual(['accept', 1]));               // the user's tick always plays
+      await act(async () => { mock.upsert(fakeSession('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'ls', source: 'hook' } })); await sleep(50); vi.advanceTimersByTime(300); });
+      await waitFor(() => expect(p.played.at(-1)).toEqual(['approval', 1]));             // a tick never silences the next ask
       await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); vi.advanceTimersByTime(2000); });
       await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); });
       await waitFor(() => expect(p.played.at(-1)).toEqual(['finished', 1]));

@@ -17,6 +17,8 @@ Hovering a mascot tells you who it is and what it waits for.
 
 <img src="screens/handle-tooltip-dark.png" alt="Tooltip: Otto, waits for your approval, pnpm test --filter overlay, click to open" width="504">
 
+**The handle lives.** A working bot hops every 3.6 to 4.4 s, 2 px high in the handle, so you can tell a bot that works from one that waits without opening anything. Under reduced motion the antenna light pulses instead.
+
 ## The bubble
 
 When an agent asks something, the bubble unfolds beside the handle for a few seconds with the request and the two answers. "+1 autre" means another ask is queued behind it. Nothing steals your focus: you keep typing wherever you were, and the bubble folds back on its own.
@@ -25,6 +27,8 @@ When an agent asks something, the bubble unfolds beside the handle for a few sec
   <img src="screens/bubble-dark.png" alt="Bubble: Otto waits for your approval, pnpm test --filter overlay, Refuser and Autoriser" width="364">
   <img src="screens/bubble-light.png" alt="The same bubble in light theme" width="364">
 </p>
+
+**Finished.** When a bot ends its turn, it grows in the handle and a bubble says "Otto finished · 2m 40s of work · harness-assistant" for 6 s, with OK and Open. A request always comes before a notice. Settings › "When a bot finishes" chooses bubble, sound, both or the handle only.
 
 ## The list
 
@@ -76,6 +80,8 @@ A session started with plain `claude`, without the launcher, is still visible th
 Language, the screen the handle sits on, the size of the handle and of the windows (auto or 100 to 200 percent), do-not-disturb, reduced motion, and the theme (`Ctrl+Alt+T`).
 
 <img src="screens/settings-dark.png" alt="Settings: language, screen, handle size, window size, do not disturb, reduced motion, theme" width="408">
+
+**Sounds.** Eight short synthesised cues, one family: asks rise or knock, results fall, your own decisions tick. Settings › Sounds has the switch, the volume with a Test button, one checkbox per category, and "Only when the terminal is behind", which keeps Ledge quiet while Windows Terminal is the front window. Do not disturb silences everything.
 
 ## Refreshing these captures
 

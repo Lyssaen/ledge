@@ -1,8 +1,10 @@
+import { DEFAULT_SOUNDS } from '../src/sounds/preferences';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { autoScale, loadScale, migrateLegacyScale, resolveScale, saveScale } from '../src/scale';
 import { LangProvider } from '../src/i18n/lang';
 import { SettingsView } from '../src/surface/SettingsView';
+const soundProps = { finished: 'both' as const, sounds: DEFAULT_SOUNDS, onFinished: () => {}, onSounds: () => {}, onTestSound: () => {} };
 import { App } from '../src/App';
 
 describe('UI scales', () => {
@@ -49,7 +51,7 @@ describe('UI scales', () => {
 
   it('Settings shows the two sizes as radio groups; Auto shows the value it resolves to; each changes on its own', () => {
     const onScale = vi.fn();
-    render(<SettingsView visible theme="dark" dnd={false} reduced={false} osReduced={false} onToggleDnd={() => {}} onReduced={() => {}} onBack={() => {}} onClose={() => {}} scales={{ handle: 'auto', panel: 'auto' }} autoScales={{ handle: 2, panel: 1 }} onScale={onScale} />);
+    render(<SettingsView visible theme="dark" dnd={false} reduced={false} osReduced={false} onToggleDnd={() => {}} onReduced={() => {}} onBack={() => {}} onClose={() => {}} {...soundProps} scales={{ handle: 'auto', panel: 'auto' }} autoScales={{ handle: 2, panel: 1 }} onScale={onScale} />);
     const handle = screen.getByRole('group', { name: 'Handle size' }); const win = screen.getByRole('group', { name: 'Window size' });
     expect(within(handle).getByRole('radio', { name: 'Auto (200%)' })).toBeChecked();
     expect(within(win).getByRole('radio', { name: 'Auto (100%)' })).toBeChecked();
@@ -61,7 +63,7 @@ describe('UI scales', () => {
   });
 
   it('the French labels', () => {
-    render(<LangProvider lang="fr"><SettingsView visible theme="dark" dnd={false} reduced={false} osReduced={false} onToggleDnd={() => {}} onReduced={() => {}} onBack={() => {}} onClose={() => {}} scales={{ handle: 'auto', panel: 2 }} autoScales={{ handle: 2, panel: 1 }} onScale={() => {}} /></LangProvider>);
+    render(<LangProvider lang="fr"><SettingsView visible theme="dark" dnd={false} reduced={false} osReduced={false} onToggleDnd={() => {}} onReduced={() => {}} onBack={() => {}} onClose={() => {}} {...soundProps} scales={{ handle: 'auto', panel: 2 }} autoScales={{ handle: 2, panel: 1 }} onScale={() => {}} /></LangProvider>);
     expect(within(screen.getByRole('group', { name: 'Taille de la poignée' })).getByRole('radio', { name: 'Auto (200%)' })).toBeChecked();
     expect(within(screen.getByRole('group', { name: 'Taille des fenêtres' })).getByRole('radio', { name: '200%' })).toBeChecked();
   });

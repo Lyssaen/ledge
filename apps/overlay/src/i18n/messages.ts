@@ -1,3 +1,4 @@
+import type { SoundCategory } from '../sounds/preferences';
 import type { BotState } from '../bots/poseFor';
 
 /**
@@ -91,6 +92,14 @@ const fr = {
     dnd: 'Ne pas déranger', dndHint: 'Les demandes restent dans la poignée.',
     reduced: 'Mouvements réduits', reducedHint: 'Les états restent lisibles sans animation.',
     osReduced: 'Votre système demande des mouvements réduits ; Ledge continue de le respecter.',
+    finished: 'Quand un bot a terminé', finishedHint: 'Une bulle de 6 s, un son, les deux, ou seulement la poignée.',
+    finishedBoth: 'Bulle et son', finishedBubble: 'Bulle', finishedSound: 'Son', finishedNone: 'Poignée seule',
+    sounds: 'Sons', soundsHint: 'Des tons courts et doux pour ce qui vous attend. Jamais en Ne pas déranger.',
+    volume: 'Volume', volumeHint: 'Test joue le signal de question.', volumeQuiet: 'Bas', volumeNormal: 'Normal', volumeLoud: 'Fort', test: 'Test',
+    playWhen: 'Jouer un son quand',
+    category: { requests: 'Un bot a besoin de vous · accord, question', finished: 'Un bot a terminé sa tâche', errors: 'Quelque chose échoue', decisions: 'Vous acceptez ou refusez', team: 'Un bot arrive ou part' } as Record<SoundCategory, string>,
+    behind: 'Seulement quand le terminal est derrière', behindHint: 'Si l’onglet Windows Terminal de ce bot est devant, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
+    soundsNote: 'Un seul son à la fois : une rafale de demandes ne joue qu’une fois, la poignée montre le reste. Ouvrir, fermer et survoler sont silencieux.',
     themeLight: 'Thème clair · Galet', themeDark: 'Thème sombre · Signal', themeHint: 'Changer le thème et la matière des mascottes'
   },
   help: {
@@ -191,6 +200,14 @@ const en: Messages = {
     dnd: 'Do not disturb', dndHint: 'New asks stay in the handle.',
     reduced: 'Reduced motion', reducedHint: 'States stay readable without animation.',
     osReduced: 'Your system asks for reduced motion; Ledge keeps respecting it.',
+    finished: 'When a bot finishes', finishedHint: 'A 6 s bubble, a sound, both, or the handle only.',
+    finishedBoth: 'Bubble and sound', finishedBubble: 'Bubble', finishedSound: 'Sound', finishedNone: 'Handle only',
+    sounds: 'Sounds', soundsHint: 'Short, soft tones for what needs you. Never while Do not disturb is on.',
+    volume: 'Volume', volumeHint: 'Test plays the question cue.', volumeQuiet: 'Quiet', volumeNormal: 'Normal', volumeLoud: 'Loud', test: 'Test',
+    playWhen: 'Play a sound when',
+    category: { requests: 'A bot needs you · approval, question', finished: 'A bot finishes its task', errors: 'Something fails', decisions: 'You approve or deny', team: 'A bot joins or leaves' } as Record<SoundCategory, string>,
+    behind: 'Only when the terminal is behind', behindHint: 'If that bot’s Windows Terminal tab is in front, you are already looking: no sound, the bubble still shows.',
+    soundsNote: 'One sound at a time: a burst of asks plays once, the handle shows the rest. Opening, closing and hovering are silent.',
     themeLight: 'Light theme · Pebble', themeDark: 'Dark theme · Signal', themeHint: 'Switch the theme and the mascot material'
   },
   help: {

@@ -4,12 +4,15 @@ import { DetailHeader } from './DetailHeader';
 import { UI_SCALES, percent, type ScaleTarget, type UiScale } from '../scale';
 import { useI18n } from '../i18n/lang';
 import { LANGS, type Lang } from '../i18n/messages';
+import { Button } from '../ui/Button';
+import { CATEGORIES, FINISHED_VALUES, VOLUMES, type FinishedNotify, type SoundPrefs, type SoundPatch } from '../sounds/preferences';
 import { resolveMonitor, type MonitorInfo } from '../monitor';
 
 export interface SettingsViewProps {
   visible: boolean; theme: 'dark' | 'light'; dnd: boolean;
   /** The app's own reduced-motion setting, and whether the OS already asks for it (which always wins). */
   reduced: boolean; osReduced: boolean;
+  finished: FinishedNotify; onFinished: (v: FinishedNotify) => void; sounds: SoundPrefs; onSounds: (patch: SoundPatch) => void; onTestSound: () => void;
   onToggleTheme?: () => void; onToggleDnd: () => void; onReduced: (on: boolean) => void; onBack: () => void; onClose: () => void;
   /** The handle and window size settings, the scales Auto resolves to on this screen, and how to change them (live). */
   scales?: Record<ScaleTarget, UiScale>; autoScales?: Record<ScaleTarget, number>; onScale?: (target: ScaleTarget, s: UiScale) => void;
@@ -29,7 +32,7 @@ function Switch({ label, hint, checked, onChange }: { label: string; hint: strin
         <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 600 }}>{label}</span>
         <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{hint}</span>
       </span>
-      <input type="checkbox" role="switch" checked={checked} onChange={e => onChange(e.target.checked)} style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }} />
+      <input type="checkbox" role="switch" aria-label={label} checked={checked} onChange={e => onChange(e.target.checked)} style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }} />
       <span className="dnd-track" aria-hidden="true" style={{ flexShrink: 0, display: 'inline-block', width: 32, height: 18, borderRadius: 9999, background: checked ? 'var(--sidebar-primary)' : 'var(--muted)', border: '1px solid var(--input)', boxSizing: 'border-box', position: 'relative', transition: transition([['background-color', 'hover']]) }}>
         <span style={{ position: 'absolute', left: checked ? 16 : 2, top: 2, width: 12, height: 12, borderRadius: 9999, background: checked ? 'var(--primary-foreground)' : 'var(--muted-foreground)', transition: transition([['left', 'hover']]) }} />
       </span>
@@ -97,6 +100,31 @@ export function SettingsView(p: SettingsViewProps) {
           <Row><Switch label={t.settings.dnd} hint={t.settings.dndHint} checked={p.dnd} onChange={on => { if (on !== p.dnd) p.onToggleDnd(); }} /></Row>
           <Row><Switch label={t.settings.reduced} hint={t.settings.reducedHint} checked={p.reduced} onChange={p.onReduced} /></Row>
           {p.osReduced && !p.reduced && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', padding: '8px 0' }}>{t.settings.osReduced}</span>}
+          <Row><Segmented<FinishedNotify> name="ledge-finished" label={t.settings.finished} hint={t.settings.finishedHint} value={p.finished} onChange={p.onFinished}
+            options={FINISHED_VALUES.map(v => ({ value: v, label: { both: t.settings.finishedBoth, bubble: t.settings.finishedBubble, sound: t.settings.finishedSound, none: t.settings.finishedNone }[v], wide: v === 'both' }))} /></Row>
+          <Row><Switch label={t.settings.sounds} hint={t.settings.soundsHint} checked={p.sounds.enabled} onChange={on => p.onSounds({ enabled: on })} /></Row>
+          <div data-testid="sound-sections" style={{ opacity: p.sounds.enabled ? 1 : 0.5, transition: transition([['opacity', 'hover']]) }}>
+            <Row>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                <div style={{ flexGrow: 1 }}><Segmented name="ledge-volume" label={t.settings.volume} hint={t.settings.volumeHint} value={p.sounds.volume} onChange={v => p.onSounds({ volume: v })}
+                  options={VOLUMES.map(v => ({ value: v, label: { quiet: t.settings.volumeQuiet, normal: t.settings.volumeNormal, loud: t.settings.volumeLoud }[v] }))} /></div>
+                <Button variant="outline" size="sm" onClick={p.onTestSound}>{t.settings.test}</Button>
+              </div>
+            </Row>
+            <Row>
+              <fieldset style={{ margin: 0, padding: 0, border: 'none' }}>
+                <legend style={{ padding: '12px 0 4px', fontSize: 14, lineHeight: '18px', fontWeight: 600 }}>{t.settings.playWhen}</legend>
+                {CATEGORIES.map(c => (
+                  <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 10, height: 32, fontSize: 13, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={p.sounds.categories[c]} onChange={e => p.onSounds({ categories: { [c]: e.target.checked } })} style={{ margin: 0, width: 16, height: 16, accentColor: 'var(--sidebar-primary)' }} />
+                    {t.settings.category[c]}
+                  </label>
+                ))}
+              </fieldset>
+            </Row>
+            <Row><Switch label={t.settings.behind} hint={t.settings.behindHint} checked={p.sounds.onlyWhenTerminalBehind} onChange={on => p.onSounds({ onlyWhenTerminalBehind: on })} /></Row>
+            <span style={{ display: 'block', fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', padding: '8px 0' }}>{t.settings.soundsNote}</span>
+          </div>
           <button type="button" onClick={p.onToggleTheme} disabled={!p.onToggleTheme} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', background: 'transparent', border: 'none', color: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
             <span style={{ display: 'flex', flexDirection: 'column', gap: 3, flexGrow: 1 }}>
               <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 600 }}>{light ? t.settings.themeLight : t.settings.themeDark}</span>

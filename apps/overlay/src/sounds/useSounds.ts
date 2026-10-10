@@ -5,7 +5,7 @@ import { foregroundIsTerminal } from '../tauri/bridge';
 import { decideSound } from './decide';
 import type { Cue } from './cues';
 import type { SoundPlayer } from './player';
-import { useSoundPrefs } from './preferences';
+import { VOLUME_GAIN, useSoundPrefs } from './preferences';
 
 const cueOf = (c: SessionChange): Cue | null => {
   switch (c.kind) {
@@ -37,7 +37,7 @@ export function useSounds(o: { player: SoundPlayer; dnd: boolean; status: Daemon
       const now = Date.now();
       const d = decideSound({ cue, sounds: l.sounds, finished: l.finished, dnd: l.dnd, terminalInFront: front, lastPlayedAt: lastPlayedAt.current, connectedAt: connectedAt.current, now });
       if (!d.play) return;
-      lastPlayedAt.current = now;
+      if (cue !== 'accept' && cue !== 'deny') lastPlayedAt.current = now;   // a tick of yours never silences the next ask
       l.player.play(cue, d.gain);
     });
   };
@@ -45,6 +45,6 @@ export function useSounds(o: { player: SoundPlayer; dnd: boolean; status: Daemon
     onChange: (c: SessionChange) => { const cue = cueOf(c); if (cue) play(cue); },
     user: (cue: 'accept' | 'deny') => play(cue),
     /** The settings' Test button: the question cue, through the volume only (no DND, category or terminal cut). */
-    test: () => { const l = live.current; l.player.play('question', decideSound({ cue: 'question', sounds: { ...l.sounds, enabled: true, onlyWhenTerminalBehind: false, categories: { ...l.sounds.categories, requests: true } }, finished: 'both', dnd: false, terminalInFront: false, lastPlayedAt: null, connectedAt: null, now: 0 }).play ? ({ quiet: 0.5, normal: 1, loud: 1.8 }[l.sounds.volume]) : 1); }
+    test: () => { const l = live.current; l.player.play('question', VOLUME_GAIN[l.sounds.volume]); }
   };
 }
