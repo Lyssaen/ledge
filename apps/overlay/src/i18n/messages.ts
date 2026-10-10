@@ -98,7 +98,7 @@ const fr = {
     volume: 'Volume', volumeHint: 'Test joue le signal de question.', volumeQuiet: 'Bas', volumeNormal: 'Normal', volumeLoud: 'Fort', test: 'Test',
     playWhen: 'Jouer un son quand',
     category: { requests: 'Un bot a besoin de vous · accord, question', finished: 'Un bot a terminé sa tâche', errors: 'Quelque chose échoue', decisions: 'Vous acceptez ou refusez', team: 'Un bot arrive ou part' } as Record<SoundCategory, string>,
-    behind: 'Seulement quand le terminal est derrière', behindHint: 'Si l’onglet Windows Terminal de ce bot est devant, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
+    behind: 'Seulement quand le terminal est derrière', behindHint: 'Si Windows Terminal est la fenêtre au premier plan, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
     soundsNote: 'Un seul son à la fois : une rafale de demandes ne joue qu’une fois, la poignée montre le reste. Ouvrir, fermer et survoler sont silencieux.',
     themeLight: 'Thème clair · Galet', themeDark: 'Thème sombre · Signal', themeHint: 'Changer le thème et la matière des mascottes'
   },
@@ -206,7 +206,7 @@ const en: Messages = {
     volume: 'Volume', volumeHint: 'Test plays the question cue.', volumeQuiet: 'Quiet', volumeNormal: 'Normal', volumeLoud: 'Loud', test: 'Test',
     playWhen: 'Play a sound when',
     category: { requests: 'A bot needs you · approval, question', finished: 'A bot finishes its task', errors: 'Something fails', decisions: 'You approve or deny', team: 'A bot joins or leaves' } as Record<SoundCategory, string>,
-    behind: 'Only when the terminal is behind', behindHint: 'If that bot’s Windows Terminal tab is in front, you are already looking: no sound, the bubble still shows.',
+    behind: 'Only when the terminal is behind', behindHint: 'When Windows Terminal is the front window you are already looking: no sound, the bubble still shows.',
     soundsNote: 'One sound at a time: a burst of asks plays once, the handle shows the rest. Opening, closing and hovering are silent.',
     themeLight: 'Light theme · Pebble', themeDark: 'Dark theme · Signal', themeHint: 'Switch the theme and the mascot material'
   },
