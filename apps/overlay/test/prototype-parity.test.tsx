@@ -8,6 +8,7 @@ import { Surface } from '../src/surface/Surface';
 import { Bot } from '../src/bots/Bot';
 import { useMotionPreferences } from '../src/motionPreferences';
 import { useMeasuredHeight } from '../src/surface/useMeasuredHeight';
+import { SURFACE_CHROME_Y } from '../src/surface/geometry';
 import { Badge, BADGE } from '../src/ui/Badge';
 import type { BotState } from '../src/bots/poseFor';
 import { fakeSession } from './mockDaemon';
@@ -226,7 +227,9 @@ describe('prototype parity', () => {
     const ro = FakeResizeObserver.all.find(o => o.target === layer('bubble') && !o.disconnected)!;
     expect(ro).toBeDefined();
     act(() => ro.report(172));
-    expect(surface()).toHaveStyle({ width: '336px', height: '172px' });
+    // The surface is border-box with 1 px top and bottom borders: it holds the whole bubble, timer bar included.
+    expect(surface()).toHaveStyle({ width: '336px', height: `${172 + SURFACE_CHROME_Y}px` });
+    expect(surface().style.border).toContain(`${SURFACE_CHROME_Y / 2}px solid`);
     expect(layer('bubble')).toHaveStyle({ width: '336px' });
     expect(within(layer('bubble')).getByText(new RegExp(long.slice(0, 20)))).not.toHaveStyle({ whiteSpace: 'nowrap' });
     expect(within(layer('bubble')).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
@@ -389,6 +392,51 @@ describe('carried items', () => {
     snapshot([otto({ state: 'working' })]);
     expect(mode()).toBe('handle');
     expect(rec.sent).toHaveLength(1);
+  });
+
+  it('a retry that fails again (InjectFailed with no error reply, already in error) unlocks again', () => {
+    const cmd = asks('rm -rf dist');
+    snapshot([otto(cmd)]);
+    render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
+    tick(540);
+    const bubble = layer('bubble');
+    const approve = () => within(bubble).getByRole('button', { name: 'Approve' });
+    fireEvent.click(approve());
+    update(otto({ ...cmd, state: 'error', lastError: 'the terminal did not take it', lastActivityAt: '2026-10-09T18:05:00.000Z' }));
+    expect(bubble).toHaveAttribute('data-ack', 'failed');
+    expect(approve()).toBeEnabled();
+    fireEvent.click(approve());
+    expect(bubble).toHaveAttribute('data-ack', 'pending');
+    expect(approve()).toBeDisabled();
+    update(otto({ ...cmd, state: 'error', lastError: 'the terminal did not take it', lastActivityAt: '2026-10-09T18:06:00.000Z' }));
+    expect(bubble).toHaveAttribute('data-ack', 'failed');
+    expect(approve()).toBeEnabled();
+    fireEvent.click(approve());
+    expect(rec.sent.filter(m => m.type === 'session.decide')).toHaveLength(3);
+  });
+
+  it('a failure text never carries over to the next request of the same session', () => {
+    snapshot([otto(asks('rm -rf dist'))]);
+    render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
+    tick(540);
+    fireEvent.click(within(layer('bubble')).getByRole('button', { name: 'Approve' }));
+    act(() => { daemonStore.apply({ type: 'error', id: 'a', message: 'nothing to decide' }); });
+    expect(within(layer('bubble')).getByText(/nothing to decide/)).toBeInTheDocument();
+    // Resolved, then a new request: no stale failure in the bubble or the session view.
+    update(otto({ state: 'working' }));
+    update(otto(asks('git push --force')));
+    tick(540);
+    expect(mode()).toBe('bubble');
+    expect(within(layer('bubble')).queryByText(/nothing to decide/)).toBeNull();
+    expect(layer('bubble')).toHaveAttribute('data-ack', 'none');
+    fireEvent.click(screen.getByRole('link', { name: /Otto needs your approval/ }));
+    expect(within(layer('session')).queryByText(/nothing to decide/)).toBeNull();
+    // A request replaced in place (no resolution in between) also drops the old failure.
+    fireEvent.click(within(layer('session')).getByRole('button', { name: 'Approve' }));
+    act(() => { daemonStore.apply({ type: 'error', id: 'a', message: 'nothing to decide' }); });
+    expect(within(layer('session')).getByText(/nothing to decide/)).toBeInTheDocument();
+    update(otto(asks('npm publish')));
+    expect(within(layer('session')).queryByText(/nothing to decide/)).toBeNull();
   });
 
   it('every rendered bot freezes while the daemon is unreachable', () => {

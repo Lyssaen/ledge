@@ -18,11 +18,14 @@ const LOST = 'The connection dropped before the terminal answered';
 export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; lastError: DaemonError | null; dnd: boolean; dispatch: (e: SurfaceEvent) => void }) {
   const { sessions, status, lastError, dnd, dispatch } = o;
   const prev = useRef<Map<string, Session>>(new Map());
-  const lock = useRef<Set<string>>(new Set());
+  /** Decisions in flight, with the session's `lastActivityAt` when each was sent (the failure baseline). */
+  const lock = useRef<Map<string, string>>(new Map());
   const [inFlight, setInFlight] = useState<ReadonlySet<string>>(() => new Set());
   const [failures, setFailures] = useState<Record<string, string>>({});
-  const sync = () => setInFlight(new Set(lock.current));
+  const sync = () => setInFlight(new Set(lock.current.keys()));
   const release = (id: string) => { if (lock.current.delete(id)) sync(); };
+  /** The request was resolved, replaced or removed: its failure text no longer applies. */
+  const forget = (id: string) => { release(id); setFailures(f => { if (!(id in f)) return f; const { [id]: _gone, ...rest } = f; return rest; }); };
   const fail = (id: string, why: string) => {
     release(id);
     setFailures(f => (f[id] === why ? f : { ...f, [id]: why }));
@@ -33,14 +36,17 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
     const before = prev.current;
     const now = new Map(sessions.map(s => [s.id, s]));
     const ids = [...now.keys()];
-    for (const id of before.keys()) if (!now.has(id)) { release(id); dispatch({ type: 'removed', id, remaining: ids }); }
+    for (const id of before.keys()) if (!now.has(id)) { forget(id); dispatch({ type: 'removed', id, remaining: ids }); }
     for (const s of sessions) {
       const was = before.get(s.id);
       const wasTracked = !!was && tracked(was);
       if (isPending(s) && !wasTracked && !dnd) dispatch({ type: 'ask', id: s.id });
-      else if (wasTracked && tracked(s) && s.state === 'error' && was!.state !== 'error') fail(s.id, s.lastError ?? 'The terminal did not take it');
-      else if (wasTracked && !tracked(s)) { release(s.id); dispatch({ type: 'askCleared', id: s.id }); }
-      else if (wasTracked && !sameRequest(was!.pending, s.pending)) release(s.id); // a new request replaced the old one
+      else if (wasTracked && !tracked(s)) { forget(s.id); dispatch({ type: 'askCleared', id: s.id }); }
+      else if (wasTracked && !sameRequest(was!.pending, s.pending)) forget(s.id); // a new request replaced the old one
+      // Into `error` with the request kept: the injection failed. A retry from `error` fails again when the daemon
+      // reports newer activity than when the decision was sent (it applies InjectFailed without an `error` reply).
+      else if (wasTracked && tracked(s) && s.state === 'error' && (was!.state !== 'error' || (lock.current.has(s.id) && s.lastActivityAt > lock.current.get(s.id)!)))
+        fail(s.id, s.lastError ?? 'The terminal did not take it');
     }
     prev.current = now;
   }, [sessions, dnd, dispatch]); // eslint-disable-line react-hooks/exhaustive-deps -- release/fail only touch refs and setters
@@ -53,13 +59,13 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
   // A dropped connection leaves every decision in flight unresolved: unlock them; the next snapshot tells what happened.
   useEffect(() => {
     if (status !== 'unreachable') return;
-    for (const id of [...lock.current]) fail(id, LOST);
+    for (const id of [...lock.current.keys()]) fail(id, LOST);
   }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Takes the lock for a decision on `id`; false when one is already in flight (a double click sends one command). */
   const begin = useCallback((id: string): boolean => {
     if (lock.current.has(id)) return false;
-    lock.current.add(id); sync();
+    lock.current.set(id, prev.current.get(id)?.lastActivityAt ?? ''); sync();
     setFailures(f => { if (!(id in f)) return f; const { [id]: _gone, ...rest } = f; return rest; });
     return true;
   }, []);

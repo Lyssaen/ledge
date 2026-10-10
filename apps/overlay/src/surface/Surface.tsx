@@ -4,7 +4,7 @@ import type { Session } from '@ledge/protocol';
 import { useDaemon } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
 import { botState, poseFor } from '../bots/poseFor';
-import { layout, slotSizes, SIZES, type Layout } from './geometry';
+import { layout, slotSizes, SIZES, SURFACE_BORDER, SURFACE_CHROME_Y, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
 import { Handle, type HandleBot } from './Handle';
@@ -133,7 +133,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const bubbleSession = st.bubbleId ? byId.get(st.bubbleId) ?? null : null;
   const bubbleRef = useRef<HTMLDivElement>(null);
   const bubbleH = useMeasuredHeight(bubbleRef, st.mode === 'bubble');
-  const geo = layout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH || undefined, sessionH: selected ? measureSessionH(selected, st.reading) : 480, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 });
+  const geo = layout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH: selected ? measureSessionH(selected, st.reading) : 480, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 });
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -252,7 +252,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
         }} onBlur={onBlur}
         // A mouse-opened panel has no scoped shortcuts, but Escape still steps back (detail view to list, then closed).
         onKeyDown={e => { if (!kb && panel && e.key === 'Escape') { e.preventDefault(); dispatch({ type: detail ? 'back' : 'close' }); } }}
-        style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'hidden', background: 'var(--sidebar)', color: 'var(--sidebar-foreground)', border: '1px solid var(--sidebar-border)', borderLeft: 'none', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
+        style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'hidden', background: 'var(--sidebar)', color: 'var(--sidebar-foreground)', border: `${SURFACE_BORDER}px solid var(--sidebar-border)`, borderLeft: 'none', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
           transition: ['top', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out` }}>
         <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         <Bubble ref={bubbleRef} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
