@@ -52,6 +52,8 @@ function QuestionCard({ pending, onReply, disabled, t }: { pending: Pending; onR
 
 export interface SessionViewProps {
   session: Session; preview: string[]; visible: boolean; reading: boolean; draft: string;
+  /** When the layer's fade-in starts, in ms (see `enterDelay` in motion). */
+  enterDelay?: number;
   onDraft: (t: string) => void; onBack: () => void; onClose: () => void; onDecide: (d: 'accept' | 'deny') => void; onReply: (t: string) => void;
   onInterrupt: () => void; onKill: () => void; onFocus: () => void; onToggleReading: () => void;
   /** Removes a finished or read-only session from the list (shown only for those); `dismissOff` while offline. */
@@ -69,7 +71,7 @@ export interface SessionViewProps {
 
 export function SessionView(p: SessionViewProps) {
   const { t } = useI18n();
-  const { session: s, visible } = p;
+  const { session: s, visible, enterDelay = 120 } = p;
   const blocked = p.blocked ?? null;
   const readOnly = s.source === 'hook_only';
   const decideOff = blocked !== null || !!p.deciding;
@@ -102,7 +104,7 @@ export function SessionView(p: SessionViewProps) {
     : s.state === 'exited' ? t.session.title.exited : s.state === 'error' ? t.session.title.error : s.state === 'idle' ? t.session.title.idle : s.state === 'starting' ? t.session.title.starting : t.session.title.working;
   const failureText = (s.state === 'error' || p.failure) && pending ? t.session.failed(p.failure ?? s.lastError ?? t.notTaken) : null;
   return (
-    <div data-layer="session" inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? 120 : 0]]) }}>
+    <div data-layer="session" data-delay={enterDelay} inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay : 0]]) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: SESSION_HEADER_H, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px 0 6px', borderBottom: rule }}>
         <Button variant="ghost" size="icon" aria-label={t.detail.back} title={t.detail.back} data-initial-focus onClick={p.onBack} style={{ width: 30, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.chevronLeft} /></Button>
         <Bot seed={s.id} readOnly={readOnly} tool={s.tool} state={st} pose={poseFor(s.id, s.state)} size={32} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} askKey={pending?.text} />

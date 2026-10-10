@@ -20,7 +20,7 @@ import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { SessionList, rowHint, EXPANDED_ROW_H } from './SessionList';
 import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
 import { useI18n, type Lang } from '../i18n/lang';
-import { transition, MOTION, ms } from '../motion';
+import { transition, MOTION, ms, enterDelay } from '../motion';
 import { focusTerminal, onShortcut, onEdge, setHotZones, focusOverlay, releaseFocus, isTauri } from '../tauri/bridge';
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { frameOf, type Box } from './frame';
@@ -289,6 +289,8 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   });
   const motion = growing ? MOTION.grow : MOTION.shrink;
   const delay = growing ? 0 : MOTION.shrink.delayMs;
+  // The entering view follows the shape once it has nearly settled: later on a shrink (back from a session) than on a grow.
+  const enter = enterDelay(growing);
 
   const tauri = isTauri();
   const content = (
@@ -320,20 +322,20 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
         </div>
         <div data-panel style={{ position: 'absolute', inset: 0, zoom: ps, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <SessionList sessions={sessions} visible={st.mode === 'list'} numbered={kb} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
+            <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} numbered={kb} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               onDismiss={id => { if (!unreachable) send({ type: 'session.dismiss', id }); }} offline={unreachable}
               onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
           </div>
           <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <SettingsView contentRef={settingsRef} onLang={onLang} visible={st.mode === 'settings'} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} scales={scales} autoScales={autoScales} onScale={onScale}
+            <SettingsView contentRef={settingsRef} onLang={onLang} visible={st.mode === 'settings'} enterDelay={enter} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} scales={scales} autoScales={autoScales} onScale={onScale}
               monitors={monitors} monitor={monitor} onMonitor={onMonitor}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'help' ? 'auto' : 'none', transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <HelpView contentRef={helpRef} visible={st.mode === 'help'} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
+            <HelpView contentRef={helpRef} visible={st.mode === 'help'} enterDelay={enter} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'session' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'session' ? 'auto' : 'none', transform: `translateX(${st.mode === 'session' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            {shown && <SessionView contentRef={sessionContentRef} replyRef={sessionReplyRef} session={shown} preview={shownPreview} visible={st.mode === 'session'} reading={st.reading} draft={drafts[shown.id] ?? ''}
+            {shown && <SessionView contentRef={sessionContentRef} replyRef={sessionReplyRef} session={shown} preview={shownPreview} visible={st.mode === 'session'} enterDelay={enter} reading={st.reading} draft={drafts[shown.id] ?? ''}
               blocked={blockedFor(shown)} deciding={asks.inFlight.has(shown.id)} failure={asks.failures[shown.id]} frozen={unreachable} reducedMotion={reducedMotion}
               onDraft={t => { setDrafts(x => ({ ...x, [shown.id]: t })); dispatch({ type: 'typing', on: t.length > 0 }); }}
               onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onDecide={d => decide(shown.id, d)} onReply={t => reply(shown.id, t)}

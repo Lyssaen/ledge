@@ -29,6 +29,8 @@ export const EXPANDED_ROW_H = 100;
 
 export interface ListProps {
   sessions: Session[]; visible: boolean; numbered: boolean; selectedId: string | null; focusedId?: string | null; dnd: boolean;
+  /** When the layer's fade-in starts, in ms (see `enterDelay` in motion); the rows cascade from there. */
+  enterDelay?: number;
   onToggleDnd: () => void; onOpen: (id: string) => void; onDecide?: (id: string, d: 'accept' | 'deny') => void; onClose: () => void;
   onSettings?: () => void; onHelp?: () => void; onHoverRow?: (id: string | null) => void;
   /** Whether a session's decisions may be sent now (reachable daemon, not read-only, nothing in flight). */
@@ -38,12 +40,12 @@ export interface ListProps {
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number;
 }
 
-export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now() }: ListProps) {
+export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
   const { t } = useI18n();
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
   return (
-    <div data-layer="list" inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? 120 : 0]]) }}>
+    <div data-layer="list" data-delay={enterDelay} inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay : 0]]) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: SIZES.headerH, flexShrink: 0, boxSizing: 'border-box', padding: '4px 10px 0 17px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexGrow: 1, minWidth: 0 }}>
           <span data-brand style={{ fontSize: 18, lineHeight: '22px', fontWeight: 650, letterSpacing: '-0.02em' }}>Ledge<span style={{ color: 'var(--sidebar-primary)' }}>.</span></span>
@@ -55,7 +57,7 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
       </div>
       <div data-scroll className="ledge-scroll" style={{ display: 'flex', flexDirection: 'column', padding: '8px 0', flexGrow: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {sessions.map((s, i) => {
-          const hi = s.id === oldestAsk; const delay = 150 + i * 24;
+          const hi = s.id === oldestAsk; const delay = enterDelay + 30 + i * 24;
           const focused = focusedId === s.id; const actions = focused && isYesNo(s);
           const bg = hi ? 'var(--secondary)' : selectedId === s.id ? 'var(--sidebar-accent)' : 'transparent';
           const st = botState(s); const readOnly = s.source === 'hook_only';

@@ -46,6 +46,12 @@ describe('<SessionList>', () => {
     expect(rows[0]!.getAttribute('data-delay')).toBe('150');
     expect(rows[3]!.getAttribute('data-delay')).toBe('222');
   });
+  it('the cascade follows the layer\'s own entry delay', () => {
+    render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} enterDelay={280} />);
+    const rows = screen.getAllByRole('button', { name: /open/ });
+    expect(rows[0]!.getAttribute('data-delay')).toBe('310');
+    expect(rows[3]!.getAttribute('data-delay')).toBe('382');
+  });
 });
 
 describe('rowHint', () => {
