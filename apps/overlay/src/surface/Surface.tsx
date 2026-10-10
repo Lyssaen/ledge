@@ -232,9 +232,11 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   });
   const tipShown = st.mode === 'handle' && hovBot !== null;
   const extras: Box[] = [];
-  // The tooltip and the status line belong to the handle (its scale), the coachmark to the opened list (the windows').
+  // The status line belongs to the handle (its scale); the tooltip and the coachmark read at the windows' size.
   const statusLeft = Math.max(geo.w, SIZES.handleW * hs) + 8 * hs;
-  if (tipShown) { const h = sizes.tip.h || TOOLTIP_BOX.h * hs; extras.push({ left: TOOLTIP_BOX.left * hs, top: (hovSlot?.center ?? geo.top) - h / 2, w: sizes.tip.w || TOOLTIP_BOX.w * hs, h }); }
+  // The tooltip sits beside the handle (whose width follows the handle size) but reads at the windows' size.
+  const tipLeft = SIZES.handleW * hs + (TOOLTIP_BOX.left - SIZES.handleW) * ps;
+  if (tipShown) { const h = sizes.tip.h || TOOLTIP_BOX.h * ps; extras.push({ left: tipLeft, top: (hovSlot?.center ?? geo.top) - h / 2, w: sizes.tip.w || TOOLTIP_BOX.w * ps, h }); }
   if (unreachable) extras.push({ left: statusLeft, top: geo.top, w: sizes.status.w || STATUS_BOX.w * hs, h: sizes.status.h || STATUS_BOX.h * hs });
   if (coachShown) extras.push({ left: 44 * ps, top: coachTop, w: 300 * ps, h: COACHMARK_H * ps });
   const frame = frameOf(geo, extras, screenH);
@@ -330,8 +332,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
       <div data-zoom="coachmark" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Coachmark visible={coachShown} top={coachTop / ps} onDismiss={() => { setCoach(false); if (focusedRowId) surfaceRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusedRowId)}"] [data-row]`)?.focus(); }} />
       </div>
-      <div data-zoom="tooltip" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-        <Tooltip ref={tipRef} bot={st.mode === 'handle' ? hovBot : null} y={(hovSlot?.center ?? geo.top) / hs} />
+      <div data-zoom="tooltip" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
+        <Tooltip ref={tipRef} bot={st.mode === 'handle' ? hovBot : null} y={(hovSlot?.center ?? geo.top) / ps} left={tipLeft / ps} />
+      </div>
+      <div data-zoom="status" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
         {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: statusLeft / hs, top: geo.top / hs, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{t.unreachable}</div>}
       </div>
     </>
