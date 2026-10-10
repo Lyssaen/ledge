@@ -98,9 +98,9 @@ A session started with plain `claude`, without the launcher, is still visible th
 
 ## Settings
 
-Language, the screen the handle sits on, the size of the handle and of the windows (auto or 100 to 200 percent), do-not-disturb, reduced motion, when a bot finishes (bubble and sound, bubble, sound, or handle only), sounds, and the theme (`Ctrl+Alt+T`).
+Three tabs, the last one opened remembered. Display: language, the screen the handle sits on, the size of the handle and of the windows (auto or 100 to 200 percent), the theme (`Ctrl+Alt+T`) and reduced motion. Notifications: do-not-disturb and when a bot finishes (bubble and sound, bubble, sound, or handle only). Sounds: everything below.
 
-<img src="screens/settings-dark.png" alt="Settings: language, screen, handle size, window size, do not disturb, reduced motion, when a bot finishes, sounds, theme" width="408">
+<img src="screens/settings-dark.png" alt="Settings, Display tab: language, screen, handle size, window size, theme, reduced motion" width="408">
 
 **Sounds.** Eight short synthesised cues, one family: asks rise or knock, results fall, your own decisions tick. Settings › Sounds has the switch, the volume with a Test button, one checkbox per category, and "Only when the terminal is behind", which keeps Ledge quiet while Windows Terminal is the front window. Do not disturb silences everything.
 

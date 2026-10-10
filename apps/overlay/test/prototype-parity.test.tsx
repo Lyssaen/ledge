@@ -489,8 +489,10 @@ describe('carried items', () => {
     expect(surface()).toHaveStyle({ width: '380px' });
     expect(document.activeElement).toHaveAccessibleName('Back to sessions');
     const view = layer('settings');
+    fireEvent.click(within(view).getByRole('tab', { name: 'Notifications' }));
     fireEvent.click(within(view).getByRole('switch', { name: /Do not disturb/ }));
     for (const b of within(list).getAllByRole('button', { name: 'Do not disturb', hidden: true })) expect(b).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(view).getByRole('tab', { name: 'Display' }));
     expect(within(view).getByRole('button', { name: /Dark theme · Signal/ })).toBeInTheDocument();
     fireEvent.click(within(view).getByRole('button', { name: /theme/ }));
     expect(within(view).getByRole('button', { name: /Light theme · Pebble/ })).toBeInTheDocument();
