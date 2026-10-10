@@ -87,6 +87,17 @@ const fr = {
     hintFree: 'Entrée envoie le texte au terminal tel quel',
     interrupt: 'Interrompre', kill: 'Arrêter la session'
   },
+  /** The agent's last message, read like a plan (the "your turn" view). */
+  reply: {
+    finished: (name: string, when: string) => `${name} a terminé il y a ${when}`,
+    doneCount: (n: number) => `${n} ${plural(n, 'point fait', 'points faits')}`,
+    questionCount: (n: number) => `${n} ${plural(n, 'question', 'questions')}`,
+    question: 'Question',
+    typeAnswer: 'Répondre librement',
+    showRaw: 'Réponse complète, telle quelle', showStructured: 'Vue structurée',
+    hintChips: 'Une puce remplit le champ, Entrée envoie',
+    hintAnswerAll: 'Une ligne par question, Entrée envoie'
+  },
   bubble: {
     question: (name: string) => `${name} a une question`,
     review: (name: string, kind: string) => `${name} propose ${kind === 'diff' ? 'des modifications' : 'un plan'} à relire`,
@@ -200,6 +211,16 @@ const en: Messages = {
     hintQuestion: 'A question takes an option number; answer anything else in its terminal',
     hintFree: 'Enter sends to the terminal as typed',
     interrupt: 'Interrupt', kill: 'Kill session'
+  },
+  reply: {
+    finished: (name: string, when: string) => `${name} finished ${when} ago`,
+    doneCount: (n: number) => `${n} done`,
+    questionCount: (n: number) => `${n} ${plural(n, 'question', 'questions')}`,
+    question: 'Question',
+    typeAnswer: 'Type an answer',
+    showRaw: 'Full reply as written', showStructured: 'Structured view',
+    hintChips: 'A chip fills the field, Enter sends',
+    hintAnswerAll: 'One line per question, Enter sends'
   },
   bubble: {
     question: (name: string) => `${name} has a question`,

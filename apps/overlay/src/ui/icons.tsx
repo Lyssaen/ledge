@@ -21,6 +21,8 @@ export const ICONS = {
   stop: { d: ['M6 6h12v12H6z'] },
   check: { d: ['M20 6 9 17l-5-5'] },
   listRemove: { d: ['M11 12H3', 'M16 6H3', 'M16 18H3', 'm19 10-4 4', 'm15 10 4 4'] },
+  /** A "T" with its baseline: the reply as written. */
+  text: { d: ['M4 7V4h16v3', 'M9 20h6', 'M12 4v16'] },
   plus: { d: ['M12 5v14', 'M5 12h14'] },
   /** A die: another companion name. */
   dice: { d: ['M3 7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z'], fill: ['M8.5 7.5a1 1 0 1 0 0 2a1 1 0 1 0 0-2', 'M15.5 7.5a1 1 0 1 0 0 2a1 1 0 1 0 0-2', 'M12 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2', 'M8.5 14.5a1 1 0 1 0 0 2a1 1 0 1 0 0-2', 'M15.5 14.5a1 1 0 1 0 0 2a1 1 0 1 0 0-2'] },
