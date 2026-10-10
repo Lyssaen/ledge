@@ -35,3 +35,24 @@
   --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08);
   --well: oklch(0.145 0 0);
 }
+
+/* Mascots (spec section 6). Material follows the theme: Galet (light) / Signal (dark).
+   A bot's own data-material wins over the root theme so its theme prop is authoritative. */
+@property --bot-shell-top { syntax: '<color>'; inherits: true; initial-value: #f0eee6; }
+@property --bot-shell-bottom { syntax: '<color>'; inherits: true; initial-value: #b7b7b0; }
+@property --bot-shell-line { syntax: '<color>'; inherits: true; initial-value: #ffffff99; }
+@property --bot-visor { syntax: '<color>'; inherits: true; initial-value: #22292b; }
+@property --bot-shine { syntax: '<color>'; inherits: true; initial-value: #ffffff77; }
+:root, :root[data-theme="light"], [data-material="pebble"] {
+  --bot-shell-top: #f0eee6; --bot-shell-bottom: #b7b7b0; --bot-shell-line: #ffffff99; --bot-visor: #22292b;
+  --bot-shine: #ffffff77;
+}
+:root[data-theme="dark"], [data-material="signal"] {
+  --bot-shell-top: #34434b; --bot-shell-bottom: #273238; --bot-shell-line: #859397; --bot-visor: #172124;
+  --bot-shine: #ffffff00;
+}
+:root {
+  --bot-visor-line: #00000055; --bot-reflection: #ffffff; --bot-ground: #000000; --bot-readonly-line: #adb3b2;
+  --bot-eye-starting: #90c7f2; --bot-eye-working: #90c7f2; --bot-eye-approval: #f2b09c; --bot-eye-question: #f6d487;
+  --bot-eye-idle: #a9dfc7; --bot-eye-error: #ffab9f; --bot-eye-done: #a3aaa9;
+}

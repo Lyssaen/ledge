@@ -1,0 +1,99 @@
+/* Signal / Galet mascots, ported from docs/mockups/prototype/mascot.css and the mascot block of prototype.css.
+   Colors come from tokens.css; durations come from inline variables set by Bot (scaled by VITE_LEDGE_MOTION). */
+
+.bot {
+  display: block; flex-shrink: 0; overflow: visible;
+  transition:
+    --bot-shell-top var(--bot-material-ms, 240ms), --bot-shell-bottom var(--bot-material-ms, 240ms),
+    --bot-shell-line var(--bot-material-ms, 240ms), --bot-visor var(--bot-material-ms, 240ms),
+    --bot-shine var(--bot-material-ms, 240ms), opacity 180ms;
+}
+.bot .shell-top { stop-color: var(--bot-shell-top); }
+.bot .shell-bottom { stop-color: var(--bot-shell-bottom); }
+
+/* Layers */
+.bot .body {
+  transform-origin: 48px 72px;
+  animation: bot-breathe var(--bot-breath, 5.4s) ease-in-out infinite;
+  animation-delay: var(--bot-phase, 0s);
+}
+.bot .pose {
+  transform-origin: 48px 59px;
+  transform: rotate(var(--bot-tilt, 0deg)) translateY(var(--bot-lift, 0px));
+  transition: transform var(--bot-pose-ms, 300ms) var(--bot-ease);
+}
+.bot .gaze {
+  transform: translate(var(--bot-gx, 0px), var(--bot-gy, 0px));
+  transition: transform var(--bot-gaze-ms, 450ms) var(--bot-ease);
+}
+.bot .eye-blink { transform-origin: 48px 48px; }
+.bot .eye-open, .bot .eye-happy, .bot .eye-error, .bot .eye-sleep {
+  transform-origin: 48px 49px;
+  transition: opacity var(--bot-eye-ms, 260ms) var(--bot-ease), transform var(--bot-eye-ms, 260ms) var(--bot-ease);
+}
+.bot .eye-open { fill: var(--bot-eye); }
+.bot .eye-happy, .bot .eye-error, .bot .eye-sleep {
+  opacity: 0; fill: none; stroke: var(--bot-eye); stroke-width: 3.4; stroke-linecap: round;
+}
+.bot .visor { fill: var(--bot-visor); stroke: var(--bot-visor-line); stroke-width: 1; }
+.bot .shell { stroke: var(--bot-shell-line); stroke-width: .8; transition: stroke-width var(--bot-material-ms, 240ms); }
+.bot .shine { fill: none; stroke: var(--bot-shine); stroke-width: 1.25; stroke-linecap: round; }
+.bot .reflection { fill: var(--bot-reflection); opacity: .035; }
+.bot .ground { fill: var(--bot-ground); opacity: .16; }
+.bot .feet { fill: var(--bot-shell-bottom); }
+.bot .antenna { stroke: var(--bot-shell-bottom); stroke-width: 2; stroke-linecap: round; }
+.bot .antenna-light { fill: var(--bot-eye); }
+.bot .arm {
+  fill: var(--bot-shell-bottom); stroke: var(--bot-shell-line); stroke-width: .7;
+  transform-origin: 75px 66px; opacity: 0;
+  transition: transform var(--bot-pose-ms, 300ms) var(--bot-ease), opacity 180ms;
+}
+
+/* Material: Signal has a readable outline and no white shine; Galet keeps a light shine and a matte gradient. */
+.bot[data-material="signal"] .shell { stroke-width: 1.5; }
+
+/* Expressions */
+.bot[data-eyes="wide"] .eye-open { transform: scaleY(1.2); }
+.bot[data-eyes="happy"] .eye-open, .bot[data-eyes="error"] .eye-open, .bot[data-eyes="sleep"] .eye-open { opacity: 0; }
+.bot[data-eyes="happy"] .eye-happy, .bot[data-eyes="error"] .eye-error, .bot[data-eyes="sleep"] .eye-sleep { opacity: 1; }
+.bot[data-state="approval"] .arm { opacity: 1; transform: rotate(-22deg) translateY(-5px); transition-delay: 180ms; }
+.bot[data-state="done"] { opacity: .55; }
+.bot[data-state="done"] .body, .bot[data-state="error"] .body { animation: none; }
+
+/* Modifiers: read-only (dashed outline), frozen (connection lost), simplified (≤20 px head crop) */
+.bot[data-readonly="true"] { opacity: .6; }
+.bot[data-readonly="true"] .shell { stroke: var(--bot-readonly-line); stroke-width: 1.3; stroke-dasharray: 3 3; }
+.bot[data-readonly="true"] .body { animation: none; }
+.bot[data-frozen="true"] { opacity: .5; }
+.bot[data-frozen="true"] * { animation-play-state: paused !important; }
+.bot[data-simplified="true"] :is(.arm, .feet, .shine, .ground, .antenna-group) { display: none; }
+.bot[data-simplified="true"] .eye-open { transform: scale(1.1); }
+.bot[data-simplified="true"] .body { animation: none; }
+
+/* Gestures, set by useBotMotion */
+.bot[data-blink="true"] .eye-blink { animation: bot-blink var(--bot-blink-ms, 180ms) ease-in-out; }
+.bot[data-gesture="ask"] .arm { animation: bot-ask var(--bot-ask-ms, 850ms) var(--bot-ease); }
+.bot[data-gesture="nod"] .pose { animation: bot-nod var(--bot-nod-ms, 650ms) var(--bot-ease); }
+
+/* Reduced motion: app preference / VITE_LEDGE_MOTION=0 (data-reduced) and the OS preference */
+.bot[data-reduced="true"], .bot[data-reduced="true"] * { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .bot, .bot * { animation: none !important; transition: none !important; }
+}
+
+/* Respiration 4.8–6.4 s: 0.7 SVG unit up, ±0.3°, 1.4 % vertical stretch */
+@keyframes bot-breathe {
+  0%, 100% { transform: translateY(0) rotate(-.3deg) scaleY(1); }
+  50% { transform: translateY(-.7px) rotate(.3deg) scaleY(1.014); }
+}
+@keyframes bot-blink { 0%, 100% { transform: scaleY(1); } 45%, 60% { transform: scaleY(.08); } }
+@keyframes bot-nod {
+  0%, 100% { transform: rotate(var(--bot-tilt, 0deg)) translateY(var(--bot-lift, 0px)); }
+  35% { transform: translateY(3px) rotate(5deg); }
+  65% { transform: translateY(-1px) rotate(-2deg); }
+}
+@keyframes bot-ask {
+  0%, 100% { transform: rotate(-22deg) translateY(-5px); }
+  35% { transform: rotate(-42deg) translateY(-7px); }
+  65% { transform: rotate(-16deg) translateY(-5px); }
+}
