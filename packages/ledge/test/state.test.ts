@@ -40,6 +40,7 @@ describe('reduce: transition table', () => {
     table.push([ev('Notification', { kind: 'question', text: 'Claude is waiting for your input' }), s, '=']);
     table.push([ev('PostToolUse', { tool: 'Bash' }), s, terminal ? '=' : 'working']);
     table.push([ev('PostToolUseFailure', { tool: 'Bash' }), s, terminal ? '=' : 'working']);
+    table.push([ev('PostToolUseFailure', { tool: 'Bash', interrupt: true }), s, terminal ? '=' : 'idle']);
     table.push([ev('StopFailure', { text: 'rate_limit' }), s, terminal ? '=' : 'error']);
     table.push([ev('SubagentStart', { helperId: 'a1', tool: 'Explore' }), s, '=']);
     table.push([ev('SubagentStop', { helperId: 'a1', tool: 'Explore' }), s, '=']);
@@ -300,7 +301,7 @@ describe('reduce: subagent isolation', () => {
     const s = reduce(session('working'), ev('SubagentStart', { helperId: 'a1', tool: 'Explore' }));
     const next = reduce(s, ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist', helperId: 'a1', at: later(6000) }));
     expect(next.state).toBe('waiting_permission');
-    expect(next.pending).toEqual({ kind: 'permission', text: 'rm -rf dist', tool: 'Bash', source: 'hook', helperId: 'a1' });
+    expect(next.pending).toEqual({ kind: 'permission', text: 'rm -rf dist', tool: 'Bash', source: 'hook', helperId: 'a1', parentState: 'working' });
     expect(next.helpers[0]!.state).toBe('waiting_permission');
   });
   it('a helper PermissionRequest is ignored when the parent already has a hook pending', () => {
@@ -317,7 +318,7 @@ describe('reduce: subagent isolation', () => {
   it('a helper PermissionRequest replaces a pane-sourced pending (hook wins over pane)', () => {
     const s = session('waiting_permission', { pending: { kind: 'permission', text: 'Do you want to proceed?', source: 'pane' } });
     const next = reduce(s, ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));
-    expect(next.pending).toEqual({ kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook', helperId: 'a1' });
+    expect(next.pending).toEqual({ kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook', helperId: 'a1', parentState: 'working' });
   });
   it('the helper own PostToolUse clears its routed pending and the parent goes back to working', () => {
     const s = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));
@@ -356,5 +357,70 @@ describe('reduce: subagent isolation', () => {
     expect(next.pending).toBeUndefined();
     expect(next.state).toBe('working');
     expect(next.lastHookAt).toBe(later(5000));
+  });
+});
+
+describe('reduce: interrupted tool (Esc)', () => {
+  it('an interrupted PostToolUseFailure goes idle and clears the pending, like Stop', () => {
+    const s = session('waiting_permission', { pending: { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } });
+    const next = reduce(s, ev('PostToolUseFailure', { tool: 'Read', interrupt: true }));
+    expect(next.state).toBe('idle');
+    expect(next.pending).toBeUndefined();
+  });
+  it('an interrupted helper tool sets the helper idle and clears its routed pending', () => {
+    const s = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));
+    const next = reduce(s, ev('PostToolUseFailure', { tool: 'Bash', helperId: 'a1', interrupt: true, at: later(6000) }));
+    expect(next.pending).toBeUndefined();
+    expect(next.helpers[0]!.state).toBe('idle');
+  });
+});
+
+describe('reduce: background helpers keep the parent resting state', () => {
+  const routed = (from: Session) => reduce(from, ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));
+  it('idle parent + background helper permission answered in the terminal -> idle', () => {
+    const s = routed(session('idle'));
+    expect(s.state).toBe('waiting_permission');
+    expect(reduce(s, ev('PostToolUse', { tool: 'Bash', helperId: 'a1', at: later(6000) })).state).toBe('idle');
+  });
+  it('idle parent + background helper permission answered from Ledge (Decided) -> idle, helper back to working', () => {
+    const s = reduce(reduce(session('idle'), ev('SubagentStart', { helperId: 'a1' })), ev('PermissionRequest', { tool: 'Bash', text: 'x', helperId: 'a1', at: later(5500) }));
+    const next = reduce(s, ev('Decided', { source: 'daemon', at: later(6000) }));
+    expect(next.state).toBe('idle');
+    expect(next.pending).toBeUndefined();
+    expect(next.helpers[0]!.state).toBe('working');
+  });
+  it('idle parent + background helper stopping with its request open -> idle', () => {
+    const next = reduce(routed(session('idle')), ev('SubagentStop', { helperId: 'a1', at: later(6000) }));
+    expect(next.state).toBe('idle');
+  });
+  it('Stop while a helper permission is pending keeps it, then clearing it -> idle', () => {
+    const s = reduce(routed(session('working')), ev('Stop', { at: later(6000) }));
+    expect(s.state).toBe('waiting_permission');
+    expect(s.pending?.helperId).toBe('a1');
+    expect(s.pending?.parentState).toBe('idle');
+    expect(reduce(s, ev('PostToolUse', { tool: 'Bash', helperId: 'a1', at: later(7000) })).state).toBe('idle');
+  });
+  it('StopFailure while a helper permission is pending keeps it, then clearing it -> error with the reason', () => {
+    const s = reduce(routed(session('working')), ev('StopFailure', { text: 'overloaded', at: later(6000) }));
+    expect(s.state).toBe('waiting_permission');
+    expect(s.pending?.helperId).toBe('a1');
+    expect(s.lastError).toBe('overloaded');
+    const next = reduce(s, ev('Decided', { source: 'daemon', at: later(7000) }));
+    expect(next.state).toBe('error');
+    expect(next.lastError).toBe('overloaded');
+  });
+  it('the main thread resuming under a helper pending makes the resting state working again', () => {
+    const s = reduce(reduce(routed(session('working')), ev('Stop', { at: later(6000) })), ev('UserPromptSubmit', { at: later(7000) }));
+    expect(s.pending?.parentState).toBe('working');
+    expect(reduce(s, ev('PostToolUse', { tool: 'Bash', helperId: 'a1', at: later(8000) })).state).toBe('working');
+  });
+  it('a main-thread interrupt under a helper pending rests idle', () => {
+    const s = reduce(routed(session('working')), ev('PostToolUseFailure', { tool: 'Agent', interrupt: true, at: later(6000) }));
+    expect(s.pending?.helperId).toBe('a1');
+    expect(s.pending?.parentState).toBe('idle');
+  });
+  it('a pending without parentState (older journal) settles to working', () => {
+    const s = session('waiting_permission', { pending: { kind: 'permission', text: 'x', tool: 'Bash', source: 'hook', helperId: 'a1' } });
+    expect(reduce(s, ev('PostToolUse', { tool: 'Bash', helperId: 'a1' })).state).toBe('working');
   });
 });

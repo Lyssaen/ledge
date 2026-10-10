@@ -35,8 +35,8 @@ export function mapClaudeHook(eventName: string, payload: unknown, at: string): 
       const task = eventName === 'SubagentStart' ? (str(p.description) || str(p.prompt))?.split('\n')[0] : undefined;
       return { id, event: { name: eventName, ...base, ...(type ? { tool: type } : {}), ...(task ? { text: task } : {}) } };
     }
-    case 'PostToolUse':
-    case 'PostToolUseFailure': return { id, event: { name: eventName, ...base, tool } };
+    case 'PostToolUse': return { id, event: { name: 'PostToolUse', ...base, tool } };
+    case 'PostToolUseFailure': return { id, event: { name: 'PostToolUseFailure', ...base, tool, ...(p.is_interrupt === true ? { interrupt: true } : {}) } };
     case 'StopFailure': {
       const error = str(p.error); const details = str(p.error_details);
       const text = [error, details].filter(Boolean).join(': ').slice(0, 300) || undefined;

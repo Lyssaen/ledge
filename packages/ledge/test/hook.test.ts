@@ -63,6 +63,10 @@ describe('mapClaudeHook', () => {
     const payload = { ...common, hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command: 'false' }, tool_use_id: 'toolu_2', error: 'Exit code 1', is_interrupt: false };
     expect(mapClaudeHook('PostToolUseFailure', payload, at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', tool: 'Bash' });
   });
+  it('maps an interrupted PostToolUseFailure (Esc) with interrupt set', () => {
+    const payload = { ...common, hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command: 'sleep 60' }, tool_use_id: 'toolu_3', error: 'Interrupted by user', is_interrupt: true };
+    expect(mapClaudeHook('PostToolUseFailure', payload, at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', tool: 'Bash', interrupt: true });
+  });
   it('maps StopFailure with its error and details', () => {
     const payload = { ...common, hook_event_name: 'StopFailure', error: 'rate_limit', error_details: '429 Too Many Requests', last_assistant_message: 'Working on it' };
     expect(mapClaudeHook('StopFailure', payload, at)?.event).toEqual({ name: 'StopFailure', at, source: 'hook', text: 'rate_limit: 429 Too Many Requests' });

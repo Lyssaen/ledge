@@ -65,6 +65,16 @@ function settled(state: SessionState): SessionState {
   return state === 'waiting_permission' || state === 'waiting_input' ? 'working' : state;
 }
 
+/** The parent's state once its helper-routed pending is answered: what it was doing underneath. */
+function restored(s: Session): SessionState {
+  return s.pending?.parentState ?? settled(s.state);
+}
+
+/** Main-thread activity under a helper-routed pending: the request stays, the resting state underneath moves. */
+function underHelper(s: Session, parentState: SessionState, at: string, extra: Partial<Session> = {}): Session {
+  return { ...s, ...extra, pending: { ...s.pending!, parentState }, lastHookAt: at, lastActivityAt: at };
+}
+
 /**
  * Events fired inside a subagent (helperId set). They never clear or replace the parent's pending and never
  * flip the parent to working; a helper permission is routed to the parent only when nothing is pending there.
@@ -81,13 +91,13 @@ function reduceHelper(s: Session, ev: SessionEvent & { helperId: string }): Sess
     }
     case 'SubagentStop': {
       const helpers = setHelper(s, id, { state: 'exited' }, ev.tool ?? 'subagent');
-      if (own) return { ...s, helpers, pending: undefined, state: settled(s.state), lastHookAt: at, lastActivityAt: at };
+      if (own) return { ...s, helpers, pending: undefined, state: restored(s), lastHookAt: at, lastActivityAt: at };
       return { ...s, helpers, lastHookAt: at, lastActivityAt: at };
     }
     case 'PermissionRequest': {
       const helpers = setHelper(s, id, { state: 'waiting_permission' });
       if (s.pending && s.pending.source === 'hook') return { ...s, helpers, lastHookAt: at, lastActivityAt: at };
-      const pending = { ...pendingFor(ev)!, helperId: id };
+      const pending = { ...pendingFor(ev)!, helperId: id, parentState: settled(s.state) };
       return { ...s, helpers, state: 'waiting_permission', pending, lastHookAt: at, lastActivityAt: at };
     }
     case 'PreToolUse':
@@ -95,9 +105,9 @@ function reduceHelper(s: Session, ev: SessionEvent & { helperId: string }): Sess
     case 'PostToolUseFailure': {
       const helper = s.helpers.find(h => h.id === id);
       const busy = ev.name === 'PreToolUse' && helper?.state === 'waiting_permission';
-      const helpers = busy ? s.helpers : setHelper(s, id, { state: 'working' });
-      if (ev.name !== 'PreToolUse' && own && clearedByToolRun(s.pending!, ev.tool)) {
-        return { ...s, helpers, pending: undefined, state: settled(s.state), lastHookAt: at, lastActivityAt: at };
+      const helpers = busy ? s.helpers : setHelper(s, id, { state: ev.interrupt ? 'idle' : 'working' });
+      if (ev.name !== 'PreToolUse' && own && (ev.interrupt || clearedByToolRun(s.pending!, ev.tool))) {
+        return { ...s, helpers, pending: undefined, state: restored(s), lastHookAt: at, lastActivityAt: at };
       }
       return { ...s, helpers, lastHookAt: at, lastActivityAt: at };
     }
@@ -129,16 +139,30 @@ export function reduce(s: Session, ev: SessionEvent): Session {
       return s;
     case 'InjectFailed':
       return { ...s, state: 'error', lastError: ev.text ?? 'injection not confirmed', lastActivityAt: at };
-    case 'Decided':
+    case 'Decided': {
+      const helperId = s.pending?.helperId;
+      if (helperId) {
+        const state = restored(s);
+        const helpers = s.helpers.some(h => h.id === helperId) ? setHelper(s, helperId, { state: 'working' }) : s.helpers;
+        return { ...s, state, helpers, pending: undefined, lastError: state === 'error' ? s.lastError : undefined, lastActivityAt: at };
+      }
       return { ...s, state: 'working', pending: undefined, lastError: undefined, lastActivityAt: at };
+    }
     case 'Stop':
+      if (s.pending?.helperId) return underHelper(s, 'idle', at);
       return { ...s, state: 'idle', pending: undefined, lastHookAt: at, lastActivityAt: at };
-    case 'StopFailure':
-      return { ...s, state: 'error', pending: undefined, lastError: ev.text || 'the turn stopped on an error', lastHookAt: at, lastActivityAt: at };
+    case 'StopFailure': {
+      const lastError = ev.text || 'the turn stopped on an error';
+      if (s.pending?.helperId) return underHelper(s, 'error', at, { lastError });
+      return { ...s, state: 'error', pending: undefined, lastError, lastHookAt: at, lastActivityAt: at };
+    }
     case 'PostToolUse':
     case 'PostToolUseFailure': {
-      if (s.pending && !(s.pending.helperId === undefined && clearedByToolRun(s.pending, ev.tool))) return { ...s, lastHookAt: at, lastActivityAt: at };
-      return { ...s, state: 'working', pending: undefined, lastHookAt: at, lastActivityAt: at };
+      // Esc interrupts the turn: Claude waits for input and no Stop follows.
+      const rest = ev.interrupt ? 'idle' : 'working';
+      if (s.pending?.helperId) return underHelper(s, rest, at);
+      if (s.pending && !ev.interrupt && !clearedByToolRun(s.pending, ev.tool)) return { ...s, lastHookAt: at, lastActivityAt: at };
+      return { ...s, state: rest, pending: undefined, lastHookAt: at, lastActivityAt: at };
     }
     case 'PanePrompt': {
       if (s.pending?.source === 'hook') return s;
@@ -163,7 +187,7 @@ export function reduce(s: Session, ev: SessionEvent): Session {
       }
       if (ev.name === 'Notification') return { ...s, lastHookAt: at, lastActivityAt: at };
       // A helper's routed request outlives the main agent's own activity (background helpers).
-      if (s.pending?.helperId) return { ...s, lastHookAt: at, lastActivityAt: at };
+      if (s.pending?.helperId) return underHelper(s, 'working', at);
       if (s.state === 'working' && s.lastActivityAt === at && !s.pending) return s;
       return { ...s, state: 'working', pending: undefined, lastHookAt: at, lastActivityAt: at };
     }

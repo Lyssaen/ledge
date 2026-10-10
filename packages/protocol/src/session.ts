@@ -13,7 +13,9 @@ export const PendingSchema = z.object({
   options: z.array(z.string()).optional(),
   source: z.enum(['hook', 'pane']),
   /** Set when the request comes from a helper (subagent): it is routed through its parent. */
-  helperId: z.string().optional()
+  helperId: z.string().optional(),
+  /** For a helper-routed request: the state the parent returns to once it is answered (main thread may stop meanwhile). */
+  parentState: SessionStateSchema.optional()
 });
 export type Pending = z.infer<typeof PendingSchema>;
 
