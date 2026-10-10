@@ -19,6 +19,13 @@ export const PendingSchema = z.object({
 });
 export type Pending = z.infer<typeof PendingSchema>;
 
+/** The agent's last message of a finished turn, as the tool reported it (markdown), until the next prompt is sent. */
+export const ReplySchema = z.object({
+  text: z.string(),
+  at: z.string().datetime()
+});
+export type Reply = z.infer<typeof ReplySchema>;
+
 export const HelperSchema = z.object({
   id: z.string(),
   kind: z.string(),
@@ -38,6 +45,7 @@ export const SessionSchema = z.object({
   state: SessionStateSchema,
   pending: PendingSchema.optional(),
   helpers: z.array(HelperSchema).default([]),
+  lastReply: ReplySchema.optional(),
   startedAt: z.string().datetime(),
   lastActivityAt: z.string().datetime(),
   lastHookAt: z.string().datetime().optional(),

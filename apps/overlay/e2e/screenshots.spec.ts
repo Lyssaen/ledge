@@ -137,6 +137,16 @@ for (const theme of ['dark', 'light'] as const) {
         await shoot(page, `session-preview-${theme}`);
       });
 
+      test('session: your turn, the last reply read like a plan', async ({ page }) => {
+        await desktop(page, theme);
+        const d = await fakeDaemon(page, overview());
+        await ready(page, 4);
+        d.preview('bix', conversation);
+        await openSession(page, 'documentation, Bix, ouvrir');
+        await expect(layer(page, 'session').getByRole('group', { name: 'Question 1' })).toBeVisible();
+        await shoot(page, `session-reply-${theme}`);
+      });
+
       test('session: read only', async ({ page }) => {
         await desktop(page, theme);
         await fakeDaemon(page, [session('otto', { source: 'hook_only', tmuxSession: null })]);

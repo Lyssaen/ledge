@@ -20,5 +20,7 @@ export const ICONS = {
   send: { d: ['M12 19V5', 'm5 12 7-7 7 7'] },
   stop: { d: ['M6 6h12v12H6z'] },
   check: { d: ['M20 6 9 17l-5-5'] },
-  listRemove: { d: ['M11 12H3', 'M16 6H3', 'M16 18H3', 'm19 10-4 4', 'm15 10 4 4'] }
+  listRemove: { d: ['M11 12H3', 'M16 6H3', 'M16 18H3', 'm19 10-4 4', 'm15 10 4 4'] },
+  /** A "T" with its baseline: the reply as written. */
+  text: { d: ['M4 7V4h16v3', 'M9 20h6', 'M12 4v16'] }
 } as const;

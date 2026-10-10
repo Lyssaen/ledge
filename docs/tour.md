@@ -52,6 +52,14 @@ A question from the agent shows its options as cards. Pick one and send; free te
 
 <img src="screens/session-question-dark.png" alt="Session: which theme to use by default, three options, Envoyer la réponse" width="448">
 
+## When the agent hands back to you
+
+When a turn ends, the agent's last message is read like a plan instead of being left in the terminal: a title, a lead, then its sections with their markers. What was done gets a green check per item, verifications read in monospace, an open question becomes a card with the options the agent proposed as chips, and what is left to do sits in a dashed box. A chip fills the reply field, `Enter` sends it; with several questions, each chip writes its own numbered line. The "Réponse complète, telle quelle" toggle shows the text as the agent wrote it, and the terminal preview folds underneath.
+
+<img src="screens/session-reply-dark.png" alt="Session: Bix finished, the reply read like a plan: What I did with green checks, Verified, an open question with two chips, Left to do" width="448">
+
+The text comes from the `Stop` hook of Claude Code (its `last_assistant_message`), so it is the real message, not a capture of the pane. A reply without headings or lists still shows as readable prose.
+
 ## Following an agent at work
 
 A working session shows the terminal preview: the last thirty lines of the conversation, kept on the latest line as the agent writes. From here you can interrupt the turn, stop the session, or jump to its terminal tab.

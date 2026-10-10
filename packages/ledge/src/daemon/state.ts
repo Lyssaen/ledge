@@ -116,6 +116,11 @@ function reduceHelper(s: Session, ev: SessionEvent & { helperId: string }): Sess
   }
 }
 
+function withoutReply(s: Session): Session {
+  const { lastReply: _gone, ...rest } = s;
+  return rest;
+}
+
 function samePending(a: Pending, b: Pending): boolean {
   return a.kind === b.kind && a.text === b.text && a.tool === b.tool && a.source === b.source
     && JSON.stringify(a.options) === JSON.stringify(b.options);
@@ -153,9 +158,12 @@ export function reduce(s: Session, ev: SessionEvent): Session {
       }
       return { ...s, state: 'working', pending: undefined, lastError: undefined, lastActivityAt: at };
     }
-    case 'Stop':
-      if (s.pending?.helperId) return underHelper(s, 'idle', at);
-      return { ...s, state: 'idle', pending: undefined, lastHookAt: at, lastActivityAt: at };
+    case 'Stop': {
+      // The turn's last message rides on the hook; a Stop without one keeps what the last Stop said.
+      const lastReply = ev.text ? { text: ev.text, at } : s.lastReply;
+      if (s.pending?.helperId) return underHelper(s, 'idle', at, { lastReply });
+      return { ...s, state: 'idle', pending: undefined, lastReply, lastHookAt: at, lastActivityAt: at };
+    }
     case 'StopFailure': {
       const lastError = ev.text || 'the turn stopped on an error';
       if (s.pending?.helperId) return underHelper(s, 'error', at, { lastError });
@@ -191,10 +199,12 @@ export function reduce(s: Session, ev: SessionEvent): Session {
         return { ...s, state, pending, lastHookAt: at, lastActivityAt: at };
       }
       if (ev.name === 'Notification') return { ...s, lastHookAt: at, lastActivityAt: at };
+      // A new prompt answers the last reply: it is no longer "your turn" on that text.
+      const prompted = ev.name === 'UserPromptSubmit' && s.lastReply ? withoutReply(s) : s;
       // A helper's routed request outlives the main agent's own activity (background helpers).
-      if (s.pending?.helperId) return underHelper(s, 'working', at);
-      if (s.state === 'working' && s.lastActivityAt === at && !s.pending) return s;
-      return { ...s, state: 'working', pending: undefined, lastHookAt: at, lastActivityAt: at };
+      if (prompted.pending?.helperId) return underHelper(prompted, 'working', at);
+      if (prompted === s && s.state === 'working' && s.lastActivityAt === at && !s.pending) return s;
+      return { ...prompted, state: 'working', pending: undefined, lastHookAt: at, lastActivityAt: at };
     }
   }
 }

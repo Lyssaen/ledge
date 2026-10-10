@@ -88,10 +88,17 @@ Every size is designed in CSS px for a 1080p work area. Settings has two sizes, 
 
 Changing one never changes the other. A value saved by an older version under `ledge.uiScale` is copied to both once. The page itself is never zoomed: the geometry (`scaledLayout` in `src/surface/geometry.ts`) lays the handle out in a screen of height / handle scale and the opened views in height / window scale, then multiplies each by its scale; each layer carries a CSS `zoom` of its own scale. Frames and edge bands sent to the shell are therefore plain logical px (the Rust side is unchanged). The OS reduced-motion preference always wins. While the daemon is unreachable, and for sessions started without Ledge (read only), every send and decision path is disabled, keys included; the terminal tab button and O still bring the terminal forward.
 
+## Your turn: the last reply read like a plan
+
+When a session is `idle` (or `exited`) with no request pending and the daemon carries a `lastReply` (the `Stop` hook's `last_assistant_message`, Claude Code 2.1+), the session view shows that message structured instead of the raw terminal preview: `src/reply/parse.ts` reads the markdown into a title, a lead, sections classified by their heading (done, verified, questions, next, other) and the questions the agent asks, each with the options it proposes (a list right under the question, or "A or B?"). `src/surface/ReplyCard.tsx` renders them: green checks for what was done, monospace rows for what was verified, question cards whose chips fill the reply field (one numbered line per question when there are several), a dashed box for what is left, and a toggle to the reply as written. The terminal preview folds under the card; reading mode opens it again. The next prompt (`UserPromptSubmit`) drops the reply on the daemon side, so the view goes back to the preview while the agent works.
+
+The parser never drops content: a reply with no structure is shown as prose under the default title. Sessions started without the launcher never carry a reply (their hooks are the same, so they do, read only).
+
 ## Known V1 limits
 
 - Focus brings the Windows Terminal window forward; it does not switch to the exact tab yet.
 - Free-text answers to a question are not supported by the daemon yet: the question's free field ("Ou proposez autre chose…") is off; answer in the terminal.
 - "Toujours pour cette session" (allow for the session) is shown off: no adapter confirms a scoped authorization yet.
 - The review of a diff or a plan is the session's terminal preview for now.
+- The last reply comes from Claude Code's `Stop` hook only: Codex and Cursor Agent sessions keep the terminal preview when they finish a turn.
 - The Rust shell is untested on a real Windows build until the first-build checks above pass.
