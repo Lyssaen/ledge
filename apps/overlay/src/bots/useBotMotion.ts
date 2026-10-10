@@ -34,13 +34,17 @@ function setGaze(el: SVGSVGElement, x: number, y: number) {
  * Nothing is scheduled while disabled, still, the document is hidden, or the bot sits in an inert (inactive) layer.
  * The daemon's state is an input only; no timer ever changes it.
  */
-export function useBotMotion(ref: RefObject<SVGSVGElement | null>, options: { seed: string; state: BotState; enabled: boolean }): void {
-  const { seed, state, enabled } = options;
+export function useBotMotion(
+  ref: RefObject<SVGSVGElement | null>,
+  options: { seed: string; state: BotState; enabled: boolean; askKey?: string }
+): void {
+  const { seed, state, enabled, askKey } = options;
   const h = seedHash(seed);
   const ambient = enabled && !STILL.has(state);
   const stateRef = useRef(state);
   const clock = useRef<Clock | null>(null);
   const prevState = useRef(state);
+  const prevAsk = useRef<string | undefined>(undefined);
 
   useEffect(() => { stateRef.current = state; }, [state]);
 
@@ -101,16 +105,22 @@ export function useBotMotion(ref: RefObject<SVGSVGElement | null>, options: { se
     };
   }, [ref, ambient, h]);
 
-  // A state change recentres the gaze; a new approval request raises the hand once, after the gaze settles.
+  // A state change recentres the gaze. The hand rises once, after the gaze settles, for each new approval request:
+  // on a transition into `approval`, or when a new defined `askKey` arrives while in approval (including on mount).
   useEffect(() => {
     const el = ref.current;
     const prev = prevState.current;
+    const prevKey = prevAsk.current;
     prevState.current = state;
-    if (!el || prev === state) return;
-    setGaze(el, 0, 0);
-    if (state !== 'approval' || !enabled || document.hidden || el.closest('[inert]')) return;
+    prevAsk.current = askKey;
+    if (!el) return;
+    if (prev !== state) setGaze(el, 0, 0);
+    const newRequest = state === 'approval' && (prev !== 'approval' || (askKey !== undefined && askKey !== prevKey));
+    if (!newRequest || !enabled || document.hidden || el.closest('[inert]')) return;
     let end: ReturnType<typeof setTimeout> | undefined;
+    let started = false;
     const start = setTimeout(() => {
+      started = true;
       el.setAttribute('data-gesture', 'ask');
       end = setTimeout(() => { if (el.getAttribute('data-gesture') === 'ask') el.removeAttribute('data-gesture'); }, BOT_MOTION.askMs);
     }, BOT_MOTION.askDelayMs);
@@ -118,8 +128,10 @@ export function useBotMotion(ref: RefObject<SVGSVGElement | null>, options: { se
       clearTimeout(start);
       if (end !== undefined) clearTimeout(end);
       if (el.getAttribute('data-gesture') === 'ask') el.removeAttribute('data-gesture');
+      // Cancelled before it began (e.g. StrictMode's mount/unmount/mount): let the next run still see the request as new.
+      if (!started && prevAsk.current === askKey) prevAsk.current = prevKey;
     };
-  }, [ref, state, enabled]);
+  }, [ref, state, enabled, askKey]);
 }
 
 /** One 650 ms nod each time `nodKey` changes: it confirms that a decision was received, never that the task succeeded. */

@@ -66,6 +66,8 @@
 .bot[data-readonly="true"] .body { animation: none; }
 .bot[data-frozen="true"] { opacity: .5; }
 .bot[data-frozen="true"] * { animation-play-state: paused !important; }
+/* Inactive (inert) layers and explicitly paused views hold every loop in place, like the prototype's .paused rule. */
+[inert] .bot *, .bot[data-paused="true"] * { animation-play-state: paused !important; }
 .bot[data-simplified="true"] :is(.arm, .feet, .shine, .ground, .antenna-group) { display: none; }
 .bot[data-simplified="true"] .eye-open { transform: scale(1.1); }
 .bot[data-simplified="true"] .body { animation: none; }

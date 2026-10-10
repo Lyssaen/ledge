@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, act, renderHook, cleanup } from '@testing-library/react';
-import type { ComponentProps } from 'react';
+import { StrictMode, type ComponentProps } from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fakeSession } from './mockDaemon';
 import { Bot } from '../src/bots/Bot';
 import { botState, poseFor } from '../src/bots/poseFor';
@@ -104,6 +106,42 @@ describe('Bot ambient motion', () => {
     expect(run.gestures).toEqual([]);
   });
 
+  it('waves once when it mounts already asking with a request key', () => {
+    const { svg } = mount({ state: 'approval', askKey: 'req-1' });
+    expect(record(svg, 5000).gestures).toEqual([[180, 'ask']]);
+  });
+
+  it('waves once per new request key, never again for the same key', () => {
+    const { svg, rerender } = mount({ state: 'approval', askKey: 'req-1' });
+    const same = record(svg, 4000, { ms: 2000, run: () => rerender(<Bot {...base} state="approval" askKey="req-1" theme="light" />) });
+    expect(same.gestures).toEqual([[180, 'ask']]);
+    const next = record(svg, 4000, { ms: 1000, run: () => rerender(<Bot {...base} state="approval" askKey="req-2" />) });
+    expect(next.gestures).toEqual([[1180, 'ask']]);
+  });
+
+  it('waves once for a transition into approval that also brings a key', () => {
+    const { svg, rerender } = mount();
+    const run = record(svg, 4000, { ms: 1000, run: () => rerender(<Bot {...base} state="approval" askKey="req-1" />) });
+    expect(run.gestures).toEqual([[1180, 'ask']]);
+  });
+
+  it('waves once on a StrictMode mount with a request key', () => {
+    const view = render(<StrictMode><Bot {...base} state="approval" askKey="req-1" /></StrictMode>);
+    expect(record(view.container.querySelector('svg')!, 3000).gestures).toEqual([[180, 'ask']]);
+  });
+
+  it.each<[string, Partial<Props>]>([
+    ['reduced', { reducedMotion: true }],
+    ['frozen', { frozen: true }],
+    ['paused', { paused: true }],
+    ['read-only', { readOnly: true }],
+    ['default test env', { reducedMotion: undefined }]
+  ])('does not wave for a request key when %s', (_name, props) => {
+    const { svg } = mount({ state: 'approval', askKey: 'req-1', ...props });
+    expect(vi.getTimerCount()).toBe(0);
+    expect(record(svg, 3000).gestures).toEqual([]);
+  });
+
   it('nods once for 650 ms when a decision is received', () => {
     const { svg, rerender } = mount({ state: 'approval', nodKey: 0 });
     act(() => { rerender(<Bot {...base} state="approval" nodKey={1} />); });
@@ -132,6 +170,7 @@ describe('Bot ambient motion', () => {
     ['12 px', { size: 12 }],
     ['20 px', { size: 20 }],
     ['reduced motion', { reducedMotion: true }],
+    ['paused', { paused: true }],
     ['default test env (VITE_LEDGE_MOTION=0)', { reducedMotion: undefined }]
   ])('starts no ambient timers when %s', (_name, props) => {
     const { svg } = mount(props);
@@ -156,6 +195,26 @@ describe('Bot ambient motion', () => {
     act(() => { document.dispatchEvent(new Event('visibilitychange')); });
     expect(vi.getTimerCount()).toBe(0);
     hidden.mockRestore();
+  });
+});
+
+describe('Bot CSS pause contract', () => {
+  afterEach(cleanup);
+  const css = readFileSync(resolve(__dirname, '../src/bots/bots.css'), 'utf8').replace(/\s+/g, ' ');
+
+  it('holds every bot animation, including respiration, inside inert layers and paused views', () => {
+    expect(css).toContain('[inert] .bot *, .bot[data-paused="true"] * { animation-play-state: paused !important; }');
+    expect(css).toContain('.bot[data-frozen="true"] * { animation-play-state: paused !important; }');
+    expect(css).toMatch(/\.bot \.body \{[^}]*animation: bot-breathe/);
+  });
+
+  it('exposes the paused flag the rule keys on', () => {
+    const { container, rerender } = render(<Bot {...base} />);
+    expect(container.querySelector('svg')).toHaveAttribute('data-paused', 'false');
+    rerender(<Bot {...base} paused />);
+    expect(container.querySelector('svg')).toHaveAttribute('data-paused', 'true');
+    const inert = render(<div inert><Bot {...base} /></div>);
+    expect(inert.container.querySelector('[inert] .bot .body')).not.toBeNull();
   });
 });
 

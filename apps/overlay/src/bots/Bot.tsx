@@ -19,6 +19,10 @@ export interface BotProps {
   frozen?: boolean;
   /** Effective app preference; defaults to useMotionPreferences(). The OS preference always wins. */
   reducedMotion?: boolean;
+  /** Inactive layer / paused view: freeze every animation in place without the frozen styling. */
+  paused?: boolean;
+  /** Identity of the current approval request (e.g. its pending ID); a new value in approval plays the hand gesture once, even on mount. */
+  askKey?: string;
   /** Increment to play one 650 ms nod acknowledging a received decision. */
   nodKey?: number;
   className?: string;
@@ -60,7 +64,7 @@ function Shell({ tool, fill }: { tool: Tool; fill: string }) {
  * Session mascot: one persistent SVG whose layers (shell, pose, gaze, eyes, accessories) stay mounted
  * across theme and state changes; only attributes and CSS variables change.
  */
-export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, frozen = false, reducedMotion, nodKey, className }: BotProps): JSX.Element {
+export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, frozen = false, paused = false, reducedMotion, askKey, nodKey, className }: BotProps): JSX.Element {
   const ref = useRef<SVGSVGElement>(null);
   const gradientId = `bot-shell-${useId().replace(/[^A-Za-z0-9_-]/g, '')}`;
   const prefs = useMotionPreferences();
@@ -70,8 +74,8 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
   const expr = EXPRESSIONS[state];
   const h = seedHash(seed);
 
-  useBotMotion(ref, { seed, state, enabled: !reduced && !simplified && !readOnly && !frozen });
-  useBotNod(ref, nodKey, !reduced && !readOnly && !frozen);
+  useBotMotion(ref, { seed, state, askKey, enabled: !reduced && !simplified && !readOnly && !frozen && !paused });
+  useBotNod(ref, nodKey, !reduced && !readOnly && !frozen && !paused);
 
   const style = {
     '--bot-eye': `var(--bot-eye-${expr.eye})`,
@@ -108,6 +112,7 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
       data-simplified={String(simplified)}
       data-readonly={String(readOnly || state === 'readonly')}
       data-frozen={String(frozen)}
+      data-paused={String(paused)}
       data-reduced={String(reduced)}
       style={style}
     >
