@@ -134,7 +134,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (s.pending && s.pending.kind !== 'question') return send(ws, { type: 'error', id: msg.id, message: `a ${s.pending.kind} prompt takes accept or deny, not a reply` });
         if (msg.text.trim() === '') return send(ws, { type: 'error', id: msg.id, message: 'empty reply' });
         // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
-        return injectAndVerify(msg.id, adapterFor(s.tool).replyPlan(msg.text), !!s.pending);
+        return injectAndVerify(msg.id, adapterFor(s.tool).replyPlan(msg.text, s.pending), !!s.pending);
       }
       case 'session.interrupt': {
         const s = store.get(msg.id);

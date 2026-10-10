@@ -30,18 +30,30 @@ describe('end to end with a fake Claude Code', () => {
     const s = await createSession({ tool: 'claude', args: [], command: ['node', agent, 'permission', 'npm test', 'work', '1500', 'exit', '0'], cwd: '/tmp', tmux, client });
     expect(s.name).toBe('Otto');
     await until(() => store.get(s.id)?.state === 'waiting_permission');
-    expect(store.get(s.id)!.pending?.text).toBe('Bash(npm test)');
+    expect(store.get(s.id)!.pending).toMatchObject({ text: 'npm test', options: ['Yes', "Yes, and don't ask again for this command", 'No'] });
     client.send({ type: 'session.decide', id: s.id, decision: 'accept' });
     await until(() => store.get(s.id)?.state === 'working');
+    await until(async () => (await tmux.capture(s.tmuxSession!, 10))?.includes('✓ accepted 1') ?? false);
     await until(() => store.get(s.id)?.state === 'exited', 6000);
     expect(store.get(s.id)!.pending).toBeUndefined();
     await client.close();
   });
 
-  it('answers a question with free text', async () => {
+  it('denies a permission with Escape', async () => {
+    const client = await connect({ port: srv.port }); await client.next('snapshot');
+    const s = await createSession({ tool: 'claude', args: [], command: ['node', agent, 'permission', 'rm -rf x', 'work', '1500', 'exit', '0'], cwd: '/tmp', tmux, client });
+    await until(() => store.get(s.id)?.state === 'waiting_permission');
+    client.send({ type: 'session.decide', id: s.id, decision: 'deny' });
+    await until(async () => (await tmux.capture(s.tmuxSession!, 10))?.includes('✗ denied') ?? false);
+    await until(() => store.get(s.id)?.state === 'exited', 6000);
+    await client.close();
+  });
+
+  it('answers a question by option number: the digit alone selects it', async () => {
     const client = await connect({ port: srv.port }); await client.next('snapshot');
     const s = await createSession({ tool: 'claude', args: [], command: ['node', agent, 'question', 'work', '1500', 'exit', '0'], cwd: '/tmp', tmux, client });
     await until(() => store.get(s.id)?.state === 'waiting_input');
+    expect(store.get(s.id)!.pending).toMatchObject({ kind: 'question', text: 'Which migration strategy?', options: ['Backfill', 'Shadow table', 'Type something.'] });
     client.send({ type: 'session.reply', id: s.id, text: '2' });
     // Read the pane while the agent is still alive: a dead session has nothing left to capture.
     await until(async () => (await tmux.capture(s.tmuxSession!, 10))?.includes('You chose: 2') ?? false);

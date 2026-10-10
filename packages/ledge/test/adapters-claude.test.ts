@@ -4,64 +4,99 @@ import { claudeAdapter } from '../src/adapters/claude.js';
 import { adapterFor } from '../src/adapters/index.js';
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
+/** What the server's verify step sees: the last `n` lines, trailing whitespace trimmed like Tmux.capture. */
+const tail = (pane: string, n = 5) => pane.replace(/\s+$/g, '').split('\n').slice(-n).join('\n');
 
-describe('claude adapter: detection', () => {
-  it('detects a permission prompt with the command', () => {
-    const m = claudeAdapter.detectPrompt(fx('claude-permission'));
-    expect(m).toEqual({ kind: 'permission', text: 'Bash(npm test)', options: ['Yes', "Yes, and don't ask again for npm test", 'No, and tell Claude what to do differently (esc)'] });
+describe('claude adapter: detection (Claude Code 2.x captures)', () => {
+  it('detects a Bash permission with the command between the dashed rules', () => {
+    expect(claudeAdapter.detectPrompt(fx('claude2-permission-bash'))).toEqual({
+      kind: 'permission', text: 'mkdir zz-ledge-probe',
+      options: ['Yes', 'Yes, and always allow access to', 'Yes, and switch to auto mode · auto mode handles these prompts for you', 'No']
+    });
   });
-  it('reports the tool call nearest the box, not the first in scrollback', () => {
-    const pane = '● Read(a)\n  ⎿  Read 3 lines\n\n● Bash(npm test)\n  ⎿  Run tests\n\n' + fx('claude-permission').split('\n').slice(3).join('\n');
-    expect(claudeAdapter.detectPrompt(pane)?.text).toBe('Bash(npm test)');
+  it('detects a file-creation permission as title + file name', () => {
+    expect(claudeAdapter.detectPrompt(fx('claude2-permission-write'))).toEqual({
+      kind: 'permission', text: 'Create file a.txt',
+      options: ['Yes', 'Yes, and switch to accept edits (auto-approve file edits and common file', 'No']
+    });
   });
-  it('reads only the last box: a stale box higher in the capture is not merged in', () => {
-    const pane = fx('claude-question') + '\n\n● User answered: Shadow table and swap\n\n' + fx('claude-permission');
-    expect(claudeAdapter.detectPrompt(pane)).toEqual({ kind: 'permission', text: 'Bash(npm test)', options: ['Yes', "Yes, and don't ask again for npm test", 'No, and tell Claude what to do differently (esc)'] });
+  it('detects a question with its options, without description lines', () => {
+    expect(claudeAdapter.detectPrompt(fx('claude2-question'))).toEqual({
+      kind: 'question', text: 'Which color do you prefer?',
+      options: ['Red', 'Blue', 'Type something.', 'Chat about this']
+    });
   });
-  it('a stale box above a live one does not hide the live question', () => {
-    const pane = fx('claude-permission') + '\n\n● Bash(npm test)\n  ⎿  ok\n\n' + fx('claude-question');
-    const m = claudeAdapter.detectPrompt(pane);
-    expect(m?.kind).toBe('question');
-    expect(m?.text).toBe('Which migration strategy for the invoices table?');
-    expect(m?.options).toEqual(['Backfill in place (Recommended)', 'Shadow table and swap', 'Dual write for a week', 'Other']);
+  it('reads only the last dialog when an older one is still in scrollback', () => {
+    const pane = fx('claude2-question') + '\n● You chose Blue.\n\n' + fx('claude2-permission-write');
+    expect(claudeAdapter.detectPrompt(pane)?.text).toBe('Create file a.txt');
   });
-  it('detects a question with its options', () => {
-    const m = claudeAdapter.detectPrompt(fx('claude-question'));
-    expect(m?.kind).toBe('question');
-    expect(m?.text).toBe('Which migration strategy for the invoices table?');
-    expect(m?.options).toEqual(['Backfill in place (Recommended)', 'Shadow table and swap', 'Dual write for a week', 'Other']);
+  it('does not detect the idle input box (empty ❯ line between rules)', () => {
+    expect(claudeAdapter.detectPrompt(fx('claude2-idle'))).toBeNull();
+    expect(claudeAdapter.promptStillVisible(fx('claude2-idle'))).toBe(false);
+    expect(claudeAdapter.promptStillVisible(tail(fx('claude2-idle')))).toBe(false);
+  });
+  it('does not detect a user prompt that looks like an option', () => {
+    const pane = fx('claude2-idle').replace('❯ \n', '❯ 1. Yes\n');
+    expect(claudeAdapter.detectPrompt(pane)).toBeNull();
+    expect(claudeAdapter.promptStillVisible(tail(pane))).toBe(false);
+  });
+  it('is not fooled by chat output quoting a dialog without its footer', () => {
+    expect(claudeAdapter.detectPrompt(fx('claude2-trap-chat'))).toBeNull();
+    expect(claudeAdapter.promptStillVisible(fx('claude2-trap-chat'))).toBe(false);
+  });
+  it('is not fooled by a quoted dialog with its footer when the idle box is below it', () => {
+    const pane = fx('claude2-permission-bash') + '\n' + fx('claude2-idle');
+    expect(claudeAdapter.detectPrompt(pane)).toBeNull();
+    expect(claudeAdapter.promptStillVisible(tail(pane))).toBe(false);
   });
   it('returns null while working', () => {
     expect(claudeAdapter.detectPrompt(fx('claude-working'))).toBeNull();
   });
-  it('is not fooled by prompt text quoted inside file contents', () => {
-    expect(claudeAdapter.detectPrompt(fx('claude-trap-file-contents'))).toBeNull();
-    expect(claudeAdapter.promptStillVisible(fx('claude-trap-file-contents'))).toBe(false);
+  it('a footer without numbered options is not a dialog', () => {
+    expect(claudeAdapter.detectPrompt('────\n Something\n\n Esc to cancel · Tab to amend')).toBeNull();
+    expect(claudeAdapter.promptStillVisible('Something\n\n Esc to cancel · Tab to amend')).toBe(false);
   });
-  it('promptStillVisible is true on a live prompt', () => {
-    expect(claudeAdapter.promptStillVisible(fx('claude-permission'))).toBe(true);
+});
+
+describe('claude adapter: promptStillVisible on the 5-line verify capture', () => {
+  it.each(['claude2-permission-bash', 'claude2-permission-write', 'claude2-question'])('is true on the bottom of %s', name => {
+    expect(claudeAdapter.promptStillVisible(tail(fx(name)))).toBe(true);
+  });
+  it('is false once the dialog is replaced by the idle screen', () => {
+    expect(claudeAdapter.promptStillVisible(tail(fx('claude2-idle')))).toBe(false);
   });
 });
 
 describe('claude adapter: keys', () => {
   const perm = { kind: 'permission' as const, text: 'npm test', source: 'hook' as const };
-  it('accept presses 1 then Enter', () => {
-    expect(claudeAdapter.keysFor('accept', perm)).toEqual([{ text: '1' }, { keys: ['Enter'] }]);
+  const q = { kind: 'question' as const, text: 'Which?', options: ['A', 'B'], source: 'pane' as const };
+  it('accept presses 1 alone (a digit selects immediately in 2.x)', () => {
+    expect(claudeAdapter.keysFor('accept', perm)).toEqual([{ text: '1' }]);
+    expect(claudeAdapter.keysFor('accept', q)).toEqual([{ text: '1' }]);
   });
   it('deny presses Escape', () => {
     expect(claudeAdapter.keysFor('deny', perm)).toEqual([{ keys: ['Escape'] }]);
   });
-  it('a question answered by option number types the number then Enter', () => {
-    const q = { kind: 'question' as const, text: 'Which?', options: ['A', 'B'], source: 'hook' as const };
+  it('a question answered by a valid option number sends that digit alone', () => {
+    expect(claudeAdapter.replyPlan('2', q)).toEqual([{ text: '2' }]);
+    expect(claudeAdapter.replyPlan(' 1 ', q)).toEqual([{ text: '1' }]);
+  });
+  it('an out-of-range number is free text', () => {
+    expect(claudeAdapter.replyPlan('3', q)).toEqual([{ text: '3' }, { keys: ['Enter'] }]);
+  });
+  it('a question without known options accepts any single digit 1-9', () => {
+    expect(claudeAdapter.replyPlan('4', { kind: 'question', text: 'Which?', source: 'hook' })).toEqual([{ text: '4' }]);
+    expect(claudeAdapter.replyPlan('0', { kind: 'question', text: 'Which?', source: 'hook' })).toEqual([{ text: '0' }, { keys: ['Enter'] }]);
+  });
+  it('with nothing pending a number is ordinary input: typed then Enter', () => {
     expect(claudeAdapter.replyPlan('2')).toEqual([{ text: '2' }, { keys: ['Enter'] }]);
-    expect(claudeAdapter.keysFor('accept', q)).toEqual([{ text: '1' }, { keys: ['Enter'] }]);
   });
   it('a free text reply is typed literally then Enter, multi-line joined by spaces', () => {
-    expect(claudeAdapter.replyPlan('fix all three\nthen run tests')).toEqual([{ text: 'fix all three then run tests' }, { keys: ['Enter'] }]);
+    expect(claudeAdapter.replyPlan('fix all three\nthen run tests', q)).toEqual([{ text: 'fix all three then run tests' }, { keys: ['Enter'] }]);
   });
   it('never emits a text step containing a newline or carriage return', () => {
-    for (const input of ['a\nb', 'a\r\nb', 'a\rb', '\n\na\n\n\nb\n']) {
-      const texts = claudeAdapter.replyPlan(input).filter((s): s is { text: string } => 'text' in s);
+    for (const input of ['a\nb', 'a\r\nb', 'a\rb', '\n\na\n\n\nb\n', '\n2\n']) {
+      const texts = claudeAdapter.replyPlan(input, q).filter((s): s is { text: string } => 'text' in s);
       for (const s of texts) expect(s.text).not.toMatch(/[\r\n]/);
     }
     expect(claudeAdapter.replyPlan('a\nb')).toEqual([{ text: 'a b' }, { keys: ['Enter'] }]);

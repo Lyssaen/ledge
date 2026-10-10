@@ -13,7 +13,7 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
   id, name: 'Otto', tool: 'claude', cwd: '/w', project: 'w', title: 'Otto · w', tmuxSession: `ledge-${id}`,
   state: 'working', helpers: [], startedAt: now(), lastActivityAt: now(), source: 'launcher', ...extra
 });
-const PROMPT = '╭──╮\n│ Do you want to proceed? │\n│ ❯ 1. Yes │\n╰──╯';
+const PROMPT = '─'.repeat(40) + '\n Bash command\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend';
 const failing: Record<string, true> = {}; const throwing: Record<string, true> = {};
 function fakeTmux(panes: Record<string, string>): Tmux {
   return {

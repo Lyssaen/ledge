@@ -8,6 +8,7 @@ export interface Adapter {
   detectPrompt(pane: string): PanePromptMatch | null;
   promptStillVisible(pane: string): boolean;
   keysFor(decision: 'accept' | 'deny', pending: Pending): KeyPlan;
-  replyPlan(text: string): KeyPlan;
+  /** `pending` is what the reply answers, if anything: a question can take an option number. */
+  replyPlan(text: string, pending?: Pending): KeyPlan;
   interruptKeys(): string[];
 }

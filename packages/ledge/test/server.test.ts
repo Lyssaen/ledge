@@ -28,7 +28,8 @@ function fakeTmux(panes: Record<string, string[]>): Tmux & { sent: string[][] } 
 }
 
 let srv: Awaited<ReturnType<typeof startServer>>; let store: Store; let tmux: ReturnType<typeof fakeTmux>;
-const PROMPT = 'x\n╭──╮\n│ Do you want to proceed? │\n│ ❯ 1. Yes │\n╰──╯';
+// The bottom of a Claude Code 2.x permission dialog.
+const PROMPT = 'x\n' + '─'.repeat(40) + '\n Bash command\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend';
 beforeEach(async () => {
   process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
   store = new Store();
@@ -110,14 +111,14 @@ describe('server', () => {
     c.close();
   });
 
-  it('decide accept types 1, Enter, verifies the prompt is gone and applies Decided', async () => {
+  it('decide accept types 1 alone, verifies the prompt is gone and applies Decided', async () => {
     store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
     const upd = await c.next('session.updated', 3000);
     expect(upd.session.state).toBe('working');
     expect(upd.session.pending).toBeUndefined();
-    expect(tmux.sent).toEqual([['text', 'ledge-a', '1'], ['keys', 'ledge-a', 'Enter']]);
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '1']]);
     c.close();
   });
 
@@ -129,7 +130,7 @@ describe('server', () => {
     const upd = await c.next('session.updated', 3000);
     expect(upd.session.state).toBe('error');
     expect(upd.session.pending?.text).toBe('npm test');
-    expect(tmux.sent.length).toBe(2);
+    expect(tmux.sent.length).toBe(1);
     c.close();
   });
 
@@ -143,7 +144,7 @@ describe('server', () => {
     c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
     const upd = await c.next('session.updated', 3000);
     expect(upd.session.state).toBe('error');
-    expect(tmux.sent.length).toBe(2);
+    expect(tmux.sent.length).toBe(1);
     c.close();
   });
 
@@ -213,6 +214,15 @@ describe('server', () => {
     c.close();
   });
 
+  it('reply with an option number to a question sends the digit alone (2.x selects on the digit)', async () => {
+    store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', options: ['Red', 'Blue'], source: 'pane' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: '2' });
+    expect((await c.next('session.updated', 3000)).session.state).toBe('working');
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '2']]);
+    c.close();
+  });
+
   it('kill removes the tmux session and marks the bot exited', async () => {
     store.upsert(mk('a'));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
@@ -253,7 +263,7 @@ describe('server', () => {
     const err = await c.next('error');
     expect(err.message).toMatch(/already in progress/);
     await c.next('session.updated', 3000);
-    expect(tmux.sent).toEqual([['text', 'ledge-a', '1'], ['keys', 'ledge-a', 'Enter']]);
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '1']]);
     c.close();
   });
 
