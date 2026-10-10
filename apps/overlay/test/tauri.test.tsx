@@ -245,7 +245,7 @@ describe('<Surface> under Tauri', () => {
     expect(document.querySelectorAll('[data-hotzone]')).toHaveLength(0);
   });
 
-  it('the page offset is committed with the set_frame request, not after the shell answers', async () => {
+  it('the page offset is committed with the set_frame request, after the painted frame that starts the transition, never after the shell answers', async () => {
     // The shell answers only when the test says so, and every request records the offset the page already shows when
     // it goes out.
     const seen: Array<{ top: number; offset: string | undefined }> = [];
@@ -261,17 +261,20 @@ describe('<Surface> under Tauri', () => {
     await waitFor(() => expect(seen.at(-1)).toEqual({ top: handleTop, offset: `-${handleTop}px` }));
     expect(content()).toHaveStyle({ top: `-${handleTop}px` }); // still unanswered
     await answer();
-    // Handle to list: the list frame holds the handle frame, so it applies at once, offset first.
+    // Handle to list: the list frame holds the handle frame, so it applies as soon as the first frame of the
+    // transition is painted. In the pass that opened the list the page still shows the handle's offset.
     await waitFor(() => expect(native.shortcut).not.toBeNull());
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
     const listTop = parseFloat(surface().style.top) - FRAME_PAD.top;
     expect(listTop).toBeLessThan(handleTop);
-    expect(content()).toHaveStyle({ top: `-${listTop}px` });
-    await waitFor(() => expect(seen.at(-1)).toEqual({ top: listTop, offset: `-${listTop}px` }));
-    await answer();
-    // List to handle (no settle with VITE_LEDGE_MOTION=0): straight back, offset first.
-    await act(async () => { native.shortcut!({ state: 'Pressed' }); });
     expect(content()).toHaveStyle({ top: `-${handleTop}px` });
+    expect(seen.at(-1)!.top).toBe(handleTop);
+    await waitFor(() => expect(seen.at(-1)).toEqual({ top: listTop, offset: `-${listTop}px` }));
+    expect(content()).toHaveStyle({ top: `-${listTop}px` }); // committed with the request, the shell has not answered
+    await answer();
+    // List to handle (no settle with VITE_LEDGE_MOTION=0): straight back after the next painted frame, offset first.
+    await act(async () => { native.shortcut!({ state: 'Pressed' }); });
+    await waitFor(() => expect(content()).toHaveStyle({ top: `-${handleTop}px` }));
     await answer(); // the bridge sends frames one after the other: this one waited for the list frame's answer
     await waitFor(() => expect(seen.at(-1)).toEqual({ top: handleTop, offset: `-${handleTop}px` }));
   });
@@ -336,27 +339,89 @@ describe('<Surface> under Tauri', () => {
 describe('useNativeFrame', () => {
   beforeEach(() => { vi.useFakeTimers(); enterTauri(); });
   afterEach(() => { vi.useRealTimers(); });
-
-  it('a shrink holds the union through the settle time, each step with its offset already committed', async () => {
-    vi.resetModules();
+  const log: string[] = [];
+  async function probe(first: { top: number; w: number; h: number }, settleMs = 320) {
+    vi.resetModules(); log.length = 0;
     const { useNativeFrame } = await import('../src/tauri/useNativeFrame');
-    const log: string[] = [];
     native.invoke.mockImplementation(async (cmd: string, a?: unknown) => {
       if (cmd === 'set_frame') log.push(`${JSON.stringify(a)} offset=${document.querySelector('[data-off]')?.textContent}`);
     });
-    function Probe({ f }: { f: { top: number; w: number; h: number } }) { return <span data-off>{useNativeFrame(f, 320)}</span>; }
-    const list = { top: 292, w: 396, h: 500 }, handle = { top: 510, w: 44, h: 77 };
-    const { rerender } = render(<Probe f={list} />);
-    expect(screen.getByText('292')).toBeInTheDocument(); // committed in the same pass, no shell answer needed
-    rerender(<Probe f={handle} />);
-    expect(screen.getByText('292')).toBeInTheDocument(); // the union keeps the list's top
-    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    act(() => { vi.advanceTimersByTime(319); });
-    expect(screen.getByText('292')).toBeInTheDocument();
-    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
-    expect(screen.getByText('510')).toBeInTheDocument();
-    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    // The union equals the list frame here, so the bridge does not resend it.
+    function Probe({ f }: { f: { top: number; w: number; h: number } }) { return <span data-off>{useNativeFrame(f, settleMs)}</span>; }
+    const r = render(<Probe f={first} />);
+    return { rerender: (f: { top: number; w: number; h: number }) => r.rerender(<Probe f={f} />), offset: () => document.querySelector('[data-off]')!.textContent };
+  }
+  const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+  const handle = { top: 510, w: 44, h: 77 }, list = { top: 292, w: 396, h: 500 };
+
+  it('the first placement is committed in the render pass; a grow waits for the frame that starts the transition to be painted, then goes out once with its offset', async () => {
+    const p = await probe(handle);
+    expect(p.offset()).toBe('510'); // committed in the same pass, no shell answer needed
+    await tick(0);
+    expect(log).toEqual(['{"top":510,"width":44,"height":77} offset=510']);
+    // The list opens: laid out at a fallback size, then measured, in the same pass. The first painted frame of the
+    // transition shows no motion yet, so the page keeps the handle's offset through it: the shell then has a whole
+    // frame to move the window before the page is presented at the new offset (a blank or displaced frame otherwise).
+    p.rerender({ top: 300, w: 396, h: 480 });
+    p.rerender(list);
+    expect(p.offset()).toBe('510');
+    await tick(15);
+    expect(p.offset()).toBe('510');
+    expect(log).toHaveLength(1);
+    // Right after that frame: one request, for the last frame of the pass, its offset already committed.
+    await tick(2);
+    expect(p.offset()).toBe('292');
+    expect(log).toEqual(['{"top":510,"width":44,"height":77} offset=510', '{"top":292,"width":396,"height":500} offset=292']);
+  });
+
+  it('a shrink holds the union through the settle time and one more painted frame, each step with its offset already committed', async () => {
+    const p = await probe(list);
+    expect(p.offset()).toBe('292');
+    await tick(0);
+    p.rerender(handle);
+    expect(p.offset()).toBe('292'); // the union keeps the list's top
+    await tick(17); // the union is committed after the next paint: it equals the list frame here, so the bridge does not resend it
+    expect(p.offset()).toBe('292');
+    expect(log).toHaveLength(1);
+    await tick(336 - 17);
+    expect(p.offset()).toBe('292'); // the settle time is up: the shrink waits for the transition's last frame to be painted
+    await tick(17);
+    expect(p.offset()).toBe('510');
     expect(log).toEqual(['{"top":292,"width":396,"height":500} offset=292', '{"top":510,"width":44,"height":77} offset=510']);
+  });
+
+  it('a frame change during the settle re-plans against the frame the shell holds', async () => {
+    const p = await probe(list);
+    await tick(0);
+    p.rerender(handle);
+    await tick(100);
+    p.rerender(list); // back to the list before the settle: the union (the list frame) already holds it
+    await tick(17);
+    expect(p.offset()).toBe('292');
+    await tick(400);
+    expect(p.offset()).toBe('292'); // the cancelled settle never shrank the window to the handle
+    expect(log).toEqual(['{"top":292,"width":396,"height":500} offset=292']);
+  });
+
+  it('with no settle time a shrink still waits for the painted frame, then applies at once', async () => {
+    const p = await probe(list, 0);
+    await tick(0);
+    p.rerender(handle);
+    expect(p.offset()).toBe('292');
+    await tick(17);
+    expect(p.offset()).toBe('510');
+    expect(log).toEqual(['{"top":292,"width":396,"height":500} offset=292', '{"top":510,"width":44,"height":77} offset=510']);
+  });
+
+  it('a hidden document (no animation frames) still commits, after a short fallback', async () => {
+    const p = await probe(handle);
+    await tick(0);
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    try {
+      p.rerender(list);
+      await tick(40);
+      expect(p.offset()).toBe('510');
+      await tick(20);
+      expect(p.offset()).toBe('292');
+    } finally { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); }
   });
 });

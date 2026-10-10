@@ -230,9 +230,9 @@ describe('<Surface> keyboard first', () => {
     act(() => shortcut());
     const card = screen.getByRole('dialog', { name: 'Keyboard' });
     const bottom = parseFloat(card.style.top) + parseFloat(card.style.height);
-    const frame = vi.mocked(setFrame).mock.lastCall![0];
-    expect(frame.top + frame.h).toBeGreaterThanOrEqual(bottom);
-    expect(parseFloat(surface().style.height)).toBeLessThan(frame.h);
+    // The frame goes out once the frame that opened the list is painted.
+    await waitFor(() => { const frame = vi.mocked(setFrame).mock.lastCall![0]; expect(frame.top + frame.h).toBeGreaterThanOrEqual(bottom); });
+    expect(parseFloat(surface().style.height)).toBeLessThan(vi.mocked(setFrame).mock.lastCall![0].h);
   });
 
   it('d toggles dnd from the keyboard', () => {
