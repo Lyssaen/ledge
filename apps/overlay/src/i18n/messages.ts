@@ -75,6 +75,11 @@ const fr = {
     more: (n: number) => `+${n} ${plural(n, 'autre', 'autres')}`,
     failed: (why: string) => `${why}. Réessayez ou ouvrez la session.`,
     lostDefault: 'La décision n’a pas été transmise',
+    finished: (name: string) => `${name} a terminé`,
+    finishedSub: (duration: string, project: string) => `${duration} de travail · ${project}`,
+    finishedSubNoTime: (project: string) => project,
+    ok: 'OK',
+    openSession: 'Ouvrir',
     pending: 'Envoyé, en attente du terminal', confirmed: 'Reçu',
     later: 'Plus tard', reviewAction: 'Relire', deny: 'Refuser', approve: 'Autoriser',
     answer: (opt: string) => `Répondre : ${opt}`, firstOption: 'première option'
@@ -170,6 +175,11 @@ const en: Messages = {
     more: (n: number) => `+${n} more`,
     failed: (why: string) => `${why}. Try again or open the session.`,
     lostDefault: 'The decision was not delivered',
+    finished: (name: string) => `${name} finished`,
+    finishedSub: (duration: string, project: string) => `${duration} of work · ${project}`,
+    finishedSubNoTime: (project: string) => project,
+    ok: 'OK',
+    openSession: 'Open',
     pending: 'Sent, waiting for the terminal', confirmed: 'Received',
     later: 'Later', reviewAction: 'Review', deny: 'Deny', approve: 'Approve',
     answer: (opt: string) => `Answer: ${opt}`, firstOption: 'first option'

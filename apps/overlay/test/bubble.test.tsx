@@ -98,4 +98,22 @@ describe('<Bubble>', () => {
     rerender(<Bubble session={fakeSession('c', { state: 'waiting_permission', pending: { kind: 'permission', text: 'ls', tool: 'Bash', source: 'hook' } })} visible {...props} />);
     expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
   });
+  it('a finished notice speaks in the bot name, shows the work time and the project, and offers OK and Open', () => {
+    const onOpen = vi.fn(); const onDismiss = vi.fn();
+    const idle = fakeSession('a', { state: 'idle' });
+    render(<Bubble session={idle} kind="finished" elapsedMs={160_000} moreCount={0} visible paused={false} onOpen={onOpen} onDismiss={onDismiss} onDecide={() => {}} onReply={() => {}} />);
+    expect(screen.getByText('Otto finished')).toBeInTheDocument();
+    expect(screen.getByText('2m 40s of work · harness-assistant')).toBeInTheDocument();
+    expect(screen.getByText('Available')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+    expect(onDismiss).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    expect(onOpen).toHaveBeenCalled();
+    expect(document.querySelector('[data-timer]')).toHaveAttribute('data-remaining', '6000');
+  });
+  it('a finished notice without a known work time shows the project alone', () => {
+    render(<Bubble session={fakeSession('a', { state: 'idle' })} kind="finished" moreCount={0} visible paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />);
+    expect(screen.getByText('harness-assistant')).toBeInTheDocument();
+  });
 });
