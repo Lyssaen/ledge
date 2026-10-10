@@ -26,7 +26,7 @@ export type SurfaceEvent =
   | { type: 'focusWithin'; on: boolean } | { type: 'visibility'; hidden: boolean }
   | { type: 'botClick'; id: string } | { type: 'rowClick'; id: string } | { type: 'bubbleClick' } | Elapsed<'bubbleElapsed'>
   | { type: 'decidedInBubble' } | Elapsed<'holdElapsed'> | { type: 'back' } | { type: 'close' } | { type: 'shortcut' }
-  | { type: 'typing'; on: boolean } | { type: 'reading'; on: boolean };
+  | { type: 'typing'; on: boolean } | { type: 'reading'; on: boolean } | { type: 'dnd'; on: boolean };
 
 /** Functional durations: independent of the `ms()` animation scaling. */
 export const TIMERS: Record<TimerName, number> = { dwell: 180, leave: 500, bubble: 4000, hold: 900, unfold: 540 };
@@ -131,6 +131,13 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
     case 'shortcut': return s.mode === 'handle' ? { state: { ...s, mode: 'list', openedBy: 'keyboard', hot: false }, effects: cancelAll } : { state: toHandle(s), effects: cancelAll };
     case 'typing': return { state: { ...s, typing: e.on }, effects: e.on ? [cancel('leave')] : [] };
     case 'reading': return same({ ...s, reading: e.on });
+    /* DND on: the bubble (an in-flight acknowledgement included: the decision is already sent) folds and the queue
+       is dropped, so nothing surfaces later. Off is a no-op: asks already pending are not re-bubbled. */
+    case 'dnd': {
+      if (!e.on) return same(s);
+      const quiet = { ...s, queue: [] };
+      return { state: s.mode === 'bubble' ? toHandle(quiet) : quiet, effects: [cancel('unfold'), cancel('bubble'), cancel('hold')] };
+    }
   }
 }
 

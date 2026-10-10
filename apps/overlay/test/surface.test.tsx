@@ -128,6 +128,28 @@ describe('<Surface>', () => {
     expect((screen.getByPlaceholderText('Reply to Otto…') as HTMLInputElement).value).toBe('keep going');
   });
 
+  it('turning dnd on takes the bubble down and does not surface the queued asks', async () => {
+    const { rerender } = render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => {
+      mock.upsert(fakeSession('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } })); mock.upsert(pimAsks());
+      await sleep(50); vi.advanceTimersByTime(540);
+    });
+    expect(surface()).toHaveStyle({ width: '336px' });
+    expect(screen.getByText('+1 more')).toBeInTheDocument();
+    rerender(<Surface screenH={1080} theme="dark" client={client} dnd onToggleDnd={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(100); });
+    expect(surface()).toHaveStyle({ width: '28px' });
+    await act(async () => { vi.advanceTimersByTime(5000); });
+    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    expect(screen.getByRole('button', { name: /Otto has a question, open/ })).toHaveStyle({ width: '20px' });
+    expect(screen.getByRole('button', { name: /Pim needs your approval, open/ })).toHaveStyle({ width: '20px' });
+    // Turning dnd off does not re-bubble asks that are already pending.
+    rerender(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+  });
+
   it('dnd suppresses the bubble but the bot still grows', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(fakeSession('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } })); await sleep(50); vi.advanceTimersByTime(600); });

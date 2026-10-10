@@ -108,6 +108,19 @@ describe('surface machine', () => {
     const s2 = run([{ type: 'botClick', id: 'a' }, { type: 'removed', id: 'a', remaining: [] }]).s;
     expect(s2.mode).toBe('handle');
   });
+  it('turning dnd on folds the bubble, drops the queue and cancels the unfold; off is a no-op', () => {
+    const shown = run([{ type: 'ask', id: 'a' }, { type: 'unfoldElapsed' as never }, { type: 'ask', id: 'b' }, { type: 'dnd', on: true }]);
+    expect(shown.s.mode).toBe('handle'); expect(shown.s.bubbleId).toBeNull(); expect(shown.s.queue).toEqual([]);
+    expect(shown.effects).toEqual(expect.arrayContaining(['cancelTimer:bubble', 'cancelTimer:unfold', 'cancelTimer:hold']));
+    const acking = run([{ type: 'ask', id: 'a' }, { type: 'unfoldElapsed' as never }, { type: 'decidedInBubble' }, { type: 'dnd', on: true }]);
+    expect(acking.s.mode).toBe('handle'); expect(acking.s.ack).toBeNull();
+    const growing = run([{ type: 'ask', id: 'a' }, { type: 'dnd', on: true }, { type: 'unfoldElapsed' as never }]);
+    expect(growing.s.mode).toBe('handle'); expect(growing.s.queue).toEqual([]);
+    const list = run([{ type: 'shortcut' }, { type: 'ask', id: 'a' }, { type: 'dnd', on: true }]);
+    expect(list.s.mode).toBe('list'); expect(list.s.queue).toEqual([]);
+    const off = run([{ type: 'dnd', on: false }], shown.s);
+    expect(off.s).toBe(shown.s); expect(off.effects).toEqual([]);
+  });
   it('shortcut toggles the list opened by keyboard', () => {
     const open = run([{ type: 'shortcut' }]).s; expect(open).toMatchObject({ mode: 'list', openedBy: 'keyboard' });
     expect(run([{ type: 'shortcut' }], open).s.mode).toBe('handle');

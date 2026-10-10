@@ -41,6 +41,9 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
     prevIds.current = ids; prevPending.current = pend;
   }, [sessions, dnd, dispatch]);
 
+  // DND switched on takes any bubble down and drops queued asks. Turning it off does not re-bubble asks already pending.
+  useEffect(() => { if (dnd) dispatch({ type: 'dnd', on: true }); }, [dnd, dispatch]);
+
   // A hidden document holds the bubble clock.
   useEffect(() => {
     const sync = () => dispatch({ type: 'visibility', hidden: document.hidden });
