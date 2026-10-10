@@ -19,5 +19,6 @@ export const ICONS = {
   external: { d: ['M7 17 17 7', 'M8 7h9v9'] },
   send: { d: ['M12 19V5', 'm5 12 7-7 7 7'] },
   stop: { d: ['M6 6h12v12H6z'] },
-  check: { d: ['M20 6 9 17l-5-5'] }
+  check: { d: ['M20 6 9 17l-5-5'] },
+  listRemove: { d: ['M11 12H3', 'M16 6H3', 'M16 18H3', 'm19 10-4 4', 'm15 10 4 4'] }
 } as const;

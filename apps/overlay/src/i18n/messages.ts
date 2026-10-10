@@ -29,7 +29,8 @@ const fr = {
     summary: (n: number, waiting: number) => `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} ${plural(waiting, 'demande', 'demandes')} pour vous` : 'tout est à jour'}`,
     dnd: 'Ne pas déranger', settings: 'Réglages', collapse: 'Replier', help: 'Raccourcis clavier',
     row: (project: string, name: string) => `${project}, ${name}, ouvrir`,
-    approve: 'Autoriser', deny: 'Refuser', openRow: 'Ouvrir'
+    approve: 'Autoriser', deny: 'Refuser', openRow: 'Ouvrir',
+    dismiss: 'Retirer de la liste', dismissRow: (project: string, name: string) => `Retirer de la liste : ${project}, ${name}`
   },
   detail: { back: 'Retour aux sessions', close: 'Fermer' },
   session: {
@@ -121,7 +122,8 @@ const en: Messages = {
     summary: (n: number, waiting: number) => `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} waiting for you` : 'nothing waiting'}`,
     dnd: 'Do not disturb', settings: 'Settings', collapse: 'Collapse', help: 'Keyboard shortcuts',
     row: (project: string, name: string) => `${project}, ${name}, open`,
-    approve: 'Approve', deny: 'Deny', openRow: 'Open'
+    approve: 'Approve', deny: 'Deny', openRow: 'Open',
+    dismiss: 'Remove from list', dismissRow: (project: string, name: string) => `Remove from list: ${project}, ${name}`
   },
   detail: { back: 'Back to sessions', close: 'Close' },
   session: {

@@ -57,4 +57,26 @@ describe('rowHint', () => {
     expect(rowHint(sessions[3]!)).toBe('exited 0');
     expect(rowHint(fakeSession('e', { state: 'error', lastError: 'boom' }))).toBe('boom');
   });
+  describe('remove from list', () => {
+    const props = { visible: true, numbered: false, selectedId: null, dnd: false, onToggleDnd: () => {}, onClose: () => {} };
+    it('only finished and read-only rows carry the button; it dismisses without opening the row', () => {
+      const onOpen = vi.fn(); const onDismiss = vi.fn();
+      render(<SessionList {...props} sessions={sessions} onOpen={onOpen} onDismiss={onDismiss} />);
+      const buttons = screen.getAllByRole('button', { name: /^Remove from list/ });
+      expect(buttons.map(b => b.closest('[data-row-id]')!.getAttribute('data-row-id'))).toEqual(['c', 'd']);
+      expect(buttons[1]).toHaveAccessibleName(`Remove from list: ${sessions[3]!.project}, Lu`);
+      expect(buttons[1]).toHaveAttribute('title', 'Remove from list');
+      // A real button, reachable with the keyboard, outside the row's open button.
+      expect(buttons[1]!.tagName).toBe('BUTTON'); expect(buttons[1]).not.toHaveAttribute('tabindex', '-1');
+      expect(buttons[1]!.closest('button[data-row]')).toBeNull();
+      fireEvent.click(buttons[1]!);
+      expect(onDismiss).toHaveBeenCalledWith('d'); expect(onOpen).not.toHaveBeenCalled();
+    });
+    it('is disabled offline, and absent without a handler', () => {
+      const { rerender } = render(<SessionList {...props} sessions={sessions} onOpen={() => {}} onDismiss={() => {}} offline />);
+      for (const b of screen.getAllByRole('button', { name: /^Remove from list/ })) expect(b).toBeDisabled();
+      rerender(<SessionList {...props} sessions={sessions} onOpen={() => {}} />);
+      expect(screen.queryAllByRole('button', { name: /^Remove from list/ })).toHaveLength(0);
+    });
+  });
 });

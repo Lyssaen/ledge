@@ -38,3 +38,6 @@ textarea::placeholder, .ledge-field::placeholder { color: var(--muted-foreground
 details.ledge-terminal > summary { list-style: none; cursor: pointer; }
 details.ledge-terminal > summary::-webkit-details-marker { display: none; }
 details.ledge-terminal[open] > summary [data-caret] { transform: rotate(90deg); }
+/* A row's remove button shows on hover or keyboard focus of the row only (it stays in the tab order). */
+.ledge-row .ledge-row-dismiss { opacity: 0; transition: opacity 120ms ease; }
+.ledge-row:hover .ledge-row-dismiss, .ledge-row:focus-within .ledge-row-dismiss { opacity: 1; }

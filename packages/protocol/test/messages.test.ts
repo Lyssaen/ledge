@@ -28,6 +28,7 @@ describe('protocol', () => {
       { type: 'session.focus', id: '7f3a' },
       { type: 'session.kill', id: '7f3a' },
       { type: 'session.interrupt', id: '7f3a' },
+      { type: 'session.dismiss', id: '7f3a' },
       { type: 'session.register', session },
       { type: 'session.event', id: '7f3a', event: { name: 'Stop', at: '2026-10-09T18:02:00.000Z', source: 'hook' } },
       { type: 'session.unregister', id: '7f3a', exitCode: 0 }

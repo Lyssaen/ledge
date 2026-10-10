@@ -357,6 +357,46 @@ describe('server', () => {
     });
   });
 
+  describe('dismiss', () => {
+    it('removes an exited session: session.removed is broadcast and the journal forgets it', async () => {
+      store.upsert(mk('a', { state: 'exited', exitCode: 0, exitedAt: T0 })); srv.preview('a', ['● bye']);
+      const c = await connect({ port: srv.port }); await c.next('snapshot'); await c.next('session.preview');
+      const other = await connect({ port: srv.port }); await other.next('snapshot');
+      c.send({ type: 'session.dismiss', id: 'a' });
+      expect(await c.next('session.removed')).toEqual({ type: 'session.removed', id: 'a' });
+      expect(await other.next('session.removed')).toEqual({ type: 'session.removed', id: 'a' });
+      expect(store.get('a')).toBeUndefined();
+      await store.save();
+      const journal = JSON.parse(readFileSync(join(process.env.LEDGE_HOME!, 'sessions.json'), 'utf8'));
+      expect(journal.sessions.map((s: Session) => s.id)).not.toContain('a');
+      // Its preview is gone: a new client gets none.
+      c.send({ type: 'snapshot.request' }); await c.next('snapshot');
+      await expect(c.next('session.preview', 150)).rejects.toThrow(/timeout/);
+      c.close(); other.close();
+    });
+    it('removes a read-only (hook_only) session even while it runs', async () => {
+      store.upsert(mk('h', { source: 'hook_only', tmuxSession: null, state: 'working' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.dismiss', id: 'h' });
+      expect((await c.next('session.removed')).id).toBe('h');
+      // A later hook brings it back through the hook-before-register path.
+      c.send({ type: 'session.event', id: 'h', event: { name: 'Stop', at: T0, source: 'hook' } });
+      expect((await c.next('session.updated')).session.id).toBe('h');
+      c.close();
+    });
+    it('refuses a live launcher session and an unknown id with an error for that id', async () => {
+      store.upsert(mk('a'));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.dismiss', id: 'a' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: 'the session is still running, kill it first' });
+      expect(store.get('a')).toBeDefined();
+      c.send({ type: 'session.dismiss', id: 'nope' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'nope', message: 'unknown session' });
+      await expect(c.next('session.removed', 100)).rejects.toThrow(/timeout/);
+      c.close();
+    });
+  });
+
   it('kill removes the tmux session and marks the bot exited', async () => {
     store.upsert(mk('a'));
     const c = await connect({ port: srv.port }); await c.next('snapshot');

@@ -33,6 +33,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.focus'), id: z.string() }),
   z.object({ type: z.literal('session.kill'), id: z.string() }),
   z.object({ type: z.literal('session.interrupt'), id: z.string() }),
+  /** Removes a finished (exited) or read-only (hook_only) session from the list; refused for a live launcher session. */
+  z.object({ type: z.literal('session.dismiss'), id: z.string() }),
   z.object({ type: z.literal('session.register'), session: SessionSchema }),
   z.object({ type: z.literal('session.event'), id: z.string(), event: SessionEventSchema }),
   z.object({ type: z.literal('session.unregister'), id: z.string(), exitCode: z.number().int().nullable() }),

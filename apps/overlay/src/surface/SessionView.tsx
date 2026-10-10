@@ -9,6 +9,7 @@ import { Icon, ICONS } from '../ui/icons';
 import { relativeTime, toolName } from '../format';
 import { transition } from '../motion';
 import { useI18n, type Messages } from '../i18n/lang';
+import { canDismiss } from './SessionList';
 
 const mono = "'Geist Mono', ui-monospace, monospace";
 const well: React.CSSProperties = { fontFamily: mono, fontSize: 13, lineHeight: '20px', padding: '10px 12px', background: 'var(--sidebar)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' };
@@ -53,6 +54,8 @@ export interface SessionViewProps {
   session: Session; preview: string[]; visible: boolean; reading: boolean; draft: string;
   onDraft: (t: string) => void; onBack: () => void; onClose: () => void; onDecide: (d: 'accept' | 'deny') => void; onReply: (t: string) => void;
   onInterrupt: () => void; onKill: () => void; onFocus: () => void; onToggleReading: () => void;
+  /** Removes a finished or read-only session from the list (shown only for those); `dismissOff` while offline. */
+  onDismiss?: () => void; dismissOff?: boolean;
   /** Null when commands may be sent; otherwise why every send/decision path is disabled (offline, read-only). */
   blocked?: string | null;
   /** A decision for this request is in flight: its actions stay locked until the daemon answers. */
@@ -109,6 +112,7 @@ export function SessionView(p: SessionViewProps) {
         </div>
         <Button variant="ghost" size="icon" aria-label={t.session.reading} title={t.session.reading} aria-pressed={p.reading} onClick={p.onToggleReading} style={{ width: 32, height: 32, color: p.reading ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)' }}><Icon {...ICONS.expand} /></Button>
         <Button variant="ghost" size="icon" aria-label={t.session.focusTerminal} title={t.session.focusTerminal} onClick={p.onFocus} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.external} /></Button>
+        {p.onDismiss && canDismiss(s) && <Button variant="ghost" size="icon" data-dismiss aria-label={t.list.dismiss} title={t.list.dismiss} disabled={!!p.dismissOff} onClick={p.onDismiss} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.listRemove} /></Button>}
         <Button variant="ghost" size="icon" aria-label={t.session.close} title={t.session.close} onClick={p.onClose} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.close} /></Button>
       </div>
 

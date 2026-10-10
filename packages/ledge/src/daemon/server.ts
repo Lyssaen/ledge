@@ -190,6 +190,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.apply(msg.id, { name: 'PaneGone', at: now(), source: 'daemon' });
         return;
       }
+      case 'session.dismiss': {
+        const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
+        if (s.state !== 'exited' && s.source !== 'hook_only') return send(ws, { type: 'error', id: msg.id, message: 'the session is still running, kill it first' });
+        // Removal broadcasts session.removed, drops the remembered preview and is saved to the journal.
+        // A dismissed hook_only session that is in fact still alive comes back on its next hook (the
+        // hook-before-register path in session.event recreates it): acceptable, it is still running.
+        store.remove(msg.id);
+        return;
+      }
       case 'session.focus':
         return; // handled by the overlay plan via wt.exe; the daemon only acknowledges
     }

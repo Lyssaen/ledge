@@ -121,4 +121,16 @@ describe('<SessionView>', () => {
       expect(g.top).toBe(900);
     });
   });
+  describe('remove from list', () => {
+    it('a finished or read-only session offers it in the header; a running one does not', () => {
+      const onDismiss = vi.fn();
+      const { rerender } = render(<SessionView {...base} session={fakeSession('d', { state: 'exited', exitCode: 0 })} onDismiss={onDismiss} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove from list' }));
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      rerender(<SessionView {...base} session={fakeSession('h', { source: 'hook_only', tmuxSession: null })} onDismiss={onDismiss} dismissOff />);
+      expect(screen.getByRole('button', { name: 'Remove from list' })).toBeDisabled();
+      rerender(<SessionView {...base} session={fakeSession('r')} onDismiss={onDismiss} />);
+      expect(screen.queryByRole('button', { name: 'Remove from list' })).toBeNull();
+    });
+  });
 });

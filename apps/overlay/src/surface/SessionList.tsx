@@ -11,6 +11,8 @@ import { isYesNo } from '../keyboard/useKeyboard';
 import { Icon, ICONS } from '../ui/icons';
 import { messagesFor, useI18n, type Messages } from '../i18n/lang';
 
+/** A finished or read-only session can leave the list (`session.dismiss`); a live launcher session cannot. */
+export const canDismiss = (s: Session) => s.state === 'exited' || s.source === 'hook_only';
 const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
 /** The context of a session in one phrase (the handle's tooltip): the pending text, or what the bot is doing. */
 export function rowHint(s: Session, t: Messages = messagesFor()): string {
@@ -31,10 +33,12 @@ export interface ListProps {
   onSettings?: () => void; onHelp?: () => void; onHoverRow?: (id: string | null) => void;
   /** Whether a session's decisions may be sent now (reachable daemon, not read-only, nothing in flight). */
   canDecide?: (s: Session) => boolean;
+  /** Removes an eligible row (see canDismiss); `offline` disables the button like every other send. */
+  onDismiss?: (id: string) => void; offline?: boolean;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number;
 }
 
-export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, canDecide = () => true, theme = 'dark', frozen = false, reducedMotion, now = Date.now() }: ListProps) {
+export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now() }: ListProps) {
   const { t } = useI18n();
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
@@ -56,7 +60,7 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
           const bg = hi ? 'var(--secondary)' : selectedId === s.id ? 'var(--sidebar-accent)' : 'transparent';
           const st = botState(s); const readOnly = s.source === 'hook_only';
           return (
-            <div key={s.id} data-row-id={s.id} style={{ flexShrink: 0, height: actions ? EXPANDED_ROW_H : SIZES.rowH, boxSizing: 'border-box', overflow: 'hidden', backgroundColor: bg, outline: focused ? '2px solid var(--ring)' : 'none', outlineOffset: -2, transition: transition([['height', 'grow', 0], ['background-color', 'hover']]) }}>
+            <div key={s.id} data-row-id={s.id} className="ledge-row" style={{ position: 'relative', flexShrink: 0, height: actions ? EXPANDED_ROW_H : SIZES.rowH, boxSizing: 'border-box', overflow: 'hidden', backgroundColor: bg, outline: focused ? '2px solid var(--ring)' : 'none', outlineOffset: -2, transition: transition([['height', 'grow', 0], ['background-color', 'hover']]) }}>
             <button type="button" data-row aria-label={t.list.row(s.project, s.name)} aria-current={selectedId === s.id ? 'true' : undefined} data-delay={delay} onClick={() => onOpen(s.id)} onMouseEnter={() => onHoverRow?.(s.id)} onMouseLeave={() => onHoverRow?.(null)}
               style={{ display: 'flex', alignItems: 'center', gap: 12, height: SIZES.rowH, boxSizing: 'border-box', padding: `0 17px 0 ${numbered ? 8 : 15}px`, border: 'none', borderLeftWidth: 2, borderLeftStyle: 'solid', borderLeftColor: hi ? 'var(--sidebar-primary)' : 'transparent', backgroundColor: bg, textAlign: 'left', color: 'var(--sidebar-foreground)', cursor: 'pointer', width: '100%', opacity: visible ? 1 : 0, transform: `translateX(${visible ? 0 : -10}px)`,
                 transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? delay : 0], ['transform', visible ? 'grow' : 'fadeOut', visible ? delay : 0], ['background-color', 'hover'], ['border-color', 'hover']]) }}>
@@ -68,6 +72,11 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
               </span>
               {readOnly ? <Badge state="readonly" tone={st} /> : <Badge state={st} />}
             </button>
+            {onDismiss && canDismiss(s) && (
+              // A sibling of the row button, not inside it: a click removes the row and does not open it.
+              <Button variant="secondary" size="icon" data-dismiss className="ledge-row-dismiss" aria-label={t.list.dismissRow(s.project, s.name)} title={t.list.dismiss} disabled={offline}
+                onClick={() => onDismiss(s.id)} style={{ position: 'absolute', right: 12, top: (SIZES.rowH - 28) / 2, width: 28, height: 28, padding: 0, color: 'var(--sidebar-foreground)' }}><Icon size={14} {...ICONS.listRemove} /></Button>
+            )}
             {actions && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: EXPANDED_ROW_H - SIZES.rowH, boxSizing: 'border-box', padding: `0 17px 4px ${numbered ? 40 : 59}px` }}>
                 <Button variant="primary" size="sm" disabled={!canDecide(s)} onClick={() => onDecide?.(s.id, 'accept')} style={{ height: 28, padding: '0 8px' }}>{t.list.approve} <Kbd accent>Y</Kbd></Button>
