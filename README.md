@@ -97,9 +97,10 @@ One binary, `ledge`, with six modes. Source under `src/`:
 | `daemon/store.ts` | In-memory session map with change listeners; applies events through the reducer and saves the journal 200 ms after the last change (atomic write). Also the twelve most recent folders, for the overlay's launch form. |
 | `daemon/state.ts` | The pure reducer `reduce(session, event)`: the whole state machine, including helper (subagent) routing and the hook-over-pane priority. |
 | `daemon/poller.ts` | Every 1 s captures each live pane (200 lines), hashes it to detect activity, broadcasts a 30-line preview when it changed, runs the adapter's prompt detection on the last 60 lines, and checks every 5 s that the tmux session still exists. Exited sessions are dropped after 10 min. |
-| `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect, broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent and answers `session.launched`. |
+| `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect, broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent with the login shell's PATH (see `shell-path.ts`) and answers `session.launched`. |
 | `adapters/` | One adapter per tool (`Adapter` in `types.ts`): prompt detection in the pane, `promptStillVisible`, key plans for accept/deny/reply/interrupt, and preview cleaning. Only `claude.ts` is implemented. |
-| `tmux.ts` | Thin wrapper over the dedicated server `tmux -L ledge -f ~/.ledge/tmux.conf`. |
+| `tmux.ts` | Thin wrapper over the dedicated server `tmux -L ledge -f ~/.ledge/tmux.conf`. `newSession` runs the tmux client with the pane's PATH: tmux gives a detached session's pane the client's PATH, over `-e`. |
+| `shell-path.ts` | The PATH a login shell (`$SHELL -l`) starts with. Under systemd the daemon has the bare system PATH, where `claude` (`~/.local/bin`) does not resolve; an agent launched from the overlay gets the terminal's instead, or the daemon's (logged) when the shell fails. |
 | `client.ts`, `names.ts`, `paths.ts`, `log.ts` | WebSocket client for the CLI modes, the list of 64 bot names, `~/.ledge` paths (`LEDGE_HOME` overrides), the daemon log. |
 
 ### `apps/overlay` (Windows, Tauri 2 + React 19 + Tailwind 4)

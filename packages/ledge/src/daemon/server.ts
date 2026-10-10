@@ -12,6 +12,7 @@ import { reduce } from './state.js';
 import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
 import { spawnSession } from '../spawn.js';
+import { loginShellPath } from '../shell-path.js';
 import { log } from '../log.js';
 
 /** How each agent resumes the folder's last conversation. Only Claude Code's flag is verified; the other adapters are stubs. */
@@ -71,10 +72,12 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; launcher?: string[]; home?: string }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; launcher?: string[]; home?: string; agentPath?: () => Promise<string> }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
+  // Under systemd the daemon has the bare system PATH: a launched agent gets the login shell's, as a terminal would.
+  const agentPath = opts.agentPath ?? (() => loginShellPath({ fallback: process.env.PATH ?? '' }));
   const wss = new WebSocketServer({
     host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT,
     verifyClient: ({ req }: { req: IncomingMessage }) => {
@@ -186,7 +189,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
         const cwd = await resolveFolder(msg.cwd, opts.home);
         const live = store.all();
-        const session = await spawnSession({ tool: msg.tool, args: launchArgs(msg), name: msg.name, cwd, tmux, now, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+        const env = { ...process.env, PATH: await agentPath() };
+        const session = await spawnSession({ tool: msg.tool, args: launchArgs(msg), name: msg.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
         store.upsert(session);
         store.touchRecent(session.cwd, session.project, session.startedAt);
         log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);

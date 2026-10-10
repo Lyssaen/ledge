@@ -14,9 +14,9 @@ export interface Tmux {
   attachArgs(name: string): string[];
 }
 
-export function run(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+export function run(args: string[], env?: NodeJS.ProcessEnv): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise(resolve => {
-    execFile('tmux', args, { maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile('tmux', args, { maxBuffer: 4 * 1024 * 1024, env }, (err, stdout, stderr) => {
       const code = err && typeof (err as NodeJS.ErrnoException & { code?: number }).code === 'number' ? (err as unknown as { code: number }).code : err ? 1 : 0;
       resolve({ code, stdout: String(stdout), stderr: String(stderr) });
     });
@@ -25,11 +25,13 @@ export function run(args: string[]): Promise<{ code: number; stdout: string; std
 
 export function realTmux(socket = 'ledge'): Tmux {
   const base = () => ['-L', socket, '-f', paths().tmuxConf];
-  const t = (args: string[]) => run([...base(), ...args]);
+  const t = (args: string[], env?: NodeJS.ProcessEnv) => run([...base(), ...args], env);
   return {
     async newSession({ name, cwd, env, command }) {
       const envArgs = Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
-      const r = await t(['new-session', '-d', '-s', name, '-c', cwd, '-x', '200', '-y', '50', ...envArgs, '--', ...command]);
+      // tmux gives a detached session's pane the PATH of the client that created it, over `-e`: the client carries the pane's.
+      const clientEnv = env.PATH === undefined ? undefined : { ...process.env, PATH: env.PATH };
+      const r = await t(['new-session', '-d', '-s', name, '-c', cwd, '-x', '200', '-y', '50', ...envArgs, '--', ...command], clientEnv);
       if (r.code !== 0) throw new Error(`tmux new-session failed: ${r.stderr.trim()}`);
     },
     async sendText(name, text) {
