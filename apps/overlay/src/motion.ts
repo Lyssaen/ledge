@@ -9,6 +9,13 @@ export const MOTION = {
 } as const;
 export type MotionKind = keyof typeof MOTION;
 
+/** When a view's content fades in, in ms from the surface's change of shape. Entries follow the shape once it has
+ *  nearly settled: 120 ms into a grow (fast start, long deceleration), but a shrink waits 60 ms and starts slowly, so
+ *  its content comes in at 280 ms, 40 ms before the shrink ends. Earlier, the list's rows and footer would be drawn at
+ *  the session's size and jump into place as the surface shrinks. */
+export const ENTER_DELAY = { grow: 120, shrink: MOTION.shrink.delayMs + MOTION.shrink.ms - 40 } as const;
+export const enterDelay = (growing: boolean): number => growing ? ENTER_DELAY.grow : ENTER_DELAY.shrink;
+
 const scale = (): number => {
   const v = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_LEDGE_MOTION;
   return v === undefined ? 1 : Number(v);

@@ -4,6 +4,8 @@ Date : 2026-10-09 · Projet personnel, hors story Jira · Auteur : Joffrey Desan
 
 **Révision 2 — direction visuelle et maquette interactive validées par l’utilisateur.** Signal est retenu en thème sombre, Galet en thème clair. Cette validation autorise la mise à jour du design et des plans ; elle ne signifie pas que l’overlay ou les intégrations réelles sont implémentés.
 
+**Révision 3 — 2026-10-10, vie de la poignée et notifications.** Trois ajouts validés sur les planches 20 à 22 du canevas (« Alive ») : le saut de travail des bots, la bulle de fin de tâche et les sons. Décisions de l’utilisateur : saut à rythme régulier (toutes les 3,6 à 4,4 s), fin de tâche notifiée par bulle **et** son, palette de sons synthétisés sans fichier audio. Sections 5 (bulle de fin de tâche, réglages Sons), 6 (saut), 7 (mouvement), 7 ter (sons) et 9 (tests).
+
 Références visuelles, par ordre de priorité :
 
 - [Maquette interactive validée](../../mockups/ledge-prototype.html), avec ses fichiers dans `../../mockups/prototype/`.
@@ -143,6 +145,16 @@ La colonne des scénarios, le faux bureau, les boutons de simulation et le compt
 - Largeur de 336 px ; hauteur mesurée selon le texte, les actions et la file. Aucune hauteur fixe de 128 px ne doit tronquer la version validée.
 - Plusieurs demandes : la bulle ne montre que la plus ancienne, avec « +N more » dessous.
 
+#### La bulle de fin de tâche (planche 21)
+
+- Déclenchée par le passage d'une session de `working` (ou `starting`) à `idle` : le hook `Stop` de Claude Code, `notify` de Codex, `stop` de Cursor Agent, ou `PaneIdle` quand aucun hook ne l'a précédé. Uniquement quand la surface est en poignée, hors « ne pas déranger », et si le réglage « Quand un bot a terminé » le demande (défaut : bulle et son).
+- Même chorégraphie qu'une demande : le bot grossit dans la poignée (280 ms), la bulle se déploie 260 ms plus tard depuis sa place. Le bot y est en expression `idle` (yeux souriants, halo vert).
+- Contenu : « <Prénom> a terminé », sous-ligne mono avec le résumé que le daemon connaît (durée du tour, projet ; fichiers modifiés et tests quand l'adaptateur les fournit, sinon seulement la durée et le projet), badge « Disponible », puis OK (replie) et Ouvrir (vers la session, qui montre l'aperçu du terminal).
+- Barre de 2 px sur 6 s (une fin de tâche ne demande rien : elle peut rester un peu plus que les 4 s d'une demande), suspendue au survol, au focus et fenêtre masquée, avec le temps restant exact.
+- Une demande qui arrive pendant la bulle de fin la remplace : une demande passe toujours avant une information. Plusieurs fins de tâche se suivent comme une file, la plus ancienne d'abord, sans « +N » (un simple remplacement suffit).
+- Une fin de session (`exited`) n'ouvre jamais de bulle : le bot ferme les yeux et passe à 0,55 dans la poignée ; un son bref de départ si la catégorie « Équipe » est active. Un code de sortie non nul est une erreur : poignée et liste, jamais de bulle (section 8).
+- `PaneIdle` répété ou un `Stop` qui suit un `Stop` sans passage par `working` ne redéclenche rien : la bulle ne s'ouvre que sur une transition réelle vers `idle`.
+
 ### La liste (planche 3, clair planche 5)
 
 - 380 px. En-tête « Ledge », compteur « N bots · M waiting for you », boutons ne pas déranger, réglages, replier.
@@ -182,6 +194,17 @@ Quand plusieurs bots attendent : bandeau « Waiting for you · 1 of N » avec le
 - Tab et Maj+Tab conservent leur navigation native entre les contrôles. Les raccourcis à une lettre ne s’appliquent pas à un champ éditable ou à une liste de sélection.
 - Un coachmark ancré sous la ligne sélectionnée enseigne J, K, `Alt+→` et 1 à 9 les trois premières ouvertures au clavier.
 
+### Réglages : notifications et sons (planche 22)
+
+Dans la même surface, sous Langue, Écran, Tailles, Thème, Ne pas déranger et Mouvements réduits :
+
+- **Quand un bot a terminé** : segmenté « Bulle et son » (défaut), « Bulle », « Son », « Poignée seule ».
+- **Sons** : interrupteur général (défaut activé). Désactivé, les sections suivantes passent à 50 % d'opacité et ne jouent rien. « Ne pas déranger » coupe tous les sons, quel que soit ce réglage.
+- **Volume** : Quiet / Normal / Loud (facteurs 0,5 / 1 / 1,8 sur le pic de −18 dBFS) et un bouton Test qui joue le signal de question.
+- **Jouer un son quand** : cases Demandes (accord, question ; défaut activée), Fin de tâche (activée), Échec (activée), Décisions (vos accepter/refuser ; activée), Équipe (arrivée, départ ; désactivée).
+- **Seulement quand le terminal est derrière** (défaut activé) : si la fenêtre au premier plan de Windows est le Windows Terminal, aucun son ; la bulle s'affiche quand même. Le shell Tauri expose `foregroundIsTerminal()` ; sans cette information (navigateur, tests), le son joue.
+- Toutes ces préférences sont locales à l'overlay (`localStorage`, clés `ledge.sounds.*` et `ledge.finished`), comme Thème, Ne pas déranger et Mouvements réduits.
+
 ## 6. Les bots
 
 Chaque session est un compagnon SVG, sans image raster, logo produit ou dépendance à un service d’images. Les trois silhouettes de la maquette validée remplacent les anciens dessins des planches 6, 8 et 10 : carré arrondi pour Claude Code, orbe pour Codex, pointe arrondie pour Cursor Agent. Une visière sombre unifie la famille ; pieds, antenne et main sont des détails secondaires.
@@ -217,6 +240,18 @@ Le halo d'un bot qui attend respire : 5 s, `ease-in-out`, intensité seule (de 1
 
 ### Identité, échelle et rythme
 
+#### Le saut de travail (planche 20)
+
+Un bot en état `working` fait un petit saut toutes les 3,6 à 4,4 s (période `3600 + (hash % 9) × 100` ms, déphasée par bot comme sa respiration), pour montrer qu'un travail est en cours même quand le pane est silencieux. Décision du 2026-10-10 : le rythme est régulier, pas lié à la sortie du pane.
+
+- Le saut dure 480 ms, sur le groupe `.hop` qui enveloppe `.body` (origine 48 × 83) : anticipation écrasée à 14 % (`scale(1.06,.92)`), apogée à 44 % (`translateY(−H)` et `scale(.96,1.06)`), atterrissage à 70 % (`scale(1.05,.95)`), retour à 100 %. L'ombre au sol se contracte à l'apogée (`scale(.72)`, opacité 0,07). Les segments utilisent `ease-in`, `cubic-bezier(.2,.7,.3,1)`, `cubic-bezier(.6,0,.9,.4)` puis `ease-out`.
+- Hauteur H en px écran : `clamp(2, taille × 0,12, 7)`, donc 2 px dans la poignée à 12 px, 3,8 px sur une ligne à 32 px, 5,8 px dans la bulle à 48 px ; convertie en unités SVG par `H / taille × 96`.
+- Le saut est le seul mouvement ambiant conservé à 20 px et moins : c'est le signal de la poignée. Clignement et regard restent coupés sous 20 px.
+- Il ne s'applique qu'à `working` ; `starting`, `approval`, `question`, `idle`, `error`, `done`, `readonly` ne sautent jamais. Lecture seule, connexion perdue, couche inerte, fenêtre masquée et vue en pause le gèlent comme les autres boucles.
+- Mouvements réduits (système ou réglage) : pas de saut ; la lumière d'antenne pulse de 1 à 0,35 sur 1,2 s, le même rythme que le point « running » des badges.
+- Jamais sur la surface, le badge ou la ligne : seul le bot saute (règle « pas de rebond sur les surfaces » de la section 7).
+
+
 - Identité stable : clé React, graine de mouvement et décalage dérivent de `session.id` ; pour un helper, de `parent.id + ':' + helper.id`. Un renommage ou un changement de thème ne synchronise pas les bots.
 - Trois variantes sobres d’inclinaison et de phase par état ; pas trois animations d’accessoires complexes. Respiration entre 4,8 et 6,4 s, amplitude verticale maximale de 0,7 unité dans le repère SVG 96×96, rotation de ±0,3° et étirement vertical maximal de 1,4 %.
 - Clignement de 180 ms, intervalle déterministe de 3,4 à 6,7 s propre à chaque bot. Le regard de travail change toutes les 2,4 à 4,5 s, avec une transition de 450 ms. La main intervient une seule fois lors d’une nouvelle demande, après le regard ; geste de 850 ms.
@@ -230,6 +265,7 @@ Trois courbes pour les transitions de l’interface (section Motion du design sy
 - **grow** : 320 ms `cubic-bezier(.22,1,.36,1)`, part vite et décélère longuement.
 - **shrink** : 260 ms `cubic-bezier(.65,0,.35,1)`, avec 60 ms de retard pour que le contenu s'efface d'abord.
 - **pop** : 260 ms `cubic-bezier(.34,1.3,.64,1)`, réservé à l'échelle d'un bot, jamais à une surface.
+- **hop** : 480 ms, séquence de segments (section 6, « Le saut de travail »), réservé au groupe `.hop` d'un bot en état `working`, jamais à une surface.
 
 Règles : survol et couleurs en 150 ms ; entrées en fondu de 180 ms après que la forme s'est presque posée (140 à 200 ms de retard), sorties en 100 ms avant que la forme bouge ; séquence plutôt que simultanéité ; toute apparition, disparition, redimension ou changement d'état est animé ; pas de rebond sur les surfaces, badges ou panneaux ; une variable d'environnement ramène toutes les durées à zéro pour les tests.
 
@@ -238,6 +274,32 @@ Les microgestes organiques utilisent `ease-in-out` pour la respiration et le cli
 `prefers-reduced-motion: reduce`, le réglage « Mouvements réduits » ou `VITE_LEDGE_MOTION=0` suppriment mouvements ambiants, interpolations et gestes. Les demandes, leurs libellés et les règles de temporisation restent fonctionnels ; un réglage local ne force pas le mouvement contre la préférence du système. Suspendre les boucles quand la fenêtre est masquée, la couche inactive ou la connexion perdue ; libérer les timers et observateurs au démontage. Les décomptes fonctionnels (bulle, reconnexion, retraite) ne sont pas mis à zéro par la suppression des animations.
 
 ## 7 bis. Portée de la validation et raccordement
+
+Les sons (7 ter) ne sont pas du mouvement : un réglage de mouvements réduits ne les coupe pas, et un son ne remplace jamais une animation supprimée.
+
+## 7 ter. Sons
+
+Une seule famille de signaux, synthétisée dans l'overlay par Web Audio (oscillateurs sinus et triangle, attaque 8 ms, relâchement exponentiel, pic à −18 dBFS multiplié par le volume), aucun fichier audio, rien de plus long que 350 ms. Les signaux qui demandent montent ou frappent, les résultats descendent, les actions de l'utilisateur sont des tics.
+
+| Signal | Quand | Forme |
+|---|---|---|
+| Accord attendu | `pending` de type permission, diff ou plan | deux coups bas, triangle A3 (220 Hz), 70 ms puis 80 ms à 110 ms d'écart |
+| Question | `pending` de type question | deux notes montantes, sinus E5 (659 Hz) 90 ms puis A5 (880 Hz) 160 ms |
+| Tâche terminée | transition vers `idle` | deux notes descendantes, sinus A5 (880 Hz) 140 ms puis D5 (587 Hz) 190 ms |
+| Échec | passage en `error`, code de sortie non nul, daemon perdu | une note basse qui glisse, triangle 180 → 120 Hz, 220 ms |
+| Accepter | une décision `accept` ou une réponse envoyée | un tic, sinus E6 (1319 Hz), 35 ms |
+| Refuser | une décision `deny` | un tic plus bas, sinus E5 (659 Hz), 45 ms |
+| Arrivée | une session apparaît | un pop montant, sinus 330 → 660 Hz, 70 ms |
+| Départ | une session passe à `exited` avec code 0 | une note descendante, triangle 330 → 240 Hz, 180 ms |
+
+Règles :
+
+- Un seul signal par 1,5 s : une rafale de demandes joue une fois, la poignée montre le reste. Le dernier signal joué fait foi, pas le dernier événement.
+- Un signal joue après la décision du machine d'état, jamais sur un simple rendu : le même événement qui fait grossir le bot ou déplier la bulle déclenche le son, ainsi un son ne peut pas jouer sans son signal visuel (sauf réglage « Son » seul pour la fin de tâche).
+- Silencieux : survol, ouverture, fermeture, défilement, clavier, progression des sous-agents, battement d'une commande longue, reconnexion réussie, clignement et saut.
+- « Ne pas déranger » coupe tout ; l'interrupteur Sons coupe tout ; la catégorie coupe son signal ; « seulement quand le terminal est derrière » coupe quand Windows Terminal est au premier plan. Les décomptes et les bulles ne dépendent jamais d'un son.
+- Le `AudioContext` est créé au premier signal et réutilisé ; le shell Tauri passe `--autoplay-policy=no-user-gesture-required` au WebView2 (l'overlay n'a jamais de geste utilisateur avant un son). Si la création échoue, le son est ignoré sans erreur visible et le reste fonctionne.
+- Tests : le synthétiseur est derrière une interface `SoundPlayer` (`play(cue)`) injectable ; les tests vérifient les décisions (quel signal, à quel moment, coupé par quoi) sur un faux lecteur, jamais le rendu audio.
 
 La maquette valide les matières, les silhouettes, les expressions, la composition des vues et les interactions visibles. Elle contient douze scénarios : vue d’ensemble, autorisation, question, revue de fichiers, plan, sous-agents, commande longue, rapport, erreur, session terminée, lecture seule, équipe et connexion. Les préférences de l’atelier restent locales et la copie française illustre les libellés ; elle ne change pas les conventions de copie des adaptateurs et de la CLI.
 
@@ -263,6 +325,7 @@ Les comportements suivants nécessitent encore leur raccordement produit ; ne pa
 - **Unitaires (Vitest, WSL)** : table de transitions du réducteur, chaque couple état × événement ; motifs des adaptateurs sur des captures de pane réelles dans `test/fixtures/panes/` avec cas positifs et pièges ; schémas du protocole avec exemples sérialisés.
 - **Intégration sans IA** : un faux agent Node qui imite chaque outil dans un vrai tmux (invite de permission, question, sortie avec code) pour tester lanceur, daemon, injection et vérification de bout en bout, en CI ; test de reconnexion, daemon tué puis relancé pendant qu'un faux agent tourne.
 - **Overlay (Windows)** : composants React avec Testing Library sur un daemon simulé en mémoire, durées d'animation à zéro ; captures visuelles par état (poignée à 0, 5, 10 et 12 bots, bulle, liste, session, deux thèmes) ; chacun des douze scénarios de la maquette locale devient un test nommé. Vérifier les matières Signal/Galet à 12, 16, 20, 32 et 48 px, la distinction `idle`/`exited`, la stabilité des SVG au changement de thème et les mouvements réduits.
+- **Saut, fin de tâche et sons** : le saut n'est présent que pour `working`, à 12 px comme à 48 px, absent en mouvements réduits (pulsation d'antenne à la place), figé en lecture seule ou connexion perdue ; la bulle de fin de tâche s'ouvre sur `working → idle` seulement, jamais sur `PaneIdle` répété ni en « ne pas déranger », dure 6 s, cède à une demande ; les signaux sonores sont décidés par un module pur testé sur un faux lecteur : un par 1,5 s, coupés par DND, par l'interrupteur, par la catégorie et par le terminal au premier plan ; les réglages persistent et se lisent dans la vue Réglages.
 - **Interactions** : timer de bulle conservant le temps restant après survol/focus, aucune fermeture pendant la saisie, conservation des brouillons, aucune action en lecture seule ou hors connexion, refus sans faux succès, changement de scénario/session annulant les callbacks devenus obsolètes, Tab natif et `Alt+→` pour la file.
 - **Manuel** : checklist de dix minutes avec les trois vrais outils avant chaque version : lancer, demander une permission, approuver depuis la bulle, répondre à une question, tuer la session, relancer le daemon.
 

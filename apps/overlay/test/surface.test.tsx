@@ -107,6 +107,25 @@ describe('<Surface>', () => {
     expect(surface()).toHaveStyle({ width: '28px' });
   });
 
+  it('back from a session: the list waits for the shrink to nearly settle before it fades in', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    await act(async () => { vi.advanceTimersByTime(180); });
+    const list = () => document.querySelector('[data-layer="list"]') as HTMLElement;
+    const row = () => document.querySelector('[data-layer="list"] [data-row]') as HTMLElement;
+    // Opened from the handle (a grow): the list follows the start of the growth closely.
+    expect(list().getAttribute('data-delay')).toBe('120');
+    expect(row().getAttribute('data-delay')).toBe('150');
+    fireEvent.click(screen.getByRole('button', { name: /speos-api/ }));
+    expect(surface()).toHaveStyle({ width: '420px' });
+    fireEvent.click(screen.getByRole('button', { name: 'Back to sessions' }));
+    expect(surface()).toHaveStyle({ width: '380px' });
+    // Back is a shrink (60 ms delay, 260 ms, slow start): the list appears once the surface has nearly settled,
+    // so its footer and rows are never drawn at the session's size.
+    expect(list().getAttribute('data-delay')).toBe('280');
+    expect(row().getAttribute('data-delay')).toBe('310');
+  });
+
   it('a removed session that is open falls back to the list', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: /Otto working, open/ }));
