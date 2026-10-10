@@ -6,3 +6,4 @@ body { font-family: 'Geist', system-ui, sans-serif; color: var(--sidebar-foregro
 .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
 button, input { font-family: inherit; }
 @keyframes ledge-blink { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+@keyframes ledge-drain { from { width: 100% } to { width: 0% } }

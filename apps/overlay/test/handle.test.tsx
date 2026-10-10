@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-afterEach(cleanup);
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { Handle } from '../src/surface/Handle';
 import { Badge } from '../src/ui/Badge';
 import { layout } from '../src/surface/geometry';
