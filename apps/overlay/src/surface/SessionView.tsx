@@ -4,7 +4,6 @@ import { Bot } from '../bots/Bot';
 import { botState, poseFor } from '../bots/poseFor';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
-import { Kbd } from '../ui/Kbd';
 import { relativeTime, toolName } from '../format';
 import { transition } from '../motion';
 
@@ -102,7 +101,7 @@ export function SessionView(p: { session: Session; preview: string[]; visible: b
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--muted-foreground)' }}>
           <span>Enter sends to the terminal as typed</span><span style={{ flexGrow: 1 }} />
-          {s.state === 'working' && <Button variant="outline" size="sm" onClick={p.onInterrupt}><Icon d={I.stop} size={14} />Interrupt <Kbd>Esc</Kbd></Button>}
+          {s.state === 'working' && <Button variant="outline" size="sm" onClick={p.onInterrupt}><Icon d={I.stop} size={14} />Interrupt</Button>}
           <Button variant="ghost" size="sm" onClick={p.onKill} style={{ color: 'var(--danger-text)' }}>Kill session</Button>
         </div>
       </div>

@@ -15,7 +15,7 @@ import { SessionView, measureSessionH } from './SessionView';
 import { transition, MOTION, ms } from '../motion';
 import { setFrame, focusTerminal, onShortcut } from '../tauri/bridge';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
-import { Coachmark, countCoachmarkOpen } from '../keyboard/Coachmark';
+import { Coachmark, countCoachmarkOpen, COACHMARK_H } from '../keyboard/Coachmark';
 
 const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
 const inside = (p: { x: number; y: number } | null, g: Layout) => p !== null && p.x >= 0 && p.x < g.w && p.y >= g.top && p.y < g.top + g.h;
@@ -110,7 +110,6 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
   if (dir.area !== areaNow) setDir({ area: areaNow, growing: areaNow > dir.area });
   const growing = dir.area === areaNow ? dir.growing : areaNow > dir.area;
 
-  useEffect(() => { setFrame({ top: geo.top, w: Math.max(geo.w, 360), h: geo.h }); }, [geo.top, geo.w, geo.h]);
 
   // The machine's hover and focus facts are sticky: when the surface changes shape (close, shortcut, fold, back)
   // the pointer may no longer be over it without any mouseleave, and focus may sit in a layer that just went inert.
@@ -135,6 +134,22 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
   const send = (m: Parameters<DaemonClient['send']>[0]) => client.send(m);
   const decide = (id: string, d: 'accept' | 'deny') => send({ type: 'session.decide', id, decision: d });
   const reply = (id: string, text: string) => { send({ type: 'session.reply', id, text }); setDrafts(x => ({ ...x, [id]: '' })); dispatch({ type: 'typing', on: false }); };
+  // The coachmark sits 8 px under the focused row; when that would leave the frame it flips above the row, and when
+  // neither fits (a short list) it stays below and the native frame reported to the shell extends to hold it.
+  const coachShown = coach && kb && st.mode === 'list';
+  const focusIndex = focused ? sessions.findIndex(s => s.id === focused.id) : -1;
+  const rowTop = geo.top + SIZES.headerH + 8 + Math.max(0, focusIndex) * SIZES.rowH;
+  const rowBottom = focusIndex < 0 ? geo.top + SIZES.headerH : rowTop + (focused && isYesNo(focused) ? EXPANDED_ROW_H : SIZES.rowH);
+  const below = rowBottom + 8; const above = rowTop - 8 - COACHMARK_H;
+  const coachTop = below + COACHMARK_H <= geo.top + geo.h || above < geo.top ? below : above;
+  const frameH = coachShown ? Math.max(geo.h, coachTop + COACHMARK_H - geo.top) : geo.h;
+  useEffect(() => { setFrame({ top: geo.top, w: Math.max(geo.w, 360), h: frameH }); }, [geo.top, geo.w, frameH]);
+  const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; send({ type: 'session.focus', id }); void focusTerminal(s.title); };
+  const chooseOption = (n: number) => {
+    const radios = surfaceRef.current?.querySelectorAll<HTMLInputElement>('[data-layer="session"] [data-ask] input[type="radio"]:not([aria-label="Other"])');
+    const r = radios?.[n - 1]; if (!r) return;
+    r.click(); r.focus();
+  };
   const openRow = (id: string) => dispatch({ type: 'rowClick', id });
   useKeyboard({
     enabled: kb && panel, mode: st.mode, sessions, focusedId: st.mode === 'session' ? st.selectedId : focused?.id ?? null,
@@ -152,10 +167,8 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
       if (st.mode === 'session') { surfaceRef.current?.querySelector<HTMLInputElement>('[data-layer="session"] input[aria-label^="Reply to"]')?.focus(); return; }
       if (focused) { replyAfterOpen.current = true; openRow(focused.id); }
     },
-    onToggleDnd, onHelp: () => setCoach(c => !c)
+    onToggleDnd, onHelp: () => setCoach(c => !c), onTerminal: focusTab, onChooseOption: chooseOption
   });
-  const focusIndex = focused ? sessions.findIndex(s => s.id === focused.id) : -1;
-  const coachTop = Math.min(geo.top + SIZES.headerH + 8 + (focusIndex + 1) * SIZES.rowH + (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + 8, screenH - SIZES.margin - 140);
   const motion = growing ? MOTION.grow : MOTION.shrink;
   const delay = growing ? 0 : MOTION.shrink.delayMs;
 
@@ -186,12 +199,12 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
               onDraft={t => { setDrafts(x => ({ ...x, [selected.id]: t })); dispatch({ type: 'typing', on: t.length > 0 }); }}
               onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onDecide={d => decide(selected.id, d)} onReply={t => reply(selected.id, t)}
               onInterrupt={() => send({ type: 'session.interrupt', id: selected.id })} onKill={() => send({ type: 'session.kill', id: selected.id })}
-              onFocus={() => { send({ type: 'session.focus', id: selected.id }); void focusTerminal(selected.title); }} onToggleReading={() => dispatch({ type: 'reading', on: !st.reading })} theme={theme} />}
+              onFocus={() => focusTab(selected.id)} onToggleReading={() => dispatch({ type: 'reading', on: !st.reading })} theme={theme} />}
           </div>
         </div>
       </div>
 
-      <Coachmark visible={coach && kb && st.mode === 'list'} top={coachTop} onDismiss={() => { setCoach(false); if (focusedRowId) surfaceRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusedRowId)}"] [data-row]`)?.focus(); }} />
+      <Coachmark visible={coachShown} top={coachTop} onDismiss={() => { setCoach(false); if (focusedRowId) surfaceRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusedRowId)}"] [data-row]`)?.focus(); }} />
       <Tooltip bot={st.mode === 'handle' ? hovBot : null} y={hovSlot?.center ?? geo.top} />
       {unreachable && <div role="status" style={{ position: 'absolute', left: Math.max(geo.w, SIZES.handleW) + 8, top: geo.top, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>daemon unreachable, retrying</div>}
     </>

@@ -8,6 +8,9 @@ import { Surface } from '../src/surface/Surface';
 import { createDaemonClient } from '../src/daemon/client';
 import { attachClient, daemonStore } from '../src/daemon/store';
 import { createMockDaemon, fakeSession } from './mockDaemon';
+import { setFrame } from '../src/tauri/bridge';
+
+vi.mock('../src/tauri/bridge', async orig => ({ ...(await orig<typeof import('../src/tauri/bridge')>()), setFrame: vi.fn() }));
 
 const sessions = [
   fakeSession('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } }),
@@ -76,6 +79,34 @@ describe('useKeyboard', () => {
     press('y'); expect(h.onDecide).toHaveBeenCalledWith('a', 'accept');
     press('r'); expect(h.onReplyFocus).toHaveBeenCalled();
     press('Escape'); expect(h.onClose).toHaveBeenCalled();
+  });
+});
+
+describe('useKeyboard, spec section 5 additions', () => {
+  it('o opens the terminal tab of the focused row, or of the open session; never with modifiers or while typing', () => {
+    const onTerminal = vi.fn();
+    const { rerender } = renderHook(({ mode }) => useKeyboard({ enabled: true, mode, sessions, focusedId: 'b', ...handlers(), onTerminal }), { initialProps: { mode: 'list' as 'list' | 'session' } });
+    press('o'); expect(onTerminal).toHaveBeenLastCalledWith('b');
+    rerender({ mode: 'session' }); press('o'); expect(onTerminal).toHaveBeenCalledTimes(2);
+    press('o', { ctrlKey: true }); expect(onTerminal).toHaveBeenCalledTimes(2);
+    const input = document.createElement('input'); document.body.appendChild(input); input.focus();
+    fireEvent.keyDown(input, { key: 'o' }); expect(onTerminal).toHaveBeenCalledTimes(2);
+    input.remove();
+  });
+  it('in a session with a question, 1 to 9 choose the option, also from a focused radio, never from a text field', () => {
+    const onChooseOption = vi.fn(); const h = handlers();
+    const { rerender } = renderHook(({ focusedId }) => useKeyboard({ enabled: true, mode: 'session', sessions, focusedId, ...h, onChooseOption }), { initialProps: { focusedId: 'b' } });
+    press('2'); expect(onChooseOption).toHaveBeenLastCalledWith(2);
+    expect(h.onFocus).not.toHaveBeenCalled();
+    const radio = document.createElement('input'); radio.type = 'radio'; document.body.appendChild(radio); radio.focus();
+    fireEvent.keyDown(radio, { key: '1' }); expect(onChooseOption).toHaveBeenLastCalledWith(1);
+    fireEvent.keyDown(radio, { key: 'ArrowDown' }); fireEvent.keyDown(radio, { key: 'j' });
+    expect(h.onFocus).not.toHaveBeenCalled();
+    const text = document.createElement('input'); text.type = 'text'; document.body.appendChild(text); text.focus();
+    fireEvent.keyDown(text, { key: '3' }); expect(onChooseOption).toHaveBeenCalledTimes(2);
+    rerender({ focusedId: 'a' }); document.body.focus(); radio.blur(); text.blur();
+    press('2'); expect(onChooseOption).toHaveBeenCalledTimes(2);
+    radio.remove(); text.remove();
   });
 });
 
@@ -155,6 +186,53 @@ describe('<Surface> keyboard first', () => {
     expect(document.activeElement).toHaveAttribute('aria-label', 'Reply to Otto');
     fireEvent.keyDown(document.activeElement!, { key: 'n' });
     expect(mock.received.some(m => m.type === 'session.decide')).toBe(false);
+  });
+
+  it('o asks the daemon and the shell to focus the terminal tab of the focused row', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => shortcut());
+    act(() => press('o'));
+    await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.focus', id: 'a' }));
+  });
+
+  it('digits choose the question options in an open session; a focused radio keeps native arrows; the Other field types', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    await act(async () => { mock.upsert({ ...sessions[1]!, pending: { kind: 'question', text: 'Which?', source: 'hook', options: ['Rebase', 'Merge'] } }); await sleep(50); });
+    act(() => shortcut());
+    act(() => press('2')); act(() => press('Enter'));
+    expect(surface()).toHaveAttribute('data-mode', 'session');
+    act(() => press('2'));
+    const merge = screen.getByRole('radio', { name: 'Merge' });
+    expect(merge).toBeChecked(); expect(document.activeElement).toBe(merge);
+    act(() => { fireEvent.keyDown(merge, { key: '1' }); });
+    expect(screen.getByRole('radio', { name: 'Rebase' })).toBeChecked();
+    const other = screen.getByPlaceholderText('Other…'); other.focus();
+    act(() => { fireEvent.keyDown(other, { key: '2' }); });
+    expect(screen.getByRole('radio', { name: 'Rebase' })).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
+    await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.reply', id: 'b', text: '1' }));
+  });
+
+  it('the coachmark flips above a row near the bottom so it stays inside the frame', () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => shortcut());
+    act(() => press('3'));
+    const card = screen.getByRole('dialog', { name: 'Keyboard' });
+    const top = parseFloat(card.style.top), h = parseFloat(card.style.height);
+    const sTop = parseFloat(surface().style.top), sH = parseFloat(surface().style.height);
+    expect(top).toBeGreaterThanOrEqual(sTop);
+    expect(top + h).toBeLessThanOrEqual(sTop + sH);
+  });
+
+  it('when the list is too short for the coachmark either way, the native frame extends to hold it', async () => {
+    await act(async () => { mock.remove('b'); mock.remove('c'); await sleep(50); });
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => shortcut());
+    const card = screen.getByRole('dialog', { name: 'Keyboard' });
+    const bottom = parseFloat(card.style.top) + parseFloat(card.style.height);
+    const frame = vi.mocked(setFrame).mock.lastCall![0];
+    expect(frame.top + frame.h).toBeGreaterThanOrEqual(bottom);
+    expect(parseFloat(surface().style.height)).toBeLessThan(frame.h);
   });
 
   it('d toggles dnd from the keyboard', () => {

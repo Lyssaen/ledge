@@ -59,7 +59,7 @@ describe('<SessionView>', () => {
     expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
     unmount();
     render(<SessionView {...base} session={{ ...perm, state: 'working', pending: undefined }} />);
-    expect(screen.getByRole('button', { name: /Interrupt/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Interrupt' })).toBeInTheDocument();
   });
   it('header controls: reading toggle is pressed, a hidden view is inert', () => {
     const { container } = render(<SessionView {...base} session={perm} reading visible={false} />);
