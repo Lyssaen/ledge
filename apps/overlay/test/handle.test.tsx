@@ -53,6 +53,13 @@ describe('<Handle> inertness', () => {
     expect(lu).toHaveAttribute('tabindex', '-1');
     expect(lu).toHaveAttribute('aria-hidden', 'true');
   });
+  it('a lifted bot (finishing) is drawn big without the edge tick', () => {
+    const lifted = [{ id: 'a', name: 'Otto', tool: 'claude', state: 'idle', pose: 1, pending: false, lifted: true, tip: '' }] as const;
+    render(<Handle bots={lifted as never} slots={[{ id: 'a', size: 20, center: 18 }]} big={20} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
+    const btn = screen.getByRole('button', { name: /Otto/ });
+    expect(btn).toHaveStyle({ width: '20px', opacity: '1' });
+    expect(btn.querySelector('[data-tick]')).toHaveStyle({ opacity: '0' });
+  });
 });
 
 describe('<Badge>', () => {

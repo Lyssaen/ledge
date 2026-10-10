@@ -16,6 +16,7 @@ import { DETAIL_HEADER_H } from './DetailHeader';
 import { useMeasuredHeight } from './useMeasuredHeight';
 import { useDaemonAsks, isPending } from './useDaemonAsks';
 import { useFocusRestore } from './useFocusRestore';
+import { useSoundPrefs } from '../sounds/preferences';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { SessionList, rowHint, EXPANDED_ROW_H } from './SessionList';
 import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
@@ -66,6 +67,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const motionPrefs = useMotionPreferences();
   const osReduced = useOsReducedMotion();
   const reducedMotion = motionPrefs.reduced;
+  const prefs = useSoundPrefs();
+  const finishedBubble = prefs.finished === 'both' || prefs.finished === 'bubble';
+  // Work time of the last finish per session, so the finished bubble can say "2m 40s of work".
+  const [elapsed, setElapsed] = useState<Record<string, number>>({});
   const [ctl] = useState(() => createSurfaceController({ onState: s => setSt(s) }));
   const [st, setSt] = useState<SurfaceState>(() => ctl.state());
   const dispatch = ctl.dispatch;
@@ -92,7 +97,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
 
   // Daemon changes drive the machine. DND keeps the bot growing in the handle but never asks for a bubble.
   // A reply the daemon rejects comes back into its draft (unless something new was typed meanwhile).
-  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, finishedBubble: true, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
+  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, finishedBubble, onChange: (c, info) => { if (c.kind === 'finished' && info.elapsedMs !== undefined) setElapsed(x => ({ ...x, [c.id]: info.elapsedMs! })); }, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
 
   // DND switched on takes any bubble down and drops queued asks. Turning it off does not re-bubble asks already pending.
   useEffect(() => { if (dnd) dispatch({ type: 'dnd', on: true }); }, [dnd, dispatch]);
@@ -149,7 +154,9 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
     surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="session"] [data-reply]')?.focus();
   }, [st.mode, st.selectedId]);
 
-  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), readOnly: s.source === 'hook_only', tip: isPending(s) ? `${t.handleLabel[botState(s)]} · ${s.pending?.text ?? ''}` : rowHint(s, t) })), [sessions, t]);
+  // The finishing bot is big from the moment its notice is due until the bubble folds.
+  const liftedId = st.queue.length === 0 && st.done.length > 0 && (st.unfoldDue || (st.mode === 'bubble' && st.bubbleKind === 'finished')) ? st.done[0] : null;
+  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, readOnly: s.source === 'hook_only', tip: isPending(s) ? `${t.handleLabel[botState(s)]} · ${s.pending?.text ?? ''}` : rowHint(s, t) })), [sessions, t, liftedId]);
   const selected = st.selectedId ? byId.get(st.selectedId) ?? null : null;
   // The last open session stays mounted (inert) while the view slides out, so its content fades instead of vanishing
   // and focus left on it is detectably stranded (see useFocusRestore). A session removed by the daemon leaves the same
@@ -177,7 +184,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   useEffect(() => { if (settingsOpen) onSettingsOpen?.(); }, [settingsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const helpH = useMeasuredHeight(helpRef, st.mode === 'help', ps);
   const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : 0;
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -309,7 +316,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
-        <Bubble ref={bubbleRef} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
+        <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
           ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} failure={st.bubbleId ? asks.failures[st.bubbleId] : undefined} blocked={bubbleSession ? blockedFor(bubbleSession) : null} frozen={unreachable} reducedMotion={reducedMotion}
           onOpen={() => dispatch({ type: 'bubbleClick' })} onDismiss={() => dispatch({ type: 'close' })}
           onDecide={d => { if (st.bubbleId && !ctl.state().ack && decide(st.bubbleId, d)) dispatch({ type: 'decidedInBubble' }); }}
