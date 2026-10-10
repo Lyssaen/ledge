@@ -317,6 +317,18 @@ fn open_terminal(title: String, command: Vec<String>) -> Result<bool, String> {
 #[tauri::command]
 fn open_terminal(_title: String, _command: Vec<String>) -> Result<bool, String> { Ok(false) }
 
+/// Opens a web URL in the default browser through the shell (`rundll32 url.dll,FileProtocolHandler`, which takes `&`
+/// and `?` as they are, unlike `cmd /C start`): the overlay's webview must never navigate away. Only http(s) is accepted.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) { return Err("not a web url".into()); }
+    #[cfg(windows)]
+    let spawned = std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", &url]).spawn();
+    #[cfg(not(windows))]
+    let spawned = std::process::Command::new("xdg-open").arg(&url).spawn();
+    spawned.map(|_| ()).map_err(|e| format!("open url: {e}"))
+}
+
 #[cfg(windows)]
 fn cursor_position() -> Option<(i32, i32)> {
     use windows::Win32::Foundation::POINT;
@@ -365,7 +377,7 @@ fn main() {
         .manage(HotZones::default())
         .manage(PrevForeground::default())
         .manage(Screen::default())
-        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, list_monitors, set_monitor])
+        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") { let _ = w.set_always_on_top(true); }
             spawn_edge_poller(app.handle().clone());

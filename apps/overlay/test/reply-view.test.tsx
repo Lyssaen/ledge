@@ -118,6 +118,16 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
     expect(within(table).getByText('vitest').tagName).toBe('CODE');
     expect(container.textContent).not.toContain('|---|');
   });
+  it('a quote reads as a blockquote, and a right-aligned column keeps its alignment', () => {
+    const text = 'Results\n\n> Pour mémoire\n> c’est **important**\n\n| Suite | N |\n|---|--:|\n| a | 12 |';
+    const { container } = render(<SessionView {...base} session={fakeSession('r', { state: 'idle', lastReply: { text, at } })} />);
+    const quote = container.querySelector('[data-quote]') as HTMLElement;
+    expect(quote.tagName).toBe('BLOCKQUOTE');
+    expect(quote).toHaveTextContent('Pour mémoire c’est important');
+    expect(within(quote).getByText('important').tagName).toBe('STRONG');
+    expect(container.textContent).not.toContain('>');
+    expect(within(container.querySelector('[data-table]') as HTMLElement).getByRole('cell', { name: '12' })).toHaveStyle({ textAlign: 'right' });
+  });
   it('estimates a taller view for a reply', () => {
     expect(measureSessionH(idle, false)).toBeGreaterThan(measureSessionH(fakeSession('n', { state: 'idle', startedAt: T0 }), false));
   });
