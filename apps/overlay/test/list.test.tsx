@@ -90,6 +90,13 @@ describe('rowHint', () => {
     expect(rowHint(sessions[3]!)).toBe('exited 0');
     expect(rowHint(fakeSession('e', { state: 'error', lastError: 'boom' }))).toBe('boom');
   });
+  it('an idle session with helpers still working says so, with their count', () => {
+    const h = (id: string, state: 'working' | 'exited' | 'waiting_permission') => ({ id, kind: 'general-purpose', task: 'review', state });
+    expect(rowHint(fakeSession('i', { state: 'idle', helpers: [h('a', 'working')] }))).toBe('available · 1 subagent working');
+    expect(rowHint(fakeSession('i', { state: 'idle', helpers: [h('a', 'working'), h('b', 'waiting_permission'), h('c', 'exited')] }))).toBe('available · 2 subagents working');
+    expect(rowHint(fakeSession('i', { state: 'idle', helpers: [h('c', 'exited')] }))).toBe('available');
+    expect(rowHint(fakeSession('w', { state: 'working', helpers: [h('a', 'working')] }))).toBe('running');
+  });
   describe('remove from list', () => {
     const props = { visible: true, numbered: false, selectedId: null, dnd: false, onToggleDnd: () => {}, onClose: () => {} };
     it('only finished and read-only rows carry the button; it dismisses without opening the row', () => {

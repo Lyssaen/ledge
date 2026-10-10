@@ -75,6 +75,10 @@ A working session shows the terminal preview: the last thirty lines of the conve
 
 <img src="screens/session-preview-dark.png" alt="Session: Pim at work, the terminal preview shows the agent running the tests" width="448">
 
+When the agent hands part of the work to subagents, they appear under the title as small bots with their task and their state. A session whose main thread is only waiting for its subagents stays "au travail" in the list, the handle and the bubble, instead of reading as available.
+
+<img src="screens/session-helpers-dark.png" alt="Session: Pim in progress, two subagents under the title with their task, general-purpose and Explore, both at work" width="448">
+
 A session started with plain `claude`, without the launcher, is still visible through its hooks, in read-only mode.
 
 <img src="screens/session-readonly-dark.png" alt="Session: visible, read only, Otto was started without the Ledge launcher" width="448">

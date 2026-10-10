@@ -137,6 +137,21 @@ for (const theme of ['dark', 'light'] as const) {
         await shoot(page, `session-preview-${theme}`);
       });
 
+      test('session: helpers, the main thread at rest while two subagents work', async ({ page }) => {
+        await desktop(page, theme);
+        const helpers = [
+          { id: 'h0', kind: 'Explore', task: 'find the reducer consumers', state: 'exited' as const },
+          { id: 'h1', kind: 'general-purpose', task: 'Review task 1 (spec + quality)', state: 'working' as const },
+          { id: 'h2', kind: 'Explore', task: 'list the i18n keys without a French string', state: 'working' as const }
+        ];
+        const d = await fakeDaemon(page, overview().map(s => (s.id === 'pim' ? { ...s, state: 'idle' as const, helpers } : s)));
+        await ready(page, 4);
+        d.preview('pim', conversation);
+        await openSession(page, 'landing-page, Pim, ouvrir');
+        await expect(layer(page, 'session').getByRole('list', { name: 'Sous-agents' }).locator('[data-helper]')).toHaveCount(2);
+        await shoot(page, `session-helpers-${theme}`);
+      });
+
       test('session: your turn, the last reply read like a plan', async ({ page }) => {
         await desktop(page, theme);
         const d = await fakeDaemon(page, overview());

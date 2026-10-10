@@ -1,6 +1,6 @@
 import type { Session } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
-import { botState, poseFor } from '../bots/poseFor';
+import { botState, liveHelpers, poseFor } from '../bots/poseFor';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Kbd } from '../ui/Kbd';
@@ -20,7 +20,7 @@ export function rowHint(s: Session, t: Messages = messagesFor()): string {
   if (s.source === 'hook_only') return t.hint.startedWithoutLedge;
   if (s.state === 'exited') return t.hint.exited(String(s.exitCode ?? '?'));
   if (s.state === 'error') return s.lastError ?? t.hint.error;
-  if (s.state === 'idle') return t.hint.available;
+  if (s.state === 'idle') { const n = liveHelpers(s).length; return n ? t.hint.helpersRunning(n) : t.hint.available; }
   return t.hint.running;
 }
 

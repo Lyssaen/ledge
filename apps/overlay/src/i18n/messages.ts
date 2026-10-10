@@ -19,7 +19,7 @@ const fr = {
   handleLabel: { starting: 'démarre', idle: 'disponible', approval: 'attend votre accord', question: 'a une question', working: 'au travail', done: 'terminée', error: 'en erreur', readonly: 'en lecture seule' } as Record<BotState, string>,
   open: 'ouvrir',
   clickToOpen: 'cliquer pour ouvrir',
-  hint: { startedWithoutLedge: 'lancée sans Ledge', exited: (code: string) => `terminée (code ${code})`, error: 'erreur', available: 'disponible', running: 'au travail' },
+  hint: { startedWithoutLedge: 'lancée sans Ledge', exited: (code: string) => `terminée (code ${code})`, error: 'erreur', available: 'disponible', running: 'au travail', helpersRunning: (n: number) => `disponible · ${n} sous-agent${n > 1 ? 's' : ''} au travail` },
   offline: 'Hors connexion : reconnexion au daemon',
   readOnlyBlocked: 'Lecture seule : lancée sans Ledge, répondez dans son terminal',
   unreachable: 'daemon injoignable, nouvelle tentative',
@@ -63,6 +63,7 @@ const fr = {
       starting: 'La session se prépare.', working: 'Concentré sur sa tâche.', idle: 'En attente de vos instructions.',
       error: 'La session a rencontré un problème.', exited: 'Cette session est terminée.'
     },
+    helpers: 'Sous-agents',
     readonlyLead: (name: string) => `${name} a été lancé sans le lanceur Ledge.`,
     readonlyNote: 'Son état reste visible. Pour répondre à cette session, retrouvez son terminal d’origine.',
     readonlyNext: 'Pour une prochaine session interactive :',
@@ -144,7 +145,7 @@ const en: Messages = {
   handleLabel: { starting: 'starting', idle: 'available', approval: 'needs your approval', question: 'has a question', working: 'working', done: 'done', error: 'error', readonly: 'read only' },
   open: 'open',
   clickToOpen: 'click to open',
-  hint: { startedWithoutLedge: 'started without ledge', exited: (code: string) => `exited ${code}`, error: 'error', available: 'available', running: 'running' },
+  hint: { startedWithoutLedge: 'started without ledge', exited: (code: string) => `exited ${code}`, error: 'error', available: 'available', running: 'running', helpersRunning: (n: number) => `available · ${n} subagent${n > 1 ? 's' : ''} working` },
   offline: 'Offline: reconnecting to the daemon',
   readOnlyBlocked: 'Read only: started without Ledge, answer in its terminal',
   unreachable: 'daemon unreachable, retrying',
@@ -188,6 +189,7 @@ const en: Messages = {
       starting: 'The session is starting.', working: 'Focused on its task.', idle: 'Waiting for your instructions.',
       error: 'The session ran into a problem.', exited: 'This session has ended.'
     },
+    helpers: 'Subagents',
     readonlyLead: (name: string) => `${name} was started without the Ledge launcher.`,
     readonlyNote: 'Its state stays visible. To answer this session, go back to its own terminal.',
     readonlyNext: 'For your next interactive session:',

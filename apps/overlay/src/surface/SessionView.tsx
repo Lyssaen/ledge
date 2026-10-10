@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
-import type { Pending, Session } from '@ledge/protocol';
+import type { Helper, Pending, Session } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
-import { botState, poseFor } from '../bots/poseFor';
+import { botState, liveHelpers, poseFor, type BotState } from '../bots/poseFor';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Kbd } from '../ui/Kbd';
@@ -56,6 +56,27 @@ function QuestionCard({ pending, onReply, disabled, t }: { pending: Pending; onR
   );
 }
 
+const HELPER_STATE: Record<Helper['state'], BotState> = { starting: 'starting', working: 'working', waiting_input: 'question', waiting_permission: 'approval', idle: 'idle', exited: 'done', error: 'error' };
+
+/** Spec board 17: the live helpers under their bot, 20 px each, in a tree whose last branch ends in └. */
+function HelpersTree({ parent, helpers, t, theme, paused, frozen, reducedMotion }: { parent: Session; helpers: Helper[]; t: Messages; theme: 'dark' | 'light'; paused: boolean; frozen?: boolean; reducedMotion?: boolean }) {
+  return (
+    <ul data-helpers aria-label={t.session.helpers} style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {helpers.map((h, i) => {
+        const st = HELPER_STATE[h.state]; const seed = `${parent.id}:${h.id}`; const last = i === helpers.length - 1;
+        return (
+          <li key={h.id} data-helper data-last={last ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, fontSize: 12, lineHeight: '16px' }}>
+            <span aria-hidden="true" className="mono" style={{ width: 14, flexShrink: 0, color: 'var(--muted-foreground)' }}>{last ? '└' : '├'}</span>
+            <Bot seed={seed} tool={parent.tool} state={st} pose={poseFor(seed, st)} size={20} theme={theme} paused={paused} frozen={frozen} reducedMotion={reducedMotion} />
+            <span style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--sidebar-foreground)' }}>{h.task || h.kind}</span>
+            <span style={{ flexShrink: 0, color: 'var(--muted-foreground)' }}>{h.task ? `${h.kind} · ` : ''}{t.botLabel[st]}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export interface SessionViewProps {
   session: Session; preview: string[]; visible: boolean; reading: boolean; draft: string;
   /** When the layer's fade-in starts, in ms (see `enterDelay` in motion). */
@@ -88,6 +109,9 @@ export function SessionView(p: SessionViewProps) {
   const shown = pending ?? last;
   const isQ = shown?.kind === 'question';
   const st = botState(s);
+  const helpers = liveHelpers(s);
+  // The daemon rests the main thread between turns while a background helper still works: the view reads as in progress.
+  const busy = s.state === 'working' || (s.state === 'idle' && helpers.length > 0);
   // The preview follows its latest line, like a terminal: on open, and on each update unless the user scrolled up to read.
   const termRef = useRef<HTMLPreElement>(null);
   const stuck = useRef(true);
@@ -109,13 +133,13 @@ export function SessionView(p: SessionViewProps) {
     : pending?.kind === 'question' ? t.session.hintQuestion
     : questions > 1 ? t.reply.hintAnswerAll : questions === 1 ? t.reply.hintChips
     : t.session.hintFree);
-  const eyebrow = pending || (reply && s.state === 'idle') ? t.session.eyebrow.ask : s.state === 'working' || s.state === 'starting' ? t.session.eyebrow.working : s.state === 'error' ? t.session.eyebrow.error : t.session.eyebrow.session;
+  const eyebrow = pending || (reply && s.state === 'idle' && !busy) ? t.session.eyebrow.ask : busy || s.state === 'starting' ? t.session.eyebrow.working : s.state === 'error' ? t.session.eyebrow.error : t.session.eyebrow.session;
   const badgeState = s.state === 'error' ? 'error' : pending ? (pending.kind === 'question' ? 'question' : 'approval') : st;
   const title = pending
     ? (pending.kind === 'question' ? pending.text : pending.kind === 'diff' ? t.session.title.diff(s.name) : pending.kind === 'plan' ? t.session.title.plan(s.name) : t.session.title.permission(s.name))
     : doc?.title ? doc.title
     : readOnly ? t.session.title.readonly
-    : s.state === 'exited' ? t.session.title.exited : s.state === 'error' ? t.session.title.error : s.state === 'idle' ? t.session.title.idle : s.state === 'starting' ? t.session.title.starting : t.session.title.working;
+    : s.state === 'exited' ? t.session.title.exited : s.state === 'error' ? t.session.title.error : s.state === 'idle' && !busy ? t.session.title.idle : s.state === 'starting' ? t.session.title.starting : t.session.title.working;
   const failureText = (s.state === 'error' || p.failure) && pending ? t.session.failed(p.failure ?? s.lastError ?? t.notTaken) : null;
   return (
     <div data-layer="session" data-delay={enterDelay} inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay : 0]]) }}>
@@ -139,6 +163,7 @@ export function SessionView(p: SessionViewProps) {
             {readOnly ? <Badge state="readonly" tone={badgeState} caps /> : <Badge state={badgeState} caps />}
           </div>
           <h2 style={{ margin: 0, fontSize: 18, lineHeight: '26px', fontWeight: 650, letterSpacing: '-0.01em', overflowWrap: 'anywhere' }}>{title}</h2>
+          {helpers.length > 0 && <HelpersTree parent={s} helpers={helpers} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} />}
           {reply && doc && <>
             <span data-reply-meta style={{ marginTop: 6, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
               {[t.reply.finished(s.name, relativeTime(reply.at, p.now, t)), doneCount ? t.reply.doneCount(doneCount) : null, questions ? t.reply.questionCount(questions) : null].filter(Boolean).join(' · ')}

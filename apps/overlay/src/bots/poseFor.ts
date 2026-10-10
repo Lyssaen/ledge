@@ -1,4 +1,4 @@
-import type { Session, SessionState } from '@ledge/protocol';
+import type { Helper, Session, SessionState } from '@ledge/protocol';
 
 /** The expression a bot shows. `readonly` is only a fallback for an unknown expression, never a replacement for a known one. */
 export type BotState = 'starting' | 'working' | 'question' | 'approval' | 'idle' | 'done' | 'error' | 'readonly';
@@ -13,8 +13,15 @@ const FROM_SESSION: Record<SessionState, BotState> = {
   error: 'error'
 };
 
-/** Exited always reads as `done` (still, eyes closed); a nonzero exit code belongs to the badge and text. */
+/** The helpers (subagents) still running under a session: working, or waiting on a request of their own. */
+export const liveHelpers = (session: Session): Helper[] => session.helpers.filter(h => h.state !== 'exited' && h.state !== 'idle');
+
+/**
+ * Exited always reads as `done` (still, eyes closed); a nonzero exit code belongs to the badge and text.
+ * The daemon rests a parent whose main thread ended its turn even while a background helper still works: the bot keeps working.
+ */
 export function botState(session: Session): BotState {
+  if (session.state === 'idle' && liveHelpers(session).length > 0) return 'working';
   return FROM_SESSION[session.state];
 }
 
