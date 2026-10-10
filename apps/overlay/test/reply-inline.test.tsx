@@ -26,6 +26,17 @@ describe('inline markdown', () => {
     expect(screen.getByText('a *b* _c_').tagName).toBe('CODE');
     expect(document.querySelector('em')).toBeNull();
   });
+  it('a bare web address is a link too, without the punctuation that follows it', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(<p>{inline('voir https://example.com/x?a=1&b_2=3, puis (https://example.com/y). Dans `https://example.com/z` non.')}</p>);
+    const links = screen.getAllByRole('link');
+    expect(links.map(l => l.getAttribute('href'))).toEqual(['https://example.com/x?a=1&b_2=3', 'https://example.com/y']);
+    expect(links[0]).toHaveTextContent('https://example.com/x?a=1&b_2=3');
+    fireEvent.click(links[1]!);
+    expect(open).toHaveBeenCalledWith('https://example.com/y', '_blank', 'noopener');
+    expect(screen.getByText('https://example.com/z').tagName).toBe('CODE');
+    expect(document.querySelector('em')).toBeNull();
+  });
   it('only web links are links: a javascript or file scheme stays text', () => {
     render(<p>{inline('[x](javascript:alert(1)) et [y](file:///etc/passwd)')}</p>);
     expect(screen.queryByRole('link')).toBeNull();
