@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@import "./tokens.css";
+html, body, #root { margin: 0; height: 100%; background: transparent; }
+body { font-family: 'Geist', system-ui, sans-serif; color: var(--sidebar-foreground); font-size: 14px; line-height: 20px; overflow: hidden; }
+.mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+button, input { font-family: inherit; }
