@@ -26,11 +26,30 @@ const fr = {
   lost: 'La connexion a été perdue avant la réponse du terminal',
   notTaken: 'Le terminal ne l’a pas pris en compte',
   list: {
-    summary: (n: number, waiting: number) => `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} ${plural(waiting, 'demande', 'demandes')} pour vous` : 'tout est à jour'}`,
-    dnd: 'Ne pas déranger', settings: 'Réglages', collapse: 'Replier', help: 'Raccourcis clavier',
+    summary: (n: number, waiting: number) => n === 0 ? 'Aucune session' : `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} ${plural(waiting, 'demande', 'demandes')} pour vous` : 'tout est à jour'}`,
+    dnd: 'Ne pas déranger', settings: 'Réglages', collapse: 'Replier', help: 'Raccourcis clavier', newSession: 'Nouvelle session',
     row: (project: string, name: string) => `${project}, ${name}, ouvrir`,
     approve: 'Autoriser', deny: 'Refuser', openRow: 'Ouvrir',
-    dismiss: 'Retirer de la liste', dismissRow: (project: string, name: string) => `Retirer de la liste : ${project}, ${name}`
+    dismiss: 'Retirer de la liste', dismissRow: (project: string, name: string) => `Retirer de la liste : ${project}, ${name}`,
+    emptyTitle: 'Personne au travail.',
+    emptyHint: 'Démarrez un compagnon d’ici, ou avec', emptyHintAfter: 'dans un terminal : il apparaîtra dans cette liste.',
+    launched: (name: string, project: string) => `${name} démarre dans ${project}.`, openTerminal: 'Ouvrir le terminal'
+  },
+  launch: {
+    title: 'Nouvelle session',
+    folder: 'Dossier', folderHint: 'Le projet dans lequel le compagnon travaille.', folderPlaceholder: '~/Workspace/mon-projet',
+    recents: 'Récents', busy: (name: string) => `${name} y travaille`, noRecents: 'Les dossiers de vos sessions apparaîtront ici.',
+    pick: (project: string, cwd: string) => `Choisir ${project} (${cwd})`,
+    tool: 'Outil', toolHint: 'Codex et Cursor Agent : suivi en lecture seule pour l’instant.',
+    bot: 'Compagnon', botHint: (title: string) => `Son nom donne le titre de l’onglet : ${title}.`, anotherName: 'Un autre nom', botPlaceholder: 'Au choix de Ledge',
+    prompt: 'Première instruction', optional: 'facultatif',
+    promptHint: (name: string) => `Envoyée dès que ${name} est prêt. Sinon il attend votre tour dans son terminal.`,
+    promptPlaceholder: (name: string) => `Que doit faire ${name} en premier ?`,
+    resume: 'Reprendre la dernière conversation', resumeHint: 'Démarre avec --continue dans ce dossier.',
+    openTab: 'Ouvrir l’onglet du terminal', openTabHint: 'Sinon le compagnon tourne en arrière-plan, l’onglet reste à un clic depuis sa fiche.',
+    cancel: 'Annuler', start: 'Démarrer', starting: 'Démarrage…',
+    failed: (why: string) => `Impossible de démarrer : ${why}`,
+    needFolder: 'Indiquez un dossier pour démarrer.'
   },
   detail: { back: 'Retour aux sessions', close: 'Fermer' },
   session: {
@@ -121,11 +140,30 @@ const en: Messages = {
   lost: 'The connection dropped before the terminal answered',
   notTaken: 'The terminal did not take it',
   list: {
-    summary: (n: number, waiting: number) => `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} waiting for you` : 'nothing waiting'}`,
-    dnd: 'Do not disturb', settings: 'Settings', collapse: 'Collapse', help: 'Keyboard shortcuts',
+    summary: (n: number, waiting: number) => n === 0 ? 'No sessions' : `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} waiting for you` : 'nothing waiting'}`,
+    dnd: 'Do not disturb', settings: 'Settings', collapse: 'Collapse', help: 'Keyboard shortcuts', newSession: 'New session',
     row: (project: string, name: string) => `${project}, ${name}, open`,
     approve: 'Approve', deny: 'Deny', openRow: 'Open',
-    dismiss: 'Remove from list', dismissRow: (project: string, name: string) => `Remove from list: ${project}, ${name}`
+    dismiss: 'Remove from list', dismissRow: (project: string, name: string) => `Remove from list: ${project}, ${name}`,
+    emptyTitle: 'Nobody at work.',
+    emptyHint: 'Start a companion from here, or with', emptyHintAfter: 'in a terminal: it will show up in this list.',
+    launched: (name: string, project: string) => `${name} is starting in ${project}.`, openTerminal: 'Open the terminal'
+  },
+  launch: {
+    title: 'New session',
+    folder: 'Folder', folderHint: 'The project the companion works in.', folderPlaceholder: '~/Workspace/my-project',
+    recents: 'Recent', busy: (name: string) => `${name} works there`, noRecents: 'The folders of your sessions will show up here.',
+    pick: (project: string, cwd: string) => `Choose ${project} (${cwd})`,
+    tool: 'Tool', toolHint: 'Codex and Cursor Agent: read-only tracking for now.',
+    bot: 'Companion', botHint: (title: string) => `Its name titles the terminal tab: ${title}.`, anotherName: 'Another name', botPlaceholder: 'Ledge picks one',
+    prompt: 'First instruction', optional: 'optional',
+    promptHint: (name: string) => `Sent as soon as ${name} is ready. Otherwise it waits for your turn in its terminal.`,
+    promptPlaceholder: (name: string) => `What should ${name} do first?`,
+    resume: 'Resume the last conversation', resumeHint: 'Starts with --continue in this folder.',
+    openTab: 'Open the terminal tab', openTabHint: 'Otherwise the companion runs in the background; the tab is one click away from its card.',
+    cancel: 'Cancel', start: 'Start', starting: 'Starting…',
+    failed: (why: string) => `Could not start: ${why}`,
+    needFolder: 'Give a folder to start in.'
   },
   detail: { back: 'Back to sessions', close: 'Close' },
   session: {

@@ -12,16 +12,17 @@ import { Tooltip } from './Tooltip';
 import { Bubble, type BubbleAck } from './Bubble';
 import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
+import { LaunchView, LAUNCH_FOOTER_H, type LaunchRequest } from './LaunchView';
 import { DETAIL_HEADER_H } from './DetailHeader';
 import { useMeasuredHeight } from './useMeasuredHeight';
 import { useDaemonAsks, isPending } from './useDaemonAsks';
 import { useFocusRestore } from './useFocusRestore';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
-import { SessionList, rowHint, EXPANDED_ROW_H } from './SessionList';
+import { SessionList, rowHint, EXPANDED_ROW_H, type ListNotice } from './SessionList';
 import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
 import { useI18n, type Lang } from '../i18n/lang';
 import { transition, MOTION, ms } from '../motion';
-import { focusTerminal, onShortcut, onEdge, setHotZones, focusOverlay, releaseFocus, isTauri } from '../tauri/bridge';
+import { focusTerminal, openTerminal, onShortcut, onEdge, setHotZones, focusOverlay, releaseFocus, isTauri } from '../tauri/bridge';
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { frameOf, type Box } from './frame';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
@@ -39,6 +40,8 @@ const measure = (el: HTMLElement | null) => { const r = el?.getBoundingClientRec
 const inside = (p: { x: number; y: number } | null, g: Layout) => p !== null && p.x >= 0 && p.x < g.w && p.y >= g.top && p.y < g.top + g.h;
 /** One shared empty preview, so a session without one keeps a stable value across renders. */
 const NO_LINES: string[] = [];
+/** How long the "X is starting in Y" line stays under the list header. */
+export const LAUNCH_NOTICE_MS = 6000;
 
 
 export interface SurfaceProps {
@@ -60,7 +63,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
-  const { sessions, byId, status, previews, lastError } = useDaemon();
+  const { sessions, byId, status, previews, lastError, recents, launcher, lastLaunched } = useDaemon();
   const { t } = useI18n();
   // One app-level motion preference drives every bot in every layer.
   const motionPrefs = useMotionPreferences();
@@ -176,7 +179,48 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const settingsOpen = st.mode === 'settings';
   useEffect(() => { if (settingsOpen) onSettingsOpen?.(); }, [settingsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const helpH = useMeasuredHeight(helpRef, st.mode === 'help', ps);
-  const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : 0;
+  const launchRef = useRef<HTMLDivElement>(null);
+  const launchH = useMeasuredHeight(launchRef, st.mode === 'launch', ps);
+  // The launch form's footer (the actions) sits under the measured, scrolling body.
+  const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : st.mode === 'launch' && launchH ? launchH + LAUNCH_FOOTER_H : 0;
+
+  // Starting a session from the form: one request at a time; the daemon answers `session.launched` (back to the list,
+  // a notice for a few seconds, the terminal tab when asked) or an `error` without id (shown in the form). The form is
+  // remounted on each open, so a submitted form never shows its old values again.
+  const [launchOpen, setLaunchOpen] = useState(0);
+  const launchMode = st.mode === 'launch';
+  useEffect(() => { if (launchMode) setLaunchOpen(n => n + 1); }, [launchMode]);
+  const [launching, setLaunching] = useState<{ openTab: boolean } | null>(null);
+  const [launchFailure, setLaunchFailure] = useState<string | null>(null);
+  const [notice, setNotice] = useState<ListNotice | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(noticeTimer.current), []);
+  /** The session's terminal tab: brought forward when it exists, else opened on the session (a daemon-launched one has none yet). */
+  const openTab = (id: string) => {
+    const s = byId.get(id); if (!s) return;
+    void focusTerminal(s.title).then(found => { if (!found && launcher && s.tmuxSession) return openTerminal(s.title, [...launcher, 'attach', id]); return found; });
+  };
+  const launch = (req: LaunchRequest) => {
+    if (launching || status === 'unreachable') return;
+    setLaunchFailure(null); setLaunching({ openTab: req.openTab });
+    send({ type: 'session.launch', tool: req.tool, cwd: req.cwd, name: req.name, prompt: req.prompt, continue: req.continue });
+  };
+  useEffect(() => {
+    if (!lastLaunched || !launching) return;
+    const s = byId.get(lastLaunched.id);
+    setLaunching(null);
+    if (ctl.state().mode === 'launch') dispatch({ type: 'back' });
+    if (s) {
+      setNotice({ text: t.list.launched(s.name, s.project), action: { label: t.list.openTerminal, onClick: () => openTab(s.id) } });
+      clearTimeout(noticeTimer.current); noticeTimer.current = setTimeout(() => setNotice(null), LAUNCH_NOTICE_MS);
+      if (launching.openTab) openTab(s.id);
+    }
+  }, [lastLaunched?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!launching || !lastError || lastError.id) return;
+    setLaunching(null); setLaunchFailure(lastError.message);
+  }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
@@ -204,7 +248,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const hovBot = bots.find(b => b.id === hoverId) ?? null;
   const hovSlot = geo.slots.find(s => s.id === hoverId);
   const panel = st.mode !== 'handle' && st.mode !== 'bubble';
-  const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help';
+  const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch';
   const unreachable = status === 'unreachable';
   const bubblePaused = st.hovering || st.focusWithin || st.hidden || st.ack !== null;
   const send = (m: Parameters<DaemonClient['send']>[0]) => client.send(m);
@@ -260,7 +304,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const zonesKey = zonesArmed ? geo.hotZones.map(z => `${z.top}:${z.h}`).join(',') : '';
   useEffect(() => { setHotZones(zonesArmed ? geo.hotZones : []); }, [zonesKey]); // the bands are captured through `zonesKey`
   // The terminal tab is the fallback for read-only and offline sessions too: only the daemon message needs the daemon.
-  const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); void focusTerminal(s.title); };
+  const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); openTab(id); };
   const chooseOption = (n: number) => {
     if (blockedFor(selected) !== null) return;
     const radios = surfaceRef.current?.querySelectorAll<HTMLInputElement>('[data-layer="session"] [data-ask] input[type="radio"]:not([data-other])');
@@ -322,7 +366,11 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SessionList sessions={sessions} visible={st.mode === 'list'} numbered={kb} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               onDismiss={id => { if (!unreachable) send({ type: 'session.dismiss', id }); }} offline={unreachable}
-              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+          </div>
+          <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
+            <LaunchView key={launchOpen} contentRef={launchRef} visible={st.mode === 'launch'} recents={recents} sessions={sessions} offline={unreachable ? t.offline : null} busy={!!launching} failure={launchFailure}
+              onLaunch={launch} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
           </div>
           <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SettingsView contentRef={settingsRef} onLang={onLang} visible={st.mode === 'settings'} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} scales={scales} autoScales={autoScales} onScale={onScale}

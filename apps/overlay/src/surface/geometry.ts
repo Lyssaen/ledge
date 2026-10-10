@@ -1,8 +1,11 @@
-export const SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 72, footerH: 44, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420 } as const;
+export const SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 72, footerH: 44, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420, launchH: 600, emptyH: 200 } as const;
 /** The surface's top + bottom border (border-box): added to a measured content height so nothing is clipped. */
 export const SURFACE_BORDER = 1;
 export const SURFACE_CHROME_Y = 2 * SURFACE_BORDER;
-export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'settings' | 'help';
+export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'settings' | 'help' | 'launch';
+/** The detail views that share the list's width and the DetailHeader: settings, help and the launch form. */
+export const DETAIL_VIEWS: readonly Mode[] = ['settings', 'help', 'launch'];
+const DETAIL_FALLBACK_H: Record<'settings' | 'help' | 'launch', number> = { settings: SIZES.settingsH, help: SIZES.helpH, launch: SIZES.launchH };
 export interface Slot { id: string; size: number; center: number }
 export interface Layout { top: number; w: number; h: number; slots: Slot[]; handle: { top: number; h: number }; hotZones: Array<{ top: number; h: number }> }
 
@@ -34,11 +37,13 @@ export function layout(input: LayoutInput): Layout {
     const top = clamp(Math.round((input.bubbleAnchor ?? slot?.center ?? centerY) - 38), SIZES.margin, screenH - SIZES.margin - h);
     return { top, w: SIZES.bubbleW, h, slots, handle, hotZones };
   }
-  if (mode === 'settings' || mode === 'help') {
-    const h = Math.min(maxH, input.detailH ?? (mode === 'settings' ? SIZES.settingsH : SIZES.helpH));
+  if (mode === 'settings' || mode === 'help' || mode === 'launch') {
+    const h = Math.min(maxH, input.detailH ?? DETAIL_FALLBACK_H[mode]);
     return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w: SIZES.listW, h, slots, handle, hotZones };
   }
-  const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + 16 + n * SIZES.rowH + (input.listExtraH ?? 0) + SIZES.footerH + SURFACE_CHROME_Y : (input.sessionH ?? 480));
+  // An empty list shows the empty state (a bot, two lines, a button) instead of rows.
+  const rowsH = n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.listExtraH ?? 0);
+  const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + rowsH + SIZES.footerH + SURFACE_CHROME_Y : (input.sessionH ?? 480));
   const top = clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h);
   const w = mode === 'list' ? SIZES.listW : (input.reading ? SIZES.readingW : SIZES.sessionW);
   return { top, w, h, slots, handle, hotZones };

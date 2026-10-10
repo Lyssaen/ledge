@@ -7,7 +7,8 @@
  *   set_monitor { id | null }          the Screen setting: the overlay moves to that monitor at once (null: primary)
  *   focus_overlay                      remember the foreground window, then show and focus the overlay window
  *   release_focus                      give the foreground back to the window remembered by focus_overlay
- *   focus_terminal { title }           bring the matching terminal window forward
+ *   focus_terminal { title }           bring the matching terminal window forward (true when found)
+ *   open_terminal { title, command }   open a Windows Terminal tab running `command` in WSL (true once spawned)
  *   event `ledge://edge` { inside }    cursor entered / left the edge bands
  * Coordinates sent to the shell are logical px from the top of the chosen monitor's work area ("monitor px").
  * The page is never zoomed (each layer applies its own UI scale), so its CSS px are monitor px; `setFrame` and
@@ -103,9 +104,17 @@ export async function releaseFocus(): Promise<void> {
   await invoke('release_focus').catch(() => {});
 }
 
-export async function focusTerminal(title: string): Promise<void> {
-  if (!inTauri()) return;
-  await invoke('focus_terminal', { title }).catch(() => {});
+/** Brings the terminal window whose title matches `title` forward; true when one was found (always false in the browser). */
+export async function focusTerminal(title: string): Promise<boolean> {
+  if (!inTauri()) return false;
+  return invoke<boolean>('focus_terminal', { title }).catch(() => false);
+}
+
+/** Opens a new Windows Terminal tab titled `title` running `command` inside WSL (`wt.exe -w 0 new-tab --title <title>
+ *  wsl.exe -- <command>`): the tab of a session the overlay launched itself. True once the tab was spawned. */
+export async function openTerminal(title: string, command: string[]): Promise<boolean> {
+  if (!inTauri()) return false;
+  return invoke<boolean>('open_terminal', { title, command }).catch(() => false);
 }
 
 /** Native edge hover. In the browser it never fires: the DOM hot zones handle the edge there. */

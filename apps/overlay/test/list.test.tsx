@@ -48,6 +48,33 @@ describe('<SessionList>', () => {
   });
 });
 
+describe('<SessionList> launching', () => {
+  it('the header + opens the form; an empty list shows the empty state with its own button', () => {
+    const onLaunch = vi.fn();
+    const { rerender } = render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} onLaunch={onLaunch} />);
+    fireEvent.click(screen.getByRole('button', { name: 'New session' })); expect(onLaunch).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-empty]')).toBeNull();
+    rerender(<SessionList sessions={[]} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} onLaunch={onLaunch} />);
+    expect(screen.getByText('No sessions')).toBeInTheDocument();
+    expect(screen.getByText('Nobody at work.')).toBeInTheDocument();
+    expect(screen.getByText('ledge claude')).toBeInTheDocument();
+    const buttons = screen.getAllByRole('button', { name: 'New session' });
+    expect(buttons).toHaveLength(2);
+    fireEvent.click(buttons[1]!); expect(onLaunch).toHaveBeenCalledTimes(2);
+  });
+  it('without onLaunch neither button exists', () => {
+    render(<SessionList sessions={[]} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
+    expect(screen.queryByRole('button', { name: 'New session' })).toBeNull();
+    expect(document.querySelector('[data-empty]')).not.toBeNull();
+  });
+  it('a notice shows under the header with its action', () => {
+    const onClick = vi.fn();
+    render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} notice={{ text: 'Juno is starting in api-gateway.', action: { label: 'Open the terminal', onClick } }} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Juno is starting in api-gateway.');
+    fireEvent.click(screen.getByRole('button', { name: /Open the terminal/ })); expect(onClick).toHaveBeenCalled();
+  });
+});
+
 describe('rowHint', () => {
   it('matches the badge: idle reads available, working reads running; pending, read-only, exited and error keep theirs', () => {
     expect(rowHint(fakeSession('i', { state: 'idle' }))).toBe('available');
