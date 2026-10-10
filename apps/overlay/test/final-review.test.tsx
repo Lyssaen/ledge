@@ -189,7 +189,7 @@ describe('final review fixes', () => {
     expect(rec.sent).toHaveLength(0);
     // Inside the session (the terminal preview is the review) Approve and Y decide.
     const view = layer('session');
-    expect(within(view).getByText(/proposes this diff/)).toBeInTheDocument();
+    expect(within(view).getByText(/proposes changes/)).toBeInTheDocument();
     press('y');
     expect(rec.sent).toEqual([{ type: 'session.decide', id: 'a', decision: 'accept' }]);
     // A plan in the bubble: Review opens the session.

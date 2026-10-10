@@ -5,6 +5,7 @@ import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { materialFor } from './material';
 import { seedHash, type BotState } from './poseFor';
 import { useBotMotion, useBotNod, BOT_MOTION } from './useBotMotion';
+import { useI18n } from '../i18n/lang';
 
 export interface BotProps {
   tool: Tool;
@@ -31,18 +32,18 @@ export interface BotProps {
 const TOOL_NAMES: Record<Tool, string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' };
 
 type Eyes = 'open' | 'wide' | 'happy' | 'error' | 'sleep';
-interface Expression { label: string; eyes: Eyes; eye: string; tilt?: readonly [number, number, number]; lift?: number }
+interface Expression { eyes: Eyes; eye: string; tilt?: readonly [number, number, number]; lift?: number }
 
 /** Approved expressions (spec section 6, mascot.css); tilt variants come from the reference controller. */
 const EXPRESSIONS: Record<BotState, Expression> = {
-  starting: { label: 'Starting', eyes: 'open', eye: 'starting' },
-  working: { label: 'Working', eyes: 'open', eye: 'working' },
-  approval: { label: 'Needs your approval', eyes: 'open', eye: 'approval', tilt: [-4, 3, -2], lift: -1 },
-  question: { label: 'Has a question', eyes: 'wide', eye: 'question', tilt: [4, -3, 6] },
-  idle: { label: 'Available', eyes: 'happy', eye: 'idle' },
-  error: { label: 'Error', eyes: 'error', eye: 'error', tilt: [-7, -6, -5], lift: 2 },
-  done: { label: 'Finished', eyes: 'sleep', eye: 'done' },
-  readonly: { label: 'Read-only', eyes: 'open', eye: 'done' }
+  starting: { eyes: 'open', eye: 'starting' },
+  working: { eyes: 'open', eye: 'working' },
+  approval: { eyes: 'open', eye: 'approval', tilt: [-4, 3, -2], lift: -1 },
+  question: { eyes: 'wide', eye: 'question', tilt: [4, -3, 6] },
+  idle: { eyes: 'happy', eye: 'idle' },
+  error: { eyes: 'error', eye: 'error', tilt: [-7, -6, -5], lift: 2 },
+  done: { eyes: 'sleep', eye: 'done' },
+  readonly: { eyes: 'open', eye: 'done' }
 };
 
 const FULL_VIEWBOX = '0 0 96 96';
@@ -72,6 +73,7 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
   const reduced = osReduced || (reducedMotion ?? prefs.reduced);
   const simplified = size <= 20;
   const expr = EXPRESSIONS[state];
+  const { t } = useI18n();
   const h = seedHash(seed);
 
   useBotMotion(ref, { seed, state, askKey, enabled: !reduced && !simplified && !readOnly && !frozen && !paused });
@@ -93,7 +95,7 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
     '--bot-nod-ms': ms(BOT_MOTION.nodMs)
   } as CSSProperties;
 
-  const label = `${TOOL_NAMES[tool]} · ${expr.label}${readOnly && state !== 'readonly' ? ' · Read-only' : ''}${frozen ? ' · Not live' : ''}`;
+  const label = `${TOOL_NAMES[tool]} · ${t.botLabel[state]}${readOnly && state !== 'readonly' ? ` · ${t.botReadOnly}` : ''}${frozen ? ` · ${t.botNotLive}` : ''}`;
 
   return (
     <svg

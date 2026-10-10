@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "./tokens.css";
 @import "../bots/bots.css";
+/* Native controls (radios, checkboxes, scrollbars) follow the theme inside the overlay's own boxes only: on the root it
+   would paint the transparent window's canvas. */
+:root[data-theme="dark"] [data-surface], :root[data-theme="dark"] [data-coachmark] { color-scheme: dark; }
+:root[data-theme="light"] [data-surface], :root[data-theme="light"] [data-coachmark] { color-scheme: light; }
 html, body, #root { margin: 0; height: 100%; background: transparent; }
 body { font-family: 'Geist', system-ui, sans-serif; color: var(--sidebar-foreground); font-size: 14px; line-height: 20px; overflow: hidden; }
 .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
@@ -8,7 +12,7 @@ button, input { font-family: inherit; }
 /* The bubble countdown drains from the controller's remainder (--ledge-from) to empty. */
 @keyframes ledge-drain { from { width: var(--ledge-from, 100%) } to { width: 0% } }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.dnd-switch:has(input:focus-visible) .dnd-track { outline: 2px solid var(--ring); outline-offset: 2px; }
+.dnd-switch:has(input:focus-visible) .dnd-track, .ledge-seg:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
 .ledge-opt:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
 /* Buttons: variant colors, hover and disabled states (tokens only). */
 .ledge-btn { cursor: pointer; border: 1px solid transparent; }
@@ -21,3 +25,16 @@ button, input { font-family: inherit; }
 .ledge-btn[data-variant="ghost"]:hover:not(:disabled) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .ledge-btn[data-variant="secondary"]:hover:not(:disabled) { background: var(--accent); color: var(--accent-foreground); }
 button:disabled { opacity: .5; cursor: not-allowed; }
+/* Thin, token-coloured scrollbars on every scrolling area (list, session content, terminal preview, settings, help):
+   a muted thumb on a transparent track, as in the mockup's views. */
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent; }
+/* A text toggle (the list footer's do-not-disturb). */
+.ledge-text-btn:hover { color: var(--sidebar-foreground) !important; }
+.ledge-text-btn[aria-pressed="true"]:hover { color: var(--sidebar-primary) !important; }
+/* Question options: radio cards, the chosen one with a red border, a red tint and a red radio. */
+.ledge-opt input[type="radio"], .ledge-check input[type="checkbox"] { accent-color: var(--sidebar-primary); }
+.ledge-opt[data-checked] { border-color: var(--sidebar-primary) !important; background-color: color-mix(in srgb, var(--sidebar-primary) 8%, transparent) !important; }
+textarea::placeholder, .ledge-field::placeholder { color: var(--muted-foreground); }
+details.ledge-terminal > summary { list-style: none; cursor: pointer; }
+details.ledge-terminal > summary::-webkit-details-marker { display: none; }
+details.ledge-terminal[open] > summary [data-caret] { transform: rotate(90deg); }

@@ -13,13 +13,15 @@ const sessions = [
 describe('<SessionList>', () => {
   it('shows counts, rows with badges, and highlights the oldest ask', () => {
     render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
-    expect(screen.getByText('4 bots · 1 waiting for you')).toBeInTheDocument();
+    expect(screen.getByText('4 sessions · 1 waiting for you')).toBeInTheDocument();
     const rows = screen.getAllByRole('button', { name: /open/ });
     expect(rows).toHaveLength(4);
     expect(rows[0]).toHaveStyle({ backgroundColor: 'var(--secondary)', borderLeftColor: 'var(--sidebar-primary)' });
     expect(within(rows[0]!).getByText('Approval')).toBeInTheDocument();
-    expect(within(rows[2]!).getByText(/started without ledge/)).toBeInTheDocument();
-    expect(within(rows[3]!).getByText(/exited 0/)).toBeInTheDocument();
+    // The secondary line is "Name · Tool · age" only; the badge carries the state.
+    expect(within(rows[1]!).getByText(/^Pim · Codex · /)).toBeInTheDocument();
+    expect(within(rows[2]!).getByText('Read only')).toBeInTheDocument();
+    expect(within(rows[3]!).getByText('Done')).toBeInTheDocument();
   });
   it('numbers rows when opened from the keyboard', () => {
     render(<SessionList sessions={sessions} visible numbered selectedId="b" dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
@@ -30,8 +32,11 @@ describe('<SessionList>', () => {
     const onOpen = vi.fn(), onToggleDnd = vi.fn(), onClose = vi.fn();
     render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd onToggleDnd={onToggleDnd} onOpen={onOpen} onClose={onClose} />);
     fireEvent.click(screen.getByRole('button', { name: /speos-api/ })); expect(onOpen).toHaveBeenCalledWith('b');
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Do not disturb' })); expect(onToggleDnd).toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Do not disturb' })).toHaveAttribute('aria-pressed', 'true');
+    // Do not disturb is both the header icon and the footer text toggle, as in the mockup.
+    const dnd = screen.getAllByRole('button', { name: 'Do not disturb' });
+    expect(dnd).toHaveLength(2);
+    fireEvent.click(dnd[1]!); expect(onToggleDnd).toHaveBeenCalled();
+    for (const b of dnd) expect(b).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Collapse' })); expect(onClose).toHaveBeenCalled();
   });
   it('rows cascade with increasing delays', () => {

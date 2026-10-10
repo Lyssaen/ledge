@@ -3,12 +3,12 @@ import type { Session } from '@ledge/protocol';
 import type { DaemonError } from '../daemon/store';
 import type { DaemonStatus } from '../daemon/client';
 import type { SurfaceEvent } from './machine';
+import { useI18n } from '../i18n/lang';
 
 export const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
 /** A request the surface still tracks: waiting, or failed (state `error`) with its request kept for a retry. */
 const tracked = (s: Session) => !!s.pending && (isPending(s) || s.state === 'error');
 const sameRequest = (a: Session['pending'], b: Session['pending']) => !!a && !!b && a.kind === b.kind && a.text === b.text && a.helperId === b.helperId;
-const LOST = 'The connection dropped before the terminal answered';
 
 /**
  * Turns daemon updates into machine events (ask, askCleared, askReplaced, removed, decisionFailed) and owns the
@@ -19,6 +19,8 @@ const LOST = 'The connection dropped before the terminal answered';
  */
 export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; lastError: DaemonError | null; dnd: boolean; dispatch: (e: SurfaceEvent) => void; onReplyRejected?: (id: string, text: string) => void }) {
   const { sessions, status, lastError, dnd, dispatch } = o;
+  const { t } = useI18n();
+  const msg = useRef(t); msg.current = t;
   const prev = useRef<Map<string, Session>>(new Map());
   /** Decisions in flight. */
   const lock = useRef<Set<string>>(new Set());
@@ -55,7 +57,7 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
       // Into `error` with the request kept: the injection failed. A retry from `error` that fails again stays in `error`;
       // the daemon then answers with an `error` reply for that id (handled below).
       else if (wasTracked && tracked(s) && s.state === 'error' && was!.state !== 'error')
-        fail(s.id, s.lastError ?? 'The terminal did not take it');
+        fail(s.id, s.lastError ?? msg.current.notTaken);
     }
     prev.current = now;
   }, [sessions, dnd, dispatch]); // eslint-disable-line react-hooks/exhaustive-deps -- release/fail only touch refs and setters
@@ -74,7 +76,7 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
   // A dropped connection leaves every decision in flight unresolved: unlock them; the next snapshot tells what happened.
   useEffect(() => {
     if (status !== 'unreachable') return;
-    for (const id of [...lock.current]) fail(id, LOST);
+    for (const id of [...lock.current]) fail(id, msg.current.lost);
   }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Takes the lock for a decision on `id`; false when one is already in flight (a double click sends one command). */

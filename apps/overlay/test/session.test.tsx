@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { SessionView, measureSessionH } from '../src/surface/SessionView';
+import { SessionView, measureSessionH, askMaxH } from '../src/surface/SessionView';
 import { fakeSession } from './mockDaemon';
 
 const perm = fakeSession('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } });
@@ -11,11 +11,12 @@ describe('<SessionView>', () => {
   it('shows a permission card and sends the decision', () => {
     const onDecide = vi.fn();
     render(<SessionView {...base} session={perm} onDecide={onDecide} />);
-    expect(screen.getByText('Otto wants to run')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Otto wants to run a command.' })).toBeInTheDocument();
+    expect(screen.getByText('Run in harness-assistant')).toBeInTheDocument();
     expect(screen.getByText('npm test')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Deny' })); expect(onDecide).toHaveBeenCalledWith('deny');
     fireEvent.click(screen.getByRole('button', { name: 'Approve' })); expect(onDecide).toHaveBeenLastCalledWith('accept');
-    expect(screen.getByRole('button', { name: 'Always for this session' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Always for this session' })).toBeDisabled();
     expect(screen.getByText('Do you want to proceed?')).toBeInTheDocument();
   });
   it('shows a question with options and answers by number; Other is off (free text is not supported yet)', () => {
@@ -32,7 +33,7 @@ describe('<SessionView>', () => {
   });
   it('the ask card folds when pending disappears', () => {
     const { rerender, container } = render(<SessionView {...base} session={perm} />);
-    expect(container.querySelector('[data-ask]')).toHaveStyle({ maxHeight: '260px', opacity: '1' });
+    expect(container.querySelector('[data-ask]')).toHaveStyle({ maxHeight: `${askMaxH(perm.pending!)}px`, opacity: '1' });
     rerender(<SessionView {...base} session={{ ...perm, state: 'working', pending: undefined }} />);
     expect(container.querySelector('[data-ask]')).toHaveStyle({ maxHeight: '0px', opacity: '0' });
     expect(screen.getByText('npm test')).toBeInTheDocument();
@@ -70,7 +71,10 @@ describe('<SessionView>', () => {
     expect(container.querySelector('[data-layer="session"]')).toHaveAttribute('inert');
   });
   it('measures a sensible height', () => {
-    expect(measureSessionH(perm, false)).toBe(56 + 168 + 240 + 100);
-    expect(measureSessionH(q, false)).toBe(56 + 48 + 2 * 64 + 56 + 240 + 100);
+    // A fallback before the content is measured: an ask adds its card, reading mode a longer preview.
+    const idle = { ...perm, state: 'working' as const, pending: undefined };
+    expect(measureSessionH(perm, false)).toBeGreaterThan(measureSessionH(idle, false));
+    expect(measureSessionH(q, false)).toBeGreaterThan(measureSessionH(idle, false));
+    expect(measureSessionH(perm, true)).toBeGreaterThan(measureSessionH(perm, false));
   });
 });

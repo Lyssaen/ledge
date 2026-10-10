@@ -1,4 +1,4 @@
-export const SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 56, footerH: 48, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420 } as const;
+export const SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 72, footerH: 44, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420 } as const;
 /** The surface's top + bottom border (border-box): added to a measured content height so nothing is clipped. */
 export const SURFACE_BORDER = 1;
 export const SURFACE_CHROME_Y = 2 * SURFACE_BORDER;
@@ -12,8 +12,8 @@ export function slotSizes(n: number): { big: number; small: number; gap: number 
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-/** `listExtraH` is the extra height of an expanded (focused) list row. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. */
-export function layout(input: { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number }): Layout {
+/** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of an expanded (focused) list row. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. */
+export function layout(input: { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number; detailH?: number }): Layout {
   const { bots, mode, screenH } = input;
   const n = bots.length; const { big, small, gap } = slotSizes(n);
   const centerY = screenH / 2;
@@ -32,7 +32,7 @@ export function layout(input: { bots: Array<{ id: string; pending: boolean }>; m
     return { top, w: SIZES.bubbleW, h, slots, handle, hotZones };
   }
   if (mode === 'settings' || mode === 'help') {
-    const h = Math.min(maxH, mode === 'settings' ? SIZES.settingsH : SIZES.helpH);
+    const h = Math.min(maxH, input.detailH ?? (mode === 'settings' ? SIZES.settingsH : SIZES.helpH));
     return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w: SIZES.listW, h, slots, handle, hotZones };
   }
   const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + 16 + n * SIZES.rowH + (input.listExtraH ?? 0) + SIZES.footerH : (input.sessionH ?? 480));

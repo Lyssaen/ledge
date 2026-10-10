@@ -25,7 +25,7 @@ describe('geometry', () => {
   });
   it('the list grows with the rows and never exceeds the screen minus margins', () => {
     const l = layout({ bots: bots(3), mode: 'list', screenH: 1080 });
-    expect(l.h).toBe(SIZES.headerH + 16 + 3 * SIZES.rowH + 48);
+    expect(l.h).toBe(SIZES.headerH + 16 + 3 * SIZES.rowH + SIZES.footerH);
     const big = layout({ bots: bots(10, [0, 4, 8]), mode: 'list', screenH: 600 });
     expect(big.h).toBe(600 - 2 * SIZES.margin);
     expect(big.top).toBe(SIZES.margin);

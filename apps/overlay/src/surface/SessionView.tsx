@@ -1,45 +1,51 @@
-import { useState } from 'react';
+import { useState, type Ref } from 'react';
 import type { Pending, Session } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
 import { botState, poseFor } from '../bots/poseFor';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
+import { Kbd } from '../ui/Kbd';
+import { Icon, ICONS } from '../ui/icons';
 import { relativeTime, toolName } from '../format';
 import { transition } from '../motion';
+import { useI18n, type Messages } from '../i18n/lang';
 
-const Icon = ({ d, size = 16 }: { d: string[]; size?: number }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d.map((p, i) => <path key={i} d={p} />)}</svg>;
-const I = { back: ['m15 18-6-6 6-6'], close: ['M18 6 6 18', 'm6 6 12 12'], ext: ['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'], expand: ['M15 3h6v6', 'm21 3-7 7', 'm3 21 7-7', 'M9 21H3v-6'], check: ['M20 6 9 17l-5-5'], send: ['M22 2 11 13', 'm22 2-7 20-4-9-9-4 20-7z'], stop: ['M6 6h12v12H6z'] };
-const well: React.CSSProperties = { fontFamily: "'Geist Mono', ui-monospace, monospace", fontSize: 13, lineHeight: '20px', padding: '8px 12px', background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' };
+const mono = "'Geist Mono', ui-monospace, monospace";
+const well: React.CSSProperties = { fontFamily: mono, fontSize: 13, lineHeight: '20px', padding: '10px 12px', background: 'var(--sidebar)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' };
 const rule = '1px solid var(--sidebar-border)';
+/** Fixed parts of the view: its header and the reply area under the content. */
+export const SESSION_HEADER_H = 60;
 
+/** A first estimate of the view's height, before (or without) a measurement of its content. */
 export function measureSessionH(s: Session, reading: boolean): number {
-  const ask = !s.pending ? 0 : s.pending.kind === 'question' ? 48 + (s.pending.options?.length ?? 0) * 64 + 56 : 168;
-  return 56 + ask + (reading ? 480 : 240) + 100;
+  const ask = !s.pending ? 0 : s.pending.kind === 'question' ? 140 + (s.pending.options?.length ?? 0) * 56 : 260;
+  return SESSION_HEADER_H + 90 + ask + (reading ? 400 : 240) + 96;
 }
+/** The cap the request block grows to (its content is always shorter): only the fold animation uses it. */
+export const askMaxH = (p: Pending) => (p.kind === 'question' ? 160 + (p.options?.length ?? 0) * 72 : 360);
 
-function QuestionCard({ pending, onReply, disabled }: { pending: Pending; onReply: (t: string) => void; disabled: boolean }) {
+function QuestionCard({ pending, onReply, disabled, t }: { pending: Pending; onReply: (t: string) => void; disabled: boolean; t: Messages }) {
   const [choice, setChoice] = useState(0);
   const opts = pending.options ?? [];
-  const row = (active: boolean, pad: string): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 12, padding: pad, borderStyle: 'solid', borderWidth: 1, borderColor: active ? 'var(--sidebar-primary)' : 'var(--border)', borderRadius: 'var(--radius-lg)', backgroundColor: active ? 'var(--secondary)' : 'transparent', cursor: 'pointer', transition: transition([['border-color', 'hover'], ['background-color', 'hover']]) });
+  const card: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, minHeight: 48, boxSizing: 'border-box', padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', backgroundColor: 'transparent', cursor: 'pointer', transition: transition([['border-color', 'hover'], ['background-color', 'hover']]) };
   return (
-    <>
-      <div style={{ fontSize: 15, lineHeight: '22px', fontWeight: 600 }}>{pending.text}</div>
-      <fieldset disabled={disabled} style={{ margin: 0, padding: 0, border: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <legend style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Options</legend>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <fieldset disabled={disabled} style={{ margin: 0, padding: 0, border: 'none', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+        <legend style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{t.session.options}</legend>
         {opts.map((o, i) => (
-          <label key={o} className="ledge-opt" style={row(choice === i, '10px 14px')}>
-            <input type="radio" name="opt" checked={choice === i} onChange={() => setChoice(i)} /> <span style={{ fontWeight: 500 }}>{o}</span>
+          <label key={o} className="ledge-opt" data-checked={choice === i || undefined} style={card}>
+            <input type="radio" name="opt" checked={choice === i} onChange={() => setChoice(i)} style={{ margin: 0, width: 16, height: 16, flexShrink: 0 }} />
+            <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{o}</span>
           </label>
         ))}
-        {/* The daemon cannot type a free-text answer into the select dialog yet: Other stays visible but off. */}
-        <label className="ledge-opt" style={{ ...row(false, '6px 14px'), cursor: 'not-allowed', opacity: 0.6 }}>
-          <input type="radio" name="opt" aria-label="Other" disabled aria-describedby="ledge-other-why" />
-          <input type="text" placeholder="Other…" disabled aria-label="Other answer" style={{ flexGrow: 1, minWidth: 0, height: 28, background: 'transparent', color: 'inherit', border: 'none', fontSize: 14 }} />
-          <span id="ledge-other-why" style={{ fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>answer in the terminal</span>
-        </label>
+        {/* The daemon cannot type a free-text answer into the select dialog yet: the field stays visible but off. */}
+        <input type="radio" name="opt" data-other aria-label={t.session.other} disabled aria-describedby="ledge-other-why" style={{ position: 'absolute', opacity: 0, width: 1, height: 1, margin: 0 }} />
+        <input type="text" className="ledge-field" placeholder={t.session.otherPlaceholder} disabled aria-label={t.session.otherAnswer} aria-describedby="ledge-other-why"
+          style={{ height: 40, boxSizing: 'border-box', padding: '0 12px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 14, cursor: 'not-allowed' }} />
+        <span id="ledge-other-why" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.session.otherWhy}</span>
       </fieldset>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><Button variant="primary" disabled={disabled} onClick={() => onReply(String(choice + 1))}>Answer</Button></div>
-    </>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}><Button variant="primary" disabled={disabled} onClick={() => onReply(String(choice + 1))}>{t.session.send}</Button></div>
+    </div>
   );
 }
 
@@ -54,9 +60,12 @@ export interface SessionViewProps {
   /** Why the last decision for this session failed (a daemon `error` reply, a dropped connection). */
   failure?: string;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number;
+  /** The view's natural content (scroll area) and reply area, measured by the surface to size itself. */
+  contentRef?: Ref<HTMLDivElement>; replyRef?: Ref<HTMLDivElement>;
 }
 
 export function SessionView(p: SessionViewProps) {
+  const { t } = useI18n();
   const { session: s, visible } = p;
   const blocked = p.blocked ?? null;
   const readOnly = s.source === 'hook_only';
@@ -72,64 +81,94 @@ export function SessionView(p: SessionViewProps) {
   const promptOnly = !!pending && pending.kind !== 'question';
   const replyOff = blocked !== null || promptOnly;
   const sendDraft = () => { if (!replyOff && p.draft.trim()) p.onReply(p.draft); };
-  const hint = blocked ?? (promptOnly ? `Approve or deny the ${pending!.kind} first, then reply`
-    : pending?.kind === 'question' ? 'A question takes an option number; answer anything else in its terminal'
-    : 'Enter sends to the terminal as typed');
+  const hint = blocked ?? (promptOnly ? t.session.hintPrompt(pending!.kind)
+    : pending?.kind === 'question' ? t.session.hintQuestion
+    : t.session.hintFree);
+  const eyebrow = pending ? t.session.eyebrow.ask : s.state === 'working' || s.state === 'starting' ? t.session.eyebrow.working : s.state === 'error' ? t.session.eyebrow.error : t.session.eyebrow.session;
+  const badgeState = s.state === 'error' ? 'error' : pending ? (pending.kind === 'question' ? 'question' : 'approval') : st;
+  const title = pending
+    ? (pending.kind === 'question' ? pending.text : pending.kind === 'diff' ? t.session.title.diff(s.name) : pending.kind === 'plan' ? t.session.title.plan(s.name) : t.session.title.permission(s.name))
+    : readOnly ? t.session.title.readonly
+    : s.state === 'exited' ? t.session.title.exited : s.state === 'error' ? t.session.title.error : s.state === 'idle' ? t.session.title.idle : s.state === 'starting' ? t.session.title.starting : t.session.title.working;
+  const failureText = (s.state === 'error' || p.failure) && pending ? t.session.failed(p.failure ?? s.lastError ?? t.notTaken) : null;
   return (
     <div data-layer="session" inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? 120 : 0]]) }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 56, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px', borderBottom: rule }}>
-        <Button variant="ghost" size="icon" aria-label="Back to sessions" data-initial-focus onClick={p.onBack}><Icon d={I.back} /></Button>
-        <Bot seed={s.id} readOnly={s.source === 'hook_only'} tool={s.tool} state={st} pose={poseFor(s.id, s.state)} size={32} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} askKey={pending?.text} />
-        <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
-          <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name} · {s.project}</span>
-          <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{toolName(s.tool)} · {relativeTime(s.startedAt, p.now)}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: SESSION_HEADER_H, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px 0 6px', borderBottom: rule }}>
+        <Button variant="ghost" size="icon" aria-label={t.detail.back} title={t.detail.back} data-initial-focus onClick={p.onBack} style={{ width: 30, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.chevronLeft} /></Button>
+        <Bot seed={s.id} readOnly={readOnly} tool={s.tool} state={st} pose={poseFor(s.id, s.state)} size={32} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} askKey={pending?.text} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1, minWidth: 0, paddingLeft: 4 }}>
+          <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name} · {s.project}</span>
+          <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toolName(s.tool)} · {relativeTime(s.startedAt, p.now, t)}</span>
         </div>
-        <Button variant="ghost" size="icon" aria-label="Reading mode" aria-pressed={p.reading} onClick={p.onToggleReading} style={{ color: p.reading ? 'var(--sidebar-primary)' : undefined }}><Icon d={I.expand} /></Button>
-        <Button variant="ghost" size="icon" aria-label="Focus terminal tab" onClick={p.onFocus}><Icon d={I.ext} /></Button>
-        <Button variant="ghost" size="icon" aria-label="Close" onClick={p.onClose}><Icon d={I.close} /></Button>
+        <Button variant="ghost" size="icon" aria-label={t.session.reading} title={t.session.reading} aria-pressed={p.reading} onClick={p.onToggleReading} style={{ width: 32, height: 32, color: p.reading ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)' }}><Icon {...ICONS.expand} /></Button>
+        <Button variant="ghost" size="icon" aria-label={t.session.focusTerminal} title={t.session.focusTerminal} onClick={p.onFocus} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.external} /></Button>
+        <Button variant="ghost" size="icon" aria-label={t.session.close} title={t.session.close} onClick={p.onClose} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.close} /></Button>
       </div>
 
-      <div data-ask inert={!pending} style={{ flexShrink: 0, maxHeight: pending ? `${260 + (pending.options?.length ?? 0) * 64}px` : '0px', opacity: pending ? 1 : 0, overflow: 'hidden', transition: pending ? transition([['max-height', 'grow'], ['opacity', 'fadeIn', 0]]) : transition([['max-height', 'cardExit'], ['opacity', 'cardExit']]) }}>
-        {shown && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16, borderBottom: rule }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Badge state={s.state === 'error' ? 'error' : isQ ? 'question' : 'approval'} label={s.state === 'error' ? 'Error' : isQ ? 'Question' : 'Approval needed'} />
-              {(s.state === 'error' || p.failure) && <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{p.failure ?? s.lastError ?? 'the terminal did not take it'}, try again or open the tab</span>}
-            </div>
-            {isQ ? <QuestionCard key={shown.text} pending={shown} onReply={p.onReply} disabled={decideOff} /> : (
-              <>
-                <div>{shown.kind === 'diff' ? `${s.name} proposes this diff, review it in the terminal below` : shown.kind === 'plan' ? `${s.name} proposes this plan, review it in the terminal below` : `${s.name} wants to run`}</div>
-                <div style={well}>{shown.text}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Button variant="ghost" size="sm" disabled title="Scoped authorization is not confirmed by any adapter yet">Always for this session</Button>
-                  <span style={{ flexGrow: 1 }} />
-                  <Button variant="outline" disabled={decideOff} onClick={() => p.onDecide('deny')}>Deny</Button>
-                  <Button variant="primary" disabled={decideOff} onClick={() => p.onDecide('accept')}><Icon d={I.check} />Approve</Button>
-                </div>
-              </>
-            )}
+      <div data-scroll className="ledge-scroll" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        <div ref={p.contentRef} data-session-content style={{ display: 'flex', flexDirection: 'column', padding: '18px 16px 16px', fontSize: p.reading ? 14 : undefined, lineHeight: p.reading ? '21px' : undefined }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+            <span data-eyebrow style={{ fontSize: 11, lineHeight: '16px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted-foreground)' }}>{eyebrow}</span>
+            {readOnly ? <Badge state="readonly" tone={badgeState} caps /> : <Badge state={badgeState} caps />}
           </div>
-        )}
+          <h2 style={{ margin: 0, fontSize: 18, lineHeight: '26px', fontWeight: 650, letterSpacing: '-0.01em', overflowWrap: 'anywhere' }}>{title}</h2>
+          {readOnly && <>
+            {!pending && <p style={{ margin: '8px 0 0', fontSize: 14, lineHeight: '22px', color: 'var(--muted-foreground)' }}>{t.session.readonlyLead(s.name)}</p>}
+            <div data-readonly-note style={{ marginTop: 14, padding: '12px 14px', background: 'var(--well)', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md)', fontSize: 13, lineHeight: '21px', color: 'var(--muted-foreground)' }}>
+              {t.session.readonlyNote}<br /><br />{t.session.readonlyNext}<br /><code style={{ fontFamily: mono, color: 'var(--sidebar-foreground)' }}>ledge {s.tool}</code>
+            </div>
+          </>}
+          {failureText && <span role="status" style={{ marginTop: 10, fontSize: 12, lineHeight: '16px', color: 'var(--danger-text)' }}>{failureText}</span>}
+
+          <div data-ask inert={!pending} style={{ flexShrink: 0, maxHeight: pending ? `${askMaxH(pending)}px` : '0px', opacity: pending ? 1 : 0, overflow: 'hidden', transition: pending ? transition([['max-height', 'grow'], ['opacity', 'fadeIn', 0]]) : transition([['max-height', 'cardExit'], ['opacity', 'cardExit']]) }}>
+            {shown && (isQ ? <div style={{ paddingTop: 14 }}><QuestionCard key={shown.text} pending={shown} onReply={p.onReply} disabled={decideOff} t={t} /></div> : (
+              <div style={{ paddingTop: 14 }}>
+                <section style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14, background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
+                  <h3 style={{ margin: 0, fontSize: 14, lineHeight: '20px', fontWeight: 650, overflowWrap: 'anywhere' }}>{shown.kind === 'permission' ? t.session.runIn(s.project) : t.session.reviewIn(s.project)}</h3>
+                  <div style={well}>{shown.text}</div>
+                  {shown.kind === 'permission'
+                    ? <label className="ledge-check" title={t.session.alwaysWhy} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, lineHeight: '18px', color: 'var(--muted-foreground)', cursor: 'not-allowed', opacity: 0.7 }}>
+                        <input type="checkbox" disabled aria-describedby="ledge-always-why" style={{ margin: 0, width: 15, height: 15 }} />{t.session.always}
+                      </label>
+                    : <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.session.reviewHint}</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                    <Button variant="outline" disabled={decideOff} onClick={() => p.onDecide('deny')}>{t.session.deny}</Button>
+                    <Button variant="primary" disabled={decideOff} onClick={() => p.onDecide('accept')} aria-keyshortcuts="Y">{t.session.allow}<span aria-hidden="true" style={{ display: 'inline-flex' }}><Kbd accent>Y</Kbd></span></Button>
+                  </div>
+                </section>
+                {shown.kind === 'permission' && <p id="ledge-always-why" style={{ margin: '10px 0 0', fontSize: 12, lineHeight: '18px', color: 'var(--muted-foreground)' }}>{t.session.scope}</p>}
+              </div>
+            ))}
+          </div>
+
+          {p.preview.length > 0 && <details className="ledge-terminal" open={!pending || p.reading} style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+            <summary style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--well)', fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
+              <span data-caret aria-hidden="true" style={{ display: 'inline-flex', transition: transition([['transform', 'hover']]) }}><Icon size={12} {...ICONS.chevronRight} /></span>
+              <span style={{ color: 'var(--sidebar-foreground)' }}>{t.session.terminal}</span><span>· {t.session.terminalNote}</span>
+            </summary>
+            <pre className="mono ledge-scroll" style={{ margin: 0, padding: '10px 12px', maxHeight: p.reading ? 360 : 200, overflow: 'auto', fontSize: 12, lineHeight: '18px', color: 'var(--muted-foreground)', background: 'var(--well)', borderTop: '1px solid var(--border)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{p.preview.map((l, i) => <div key={i}>{l || ' '}</div>)}</pre>
+          </details>}
+        </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px 0', flexGrow: 1, minHeight: 0 }}>
-        <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted-foreground)' }}>Terminal · last 30 lines · read only</span>
-        <pre className="mono" style={{ ...well, flexGrow: 1, minHeight: 0, margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--muted-foreground)', overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{p.preview.map((l, i) => <div key={i}>{l || ' '}</div>)}</pre>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '12px 16px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="text" disabled={readOnly} placeholder={readOnly ? `Read only: reply to ${s.name} in its terminal` : `Reply to ${s.name}…`} aria-label={`Reply to ${s.name}`} value={p.draft} onChange={e => p.onDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') sendDraft(); }} style={{ flexGrow: 1, minWidth: 0, height: 36, boxSizing: 'border-box', padding: '0 12px', background: 'var(--sidebar)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', fontSize: 14 }} />
-          <Button variant="secondary" size="icon" aria-label="Send" disabled={replyOff || !p.draft.trim()} onClick={sendDraft}><Icon d={I.send} /></Button>
+      {/* A session started without Ledge cannot be written to: the mockup drops the reply area, the note above says why. */}
+      {!readOnly && (
+        <div ref={p.replyRef} data-reply-area style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px 10px', flexShrink: 0, borderTop: rule }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+            <textarea data-reply rows={1} className="ledge-field" placeholder={t.session.replyPlaceholder(s.name)} aria-label={t.session.replyLabel(s.name)} aria-describedby="ledge-reply-hint" value={p.draft}
+              onChange={e => p.onDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDraft(); } }}
+              style={{ flexGrow: 1, minWidth: 0, minHeight: 36, maxHeight: 120, boxSizing: 'border-box', padding: '8px 2px', resize: 'none', fieldSizing: 'content', background: 'transparent', color: 'inherit', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: 14, lineHeight: '20px' } as React.CSSProperties} />
+            <Button variant="primary" size="icon" aria-label={t.session.sendReply} title={t.session.sendReply} disabled={replyOff || !p.draft.trim()} onClick={sendDraft} style={{ width: 32, height: 32, flexShrink: 0, marginBottom: 2 }}><Icon {...ICONS.send} /></Button>
+          </div>
+          {/* A failure outside a request (a rejected reply to an idle session, say): the request card shows its own. */}
+          {p.failure && !pending && <span role="status" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--danger-text)' }}>{p.failure}</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
+            <span id="ledge-reply-hint" style={{ flexGrow: 1, minWidth: 0 }}>{hint}</span>
+            {s.state === 'working' && <Button variant="outline" size="sm" disabled={blocked !== null} onClick={p.onInterrupt} style={{ height: 26, padding: '0 8px', fontSize: 12, whiteSpace: 'nowrap' }}><Icon {...ICONS.stop} size={12} />{t.session.interrupt}</Button>}
+            <Button variant="ghost" size="sm" disabled={blocked !== null} onClick={p.onKill} style={{ height: 26, padding: '0 6px', fontSize: 12, whiteSpace: 'nowrap', color: 'var(--danger-text)' }}>{t.session.kill}</Button>
+          </div>
         </div>
-        {/* A failure outside a request (a rejected reply to an idle session, say): the request card shows its own. */}
-        {p.failure && !pending && <span role="status" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--danger-text)' }}>{p.failure}</span>}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--muted-foreground)' }}>
-          <span>{hint}</span><span style={{ flexGrow: 1 }} />
-          {s.state === 'working' && <Button variant="outline" size="sm" disabled={blocked !== null} onClick={p.onInterrupt}><Icon d={I.stop} size={14} />Interrupt</Button>}
-          <Button variant="ghost" size="sm" disabled={blocked !== null} onClick={p.onKill} style={{ color: 'var(--danger-text)' }}>Kill session</Button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

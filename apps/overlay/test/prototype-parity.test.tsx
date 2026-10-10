@@ -341,7 +341,7 @@ describe('prototype parity', () => {
     press('Escape');
     expect(mode()).toBe('list');
     // Do not disturb off, then a new ask: the bubble still expires after 4,000 ms of active time.
-    fireEvent.click(within(layer('list')).getByRole('button', { name: 'Do not disturb' }));
+    fireEvent.click(within(layer('list')).getAllByRole('button', { name: 'Do not disturb' })[0]!);
     press('Escape');
     expect(mode()).toBe('handle');
     update(pim(asks('git push')));
@@ -490,7 +490,7 @@ describe('carried items', () => {
     expect(document.activeElement).toHaveAccessibleName('Back to sessions');
     const view = layer('settings');
     fireEvent.click(within(view).getByRole('switch', { name: /Do not disturb/ }));
-    expect(within(list).getByRole('button', { name: 'Do not disturb', hidden: true })).toHaveAttribute('aria-pressed', 'true');
+    for (const b of within(list).getAllByRole('button', { name: 'Do not disturb', hidden: true })) expect(b).toHaveAttribute('aria-pressed', 'true');
     expect(within(view).getByRole('button', { name: /Dark theme · Signal/ })).toBeInTheDocument();
     fireEvent.click(within(view).getByRole('button', { name: /theme/ }));
     expect(within(view).getByRole('button', { name: /Light theme · Pebble/ })).toBeInTheDocument();

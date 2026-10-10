@@ -12,12 +12,14 @@ import { Tooltip } from './Tooltip';
 import { Bubble, type BubbleAck } from './Bubble';
 import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
+import { DETAIL_HEADER_H } from './DetailHeader';
 import { useMeasuredHeight } from './useMeasuredHeight';
 import { useDaemonAsks, isPending } from './useDaemonAsks';
 import { useFocusRestore } from './useFocusRestore';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { SessionList, rowHint, EXPANDED_ROW_H } from './SessionList';
-import { SessionView, measureSessionH } from './SessionView';
+import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
+import { useI18n, type Lang } from '../i18n/lang';
 import { transition, MOTION, ms } from '../motion';
 import { focusTerminal, onShortcut, onEdge, setHotZones, focusOverlay, releaseFocus, isTauri } from '../tauri/bridge';
 import { useNativeFrame } from '../tauri/useNativeFrame';
@@ -34,8 +36,6 @@ const SETTLE_MS = Math.max(MOTION.grow.ms, MOTION.shrink.delayMs + MOTION.shrink
 const measure = (el: HTMLElement | null) => ({ w: el?.offsetWidth ?? 0, h: el?.offsetHeight ?? 0 });
 const inside = (p: { x: number; y: number } | null, g: Layout) => p !== null && p.x >= 0 && p.x < g.w && p.y >= g.top && p.y < g.top + g.h;
 
-const OFFLINE = 'Offline: reconnecting to the daemon';
-const READ_ONLY = 'Read only: started without Ledge, answer in its terminal';
 
 export interface SurfaceProps {
   /** The work-area height in CSS px (the logical height divided by the UI scale). */
@@ -44,14 +44,17 @@ export interface SurfaceProps {
   scale?: number;
   /** The Size setting, its auto value, and how to change it (Settings). */
   uiScale?: UiScale; autoScale?: number; onUiScale?: (s: UiScale) => void;
+  /** The Language setting (Settings). */
+  onLang?: (l: Lang) => void;
 }
 
-export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme, scale = 1, uiScale = 'auto', autoScale = 1, onUiScale }: SurfaceProps) {
+export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme, scale = 1, uiScale = 'auto', autoScale = 1, onUiScale, onLang }: SurfaceProps) {
   // The browser emulates the scale with CSS zoom: pointer coordinates and client rects are then in unzoomed viewport
   // px and are divided by it. Under the webview zoom (Tauri) everything is already in CSS px.
   const cssZoom = isTauri() ? 1 : scale;
   const cssZoomRef = useRef(cssZoom); cssZoomRef.current = cssZoom;
   const { sessions, byId, status, previews, lastError } = useDaemon();
+  const { t } = useI18n();
   // One app-level motion preference drives every bot in every layer.
   const motionPrefs = useMotionPreferences();
   const osReduced = useOsReducedMotion();
@@ -136,10 +139,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   useEffect(() => {
     if (st.mode !== 'session' || !replyAfterOpen.current) return;
     replyAfterOpen.current = false;
-    surfaceRef.current?.querySelector<HTMLInputElement>('[data-layer="session"] input[aria-label^="Reply to"]')?.focus();
+    surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="session"] [data-reply]')?.focus();
   }, [st.mode, st.selectedId]);
 
-  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), readOnly: s.source === 'hook_only', tip: isPending(s) ? `${botState(s) === 'question' ? 'has a question' : 'needs your approval'} · ${s.pending?.text ?? ''}` : rowHint(s) })), [sessions]);
+  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), readOnly: s.source === 'hook_only', tip: isPending(s) ? `${t.handleLabel[botState(s)]} · ${s.pending?.text ?? ''}` : rowHint(s, t) })), [sessions, t]);
   const selected = st.selectedId ? byId.get(st.selectedId) ?? null : null;
   // The last open session stays mounted (inert) while the view slides out, so its content fades instead of vanishing
   // and focus left on it is detectably stranded (see useFocusRestore). A removed session unmounts at once.
@@ -150,7 +153,17 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const bubbleSession = st.bubbleId ? byId.get(st.bubbleId) ?? null : null;
   const bubbleRef = useRef<HTMLDivElement>(null);
   const bubbleH = useMeasuredHeight(bubbleRef, st.mode === 'bubble', cssZoom);
-  const geo = layout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH: selected ? measureSessionH(selected, st.reading) : 480, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 });
+  // The open session sizes itself to its content (header + scroll content + reply area), up to the screen.
+  const sessionContentRef = useRef<HTMLDivElement>(null); const sessionReplyRef = useRef<HTMLDivElement>(null);
+  const contentH = useMeasuredHeight(sessionContentRef, st.mode === 'session', cssZoom);
+  const replyH = useMeasuredHeight(sessionReplyRef, st.mode === 'session', cssZoom);
+  const sessionH = !selected ? 480 : contentH ? SESSION_HEADER_H + contentH + (selected.source === 'hook_only' ? 0 : replyH) + SURFACE_CHROME_Y : measureSessionH(selected, st.reading);
+  // Settings and help size themselves to their content too (their header is the 56 px DetailHeader).
+  const settingsRef = useRef<HTMLDivElement>(null); const helpRef = useRef<HTMLDivElement>(null);
+  const settingsH = useMeasuredHeight(settingsRef, st.mode === 'settings', cssZoom);
+  const helpH = useMeasuredHeight(helpRef, st.mode === 'help', cssZoom);
+  const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : 0;
+  const geo = layout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 });
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -182,7 +195,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const bubblePaused = st.hovering || st.focusWithin || st.hidden || st.ack !== null;
   const send = (m: Parameters<DaemonClient['send']>[0]) => client.send(m);
   // Offline or read-only: every send/decision path (buttons and keys alike) is off, with the reason shown.
-  const blockedFor = (s: Session | null | undefined): string | null => unreachable ? OFFLINE : s?.source === 'hook_only' ? READ_ONLY : s ? null : OFFLINE;
+  const blockedFor = (s: Session | null | undefined): string | null => unreachable ? t.offline : s?.source === 'hook_only' ? t.readOnlyBlocked : s ? null : t.offline;
   const canDecide = (s: Session) => blockedFor(s) === null && !asks.inFlight.has(s.id);
   /** One decision command per request: false when blocked or already in flight. */
   const decide = (id: string, d: 'accept' | 'deny'): boolean => {
@@ -231,7 +244,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); void focusTerminal(s.title); };
   const chooseOption = (n: number) => {
     if (blockedFor(selected) !== null) return;
-    const radios = surfaceRef.current?.querySelectorAll<HTMLInputElement>('[data-layer="session"] [data-ask] input[type="radio"]:not([aria-label="Other"])');
+    const radios = surfaceRef.current?.querySelectorAll<HTMLInputElement>('[data-layer="session"] [data-ask] input[type="radio"]:not([data-other])');
     const r = radios?.[n - 1]; if (!r) return;
     r.click(); r.focus();
   };
@@ -250,7 +263,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
     onClose: () => dispatch({ type: detail ? 'back' : 'close' }),
     onReplyFocus: () => {
       if (st.mode !== 'session' && st.mode !== 'list') return;
-      if (st.mode === 'session') { surfaceRef.current?.querySelector<HTMLInputElement>('[data-layer="session"] input[aria-label^="Reply to"]')?.focus(); return; }
+      if (st.mode === 'session') { surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="session"] [data-reply]')?.focus(); return; }
       if (focused) { replyAfterOpen.current = true; openRow(focused.id); }
     },
     onToggleDnd, onHelp: () => dispatch({ type: st.mode === 'help' ? 'back' : 'help' }), onTerminal: focusTab, onChooseOption: chooseOption
@@ -288,14 +301,14 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
               onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
           </div>
           <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <SettingsView visible={st.mode === 'settings'} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} uiScale={uiScale} autoScale={autoScale} onUiScale={onUiScale}
+            <SettingsView contentRef={settingsRef} onLang={onLang} visible={st.mode === 'settings'} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} uiScale={uiScale} autoScale={autoScale} onUiScale={onUiScale}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'help' ? 'auto' : 'none', transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <HelpView visible={st.mode === 'help'} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
+            <HelpView contentRef={helpRef} visible={st.mode === 'help'} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'session' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'session' ? 'auto' : 'none', transform: `translateX(${st.mode === 'session' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            {shown && <SessionView session={shown} preview={previews.get(shown.id) ?? []} visible={st.mode === 'session'} reading={st.reading} draft={drafts[shown.id] ?? ''}
+            {shown && <SessionView contentRef={sessionContentRef} replyRef={sessionReplyRef} session={shown} preview={previews.get(shown.id) ?? []} visible={st.mode === 'session'} reading={st.reading} draft={drafts[shown.id] ?? ''}
               blocked={blockedFor(shown)} deciding={asks.inFlight.has(shown.id)} failure={asks.failures[shown.id]} frozen={unreachable} reducedMotion={reducedMotion}
               onDraft={t => { setDrafts(x => ({ ...x, [shown.id]: t })); dispatch({ type: 'typing', on: t.length > 0 }); }}
               onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onDecide={d => decide(shown.id, d)} onReply={t => reply(shown.id, t)}
@@ -307,7 +320,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
 
       <Coachmark visible={coachShown} top={coachTop} onDismiss={() => { setCoach(false); if (focusedRowId) surfaceRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusedRowId)}"] [data-row]`)?.focus(); }} />
       <Tooltip ref={tipRef} bot={st.mode === 'handle' ? hovBot : null} y={hovSlot?.center ?? geo.top} />
-      {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: Math.max(geo.w, SIZES.handleW) + 8, top: geo.top, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>daemon unreachable, retrying</div>}
+      {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: Math.max(geo.w, SIZES.handleW) + 8, top: geo.top, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{t.unreachable}</div>}
     </>
   );
   // Under Tauri the page is shifted so page y = screen y - frame top; the browser renders at page coordinates as is.
