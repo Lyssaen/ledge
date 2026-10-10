@@ -26,6 +26,7 @@ import { useNativeFrame } from '../tauri/useNativeFrame';
 import { frameOf, type Box } from './frame';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
 import type { ScaleTarget, UiScale } from '../scale';
+import type { MonitorInfo } from '../monitor';
 import { Coachmark, countCoachmarkOpen, COACHMARK_H } from '../keyboard/Coachmark';
 
 /** Fallback extents of the extras beside the surface, before (or without) a layout measurement. */
@@ -48,9 +49,12 @@ export interface SurfaceProps {
   scales?: Record<ScaleTarget, UiScale>; autoScales?: Record<ScaleTarget, number>; onScale?: (target: ScaleTarget, s: UiScale) => void;
   /** The Language setting (Settings). */
   onLang?: (l: Lang) => void;
+  /** The Screen setting: the monitors to choose from, the choice (null: the primary) and how to change it (live).
+   *  `onSettingsOpen` fires when the Settings view opens, so the monitors can be listed again. */
+  monitors?: MonitorInfo[]; monitor?: string | null; onMonitor?: (id: string | null) => void; onSettingsOpen?: () => void;
 }
 
-export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang }: SurfaceProps) {
+export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen }: SurfaceProps) {
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
@@ -162,6 +166,9 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   // Settings and help size themselves to their content too (their header is the 56 px DetailHeader).
   const settingsRef = useRef<HTMLDivElement>(null); const helpRef = useRef<HTMLDivElement>(null);
   const settingsH = useMeasuredHeight(settingsRef, st.mode === 'settings', ps);
+  // Settings opening: the monitors are listed again, so a screen plugged in since the start can be chosen.
+  const settingsOpen = st.mode === 'settings';
+  useEffect(() => { if (settingsOpen) onSettingsOpen?.(); }, [settingsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const helpH = useMeasuredHeight(helpRef, st.mode === 'help', ps);
   const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : 0;
   const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
@@ -313,6 +320,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           </div>
           <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SettingsView contentRef={settingsRef} onLang={onLang} visible={st.mode === 'settings'} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} scales={scales} autoScales={autoScales} onScale={onScale}
+              monitors={monitors} monitor={monitor} onMonitor={onMonitor}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'help' ? 'auto' : 'none', transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>

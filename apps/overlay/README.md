@@ -46,7 +46,8 @@ The Rust side has not been compiled yet. On the first build:
    - open and close transitions show no flash of misplaced content;
    - clicks beside the surface reach the app underneath;
    - sizes on the 4K screen: Settings shows Handle size `Auto (200%)` and Window size `Auto (100%)` at 100% Windows scaling (see Sizes below for the rules), the handle and bots are clearly readable, the handle stays centered on the left edge, and the list opens at its base 380 px;
-   - switching each size between Auto, 100%, 125%, 150% and 200% resizes only its own part, live, with nothing clipped or offset: the handle size moves the handle, its bots, the tooltip and the edge bands; the window size moves the bubble, list, session, settings, help and coachmark; the window follows the surface, the edge bands above and below the handle still open the list, clicks beside the surface still reach the app underneath.
+   - switching each size between Auto, 100%, 125%, 150% and 200% resizes only its own part, live, with nothing clipped or offset: the handle size moves the handle, its bots, the tooltip and the edge bands; the window size moves the bubble, list, session, settings, help and coachmark; the window follows the surface, the edge bands above and below the handle still open the list, clicks beside the surface still reach the app underneath;
+   - with two screens: Settings shows a Screen group (`Primary`, `Screen 2`, in the OS order); choosing `Screen 2` moves the handle to that screen's left edge at once, centered in its work area, the edge bands and the tooltip follow, the list opens there; back to `Primary` returns it; the choice survives a restart (`ledge.monitor`); unplugging the chosen screen brings the handle back to the primary and Settings shows the choice as `Unplugged` until the screen returns; a screen plugged in after the start appears in the group the next time Settings opens.
 4. `pnpm tauri build`: NSIS installer with the bot icon.
 
 ## Keys
@@ -66,7 +67,11 @@ The Rust side has not been compiled yet. On the first build:
 | ? | keyboard help, inside the surface (Esc returns to the list) |
 | Ctrl+Alt+T | toggle dark / light theme |
 
-Language, theme, do not disturb, reduced motion and the two sizes are also in the list's Settings view, and are remembered in `localStorage` (`ledge.lang`, `ledge.theme`, `ledge.dnd`, `ledge.reducedMotion`, `ledge.handleScale`, `ledge.panelScale`).
+Language, screen, theme, do not disturb, reduced motion and the two sizes are also in the list's Settings view, and are remembered in `localStorage` (`ledge.lang`, `ledge.monitor`, `ledge.theme`, `ledge.dnd`, `ledge.reducedMotion`, `ledge.handleScale`, `ledge.panelScale`).
+
+## Screen
+
+The handle sits on the left edge of one screen: the primary by default, or the one chosen in Settings > Screen. The shell lists the monitors (`list_monitors`) and moves the window to the chosen one (`set_monitor`); frames and edge bands are then in that screen's work-area coordinates. The choice is a monitor name (`\\.\DISPLAY2` on Windows); a chosen screen that is unplugged falls back to the primary until it comes back, without losing the setting.
 
 ## Language
 

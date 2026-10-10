@@ -119,7 +119,7 @@ Le hook `SessionStart` l'enregistre avec `source: hook_only`. Elle apparaît en 
 
 ### La surface vivante
 
-Il n'y a qu'une seule surface, ancrée au bord gauche, verticalement centrée. Au repos c'est la **poignée** ; c'est elle qui grandit en **bulle**, en **liste** ou en **session**, puis rétrécit. Rien n'apparaît jamais à côté d'elle. Sa hauteur suit toujours son contenu : nombre de bots pour la poignée et la liste, contenu de la vue pour la session.
+Il n'y a qu'une seule surface, ancrée au bord gauche de l'écran principal, ou de l'écran choisi dans les réglages (« Écran » : l'écran principal ou un autre écran branché ; un écran choisi puis débranché rend la surface à l'écran principal sans perdre le réglage), verticalement centrée dans sa zone de travail. Au repos c'est la **poignée** ; c'est elle qui grandit en **bulle**, en **liste** ou en **session**, puis rétrécit. Rien n'apparaît jamais à côté d'elle. Sa hauteur suit toujours son contenu : nombre de bots pour la poignée et la liste, contenu de la vue pour la session.
 
 La colonne des scénarios, le faux bureau, les boutons de simulation et le compteur d’actions appartiennent à l’atelier de test, pas à l’overlay livré. Réglages et aide clavier se présentent dans la même surface. Les couches masquées sont inertes et retirées de la navigation au clavier. Le focus est transféré vers un contrôle visible après une transition.
 

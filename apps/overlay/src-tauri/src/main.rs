@@ -3,17 +3,17 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 /// Emitted on every enter/leave transition of the cursor over the edge hot zones; payload `{ "inside": bool }`.
 pub const EDGE_EVENT: &str = "ledge://edge";
 const EDGE_POLL: Duration = Duration::from_millis(50);
-/// Re-read the primary monitor every 40 polls (2 s): resolution, scale or taskbar changes are picked up.
+/// Re-read the chosen monitor every 40 polls (2 s): resolution, scale or taskbar changes are picked up.
 const MONITOR_REFRESH_TICKS: u32 = 40;
 /// How close (logical px) to the monitor's left edge the cursor must be to count as "on the edge".
 const EDGE_PX: f64 = 2.0;
 
-/// A band of the left screen edge, in logical px from the top of the primary monitor's work area
+/// A band of the left screen edge, in logical px from the top of the chosen monitor's work area
 /// (the same coordinate space as `set_frame`'s `top`).
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
 pub struct Band {
@@ -30,12 +30,35 @@ struct HotZones(Mutex<(Vec<Band>, u64)>);
 #[derive(Default)]
 struct PrevForeground(Mutex<Option<isize>>);
 
+/// The Screen setting: the id of the monitor the overlay lives on (`None`: the primary), a generation bumped on every
+/// change so the poller re-reads its monitor at once, and the last frame the webview asked for, re-placed on a change.
+#[derive(Default)]
+struct Screen(Mutex<ScreenState>);
+#[derive(Default)]
+struct ScreenState {
+    chosen: Option<String>,
+    gen: u64,
+    last_frame: Option<(i32, u32, u32)>,
+}
+
+/// One monitor as the Settings view lists it: logical sizes, the work area's height, whether it is the primary.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct MonitorInfo {
+    pub id: String,
+    pub name: Option<String>,
+    pub width: u32,
+    pub height: u32,
+    #[serde(rename = "workH")]
+    pub work_h: u32,
+    pub primary: bool,
+}
+
 #[derive(Clone, Serialize)]
 struct EdgePayload {
     inside: bool,
 }
 
-/// The primary monitor in physical px: its left edge, its work area and its scale factor.
+/// The chosen monitor in physical px: its left edge, its work area and its scale factor.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Area {
     pub edge_x: i32,
@@ -47,6 +70,40 @@ pub struct Area {
 fn area_of(m: &tauri::window::Monitor) -> Area {
     let wa = m.work_area();
     Area { edge_x: m.position().x, x: wa.position.x, y: wa.position.y, scale: m.scale_factor() }
+}
+
+/// A monitor's stable id: its name (`\\.\DISPLAY1` on Windows), or its index when the OS gives none.
+fn monitor_id(m: &tauri::window::Monitor, index: usize) -> String {
+    m.name().cloned().unwrap_or_else(|| format!("#{index}"))
+}
+
+/// The index of the monitor to use: `chosen` while it is plugged in, otherwise the primary.
+pub fn choose(chosen: Option<&str>, ids: &[String], primary: usize) -> usize {
+    chosen.and_then(|c| ids.iter().position(|id| id == c)).unwrap_or(primary)
+}
+
+/// Every monitor, with the index of the primary one (0 when the OS reports none).
+fn monitors(app: &AppHandle) -> (Vec<tauri::window::Monitor>, usize) {
+    let all = app.available_monitors().unwrap_or_default();
+    let primary = app.primary_monitor().ok().flatten();
+    let index = primary.and_then(|p| all.iter().position(|m| m.position() == p.position())).unwrap_or(0);
+    (all, index)
+}
+
+/// The monitor the overlay lives on: the chosen one when present, else the primary.
+fn target_monitor(app: &AppHandle, chosen: Option<&str>) -> Option<tauri::window::Monitor> {
+    let (all, primary) = monitors(app);
+    if all.is_empty() { return None; }
+    let ids: Vec<String> = all.iter().enumerate().map(|(i, m)| monitor_id(m, i)).collect();
+    all.into_iter().nth(choose(chosen, &ids, primary))
+}
+
+fn chosen_of(screen: &Screen) -> Option<String> {
+    screen.0.lock().ok().and_then(|s| s.chosen.clone())
+}
+
+fn target_area(app: &AppHandle, screen: &Screen) -> Area {
+    target_monitor(app, chosen_of(screen).as_deref()).map(|m| area_of(&m)).unwrap_or(Area { edge_x: 0, x: 0, y: 0, scale: 1.0 })
 }
 
 /// Physical position and size of a frame given in logical px relative to the work area's top-left corner.
@@ -80,18 +137,41 @@ pub fn edge_step(prev: bool, now: bool, rearmed: bool) -> (bool, Option<bool>) {
     (now, Some(now))
 }
 
-/// Moves and resizes the window to `(0, top)` on the primary monitor's work area, `width` x `height` (logical px),
+/// Moves and resizes the window to `(0, top)` on the chosen monitor's work area, `width` x `height` (logical px),
 /// in one native call so the webview never sees the new position with the old size.
 /// The webview reports the bounding frame of everything it draws (surface, tooltip, status, coachmark).
 #[tauri::command]
-async fn set_frame(window: WebviewWindow, top: i32, width: u32, height: u32) -> Result<(), String> {
-    let area = window
-        .primary_monitor()
-        .map_err(|e| e.to_string())?
-        .map(|m| area_of(&m))
-        .unwrap_or(Area { edge_x: 0, x: 0, y: 0, scale: 1.0 });
+async fn set_frame(window: WebviewWindow, top: i32, width: u32, height: u32, screen: tauri::State<'_, Screen>) -> Result<(), String> {
+    if let Ok(mut s) = screen.0.lock() { s.last_frame = Some((top, width, height)); }
+    let area = target_area(window.app_handle(), &screen);
     let (x, y, w, h) = frame_rect(area, top, width, height);
     place_window(&window, x, y, w, h)
+}
+
+/// The monitors the Settings view offers, in the OS order.
+#[tauri::command]
+fn list_monitors(app: AppHandle) -> Vec<MonitorInfo> {
+    let (all, primary) = monitors(&app);
+    all.iter().enumerate().map(|(i, m)| {
+        let s = m.scale_factor();
+        let logical = |v: u32| (v as f64 / s).round() as u32;
+        MonitorInfo { id: monitor_id(m, i), name: m.name().cloned(), width: logical(m.size().width), height: logical(m.size().height), work_h: logical(m.work_area().size.height), primary: i == primary }
+    }).collect()
+}
+
+/// Applies the Screen setting (`None`: the primary monitor) and moves the window there at once, at the frame the
+/// webview last asked for. A monitor that is not plugged in falls back to the primary until it comes back.
+#[tauri::command]
+fn set_monitor(window: WebviewWindow, id: Option<String>, screen: tauri::State<'_, Screen>) -> Result<(), String> {
+    let last = match screen.0.lock() {
+        Ok(mut s) => { s.chosen = id; s.gen = s.gen.wrapping_add(1); s.last_frame }
+        Err(_) => return Err("screen state poisoned".into()),
+    };
+    if let Some((top, width, height)) = last {
+        let (x, y, w, h) = frame_rect(target_area(window.app_handle(), &screen), top, width, height);
+        place_window(&window, x, y, w, h)?;
+    }
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -212,12 +292,15 @@ fn spawn_edge_poller(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut inside = false;
         let mut seen_gen: u64 = 0;
+        let mut seen_screen: u64 = 0;
         let mut area: Option<Area> = None;
         let mut tick: u32 = 0;
         loop {
             std::thread::sleep(EDGE_POLL);
-            if tick % MONITOR_REFRESH_TICKS == 0 {
-                if let Ok(Some(m)) = app.primary_monitor() { area = Some(area_of(&m)); }
+            let (chosen, screen_gen) = match app.state::<Screen>().0.lock() { Ok(s) => (s.chosen.clone(), s.gen), Err(_) => continue };
+            if tick % MONITOR_REFRESH_TICKS == 0 || screen_gen != seen_screen {
+                seen_screen = screen_gen;
+                if let Some(m) = target_monitor(&app, chosen.as_deref()) { area = Some(area_of(&m)); }
             }
             tick = tick.wrapping_add(1);
             let (Some(a), Some(c)) = (area, cursor_position()) else { continue };
@@ -238,7 +321,8 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(HotZones::default())
         .manage(PrevForeground::default())
-        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal])
+        .manage(Screen::default())
+        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, list_monitors, set_monitor])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") { let _ = w.set_always_on_top(true); }
             spawn_edge_poller(app.handle().clone());
@@ -250,7 +334,15 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{edge_inside, edge_step, frame_rect, title_matches, Area, Band};
+    use super::{choose, edge_inside, edge_step, frame_rect, title_matches, Area, Band};
+
+    #[test] fn the_chosen_monitor_is_used_while_plugged_in_else_the_primary() {
+        let ids: Vec<String> = ["\\\\.\\DISPLAY1", "\\\\.\\DISPLAY2"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(choose(None, &ids, 0), 0);
+        assert_eq!(choose(Some("\\\\.\\DISPLAY2"), &ids, 0), 1);
+        assert_eq!(choose(Some("\\\\.\\DISPLAY3"), &ids, 0), 0); // unplugged: back to the primary
+        assert_eq!(choose(Some("#1"), &["#0".to_string(), "#1".to_string()], 0), 1); // unnamed monitors go by index
+    }
 
     #[test] fn matches_bot_title_or_terminal() {
         assert!(title_matches("Otto · harness-assistant - Windows Terminal", "Otto · harness-assistant"));

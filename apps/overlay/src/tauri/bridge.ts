@@ -1,17 +1,21 @@
 /**
  * Everything the web app asks of the native shell goes through here. In a plain browser (dev, tests) every call is a
  * no-op or a DOM fallback; under Tauri it talks to the commands and events in `src-tauri/src/main.rs`:
- *   set_frame { top, width, height }   window to (0, top) on the primary monitor's work area, sized width x height
+ *   set_frame { top, width, height }   window to (0, top) on the chosen monitor's work area, sized width x height
  *   set_hot_zones { zones: Band[] }    edge bands the native cursor poller watches (empty: none)
+ *   list_monitors                      every monitor (logical sizes, work-area height, which one is the primary)
+ *   set_monitor { id | null }          the Screen setting: the overlay moves to that monitor at once (null: primary)
  *   focus_overlay                      remember the foreground window, then show and focus the overlay window
  *   release_focus                      give the foreground back to the window remembered by focus_overlay
  *   focus_terminal { title }           bring the matching terminal window forward
  *   event `ledge://edge` { inside }    cursor entered / left the edge bands
- * Coordinates sent to the shell are logical px from the top of the primary monitor's work area ("monitor px").
+ * Coordinates sent to the shell are logical px from the top of the chosen monitor's work area ("monitor px").
  * The page is never zoomed (each layer applies its own UI scale), so its CSS px are monitor px; `setFrame` and
  * `setHotZones` still take an optional `zoom` (one CSS px = `zoom` monitor px) and round frames outward here. The shell
  * itself never knows about any zoom.
  */
+import { resolveMonitor, type MonitorInfo } from '../monitor';
+
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const inTauri = isTauri;
 
@@ -19,14 +23,31 @@ export interface Frame { top: number; w: number; h: number }
 export interface Band { top: number; h: number }
 export const EDGE_EVENT = 'ledge://edge';
 
-/** The primary monitor's work-area height in logical (monitor) px: the height the surface lays itself out in. */
-export async function screenHeight(): Promise<number> {
+/** The work-area height, in logical (monitor) px, of the monitor the Screen setting `choice` resolves to (`null`: the
+ *  primary): the height the surface lays itself out in. */
+export async function screenHeight(choice: string | null = null): Promise<number> {
   if (!inTauri()) return window.innerHeight;
+  if (choice !== null) {
+    const m = resolveMonitor(choice, await listMonitors());
+    if (m) return m.workH;
+  }
   const { primaryMonitor } = await import('@tauri-apps/api/window');
   const m = await primaryMonitor();
   if (!m) return window.innerHeight;
   const h = m.workArea?.size.height ?? m.size.height;
   return Math.round(h / m.scaleFactor);
+}
+
+/** The monitors the Screen setting can choose from. In the browser: the viewport, as the one primary monitor. */
+export async function listMonitors(): Promise<MonitorInfo[]> {
+  if (!inTauri()) return [{ id: 'primary', name: null, width: window.innerWidth, height: window.innerHeight, workH: window.innerHeight, primary: true }];
+  try { return await invoke<MonitorInfo[]>('list_monitors'); } catch { return []; }
+}
+
+/** Applies the Screen setting: the shell moves the overlay to that monitor at once (`null`: the primary). */
+export async function setMonitor(id: string | null): Promise<void> {
+  if (!inTauri()) return;
+  await invoke('set_monitor', { id }).catch(() => {});
 }
 
 // One shared import: the commands are loaded once, not once per call.

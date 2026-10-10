@@ -81,6 +81,8 @@ const fr = {
   },
   settings: {
     title: 'Votre Ledge', handleSize: 'Taille de la poignée', handleSizeHint: 'La poignée et ses compagnons au bord de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
+    screen: 'Écran', screenHint: (w: number, h: number) => `La poignée se pose au bord gauche de cet écran (${w} × ${h}).`, screenHintNone: 'La poignée se pose au bord gauche de l’écran principal.',
+    screenPrimary: 'Principal', screenNth: (n: number) => `Écran ${n}`, screenMissing: 'Débranché',
     dnd: 'Ne pas déranger', dndHint: 'Les demandes restent dans la poignée.',
     reduced: 'Mouvements réduits', reducedHint: 'Les états restent lisibles sans animation.',
     osReduced: 'Votre système demande des mouvements réduits ; Ledge continue de le respecter.',
@@ -174,6 +176,8 @@ const en: Messages = {
   },
   settings: {
     title: 'Your Ledge', handleSize: 'Handle size', handleSizeHint: 'The handle and its companions on the screen edge.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
+    screen: 'Screen', screenHint: (w: number, h: number) => `The handle sits on the left edge of this screen (${w} × ${h}).`, screenHintNone: 'The handle sits on the left edge of the primary screen.',
+    screenPrimary: 'Primary', screenNth: (n: number) => `Screen ${n}`, screenMissing: 'Unplugged',
     dnd: 'Do not disturb', dndHint: 'New asks stay in the handle.',
     reduced: 'Reduced motion', reducedHint: 'States stay readable without animation.',
     osReduced: 'Your system asks for reduced motion; Ledge keeps respecting it.',

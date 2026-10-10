@@ -4,6 +4,7 @@ import { DetailHeader } from './DetailHeader';
 import { UI_SCALES, percent, type ScaleTarget, type UiScale } from '../scale';
 import { useI18n } from '../i18n/lang';
 import { LANGS, type Lang } from '../i18n/messages';
+import { resolveMonitor, type MonitorInfo } from '../monitor';
 
 export interface SettingsViewProps {
   visible: boolean; theme: 'dark' | 'light'; dnd: boolean;
@@ -14,6 +15,9 @@ export interface SettingsViewProps {
   scales?: Record<ScaleTarget, UiScale>; autoScales?: Record<ScaleTarget, number>; onScale?: (target: ScaleTarget, s: UiScale) => void;
   /** The Language setting (applied live). */
   onLang?: (l: Lang) => void;
+  /** The Screen setting: the monitors to choose from (none: the group is not shown), the choice (null: the primary)
+   *  and how to change it (live). */
+  monitors?: MonitorInfo[]; monitor?: string | null; onMonitor?: (id: string | null) => void;
   /** The body's natural height, measured by the surface to size itself. */
   contentRef?: Ref<HTMLDivElement>;
 }
@@ -57,16 +61,34 @@ export function Segmented<T extends string | number>({ name, label, hint, value,
 
 const Row = ({ children }: { children: ReactNode }) => <div style={{ borderBottom: '1px solid var(--sidebar-border)' }}>{children}</div>;
 
+/** The Screen group's options: the primary (value `primary`), then the other monitors by their index in the OS order;
+ *  a chosen monitor that is not plugged in is one more option, checked, so the choice stays visible. */
+export function monitorOptions(monitors: MonitorInfo[], choice: string | null, t: { primary: string; nth: (n: number) => string; missing: string }): Array<{ value: string; label: string }> {
+  const opts = monitors.map((m, i) => ({ value: m.primary ? 'primary' : m.id, label: m.primary ? t.primary : t.nth(i + 1) }));
+  opts.sort((a, b) => Number(b.value === 'primary') - Number(a.value === 'primary'));
+  if (choice !== null && !monitors.some(m => m.id === choice)) opts.push({ value: choice, label: t.missing });
+  return opts;
+}
+
 /** Preferences inside the same surface; they are the app's own (language, size, theme, do not disturb, motion), not a local copy. */
 export function SettingsView(p: SettingsViewProps) {
   const { t, lang } = useI18n();
   const light = p.theme === 'light';
+  const monitors = p.monitors ?? [];
+  const choice = p.monitor ?? null;
+  const chosen = resolveMonitor(choice, monitors);
+  const chosenValue = choice !== null && !monitors.some(m => m.id === choice) ? choice : chosen && !chosen.primary ? chosen.id : 'primary';
   return (
     <div data-layer="settings" inert={!p.visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: p.visible ? 1 : 0, pointerEvents: p.visible ? 'auto' : 'none', transition: transition([['opacity', p.visible ? 'fadeIn' : 'fadeOut', p.visible ? 120 : 0]]) }}>
       <DetailHeader title={t.settings.title} onBack={p.onBack} onClose={p.onClose} />
       <div className="ledge-scroll" style={{ overflowY: 'auto', minHeight: 0, overscrollBehavior: 'contain' }}>
         <div ref={p.contentRef} style={{ display: 'flex', flexDirection: 'column', padding: '4px 17px 12px' }}>
           <Row><Segmented name="ledge-lang" label={t.lang.label} hint={t.lang.hint} value={lang} onChange={p.onLang} options={LANGS.map(l => ({ value: l, label: t.lang[l] }))} /></Row>
+          {monitors.length > 0 && (
+            <Row><Segmented name="ledge-monitor" label={t.settings.screen} hint={chosen ? t.settings.screenHint(chosen.width, chosen.height) : t.settings.screenHintNone} value={chosenValue}
+              onChange={p.onMonitor ? v => p.onMonitor!(v === 'primary' ? null : v) : undefined}
+              options={monitorOptions(monitors, choice, { primary: t.settings.screenPrimary, nth: t.settings.screenNth, missing: t.settings.screenMissing })} /></Row>
+          )}
           {(['handle', 'panel'] as const).map(target => (
             <Row key={target}><Segmented<UiScale> name={`ledge-${target}-scale`} label={target === 'handle' ? t.settings.handleSize : t.settings.windowSize} hint={target === 'handle' ? t.settings.handleSizeHint : t.settings.windowSizeHint}
               value={p.scales?.[target] ?? 'auto'} onChange={p.onScale ? s => p.onScale!(target, s) : undefined}

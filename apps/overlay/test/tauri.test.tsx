@@ -132,6 +132,37 @@ describe('bridge', () => {
     native.monitor = { scaleFactor: 1.5, size: { height: 1620 }, workArea: { size: { height: 1548 } } };
     await expect(b.screenHeight()).resolves.toBe(1032);
   });
+
+  const monitors = [
+    { id: '\\\\.\\DISPLAY1', name: '\\\\.\\DISPLAY1', width: 1920, height: 1080, workH: 1032, primary: true },
+    { id: '\\\\.\\DISPLAY2', name: '\\\\.\\DISPLAY2', width: 2560, height: 1440, workH: 1400, primary: false }
+  ];
+
+  it('screenHeight follows the Screen setting: the chosen monitor while listed, else the primary', async () => {
+    enterTauri(); const b = await loadBridge();
+    native.monitor = { scaleFactor: 1.5, size: { height: 1620 }, workArea: { size: { height: 1548 } } };
+    native.invoke.mockImplementation(async cmd => (cmd === 'list_monitors' ? monitors : undefined));
+    await expect(b.screenHeight(monitors[1]!.id)).resolves.toBe(1400);
+    await expect(b.screenHeight('\\\\.\\DISPLAY3')).resolves.toBe(1032);
+    await expect(b.screenHeight(null)).resolves.toBe(1032);
+    expect(calls('list_monitors')).toHaveLength(2);
+  });
+
+  it('listMonitors and setMonitor go to the shell; the browser lists its viewport as the one primary screen', async () => {
+    const browser = await loadBridge();
+    await expect(browser.listMonitors()).resolves.toEqual([{ id: 'primary', name: null, width: window.innerWidth, height: window.innerHeight, workH: window.innerHeight, primary: true }]);
+    await browser.setMonitor('x');
+    expect(native.invoke).not.toHaveBeenCalled();
+    enterTauri(); const b = await loadBridge();
+    native.invoke.mockImplementation(async cmd => (cmd === 'list_monitors' ? monitors : undefined));
+    await expect(b.listMonitors()).resolves.toEqual(monitors);
+    await b.setMonitor(monitors[1]!.id); await b.setMonitor(null);
+    expect(calls('set_monitor')).toEqual([{ id: monitors[1]!.id }, { id: null }]);
+    // A shell that fails to answer: an empty list, never a rejection.
+    native.invoke.mockImplementation(async () => { throw new Error('no shell'); });
+    await expect(b.listMonitors()).resolves.toEqual([]);
+    await expect(b.setMonitor('x')).resolves.toBeUndefined();
+  });
 });
 
 describe('<Surface> under Tauri', () => {
