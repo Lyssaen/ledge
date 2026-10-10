@@ -53,9 +53,9 @@ export function SessionList({ sessions, visible, numbered, selectedId, dnd, onTo
         })}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, height: 48, boxSizing: 'border-box', padding: '0 16px', borderTop: '1px solid var(--sidebar-border)' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--muted-foreground)', cursor: 'pointer' }}>
+        <label className="dnd-switch" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--muted-foreground)', cursor: 'pointer' }}>
           <input type="checkbox" checked={dnd} onChange={onToggleDnd} style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }} />
-          <span style={{ display: 'inline-block', width: 32, height: 18, borderRadius: 9999, background: dnd ? 'var(--sidebar-primary)' : 'var(--muted)', border: '1px solid var(--input)', boxSizing: 'border-box', position: 'relative', transition: transition([['background-color', 'hover']]) }}>
+          <span className="dnd-track" style={{ display: 'inline-block', width: 32, height: 18, borderRadius: 9999, background: dnd ? 'var(--sidebar-primary)' : 'var(--muted)', border: '1px solid var(--input)', boxSizing: 'border-box', position: 'relative', transition: transition([['background-color', 'hover']]) }}>
             <span style={{ position: 'absolute', left: dnd ? 16 : 2, top: 2, width: 12, height: 12, borderRadius: 9999, background: dnd ? 'var(--primary-foreground)' : 'var(--muted-foreground)', transition: transition([['left', 'hover']]) }} />
           </span>
           Do not disturb
