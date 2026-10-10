@@ -24,10 +24,8 @@ const RULE = /^─{10,}$/;
 const DASHED = /^╌{10,}$/;
 /** The footer may have at most this many non-blank lines below it. */
 const FOOTER_SLACK = 2;
-/** How far above the footer option 1 may sit (long option descriptions included). */
-const MAX_OPTIONS_SPAN = 40;
-/** How far above the question the top rule may sit (a diff body included). */
-const MAX_HEADER_SPAN = 60;
+// No span limit inside the dialog: the poller's capture (DETECT_LINES) bounds the search, and a
+// dialog taller than that capture has no top rule in it, so it is not detected.
 
 const isBlank = (l: string) => l.trim() === '';
 const isRule = (l: string) => RULE.test(l.trim()) || DASHED.test(l.trim());
@@ -61,7 +59,7 @@ function parseDialog(pane: string): Dialog | null {
   if (footer < 0) return null;
 
   let first = -1;
-  for (let i = footer - 1; i >= Math.max(0, footer - MAX_OPTIONS_SPAN); i--) {
+  for (let i = footer - 1; i >= 0; i--) {
     const m = lines[i]!.match(OPTION);
     if (m && m[1] === '1') { first = i; break; }
   }
@@ -76,8 +74,8 @@ function parseDialog(pane: string): Dialog | null {
   if (questionLines.length === 0) return null;
 
   let top = q;
-  while (top >= Math.max(0, q - MAX_HEADER_SPAN) && !RULE.test(lines[top]!.trim())) top--;
-  if (top < 0 || !RULE.test(lines[top]!.trim())) return null;
+  while (top >= 0 && !RULE.test(lines[top]!.trim())) top--;
+  if (top < 0) return null;
 
   return {
     kind: /Enter to select/.test(lines[footer]!) ? 'question' : 'permission',
@@ -119,10 +117,9 @@ function promptStillVisible(lastLines: string): boolean {
 // In 2.x a digit selects its option at once: no Enter (an Enter would land on whatever comes next).
 const digit = (n: number): KeyPlan => [{ text: String(n) }];
 
+// Any digit is a selection: hook options omit the dialog's own "Type something." / "Chat about this".
 function optionNumber(text: string, pending: Pending | undefined): number | null {
-  if (pending?.kind !== 'question' || !/^[1-9]$/.test(text)) return null;
-  const n = Number(text);
-  return !pending.options || n <= pending.options.length ? n : null;
+  return pending?.kind === 'question' && /^[1-9]$/.test(text) ? Number(text) : null;
 }
 
 export const claudeAdapter: Adapter = {

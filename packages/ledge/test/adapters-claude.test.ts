@@ -49,6 +49,13 @@ describe('claude adapter: detection (Claude Code 2.x captures)', () => {
     expect(claudeAdapter.detectPrompt(pane)).toBeNull();
     expect(claudeAdapter.promptStillVisible(tail(pane))).toBe(false);
   });
+  it('detects a dialog taller than the 30-line preview (top rule 40+ lines up)', () => {
+    const body = Array.from({ length: 30 }, (_, i) => `  ${i + 1} line ${i + 1}`).join('\n');
+    const pane = fx('claude2-permission-write').replace('  1 hi', body);
+    const lines = pane.replace(/\s+$/, '').split('\n');
+    expect(lines.length - lines.findIndex(l => l.startsWith('────'))).toBeGreaterThan(30);
+    expect(claudeAdapter.detectPrompt(lines.slice(-60).join('\n'))?.text).toBe('Create file a.txt');
+  });
   it('returns null while working', () => {
     expect(claudeAdapter.detectPrompt(fx('claude-working'))).toBeNull();
   });
@@ -81,10 +88,9 @@ describe('claude adapter: keys', () => {
     expect(claudeAdapter.replyPlan('2', q)).toEqual([{ text: '2' }]);
     expect(claudeAdapter.replyPlan(' 1 ', q)).toEqual([{ text: '1' }]);
   });
-  it('an out-of-range number is free text', () => {
-    expect(claudeAdapter.replyPlan('3', q)).toEqual([{ text: '3' }, { keys: ['Enter'] }]);
-  });
-  it('a question without known options accepts any single digit 1-9', () => {
+  it('any digit 1-9 is a selection, even past the known options (hooks omit "Type something." / "Chat about this")', () => {
+    expect(claudeAdapter.replyPlan('3', q)).toEqual([{ text: '3' }]);
+    expect(claudeAdapter.replyPlan('9', q)).toEqual([{ text: '9' }]);
     expect(claudeAdapter.replyPlan('4', { kind: 'question', text: 'Which?', source: 'hook' })).toEqual([{ text: '4' }]);
     expect(claudeAdapter.replyPlan('0', { kind: 'question', text: 'Which?', source: 'hook' })).toEqual([{ text: '0' }, { keys: ['Enter'] }]);
   });

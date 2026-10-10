@@ -170,7 +170,7 @@ describe('server', () => {
     it('decide when the capture fails injects nothing', () =>
       expectRefused(null, { type: 'session.decide', id: 'a', decision: 'deny' }, perm));
     it('reply to a question whose dialog is not on screen injects nothing', () =>
-      expectRefused('> ', { type: 'session.reply', id: 'a', text: 'shadow table' }, question));
+      expectRefused('> ', { type: 'session.reply', id: 'a', text: '2' }, question));
   });
 
   it('a reply with no pending (your turn) is typed without a prompt check', async () => {
@@ -204,13 +204,34 @@ describe('server', () => {
     c.close();
   });
 
-  it('reply types the text literally then Enter', async () => {
-    store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } }));
+  it('reply with no pending types the text literally then Enter', async () => {
+    store.upsert(mk('a', { state: 'idle' }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.reply', id: 'a', text: '-n ; backfill' });
     await c.next('session.updated', 3000);
     expect(tmux.sent[0]).toEqual(['text', 'ledge-a', '-n ; backfill']);
     expect(tmux.sent[1]).toEqual(['keys', 'ledge-a', 'Enter']);
+    c.close();
+  });
+
+  it.each(['shadow table', '12', '0', '2 please'])('refuses a free-text reply (%j) to a question, nothing injected (fail closed)', async text => {
+    const before = mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', options: ['Red', 'Blue'], source: 'pane' } });
+    store.upsert(before);
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text });
+    expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: 'free-text answers are not supported yet, answer in the terminal' });
+    expect(tmux.sent).toEqual([]);
+    expect(store.get('a')).toEqual(before);
+    await expect(c.next('session.updated', 200)).rejects.toThrow(/timeout/);
+    c.close();
+  });
+
+  it('a digit past the known options is still a selection (hook options omit the dialog extras)', async () => {
+    store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', options: ['Red', 'Blue'], source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: '3' });
+    await c.next('session.updated', 3000);
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '3']]);
     c.close();
   });
 
@@ -282,10 +303,10 @@ describe('server', () => {
   it('a failing key plan marks the session error and replies with an error', async () => {
     store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
-    c.send({ type: 'session.reply', id: 'a', text: 'bad\nline' });
-    tmux.sendText = async () => { throw new Error('no newlines'); };
+    c.send({ type: 'session.reply', id: 'a', text: '2' });
+    tmux.sendText = async () => { throw new Error('tmux send failed'); };
     const err = await c.next('error');
-    expect(err.message).toMatch(/newlines/);
+    expect(err.message).toMatch(/tmux send failed/);
     expect(store.get('a')?.state).toBe('error');
     c.close();
   });

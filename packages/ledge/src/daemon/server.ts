@@ -86,6 +86,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   const READ_ONLY = 'session started without ledge, read only';
   const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
+  const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
 
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
@@ -133,6 +134,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
         if (s.pending && s.pending.kind !== 'question') return send(ws, { type: 'error', id: msg.id, message: `a ${s.pending.kind} prompt takes accept or deny, not a reply` });
         if (msg.text.trim() === '') return send(ws, { type: 'error', id: msg.id, message: 'empty reply' });
+        // The 2.x question dialog is a select: typed text then Enter would silently pick the highlighted option.
+        if (s.pending?.kind === 'question' && !/^[1-9]$/.test(msg.text.trim())) return send(ws, { type: 'error', id: msg.id, message: FREE_TEXT });
         // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
         return injectAndVerify(msg.id, adapterFor(s.tool).replyPlan(msg.text, s.pending), !!s.pending);
       }

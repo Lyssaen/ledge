@@ -18,7 +18,7 @@ const failing: Record<string, true> = {}; const throwing: Record<string, true> =
 function fakeTmux(panes: Record<string, string>): Tmux {
   return {
     async newSession() {}, async sendText() {}, async sendKeys() {},
-    async capture(n) { if (n in failing) return null; if (n in throwing) throw new Error('boom'); return panes[n] ?? ''; }, async hasSession(n) { return n in panes; },
+    async capture(n, lines) { if (n in failing) return null; if (n in throwing) throw new Error('boom'); return (panes[n] ?? '').split('\n').slice(-lines).join('\n'); }, async hasSession(n) { return n in panes; },
     async listSessions() { return Object.keys(panes); }, async killSession(n) { delete panes[n]; }, attachArgs: () => []
   };
 }
@@ -45,6 +45,20 @@ describe('poller', () => {
     clock += 5000; await p.tick();
     expect(store.get('a')!.state).toBe('waiting_permission');
     expect(store.get('a')!.pending?.source).toBe('pane');
+    p.stop();
+  });
+  it('detects a dialog taller than the preview, and the preview stays the last 30 lines', async () => {
+    const body = Array.from({ length: 30 }, (_, i) => `  ${i + 1} line ${i + 1}`).join('\n');
+    panes['ledge-a'] = 'seed'; store.upsert(mk('a'));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, l) => previews.push(l) });
+    clock += 1000; await p.tick();
+    panes['ledge-a'] = Array.from({ length: 20 }, (_, i) => `scroll ${i}`).join('\n') + '\n' + '─'.repeat(40) + '\n Create file\n a.txt\n' + '╌'.repeat(40) + '\n' + body + '\n' + '╌'.repeat(40) +
+      '\n Do you want to create a.txt?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend';
+    clock += 5000; await p.tick();
+    expect(store.get('a')!.state).toBe('waiting_permission');
+    expect(store.get('a')!.pending?.text).toBe('Create file a.txt');
+    expect(previews.at(-1)!.length).toBe(30);
+    expect(previews.at(-1)!.at(-1)).toBe(' Esc to cancel · Tab to amend');
     p.stop();
   });
   it('marks a dead pane as exited on the dead check and retires it after retireMs', async () => {

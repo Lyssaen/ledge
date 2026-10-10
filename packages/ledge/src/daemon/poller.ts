@@ -6,6 +6,8 @@ import { adapterFor as defaultAdapterFor } from '../adapters/index.js';
 import { log } from '../log.js';
 
 export const PREVIEW_LINES = 30;
+/** Prompt detection reads more than the preview: a dialog with a long diff or many options is taller than 30 lines. */
+export const DETECT_LINES = 60;
 
 export function startPoller(opts: {
   store: Store; tmux: Tmux; adapterFor?: typeof defaultAdapterFor;
@@ -47,7 +49,7 @@ export function startPoller(opts: {
       hashes.delete(s.id); matches.delete(s.id);
       return;
     }
-    const pane = await tmux.capture(s.tmuxSession, PREVIEW_LINES);
+    const pane = await tmux.capture(s.tmuxSession, DETECT_LINES);
     if (pane === null) return; // capture failed: not a content change
     const h = createHash('sha1').update(pane).digest('hex');
     const prev = hashes.get(s.id);
@@ -61,7 +63,7 @@ export function startPoller(opts: {
     hashes.set(s.id, h);
     if (prev !== undefined) {
       store.apply(s.id, { name: 'PaneChanged', at: now(), source: 'pane' });
-      opts.broadcastPreview?.(s.id, pane.split('\n'));
+      opts.broadcastPreview?.(s.id, pane.split('\n').slice(-PREVIEW_LINES));
     }
     let adapter; try { adapter = adapterFor(s.tool); } catch { return; }
     const m = adapter.detectPrompt(pane);
