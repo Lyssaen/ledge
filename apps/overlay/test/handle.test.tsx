@@ -33,6 +33,13 @@ describe('<Handle>', () => {
     fireEvent.click(screen.getByRole('button', { name: /Pim/ }));
     expect(onOpen).toHaveBeenCalledWith('b');
   });
+  it('a resting working bot hops 2 px on screen: drawn 12 px (scale 12/20) on a 20 px head-only SVG (viewBox 72 wide), the hop is 2 / 12 * 72 = 12.00 SVG units', () => {
+    const { container } = render(<Handle bots={bots} slots={l.slots} big={20} visible hoverId={null} onHover={() => {}} onOpen={() => {}} reducedMotion={false} />);
+    const pim = screen.getByRole('button', { name: /Pim/ }).querySelector('svg.bot')!;
+    expect(pim).toHaveAttribute('data-hop', 'true');
+    expect(pim.getAttribute('style')).toContain('--bot-hop: 12.00px');
+    expect(container.querySelectorAll('svg.bot[data-hop="true"]')).toHaveLength(1);
+  });
   it('is inert when not visible', () => {
     const { container } = render(<Handle bots={bots} slots={l.slots} big={20} visible={false} hoverId={null} onHover={() => {}} onOpen={() => {}} />);
     expect(container.firstChild).toHaveStyle({ opacity: '0', pointerEvents: 'none' });

@@ -201,8 +201,9 @@ describe('Bot', () => {
     });
 
     it('sizes the hop in SVG units from clamp(2, size * 0.12, 7) px and cycles every 3.6 to 4.4 s', () => {
+      // ≤ 20 px draws the head-only viewBox (72 units wide): 2 px of a 12 px bot is 2 / 12 * 72 = 12 units.
       render(<Bot seed="s1" tool="claude" state="working" pose={1} size={12} theme="dark" />);
-      expect(vars()['--bot-hop']).toBe('16.00px');
+      expect(vars()['--bot-hop']).toBe('12.00px');
       cleanup();
       render(<Bot seed="s1" tool="claude" state="working" pose={1} size={48} theme="dark" />);
       expect(vars()['--bot-hop']).toBe('11.52px');

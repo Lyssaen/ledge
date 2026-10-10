@@ -12,6 +12,8 @@ export interface BotProps {
   state: BotState;
   pose: 1 | 2 | 3;
   size: number;
+  /** The size the bot is drawn at on screen when a parent scales it; used only for the hop height. Defaults to `size`. */
+  shownSize?: number;
   theme: 'dark' | 'light';
   /** Stable session ID, or `parent.id + ':' + helper.id` for a helper; never the display name. */
   seed: string;
@@ -66,7 +68,7 @@ function Shell({ tool, fill }: { tool: Tool; fill: string }) {
  * across theme and state changes; only attributes and CSS variables change. A halo in the state colour
  * (data-halo, drawn by bots.css) distinguishes live sessions at a glance.
  */
-export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, frozen = false, paused = false, reducedMotion, askKey, nodKey, className }: BotProps): JSX.Element {
+export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly = false, frozen = false, paused = false, reducedMotion, askKey, nodKey, className }: BotProps): JSX.Element {
   const ref = useRef<SVGSVGElement>(null);
   const gradientId = `bot-shell-${useId().replace(/[^A-Za-z0-9_-]/g, '')}`;
   const prefs = useMotionPreferences();
@@ -81,8 +83,11 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
   // The working hop (spec §6): the only ambient motion kept at ≤ 20 px, so the handle shows progress. Height in screen px,
   // converted to SVG units so a 12 px bot lifts 2 px and a 48 px bot 5.8 px; period 3.6–4.4 s, offset per bot like breathing.
   const hop = state === 'working' && !reduced && !readOnly && !frozen && !paused;
-  const hopPx = Math.min(7, Math.max(2, size * 0.12));
-  const hopUnits = (hopPx / size) * 96;
+  // A parent that scales the SVG (the handle's resting bots) passes the on-screen size, so the units match what is seen;
+  // the units follow the viewBox width (72 for the head-only drawing, 96 for the full one).
+  const shown = shownSize ?? size;
+  const hopPx = Math.min(7, Math.max(2, shown * 0.12));
+  const hopUnits = (hopPx / shown) * (simplified ? 72 : 96);
   const hopCycle = 3600 + (h % 9) * 100;
 
   useBotMotion(ref, { seed, state, askKey, enabled: !reduced && !simplified && !readOnly && !frozen && !paused });

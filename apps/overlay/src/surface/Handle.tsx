@@ -27,7 +27,7 @@ export function Handle({ bots, slots, big, visible, hoverId, onHover, onOpen, th
               transition: transition([['width', 'grow', 0], ['height', 'grow', 0], ['margin-top', 'grow', 0], ['opacity', 'fadeIn', on ? 80 : 0], ['background-color', 'hover']]) }}>
             <span data-tick style={{ position: 'absolute', left: -4, top: 2, bottom: 2, width: 2, borderRadius: '0 2px 2px 0', background: BADGE[b.state].fg, opacity: b.pending ? 1 : 0, transition: transition([['opacity', 'fadeIn', b.pending ? 160 : 0], ['background-color', 'hover']]) }} />
             <span data-sprite style={{ display: 'inline-flex', lineHeight: 0, transform: `scale(${hov ? base * 1.25 : base})`, transition: transition([['transform', up || hov ? 'pop' : 'shrink', 0]]) }}>
-              <Bot seed={b.id} readOnly={b.readOnly} tool={b.tool} state={b.state} pose={b.pose} size={big} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} />
+              <Bot seed={b.id} readOnly={b.readOnly} tool={b.tool} state={b.state} pose={b.pose} size={big} shownSize={up ? big : small} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} />
             </span>
           </button>
         );
