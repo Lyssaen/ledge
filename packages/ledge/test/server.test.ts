@@ -186,6 +186,20 @@ describe('server', () => {
     expect(upd.session.state).toBe('error');
     expect(upd.session.pending?.text).toBe('npm test');
     expect(tmux.sent.length).toBe(1);
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it' });
+    c.close();
+  });
+
+  it('a retry from error that the terminal still does not take replies with an error for that id', async () => {
+    tmux = fakeTmux({ 'ledge-a': [PROMPT] }); await srv.close(); srv = await startServer({ store, tmux, port: 0 });
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    expect(await c.next('error', 3000)).toMatchObject({ id: 'a' });
+    expect(store.get('a')?.state).toBe('error');
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it' });
+    expect(tmux.sent.length).toBe(2);
     c.close();
   });
 

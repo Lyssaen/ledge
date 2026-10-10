@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@import "./tokens.css";
+@import "../bots/bots.css";
+html, body, #root { margin: 0; height: 100%; background: transparent; }
+body { font-family: 'Geist', system-ui, sans-serif; color: var(--sidebar-foreground); font-size: 14px; line-height: 20px; overflow: hidden; }
+.mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+button, input { font-family: inherit; }
+/* The bubble countdown drains from the controller's remainder (--ledge-from) to empty. */
+@keyframes ledge-drain { from { width: var(--ledge-from, 100%) } to { width: 0% } }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.dnd-switch:has(input:focus-visible) .dnd-track { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ledge-opt:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
+/* Buttons: variant colors, hover and disabled states (tokens only). */
+.ledge-btn { cursor: pointer; border: 1px solid transparent; }
+.ledge-btn[data-variant="primary"] { background: var(--primary); color: var(--primary-foreground); }
+.ledge-btn[data-variant="outline"] { background: transparent; color: var(--sidebar-foreground); border-color: var(--input); }
+.ledge-btn[data-variant="ghost"] { background: transparent; color: var(--muted-foreground); }
+.ledge-btn[data-variant="secondary"] { background: var(--secondary); color: var(--secondary-foreground); border-color: var(--border); }
+.ledge-btn[data-variant="primary"]:hover:not(:disabled) { background: var(--primary-hover); }
+.ledge-btn[data-variant="outline"]:hover:not(:disabled),
+.ledge-btn[data-variant="ghost"]:hover:not(:disabled) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.ledge-btn[data-variant="secondary"]:hover:not(:disabled) { background: var(--accent); color: var(--accent-foreground); }
+button:disabled { opacity: .5; cursor: not-allowed; }
