@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
 import type { Session } from '@ledge/protocol';
 import { useDaemon } from '../daemon/store';
@@ -13,11 +13,19 @@ import { Bubble } from './Bubble';
 import { SessionList, rowHint, EXPANDED_ROW_H } from './SessionList';
 import { SessionView, measureSessionH } from './SessionView';
 import { transition, MOTION, ms } from '../motion';
-import { setFrame, focusTerminal, onShortcut } from '../tauri/bridge';
+import { focusTerminal, onShortcut, onEdge, setHotZones, focusOverlay, isTauri } from '../tauri/bridge';
+import { useNativeFrame } from '../tauri/useNativeFrame';
+import { frameOf, type Box } from './frame';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
 import { Coachmark, countCoachmarkOpen, COACHMARK_H } from '../keyboard/Coachmark';
 
 const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
+/** Fallback extents of the extras beside the surface, before (or without) a layout measurement. */
+export const TOOLTIP_BOX = { left: 36, w: 324, h: 30 } as const;
+export const STATUS_BOX = { w: 190, h: 20 } as const;
+/** The native frame waits out the surface's size transition before it shrinks (shrink delay + duration). */
+const SETTLE_MS = Math.max(MOTION.grow.ms, MOTION.shrink.delayMs + MOTION.shrink.ms);
+const measure = (el: HTMLElement | null) => ({ w: el?.offsetWidth ?? 0, h: el?.offsetHeight ?? 0 });
 const inside = (p: { x: number; y: number } | null, g: Layout) => p !== null && p.x >= 0 && p.x < g.w && p.y >= g.top && p.y < g.top + g.h;
 
 export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH: number; theme: 'dark' | 'light'; client: DaemonClient; dnd: boolean; onToggleDnd: () => void }) {
@@ -31,13 +39,22 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
   const prevIds = useRef<Set<string>>(new Set());
   const surfaceRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
+  const offsetRef = useRef(0);
   useEffect(() => () => ctl.dispose(), [ctl]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [coach, setCoach] = useState(false);
   const replyAfterOpen = useRef(false);
 
   // Ctrl+Alt+L (the global shortcut in Tauri, a window key binding in the browser) toggles a keyboard-opened list.
-  useEffect(() => onShortcut(() => dispatch({ type: 'shortcut' })), [dispatch]);
+  // Opening takes OS focus so single-letter keys reach the overlay; asks and bubbles never do.
+  useEffect(() => onShortcut(() => {
+    const was = ctl.state().mode;
+    dispatch({ type: 'shortcut' });
+    if (was === 'handle' && ctl.state().mode === 'list') void focusOverlay();
+  }), [ctl, dispatch]);
+
+  // The native window only covers what it draws, so in Tauri the shell watches the edge bands and reports crossings.
+  useEffect(() => onEdge(on => dispatch({ type: on ? 'edgeEnter' : 'edgeLeave' })), [dispatch]);
 
   // Daemon changes drive the machine. DND keeps the bot growing in the handle but never asks for a bubble.
   useEffect(() => {
@@ -62,7 +79,8 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
 
   // The last known pointer position, to tell whether the surface shrank out from under it.
   useEffect(() => {
-    const track = (e: PointerEvent | MouseEvent) => { pointer.current = { x: e.clientX, y: e.clientY }; };
+    // In page coordinates: under Tauri the window (and so the viewport) starts at the frame's top.
+    const track = (e: PointerEvent | MouseEvent) => { pointer.current = { x: e.clientX, y: e.clientY + offsetRef.current }; };
     document.addEventListener('pointermove', track); document.addEventListener('mousemove', track);
     return () => { document.removeEventListener('pointermove', track); document.removeEventListener('mousemove', track); };
   }, []);
@@ -142,8 +160,26 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
   const rowBottom = focusIndex < 0 ? geo.top + SIZES.headerH : rowTop + (focused && isYesNo(focused) ? EXPANDED_ROW_H : SIZES.rowH);
   const below = rowBottom + 8; const above = rowTop - 8 - COACHMARK_H;
   const coachTop = below + COACHMARK_H <= geo.top + geo.h || above < geo.top ? below : above;
-  const frameH = coachShown ? Math.max(geo.h, coachTop + COACHMARK_H - geo.top) : geo.h;
-  useEffect(() => { setFrame({ top: geo.top, w: Math.max(geo.w, 360), h: frameH }); }, [geo.top, geo.w, frameH]);
+  // The native window is the bounding frame of what is visible: the surface plus the tooltip, the status line and the
+  // coachmark when shown. Text extras are measured after layout (fixed fallbacks where layout gives nothing).
+  const tipRef = useRef<HTMLDivElement>(null); const statusRef = useRef<HTMLDivElement>(null);
+  const [sizes, setSizes] = useState({ tip: { w: 0, h: 0 }, status: { w: 0, h: 0 } });
+  useLayoutEffect(() => {
+    const tip = measure(tipRef.current), status = measure(statusRef.current);
+    setSizes(s => s.tip.w === tip.w && s.tip.h === tip.h && s.status.w === status.w && s.status.h === status.h ? s : { tip, status });
+  });
+  const tipShown = st.mode === 'handle' && hovBot !== null;
+  const extras: Box[] = [];
+  if (tipShown) { const h = sizes.tip.h || TOOLTIP_BOX.h; extras.push({ left: TOOLTIP_BOX.left, top: (hovSlot?.center ?? geo.top) - h / 2, w: sizes.tip.w || TOOLTIP_BOX.w, h }); }
+  if (unreachable) extras.push({ left: Math.max(geo.w, SIZES.handleW) + 8, top: geo.top, w: sizes.status.w || STATUS_BOX.w, h: sizes.status.h || STATUS_BOX.h });
+  if (coachShown) extras.push({ left: 44, top: coachTop, w: 300, h: COACHMARK_H });
+  const frame = frameOf(geo, extras, screenH);
+  const offset = useNativeFrame(frame, parseFloat(ms(SETTLE_MS)));
+  offsetRef.current = offset;
+  // Armed only while the bare handle shows and the daemon is reachable, exactly like the DOM zones' pointer-events.
+  const zonesArmed = st.mode === 'handle' && !unreachable;
+  const zonesKey = zonesArmed ? geo.hotZones.map(z => `${z.top}:${z.h}`).join(',') : '';
+  useEffect(() => { setHotZones(zonesArmed ? geo.hotZones : []); }, [zonesKey]); // the bands are captured through `zonesKey`
   const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; send({ type: 'session.focus', id }); void focusTerminal(s.title); };
   const chooseOption = (n: number) => {
     const radios = surfaceRef.current?.querySelectorAll<HTMLInputElement>('[data-layer="session"] [data-ask] input[type="radio"]:not([aria-label="Other"])');
@@ -172,9 +208,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
   const motion = growing ? MOTION.grow : MOTION.shrink;
   const delay = growing ? 0 : MOTION.shrink.delayMs;
 
-  return (
+  const tauri = isTauri();
+  const content = (
     <>
-      {geo.hotZones.map((z, i) => <div key={i} data-hotzone onMouseEnter={() => dispatch({ type: 'edgeEnter' })} onMouseLeave={() => dispatch({ type: 'edgeLeave' })} style={{ position: 'absolute', left: 0, top: z.top, width: 14, height: z.h, pointerEvents: st.mode === 'handle' && !unreachable ? 'auto' : 'none', background: st.hot ? 'var(--edge-hot)' : 'transparent', transition: transition([['background-color', 'hover']]) }} />)}
+      {!tauri && geo.hotZones.map((z, i) => <div key={i} data-hotzone onMouseEnter={() => dispatch({ type: 'edgeEnter' })} onMouseLeave={() => dispatch({ type: 'edgeLeave' })} style={{ position: 'absolute', left: 0, top: z.top, width: 14, height: z.h, pointerEvents: st.mode === 'handle' && !unreachable ? 'auto' : 'none', background: st.hot ? 'var(--edge-hot)' : 'transparent', transition: transition([['background-color', 'hover']]) }} />)}
 
       <div ref={surfaceRef} data-surface data-mode={st.mode}
         onMouseEnter={() => dispatch({ type: 'surfaceEnter' })} onMouseLeave={() => dispatch({ type: 'surfaceLeave' })} onMouseMove={onMouseMove}
@@ -205,8 +242,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
       </div>
 
       <Coachmark visible={coachShown} top={coachTop} onDismiss={() => { setCoach(false); if (focusedRowId) surfaceRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusedRowId)}"] [data-row]`)?.focus(); }} />
-      <Tooltip bot={st.mode === 'handle' ? hovBot : null} y={hovSlot?.center ?? geo.top} />
-      {unreachable && <div role="status" style={{ position: 'absolute', left: Math.max(geo.w, SIZES.handleW) + 8, top: geo.top, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>daemon unreachable, retrying</div>}
+      <Tooltip ref={tipRef} bot={st.mode === 'handle' ? hovBot : null} y={hovSlot?.center ?? geo.top} />
+      {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: Math.max(geo.w, SIZES.handleW) + 8, top: geo.top, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>daemon unreachable, retrying</div>}
     </>
   );
+  // Under Tauri the page is shifted so page y = screen y - frame top; the browser renders at page coordinates as is.
+  return tauri ? <div data-frame-content style={{ position: 'absolute', left: 0, top: -offset, width: '100%' }}>{content}</div> : content;
 }
