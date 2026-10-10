@@ -23,6 +23,7 @@ import { focusTerminal, onShortcut, onEdge, setHotZones, focusOverlay, releaseFo
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { frameOf, type Box } from './frame';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
+import type { UiScale } from '../scale';
 import { Coachmark, countCoachmarkOpen, COACHMARK_H } from '../keyboard/Coachmark';
 
 /** Fallback extents of the extras beside the surface, before (or without) a layout measurement. */
@@ -36,7 +37,20 @@ const inside = (p: { x: number; y: number } | null, g: Layout) => p !== null && 
 const OFFLINE = 'Offline: reconnecting to the daemon';
 const READ_ONLY = 'Read only: started without Ledge, answer in its terminal';
 
-export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme }: { screenH: number; theme: 'dark' | 'light'; client: DaemonClient; dnd: boolean; onToggleDnd: () => void; onToggleTheme?: () => void }) {
+export interface SurfaceProps {
+  /** The work-area height in CSS px (the logical height divided by the UI scale). */
+  screenH: number; theme: 'dark' | 'light'; client: DaemonClient; dnd: boolean; onToggleDnd: () => void; onToggleTheme?: () => void;
+  /** The applied UI scale: the webview zoom under Tauri, a CSS `zoom` on an ancestor in the browser. */
+  scale?: number;
+  /** The Size setting, its auto value, and how to change it (Settings). */
+  uiScale?: UiScale; autoScale?: number; onUiScale?: (s: UiScale) => void;
+}
+
+export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme, scale = 1, uiScale = 'auto', autoScale = 1, onUiScale }: SurfaceProps) {
+  // The browser emulates the scale with CSS zoom: pointer coordinates and client rects are then in unzoomed viewport
+  // px and are divided by it. Under the webview zoom (Tauri) everything is already in CSS px.
+  const cssZoom = isTauri() ? 1 : scale;
+  const cssZoomRef = useRef(cssZoom); cssZoomRef.current = cssZoom;
   const { sessions, byId, status, previews, lastError } = useDaemon();
   // One app-level motion preference drives every bot in every layer.
   const motionPrefs = useMotionPreferences();
@@ -84,7 +98,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   // The last known pointer position, to tell whether the surface shrank out from under it.
   useEffect(() => {
     // In page coordinates: under Tauri the window (and so the viewport) starts at the frame's top.
-    const track = (e: PointerEvent | MouseEvent) => { pointer.current = { x: e.clientX, y: e.clientY + offsetRef.current }; };
+    const track = (e: PointerEvent | MouseEvent) => { const z = cssZoomRef.current; pointer.current = { x: e.clientX / z, y: e.clientY / z + offsetRef.current }; };
     document.addEventListener('pointermove', track); document.addEventListener('mousemove', track);
     return () => { document.removeEventListener('pointermove', track); document.removeEventListener('mousemove', track); };
   }, []);
@@ -135,7 +149,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const shown = shownId ? byId.get(shownId) ?? null : null;
   const bubbleSession = st.bubbleId ? byId.get(st.bubbleId) ?? null : null;
   const bubbleRef = useRef<HTMLDivElement>(null);
-  const bubbleH = useMeasuredHeight(bubbleRef, st.mode === 'bubble');
+  const bubbleH = useMeasuredHeight(bubbleRef, st.mode === 'bubble', cssZoom);
   const geo = layout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH: selected ? measureSessionH(selected, st.reading) : 480, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 });
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
@@ -207,12 +221,12 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   if (unreachable) extras.push({ left: Math.max(geo.w, SIZES.handleW) + 8, top: geo.top, w: sizes.status.w || STATUS_BOX.w, h: sizes.status.h || STATUS_BOX.h });
   if (coachShown) extras.push({ left: 44, top: coachTop, w: 300, h: COACHMARK_H });
   const frame = frameOf(geo, extras, screenH);
-  const offset = useNativeFrame(frame, parseFloat(ms(SETTLE_MS)));
+  const offset = useNativeFrame(frame, parseFloat(ms(SETTLE_MS)), scale);
   offsetRef.current = offset;
   // Armed only while the bare handle shows and the daemon is reachable, exactly like the DOM zones' pointer-events.
   const zonesArmed = st.mode === 'handle' && !unreachable;
-  const zonesKey = zonesArmed ? geo.hotZones.map(z => `${z.top}:${z.h}`).join(',') : '';
-  useEffect(() => { setHotZones(zonesArmed ? geo.hotZones : []); }, [zonesKey]); // the bands are captured through `zonesKey`
+  const zonesKey = zonesArmed ? `${scale}|` + geo.hotZones.map(z => `${z.top}:${z.h}`).join(',') : '';
+  useEffect(() => { setHotZones(zonesArmed ? geo.hotZones : [], scale); }, [zonesKey]); // the bands and scale are captured through `zonesKey`
   // The terminal tab is the fallback for read-only and offline sessions too: only the daemon message needs the daemon.
   const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); void focusTerminal(s.title); };
   const chooseOption = (n: number) => {
@@ -274,7 +288,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
               onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
           </div>
           <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <SettingsView visible={st.mode === 'settings'} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced}
+            <SettingsView visible={st.mode === 'settings'} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} uiScale={uiScale} autoScale={autoScale} onUiScale={onUiScale}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'help' ? 'auto' : 'none', transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>

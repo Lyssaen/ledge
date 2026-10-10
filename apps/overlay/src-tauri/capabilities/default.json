@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The overlay window: monitor lookup, the edge event, the global shortcut and the app's own commands.",
+  "description": "The overlay window: monitor lookup, the webview zoom (UI scale), the edge event, the global shortcut and the app's own commands.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -10,6 +10,7 @@
     "core:window:allow-set-position",
     "core:window:allow-set-size",
     "core:window:allow-set-focus",
+    "core:webview:allow-set-webview-zoom",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "global-shortcut:allow-register",

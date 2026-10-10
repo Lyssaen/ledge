@@ -7,7 +7,9 @@
  *   release_focus                      give the foreground back to the window remembered by focus_overlay
  *   focus_terminal { title }           bring the matching terminal window forward
  *   event `ledge://edge` { inside }    cursor entered / left the edge bands
- * Coordinates are logical px from the top of the primary monitor's work area.
+ * Coordinates sent to the shell are logical px from the top of the primary monitor's work area ("monitor px").
+ * The page lays itself out in CSS px; with a UI scale (webview zoom) one CSS px is `zoom` monitor px, so `setFrame`
+ * and `setHotZones` take CSS px plus the zoom and convert here. The shell itself never knows about the zoom.
  */
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const inTauri = isTauri;
@@ -16,7 +18,8 @@ export interface Frame { top: number; w: number; h: number }
 export interface Band { top: number; h: number }
 export const EDGE_EVENT = 'ledge://edge';
 
-/** The primary monitor's work-area height in logical px (the space the surface lays itself out in). */
+/** The primary monitor's work-area height in logical (monitor) px, before any UI zoom. The surface lays itself out in
+ *  this height divided by the UI scale. */
 export async function screenHeight(): Promise<number> {
   if (!inTauri()) return window.innerHeight;
   const { primaryMonitor } = await import('@tauri-apps/api/window');
@@ -33,27 +36,49 @@ const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T
   return (await core).invoke<T>(cmd, args);
 };
 
-// Frames are sent one after the other: async commands may otherwise land out of order and leave the window at an
-// older frame than the page offset, which is committed with each request.
+/** A frame in CSS px to monitor px under `zoom`: the edges are rounded outward so the window always holds the drawing. */
+export function toMonitorFrame(f: Frame, zoom = 1): Frame {
+  if (zoom === 1) return f;
+  const top = Math.floor(f.top * zoom);
+  return { top, w: Math.ceil(f.w * zoom), h: Math.max(1, Math.ceil((f.top + f.h) * zoom) - top) };
+}
+
+// Frames (and zoom changes) are sent one after the other: async commands may otherwise land out of order and leave the
+// window at an older frame than the page offset, which is committed with each request.
 let lastFrame = '';
 let frameChain: Promise<unknown> = Promise.resolve();
-/** Moves and sizes the native window. Resolves true once the shell applied it (false in the browser or on failure). */
-export function setFrame(f: Frame): Promise<boolean> {
+/** Moves and sizes the native window to `f` (CSS px) under the UI `zoom`. Resolves true once the shell applied it
+ *  (false in the browser or on failure). */
+export function setFrame(f: Frame, zoom = 1): Promise<boolean> {
   if (!inTauri()) return Promise.resolve(false);
-  const key = `${f.top}:${f.w}:${f.h}`;
+  const m = toMonitorFrame(f, zoom);
+  const key = `${m.top}:${m.w}:${m.h}`;
   if (key === lastFrame) return frameChain.then(() => lastFrame === key);
   lastFrame = key;
-  const run = frameChain.then(() => invoke('set_frame', { top: f.top, width: f.w, height: f.h })).then(() => true, () => { if (lastFrame === key) lastFrame = ''; return false; });
+  const run = frameChain.then(() => invoke('set_frame', { top: m.top, width: m.w, height: m.h })).then(() => true, () => { if (lastFrame === key) lastFrame = ''; return false; });
+  frameChain = run;
+  return run;
+}
+
+/** Applies the UI scale as the webview zoom (Tauri only), in order with the frames. */
+export function setWebviewZoom(scale: number): Promise<boolean> {
+  if (!inTauri()) return Promise.resolve(false);
+  const run = frameChain.then(async () => {
+    const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+    await getCurrentWebview().setZoom(scale);
+  }).then(() => true, () => false);
   frameChain = run;
   return run;
 }
 
 let lastZones = '';
-/** Reports the edge bands that should open the surface; an empty list disarms the native poller. */
-export function setHotZones(zones: Band[]): void {
+/** Reports the edge bands (CSS px, under the UI `zoom`) that should open the surface; an empty list disarms the
+ *  native poller. */
+export function setHotZones(zones: Band[], zoom = 1): void {
   if (!inTauri()) return;
-  const key = JSON.stringify(zones); if (key === lastZones) return; lastZones = key;
-  invoke('set_hot_zones', { zones }).catch(() => { if (lastZones === key) lastZones = ''; });
+  const bands = zones.map(z => ({ top: z.top * zoom, h: z.h * zoom }));
+  const key = JSON.stringify(bands); if (key === lastZones) return; lastZones = key;
+  invoke('set_hot_zones', { zones: bands }).catch(() => { if (lastZones === key) lastZones = ''; });
 }
 
 /** Gives the overlay OS focus so single-letter keys reach it. Only for keyboard opens: asks never steal focus. */

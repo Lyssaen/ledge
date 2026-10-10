@@ -1,12 +1,15 @@
 import type { ReactNode } from 'react';
 import { transition } from '../motion';
 import { DetailHeader } from './DetailHeader';
+import { UI_SCALES, percent, type UiScale } from '../scale';
 
 export interface SettingsViewProps {
   visible: boolean; theme: 'dark' | 'light'; dnd: boolean;
   /** The app's own reduced-motion setting, and whether the OS already asks for it (which always wins). */
   reduced: boolean; osReduced: boolean;
   onToggleTheme?: () => void; onToggleDnd: () => void; onReduced: (on: boolean) => void; onBack: () => void; onClose: () => void;
+  /** The Size setting, the scale Auto resolves to on this screen, and how to change it (applied live). */
+  uiScale?: UiScale; autoScale?: number; onUiScale?: (s: UiScale) => void;
 }
 
 function Switch({ label, hint, checked, onChange }: { label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
@@ -24,6 +27,27 @@ function Switch({ label, hint, checked, onChange }: { label: string; hint: strin
   );
 }
 
+/** The UI scale as a segmented radio group: Auto (with the value it resolves to) or a fixed percentage. */
+function SizeRow({ value, auto, onChange }: { value: UiScale; auto: number; onChange?: (s: UiScale) => void }) {
+  return (
+    <fieldset style={{ margin: 0, padding: '10px 0', border: 'none', minWidth: 0 }}>
+      <legend style={{ padding: 0, fontSize: 14, lineHeight: '18px', fontWeight: 500 }}>Size</legend>
+      <span style={{ display: 'block', marginTop: 2, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>Scale the whole overlay for large screens.</span>
+      <div style={{ display: 'flex', marginTop: 8, padding: 2, gap: 2, borderRadius: 'var(--radius-md)', background: 'var(--muted)', border: '1px solid var(--input)' }}>
+        {UI_SCALES.map(s => {
+          const on = s === value;
+          return (
+            <label key={String(s)} className="ledge-opt" data-checked={on || undefined} style={{ position: 'relative', flex: s === 'auto' ? '1.6 1 0' : '1 1 0', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 28, borderRadius: 'calc(var(--radius-md) - 2px)', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', cursor: 'pointer', background: on ? 'var(--sidebar)' : 'transparent', color: on ? 'var(--sidebar-foreground)' : 'var(--muted-foreground)', boxShadow: on ? '0 1px 2px rgb(0 0 0 / .2)' : 'none', transition: transition([['background-color', 'hover'], ['color', 'hover']]) }}>
+              <input type="radio" name="ledge-ui-scale" value={String(s)} checked={on} onChange={() => onChange?.(s)} disabled={!onChange} style={{ position: 'absolute', opacity: 0, width: 1, height: 1, margin: 0 }} />
+              {s === 'auto' ? `Auto (${percent(auto)})` : percent(s)}
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 const Row = ({ children }: { children: ReactNode }) => <div style={{ borderBottom: '1px solid var(--sidebar-border)' }}>{children}</div>;
 
 /** Preferences inside the same surface; they are the app's own (theme, do not disturb, motion), not a local copy. */
@@ -33,6 +57,7 @@ export function SettingsView(p: SettingsViewProps) {
     <div data-layer="settings" inert={!p.visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: p.visible ? 1 : 0, pointerEvents: p.visible ? 'auto' : 'none', transition: transition([['opacity', p.visible ? 'fadeIn' : 'fadeOut', p.visible ? 120 : 0]]) }}>
       <DetailHeader title="Your Ledge" onBack={p.onBack} onClose={p.onClose} />
       <div style={{ display: 'flex', flexDirection: 'column', padding: '4px 16px 12px', overflowY: 'auto', minHeight: 0 }}>
+        <Row><SizeRow value={p.uiScale ?? 'auto'} auto={p.autoScale ?? 1} onChange={p.onUiScale} /></Row>
         <Row><Switch label="Do not disturb" hint="New asks stay in the handle." checked={p.dnd} onChange={on => { if (on !== p.dnd) p.onToggleDnd(); }} /></Row>
         <Row><Switch label="Reduced motion" hint="States stay readable without animation." checked={p.reduced} onChange={p.onReduced} /></Row>
         {p.osReduced && !p.reduced && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', padding: '8px 0' }}>Your system asks for reduced motion; Ledge keeps respecting it.</span>}
