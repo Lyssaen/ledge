@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
-import { mapClaudeHook, runHook } from '../src/cli/hook.js';
+import { mapClaudeHook, runHook, REPLY_MAX } from '../src/cli/hook.js';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import { connect } from '../src/client.js';
@@ -66,6 +66,19 @@ describe('mapClaudeHook', () => {
   it('maps an interrupted PostToolUseFailure (Esc) with interrupt set', () => {
     const payload = { ...common, hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command: 'sleep 60' }, tool_use_id: 'toolu_3', error: 'Interrupted by user', is_interrupt: true };
     expect(mapClaudeHook('PostToolUseFailure', payload, at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', tool: 'Bash', interrupt: true });
+  });
+  it('maps Stop with the last assistant message as the reply text', () => {
+    const payload = { ...common, hook_event_name: 'Stop', stop_hook_active: false, last_assistant_message: '  ## Done\n\nAll green.  ' };
+    expect(mapClaudeHook('Stop', payload, at)?.event).toEqual({ name: 'Stop', at, source: 'hook', text: '## Done\n\nAll green.' });
+  });
+  it('maps Stop without a message (older Claude Code) or with a blank one to a bare Stop', () => {
+    expect(mapClaudeHook('Stop', { ...common, hook_event_name: 'Stop', stop_hook_active: false }, at)?.event).toEqual({ name: 'Stop', at, source: 'hook' });
+    expect(mapClaudeHook('Stop', { ...common, last_assistant_message: '   ' }, at)?.event).toEqual({ name: 'Stop', at, source: 'hook' });
+  });
+  it('caps a very long reply and marks the cut', () => {
+    const text = mapClaudeHook('Stop', { ...common, last_assistant_message: 'x'.repeat(REPLY_MAX + 500) }, at)?.event.text!;
+    expect(text.length).toBeLessThan(REPLY_MAX + 20);
+    expect(text.endsWith('[…]')).toBe(true);
   });
   it('maps StopFailure with its error and details', () => {
     const payload = { ...common, hook_event_name: 'StopFailure', error: 'rate_limit', error_details: '429 Too Many Requests', last_assistant_message: 'Working on it' };

@@ -137,6 +137,31 @@ for (const theme of ['dark', 'light'] as const) {
         await shoot(page, `session-preview-${theme}`);
       });
 
+      test('session: helpers, the main thread at rest while two subagents work', async ({ page }) => {
+        await desktop(page, theme);
+        const helpers = [
+          { id: 'h0', kind: 'Explore', task: 'find the reducer consumers', state: 'exited' as const },
+          { id: 'h1', kind: 'general-purpose', task: 'Review task 1 (spec + quality)', state: 'working' as const },
+          { id: 'h2', kind: 'Explore', task: 'list the i18n keys without a French string', state: 'working' as const }
+        ];
+        const d = await fakeDaemon(page, overview().map(s => (s.id === 'pim' ? { ...s, state: 'idle' as const, helpers } : s)));
+        await ready(page, 4);
+        d.preview('pim', conversation);
+        await openSession(page, 'landing-page, Pim, ouvrir');
+        await expect(layer(page, 'session').getByRole('list', { name: 'Sous-agents' }).locator('[data-helper]')).toHaveCount(2);
+        await shoot(page, `session-helpers-${theme}`);
+      });
+
+      test('session: your turn, the last reply read like a plan', async ({ page }) => {
+        await desktop(page, theme);
+        const d = await fakeDaemon(page, overview());
+        await ready(page, 4);
+        d.preview('bix', conversation);
+        await openSession(page, 'documentation, Bix, ouvrir');
+        await expect(layer(page, 'session').getByRole('group', { name: 'Question 1' })).toBeVisible();
+        await shoot(page, `session-reply-${theme}`);
+      });
+
       test('session: read only', async ({ page }) => {
         await desktop(page, theme);
         await fakeDaemon(page, [session('otto', { source: 'hook_only', tmuxSession: null })]);
@@ -171,6 +196,32 @@ for (const theme of ['dark', 'light'] as const) {
         await expectMode(page, 'help');
         await restInside(page);
         await shoot(page, `help-${theme}`);
+      });
+
+      test('new session, and the empty list', async ({ page }) => {
+        await desktop(page, theme);
+        const recents = [
+          { cwd: '/home/joffrey/Workspace/api-gateway', project: 'api-gateway', lastAt: new Date(Date.now() - 86_400_000).toISOString() },
+          { cwd: '/home/joffrey/Workspace/harness-assistant', project: 'harness-assistant', lastAt: new Date(Date.now() - 18 * 60_000).toISOString() },
+          { cwd: '/home/joffrey/Workspace/speos-portal', project: 'speos-portal', lastAt: new Date(Date.now() - 3 * 86_400_000).toISOString() }
+        ];
+        await fakeDaemon(page, overview().map(s => (s.id === 'otto' ? { ...s, cwd: '/home/joffrey/Workspace/harness-assistant' } : s)), { recents });
+        await ready(page, 4);
+        await openList(page);
+        await layer(page, 'list').getByRole('button', { name: 'Nouvelle session' }).click();
+        await expectMode(page, 'launch');
+        await restInside(page);
+        await layer(page, 'launch').getByLabel('Compagnon', { exact: true }).fill('Juno');
+        await shoot(page, `launch-${theme}`);
+      });
+
+      test('empty list', async ({ page }) => {
+        await desktop(page, theme);
+        await fakeDaemon(page, []);
+        await ready(page, 0);
+        await openList(page);
+        await expect(layer(page, 'list').getByText('Personne au travail.')).toBeVisible();
+        await shoot(page, `launch-empty-${theme}`);
       });
 
       test('twelve sessions', async ({ page }) => {

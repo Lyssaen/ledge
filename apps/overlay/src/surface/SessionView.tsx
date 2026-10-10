@@ -1,7 +1,7 @@
-import { useLayoutEffect, useRef, useState, type Ref } from 'react';
-import type { Pending, Session } from '@ledge/protocol';
+import { useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
+import type { Helper, Pending, Session } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
-import { botState, poseFor } from '../bots/poseFor';
+import { botState, liveHelpers, poseFor, type BotState } from '../bots/poseFor';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Kbd } from '../ui/Kbd';
@@ -10,6 +10,8 @@ import { relativeTime, toolName } from '../format';
 import { transition } from '../motion';
 import { useI18n, type Messages } from '../i18n/lang';
 import { canDismiss } from './SessionList';
+import { parseReply } from '../reply/parse';
+import { ReplyCard, inline } from './ReplyCard';
 
 const mono = "'Geist Mono', ui-monospace, monospace";
 const well: React.CSSProperties = { fontFamily: mono, fontSize: 13, lineHeight: '20px', padding: '10px 12px', background: 'var(--sidebar)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' };
@@ -17,10 +19,14 @@ const rule = '1px solid var(--sidebar-border)';
 /** Fixed parts of the view: its header and the reply area under the content. */
 export const SESSION_HEADER_H = 60;
 
+/** The last reply is shown when nothing is asked and the agent waits (or ended) on it: "your turn". */
+export const shownReply = (s: Session) => (!s.pending && (s.state === 'idle' || s.state === 'exited') ? s.lastReply : undefined);
+
 /** A first estimate of the view's height, before (or without) a measurement of its content. */
 export function measureSessionH(s: Session, reading: boolean): number {
   const ask = !s.pending ? 0 : s.pending.kind === 'question' ? 140 + (s.pending.options?.length ?? 0) * 56 : 260;
-  return SESSION_HEADER_H + 90 + ask + (reading ? 400 : 240) + 96;
+  const reply = shownReply(s) ? Math.min(560, 160 + shownReply(s)!.text.length / 3) : 0;
+  return SESSION_HEADER_H + 90 + ask + reply + (reading ? 400 : 240) + 96;
 }
 /** The cap the request block grows to (its content is always shorter): only the fold animation uses it. */
 export const askMaxH = (p: Pending) => (p.kind === 'question' ? 160 + (p.options?.length ?? 0) * 72 : 360);
@@ -50,8 +56,31 @@ function QuestionCard({ pending, onReply, disabled, t }: { pending: Pending; onR
   );
 }
 
+const HELPER_STATE: Record<Helper['state'], BotState> = { starting: 'starting', working: 'working', waiting_input: 'question', waiting_permission: 'approval', idle: 'idle', exited: 'done', error: 'error' };
+
+/** Spec board 17: the live helpers under their bot, 20 px each, in a tree whose last branch ends in └. */
+function HelpersTree({ parent, helpers, t, theme, paused, frozen, reducedMotion }: { parent: Session; helpers: Helper[]; t: Messages; theme: 'dark' | 'light'; paused: boolean; frozen?: boolean; reducedMotion?: boolean }) {
+  return (
+    <ul data-helpers aria-label={t.session.helpers} style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {helpers.map((h, i) => {
+        const st = HELPER_STATE[h.state]; const seed = `${parent.id}:${h.id}`; const last = i === helpers.length - 1;
+        return (
+          <li key={h.id} data-helper data-last={last ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, fontSize: 12, lineHeight: '16px' }}>
+            <span aria-hidden="true" className="mono" style={{ width: 14, flexShrink: 0, color: 'var(--muted-foreground)' }}>{last ? '└' : '├'}</span>
+            <Bot seed={seed} tool={parent.tool} state={st} pose={poseFor(seed, st)} size={20} theme={theme} paused={paused} frozen={frozen} reducedMotion={reducedMotion} />
+            <span style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--sidebar-foreground)' }}>{h.task || h.kind}</span>
+            <span style={{ flexShrink: 0, color: 'var(--muted-foreground)' }}>{h.task ? `${h.kind} · ` : ''}{t.botLabel[st]}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export interface SessionViewProps {
   session: Session; preview: string[]; visible: boolean; reading: boolean; draft: string;
+  /** When the layer's fade-in starts, in ms (see `enterDelay` in motion). */
+  enterDelay?: number;
   onDraft: (t: string) => void; onBack: () => void; onClose: () => void; onDecide: (d: 'accept' | 'deny') => void; onReply: (t: string) => void;
   onInterrupt: () => void; onKill: () => void; onFocus: () => void; onToggleReading: () => void;
   /** Removes a finished or read-only session from the list (shown only for those); `dismissOff` while offline. */
@@ -69,7 +98,7 @@ export interface SessionViewProps {
 
 export function SessionView(p: SessionViewProps) {
   const { t } = useI18n();
-  const { session: s, visible } = p;
+  const { session: s, visible, enterDelay = 120 } = p;
   const blocked = p.blocked ?? null;
   const readOnly = s.source === 'hook_only';
   const decideOff = blocked !== null || !!p.deciding;
@@ -80,6 +109,9 @@ export function SessionView(p: SessionViewProps) {
   const shown = pending ?? last;
   const isQ = shown?.kind === 'question';
   const st = botState(s);
+  const helpers = liveHelpers(s);
+  // The daemon rests the main thread between turns while a background helper still works: the view reads as in progress.
+  const busy = s.state === 'working' || (s.state === 'idle' && helpers.length > 0);
   // The preview follows its latest line, like a terminal: on open, and on each update unless the user scrolled up to read.
   const termRef = useRef<HTMLPreElement>(null);
   const stuck = useRef(true);
@@ -91,18 +123,26 @@ export function SessionView(p: SessionViewProps) {
   const promptOnly = !!pending && pending.kind !== 'question';
   const replyOff = blocked !== null || promptOnly;
   const sendDraft = () => { if (!replyOff && p.draft.trim()) p.onReply(p.draft); };
+  // The agent's last message, read like a plan, while it waits for the next instruction.
+  const reply = shownReply(s);
+  const doc = useMemo(() => (reply ? parseReply(reply.text) : null), [reply?.text]); // eslint-disable-line react-hooks/exhaustive-deps
+  const replyField = useRef<HTMLTextAreaElement>(null);
+  const questions = doc?.questions.length ?? 0;
+  const doneCount = doc ? doc.sections.reduce((n, sec) => n + sec.blocks.reduce((m, b) => m + (b.type === 'list' ? b.items.filter(it => sec.kind === 'done' || it.checked).length : 0), 0), 0) : 0;
   const hint = blocked ?? (promptOnly ? t.session.hintPrompt(pending!.kind)
     : pending?.kind === 'question' ? t.session.hintQuestion
+    : questions > 1 ? t.reply.hintAnswerAll : questions === 1 ? t.reply.hintChips
     : t.session.hintFree);
-  const eyebrow = pending ? t.session.eyebrow.ask : s.state === 'working' || s.state === 'starting' ? t.session.eyebrow.working : s.state === 'error' ? t.session.eyebrow.error : t.session.eyebrow.session;
+  const eyebrow = pending || (reply && s.state === 'idle' && !busy) ? t.session.eyebrow.ask : busy || s.state === 'starting' ? t.session.eyebrow.working : s.state === 'error' ? t.session.eyebrow.error : t.session.eyebrow.session;
   const badgeState = s.state === 'error' ? 'error' : pending ? (pending.kind === 'question' ? 'question' : 'approval') : st;
   const title = pending
     ? (pending.kind === 'question' ? pending.text : pending.kind === 'diff' ? t.session.title.diff(s.name) : pending.kind === 'plan' ? t.session.title.plan(s.name) : t.session.title.permission(s.name))
+    : doc?.title ? doc.title
     : readOnly ? t.session.title.readonly
-    : s.state === 'exited' ? t.session.title.exited : s.state === 'error' ? t.session.title.error : s.state === 'idle' ? t.session.title.idle : s.state === 'starting' ? t.session.title.starting : t.session.title.working;
+    : s.state === 'exited' ? t.session.title.exited : s.state === 'error' ? t.session.title.error : s.state === 'idle' && !busy ? t.session.title.idle : s.state === 'starting' ? t.session.title.starting : t.session.title.working;
   const failureText = (s.state === 'error' || p.failure) && pending ? t.session.failed(p.failure ?? s.lastError ?? t.notTaken) : null;
   return (
-    <div data-layer="session" inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? 120 : 0]]) }}>
+    <div data-layer="session" data-delay={enterDelay} inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay : 0]]) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: SESSION_HEADER_H, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px 0 6px', borderBottom: rule }}>
         <Button variant="ghost" size="icon" aria-label={t.detail.back} title={t.detail.back} data-initial-focus onClick={p.onBack} style={{ width: 30, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.chevronLeft} /></Button>
         <Bot seed={s.id} readOnly={readOnly} tool={s.tool} state={st} pose={poseFor(s.id, s.state)} size={32} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} askKey={pending?.text} />
@@ -123,6 +163,16 @@ export function SessionView(p: SessionViewProps) {
             {readOnly ? <Badge state="readonly" tone={badgeState} caps /> : <Badge state={badgeState} caps />}
           </div>
           <h2 style={{ margin: 0, fontSize: 18, lineHeight: '26px', fontWeight: 650, letterSpacing: '-0.01em', overflowWrap: 'anywhere' }}>{title}</h2>
+          {helpers.length > 0 && <HelpersTree parent={s} helpers={helpers} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} />}
+          {reply && doc && <>
+            <span data-reply-meta style={{ marginTop: 6, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
+              {[t.reply.finished(s.name, relativeTime(reply.at, p.now, t)), doneCount ? t.reply.doneCount(doneCount) : null, questions ? t.reply.questionCount(questions) : null].filter(Boolean).join(' · ')}
+            </span>
+            {doc.lead && <p data-reply-lead style={{ margin: '10px 0 0', fontSize: 14, lineHeight: '21px', color: 'var(--sidebar-foreground)', overflowWrap: 'anywhere' }}>{inline(doc.lead)}</p>}
+            <div style={{ marginTop: 14 }}>
+              <ReplyCard key={reply.at} doc={doc} raw={reply.text} t={t} onDraft={p.onDraft} onFocusReply={() => replyField.current?.focus()} />
+            </div>
+          </>}
           {readOnly && <>
             {!pending && <p style={{ margin: '8px 0 0', fontSize: 14, lineHeight: '22px', color: 'var(--muted-foreground)' }}>{t.session.readonlyLead(s.name)}</p>}
             <div data-readonly-note style={{ marginTop: 14, padding: '12px 14px', background: 'var(--well)', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md)', fontSize: 13, lineHeight: '21px', color: 'var(--muted-foreground)' }}>
@@ -152,7 +202,7 @@ export function SessionView(p: SessionViewProps) {
             ))}
           </div>
 
-          {p.preview.length > 0 && <details className="ledge-terminal" open={!pending || p.reading} onToggle={e => { if ((e.currentTarget as HTMLDetailsElement).open) { stuck.current = true; toBottom(); } }} style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+          {p.preview.length > 0 && <details className="ledge-terminal" open={(!pending && !reply) || p.reading} onToggle={e => { if ((e.currentTarget as HTMLDetailsElement).open) { stuck.current = true; toBottom(); } }} style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
             <summary style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--well)', fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
               <span data-caret aria-hidden="true" style={{ display: 'inline-flex', transition: transition([['transform', 'hover']]) }}><Icon size={12} {...ICONS.chevronRight} /></span>
               <span style={{ color: 'var(--sidebar-foreground)' }}>{t.session.terminal}</span><span>· {t.session.terminalNote}</span>
@@ -166,7 +216,7 @@ export function SessionView(p: SessionViewProps) {
       {!readOnly && (
         <div ref={p.replyRef} data-reply-area style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px 10px', flexShrink: 0, borderTop: rule }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-            <textarea data-reply rows={1} className="ledge-field" placeholder={t.session.replyPlaceholder(s.name)} aria-label={t.session.replyLabel(s.name)} aria-describedby="ledge-reply-hint" value={p.draft}
+            <textarea ref={replyField} data-reply rows={1} className="ledge-field" placeholder={t.session.replyPlaceholder(s.name)} aria-label={t.session.replyLabel(s.name)} aria-describedby="ledge-reply-hint" value={p.draft}
               onChange={e => p.onDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDraft(); } }}
               style={{ flexGrow: 1, minWidth: 0, minHeight: 36, maxHeight: 120, boxSizing: 'border-box', padding: '8px 2px', resize: 'none', fieldSizing: 'content', background: 'transparent', color: 'inherit', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: 14, lineHeight: '20px' } as React.CSSProperties} />
             <Button variant="primary" size="icon" aria-label={t.session.sendReply} title={t.session.sendReply} disabled={replyOff || !p.draft.trim()} onClick={sendDraft} style={{ width: 32, height: 32, flexShrink: 0, marginBottom: 2 }}><Icon {...ICONS.send} /></Button>

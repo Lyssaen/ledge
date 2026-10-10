@@ -13,6 +13,15 @@ function describeTool(tool: string | undefined, input: unknown): string {
   return str(i.description) ?? JSON.stringify(i).slice(0, 200);
 }
 
+/** The longest reply kept from a Stop hook: enough for a long report, never a whole transcript. */
+export const REPLY_MAX = 24_000;
+/** The agent's last message (Claude Code 2.1: `last_assistant_message` on Stop), trimmed and capped. */
+function lastReply(p: Payload): string | undefined {
+  const text = str(p.last_assistant_message)?.trim();
+  if (!text) return undefined;
+  return text.length > REPLY_MAX ? `${text.slice(0, REPLY_MAX)}\n\n[…]` : text;
+}
+
 /** SessionEnd reasons after which the same agent process keeps running (Claude Code 2.1). */
 const NON_TERMINAL_END_REASONS = new Set(['clear', 'resume']);
 
@@ -44,7 +53,10 @@ export function mapClaudeHook(eventName: string, payload: unknown, at: string): 
     }
     case 'SessionStart': return { id, event: { name: 'SessionStart', ...base } };
     case 'UserPromptSubmit': return { id, event: { name: 'UserPromptSubmit', ...base } };
-    case 'Stop': return { id, event: { name: 'Stop', ...base } };
+    case 'Stop': {
+      const text = lastReply(p);
+      return { id, event: { name: 'Stop', ...base, ...(text ? { text } : {}) } };
+    }
     case 'SessionEnd':
       // Under the launcher, the exit belongs to session.unregister (real exit code) and PaneGone:
       // Claude's SessionEnd also fires on /clear, /resume and logout while the process lives on.

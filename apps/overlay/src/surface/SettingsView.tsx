@@ -10,6 +10,8 @@ import { resolveMonitor, type MonitorInfo } from '../monitor';
 
 export interface SettingsViewProps {
   visible: boolean; theme: 'dark' | 'light'; dnd: boolean;
+  /** When the layer's fade-in starts, in ms (see `enterDelay` in motion). */
+  enterDelay?: number;
   /** The app's own reduced-motion setting, and whether the OS already asks for it (which always wins). */
   reduced: boolean; osReduced: boolean;
   finished: FinishedNotify; onFinished: (v: FinishedNotify) => void; sounds: SoundPrefs; onSounds: (patch: SoundPatch) => void; onTestSound: () => void;
@@ -75,6 +77,7 @@ export function monitorOptions(monitors: MonitorInfo[], choice: string | null, t
 
 /** Preferences inside the same surface; they are the app's own (language, size, theme, do not disturb, motion), not a local copy. */
 export function SettingsView(p: SettingsViewProps) {
+  const enterDelay = p.enterDelay ?? 120;
   const { t, lang } = useI18n();
   const light = p.theme === 'light';
   const monitors = p.monitors ?? [];
@@ -82,7 +85,7 @@ export function SettingsView(p: SettingsViewProps) {
   const chosen = resolveMonitor(choice, monitors);
   const chosenValue = choice !== null && !monitors.some(m => m.id === choice) ? choice : chosen && !chosen.primary ? chosen.id : 'primary';
   return (
-    <div data-layer="settings" inert={!p.visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: p.visible ? 1 : 0, pointerEvents: p.visible ? 'auto' : 'none', transition: transition([['opacity', p.visible ? 'fadeIn' : 'fadeOut', p.visible ? 120 : 0]]) }}>
+    <div data-layer="settings" data-delay={enterDelay} inert={!p.visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: p.visible ? 1 : 0, pointerEvents: p.visible ? 'auto' : 'none', transition: transition([['opacity', p.visible ? 'fadeIn' : 'fadeOut', p.visible ? enterDelay : 0]]) }}>
       <DetailHeader title={t.settings.title} onBack={p.onBack} onClose={p.onClose} />
       <div className="ledge-scroll" style={{ overflowY: 'auto', minHeight: 0, overscrollBehavior: 'contain' }}>
         <div ref={p.contentRef} style={{ display: 'flex', flexDirection: 'column', padding: '4px 17px 12px' }}>

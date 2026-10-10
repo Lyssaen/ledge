@@ -58,7 +58,9 @@ describe('bridge', () => {
   it('in the browser nothing reaches the shell', async () => {
     const b = await loadBridge();
     await expect(b.setFrame({ top: 1, w: 2, h: 3 })).resolves.toBe(false);
-    b.setHotZones([{ top: 40, h: 100 }]); await b.focusOverlay(); await b.releaseFocus(); await b.focusTerminal('Otto');
+    b.setHotZones([{ top: 40, h: 100 }]); await b.focusOverlay(); await b.releaseFocus();
+    await expect(b.focusTerminal('Otto')).resolves.toBe(false);
+    await expect(b.openTerminal('Otto', ['node', 'cli', 'attach', 'a'])).resolves.toBe(false);
     const fn = vi.fn(); b.onEdge(fn)();
     await Promise.resolve();
     expect(native.invoke).not.toHaveBeenCalled();
@@ -93,11 +95,24 @@ describe('bridge', () => {
   it('hot zones, overlay focus and terminal focus are commands', async () => {
     enterTauri(); const b = await loadBridge();
     b.setHotZones([{ top: 40, h: 100 }]); b.setHotZones([{ top: 40, h: 100 }]); b.setHotZones([]);
-    await b.focusOverlay(); await b.releaseFocus(); await b.focusTerminal('Otto · harness-assistant');
+    await b.focusOverlay(); await b.releaseFocus();
+    native.invoke.mockImplementationOnce(async () => true);
+    await expect(b.focusTerminal('Otto · harness-assistant')).resolves.toBe(true);
     await vi.waitFor(() => expect(calls('set_hot_zones')).toEqual([{ zones: [{ top: 40, h: 100 }] }, { zones: [] }]));
     expect(calls('focus_overlay')).toEqual([undefined]);
     expect(calls('release_focus')).toEqual([undefined]);
     expect(calls('focus_terminal')).toEqual([{ title: 'Otto · harness-assistant' }]);
+  });
+
+  it('open_terminal takes the tab title and the WSL command; a refusal or a failure reads false', async () => {
+    enterTauri(); const b = await loadBridge();
+    native.invoke.mockImplementationOnce(async () => true);
+    await expect(b.openTerminal('Juno · api-gateway', ['/usr/bin/node', '/opt/ledge/cli.js', 'attach', 'n1'])).resolves.toBe(true);
+    expect(calls('open_terminal')).toEqual([{ title: 'Juno · api-gateway', command: ['/usr/bin/node', '/opt/ledge/cli.js', 'attach', 'n1'] }]);
+    native.invoke.mockRejectedValueOnce(new Error('wt.exe not found'));
+    await expect(b.openTerminal('x', ['y'])).resolves.toBe(false);
+    native.invoke.mockRejectedValueOnce(new Error('no window'));
+    await expect(b.focusTerminal('x')).resolves.toBe(false);
   });
 
   it('onEdge forwards the inside flag of ledge://edge and unlistens on dispose', async () => {
@@ -173,13 +188,14 @@ describe('<Surface> under Tauri', () => {
   const lastFrame = () => calls('set_frame').at(-1) as { top: number; width: number; height: number };
   const edge = (inside: boolean) => act(async () => { native.listeners.get('ledge://edge')!({ payload: { inside } }); });
 
-  async function mount(opts: { tauri: boolean; handleScale?: number; panelScale?: number; screenH?: number }) {
+  async function mount(opts: { tauri: boolean; handleScale?: number; panelScale?: number; screenH?: number; launcher?: string[] }) {
     if (opts.tauri) enterTauri();
     vi.resetModules();
     const [{ Surface }, { createDaemonClient }, { attachClient, daemonStore }] = await Promise.all([
       import('../src/surface/Surface'), import('../src/daemon/client'), import('../src/daemon/store')
     ]);
     daemonStore.reset(); mock = await createMockDaemon();
+    if (opts.launcher) mock.extras.launcher = opts.launcher;
     mock.sessions.set('a', fakeSession('a')); mock.sessions.set('b', fakeSession('b', { name: 'Pim', tool: 'codex', project: 'speos-api', startedAt: '2026-10-09T18:01:00.000Z' }));
     const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never }); detach = attachClient(client); client.connect();
     close = () => client.close();
@@ -188,6 +204,29 @@ describe('<Surface> under Tauri', () => {
   }
   beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
   afterEach(async () => { detach(); close(); await mock.close(); vi.useRealTimers(); });
+
+  it('a session launched with the terminal option opens a tab through the launcher when no window carries its title', async () => {
+    await mount({ tauri: true, launcher: ['/usr/bin/node', '/opt/ledge/cli.js'] });
+    await waitFor(() => expect(native.shortcut).not.toBeNull());
+    await act(async () => { native.shortcut!({ state: 'Pressed' }); });
+    // Modules are reset for this mount, so the catalogue is back to French: the queries go by data attributes.
+    const el = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
+    fireEvent.click(el('[data-launch]'));
+    fireEvent.change(el('[data-launch-cwd]'), { target: { value: '/w/api-gateway' } });
+    expect(el<HTMLInputElement>('[data-layer="launch"] input[data-switch="openTab"]').checked).toBe(true);
+    fireEvent.submit(el('[data-launch-form]'));
+    await vi.waitFor(() => expect(mock.received.some(m => m.type === 'session.launch')).toBe(true));
+    native.invoke.mockImplementation(async (cmd: string) => (cmd === 'focus_terminal' ? false : cmd === 'open_terminal' ? true : undefined));
+    await act(async () => { mock.launched(fakeSession('n1', { name: 'Juno', project: 'api-gateway', title: 'Juno · api-gateway', state: 'starting' })); await sleep(50); });
+    await vi.waitFor(() => expect(calls('open_terminal')).toEqual([{ title: 'Juno · api-gateway', command: ['/usr/bin/node', '/opt/ledge/cli.js', 'attach', 'n1'] }]));
+    expect(calls('focus_terminal')).toEqual([{ title: 'Juno · api-gateway' }]);
+    // The notice's action and the session card's terminal button do the same; a window found needs no new tab.
+    native.invoke.mockImplementation(async (cmd: string) => (cmd === 'focus_terminal' ? true : undefined));
+    fireEvent.click(el('[data-notice] button'));
+    await vi.waitFor(() => expect(calls('focus_terminal')).toHaveLength(2));
+    await sleep(20);
+    expect(calls('open_terminal')).toHaveLength(1);
+  });
 
   it('in the browser the page is not offset and the DOM hot zones handle the edge', async () => {
     await mount({ tauri: false });

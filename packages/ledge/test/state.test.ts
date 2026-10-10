@@ -147,6 +147,35 @@ describe('reduce: rulings', () => {
     const next = reduce(s, ev('PanePrompt', { source: 'pane', kind: 'permission', text: 'Proceed?', at: later(9000) }));
     expect(next).toBe(s);
   });
+  describe('the last reply', () => {
+    const reply = { text: '## Done\n\n- the tests pass', at: later(5000) };
+    it('Stop with a text records it as the last reply', () => {
+      const next = reduce(session('working'), ev('Stop', { text: reply.text }));
+      expect(next.state).toBe('idle');
+      expect(next.lastReply).toEqual(reply);
+    });
+    it('Stop without a text keeps the previous reply', () => {
+      const next = reduce(session('working', { lastReply: reply }), ev('Stop', { at: later(9000) }));
+      expect(next.lastReply).toEqual(reply);
+    });
+    it('the next prompt drops it; other activity keeps it', () => {
+      const idle = session('idle', { lastReply: reply });
+      const prompted = reduce(idle, ev('UserPromptSubmit', { at: later(9000) }));
+      expect(prompted.state).toBe('working');
+      expect(prompted.lastReply).toBeUndefined();
+      expect('lastReply' in prompted).toBe(false);
+      expect(reduce(idle, ev('PaneChanged', { source: 'pane', at: later(9000) })).lastReply).toEqual(reply);
+      expect(reduce(idle, ev('PreToolUse', { tool: 'Bash', at: later(9000) })).lastReply).toEqual(reply);
+    });
+    it('survives the session ending', () => {
+      expect(reduce(session('idle', { lastReply: reply }), ev('SessionEnd', { exitCode: 0 })).lastReply).toEqual(reply);
+    });
+    it('is recorded under a helper-routed request too', () => {
+      const routedReply = reduce(session('working', { pending: { ...hookPerm, helperId: 'a1', parentState: 'working' } }), ev('Stop', { text: reply.text }));
+      expect(routedReply.pending?.helperId).toBe('a1');
+      expect(routedReply.lastReply).toEqual(reply);
+    });
+  });
   it('Stop clears pending', () => {
     const next = reduce(session('waiting_permission', { pending: hookPerm }), ev('Stop'));
     expect(next.state).toBe('idle');

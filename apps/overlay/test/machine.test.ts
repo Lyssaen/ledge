@@ -276,6 +276,21 @@ describe('surface machine: decision failure and detail views', () => {
     expect(run([{ type: 'settings' }]).s.mode).toBe('handle');
     expect(run([{ type: 'help' }], bubble()).s.mode).toBe('bubble');
   });
+  it('the launch form opens over the list or a session like settings; back returns to the list', () => {
+    const list = run([{ type: 'shortcut' }]).s;
+    const form = run([{ type: 'launch' }], list).s;
+    expect(form.mode).toBe('launch'); expect(form.openedBy).toBe('keyboard');
+    expect(run([{ type: 'launch' }], form).s).toBe(form);
+    expect(run([{ type: 'back' }], form).s.mode).toBe('list');
+    expect(run([{ type: 'launch' }], run([{ type: 'rowClick', id: 'a' }], list).s).s).toMatchObject({ mode: 'launch', selectedId: null });
+    expect(run([{ type: 'settings' }], form).s.mode).toBe('settings');
+    expect(run([{ type: 'launch' }]).s.mode).toBe('handle');
+    expect(run([{ type: 'launch' }], bubble()).s.mode).toBe('bubble');
+    // Mouse-opened: folds on leave unless focus (a field being filled) is inside.
+    const byMouse = run([{ type: 'edgeEnter' }, { type: 'dwellElapsed' as never }, { type: 'surfaceEnter' }, { type: 'launch' }]).s;
+    expect(run([{ type: 'surfaceLeave' }], byMouse).effects).toContain('startTimer:leave');
+    expect(run([{ type: 'focusWithin', on: true }, { type: 'surfaceLeave' }], byMouse).effects).not.toContain('startTimer:leave');
+  });
   it('a mouse-opened settings view folds on leave like the list, unless focus is inside', () => {
     const open = run([{ type: 'edgeEnter' }, { type: 'dwellElapsed' as never }, { type: 'surfaceEnter' }, { type: 'settings' }]).s;
     expect(run([{ type: 'surfaceLeave' }], open).effects).toContain('startTimer:leave');

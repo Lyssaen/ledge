@@ -20,18 +20,37 @@ const fr = {
   handleLabel: { starting: 'démarre', idle: 'disponible', approval: 'attend votre accord', question: 'a une question', working: 'au travail', done: 'terminée', error: 'en erreur', readonly: 'en lecture seule' } as Record<BotState, string>,
   open: 'ouvrir',
   clickToOpen: 'cliquer pour ouvrir',
-  hint: { startedWithoutLedge: 'lancée sans Ledge', exited: (code: string) => `terminée (code ${code})`, error: 'erreur', available: 'disponible', running: 'au travail' },
+  hint: { startedWithoutLedge: 'lancée sans Ledge', exited: (code: string) => `terminée (code ${code})`, error: 'erreur', available: 'disponible', running: 'au travail', helpersRunning: (n: number) => `disponible · ${n} sous-agent${n > 1 ? 's' : ''} au travail` },
   offline: 'Hors connexion : reconnexion au daemon',
   readOnlyBlocked: 'Lecture seule : lancée sans Ledge, répondez dans son terminal',
   unreachable: 'daemon injoignable, nouvelle tentative',
   lost: 'La connexion a été perdue avant la réponse du terminal',
   notTaken: 'Le terminal ne l’a pas pris en compte',
   list: {
-    summary: (n: number, waiting: number) => `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} ${plural(waiting, 'demande', 'demandes')} pour vous` : 'tout est à jour'}`,
-    dnd: 'Ne pas déranger', settings: 'Réglages', collapse: 'Replier', help: 'Raccourcis clavier',
+    summary: (n: number, waiting: number) => n === 0 ? 'Aucune session' : `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} ${plural(waiting, 'demande', 'demandes')} pour vous` : 'tout est à jour'}`,
+    dnd: 'Ne pas déranger', settings: 'Réglages', collapse: 'Replier', help: 'Raccourcis clavier', newSession: 'Nouvelle session',
     row: (project: string, name: string) => `${project}, ${name}, ouvrir`,
     approve: 'Autoriser', deny: 'Refuser', openRow: 'Ouvrir',
-    dismiss: 'Retirer de la liste', dismissRow: (project: string, name: string) => `Retirer de la liste : ${project}, ${name}`
+    dismiss: 'Retirer de la liste', dismissRow: (project: string, name: string) => `Retirer de la liste : ${project}, ${name}`,
+    emptyTitle: 'Personne au travail.',
+    emptyHint: 'Démarrez un compagnon d’ici, ou avec', emptyHintAfter: 'dans un terminal : il apparaîtra dans cette liste.',
+    launched: (name: string, project: string) => `${name} démarre dans ${project}.`, openTerminal: 'Ouvrir le terminal'
+  },
+  launch: {
+    title: 'Nouvelle session',
+    folder: 'Dossier', folderHint: 'Le projet dans lequel le compagnon travaille.', folderPlaceholder: '~/Workspace/mon-projet',
+    recents: 'Récents', busy: (name: string) => `${name} y travaille`, noRecents: 'Les dossiers de vos sessions apparaîtront ici.',
+    pick: (project: string, cwd: string) => `Choisir ${project} (${cwd})`,
+    tool: 'Outil', toolHint: 'Codex et Cursor Agent : suivi en lecture seule pour l’instant.',
+    bot: 'Compagnon', botHint: (title: string) => `Son nom donne le titre de l’onglet : ${title}.`, anotherName: 'Un autre nom', botPlaceholder: 'Au choix de Ledge',
+    prompt: 'Première instruction', optional: 'facultatif',
+    promptHint: (name: string) => `Envoyée dès que ${name} est prêt. Sinon il attend votre tour dans son terminal.`,
+    promptPlaceholder: (name: string) => `Que doit faire ${name} en premier ?`,
+    resume: 'Reprendre la dernière conversation', resumeHint: 'Démarre avec --continue dans ce dossier.',
+    openTab: 'Ouvrir l’onglet du terminal', openTabHint: 'Sinon le compagnon tourne en arrière-plan, l’onglet reste à un clic depuis sa fiche.',
+    cancel: 'Annuler', start: 'Démarrer', starting: 'Démarrage…',
+    failed: (why: string) => `Impossible de démarrer : ${why}`,
+    needFolder: 'Indiquez un dossier pour démarrer.'
   },
   detail: { back: 'Retour aux sessions', close: 'Fermer' },
   session: {
@@ -45,6 +64,7 @@ const fr = {
       starting: 'La session se prépare.', working: 'Concentré sur sa tâche.', idle: 'En attente de vos instructions.',
       error: 'La session a rencontré un problème.', exited: 'Cette session est terminée.'
     },
+    helpers: 'Sous-agents',
     readonlyLead: (name: string) => `${name} a été lancé sans le lanceur Ledge.`,
     readonlyNote: 'Son état reste visible. Pour répondre à cette session, retrouvez son terminal d’origine.',
     readonlyNext: 'Pour une prochaine session interactive :',
@@ -68,6 +88,17 @@ const fr = {
     hintQuestion: 'Une question se répond par une option ; le reste, dans son terminal',
     hintFree: 'Entrée envoie le texte au terminal tel quel',
     interrupt: 'Interrompre', kill: 'Arrêter la session'
+  },
+  /** The agent's last message, read like a plan (the "your turn" view). */
+  reply: {
+    finished: (name: string, when: string) => `${name} a terminé il y a ${when}`,
+    doneCount: (n: number) => `${n} ${plural(n, 'point fait', 'points faits')}`,
+    questionCount: (n: number) => `${n} ${plural(n, 'question', 'questions')}`,
+    question: 'Question',
+    typeAnswer: 'Répondre librement',
+    showRaw: 'Réponse complète, telle quelle', showStructured: 'Vue structurée',
+    hintChips: 'Une puce remplit le champ, Entrée envoie',
+    hintAnswerAll: 'Une ligne par question, Entrée envoie'
   },
   bubble: {
     question: (name: string) => `${name} a une question`,
@@ -128,18 +159,37 @@ const en: Messages = {
   handleLabel: { starting: 'starting', idle: 'available', approval: 'needs your approval', question: 'has a question', working: 'working', done: 'done', error: 'error', readonly: 'read only' },
   open: 'open',
   clickToOpen: 'click to open',
-  hint: { startedWithoutLedge: 'started without ledge', exited: (code: string) => `exited ${code}`, error: 'error', available: 'available', running: 'running' },
+  hint: { startedWithoutLedge: 'started without ledge', exited: (code: string) => `exited ${code}`, error: 'error', available: 'available', running: 'running', helpersRunning: (n: number) => `available · ${n} subagent${n > 1 ? 's' : ''} working` },
   offline: 'Offline: reconnecting to the daemon',
   readOnlyBlocked: 'Read only: started without Ledge, answer in its terminal',
   unreachable: 'daemon unreachable, retrying',
   lost: 'The connection dropped before the terminal answered',
   notTaken: 'The terminal did not take it',
   list: {
-    summary: (n: number, waiting: number) => `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} waiting for you` : 'nothing waiting'}`,
-    dnd: 'Do not disturb', settings: 'Settings', collapse: 'Collapse', help: 'Keyboard shortcuts',
+    summary: (n: number, waiting: number) => n === 0 ? 'No sessions' : `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} waiting for you` : 'nothing waiting'}`,
+    dnd: 'Do not disturb', settings: 'Settings', collapse: 'Collapse', help: 'Keyboard shortcuts', newSession: 'New session',
     row: (project: string, name: string) => `${project}, ${name}, open`,
     approve: 'Approve', deny: 'Deny', openRow: 'Open',
-    dismiss: 'Remove from list', dismissRow: (project: string, name: string) => `Remove from list: ${project}, ${name}`
+    dismiss: 'Remove from list', dismissRow: (project: string, name: string) => `Remove from list: ${project}, ${name}`,
+    emptyTitle: 'Nobody at work.',
+    emptyHint: 'Start a companion from here, or with', emptyHintAfter: 'in a terminal: it will show up in this list.',
+    launched: (name: string, project: string) => `${name} is starting in ${project}.`, openTerminal: 'Open the terminal'
+  },
+  launch: {
+    title: 'New session',
+    folder: 'Folder', folderHint: 'The project the companion works in.', folderPlaceholder: '~/Workspace/my-project',
+    recents: 'Recent', busy: (name: string) => `${name} works there`, noRecents: 'The folders of your sessions will show up here.',
+    pick: (project: string, cwd: string) => `Choose ${project} (${cwd})`,
+    tool: 'Tool', toolHint: 'Codex and Cursor Agent: read-only tracking for now.',
+    bot: 'Companion', botHint: (title: string) => `Its name titles the terminal tab: ${title}.`, anotherName: 'Another name', botPlaceholder: 'Ledge picks one',
+    prompt: 'First instruction', optional: 'optional',
+    promptHint: (name: string) => `Sent as soon as ${name} is ready. Otherwise it waits for your turn in its terminal.`,
+    promptPlaceholder: (name: string) => `What should ${name} do first?`,
+    resume: 'Resume the last conversation', resumeHint: 'Starts with --continue in this folder.',
+    openTab: 'Open the terminal tab', openTabHint: 'Otherwise the companion runs in the background; the tab is one click away from its card.',
+    cancel: 'Cancel', start: 'Start', starting: 'Starting…',
+    failed: (why: string) => `Could not start: ${why}`,
+    needFolder: 'Give a folder to start in.'
   },
   detail: { back: 'Back to sessions', close: 'Close' },
   session: {
@@ -153,6 +203,7 @@ const en: Messages = {
       starting: 'The session is starting.', working: 'Focused on its task.', idle: 'Waiting for your instructions.',
       error: 'The session ran into a problem.', exited: 'This session has ended.'
     },
+    helpers: 'Subagents',
     readonlyLead: (name: string) => `${name} was started without the Ledge launcher.`,
     readonlyNote: 'Its state stays visible. To answer this session, go back to its own terminal.',
     readonlyNext: 'For your next interactive session:',
@@ -176,6 +227,16 @@ const en: Messages = {
     hintQuestion: 'A question takes an option number; answer anything else in its terminal',
     hintFree: 'Enter sends to the terminal as typed',
     interrupt: 'Interrupt', kill: 'Kill session'
+  },
+  reply: {
+    finished: (name: string, when: string) => `${name} finished ${when} ago`,
+    doneCount: (n: number) => `${n} done`,
+    questionCount: (n: number) => `${n} ${plural(n, 'question', 'questions')}`,
+    question: 'Question',
+    typeAnswer: 'Type an answer',
+    showRaw: 'Full reply as written', showStructured: 'Structured view',
+    hintChips: 'A chip fills the field, Enter sends',
+    hintAnswerAll: 'One line per question, Enter sends'
   },
   bubble: {
     question: (name: string) => `${name} has a question`,

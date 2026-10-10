@@ -23,6 +23,15 @@ describe('botState and materialFor', () => {
     expect(botState(fakeSession('a', { state: 'error' }))).toBe('error');
     expect(botState(fakeSession('a', { state: 'working', source: 'hook_only', tmuxSession: null }))).toBe('working');
     expect(materialFor('dark')).toBe('signal');
+  });
+  it('an idle parent whose helper still works reads as working; exited helpers leave it idle', () => {
+    const working = { id: 'h1', kind: 'general-purpose', task: 'review task 1', state: 'working' as const };
+    const exited = { ...working, id: 'h0', state: 'exited' as const };
+    expect(botState(fakeSession('a', { state: 'idle', helpers: [working] }))).toBe('working');
+    expect(botState(fakeSession('a', { state: 'idle', helpers: [{ ...working, state: 'waiting_permission' }] }))).toBe('working');
+    expect(botState(fakeSession('a', { state: 'idle', helpers: [exited] }))).toBe('idle');
+    expect(botState(fakeSession('a', { state: 'exited', helpers: [working] }))).toBe('done');
+    expect(botState(fakeSession('a', { state: 'error', helpers: [working] }))).toBe('error');
     expect(materialFor('light')).toBe('pebble');
   });
 

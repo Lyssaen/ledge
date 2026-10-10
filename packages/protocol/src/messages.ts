@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SessionSchema } from './session.js';
+import { SessionSchema, ToolSchema } from './session.js';
 
 export const PROTOCOL_PORT = 47831;
 
@@ -18,16 +18,28 @@ export const SessionEventSchema = z.object({
 });
 export type SessionEvent = z.infer<typeof SessionEventSchema>;
 
+/** A folder a session ran in, for the launch form; `lastAt` is its latest session's start. */
+export const RecentSchema = z.object({ cwd: z.string().min(1), project: z.string().min(1), lastAt: z.string().datetime() });
+export type Recent = z.infer<typeof RecentSchema>;
+
 export const ServerMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema) }),
+  /** `recents`: the folders of past sessions, most recent first. `launcher`: the command that runs `ledge` inside WSL
+   *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. */
+  z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional() }),
   z.object({ type: z.literal('session.updated'), session: SessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
+  /** Answer to the requester of a `session.launch`: the session exists (its `session.updated` is broadcast as usual). */
+  z.object({ type: z.literal('session.launched'), id: z.string() }),
+  z.object({ type: z.literal('recents'), recents: z.array(RecentSchema) }),
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional() })
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
+  /** The overlay starts a session: `cwd` is a WSL path (`~` allowed), `name` a preferred bot name (the daemon picks a
+   *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation. */
+  z.object({ type: z.literal('session.launch'), tool: ToolSchema, cwd: z.string().min(1), name: z.string().optional(), prompt: z.string().optional(), continue: z.boolean().optional() }),
   z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1) }),
   z.object({ type: z.literal('session.decide'), id: z.string(), decision: z.enum(['accept', 'deny']) }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),

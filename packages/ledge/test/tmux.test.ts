@@ -23,6 +23,13 @@ describe('tmux', () => {
     const out = await tmux.capture(name, 5);
     expect(out).toContain('LS=t1 PWD=/tmp');
   });
+  it('gives a detached pane the PATH of its env (tmux hands it the client PATH otherwise)', async () => {
+    const n = 'ledge-path';
+    await tmux.newSession({ name: n, cwd: '/tmp', env: { PATH: '/ledge-test-first:/usr/bin:/bin' }, command: ['/bin/sh', '-c', 'echo "P=$PATH"; cat'] });
+    await sleep(300);
+    expect(await tmux.capture(n, 5)).toContain('P=/ledge-test-first:/usr/bin:/bin');
+    await tmux.killSession(n);
+  });
   it('sends text literally, then Enter separately', async () => {
     await tmux.sendText(name, '-n ; echo not-a-flag');
     await tmux.sendKeys(name, ['Enter']);

@@ -35,6 +35,8 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .ledge-opt input[type="radio"], .ledge-check input[type="checkbox"] { accent-color: var(--sidebar-primary); }
 .ledge-opt[data-checked] { border-color: var(--sidebar-primary) !important; background-color: color-mix(in srgb, var(--sidebar-primary) 8%, transparent) !important; }
 textarea::placeholder, .ledge-field::placeholder { color: var(--muted-foreground); }
+/* The launch form's recent folders: rows that light up on hover like list rows. */
+.ledge-recent:hover { background: var(--sidebar-accent) !important; }
 details.ledge-terminal > summary { list-style: none; cursor: pointer; }
 details.ledge-terminal > summary::-webkit-details-marker { display: none; }
 details.ledge-terminal[open] > summary [data-caret] { transform: rotate(90deg); }

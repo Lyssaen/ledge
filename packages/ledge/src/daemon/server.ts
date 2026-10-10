@@ -1,6 +1,9 @@
 import type { IncomingMessage } from 'node:http';
+import { stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { isAbsolute, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type ServerMessage, type Session, type SessionEvent } from '@ledge/protocol';
+import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
@@ -8,7 +11,30 @@ import { verifyGone } from '../adapters/verify.js';
 import { reduce } from './state.js';
 import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
+import { spawnSession } from '../spawn.js';
+import { loginShellPath } from '../shell-path.js';
 import { log } from '../log.js';
+
+/** How each agent resumes the folder's last conversation. Only Claude Code's flag is verified; the other adapters are stubs. */
+export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
+
+/** The agent's arguments for a `session.launch`: the resume flag, then the first instruction as the positional prompt. */
+export function launchArgs(msg: { tool: Tool; prompt?: string; continue?: boolean }): string[] {
+  const prompt = msg.prompt?.trim();
+  return [...(msg.continue ? CONTINUE_ARGS[msg.tool] : []), ...(prompt ? [prompt] : [])];
+}
+
+/** A folder the overlay typed or picked: `~` expanded, absolute, and an existing directory. Throws the reason otherwise. */
+export async function resolveFolder(input: string, home = homedir()): Promise<string> {
+  const raw = input.trim();
+  const expanded = raw === '~' ? home : raw.startsWith('~/') ? resolve(home, raw.slice(2)) : raw;
+  if (!isAbsolute(expanded)) throw new Error(`not an absolute path: ${raw}`);
+  const path = resolve(expanded);
+  let s;
+  try { s = await stat(path); } catch { throw new Error(`no such folder: ${path}`); }
+  if (!s.isDirectory()) throw new Error(`not a folder: ${path}`);
+  return path;
+}
 
 /**
  * Origins allowed to open a WebSocket: the Tauri overlay (packaged and dev server). A browser always
@@ -42,9 +68,16 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
   log(`${who} permission for ${ev.tool ?? 'a tool'} on ${id} not routed: ${why}`);
 }
 
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number } }): Promise<ServerHandle> {
+/**
+ * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
+ * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
+ */
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; launcher?: string[]; home?: string; agentPath?: () => Promise<string> }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
+  const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
+  // Under systemd the daemon has the bare system PATH: a launched agent gets the login shell's, as a terminal would.
+  const agentPath = opts.agentPath ?? (() => loginShellPath({ fallback: process.env.PATH ?? '' }));
   const wss = new WebSocketServer({
     host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT,
     verifyClient: ({ req }: { req: IncomingMessage }) => {
@@ -61,11 +94,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   const unsubscribe = store.onChange(c => {
+    if (c.type === 'recents') return broadcast({ type: 'recents', recents: c.recents });
     if (c.type === 'removed') previews.delete(c.id);
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all() });
+    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher });
     for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
   };
   const preview = (id: string, lines: string[]) => {
@@ -148,7 +182,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
             lastHookAt: existing.lastHookAt, exitCode: existing.exitCode, exitedAt: existing.exitedAt, source: 'launcher'
           });
         } else store.upsert(incoming);
+        if (incoming.cwd) store.touchRecent(incoming.cwd, incoming.project, incoming.startedAt);
         return;
+      }
+      case 'session.launch': {
+        // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
+        const cwd = await resolveFolder(msg.cwd, opts.home);
+        const live = store.all();
+        const env = { ...process.env, PATH: await agentPath() };
+        const session = await spawnSession({ tool: msg.tool, args: launchArgs(msg), name: msg.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+        store.upsert(session);
+        store.touchRecent(session.cwd, session.project, session.startedAt);
+        log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
+        return send(ws, { type: 'session.launched', id: session.id });
       }
       case 'session.event': {
         const before = store.get(msg.id);

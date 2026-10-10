@@ -8,6 +8,28 @@ const q = fakeSession('b', { name: 'Pim', tool: 'codex', state: 'waiting_input',
 const base = { preview: ['● Bash(npm test)', 'Do you want to proceed?'], visible: true, reading: false, draft: '', onDraft: () => {}, onBack: () => {}, onClose: () => {}, onDecide: () => {}, onReply: () => {}, onInterrupt: () => {}, onKill: () => {}, onFocus: () => {}, onToggleReading: () => {} };
 
 describe('<SessionView>', () => {
+  it('lists the live helpers under the title and keeps an idle parent "in progress" while one works', () => {
+    const helpers = [
+      { id: 'h0', kind: 'Explore', task: 'find reducer consumers', state: 'exited' as const },
+      { id: 'h1', kind: 'general-purpose', task: 'review task 1', state: 'working' as const },
+      { id: 'h2', kind: 'Explore', task: '', state: 'waiting_permission' as const }
+    ];
+    const { container, rerender } = render(<SessionView {...base} session={fakeSession('a', { state: 'idle', helpers })} />);
+    expect(container.querySelector('[data-eyebrow]')).toHaveTextContent('In progress');
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Focused on its task.');
+    const tree = screen.getByRole('list', { name: 'Subagents' });
+    const rows = tree.querySelectorAll('[data-helper]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent('review task 1');
+    expect(rows[0]).toHaveTextContent('Working');
+    expect(rows[1]).toHaveTextContent('Explore');
+    expect(rows[1]).toHaveTextContent('Needs your approval');
+    expect(rows[1]).toHaveAttribute('data-last', 'true');
+    expect(tree.querySelectorAll('svg')).toHaveLength(2);
+    rerender(<SessionView {...base} session={fakeSession('a', { state: 'idle', helpers: helpers.map(h => ({ ...h, state: 'exited' as const })) })} />);
+    expect(screen.queryByRole('list', { name: 'Subagents' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Waiting for your instructions.');
+  });
   it('shows a permission card and sends the decision', () => {
     const onDecide = vi.fn();
     render(<SessionView {...base} session={perm} onDecide={onDecide} />);

@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { parseClientMessage, type ClientMessage, type ServerMessage, type Session } from '@ledge/protocol';
+import { parseClientMessage, type ClientMessage, type Recent, type ServerMessage, type Session } from '@ledge/protocol';
 
 export async function createMockDaemon(opts: { port?: number } = {}) {
   const wss = new WebSocketServer({ host: '127.0.0.1', port: opts.port ?? 0 });
@@ -7,17 +7,27 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
   const port = (wss.address() as { port: number }).port;
   const sessions = new Map<string, Session>();
   const received: ClientMessage[] = [];
+  /** What the snapshot carries beside the sessions (the launch form's inputs); set before a client connects. */
+  const extras: { recents?: Recent[]; launcher?: string[] } = {};
   const bc = (m: ServerMessage) => { for (const c of wss.clients) if (c.readyState === WebSocket.OPEN) c.send(JSON.stringify(m)); };
+  const snapshot = (): ServerMessage => ({ type: 'snapshot', sessions: [...sessions.values()], ...extras });
+  /** The last client to send anything: a reply (`session.launched`, an `error` for a launch) goes to it alone. */
+  let last: WebSocket | null = null;
   wss.on('connection', ws => {
-    ws.send(JSON.stringify({ type: 'snapshot', sessions: [...sessions.values()] }));
-    ws.on('message', d => { try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify({ type: 'snapshot', sessions: [...sessions.values()] })); } catch { /* ignore */ } });
+    ws.send(JSON.stringify(snapshot()));
+    ws.on('message', d => { last = ws; try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify(snapshot())); } catch { /* ignore */ } });
   });
   return {
     get clientCount() { return [...wss.clients].filter(c => c.readyState === WebSocket.OPEN).length; },
-    port, url: `ws://127.0.0.1:${port}`, sessions, received,
+    port, url: `ws://127.0.0.1:${port}`, sessions, received, extras,
     upsert(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); },
     remove(id: string) { sessions.delete(id); bc({ type: 'session.removed', id }); },
     preview(id: string, lines: string[]) { bc({ type: 'session.preview', id, lines }); },
+    recents(recents: Recent[]) { extras.recents = recents; bc({ type: 'recents', recents }); },
+    /** Answers the last requester's `session.launch`: the new session is broadcast, then `session.launched` is replied. */
+    launched(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); last?.send(JSON.stringify({ type: 'session.launched', id: s.id })); },
+    /** A launch refused: an `error` with no id, to the last requester. */
+    refuse(message: string) { last?.send(JSON.stringify({ type: 'error', message })); },
     close: () => new Promise<void>(r => { for (const c of wss.clients) c.terminate(); wss.close(() => r()); })
   };
 }

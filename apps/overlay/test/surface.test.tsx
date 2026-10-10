@@ -109,6 +109,66 @@ describe('<Surface>', () => {
     expect(surface()).toHaveStyle({ width: '28px' });
   });
 
+  it('back from a session: the list waits for the shrink to nearly settle before it fades in', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    await act(async () => { vi.advanceTimersByTime(180); });
+    const list = () => document.querySelector('[data-layer="list"]') as HTMLElement;
+    const row = () => document.querySelector('[data-layer="list"] [data-row]') as HTMLElement;
+    // Opened from the handle (a grow): the list follows the start of the growth closely.
+    expect(list().getAttribute('data-delay')).toBe('120');
+    expect(row().getAttribute('data-delay')).toBe('150');
+    fireEvent.click(screen.getByRole('button', { name: /speos-api/ }));
+    expect(surface()).toHaveStyle({ width: '420px' });
+    fireEvent.click(screen.getByRole('button', { name: 'Back to sessions' }));
+    expect(surface()).toHaveStyle({ width: '380px' });
+    // Back is a shrink (60 ms delay, 260 ms, slow start): the list appears once the surface has nearly settled,
+    // so its footer and rows are never drawn at the session's size.
+    expect(list().getAttribute('data-delay')).toBe('280');
+    expect(row().getAttribute('data-delay')).toBe('310');
+  });
+
+  it('the + opens the launch form; Start sends session.launch; the daemon answer returns to the list with a notice that fades', async () => {
+    mock.extras.recents = [{ cwd: '/w/api-gateway', project: 'api-gateway', lastAt: '2026-10-10T09:00:00.000Z' }];
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => { client.connect(); await sleep(100); }); // a fresh snapshot carries the recents
+    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    await act(async () => { vi.advanceTimersByTime(180); });
+    fireEvent.click(screen.getByRole('button', { name: 'New session' }));
+    expect(surface()).toHaveAttribute('data-mode', 'launch');
+    expect(screen.getByLabelText('Folder')).toHaveValue('/w/api-gateway');
+    fireEvent.change(screen.getByLabelText('Companion'), { target: { value: 'Juno' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Start/ }));
+    await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.launch', tool: 'claude', cwd: '/w/api-gateway', name: 'Juno', continue: false }));
+    expect(screen.getByRole('button', { name: /Starting…/ })).toBeDisabled();
+    await act(async () => { mock.launched(fakeSession('n1', { name: 'Juno', project: 'api-gateway', state: 'starting', startedAt: '2026-10-10T09:00:00.000Z' })); await sleep(50); });
+    expect(surface()).toHaveAttribute('data-mode', 'list');
+    expect(screen.getByRole('status')).toHaveTextContent('Juno is starting in api-gateway.');
+    expect(screen.getByRole('button', { name: /Juno .*open/ })).toBeInTheDocument();
+    await act(async () => { vi.advanceTimersByTime(6000); });
+    expect(screen.queryByRole('status')).toBeNull();
+    // Opening the form again starts from a clean one (the name is a free pick again, not Juno).
+    fireEvent.click(screen.getByRole('button', { name: 'New session' }));
+    expect(screen.getByLabelText('Companion')).not.toHaveValue('Juno');
+  });
+
+  it('a refused launch stays on the form with the reason; the next attempt clears it', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    await act(async () => { vi.advanceTimersByTime(180); });
+    fireEvent.click(screen.getByRole('button', { name: 'New session' }));
+    fireEvent.change(screen.getByLabelText('Folder'), { target: { value: '/w/nope' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Start/ }));
+    await waitFor(() => expect(mock.received.some(m => m.type === 'session.launch')).toBe(true));
+    await act(async () => { mock.refuse('no such folder: /w/nope'); await sleep(50); });
+    expect(surface()).toHaveAttribute('data-mode', 'launch');
+    expect(screen.getByRole('status')).toHaveTextContent('Could not start: no such folder: /w/nope');
+    expect(screen.getByRole('button', { name: /^Start/ })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: /^Start/ }));
+    expect(screen.queryByText(/Could not start/)).toBeNull();
+    await waitFor(() => expect(mock.received.filter(m => m.type === 'session.launch')).toHaveLength(2));
+  });
+
   it('a removed session that is open falls back to the list', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: /Otto working, open/ }));
