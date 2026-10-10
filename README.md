@@ -168,6 +168,8 @@ Points worth knowing:
 - **Daemon discovery.** The launcher probes the port. A refused connection means nothing listens, so it spawns `ledge daemon` detached and retries three times at 500 ms. An open port that does not answer with a valid snapshot is treated as a foreign program and the session runs untracked.
 - **Exit code.** The agent runs under `sh -c '"$@"; echo $? > ~/.ledge/exit-<id>'`, so the tmux session can end naturally and the launcher still returns the agent's real exit code.
 - **Hook priority.** For 2 s after any hook, prompts detected in the pane are ignored, so a hook's richer description always wins over the pane's guess. Without hooks (a session started with plain `claude`, `source: hook_only`), the pane still gives a read-only view.
+- **Rest from the pane.** Some turns end with no hook: a denied request, an Esc. When the pane shows the input box with no running turn (`esc to interrupt` gone) and no dialog for 2 s, outside the hook priority window, the session goes `idle` and a request answered or dismissed in the terminal is dropped. A helper's routed request is left alone.
+- **Plan and trust dialogs.** Accepting a plan picks "Yes, manually approve edits", so the permission mode never changes behind your back. The workspace trust dialog of a new folder shows as a permission: accept trusts the folder, deny exits Claude.
 - **Helpers (subagents).** Hook events that carry `agent_id` update the helper list on the parent session. A helper's permission request is shown on the parent only when nothing else is pending there, and the parent's underlying state is restored when it is answered.
 - **Restart.** The journal is reloaded when the daemon restarts; sessions whose tmux session no longer exists are pruned. The launcher opens a fresh connection to unregister, so a daemon restarted while the agent ran still learns about the exit.
 
@@ -222,7 +224,7 @@ startedAt, lastActivityAt, lastHookAt?, exitCode?, exitedAt?, lastError?, source
 | `error` | A turn stopped on an error, or an injected answer was not taken. The request is kept for a retry. |
 | `exited` | Terminal. Set by `session.unregister`, a terminal `SessionEnd`, or the pane disappearing. |
 
-Where a pending request comes from, for Claude Code: `PermissionRequest` gives `permission` (or `diff` for Edit/Write/MultiEdit), `PreToolUse` on `AskUserQuestion` gives `question` with its options, `PreToolUse` on `ExitPlanMode` gives `plan`, a permission `Notification` gives `permission`, and the pane detector gives `permission` or `question` from the dialog footer. A `PostToolUse` for the same tool, a `Stop`, or a confirmed injection clears it.
+Where a pending request comes from, for Claude Code: `PermissionRequest` gives `permission` (or `diff` for Edit/Write/MultiEdit), `PreToolUse` on `AskUserQuestion` gives `question` with its options, `PreToolUse` on `ExitPlanMode` gives `plan`, a permission `Notification` gives `permission`, and the pane detector gives `permission`, `question` or `plan` from the dialog footer (the workspace trust dialog included). A `PostToolUse` for the same tool, a `Stop`, a confirmed injection, or the pane at rest clears it.
 
 ## Files and settings
 

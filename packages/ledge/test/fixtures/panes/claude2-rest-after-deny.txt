@@ -1,0 +1,45 @@
+
+ ▐▛███▛█   Claude Code v2.1.296
+▝▜██████▀  Haiku 5.5 · Claude Team
+ ▝▝   ▝▝   /home/dev/demo
+
+
+❯ Context: hors story, objectif tests. Plan adding a README.md here in 2 short steps, then call ExitPlanMode.
+
+● [synapse-obs] story=hors-story objectif=tests
+
+● Updated plan
+  ⎿  /plan to preview
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/demo-plan.md · /plan to edit
+     Plan: add README.md
+
+     Context
+
+     Hors story, objectif tests. The project directory has no README.md. Add a short one.
+
+     Steps
+
+     1. Create README.md at the project root (proj-trust/) with a title and a one-line description.
+     2. Check the file exists and renders correctly (read it back).
+
+     Verification
+
+     - README.md is present in the project root and contains the title and description.
+
+● Write(README.md)
+  ⎿  User rejected write to README.md
+      1 # proj-trust
+      2
+      3 Projet de tests (hors story).
+
+✻ Cooked for 7s · done 10:07 PM
+
+
+
+                                                          tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── add-readme-file ─
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← 2 agents

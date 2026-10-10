@@ -6,6 +6,7 @@ import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
 import { verifyGone } from '../adapters/verify.js';
 import { reduce } from './state.js';
+import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
 import { log } from '../log.js';
 
@@ -86,19 +87,22 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /**
    * With `requirePrompt`, fail closed: the prompt must be on screen before anything is typed, else a
    * stale pending (or a dialog the adapter cannot read) would get keys meant for something else and
-   * the "prompt gone" check would then report success.
+   * the "prompt gone" check would then report success. A plan given as a function is built from that
+   * same capture, so the keys match the dialog actually on screen.
    */
-  async function injectAndVerify(id: string, plan: KeyPlan, requirePrompt: boolean): Promise<void> {
+  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean): Promise<void> {
     const s = store.get(id);
     if (!s) throw new Error(`unknown session ${id}`);
     if (inFlight.has(id)) throw new Error('a decision is already in progress');
     inFlight.add(id);
     try {
       const adapter = adapterFor(s.tool);
+      let before: string | null = null;
       if (requirePrompt) {
-        const before = s.tmuxSession ? await tmux.capture(s.tmuxSession, 5) : null;
-        if (before === null || !adapter.promptStillVisible(before)) throw new Error(NO_PROMPT);
+        before = s.tmuxSession ? await tmux.capture(s.tmuxSession, DETECT_LINES) : null;
+        if (before === null || !adapter.promptStillVisible(before.split('\n').slice(-5).join('\n'))) throw new Error(NO_PROMPT);
       }
+      const plan = typeof planFor === 'function' ? planFor(before ?? '') : planFor;
       const decided = s.pending;
       const stillTheSame = () => {
         const cur = store.get(id)?.pending;
@@ -163,7 +167,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
         if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
         if (!s.pending) return send(ws, { type: 'error', id: msg.id, message: 'nothing to decide' });
-        return injectAndVerify(msg.id, adapterFor(s.tool).keysFor(msg.decision, s.pending), true);
+        const pending = s.pending; const adapter = adapterFor(s.tool);
+        return injectAndVerify(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true);
       }
       case 'session.reply': {
         const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });

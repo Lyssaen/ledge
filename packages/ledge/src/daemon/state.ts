@@ -135,8 +135,13 @@ export function reduce(s: Session, ev: SessionEvent): Session {
       return { ...s, state: 'exited', pending: undefined, exitCode: null, exitedAt: s.exitedAt ?? at, lastActivityAt: at };
     case 'PaneChanged':
       return s.lastActivityAt === at ? s : { ...s, lastActivityAt: at };
-    case 'PaneIdle':
-      return s;
+    case 'PaneIdle': {
+      // The pane shows Claude waiting for a prompt. Ends what no hook ends (a denied request, an Esc) and drops a
+      // request answered or dismissed in the terminal. A recent hook describes the turn better; a helper may still wait.
+      if (s.state === 'idle' || s.state === 'error' || s.pending?.helperId) return s;
+      if (lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
+      return { ...s, state: 'idle', pending: undefined, lastActivityAt: at };
+    }
     case 'InjectFailed':
       return { ...s, state: 'error', lastError: ev.text ?? 'injection not confirmed', lastActivityAt: at };
     case 'Decided': {

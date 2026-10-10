@@ -8,6 +8,8 @@ import { log } from '../log.js';
 export { PREVIEW_LINES } from '../adapters/index.js';
 /** Prompt detection reads more than the preview: a dialog with a long diff or many options is taller than 30 lines. */
 export const DETECT_LINES = 60;
+/** How long the pane must stay at rest before the session is called idle: a turn starting has time to show itself. */
+export const REST_MS = 2000;
 
 export function startPoller(opts: {
   store: Store; tmux: Tmux; adapterFor?: typeof defaultAdapterFor;
@@ -23,6 +25,9 @@ export function startPoller(opts: {
   /** The last preview sent per session, so an unchanged one is not sent again. */
   const previews = new Map<string, string>();
   const matches = new Map<string, NonNullable<ReturnType<ReturnType<typeof defaultAdapterFor>['detectPrompt']>>>();
+  /** Since when each pane has been at rest (the agent waiting for a prompt), as read on its last change. */
+  const restSince = new Map<string, number>();
+  const forget = (id: string) => { hashes.delete(id); matches.delete(id); previews.delete(id); restSince.delete(id); };
   let lastDeadCheck = 0;
   let running = false;
 
@@ -42,14 +47,14 @@ export function startPoller(opts: {
 
   async function pollOne(s: Session, t: number, deadCheck: boolean): Promise<void> {
     if (s.state === 'exited') {
-      hashes.delete(s.id); matches.delete(s.id); previews.delete(s.id);
+      forget(s.id);
       if (s.exitedAt && t - Date.parse(s.exitedAt) > retireMs) store.remove(s.id);
       return;
     }
     if (!s.tmuxSession) return;
     if (deadCheck && !(await tmux.hasSession(s.tmuxSession))) {
       store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' });
-      hashes.delete(s.id); matches.delete(s.id); previews.delete(s.id);
+      forget(s.id);
       return;
     }
     // One capture serves both: the preview reads the whole screen and some scrollback, prompt
@@ -64,6 +69,7 @@ export function startPoller(opts: {
       // shadowed it inside the priority window). The reducer keeps no-ops identical.
       const m = matches.get(s.id);
       if (m && !store.get(s.id)?.pending) store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options });
+      rested(s.id, t);
       return;
     }
     hashes.set(s.id, h);
@@ -74,10 +80,18 @@ export function startPoller(opts: {
     const key = lines.join('\n');
     if (previews.get(s.id) !== key) { previews.set(s.id, key); opts.broadcastPreview?.(s.id, lines); }
     if (!adapter) return;
+    if (adapter.atRest?.(pane)) { if (!restSince.has(s.id)) restSince.set(s.id, t); }
+    else restSince.delete(s.id);
     const m = adapter.detectPrompt(pane);
-    if (!m) { matches.delete(s.id); return; }
+    if (!m) { matches.delete(s.id); rested(s.id, t); return; }
     matches.set(s.id, m);
     store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options });
+  }
+
+  /** A pane at rest for REST_MS reports it; the reducer decides what that ends (and keeps no-ops identical). */
+  function rested(id: string, t: number): void {
+    const since = restSince.get(id);
+    if (since !== undefined && t - since >= REST_MS) store.apply(id, { name: 'PaneIdle', at: now(), source: 'pane' });
   }
 
   const timer = setInterval(() => { void tick(); }, opts.intervalMs ?? 1000);

@@ -115,3 +115,50 @@ describe('claude adapter: keys', () => {
     expect(() => adapterFor('codex')).toThrow(/not implemented/);
   });
 });
+
+describe('claude adapter: start-up and plan dialogs (Claude Code 2.1 captures)', () => {
+  it('detects the workspace trust dialog, whose options are not numbered', () => {
+    expect(claudeAdapter.detectPrompt(fx('claude2-trust'))).toEqual({
+      kind: 'permission', text: 'Trust this folder? /home/dev/demo', options: ['No, exit', 'Yes, I trust this folder']
+    });
+    expect(claudeAdapter.promptStillVisible(tail(fx('claude2-trust')))).toBe(true);
+  });
+  it('accepts the trust dialog by moving to the trust option, denies it with Esc', () => {
+    const p = { kind: 'permission' as const, text: 'Trust this folder? /home/dev/demo', source: 'pane' as const };
+    expect(claudeAdapter.keysFor('accept', p, fx('claude2-trust'))).toEqual([{ keys: ['Down', 'Enter'] }]);
+    expect(claudeAdapter.keysFor('deny', p, fx('claude2-trust'))).toEqual([{ keys: ['Escape'] }]);
+  });
+  it('detects the plan approval dialog as a plan, footer included', () => {
+    expect(claudeAdapter.detectPrompt(fx('claude2-plan'))).toEqual({
+      kind: 'plan', text: 'Claude has written up a plan and is ready to execute. Would you like to proceed?',
+      options: ['Yes, and use auto mode', 'Yes, manually approve edits', 'Tell Claude what to change']
+    });
+    expect(claudeAdapter.promptStillVisible(tail(fx('claude2-plan')))).toBe(true);
+  });
+  it('accepts a plan without changing the permission mode: the "manually approve" option', () => {
+    const p = { kind: 'plan' as const, text: '# Plan', source: 'hook' as const };
+    expect(claudeAdapter.keysFor('accept', p, fx('claude2-plan'))).toEqual([{ text: '2' }]);
+    expect(claudeAdapter.keysFor('deny', p, fx('claude2-plan'))).toEqual([{ keys: ['Escape'] }]);
+  });
+});
+
+describe('claude adapter: at rest', () => {
+  it('is at rest on the input box with no turn running', () => {
+    expect(claudeAdapter.atRest!(fx('claude2-idle'))).toBe(true);
+    expect(claudeAdapter.atRest!(fx('claude2-fullscreen-idle'))).toBe(true);
+    expect(claudeAdapter.atRest!(fx('claude2-rest-after-deny'))).toBe(true);
+  });
+  it('is not at rest while a turn runs or a dialog replaces the input box', () => {
+    expect(claudeAdapter.atRest!(fx('claude2-working-status'))).toBe(false);
+    expect(claudeAdapter.atRest!(fx('claude-working'))).toBe(false);
+    for (const f of ['claude2-plan', 'claude2-trust', 'claude2-permission-bash', 'claude2-question']) expect(claudeAdapter.atRest!(fx(f)), f).toBe(false);
+  });
+});
+
+describe('claude adapter: titled input box', () => {
+  it('drops the input box from the preview when its top rule carries the conversation title', () => {
+    const lines = claudeAdapter.previewLines!(fx('claude2-rest-after-deny'));
+    expect(lines.some(l => l.includes('add-readme-file') || l.trim() === '❯')).toBe(false);
+    expect(lines.some(l => l.includes('Cooked for 7s'))).toBe(true);
+  });
+});

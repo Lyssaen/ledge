@@ -36,7 +36,8 @@ describe('reduce: transition table', () => {
     table.push([ev('Decided', { source: 'daemon' }), s, terminal ? '=' : 'working']);
     table.push([ev('PanePrompt', { source: 'pane', kind: 'permission', text: 'Do you want to proceed?' }), s, terminal ? '=' : 'waiting_permission']);
     table.push([ev('PaneChanged', { source: 'pane' }), s, '=']);
-    table.push([ev('PaneIdle', { source: 'pane' }), s, '=']);
+    // The pane shows Claude waiting for a prompt: a turn that ended with no Stop, or a request answered in the terminal.
+    table.push([ev('PaneIdle', { source: 'pane' }), s, s === 'idle' || s === 'exited' || s === 'error' ? '=' : 'idle']);
     table.push([ev('Notification', { kind: 'question', text: 'Claude is waiting for your input' }), s, '=']);
     table.push([ev('PostToolUse', { tool: 'Bash' }), s, terminal ? '=' : 'working']);
     table.push([ev('PostToolUseFailure', { tool: 'Bash' }), s, terminal ? '=' : 'working']);
@@ -422,5 +423,33 @@ describe('reduce: background helpers keep the parent resting state', () => {
   it('a pending without parentState (older journal) settles to working', () => {
     const s = session('waiting_permission', { pending: { kind: 'permission', text: 'x', tool: 'Bash', source: 'hook', helperId: 'a1' } });
     expect(reduce(s, ev('PostToolUse', { tool: 'Bash', helperId: 'a1' })).state).toBe('working');
+  });
+});
+
+describe('reduce: PaneIdle (the pane is at rest)', () => {
+  const idle = (ms = 5000) => ev('PaneIdle', { source: 'pane', at: later(ms) });
+  it('ends a turn that stopped without a Stop hook (a denial, an Esc)', () => {
+    const next = reduce(session('working', { lastHookAt: T0 }), idle());
+    expect(next.state).toBe('idle');
+  });
+  it('clears a request answered or dismissed in the terminal', () => {
+    const pending = { kind: 'plan' as const, text: '# Plan', source: 'hook' as const };
+    const next = reduce(session('waiting_permission', { pending, lastHookAt: T0 }), idle());
+    expect(next.state).toBe('idle');
+    expect(next.pending).toBeUndefined();
+  });
+  it('waits for the hook priority window: a hook just fired describes the turn better', () => {
+    const s = session('working', { lastHookAt: later(4000) });
+    expect(reduce(s, idle(4000 + HOOK_PRIORITY_MS - 1))).toBe(s);
+    expect(reduce(s, idle(4000 + HOOK_PRIORITY_MS)).state).toBe('idle');
+  });
+  it('leaves a helper-routed request alone: the helper may still be waiting', () => {
+    const pending = { kind: 'permission' as const, text: 'npm test', source: 'hook' as const, helperId: 'a1', parentState: 'working' as const };
+    const s = session('waiting_permission', { pending, lastHookAt: T0 });
+    expect(reduce(s, idle())).toBe(s);
+  });
+  it('is a no-op when already idle', () => {
+    const s = session('idle');
+    expect(reduce(s, idle())).toBe(s);
   });
 });

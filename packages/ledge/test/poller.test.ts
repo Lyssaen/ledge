@@ -155,3 +155,46 @@ describe('poller robustness', () => {
     p.stop();
   });
 });
+
+const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
+
+describe('poller rest detection', () => {
+  it('turns a working session idle once the pane has rested for a while, never on the first sighting', async () => {
+    panes['ledge-a'] = fx('claude2-rest-after-deny'); store.upsert(mk('a'));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
+    clock += 1000; await p.tick();
+    expect(store.get('a')!.state).toBe('working');
+    clock += 1000; await p.tick();
+    expect(store.get('a')!.state).toBe('working');
+    clock += 1000; await p.tick();
+    expect(store.get('a')!.state).toBe('idle');
+    p.stop();
+  });
+  it('keeps a session working while its status line says a turn runs', async () => {
+    panes['ledge-a'] = fx('claude2-working-status'); store.upsert(mk('a'));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
+    for (let i = 0; i < 5; i++) { clock += 1000; await p.tick(); }
+    expect(store.get('a')!.state).toBe('working');
+    p.stop();
+  });
+  it('clears a plan dismissed in the terminal once the input box is back', async () => {
+    const pending = { kind: 'plan' as const, text: '# Plan', source: 'hook' as const };
+    panes['ledge-a'] = fx('claude2-plan'); store.upsert(mk('a', { state: 'waiting_permission', pending, lastHookAt: now() }));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
+    for (let i = 0; i < 4; i++) { clock += 1000; await p.tick(); }
+    expect(store.get('a')!.pending?.kind).toBe('plan');
+    panes['ledge-a'] = fx('claude2-rest-after-deny');
+    for (let i = 0; i < 4; i++) { clock += 1000; await p.tick(); }
+    expect(store.get('a')!.state).toBe('idle');
+    expect(store.get('a')!.pending).toBeUndefined();
+    p.stop();
+  });
+  it('surfaces the workspace trust dialog of a starting session', async () => {
+    panes['ledge-a'] = fx('claude2-trust'); store.upsert(mk('a', { state: 'starting' }));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
+    clock += 1000; await p.tick();
+    expect(store.get('a')!.state).toBe('waiting_permission');
+    expect(store.get('a')!.pending?.text).toBe('Trust this folder? /home/dev/demo');
+    p.stop();
+  });
+});

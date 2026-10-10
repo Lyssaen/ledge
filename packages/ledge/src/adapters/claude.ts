@@ -15,11 +15,13 @@ import type { Adapter, KeyPlan, PanePromptMatch } from './types.js';
 //
 //    Esc to cancel · Tab to amend                             footer (permission)
 //   Enter to select · ↑/↓ to navigate · Esc to cancel         footer (question)
+//    ctrl+g to edit in VS Code · ~/.claude/plans/….md         footer (plan approval, ExitPlanMode)
 //
 // The footer is what makes it a live dialog: the idle input line ("❯ ") and chat that quotes a
 // dialog have numbered lines but no footer at the bottom.
 const OPTION = /^\s*(?:❯\s*)?(\d+)\.\s+(\S.*?)\s*$/;
-const FOOTER = /^\s*(?:Enter to select\b.*)?Esc to cancel\b/;
+const FOOTER = /^\s*(?:(?:Enter to select\b.*)?Esc to cancel\b|ctrl\+g to edit\b)/;
+const PLAN_FOOTER = /^\s*ctrl\+g to edit\b/;
 const RULE = /^─{10,}$/;
 const DASHED = /^╌{10,}$/;
 /** The footer may have at most this many non-blank lines below it. */
@@ -51,7 +53,7 @@ function optionsBetween(lines: string[], from: number, footer: number): string[]
   return options;
 }
 
-type Dialog = { kind: 'permission' | 'question'; title: string[]; question: string; options: string[] };
+type Dialog = { kind: 'permission' | 'question' | 'plan'; title: string[]; question: string; options: string[] };
 
 function parseDialog(pane: string): Dialog | null {
   const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
@@ -78,7 +80,7 @@ function parseDialog(pane: string): Dialog | null {
   if (top < 0) return null;
 
   return {
-    kind: /Enter to select/.test(lines[footer]!) ? 'question' : 'permission',
+    kind: /Enter to select/.test(lines[footer]!) ? 'question' : PLAN_FOOTER.test(lines[footer]!) ? 'plan' : 'permission',
     title: lines.slice(top + 1, q + 1),
     question: questionLines.join(' '),
     options
@@ -100,16 +102,54 @@ function permissionText(header: string[], question: string): string {
   return titleAndNext || question;
 }
 
+// The workspace trust dialog, shown before anything else in a folder Claude Code has not seen. Its options carry no
+// number, only the ❯ cursor, and its footer is its own:
+//
+//   ────────────────────────
+//    Accessing workspace:
+//    /home/dev/demo
+//    Quick safety check: … one you trust? …
+//    ❯ No, exit
+//      Yes, I trust this folder
+//    Enter to confirm · Esc to cancel
+const TRUST_FOOTER = /^\s*Enter to confirm\b.*Esc to cancel\b/;
+const TRUST_OPTION = /\btrust this folder\b/i;
+
+type Trust = { path: string; options: string[]; selected: number; trust: number };
+
+function parseTrust(pane: string): Trust | null {
+  const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
+  let footer = lines.length - 1;
+  while (footer >= 0 && isBlank(lines[footer]!)) footer--;
+  if (footer < 0 || !TRUST_FOOTER.test(lines[footer]!)) return null;
+  // The options are the block right above the footer.
+  let o = footer - 1;
+  while (o >= 0 && isBlank(lines[o]!)) o--;
+  const block: string[] = [];
+  while (o >= 0 && !isBlank(lines[o]!)) block.unshift(lines[o--]!);
+  const options = block.map(l => l.trim().replace(/^❯\s*/, ''));
+  const trust = options.findIndex(l => TRUST_OPTION.test(l));
+  const selected = block.findIndex(l => l.trim().startsWith('❯'));
+  if (trust < 0 || selected < 0) return null;
+  const at = lines.findIndex(l => /^\s*Accessing workspace:/.test(l));
+  const path = at < 0 ? '' : lines.slice(at + 1, footer).find(l => !isBlank(l))?.trim() ?? '';
+  return { path, options, selected, trust };
+}
+
 function detectPrompt(pane: string): PanePromptMatch | null {
+  const t = parseTrust(pane);
+  if (t) return { kind: 'permission', text: `Trust this folder? ${t.path}`.trim(), options: t.options };
   const d = parseDialog(pane);
   if (!d) return null;
   if (d.kind === 'question') return { kind: 'question', text: d.question, options: d.options };
+  if (d.kind === 'plan') return { kind: 'plan', text: d.question, options: d.options };
   return { kind: 'permission', text: permissionText(d.title, d.question), options: d.options };
 }
 
 /** Works on the server's short capture: the bottom of a dialog is its last options and the footer. */
 function promptStillVisible(lastLines: string): boolean {
   const lines = lastLines.split('\n').map(l => l.replace(/\s+$/, ''));
+  if (lines.some(l => TRUST_FOOTER.test(l)) && lines.some(l => TRUST_OPTION.test(l))) return true;
   const footer = footerIndex(lines);
   return footer > 0 && lines.slice(0, footer).some(l => OPTION.test(l));
 }
@@ -127,9 +167,11 @@ const STATUS_SLACK = 3;
 /** The tallest draft the input box can hold before it is no longer recognised as one. */
 const INPUT_MAX = 12;
 const isInputRule = (l: string) => /^─{10,}$/.test(l.trim());
+/** The top rule can carry the conversation's title once it has one: `───── add-readme-file ─`. */
+const isInputTop = (l: string) => /^─{10,}(?: \S.* ─+)?$/.test(l.trim());
 
-function previewLines(pane: string): string[] {
-  const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
+/** The input box's top and bottom rules, or null when the bottom of the pane is not the input box. */
+function inputBox(lines: string[]): { top: number; bottom: number } | null {
   let end = lines.length;
   while (end > 0 && isBlank(lines[end - 1]!)) end--;
   // The bottom rule: the lowest rule with at most STATUS_SLACK non-blank lines under it.
@@ -138,13 +180,33 @@ function previewLines(pane: string): string[] {
     if (isInputRule(lines[i]!)) { bottom = i; break; }
     if (!isBlank(lines[i]!)) below++;
   }
-  if (bottom < 0) return lines;
+  if (bottom < 0) return null;
   // The top rule: the nearest rule above, with the ❯ input line right under it.
   for (let top = bottom - 1; top >= 0 && bottom - top <= INPUT_MAX + 1; top--) {
-    if (!isInputRule(lines[top]!)) continue;
-    return lines[top + 1]!.trimStart().startsWith('❯') ? lines.slice(0, top) : lines;
+    if (!isInputTop(lines[top]!)) continue;
+    return lines[top + 1]!.trimStart().startsWith('❯') ? { top, bottom } : null;
   }
-  return lines;
+  return null;
+}
+
+function previewLines(pane: string): string[] {
+  const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
+  const box = inputBox(lines);
+  return box ? lines.slice(0, box.top) : lines;
+}
+
+// A running turn puts "esc to interrupt" in the status line under the input box; at rest it is gone:
+//
+//   ⏸ plan mode on (shift+tab to cycle) · esc to interrupt · ← 2 agents     working
+//   ⏸ manual mode on · ? for shortcuts · ← 2 agents                         at rest
+const BUSY = /\besc to interrupt\b/;
+
+/** The input box is on screen, no dialog replaces it and no turn is running: Claude waits for a prompt. */
+function atRest(pane: string): boolean {
+  const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
+  if (footerIndex(lines) >= 0 || parseTrust(pane)) return false;
+  const box = inputBox(lines);
+  return !!box && !lines.slice(box.bottom + 1).some(l => BUSY.test(l));
 }
 
 // In 2.x a digit selects its option at once: no Enter (an Enter would land on whatever comes next).
@@ -155,13 +217,28 @@ function optionNumber(text: string, pending: Pending | undefined): number | null
   return pending?.kind === 'question' && /^[1-9]$/.test(text) ? Number(text) : null;
 }
 
+/** Accepting a plan keeps the permission mode as it was: never the option that turns on auto mode or auto edits. */
+const PLAN_ACCEPT = /\bmanually approve\b/i;
+
 export const claudeAdapter: Adapter = {
   tool: 'claude',
   detectPrompt,
   promptStillVisible,
   previewLines,
-  keysFor(decision) {
-    return decision === 'accept' ? digit(1) : [{ keys: ['Escape'] }];
+  atRest,
+  keysFor(decision, pending, pane) {
+    if (decision === 'deny') return [{ keys: ['Escape'] }];
+    const t = pane ? parseTrust(pane) : null;
+    if (t) {
+      const step = t.trust > t.selected ? 'Down' : 'Up';
+      return [{ keys: [...Array<string>(Math.abs(t.trust - t.selected)).fill(step), 'Enter'] }];
+    }
+    const d = pane ? parseDialog(pane) : null;
+    if (pending.kind === 'plan' && d?.kind === 'plan') {
+      const i = d.options.findIndex(o => PLAN_ACCEPT.test(o));
+      return digit(i < 0 ? 1 : i + 1);
+    }
+    return digit(1);
   },
   replyPlan(text, pending) {
     // Tmux.sendText rejects newlines: flatten here, Enter is a separate key step.

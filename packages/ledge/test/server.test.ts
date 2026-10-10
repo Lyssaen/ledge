@@ -177,6 +177,30 @@ describe('server', () => {
     c.close();
   });
 
+  it('decide accept on a plan picks "manually approve edits" read from the dialog, never auto mode', async () => {
+    const plan = readFileSync(new URL('./fixtures/panes/claude2-plan.txt', import.meta.url), 'utf8').replace(/\s+$/, ''); // trimmed like Tmux.capture
+    tmux = fakeTmux({ 'ledge-a': [plan, plan, 'Running…'] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0 });
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan', source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    expect((await c.next('session.updated', 3000)).session.state).toBe('working');
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '2']]);
+    c.close();
+  });
+
+  it('decide accept on the workspace trust dialog moves to the trust option and confirms', async () => {
+    const trust = readFileSync(new URL('./fixtures/panes/claude2-trust.txt', import.meta.url), 'utf8').replace(/\s+$/, '');
+    tmux = fakeTmux({ 'ledge-a': [trust, trust, 'Welcome'] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0 });
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'Trust this folder? /home/dev/demo', source: 'pane' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    expect((await c.next('session.updated', 3000)).session.state).toBe('working');
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Down', 'Enter']]);
+    c.close();
+  });
+
   it('decide fails to error when the prompt stays, and nothing is re-sent', async () => {
     tmux = fakeTmux({ 'ledge-a': [PROMPT] }); await srv.close(); srv = await startServer({ store, tmux, port: 0 });
     store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } }));

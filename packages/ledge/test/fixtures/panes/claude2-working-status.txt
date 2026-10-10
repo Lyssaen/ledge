@@ -1,0 +1,45 @@
+
+ ▐▛███▛█   Claude Code v2.1.296
+▝▜██████▀  Haiku 5.5 · Claude Team
+ ▝▝   ▝▝   /home/dev/demo
+
+
+❯ Context: hors story, objectif tests. Plan adding a README.md here in 2 short steps, then call ExitPlanMode.
+
+● [synapse-obs] story=hors-story objectif=tests
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+✽ Ideating… (2s · ↓ 273 tokens · thinking)
+                                                                                                                                            ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ plan mode on (shift+tab to cycle) · esc to interrupt · ← 2 agents
