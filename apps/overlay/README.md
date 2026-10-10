@@ -27,6 +27,8 @@ pnpm --filter overlay tauri build    # NSIS installer in src-tauri/target/releas
 
 Needs Windows with Rust (stable MSVC), Node, pnpm and WebView2.
 
+The installer needs no administrator rights: `installMode` is `currentUser` in `src-tauri/tauri.conf.json`, so Ledge goes under `%LOCALAPPDATA%`, its uninstall entry under HKCU, and no UAC prompt appears. Keep it that way (`perMachine` and `both` both require elevation). WebView2 is already present on Windows 11 and on an up-to-date Windows 10; if it is missing, the installer downloads the bootstrapper, which installs per user when run without elevation.
+
 ### First Windows build
 
 The Rust side has not been compiled yet. On the first build:
