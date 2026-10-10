@@ -3,7 +3,8 @@
  * no-op or a DOM fallback; under Tauri it talks to the commands and events in `src-tauri/src/main.rs`:
  *   set_frame { top, width, height }   window to (0, top) on the primary monitor's work area, sized width x height
  *   set_hot_zones { zones: Band[] }    edge bands the native cursor poller watches (empty: none)
- *   focus_overlay                      show and focus the overlay window
+ *   focus_overlay                      remember the foreground window, then show and focus the overlay window
+ *   release_focus                      give the foreground back to the window remembered by focus_overlay
  *   focus_terminal { title }           bring the matching terminal window forward
  *   event `ledge://edge` { inside }    cursor entered / left the edge bands
  * Coordinates are logical px from the top of the primary monitor's work area.
@@ -59,6 +60,12 @@ export function setHotZones(zones: Band[]): void {
 export async function focusOverlay(): Promise<void> {
   if (!inTauri()) return;
   await invoke('focus_overlay').catch(() => {});
+}
+
+/** Hands OS focus back to the window that had it before `focusOverlay` (a keyboard-opened surface folding away). */
+export async function releaseFocus(): Promise<void> {
+  if (!inTauri()) return;
+  await invoke('release_focus').catch(() => {});
 }
 
 export async function focusTerminal(title: string): Promise<void> {

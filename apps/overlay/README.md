@@ -31,7 +31,8 @@ The Rust side has not been compiled yet. On the first build:
    - borderless, transparent, no shadow, not in the taskbar, always on top; handle vertically centered on the left edge of the primary work area, nothing drawn twice or offset; also at 125% and 150% scaling and with the taskbar on the left;
    - hovering a bot shows the full tooltip, even for a long pending text;
    - cursor against the left edge above or below the handle opens the list after about 180 ms; leaving earlier does nothing; the edge does nothing while the list or a session is open, or the daemon is down;
-   - Ctrl+Alt+L from another app opens the list and gives the overlay focus (j/k/digits/y/n work at once); pressing it again closes; an ask arriving while you type elsewhere shows the bubble without stealing focus;
+   - Ctrl+Alt+L from another app opens the list and gives the overlay focus (j/k/digits/y/n work at once); pressing it again closes; an ask arriving while you type elsewhere shows the bubble without stealing focus; Ctrl+Alt+L while a bubble shows opens the list;
+   - with a terminal focused, Ctrl+Alt+L, then Y, then Esc: typing reaches the terminal again at once (focus is handed back, no click needed);
    - the window grows with the surface and shrinks only after the shrink animation; the coachmark (first three keyboard opens) is fully visible;
    - with the daemon stopped, "daemon unreachable, retrying" is fully visible beside the handle;
    - in a session, `o` or the terminal button brings Windows Terminal forward;
@@ -44,11 +45,11 @@ The Rust side has not been compiled yet. On the first build:
 
 | Key | Action |
 | --- | --- |
-| Ctrl+Alt+L | open / close the list (global) |
+| Ctrl+Alt+L | open / close the list (global); over a bubble it opens the list |
 | J K (or arrows) | move in the list |
 | 1-9 | jump to a row in the list; choose an option inside a question card |
 | Enter | open the focused row |
-| Y N | approve / deny a yes/no ask; on a question they open it instead |
+| Y N | approve / deny a permission ask; on a question, a diff or a plan in the list they open it instead (a diff or plan is decided from its open session, after review) |
 | Alt+Right | next ask |
 | R | reply |
 | O | open the terminal tab |
@@ -57,9 +58,11 @@ The Rust side has not been compiled yet. On the first build:
 | ? | keyboard help, inside the surface (Esc returns to the list) |
 | Ctrl+Alt+T | toggle dark / light theme |
 
-Theme, do not disturb and reduced motion are also in the list's Settings view, and are remembered in `localStorage` (`ledge.theme`, `ledge.dnd`, `ledge.reducedMotion`). The OS reduced-motion preference always wins. While the daemon is unreachable, and for sessions started without Ledge (read only), every send and decision path is disabled, keys included.
+Theme, do not disturb and reduced motion are also in the list's Settings view, and are remembered in `localStorage` (`ledge.theme`, `ledge.dnd`, `ledge.reducedMotion`). The OS reduced-motion preference always wins. While the daemon is unreachable, and for sessions started without Ledge (read only), every send and decision path is disabled, keys included; the terminal tab button and O still bring the terminal forward.
 
 ## Known V1 limits
 
 - Focus brings the Windows Terminal window forward; it does not switch to the exact tab yet.
+- Free-text answers to a question are not supported by the daemon yet: the question card's Other field is off; answer in the terminal.
+- The review of a diff or a plan is the session's terminal preview for now.
 - The Rust shell is untested on a real Windows build until the first-build checks above pass.

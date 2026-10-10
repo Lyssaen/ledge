@@ -13,8 +13,11 @@ export interface KeyboardOptions {
 }
 
 const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
-/** A yes/no ask: Y and N decide it. A question has no yes/no answer, so they open it instead. */
-export const isYesNo = (s: Session) => isPending(s) && (s.pending?.kind === 'permission' || s.pending?.kind === 'diff' || s.pending?.kind === 'plan');
+/** A yes/no ask decidable from the list: Y and N decide it. A question has no yes/no answer and a diff or plan opens
+ *  its review before any decision (spec §5), so on those they open the session instead. */
+export const isYesNo = (s: Session) => isPending(s) && s.pending?.kind === 'permission';
+/** A diff or plan: decided only from its open session, where the terminal preview is the review. */
+export const needsReview = (s: Session) => isPending(s) && (s.pending?.kind === 'diff' || s.pending?.kind === 'plan');
 /** Typing or choosing an option: any input (text, radio, checkbox), textarea, select or editable content. */
 const isRadio = (el: Element | null) => el?.tagName === 'INPUT' && (el as HTMLInputElement).type === 'radio';
 const choosing = (el: Element | null) => !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || (el as HTMLElement).isContentEditable);
@@ -48,7 +51,7 @@ export function useKeyboard(o: KeyboardOptions) {
       else if (list && digit) { const id = ids[Number(k) - 1]; if (id) c.onFocus(id); }
       else if (option) c.onChooseOption?.(Number(k));
       else if (list && k === 'Enter') { if (ownsEnter(active)) return; if (focused) c.onOpen(focused.id); }
-      else if (k === 'y' || k === 'n') { if (focused && isPending(focused)) { if (isYesNo(focused)) c.onDecide(focused.id, k === 'y' ? 'accept' : 'deny'); else c.onOpen(focused.id); } }
+      else if (k === 'y' || k === 'n') { if (focused && isPending(focused)) { if (isYesNo(focused) || (c.mode === 'session' && needsReview(focused))) c.onDecide(focused.id, k === 'y' ? 'accept' : 'deny'); else c.onOpen(focused.id); } }
       else if (k === 'r') c.onReplyFocus();
       else if (k === 'o') { if (focused) c.onTerminal?.(focused.id); }
       else if (k === 'd') c.onToggleDnd();

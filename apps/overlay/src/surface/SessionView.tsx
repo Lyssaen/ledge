@@ -18,8 +18,7 @@ export function measureSessionH(s: Session, reading: boolean): number {
 }
 
 function QuestionCard({ pending, onReply, disabled }: { pending: Pending; onReply: (t: string) => void; disabled: boolean }) {
-  const [choice, setChoice] = useState<number | 'other'>(0);
-  const [other, setOther] = useState('');
+  const [choice, setChoice] = useState(0);
   const opts = pending.options ?? [];
   const row = (active: boolean, pad: string): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 12, padding: pad, borderStyle: 'solid', borderWidth: 1, borderColor: active ? 'var(--sidebar-primary)' : 'var(--border)', borderRadius: 'var(--radius-lg)', backgroundColor: active ? 'var(--secondary)' : 'transparent', cursor: 'pointer', transition: transition([['border-color', 'hover'], ['background-color', 'hover']]) });
   return (
@@ -32,12 +31,14 @@ function QuestionCard({ pending, onReply, disabled }: { pending: Pending; onRepl
             <input type="radio" name="opt" checked={choice === i} onChange={() => setChoice(i)} /> <span style={{ fontWeight: 500 }}>{o}</span>
           </label>
         ))}
-        <label className="ledge-opt" style={row(choice === 'other', '6px 14px')}>
-          <input type="radio" name="opt" aria-label="Other" checked={choice === 'other'} onChange={() => setChoice('other')} />
-          <input type="text" placeholder="Other…" value={other} onChange={e => { setOther(e.target.value); setChoice('other'); }} style={{ flexGrow: 1, minWidth: 0, height: 28, background: 'transparent', color: 'inherit', border: 'none', fontSize: 14 }} />
+        {/* The daemon cannot type a free-text answer into the select dialog yet: Other stays visible but off. */}
+        <label className="ledge-opt" style={{ ...row(false, '6px 14px'), cursor: 'not-allowed', opacity: 0.6 }}>
+          <input type="radio" name="opt" aria-label="Other" disabled aria-describedby="ledge-other-why" />
+          <input type="text" placeholder="Other…" disabled aria-label="Other answer" style={{ flexGrow: 1, minWidth: 0, height: 28, background: 'transparent', color: 'inherit', border: 'none', fontSize: 14 }} />
+          <span id="ledge-other-why" style={{ fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>answer in the terminal</span>
         </label>
       </fieldset>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><Button variant="primary" disabled={disabled || (choice === 'other' && !other.trim())} onClick={() => onReply(choice === 'other' ? other : String(choice + 1))}>Answer</Button></div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><Button variant="primary" disabled={disabled} onClick={() => onReply(String(choice + 1))}>Answer</Button></div>
     </>
   );
 }
@@ -67,7 +68,13 @@ export function SessionView(p: SessionViewProps) {
   const shown = pending ?? last;
   const isQ = shown?.kind === 'question';
   const st = botState(s);
-  const sendDraft = () => { if (blocked === null && p.draft.trim()) p.onReply(p.draft); };
+  // A permission, diff or plan prompt takes Approve/Deny only: the daemon would refuse a typed reply.
+  const promptOnly = !!pending && pending.kind !== 'question';
+  const replyOff = blocked !== null || promptOnly;
+  const sendDraft = () => { if (!replyOff && p.draft.trim()) p.onReply(p.draft); };
+  const hint = blocked ?? (promptOnly ? `Approve or deny the ${pending!.kind} first, then reply`
+    : pending?.kind === 'question' ? 'A question takes an option number; answer anything else in its terminal'
+    : 'Enter sends to the terminal as typed');
   return (
     <div data-layer="session" inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? 120 : 0]]) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 56, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px', borderBottom: rule }}>
@@ -78,7 +85,7 @@ export function SessionView(p: SessionViewProps) {
           <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{toolName(s.tool)} · {relativeTime(s.startedAt, p.now)}</span>
         </div>
         <Button variant="ghost" size="icon" aria-label="Reading mode" aria-pressed={p.reading} onClick={p.onToggleReading} style={{ color: p.reading ? 'var(--sidebar-primary)' : undefined }}><Icon d={I.expand} /></Button>
-        <Button variant="ghost" size="icon" aria-label="Focus terminal tab" disabled={blocked !== null} onClick={p.onFocus}><Icon d={I.ext} /></Button>
+        <Button variant="ghost" size="icon" aria-label="Focus terminal tab" onClick={p.onFocus}><Icon d={I.ext} /></Button>
         <Button variant="ghost" size="icon" aria-label="Close" onClick={p.onClose}><Icon d={I.close} /></Button>
       </div>
 
@@ -91,7 +98,7 @@ export function SessionView(p: SessionViewProps) {
             </div>
             {isQ ? <QuestionCard key={shown.text} pending={shown} onReply={p.onReply} disabled={decideOff} /> : (
               <>
-                <div>{s.name} wants to run</div>
+                <div>{shown.kind === 'diff' ? `${s.name} proposes this diff, review it in the terminal below` : shown.kind === 'plan' ? `${s.name} proposes this plan, review it in the terminal below` : `${s.name} wants to run`}</div>
                 <div style={well}>{shown.text}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Button variant="ghost" size="sm" disabled title="Scoped authorization is not confirmed by any adapter yet">Always for this session</Button>
@@ -113,10 +120,12 @@ export function SessionView(p: SessionViewProps) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '12px 16px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input type="text" disabled={readOnly} placeholder={readOnly ? `Read only: reply to ${s.name} in its terminal` : `Reply to ${s.name}…`} aria-label={`Reply to ${s.name}`} value={p.draft} onChange={e => p.onDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') sendDraft(); }} style={{ flexGrow: 1, minWidth: 0, height: 36, boxSizing: 'border-box', padding: '0 12px', background: 'var(--sidebar)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', fontSize: 14 }} />
-          <Button variant="secondary" size="icon" aria-label="Send" disabled={blocked !== null || !p.draft.trim()} onClick={sendDraft}><Icon d={I.send} /></Button>
+          <Button variant="secondary" size="icon" aria-label="Send" disabled={replyOff || !p.draft.trim()} onClick={sendDraft}><Icon d={I.send} /></Button>
         </div>
+        {/* A failure outside a request (a rejected reply to an idle session, say): the request card shows its own. */}
+        {p.failure && !pending && <span role="status" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--danger-text)' }}>{p.failure}</span>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--muted-foreground)' }}>
-          <span>{blocked ?? 'Enter sends to the terminal as typed'}</span><span style={{ flexGrow: 1 }} />
+          <span>{hint}</span><span style={{ flexGrow: 1 }} />
           {s.state === 'working' && <Button variant="outline" size="sm" disabled={blocked !== null} onClick={p.onInterrupt}><Icon d={I.stop} size={14} />Interrupt</Button>}
           <Button variant="ghost" size="sm" disabled={blocked !== null} onClick={p.onKill} style={{ color: 'var(--danger-text)' }}>Kill session</Button>
         </div>

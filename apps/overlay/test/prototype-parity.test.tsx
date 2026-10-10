@@ -133,8 +133,8 @@ describe('prototype parity', () => {
     expect(screen.getByText('Otto needs your approval')).toBeInTheDocument();
     fireEvent.click(within(layer('bubble')).getByRole('button', { name: 'Approve' }));
     expect(rec.sent).toContainEqual({ type: 'session.decide', id: 'a', decision: 'accept' });
-    // Manually open B from the keyboard.
-    shortcut(); shortcut();
+    // Manually open B from the keyboard: Ctrl+Alt+L over the bubble opens the list.
+    shortcut();
     expect(mode()).toBe('list');
     press('2'); press('Enter');
     expect(mode()).toBe('session');
@@ -298,7 +298,8 @@ describe('prototype parity', () => {
     expect(value()).toBe('keep going, then rebase');
     fireEvent.click(within(layer('session')).getByRole('button', { name: 'Close' }));
 
-    // Offline from the keyboard: y, n, o, digits and r-send do nothing; the buttons are disabled.
+    // Offline from the keyboard: y, n, digits and r-send do nothing; the buttons are disabled. The terminal tab stays
+    // reachable (it is the fallback), but `o` sends nothing to the unreachable daemon.
     act(() => daemonStore.setStatus('unreachable'));
     shortcut();
     press('2');
@@ -309,7 +310,7 @@ describe('prototype parity', () => {
     expect(within(view).getByRole('button', { name: 'Approve' })).toBeDisabled();
     expect(within(view).getByRole('button', { name: 'Deny' })).toBeDisabled();
     expect(within(view).getByRole('button', { name: 'Kill session' })).toBeDisabled();
-    expect(within(view).getByRole('button', { name: 'Focus terminal tab' })).toBeDisabled();
+    expect(within(view).getByRole('button', { name: 'Focus terminal tab' })).toBeEnabled();
     press('y'); press('n'); press('o');
     press('r');
     fireEvent.change(document.activeElement!, { target: { value: 'please' } });
@@ -394,7 +395,7 @@ describe('carried items', () => {
     expect(rec.sent).toHaveLength(1);
   });
 
-  it('a retry that fails again (InjectFailed with no error reply, already in error) unlocks again', () => {
+  it('a retry that fails again (already in error, the daemon answers with an error reply) unlocks again', () => {
     const cmd = asks('rm -rf dist');
     snapshot([otto(cmd)]);
     render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
@@ -403,12 +404,20 @@ describe('carried items', () => {
     const approve = () => within(bubble).getByRole('button', { name: 'Approve' });
     fireEvent.click(approve());
     update(otto({ ...cmd, state: 'error', lastError: 'the terminal did not take it', lastActivityAt: '2026-10-09T18:05:00.000Z' }));
+    act(() => { daemonStore.apply({ type: 'error', id: 'a', message: 'the terminal did not take it' }); });
     expect(bubble).toHaveAttribute('data-ack', 'failed');
     expect(approve()).toBeEnabled();
     fireEvent.click(approve());
     expect(bubble).toHaveAttribute('data-ack', 'pending');
     expect(approve()).toBeDisabled();
+    // Pane activity while the retry is in flight is not a failure (no lastActivityAt heuristic any more).
+    update(otto({ ...cmd, state: 'error', lastError: 'the terminal did not take it', lastActivityAt: '2026-10-09T18:05:30.000Z' }));
+    expect(bubble).toHaveAttribute('data-ack', 'pending');
+    expect(approve()).toBeDisabled();
+    // The retry fails too: InjectFailed (still in error), then the daemon's error reply for that id.
     update(otto({ ...cmd, state: 'error', lastError: 'the terminal did not take it', lastActivityAt: '2026-10-09T18:06:00.000Z' }));
+    expect(bubble).toHaveAttribute('data-ack', 'pending');
+    act(() => { daemonStore.apply({ type: 'error', id: 'a', message: 'the terminal did not take it' }); });
     expect(bubble).toHaveAttribute('data-ack', 'failed');
     expect(approve()).toBeEnabled();
     fireEvent.click(approve());

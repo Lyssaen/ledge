@@ -58,7 +58,7 @@ describe('bridge', () => {
   it('in the browser nothing reaches the shell', async () => {
     const b = await loadBridge();
     await expect(b.setFrame({ top: 1, w: 2, h: 3 })).resolves.toBe(false);
-    b.setHotZones([{ top: 40, h: 100 }]); await b.focusOverlay(); await b.focusTerminal('Otto');
+    b.setHotZones([{ top: 40, h: 100 }]); await b.focusOverlay(); await b.releaseFocus(); await b.focusTerminal('Otto');
     const fn = vi.fn(); b.onEdge(fn)();
     await Promise.resolve();
     expect(native.invoke).not.toHaveBeenCalled();
@@ -93,9 +93,10 @@ describe('bridge', () => {
   it('hot zones, overlay focus and terminal focus are commands', async () => {
     enterTauri(); const b = await loadBridge();
     b.setHotZones([{ top: 40, h: 100 }]); b.setHotZones([{ top: 40, h: 100 }]); b.setHotZones([]);
-    await b.focusOverlay(); await b.focusTerminal('Otto · harness-assistant');
+    await b.focusOverlay(); await b.releaseFocus(); await b.focusTerminal('Otto · harness-assistant');
     await vi.waitFor(() => expect(calls('set_hot_zones')).toEqual([{ zones: [{ top: 40, h: 100 }] }, { zones: [] }]));
     expect(calls('focus_overlay')).toEqual([undefined]);
+    expect(calls('release_focus')).toEqual([undefined]);
     expect(calls('focus_terminal')).toEqual([{ title: 'Otto · harness-assistant' }]);
   });
 
@@ -210,18 +211,21 @@ describe('<Surface> under Tauri', () => {
     expect(calls('focus_overlay')).toHaveLength(0); // a hover open never takes focus
   });
 
-  it('a shortcut open focuses the overlay; closing and asks do not', async () => {
+  it('a shortcut open focuses the overlay and its close releases it; asks do neither', async () => {
     await mount({ tauri: true });
     await waitFor(() => expect(native.shortcut).not.toBeNull());
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
     expect(surface()).toHaveAttribute('data-mode', 'list');
     await waitFor(() => expect(calls('focus_overlay')).toHaveLength(1));
+    expect(calls('release_focus')).toHaveLength(0);
     await act(async () => { native.shortcut!({ state: 'Released' }); native.shortcut!({ state: 'Pressed' }); });
     expect(surface()).toHaveAttribute('data-mode', 'handle');
+    await waitFor(() => expect(calls('release_focus')).toHaveLength(1)); // the keyboard close hands focus back
     await act(async () => { mock.upsert(fakeSession('b', { name: 'Pim', tool: 'codex', project: 'speos-api', startedAt: '2026-10-09T18:01:00.000Z', state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } })); await sleep(50); vi.advanceTimersByTime(540); });
     expect(surface()).toHaveAttribute('data-mode', 'bubble');
     await act(async () => { await sleep(20); });
     expect(calls('focus_overlay')).toHaveLength(1);
+    expect(calls('release_focus')).toHaveLength(1);
   });
 });
 

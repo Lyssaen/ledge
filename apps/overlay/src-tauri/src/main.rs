@@ -26,6 +26,10 @@ pub struct Band {
 #[derive(Default)]
 struct HotZones(Mutex<(Vec<Band>, u64)>);
 
+/// The window that was in the foreground when a keyboard open took focus (a raw HWND), handed back by `release_focus`.
+#[derive(Default)]
+struct PrevForeground(Mutex<Option<isize>>);
+
 #[derive(Clone, Serialize)]
 struct EdgePayload {
     inside: bool,
@@ -115,12 +119,49 @@ fn set_hot_zones(zones: Vec<Band>, state: tauri::State<'_, HotZones>) {
     }
 }
 
-/// Shows and focuses the overlay so single-letter keys reach the webview (keyboard opens only).
+/// Shows and focuses the overlay so single-letter keys reach the webview (keyboard opens only). The window that had the
+/// foreground is remembered first (unless it is the overlay itself), so `release_focus` can give it back.
 #[tauri::command]
-async fn focus_overlay(window: WebviewWindow) -> Result<(), String> {
+async fn focus_overlay(window: WebviewWindow, prev: tauri::State<'_, PrevForeground>) -> Result<(), String> {
+    if let Some(fg) = foreground_other_than(&window) {
+        if let Ok(mut p) = prev.0.lock() { *p = Some(fg); }
+    }
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())
 }
+
+/// Gives the foreground back to the window remembered by `focus_overlay` (a keyboard-opened surface folded away), so
+/// typing reaches the terminal again. True when it was restored; false when nothing was remembered or it is gone.
+#[tauri::command]
+fn release_focus(prev: tauri::State<'_, PrevForeground>) -> bool {
+    let taken = match prev.0.lock() { Ok(mut p) => p.take(), Err(_) => None };
+    match taken { Some(raw) => restore_foreground(raw), None => false }
+}
+
+#[cfg(windows)]
+fn foreground_other_than(window: &WebviewWindow) -> Option<isize> {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    let fg = unsafe { GetForegroundWindow() }.0 as isize;
+    if fg == 0 { return None; }
+    // Tauri's HWND may come from another `windows` crate version: compare raw values.
+    let own = window.hwnd().ok().map(|h| h.0 as isize);
+    if own == Some(fg) { None } else { Some(fg) }
+}
+
+#[cfg(not(windows))]
+fn foreground_other_than(_window: &WebviewWindow) -> Option<isize> { None }
+
+#[cfg(windows)]
+fn restore_foreground(raw: isize) -> bool {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{IsWindow, SetForegroundWindow};
+    let hwnd = HWND(raw as *mut core::ffi::c_void);
+    // The overlay holds the foreground at this point, so Windows lets it hand the foreground on.
+    unsafe { IsWindow(hwnd).as_bool() && SetForegroundWindow(hwnd).as_bool() }
+}
+
+#[cfg(not(windows))]
+fn restore_foreground(_raw: isize) -> bool { false }
 
 /// True when a window title should be brought forward for `wanted`.
 pub fn title_matches(title: &str, wanted: &str) -> bool {
@@ -196,7 +237,8 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(HotZones::default())
-        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, focus_terminal])
+        .manage(PrevForeground::default())
+        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") { let _ = w.set_always_on_top(true); }
             spawn_edge_poller(app.handle().clone());

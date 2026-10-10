@@ -12,6 +12,8 @@ export interface SurfaceState {
   ack: Ack | null;
   /** The bubble id whose decision ended in a terminal error: recovery is unlocked, no success is shown. */
   failed: string | null;
+  /** An ask arrived on the handle and its bubble has not unfolded yet (an edge brush may have deferred it). */
+  unfoldDue: boolean;
   /** Bumped whenever the view context (mode, bubble, selection) changes; delayed events carrying an older rev are ignored. */
   rev: number;
 }
@@ -22,7 +24,7 @@ export type Effect =
 /** `rev` is stamped by the controller on timer events; omitted, the event is accepted. */
 type Elapsed<T extends string> = { type: T; rev?: number };
 export type SurfaceEvent =
-  | { type: 'ask'; id: string } | { type: 'askCleared'; id: string } | { type: 'removed'; id: string; remaining: string[] }
+  | { type: 'ask'; id: string } | { type: 'askCleared'; id: string } | { type: 'askReplaced'; id: string } | { type: 'removed'; id: string; remaining: string[] }
   | { type: 'edgeEnter' } | { type: 'edgeLeave' } | Elapsed<'dwellElapsed'> | Elapsed<'unfoldElapsed'>
   | { type: 'surfaceEnter' } | { type: 'surfaceLeave' } | Elapsed<'leaveElapsed'>
   | { type: 'focusWithin'; on: boolean } | { type: 'visibility'; hidden: boolean }
@@ -38,7 +40,7 @@ export const ELAPSED: Record<TimerName, 'dwellElapsed' | 'leaveElapsed' | 'bubbl
 
 export const initialSurface = (): SurfaceState => ({
   mode: 'handle', selectedId: null, bubbleId: null, queue: [], openedBy: null, hot: false, reading: false, typing: false,
-  hovering: false, focusWithin: false, hidden: false, ack: null, failed: null, rev: 0
+  hovering: false, focusWithin: false, hidden: false, ack: null, failed: null, unfoldDue: false, rev: 0
 });
 
 type Result = { state: SurfaceState; effects: Effect[] };
@@ -47,7 +49,7 @@ const cancel = (name: TimerName): Effect => ({ type: 'cancelTimer', name });
 const cancelAll: Effect[] = (['dwell', 'leave', 'bubble', 'hold', 'unfold'] as TimerName[]).map(cancel);
 const same = (s: SurfaceState): Result => ({ state: s, effects: [] });
 const held = (s: SurfaceState) => s.hovering || s.focusWithin || s.hidden;
-const toHandle = (s: SurfaceState): SurfaceState => ({ ...s, mode: 'handle', bubbleId: null, selectedId: null, openedBy: null, hot: false, reading: false, typing: false, ack: null, failed: null });
+const toHandle = (s: SurfaceState): SurfaceState => ({ ...s, mode: 'handle', bubbleId: null, selectedId: null, openedBy: null, hot: false, reading: false, typing: false, ack: null, failed: null, unfoldDue: false });
 const open = (s: SurfaceState, id: string): Result => ({ state: { ...s, mode: 'session', selectedId: id, bubbleId: null, hot: false, ack: null, failed: null }, effects: cancelAll });
 /** Panels opened inside the same surface; Escape/back from a detail view returns to the list. */
 const detail = (m: Mode) => m === 'session' || m === 'settings' || m === 'help';
@@ -78,13 +80,14 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
   switch (e.type) {
     case 'ask': {
       const queue = s.queue.includes(e.id) ? s.queue : [...s.queue, e.id];
-      if (s.mode === 'handle' && !s.hot) return { state: { ...s, queue }, effects: [start('unfold')] };
-      return same({ ...s, queue });
+      if (s.mode === 'handle' && !s.hot) return { state: { ...s, queue, unfoldDue: true }, effects: [start('unfold')] };
+      // On the edge (dwelling) the unfold waits: leaving the edge re-arms it.
+      return same({ ...s, queue, unfoldDue: s.unfoldDue || s.mode === 'handle' });
     }
     case 'unfoldElapsed': {
       const first = s.queue[0];
-      if (s.mode !== 'handle' || s.hot || first === undefined) return same(s);
-      return showBubble(s, first);
+      if (s.mode !== 'handle' || s.hot || first === undefined) return same({ ...s, unfoldDue: false });
+      return showBubble({ ...s, unfoldDue: false }, first);
     }
     case 'askCleared': {
       const queue = s.queue.filter(id => id !== e.id);
@@ -92,16 +95,28 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
       if (s.mode === 'bubble' && s.bubbleId === e.id) return advance({ ...s, queue });
       return same({ ...s, queue });
     }
+    /* The session's request was replaced in place by a new one. An acknowledgement in progress is confirmed (the old
+       request is gone) and the new one comes back as the next bubble; a bubble without one shows the new request afresh. */
+    case 'askReplaced': {
+      if (s.mode !== 'bubble' || s.bubbleId !== e.id) return same(s);
+      const queue = s.queue.includes(e.id) ? s.queue : [e.id, ...s.queue];
+      if (s.ack?.id === e.id) return confirm(s, queue);
+      return showBubble({ ...s, queue }, e.id);
+    }
     case 'removed': {
       const queue = s.queue.filter(id => id !== e.id);
       if (s.mode === 'session' && s.selectedId === e.id) return { state: e.remaining.length ? { ...s, queue, mode: 'list', selectedId: null, reading: false } : toHandle({ ...s, queue }), effects: cancelAll };
       if (s.mode === 'bubble' && s.ack?.id === e.id) return confirm(s, queue);
-      if (s.mode === 'bubble' && s.bubbleId === e.id) return { state: toHandle({ ...s, queue }), effects: cancelAll };
+      if (s.mode === 'bubble' && s.bubbleId === e.id) return advance({ ...s, queue });
       return same({ ...s, queue });
     }
     case 'edgeEnter': return s.mode === 'handle' && !s.hot ? { state: { ...s, hot: true }, effects: [start('dwell'), cancel('unfold')] } : same(s);
-    case 'edgeLeave': return { state: { ...s, hot: false }, effects: [cancel('dwell')] };
-    case 'dwellElapsed': return s.mode === 'handle' && s.hot ? { state: { ...s, mode: 'list', openedBy: 'mouse', hot: false }, effects: [cancel('unfold')] } : same(s);
+    case 'edgeLeave': {
+      // An ask deferred by the edge brush unfolds once the pointer leaves the edge.
+      const rearm = s.mode === 'handle' && s.unfoldDue && s.queue.length > 0;
+      return { state: { ...s, hot: false }, effects: [cancel('dwell'), ...(rearm ? [start('unfold')] : [])] };
+    }
+    case 'dwellElapsed': return s.mode === 'handle' && s.hot ? { state: { ...s, mode: 'list', openedBy: 'mouse', hot: false, unfoldDue: false }, effects: [cancel('unfold')] } : same(s);
     case 'surfaceEnter': {
       const next = { ...s, hovering: true, hot: false };
       return { state: next, effects: [cancel('leave'), cancel('dwell'), ...holdEffects(s, next)] };
@@ -143,14 +158,17 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
     }
     case 'back': return detail(s.mode) ? { state: { ...s, mode: 'list', selectedId: null, reading: false }, effects: [] } : same(s);
     case 'close': return { state: toHandle(s), effects: cancelAll };
-    case 'shortcut': return s.mode === 'handle' ? { state: { ...s, mode: 'list', openedBy: 'keyboard', hot: false }, effects: cancelAll } : { state: toHandle(s), effects: cancelAll };
+    /* Ctrl+Alt+L opens the list from the handle or over a bubble (the ask stays queued), and closes any open panel. */
+    case 'shortcut': return s.mode === 'handle' || s.mode === 'bubble'
+      ? { state: { ...s, mode: 'list', openedBy: 'keyboard', hot: false, bubbleId: null, ack: null, failed: null, unfoldDue: false }, effects: cancelAll }
+      : { state: toHandle(s), effects: cancelAll };
     case 'typing': return { state: { ...s, typing: e.on }, effects: e.on ? [cancel('leave')] : [] };
     case 'reading': return same({ ...s, reading: e.on });
     /* DND on: the bubble (an in-flight acknowledgement included: the decision is already sent) folds and the queue
        is dropped, so nothing surfaces later. Off is a no-op: asks already pending are not re-bubbled. */
     case 'dnd': {
       if (!e.on) return same(s);
-      const quiet = { ...s, queue: [] };
+      const quiet = { ...s, queue: [], unfoldDue: false };
       return { state: s.mode === 'bubble' ? toHandle(quiet) : quiet, effects: [cancel('unfold'), cancel('bubble'), cancel('hold')] };
     }
   }

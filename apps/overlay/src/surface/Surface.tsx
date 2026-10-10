@@ -19,7 +19,7 @@ import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { SessionList, rowHint, EXPANDED_ROW_H } from './SessionList';
 import { SessionView, measureSessionH } from './SessionView';
 import { transition, MOTION, ms } from '../motion';
-import { focusTerminal, onShortcut, onEdge, setHotZones, focusOverlay, isTauri } from '../tauri/bridge';
+import { focusTerminal, onShortcut, onEdge, setHotZones, focusOverlay, releaseFocus, isTauri } from '../tauri/bridge';
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { frameOf, type Box } from './frame';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
@@ -55,19 +55,20 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const [coach, setCoach] = useState(false);
   const replyAfterOpen = useRef(false);
 
-  // Ctrl+Alt+L (the global shortcut in Tauri, a window key binding in the browser) toggles a keyboard-opened list.
-  // Opening takes OS focus so single-letter keys reach the overlay; asks and bubbles never do.
+  // Ctrl+Alt+L (the global shortcut in Tauri, a window key binding in the browser) toggles a keyboard-opened list, from
+  // the handle or over a bubble. Opening takes OS focus so single-letter keys reach the overlay; asks and bubbles never do.
   useEffect(() => onShortcut(() => {
     const was = ctl.state().mode;
     dispatch({ type: 'shortcut' });
-    if (was === 'handle' && ctl.state().mode === 'list') void focusOverlay();
+    if ((was === 'handle' || was === 'bubble') && ctl.state().mode === 'list') void focusOverlay();
   }), [ctl, dispatch]);
 
   // The native window only covers what it draws, so in Tauri the shell watches the edge bands and reports crossings.
   useEffect(() => onEdge(on => dispatch({ type: on ? 'edgeEnter' : 'edgeLeave' })), [dispatch]);
 
   // Daemon changes drive the machine. DND keeps the bot growing in the handle but never asks for a bubble.
-  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch });
+  // A reply the daemon rejects comes back into its draft (unless something new was typed meanwhile).
+  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
 
   // DND switched on takes any bubble down and drops queued asks. Turning it off does not re-bubble asks already pending.
   useEffect(() => { if (dnd) dispatch({ type: 'dnd', on: true }); }, [dnd, dispatch]);
@@ -90,10 +91,12 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
 
   // Keyboard focus follows the view: a keyboard open lands on the oldest ask (or the first row) and counts toward the
   // coachmark; back from a session lands on that session's row; folding to the handle or the bubble forgets it.
-  const prevView = useRef({ mode: st.mode, selectedId: st.selectedId });
+  // A keyboard-opened surface folding back to the handle hands OS focus back to the window that had it.
+  const prevView = useRef({ mode: st.mode, selectedId: st.selectedId, openedBy: st.openedBy });
   useEffect(() => {
-    const was = prevView.current; prevView.current = { mode: st.mode, selectedId: st.selectedId };
+    const was = prevView.current; prevView.current = { mode: st.mode, selectedId: st.selectedId, openedBy: st.openedBy };
     if (was.mode === st.mode) return;
+    if (st.mode === 'handle' && was.mode !== 'bubble' && was.openedBy === 'keyboard') void releaseFocus();
     if (st.mode === 'list' && (was.mode === 'handle' || was.mode === 'bubble') && st.openedBy === 'keyboard') {
       setFocusedId(sessions.find(isPending)?.id ?? sessions[0]?.id ?? null);
       setCoach(countCoachmarkOpen());
@@ -172,10 +175,13 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
     if (blockedFor(byId.get(id)) !== null || !asks.begin(id)) return false;
     send({ type: 'session.decide', id, decision: d }); return true;
   };
+  /** A typed reply. A permission, diff or plan prompt takes Approve/Deny only (the field explains it); answering a
+   *  question locks it like a decision. The draft is cleared on send and comes back if the daemon rejects it. */
   const reply = (id: string, text: string) => {
     const s = byId.get(id);
-    if (blockedFor(s) !== null) return;
-    if (s && isPending(s) && !asks.begin(id)) return; // answering a request locks it like a decision
+    if (!s || blockedFor(s) !== null || (s.pending && s.pending.kind !== 'question')) return;
+    if (s.pending && !asks.begin(id)) return;
+    asks.replied(id, text);
     send({ type: 'session.reply', id, text }); setDrafts(x => ({ ...x, [id]: '' })); dispatch({ type: 'typing', on: false });
   };
   const bubbleAck: BubbleAck = st.ack ? (st.ack.confirmed ? 'confirmed' : 'pending') : st.failed && st.failed === st.bubbleId ? 'failed' : null;
@@ -207,7 +213,8 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const zonesArmed = st.mode === 'handle' && !unreachable;
   const zonesKey = zonesArmed ? geo.hotZones.map(z => `${z.top}:${z.h}`).join(',') : '';
   useEffect(() => { setHotZones(zonesArmed ? geo.hotZones : []); }, [zonesKey]); // the bands are captured through `zonesKey`
-  const focusTab = (id: string) => { const s = byId.get(id); if (!s || blockedFor(s) !== null) return; send({ type: 'session.focus', id }); void focusTerminal(s.title); };
+  // The terminal tab is the fallback for read-only and offline sessions too: only the daemon message needs the daemon.
+  const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); void focusTerminal(s.title); };
   const chooseOption = (n: number) => {
     if (blockedFor(selected) !== null) return;
     const radios = surfaceRef.current?.querySelectorAll<HTMLInputElement>('[data-layer="session"] [data-ask] input[type="radio"]:not([aria-label="Other"])');
@@ -257,7 +264,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
         <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         <Bubble ref={bubbleRef} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
           ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} failure={st.bubbleId ? asks.failures[st.bubbleId] : undefined} blocked={bubbleSession ? blockedFor(bubbleSession) : null} frozen={unreachable} reducedMotion={reducedMotion}
-          onOpen={() => dispatch({ type: 'bubbleClick' })}
+          onOpen={() => dispatch({ type: 'bubbleClick' })} onDismiss={() => dispatch({ type: 'close' })}
           onDecide={d => { if (st.bubbleId && !ctl.state().ack && decide(st.bubbleId, d)) dispatch({ type: 'decidedInBubble' }); }}
           onReply={t => {
             const id = st.bubbleId; if (!id || ctl.state().ack || blockedFor(byId.get(id)) !== null || !asks.begin(id)) return;

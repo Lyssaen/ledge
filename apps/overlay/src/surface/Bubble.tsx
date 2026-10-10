@@ -28,13 +28,15 @@ interface BubbleProps {
   frozen?: boolean;
   reducedMotion?: boolean;
   onOpen: () => void;
+  /** "Later" on a diff or plan: fold the bubble, the request stays pending. */
+  onDismiss?: () => void;
   onDecide: (decision: 'accept' | 'deny') => void;
   onReply: (text: string) => void;
   theme?: 'dark' | 'light';
   ref?: Ref<HTMLDivElement>;
 }
 
-export function Bubble({ session, moreCount, visible, paused, remainingMs = BUBBLE_HOLD_MS, ack = null, failure, deciding = false, blocked = null, frozen = false, reducedMotion, onOpen, onDecide, onReply, theme = 'dark', ref }: BubbleProps) {
+export function Bubble({ session, moreCount, visible, paused, remainingMs = BUBBLE_HOLD_MS, ack = null, failure, deciding = false, blocked = null, frozen = false, reducedMotion, onOpen, onDismiss, onDecide, onReply, theme = 'dark', ref }: BubbleProps) {
   const pending = session?.pending;
   const askKey = session ? `${session.id}:${pending?.helperId ?? ''}:${pending?.text ?? ''}` : undefined;
   // A click locks this request until the daemon answers; a failure unlocks it, a new request starts unlocked.
@@ -43,8 +45,10 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs = BUBB
   const locked = ((lockedKey === askKey || deciding) && ack !== 'failed') || ack === 'pending' || ack === 'confirmed';
   const disabled = locked || blocked !== null;
   const isQ = pending?.kind === 'question';
+  // A diff or a plan opens its review before any decision (spec §5): the bubble offers Review, never Approve.
+  const review = pending?.kind === 'diff' || pending?.kind === 'plan';
   const first = pending?.options?.[0];
-  const title = session ? `${session.name} ${isQ ? 'has a question' : 'needs your approval'}` : '';
+  const title = !session ? '' : isQ ? `${session.name} has a question` : review ? `${session.name} has a ${pending!.kind} to review` : `${session.name} needs your approval`;
   const act = (fn: () => void) => () => { if (disabled) return; setLockedKey(askKey); fn(); };
 
   // The bar restarts per request and per pause/resume segment, from the remainder the controller reports.
@@ -75,11 +79,20 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs = BUBB
       </div>
       {note && <span role="status" style={{ fontSize: 12, lineHeight: '16px', color: ack === 'failed' ? 'var(--danger-text)' : 'var(--muted-foreground)' }}>{note}</span>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-        <Button variant="outline" size="sm" disabled={isQ ? locked : disabled} onClick={isQ ? () => onOpen() : act(() => onDecide('deny'))}>{isQ ? 'Later' : 'Deny'}</Button>
-        <Button variant="primary" size="sm" disabled={disabled} onClick={act(() => { if (isQ) onReply('1'); else onDecide('accept'); })}>
-          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-          {isQ ? `Answer: ${first ?? 'first option'}` : 'Approve'}
-        </Button>
+        {review ? (
+          <>
+            <Button variant="outline" size="sm" onClick={() => onDismiss?.()}>Later</Button>
+            <Button variant="primary" size="sm" onClick={() => onOpen()}>Review</Button>
+          </>
+        ) : (
+          <>
+            <Button variant="outline" size="sm" disabled={isQ ? locked : disabled} onClick={isQ ? () => onOpen() : act(() => onDecide('deny'))}>{isQ ? 'Later' : 'Deny'}</Button>
+            <Button variant="primary" size="sm" disabled={disabled} onClick={act(() => { if (isQ) onReply('1'); else onDecide('accept'); })}>
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+              {isQ ? `Answer: ${first ?? 'first option'}` : 'Approve'}
+            </Button>
+          </>
+        )}
       </div>
       <div style={{ position: 'absolute', left: 16, right: 16, bottom: 0, height: 2, borderRadius: 9999, background: 'var(--muted)', overflow: 'hidden' }}>
         {/* A functional countdown, so it ignores VITE_LEDGE_MOTION and reduced motion: it drains the controller's real remainder. */}

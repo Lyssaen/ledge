@@ -195,7 +195,7 @@ describe('<Surface> keyboard first', () => {
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.focus', id: 'a' }));
   });
 
-  it('digits choose the question options in an open session; a focused radio keeps native arrows; the Other field types', async () => {
+  it('digits choose the question options in an open session; a focused radio keeps native arrows; Other is off', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     await act(async () => { mock.upsert({ ...sessions[1]!, pending: { kind: 'question', text: 'Which?', source: 'hook', options: ['Rebase', 'Merge'] } }); await sleep(50); });
     act(() => shortcut());
@@ -206,9 +206,9 @@ describe('<Surface> keyboard first', () => {
     expect(merge).toBeChecked(); expect(document.activeElement).toBe(merge);
     act(() => { fireEvent.keyDown(merge, { key: '1' }); });
     expect(screen.getByRole('radio', { name: 'Rebase' })).toBeChecked();
+    // Free text is not supported by the daemon yet: the Other field is disabled and takes no focus.
     const other = screen.getByPlaceholderText('Other…'); other.focus();
-    act(() => { fireEvent.keyDown(other, { key: '2' }); });
-    expect(screen.getByRole('radio', { name: 'Rebase' })).toBeChecked();
+    expect(other).toBeDisabled(); expect(document.activeElement).not.toBe(other);
     fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.reply', id: 'b', text: '1' }));
   });

@@ -281,4 +281,45 @@ describe('surface machine: decision failure and detail views', () => {
     expect(run([{ type: 'surfaceLeave' }], open).effects).toContain('startTimer:leave');
     expect(run([{ type: 'focusWithin', on: true }, { type: 'surfaceLeave' }], open).effects).not.toContain('startTimer:leave');
   });
+  it('a request replaced during the acknowledgement confirms it and the new request bubbles unlocked', () => {
+    const held = run([{ type: 'decidedInBubble' }, { type: 'holdElapsed' }], bubble()).s;
+    expect(held.ack).toEqual({ id: 'a', minElapsed: true, confirmed: false });
+    const r = run([{ type: 'askReplaced', id: 'a' }], held);
+    expect(r.s).toMatchObject({ mode: 'bubble', bubbleId: 'a', ack: null, failed: null });
+    expect(r.effects).toContain('startTimer:bubble');
+    // Replaced before the hold: confirmed now, the new request shows once the 900 ms minimum is over.
+    const early = run([{ type: 'decidedInBubble' }, { type: 'askReplaced', id: 'a' }], bubble()).s;
+    expect(early.ack).toMatchObject({ confirmed: true });
+    expect(run([{ type: 'holdElapsed' }], early).s).toMatchObject({ mode: 'bubble', bubbleId: 'a', ack: null });
+    // No acknowledgement: the bubble shows the new request with a fresh clock and no stale failure.
+    const failed = run([{ type: 'decisionFailed', id: 'a' }], bubble()).s;
+    const fresh = run([{ type: 'askReplaced', id: 'a' }], failed);
+    expect(fresh.s).toMatchObject({ mode: 'bubble', failed: null }); expect(fresh.effects).toContain('startTimer:bubble');
+    // Another session's replacement changes nothing.
+    const b = bubble(); expect(run([{ type: 'askReplaced', id: 'z' }], b).s).toBe(b);
+  });
+  it('Ctrl+Alt+L over a bubble opens the list from the keyboard, the ask stays queued', () => {
+    const r = run([{ type: 'shortcut' }], bubble());
+    expect(r.s).toMatchObject({ mode: 'list', openedBy: 'keyboard', bubbleId: null, ack: null, queue: ['a'] });
+    expect(r.effects).toContain('cancelTimer:bubble');
+    expect(run([{ type: 'shortcut' }], r.s).s.mode).toBe('handle');
+  });
+  it('removing the bubble session advances to the next queued ask', () => {
+    const two = run([{ type: 'ask', id: 'b' }], bubble()).s;
+    expect(run([{ type: 'removed', id: 'a', remaining: ['b'] }], two).s).toMatchObject({ mode: 'bubble', bubbleId: 'b', queue: ['b'] });
+    expect(run([{ type: 'removed', id: 'a', remaining: [] }], bubble()).s.mode).toBe('handle');
+  });
+  it('an edge brush right after an ask defers the bubble, leaving the edge re-arms it', () => {
+    const brushed = run([{ type: 'ask', id: 'a' }, { type: 'edgeEnter' }]);
+    expect(brushed.effects).toContain('cancelTimer:unfold');
+    const left = run([{ type: 'edgeLeave' }], brushed.s);
+    expect(left.effects).toContain('startTimer:unfold');
+    expect(run([{ type: 'unfoldElapsed' as never }], left.s).s).toMatchObject({ mode: 'bubble', bubbleId: 'a' });
+    // An ask during the dwell, then a leave before it opens the list: same.
+    const during = run([{ type: 'edgeEnter' }, { type: 'ask', id: 'a' }, { type: 'edgeLeave' }]);
+    expect(during.effects.at(-1)).toBe('startTimer:unfold');
+    // A bubble that already timed out does not come back on an edge brush.
+    const timedOut = run([{ type: 'bubbleElapsed' }], bubble()).s;
+    expect(run([{ type: 'edgeEnter' }, { type: 'edgeLeave' }], timedOut).effects).not.toContain('startTimer:unfold');
+  });
 });

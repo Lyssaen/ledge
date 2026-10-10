@@ -18,15 +18,17 @@ describe('<SessionView>', () => {
     expect(screen.getByRole('button', { name: 'Always for this session' })).toBeDisabled();
     expect(screen.getByText('Do you want to proceed?')).toBeInTheDocument();
   });
-  it('shows a question with options and answers by number or text', () => {
+  it('shows a question with options and answers by number; Other is off (free text is not supported yet)', () => {
     const onReply = vi.fn();
     render(<SessionView {...base} session={q} onReply={onReply} />);
     expect(screen.getByLabelText('Backfill')).toBeChecked();
     fireEvent.click(screen.getByLabelText('Shadow table'));
     fireEvent.click(screen.getByRole('button', { name: 'Answer' })); expect(onReply).toHaveBeenLastCalledWith('2');
+    expect(screen.getByLabelText('Other')).toBeDisabled();
+    expect(screen.getByPlaceholderText('Other…')).toBeDisabled();
+    expect(screen.getByLabelText('Other')).toHaveAccessibleDescription('answer in the terminal');
     fireEvent.click(screen.getByLabelText('Other'));
-    fireEvent.change(screen.getByPlaceholderText('Other…'), { target: { value: 'dual write' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Answer' })); expect(onReply).toHaveBeenLastCalledWith('dual write');
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' })); expect(onReply).toHaveBeenLastCalledWith('2');
   });
   it('the ask card folds when pending disappears', () => {
     const { rerender, container } = render(<SessionView {...base} session={perm} />);
