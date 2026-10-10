@@ -17,6 +17,17 @@
   animation: bot-breathe var(--bot-breath, 5.4s) ease-in-out infinite;
   animation-delay: var(--bot-phase, 0s);
 }
+/* The working hop (spec §6): a 480 ms hop inside a 3.6–4.4 s cycle on the group that wraps the body, so breathing and
+   the hop compose. Only data-hop="true" (working, not reduced/read-only/frozen/paused) animates; the simplified crop keeps it. */
+.bot .hop { transform-origin: 48px 83px; }
+.bot[data-hop="true"] .hop {
+  animation: bot-hop var(--bot-hop-cycle, 3.6s) linear infinite;
+  animation-delay: var(--bot-phase, 0s);
+}
+/* Reduced motion keeps the progress signal: the antenna light pulses at the running-dot rhythm (hidden at ≤ 20 px). */
+.bot[data-reduced="true"][data-state="working"]:not([data-frozen="true"]):not([data-paused="true"]):not([data-readonly="true"]) .antenna-light {
+  animation: bot-pulse 1.2s ease-in-out infinite !important;
+}
 .bot .pose {
   transform-origin: 48px 59px;
   transform: rotate(var(--bot-tilt, 0deg)) translateY(var(--bot-lift, 0px));
@@ -108,6 +119,16 @@
   0%, 100% { transform: translateY(0) rotate(-.3deg) scaleY(1); }
   50% { transform: translateY(-.7px) rotate(.3deg) scaleY(1.014); }
 }
+/* 480 ms of a 3.6 s cycle = 13.3 %: anticipation squash, rise with stretch, land with squash, settle, then still. */
+@keyframes bot-hop {
+  0% { transform: translateY(0) scale(1, 1); animation-timing-function: ease-in; }
+  1.9% { transform: translateY(0) scale(1.06, .92); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  5.9% { transform: translateY(calc(var(--bot-hop, 8px) * -1)) scale(.96, 1.06); animation-timing-function: cubic-bezier(.6, 0, .9, .4); }
+  9.3% { transform: translateY(0) scale(1.05, .95); animation-timing-function: ease-out; }
+  11.5% { transform: translateY(0) scale(.99, 1.01); }
+  13.3%, 100% { transform: translateY(0) scale(1, 1); }
+}
+@keyframes bot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes bot-blink { 0%, 100% { transform: scaleY(1); } 45%, 60% { transform: scaleY(.08); } }
 @keyframes bot-halo-breathe { 0%, 100% { --bot-halo-a: var(--bot-halo-alpha, .55); } 50% { --bot-halo-a: calc(var(--bot-halo-alpha, .55) * .7); } }
 @keyframes bot-nod {

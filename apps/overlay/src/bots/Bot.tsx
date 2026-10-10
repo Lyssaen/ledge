@@ -78,6 +78,12 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
   const halo = !readOnly && state !== 'done' && state !== 'readonly';
   const { t } = useI18n();
   const h = seedHash(seed);
+  // The working hop (spec §6): the only ambient motion kept at ≤ 20 px, so the handle shows progress. Height in screen px,
+  // converted to SVG units so a 12 px bot lifts 2 px and a 48 px bot 5.8 px; period 3.6–4.4 s, offset per bot like breathing.
+  const hop = state === 'working' && !reduced && !readOnly && !frozen && !paused;
+  const hopPx = Math.min(7, Math.max(2, size * 0.12));
+  const hopUnits = (hopPx / size) * 96;
+  const hopCycle = 3600 + (h % 9) * 100;
 
   useBotMotion(ref, { seed, state, askKey, enabled: !reduced && !simplified && !readOnly && !frozen && !paused });
   useBotNod(ref, nodKey, !reduced && !readOnly && !frozen && !paused);
@@ -89,6 +95,8 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
     '--bot-lift': `${expr.lift ?? 0}px`,
     '--bot-breath': ms(4800 + (h % 17) * 100),
     '--bot-phase': `-${ms((h % 43) * 100)}`,
+    '--bot-hop': `${hopUnits.toFixed(2)}px`,
+    '--bot-hop-cycle': ms(hopCycle),
     '--bot-ease': MOTION.grow.ease,
     '--bot-material-ms': ms(240),
     '--bot-eye-ms': ms(260),
@@ -121,6 +129,7 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
       data-frozen={String(frozen)}
       data-paused={String(paused)}
       data-reduced={String(reduced)}
+      data-hop={String(hop)}
       style={style}
     >
       <defs>
@@ -130,6 +139,7 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
         </linearGradient>
       </defs>
       <ellipse className="ground" cx="48" cy="88" rx="25" ry="3" />
+      <g className="hop">
       <g className="body">
         <g className="pose">
           <g className="antenna-group">
@@ -157,6 +167,7 @@ export function Bot({ tool, state, pose, size, theme, seed, readOnly = false, fr
           </g>
           <ellipse className="arm" cx="79" cy="63" rx="5" ry="8" />
         </g>
+      </g>
       </g>
     </svg>
   );

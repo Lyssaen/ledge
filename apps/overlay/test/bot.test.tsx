@@ -1,9 +1,16 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import { fakeSession } from './mockDaemon';
 import { botState, poseFor, type BotState } from '../src/bots/poseFor';
 import { materialFor } from '../src/bots/material';
 import { Bot } from '../src/bots/Bot';
+
+// ms() scales by VITE_LEDGE_MOTION (0 in tests) through a lookup vi.stubEnv does not reach; a test can unscale it.
+const motion = vi.hoisted(() => ({ unscaled: false }));
+vi.mock('../src/motion', async importOriginal => {
+  const actual = await importOriginal<typeof import('../src/motion')>();
+  return { ...actual, ms: (n: number) => (motion.unscaled ? `${Math.round(n)}ms` : actual.ms(n)) };
+});
 
 describe('botState and materialFor', () => {
   it('maps daemon states to bot expressions', () => {
@@ -162,5 +169,49 @@ describe('Bot', () => {
     rerender(<Bot {...props} theme="dark" />);
     // VITE_LEDGE_MOTION=0 in tests: the app preference reduces motion by default
     expect(container.querySelector('svg')).toHaveAttribute('data-reduced', 'true');
+  });
+
+  describe('working hop', () => {
+    // The test env reduces motion (VITE_LEDGE_MOTION=0) and zeroes ms(); the hop needs real motion on.
+    beforeEach(() => { vi.stubEnv('VITE_LEDGE_MOTION', '1'); motion.unscaled = true; });
+    afterEach(() => { vi.unstubAllEnvs(); motion.unscaled = false; });
+    const svg = () => document.querySelector('svg.bot') as SVGSVGElement;
+    const vars = () => { const s = svg().getAttribute('style') ?? ''; return Object.fromEntries([...s.matchAll(/(--bot-[a-z-]+):\s*([^;]+)/g)].map(m => [m[1]!, m[2]!.trim()])); };
+
+    it('hops only while working, at 12 px as at 48 px', () => {
+      render(<Bot seed="s1" tool="claude" state="working" pose={1} size={12} theme="dark" />);
+      expect(svg()).toHaveAttribute('data-hop', 'true');
+      cleanup();
+      render(<Bot seed="s1" tool="claude" state="working" pose={1} size={48} theme="dark" />);
+      expect(svg()).toHaveAttribute('data-hop', 'true');
+      for (const state of ['starting', 'approval', 'question', 'idle', 'error', 'done', 'readonly'] as const) {
+        cleanup();
+        render(<Bot seed="s1" tool="claude" state={state} pose={1} size={32} theme="dark" />);
+        expect(svg(), state).toHaveAttribute('data-hop', 'false');
+      }
+    });
+
+    it('is off under reduced motion, read-only, frozen and paused', () => {
+      const cases = [{ reducedMotion: true }, { readOnly: true }, { frozen: true }, { paused: true }];
+      for (const extra of cases) {
+        cleanup();
+        render(<Bot seed="s1" tool="claude" state="working" pose={1} size={32} theme="dark" {...extra} />);
+        expect(svg(), JSON.stringify(extra)).toHaveAttribute('data-hop', 'false');
+      }
+    });
+
+    it('sizes the hop in SVG units from clamp(2, size * 0.12, 7) px and cycles every 3.6 to 4.4 s', () => {
+      render(<Bot seed="s1" tool="claude" state="working" pose={1} size={12} theme="dark" />);
+      expect(vars()['--bot-hop']).toBe('16.00px');
+      cleanup();
+      render(<Bot seed="s1" tool="claude" state="working" pose={1} size={48} theme="dark" />);
+      expect(vars()['--bot-hop']).toBe('11.52px');
+      cleanup();
+      render(<Bot seed="s1" tool="claude" state="working" pose={1} size={96} theme="dark" />);
+      expect(vars()['--bot-hop']).toBe('7.00px');
+      const cycle = parseInt(vars()['--bot-hop-cycle']!, 10);
+      expect(cycle).toBeGreaterThanOrEqual(3600); expect(cycle).toBeLessThanOrEqual(4400);
+      expect(svg().querySelector('g.hop > g.body')).not.toBeNull();
+    });
   });
 });
