@@ -92,8 +92,42 @@ describe('server', () => {
     c.send({ type: 'session.event', id: 'a', event: { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Edit', text: 'a.ts', helperId: 'h1' } });
     await c.next('session.updated');
     expect(store.get('a')?.pending).toEqual(pending);
-    expect(readFileSync(join(process.env.LEDGE_HOME!, 'daemon.log'), 'utf8')).toContain('helper h1 permission for Edit not routed');
+    expect(readFileSync(join(process.env.LEDGE_HOME!, 'daemon.log'), 'utf8')).toContain('helper h1 permission for Edit on a not routed: the main thread already holds the pending request');
     await c.close();
+  });
+
+  describe('logs a dropped permission request from the pending before and after', () => {
+    const logText = () => { try { return readFileSync(join(process.env.LEDGE_HOME!, 'daemon.log'), 'utf8'); } catch { return ''; } };
+    const send = async (event: Record<string, unknown>) => {
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.event', id: 'a', event: { at: T0, source: 'hook', ...event } as never });
+      await new Promise(r => setTimeout(r, 50));
+      await c.close();
+    };
+    const helperPending = { kind: 'permission', text: 'one', tool: 'Bash', source: 'hook', helperId: 'h1', parentState: 'working' } as const;
+    it('a main-thread request while a helper holds the card', async () => {
+      store.upsert(mk('a', { state: 'waiting_permission', pending: helperPending }));
+      await send({ name: 'PermissionRequest', tool: 'Write', text: 'b.ts' });
+      expect(store.get('a')?.pending).toEqual(helperPending);
+      expect(logText()).toContain('main thread permission for Write on a not routed: helper h1 already holds the pending request');
+    });
+    it('the same helper asking twice', async () => {
+      store.upsert(mk('a', { state: 'waiting_permission', pending: helperPending }));
+      await send({ name: 'PermissionRequest', tool: 'Bash', text: 'two', helperId: 'h1' });
+      expect(logText()).toContain('helper h1 permission for Bash on a not routed: helper h1 already holds the pending request');
+    });
+    it('a request on an exited session', async () => {
+      store.upsert(mk('a', { state: 'exited', exitCode: 0 }));
+      await send({ name: 'PermissionRequest', tool: 'Bash', text: 'x', helperId: 'h1' });
+      expect(logText()).toContain('helper h1 permission for Bash on a not routed: the session has exited');
+    });
+    it('nothing for a routed request or the main thread refining its own card', async () => {
+      store.upsert(mk('a'));
+      await send({ name: 'PermissionRequest', tool: 'Bash', text: 'x', helperId: 'h1' });
+      store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'plan', text: 'the plan', source: 'hook' } }));
+      await send({ name: 'PermissionRequest', tool: 'ExitPlanMode', text: 'plan' });
+      expect(logText()).not.toContain('not routed');
+    });
   });
 
   it('register upgrades a hook_only session created by an early hook', async () => {

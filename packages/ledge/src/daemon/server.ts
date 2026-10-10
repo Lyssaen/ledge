@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type ServerMessage, type Session } from '@ledge/protocol';
+import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type ServerMessage, type Session, type SessionEvent } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
@@ -22,6 +22,20 @@ export function originAllowed(origin: string | undefined): boolean {
 }
 
 export interface ServerHandle { port: number; close(): Promise<void>; broadcast(msg: ServerMessage): void }
+
+/**
+ * A permission request that left the pending untouched was dropped by the reducer (session exited, another
+ * requester already holds the card, or the same helper asked twice). The main thread refining its own card is not a drop.
+ */
+function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undefined, after: Session | undefined): void {
+  if (ev.name !== 'PermissionRequest' || !after || after.pending !== before?.pending) return;
+  const held = before?.pending;
+  if (held && !held.helperId && !ev.helperId) return;
+  const who = ev.helperId ? `helper ${ev.helperId}` : 'main thread';
+  const why = after.state === 'exited' ? 'the session has exited'
+    : held ? `${held.helperId ? `helper ${held.helperId}` : 'the main thread'} already holds the pending request` : 'nothing was set';
+  log(`${who} permission for ${ev.tool ?? 'a tool'} on ${id} not routed: ${why}`);
+}
 
 export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number } }): Promise<ServerHandle> {
   const { store, tmux } = opts;
@@ -112,15 +126,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.event': {
-        if (!store.get(msg.id)) {
+        const before = store.get(msg.id);
+        if (!before) {
           const taken = store.all().map(s => s.name);
           const base: Session = { id: msg.id, name: pickName(taken), tool: 'claude', cwd: '', project: 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
           store.upsert(reduce(base, msg.event));
         } else store.apply(msg.id, msg.event);
-        const ev = msg.event;
-        if (ev.name === 'PermissionRequest' && ev.helperId && store.get(msg.id)?.pending?.helperId !== ev.helperId) {
-          log(`helper ${ev.helperId} permission for ${ev.tool ?? 'a tool'} not routed: ${msg.id} already has a pending request`);
-        }
+        logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
         return;
       }
       case 'session.unregister':
