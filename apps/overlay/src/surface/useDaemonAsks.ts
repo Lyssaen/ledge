@@ -4,6 +4,7 @@ import type { DaemonError } from '../daemon/store';
 import type { DaemonStatus } from '../daemon/client';
 import type { SurfaceEvent } from './machine';
 import { useI18n } from '../i18n/lang';
+import { changeOf, type SessionChange } from '../daemon/changes';
 
 export const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
 /** A request the surface still tracks: waiting, or failed (state `error`) with its request kept for a retry. */
@@ -17,8 +18,8 @@ const sameRequest = (a: Session['pending'], b: Session['pending']) => !!a && !!b
  * decision. Every `error` reply that names a session is shown as that session's failure (the daemon only sends them in
  * answer to this client's commands), and a rejected free-text reply hands its text back through `onReplyRejected`.
  */
-export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; lastError: DaemonError | null; dnd: boolean; dispatch: (e: SurfaceEvent) => void; onReplyRejected?: (id: string, text: string) => void }) {
-  const { sessions, status, lastError, dnd, dispatch } = o;
+export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; lastError: DaemonError | null; dnd: boolean; dispatch: (e: SurfaceEvent) => void; finishedBubble: boolean; onChange?: (c: SessionChange, info: { elapsedMs?: number }) => void; onReplyRejected?: (id: string, text: string) => void }) {
+  const { sessions, status, lastError, dnd, dispatch, finishedBubble } = o;
   const { t } = useI18n();
   const msg = useRef(t); msg.current = t;
   const prev = useRef<Map<string, Session>>(new Map());
@@ -28,6 +29,10 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
   const replies = useRef<Map<string, string>>(new Map());
   const onRejected = useRef(o.onReplyRejected);
   onRejected.current = o.onReplyRejected;
+  const onChange = useRef(o.onChange);
+  onChange.current = o.onChange;
+  /** When each bot last set to work from rest, for the finished cue's elapsed time. */
+  const workingSince = useRef<Map<string, number>>(new Map());
   const [inFlight, setInFlight] = useState<ReadonlySet<string>>(() => new Set());
   const [failures, setFailures] = useState<Record<string, string>>({});
   const sync = () => setInFlight(new Set(lock.current));
@@ -45,9 +50,19 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
     const before = prev.current;
     const now = new Map(sessions.map(s => [s.id, s]));
     const ids = [...now.keys()];
-    for (const id of before.keys()) if (!now.has(id)) { forget(id); dispatch({ type: 'removed', id, remaining: ids }); }
+    for (const id of before.keys()) if (!now.has(id)) { forget(id); workingSince.current.delete(id); dispatch({ type: 'removed', id, remaining: ids }); }
     for (const s of sessions) {
       const was = before.get(s.id);
+      const change = changeOf(was, s);
+      // The turn clock starts when a bot sets to work from rest; a permission answered mid-turn does not restart it.
+      if (s.state === 'working' && (!was || was.state === 'idle' || was.state === 'starting')) workingSince.current.set(s.id, Date.now());
+      if (change) {
+        const since = workingSince.current.get(s.id);
+        const elapsedMs = change.kind === 'finished' && since !== undefined ? Date.now() - since : undefined;
+        if (change.kind === 'finished') workingSince.current.delete(s.id);
+        onChange.current?.(change, { elapsedMs });
+        if (change.kind === 'finished' && finishedBubble && !dnd) dispatch({ type: 'finished', id: s.id });
+      }
       const wasTracked = !!was && tracked(was);
       // A fresh request: whatever failed before it (a rejected reply, say) no longer applies.
       if (isPending(s) && !wasTracked) { if (was) clearFailure(s.id); if (!dnd) dispatch({ type: 'ask', id: s.id }); }
@@ -60,7 +75,7 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
         fail(s.id, s.lastError ?? msg.current.notTaken);
     }
     prev.current = now;
-  }, [sessions, dnd, dispatch]); // eslint-disable-line react-hooks/exhaustive-deps -- release/fail only touch refs and setters
+  }, [sessions, dnd, finishedBubble, dispatch]); // eslint-disable-line react-hooks/exhaustive-deps -- release/fail only touch refs and setters
 
   // An `error` reply about a decision in flight fails it (the surface shows why and unlocks the actions); about any other
   // command for a session (a reply to an idle session, say) it is shown as that session's failure. A rejected reply

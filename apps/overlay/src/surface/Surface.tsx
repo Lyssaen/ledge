@@ -92,7 +92,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
 
   // Daemon changes drive the machine. DND keeps the bot growing in the handle but never asks for a bubble.
   // A reply the daemon rejects comes back into its draft (unless something new was typed meanwhile).
-  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
+  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, finishedBubble: true, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
 
   // DND switched on takes any bubble down and drops queued asks. Turning it off does not re-bubble asks already pending.
   useEffect(() => { if (dnd) dispatch({ type: 'dnd', on: true }); }, [dnd, dispatch]);

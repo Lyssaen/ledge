@@ -5,6 +5,7 @@ import { createMockDaemon, fakeSession } from './mockDaemon';
 import { createDaemonClient } from '../src/daemon/client';
 import { attachClient, daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
+import { resetSoundPrefsForTests } from '../src/sounds/preferences';
 
 let mock: Awaited<ReturnType<typeof createMockDaemon>>; let client: ReturnType<typeof createDaemonClient>; let detach: () => void;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -156,5 +157,32 @@ describe('<Surface>', () => {
     await act(async () => { mock.upsert(fakeSession('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } })); await sleep(50); vi.advanceTimersByTime(600); });
     expect(surface()).toHaveStyle({ width: '28px' });
     expect(screen.getByRole('button', { name: /Otto has a question, open/ })).toHaveStyle({ width: '20px' });
+  });
+
+  it('a bot that finishes its task (working → idle) unfolds a finished bubble that folds after 6 s', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); });
+    expect(surface()).toHaveStyle({ width: '28px' });
+    await act(async () => { vi.advanceTimersByTime(540); });
+    expect(surface()).toHaveStyle({ width: '336px' });
+    expect(screen.getByText('Pim finished')).toBeInTheDocument();
+    await act(async () => { vi.advanceTimersByTime(5900); });
+    expect(surface()).toHaveStyle({ width: '336px' });
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(surface()).toHaveStyle({ width: '28px' });
+  });
+
+  it('idle again without working in between is not a finish, and DND or the Handle-only setting keep the handle', async () => {
+    localStorage.setItem('ledge.finished', 'none'); resetSoundPrefsForTests();
+    const { rerender } = render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); vi.advanceTimersByTime(540); });
+    expect(surface()).toHaveStyle({ width: '28px' });
+    localStorage.setItem('ledge.finished', 'both'); resetSoundPrefsForTests();
+    rerender(<Surface screenH={1080} theme="dark" client={client} dnd onToggleDnd={() => {}} />);
+    await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); mock.upsert(pim({ state: 'idle' })); await sleep(50); vi.advanceTimersByTime(540); });
+    expect(surface()).toHaveStyle({ width: '28px' });
+    rerender(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => { mock.upsert(pim({ state: 'idle', lastActivityAt: '2026-10-09T18:09:00.000Z' })); await sleep(50); vi.advanceTimersByTime(540); });
+    expect(surface()).toHaveStyle({ width: '28px' });
   });
 });
