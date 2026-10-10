@@ -243,7 +243,7 @@ describe('<Surface> keyboard first', () => {
     expect(onToggleDnd).toHaveBeenCalledTimes(1);
   });
 
-  it('the coachmark shows on the first three keyboard opens only, Got it dismisses and ? brings it back', () => {
+  it('the coachmark shows on the first three keyboard opens only; ? opens the keyboard help in the surface', () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     for (let i = 1; i <= 3; i++) {
       act(() => shortcut());
@@ -254,6 +254,16 @@ describe('<Surface> keyboard first', () => {
     act(() => shortcut());
     expect(coach()).toBeNull();
     act(() => press('?'));
+    expect(surface()).toHaveAttribute('data-mode', 'help');
+    expect(document.activeElement).toHaveAccessibleName('Back to sessions');
+    act(() => press('Escape'));
+    expect(surface()).toHaveAttribute('data-mode', 'list');
+    act(() => press('Escape'));
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+  });
+  it('Got it dismisses the coachmark', () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => shortcut());
     expect(coach()).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
     expect(coach()).toBeNull();

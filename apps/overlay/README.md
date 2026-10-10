@@ -54,10 +54,10 @@ The Rust side has not been compiled yet. On the first build:
 | O | open the terminal tab |
 | D | do not disturb |
 | Esc | back, then close |
-| ? | show keys |
+| ? | keyboard help, inside the surface (Esc returns to the list) |
 | Ctrl+Alt+T | toggle dark / light theme |
 
-Theme and do-not-disturb are remembered in `localStorage` (`ledge.theme`, `ledge.dnd`).
+Theme, do not disturb and reduced motion are also in the list's Settings view, and are remembered in `localStorage` (`ledge.theme`, `ledge.dnd`, `ledge.reducedMotion`). The OS reduced-motion preference always wins. While the daemon is unreachable, and for sessions started without Ledge (read only), every send and decision path is disabled, keys included.
 
 ## Known V1 limits
 

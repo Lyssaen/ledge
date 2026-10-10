@@ -5,8 +5,8 @@ html, body, #root { margin: 0; height: 100%; background: transparent; }
 body { font-family: 'Geist', system-ui, sans-serif; color: var(--sidebar-foreground); font-size: 14px; line-height: 20px; overflow: hidden; }
 .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
 button, input { font-family: inherit; }
-@keyframes ledge-blink { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
-@keyframes ledge-drain { from { width: 100% } to { width: 0% } }
+/* The bubble countdown drains from the controller's remainder (--ledge-from) to empty. */
+@keyframes ledge-drain { from { width: var(--ledge-from, 100%) } to { width: 0% } }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .dnd-switch:has(input:focus-visible) .dnd-track { outline: 2px solid var(--ring); outline-offset: 2px; }
 .ledge-opt:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }

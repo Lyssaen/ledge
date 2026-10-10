@@ -25,7 +25,16 @@ const CHEVRON_LEFT = ['m15 18-6-6 6-6'];
 /** Height of a focused row carrying the inline Approve / Deny / Open actions. */
 export const EXPANDED_ROW_H = 100;
 
-export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onHoverRow, theme = 'dark', now = Date.now() }: { sessions: Session[]; visible: boolean; numbered: boolean; selectedId: string | null; focusedId?: string | null; dnd: boolean; onToggleDnd: () => void; onOpen: (id: string) => void; onDecide?: (id: string, d: 'accept' | 'deny') => void; onClose: () => void; onHoverRow?: (id: string | null) => void; theme?: 'dark' | 'light'; now?: number }) {
+export interface ListProps {
+  sessions: Session[]; visible: boolean; numbered: boolean; selectedId: string | null; focusedId?: string | null; dnd: boolean;
+  onToggleDnd: () => void; onOpen: (id: string) => void; onDecide?: (id: string, d: 'accept' | 'deny') => void; onClose: () => void;
+  onSettings?: () => void; onHelp?: () => void; onHoverRow?: (id: string | null) => void;
+  /** Whether a session's decisions may be sent now (reachable daemon, not read-only, nothing in flight). */
+  canDecide?: (s: Session) => boolean;
+  theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number;
+}
+
+export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, canDecide = () => true, theme = 'dark', frozen = false, reducedMotion, now = Date.now() }: ListProps) {
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
   return (
@@ -36,7 +45,7 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
           <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{sessions.length} bots · {waiting ? `${waiting} waiting for you` : 'nothing waiting'}</span>
         </div>
         <Button variant="ghost" size="icon" aria-label="Do not disturb" aria-pressed={dnd} onClick={onToggleDnd} style={{ color: dnd ? 'var(--sidebar-primary)' : undefined }}><Icon d={BELL_OFF} /></Button>
-        <Button variant="ghost" size="icon" aria-label="Settings"><Icon d={SLIDERS} /></Button>
+        <Button variant="ghost" size="icon" aria-label="Settings" onClick={onSettings}><Icon d={SLIDERS} /></Button>
         <Button variant="ghost" size="icon" aria-label="Collapse" onClick={onClose}><Icon d={CHEVRON_LEFT} /></Button>
       </div>
       <div data-scroll style={{ display: 'flex', flexDirection: 'column', padding: '8px 0', flexGrow: 1, minHeight: 0, overflowY: 'auto' }}>
@@ -50,7 +59,7 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
               style={{ display: 'flex', alignItems: 'center', gap: 12, height: SIZES.rowH, boxSizing: 'border-box', padding: `0 16px 0 ${numbered ? 10 : 14}px`, border: 'none', borderLeftWidth: 2, borderLeftStyle: 'solid', borderLeftColor: hi ? 'var(--sidebar-primary)' : 'transparent', backgroundColor: bg, textAlign: 'left', color: 'var(--sidebar-foreground)', cursor: 'pointer', width: '100%', opacity: visible ? 1 : 0, transform: `translateX(${visible ? 0 : -10}px)`,
                 transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? delay : 0], ['transform', visible ? 'grow' : 'fadeOut', visible ? delay : 0], ['background-color', 'hover'], ['border-color', 'hover']]) }}>
               {numbered && i < 9 && <Kbd accent={hi}>{i + 1}</Kbd>}
-              <Bot seed={s.id} readOnly={s.source === 'hook_only'} tool={s.tool} state={botState(s)} pose={poseFor(s.id, s.state)} size={32} theme={theme} paused={!visible} />
+              <Bot seed={s.id} readOnly={s.source === 'hook_only'} tool={s.tool} state={botState(s)} pose={poseFor(s.id, s.state)} size={32} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1, minWidth: 0 }}>
                 <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.project}</span>
                 <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name} · {toolName(s.tool)} · {relativeTime(s.startedAt, now)} · {rowHint(s)}</span>
@@ -59,8 +68,8 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
             </button>
             {actions && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: EXPANDED_ROW_H - SIZES.rowH, boxSizing: 'border-box', padding: `0 16px 4px ${numbered ? 40 : 58}px` }}>
-                <Button variant="primary" size="sm" onClick={() => onDecide?.(s.id, 'accept')} style={{ height: 28, padding: '0 8px' }}>Approve <Kbd accent>Y</Kbd></Button>
-                <Button variant="outline" size="sm" onClick={() => onDecide?.(s.id, 'deny')} style={{ height: 28, padding: '0 8px' }}>Deny <Kbd>N</Kbd></Button>
+                <Button variant="primary" size="sm" disabled={!canDecide(s)} onClick={() => onDecide?.(s.id, 'accept')} style={{ height: 28, padding: '0 8px' }}>Approve <Kbd accent>Y</Kbd></Button>
+                <Button variant="outline" size="sm" disabled={!canDecide(s)} onClick={() => onDecide?.(s.id, 'deny')} style={{ height: 28, padding: '0 8px' }}>Deny <Kbd>N</Kbd></Button>
                 <Button variant="ghost" size="sm" onClick={() => onOpen(s.id)} style={{ height: 28, padding: '0 8px' }}>Open <Kbd>↵</Kbd></Button>
               </div>
             )}
@@ -78,6 +87,7 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
         </label>
         <span style={{ flexGrow: 1 }} />
         <Kbd>Ctrl+Alt+L</Kbd>
+        <Button variant="ghost" size="sm" aria-label="Keyboard shortcuts" onClick={onHelp} style={{ height: 28, padding: '0 8px' }}><Kbd>?</Kbd></Button>
       </div>
     </div>
   );

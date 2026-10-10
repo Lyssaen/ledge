@@ -9,7 +9,7 @@ import { slotSizes } from './geometry';
 export interface HandleBot { id: string; name: string; tool: Tool; state: BotState; pose: 1 | 2 | 3; pending: boolean; readOnly?: boolean; tip: string }
 const LABEL: Record<BotState, string> = { starting: 'starting', idle: 'available', approval: 'needs your approval', question: 'has a question', working: 'working', done: 'done', error: 'error', readonly: 'read only' };
 
-export function Handle({ bots, slots, big, visible, hoverId, onHover, onOpen, theme = 'dark' }: { bots: HandleBot[]; slots: Slot[]; big: number; visible: boolean; hoverId: string | null; onHover: (id: string | null) => void; onOpen: (id: string) => void; theme?: 'dark' | 'light' }) {
+export function Handle({ bots, slots, big, visible, hoverId, onHover, onOpen, theme = 'dark', frozen = false, reducedMotion }: { bots: HandleBot[]; slots: Slot[]; big: number; visible: boolean; hoverId: string | null; onHover: (id: string | null) => void; onOpen: (id: string) => void; theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean }) {
   const { small, gap } = slotSizes(bots.length);
   return (
     <div data-layer="handle" inert={!visible} style={{ position: 'absolute', left: 0, top: 0, width: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', gap, padding: '8px 0', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? 200 : 0]]) }}>
@@ -25,7 +25,7 @@ export function Handle({ bots, slots, big, visible, hoverId, onHover, onOpen, th
               transition: transition([['width', 'grow', 0], ['height', 'grow', 0], ['margin-top', 'grow', 0], ['opacity', 'fadeIn', on ? 80 : 0], ['background-color', 'hover']]) }}>
             <span data-tick style={{ position: 'absolute', left: -4, top: 2, bottom: 2, width: 2, borderRadius: '0 2px 2px 0', background: BADGE[b.state].fg, opacity: b.pending ? 1 : 0, transition: transition([['opacity', 'fadeIn', b.pending ? 160 : 0], ['background-color', 'hover']]) }} />
             <span data-sprite style={{ display: 'inline-flex', lineHeight: 0, transform: `scale(${hov ? base * 1.25 : base})`, transition: transition([['transform', b.pending || hov ? 'pop' : 'shrink', 0]]) }}>
-              <Bot seed={b.id} readOnly={b.readOnly} tool={b.tool} state={b.state} pose={b.pose} size={big} theme={theme} paused={!visible} />
+              <Bot seed={b.id} readOnly={b.readOnly} tool={b.tool} state={b.state} pose={b.pose} size={big} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} />
             </span>
           </button>
         );

@@ -9,7 +9,13 @@ import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
 import { Handle, type HandleBot } from './Handle';
 import { Tooltip } from './Tooltip';
-import { Bubble } from './Bubble';
+import { Bubble, type BubbleAck } from './Bubble';
+import { SettingsView } from './SettingsView';
+import { HelpView } from './HelpView';
+import { useMeasuredHeight } from './useMeasuredHeight';
+import { useDaemonAsks, isPending } from './useDaemonAsks';
+import { useFocusRestore } from './useFocusRestore';
+import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { SessionList, rowHint, EXPANDED_ROW_H } from './SessionList';
 import { SessionView, measureSessionH } from './SessionView';
 import { transition, MOTION, ms } from '../motion';
@@ -19,7 +25,6 @@ import { frameOf, type Box } from './frame';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
 import { Coachmark, countCoachmarkOpen, COACHMARK_H } from '../keyboard/Coachmark';
 
-const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
 /** Fallback extents of the extras beside the surface, before (or without) a layout measurement. */
 export const TOOLTIP_BOX = { left: 36, w: 324, h: 30 } as const;
 export const STATUS_BOX = { w: 190, h: 20 } as const;
@@ -28,15 +33,20 @@ const SETTLE_MS = Math.max(MOTION.grow.ms, MOTION.shrink.delayMs + MOTION.shrink
 const measure = (el: HTMLElement | null) => ({ w: el?.offsetWidth ?? 0, h: el?.offsetHeight ?? 0 });
 const inside = (p: { x: number; y: number } | null, g: Layout) => p !== null && p.x >= 0 && p.x < g.w && p.y >= g.top && p.y < g.top + g.h;
 
-export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH: number; theme: 'dark' | 'light'; client: DaemonClient; dnd: boolean; onToggleDnd: () => void }) {
-  const { sessions, byId, status, previews } = useDaemon();
+const OFFLINE = 'Offline: reconnecting to the daemon';
+const READ_ONLY = 'Read only: started without Ledge, answer in its terminal';
+
+export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme }: { screenH: number; theme: 'dark' | 'light'; client: DaemonClient; dnd: boolean; onToggleDnd: () => void; onToggleTheme?: () => void }) {
+  const { sessions, byId, status, previews, lastError } = useDaemon();
+  // One app-level motion preference drives every bot in every layer.
+  const motionPrefs = useMotionPreferences();
+  const osReduced = useOsReducedMotion();
+  const reducedMotion = motionPrefs.reduced;
   const [ctl] = useState(() => createSurfaceController({ onState: s => setSt(s) }));
   const [st, setSt] = useState<SurfaceState>(() => ctl.state());
   const dispatch = ctl.dispatch;
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const prevPending = useRef<Set<string>>(new Set());
-  const prevIds = useRef<Set<string>>(new Set());
   const surfaceRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const offsetRef = useRef(0);
@@ -57,14 +67,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
   useEffect(() => onEdge(on => dispatch({ type: on ? 'edgeEnter' : 'edgeLeave' })), [dispatch]);
 
   // Daemon changes drive the machine. DND keeps the bot growing in the handle but never asks for a bubble.
-  useEffect(() => {
-    const ids = new Set(sessions.map(s => s.id));
-    const pend = new Set(sessions.filter(isPending).map(s => s.id));
-    for (const id of prevIds.current) if (!ids.has(id)) dispatch({ type: 'removed', id, remaining: [...ids] });
-    for (const id of pend) if (!prevPending.current.has(id) && !dnd) dispatch({ type: 'ask', id });
-    for (const id of prevPending.current) if (!pend.has(id) && ids.has(id)) dispatch({ type: 'askCleared', id });
-    prevIds.current = ids; prevPending.current = pend;
-  }, [sessions, dnd, dispatch]);
+  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch });
 
   // DND switched on takes any bubble down and drops queued asks. Turning it off does not re-bubble asks already pending.
   useEffect(() => { if (dnd) dispatch({ type: 'dnd', on: true }); }, [dnd, dispatch]);
@@ -98,6 +101,8 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
     else if (st.mode === 'handle' || st.mode === 'bubble') { setFocusedId(null); setCoach(false); replyAfterOpen.current = false; }
   }, [st.mode, st.selectedId, st.openedBy, sessions]);
 
+  useFocusRestore(surfaceRef, { mode: st.mode, selectedId: st.selectedId });
+
   const kb = st.openedBy === 'keyboard';
   const focused = kb && focusedId ? byId.get(focusedId) ?? null : null;
   const focusedRowId = focused?.id ?? null;
@@ -119,8 +124,16 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
 
   const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), readOnly: s.source === 'hook_only', tip: isPending(s) ? `${botState(s) === 'question' ? 'has a question' : 'needs your approval'} · ${s.pending?.text ?? ''}` : rowHint(s) })), [sessions]);
   const selected = st.selectedId ? byId.get(st.selectedId) ?? null : null;
+  // The last open session stays mounted (inert) while the view slides out, so its content fades instead of vanishing
+  // and focus left on it is detectably stranded (see useFocusRestore). A removed session unmounts at once.
+  const [lastShownId, setLastShownId] = useState<string | null>(null);
+  if (st.selectedId && st.selectedId !== lastShownId) setLastShownId(st.selectedId);
+  const shownId = st.selectedId ?? lastShownId;
+  const shown = shownId ? byId.get(shownId) ?? null : null;
   const bubbleSession = st.bubbleId ? byId.get(st.bubbleId) ?? null : null;
-  const geo = layout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, sessionH: selected ? measureSessionH(selected, st.reading) : 480, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 });
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const bubbleH = useMeasuredHeight(bubbleRef, st.mode === 'bubble');
+  const geo = layout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH || undefined, sessionH: selected ? measureSessionH(selected, st.reading) : 480, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 });
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -146,12 +159,26 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
   const { big } = slotSizes(bots.length);
   const hovBot = bots.find(b => b.id === hoverId) ?? null;
   const hovSlot = geo.slots.find(s => s.id === hoverId);
-  const panel = st.mode === 'list' || st.mode === 'session';
+  const panel = st.mode !== 'handle' && st.mode !== 'bubble';
+  const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help';
   const unreachable = status === 'unreachable';
   const bubblePaused = st.hovering || st.focusWithin || st.hidden || st.ack !== null;
   const send = (m: Parameters<DaemonClient['send']>[0]) => client.send(m);
-  const decide = (id: string, d: 'accept' | 'deny') => send({ type: 'session.decide', id, decision: d });
-  const reply = (id: string, text: string) => { send({ type: 'session.reply', id, text }); setDrafts(x => ({ ...x, [id]: '' })); dispatch({ type: 'typing', on: false }); };
+  // Offline or read-only: every send/decision path (buttons and keys alike) is off, with the reason shown.
+  const blockedFor = (s: Session | null | undefined): string | null => unreachable ? OFFLINE : s?.source === 'hook_only' ? READ_ONLY : s ? null : OFFLINE;
+  const canDecide = (s: Session) => blockedFor(s) === null && !asks.inFlight.has(s.id);
+  /** One decision command per request: false when blocked or already in flight. */
+  const decide = (id: string, d: 'accept' | 'deny'): boolean => {
+    if (blockedFor(byId.get(id)) !== null || !asks.begin(id)) return false;
+    send({ type: 'session.decide', id, decision: d }); return true;
+  };
+  const reply = (id: string, text: string) => {
+    const s = byId.get(id);
+    if (blockedFor(s) !== null) return;
+    if (s && isPending(s) && !asks.begin(id)) return; // answering a request locks it like a decision
+    send({ type: 'session.reply', id, text }); setDrafts(x => ({ ...x, [id]: '' })); dispatch({ type: 'typing', on: false });
+  };
+  const bubbleAck: BubbleAck = st.ack ? (st.ack.confirmed ? 'confirmed' : 'pending') : st.failed && st.failed === st.bubbleId ? 'failed' : null;
   // The coachmark sits 8 px under the focused row; when that would leave the frame it flips above the row, and when
   // neither fits (a short list) it stays below and the native frame reported to the shell extends to hold it.
   const coachShown = coach && kb && st.mode === 'list';
@@ -180,15 +207,16 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
   const zonesArmed = st.mode === 'handle' && !unreachable;
   const zonesKey = zonesArmed ? geo.hotZones.map(z => `${z.top}:${z.h}`).join(',') : '';
   useEffect(() => { setHotZones(zonesArmed ? geo.hotZones : []); }, [zonesKey]); // the bands are captured through `zonesKey`
-  const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; send({ type: 'session.focus', id }); void focusTerminal(s.title); };
+  const focusTab = (id: string) => { const s = byId.get(id); if (!s || blockedFor(s) !== null) return; send({ type: 'session.focus', id }); void focusTerminal(s.title); };
   const chooseOption = (n: number) => {
+    if (blockedFor(selected) !== null) return;
     const radios = surfaceRef.current?.querySelectorAll<HTMLInputElement>('[data-layer="session"] [data-ask] input[type="radio"]:not([aria-label="Other"])');
     const r = radios?.[n - 1]; if (!r) return;
     r.click(); r.focus();
   };
   const openRow = (id: string) => dispatch({ type: 'rowClick', id });
   useKeyboard({
-    enabled: kb && panel, mode: st.mode, sessions, focusedId: st.mode === 'session' ? st.selectedId : focused?.id ?? null,
+    enabled: kb && panel, mode: st.mode, sessions, focusedId: st.mode === 'session' ? st.selectedId : st.mode === 'list' ? focused?.id ?? null : null,
     onFocus: setFocusedId, onOpen: openRow, onDecide: decide,
     onNextAsk: () => {
       const pend = sessions.filter(isPending).map(s => s.id);
@@ -198,12 +226,13 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
       if (!next || next === from) return;
       if (st.mode === 'session') openRow(next); else setFocusedId(next);
     },
-    onClose: () => dispatch({ type: st.mode === 'session' ? 'back' : 'close' }),
+    onClose: () => dispatch({ type: detail ? 'back' : 'close' }),
     onReplyFocus: () => {
+      if (st.mode !== 'session' && st.mode !== 'list') return;
       if (st.mode === 'session') { surfaceRef.current?.querySelector<HTMLInputElement>('[data-layer="session"] input[aria-label^="Reply to"]')?.focus(); return; }
       if (focused) { replyAfterOpen.current = true; openRow(focused.id); }
     },
-    onToggleDnd, onHelp: () => setCoach(c => !c), onTerminal: focusTab, onChooseOption: chooseOption
+    onToggleDnd, onHelp: () => dispatch({ type: st.mode === 'help' ? 'back' : 'help' }), onTerminal: focusTab, onChooseOption: chooseOption
   });
   const motion = growing ? MOTION.grow : MOTION.shrink;
   const delay = growing ? 0 : MOTION.shrink.delayMs;
@@ -221,22 +250,38 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd }: { screenH:
           const row = (e.target as HTMLElement).closest?.('[data-row]') ? (e.target as HTMLElement).closest<HTMLElement>('[data-row-id]')?.dataset.rowId : undefined;
           if (row && kb && ctl.state().mode === 'list') setFocusedId(row);
         }} onBlur={onBlur}
+        // A mouse-opened panel has no scoped shortcuts, but Escape still steps back (detail view to list, then closed).
+        onKeyDown={e => { if (!kb && panel && e.key === 'Escape') { e.preventDefault(); dispatch({ type: detail ? 'back' : 'close' }); } }}
         style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'hidden', background: 'var(--sidebar)', color: 'var(--sidebar-foreground)', border: '1px solid var(--sidebar-border)', borderLeft: 'none', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
           transition: ['top', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out` }}>
-        <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} theme={theme} />
-        <Bubble session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} onOpen={() => dispatch({ type: 'bubbleClick' })}
-          onDecide={d => { if (st.bubbleId) { decide(st.bubbleId, d); dispatch({ type: 'decidedInBubble' }); } }}
-          onReply={t => { if (st.bubbleId) { send({ type: 'session.reply', id: st.bubbleId, text: t }); dispatch({ type: 'decidedInBubble' }); } }} theme={theme} />
+        <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+        <Bubble ref={bubbleRef} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
+          ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} failure={st.bubbleId ? asks.failures[st.bubbleId] : undefined} blocked={bubbleSession ? blockedFor(bubbleSession) : null} frozen={unreachable} reducedMotion={reducedMotion}
+          onOpen={() => dispatch({ type: 'bubbleClick' })}
+          onDecide={d => { if (st.bubbleId && !ctl.state().ack && decide(st.bubbleId, d)) dispatch({ type: 'decidedInBubble' }); }}
+          onReply={t => {
+            const id = st.bubbleId; if (!id || ctl.state().ack || blockedFor(byId.get(id)) !== null || !asks.begin(id)) return;
+            send({ type: 'session.reply', id, text: t }); dispatch({ type: 'decidedInBubble' });
+          }} theme={theme} />
         <div data-panel style={{ position: 'absolute', inset: 0, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>
-          <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, transform: `translateX(${st.mode === 'session' ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <SessionList sessions={sessions} visible={st.mode === 'list'} numbered={kb} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} onClose={() => dispatch({ type: 'close' })} theme={theme} />
+          <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
+            <SessionList sessions={sessions} visible={st.mode === 'list'} numbered={kb} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
+              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+          </div>
+          <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
+            <SettingsView visible={st.mode === 'settings'} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced}
+              onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
+          </div>
+          <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
+            <HelpView visible={st.mode === 'help'} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'session' || undefined} style={{ position: 'absolute', inset: 0, transform: `translateX(${st.mode === 'session' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            {selected && <SessionView session={selected} preview={previews.get(selected.id) ?? []} visible={st.mode === 'session'} reading={st.reading} draft={drafts[selected.id] ?? ''}
-              onDraft={t => { setDrafts(x => ({ ...x, [selected.id]: t })); dispatch({ type: 'typing', on: t.length > 0 }); }}
-              onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onDecide={d => decide(selected.id, d)} onReply={t => reply(selected.id, t)}
-              onInterrupt={() => send({ type: 'session.interrupt', id: selected.id })} onKill={() => send({ type: 'session.kill', id: selected.id })}
-              onFocus={() => focusTab(selected.id)} onToggleReading={() => dispatch({ type: 'reading', on: !st.reading })} theme={theme} />}
+            {shown && <SessionView session={shown} preview={previews.get(shown.id) ?? []} visible={st.mode === 'session'} reading={st.reading} draft={drafts[shown.id] ?? ''}
+              blocked={blockedFor(shown)} deciding={asks.inFlight.has(shown.id)} failure={asks.failures[shown.id]} frozen={unreachable} reducedMotion={reducedMotion}
+              onDraft={t => { setDrafts(x => ({ ...x, [shown.id]: t })); dispatch({ type: 'typing', on: t.length > 0 }); }}
+              onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onDecide={d => decide(shown.id, d)} onReply={t => reply(shown.id, t)}
+              onInterrupt={() => send({ type: 'session.interrupt', id: shown.id })} onKill={() => send({ type: 'session.kill', id: shown.id })}
+              onFocus={() => focusTab(shown.id)} onToggleReading={() => dispatch({ type: 'reading', on: !st.reading })} theme={theme} />}
           </div>
         </div>
       </div>

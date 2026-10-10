@@ -48,10 +48,11 @@ export function useOsReducedMotion(): boolean {
   return useSyncExternalStore(subscribeOs, osSnapshot, () => false);
 }
 
-/** The app-wide motion preference: persisted app setting OR live OS reduction OR `VITE_LEDGE_MOTION=0`. */
-export function useMotionPreferences(): { reduced: boolean; setReduced(value: boolean): void } {
+/** The app-wide motion preference: persisted app setting OR live OS reduction OR `VITE_LEDGE_MOTION=0`.
+ *  `app` is the app's own setting alone (what the settings switch shows). */
+export function useMotionPreferences(): { reduced: boolean; app: boolean; setReduced(value: boolean): void } {
   const app = useSyncExternalStore(subscribeApp, () => appReduced, () => appReduced);
   const os = useOsReducedMotion();
   const set = useCallback((value: boolean) => setReduced(value), []);
-  return { reduced: app || os || envReduced(), setReduced: set };
+  return { reduced: app || os || envReduced(), app, setReduced: set };
 }
