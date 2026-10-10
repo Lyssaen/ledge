@@ -10,7 +10,9 @@ export type Block =
   | { type: 'p'; text: string; q?: number }
   | { type: 'code'; text: string }
   | { type: 'list'; ordered: boolean; items: Item[] }
-  | { type: 'table'; header: string[]; rows: string[][] };
+  | { type: 'table'; header: string[]; rows: string[][]; align: Align[] }
+  | { type: 'quote'; blocks: Block[] };
+export type Align = 'left' | 'center' | 'right';
 export type Section = { kind: SectionKind; title?: string; blocks: Block[] };
 export type Question = { text: string; options: string[] };
 export type ReplyDoc = { title?: string; lead?: string; sections: Section[]; questions: Question[]; structured: boolean };
@@ -27,6 +29,8 @@ const FENCE = /^\s*(```|~~~)/;
 /** A GFM table opens on a row followed by its separator (`|---|:--:|`), with the same number of cells. */
 const TABLE_SEP = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 const UNESCAPED_PIPE = /(?<!\\)\|/;
+const QUOTE = /^\s*>\s?(.*)$/;
+const alignOf = (sep: string): Align => sep.startsWith(':') && sep.endsWith(':') ? 'center' : sep.endsWith(':') ? 'right' : 'left';
 const cells = (line: string) => line.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(UNESCAPED_PIPE).map(c => c.trim().replace(/\\\|/g, '|'));
 const TITLE_MAX = 110;
 const OPTION_MAX = 80;
@@ -44,7 +48,7 @@ export function kindOf(title: string): SectionKind {
   return KINDS.find(([, re]) => re.test(t))?.[0] ?? 'other';
 }
 
-/** Lines to raw blocks: headings, paragraphs, lists (one level of nesting), tables and fenced code. */
+/** Lines to raw blocks: headings, paragraphs, lists (one level of nesting), quotes, tables and fenced code. */
 function tokenize(text: string): Raw[] {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const out: Raw[] = [];
@@ -71,9 +75,18 @@ function tokenize(text: string): Raw[] {
         // Rows follow until a line without a pipe; each is squared to the header (short ones padded, long ones cut).
         for (i += 2; i < lines.length && lines[i]!.trim() !== '' && UNESCAPED_PIPE.test(lines[i]!); i++) rows.push(Array.from({ length: header.length }, (_, c) => cells(lines[i]!)[c] ?? ''));
         i--;
-        out.push({ type: 'table', header, rows });
+        out.push({ type: 'table', header, rows, align: cells(sep).map(alignOf) });
         continue;
       }
+    }
+    const q = line.match(QUOTE);
+    if (q) {
+      flushPara(); flushList();
+      const inner = [q[1]!];
+      for (; i + 1 < lines.length && QUOTE.test(lines[i + 1]!); i++) inner.push(lines[i + 1]!.match(QUOTE)![1]!);
+      // The quoted lines are read again as blocks; a heading means nothing inside a quote, so it reads as a paragraph.
+      out.push({ type: 'quote', blocks: tokenize(inner.join('\n')).map((b): Block => (b.type === 'h' ? { type: 'p', text: b.text } : b)) });
+      continue;
     }
     if (line.trim() === '') { flushPara(); continue; } // a list survives blank lines between its items
     if (RULE.test(line)) { flushPara(); flushList(); continue; }

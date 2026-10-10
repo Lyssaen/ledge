@@ -425,3 +425,19 @@ describe('useNativeFrame', () => {
     } finally { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); }
   });
 });
+
+describe('openUrl', () => {
+  it('goes through the shell in Tauri, a new tab in the browser, and never for a non-web url', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const browser = await loadBridge();
+    browser.openUrl('https://example.com/x');
+    expect(open).toHaveBeenCalledWith('https://example.com/x', '_blank', 'noopener');
+    enterTauri(); const b = await loadBridge();
+    b.openUrl('https://example.com/y');
+    await vi.waitFor(() => expect(calls('open_url')).toEqual([{ url: 'https://example.com/y' }]));
+    b.openUrl('javascript:alert(1)');
+    await new Promise(r => setTimeout(r, 20));
+    expect(calls('open_url')).toHaveLength(1); expect(open).toHaveBeenCalledTimes(1);
+    open.mockRestore();
+  });
+});

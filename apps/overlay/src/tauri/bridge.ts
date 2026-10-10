@@ -9,6 +9,7 @@
  *   release_focus                      give the foreground back to the window remembered by focus_overlay
  *   focus_terminal { title }           bring the matching terminal window forward (true when found)
  *   open_terminal { title, command }   open a Windows Terminal tab running `command` in WSL (true once spawned)
+ *   open_url { url }                   open a web URL in the default browser (the webview never navigates)
  *   event `ledge://edge` { inside }    cursor entered / left the edge bands
  * Coordinates sent to the shell are logical px from the top of the chosen monitor's work area ("monitor px").
  * The page is never zoomed (each layer applies its own UI scale), so its CSS px are monitor px; `setFrame` and
@@ -115,6 +116,14 @@ export async function focusTerminal(title: string): Promise<boolean> {
 export async function openTerminal(title: string, command: string[]): Promise<boolean> {
   if (!inTauri()) return false;
   return invoke<boolean>('open_terminal', { title, command }).catch(() => false);
+}
+
+/** Opens a web URL in the default browser: through the shell in Tauri (the overlay's webview must never navigate
+ *  away), a new tab in the browser. Anything but http(s) is ignored. */
+export function openUrl(url: string): void {
+  if (!/^https?:\/\//i.test(url)) return;
+  if (inTauri()) { void invoke('open_url', { url }).catch(() => {}); return; }
+  window.open(url, '_blank', 'noopener');
 }
 
 /** Whether Windows Terminal is the foreground window (the "only when the terminal is behind" sound rule). False outside Tauri. */

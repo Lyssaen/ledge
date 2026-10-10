@@ -120,14 +120,24 @@ describe('parseReply', () => {
   it('reads a pipe table into a header and rows; cells keep inline markdown and escaped pipes', () => {
     const d = parseReply('Results\n\n| Suite | Result |\n|:---|---:|\n| overlay typecheck + `vitest` | pass |\n| a \\| b | 507 tests, 17 files, pass |\n\nDone.');
     expect(d.title).toBe('Results');
-    expect(d.sections[0]!.blocks[0]).toEqual({ type: 'table', header: ['Suite', 'Result'], rows: [['overlay typecheck + `vitest`', 'pass'], ['a | b', '507 tests, 17 files, pass']] });
+    expect(d.sections[0]!.blocks[0]).toEqual({ type: 'table', header: ['Suite', 'Result'], rows: [['overlay typecheck + `vitest`', 'pass'], ['a | b', '507 tests, 17 files, pass']], align: ['left', 'right'] });
     expect(d.sections[0]!.blocks[1]).toEqual({ type: 'p', text: 'Done.' });
     expect(d.structured).toBe(true);
   });
   it('a pipe line without a separator under it stays prose; a short row is padded, a long one is cut', () => {
     expect(parseReply('a | b\nc').sections[0]!.blocks[0]).toEqual({ type: 'p', text: 'a | b c' });
     const d = parseReply('| x | y |\n| - | - |\n| 1 |\n| 2 | 3 | 4 |');
-    expect(d.sections[0]!.blocks[0]).toEqual({ type: 'table', header: ['x', 'y'], rows: [['1', ''], ['2', '3']] });
+    expect(d.sections[0]!.blocks[0]).toEqual({ type: 'table', header: ['x', 'y'], rows: [['1', ''], ['2', '3']], align: ['left', 'left'] });
+  });
+  it('quoted lines become a quote block with their own paragraphs and lists; a heading inside reads as a paragraph', () => {
+    const d = parseReply('Note\n\n> Première ligne\n> suite\n>\n> - a\n> - b\n\nAprès.');
+    expect(d.sections[0]!.blocks[0]).toEqual({ type: 'quote', blocks: [{ type: 'p', text: 'Première ligne suite' }, { type: 'list', ordered: false, items: [{ text: 'a', sub: [] }, { text: 'b', sub: [] }] }] });
+    expect(d.sections[0]!.blocks[1]).toEqual({ type: 'p', text: 'Après.' });
+    expect(parseReply('> ## Titre\n> texte').sections[0]!.blocks[0]).toEqual({ type: 'quote', blocks: [{ type: 'p', text: 'Titre' }, { type: 'p', text: 'texte' }] });
+    expect(parseReply('> Vraiment ?').questions).toHaveLength(0);
+  });
+  it('the separator sets each column alignment', () => {
+    expect(parseReply('| a | b | c | d |\n|:--|:-:|--:|---|\n| 1 | 2 | 3 | 4 |').sections[0]!.blocks[0]).toMatchObject({ type: 'table', align: ['left', 'center', 'right', 'left'] });
   });
   it('is safe on empty or odd input', () => {
     expect(parseReply('').sections).toEqual([]);

@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
 import { transition } from '../motion';
 import type { Messages } from '../i18n/lang';
+import { openUrl } from '../tauri/bridge';
 
 const mono = "'Geist Mono', ui-monospace, monospace";
 const card: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 12px', background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', minWidth: 0 };
@@ -11,14 +12,31 @@ const marker: React.CSSProperties = { width: 22, height: 22, flexShrink: 0, disp
 const kickerStyle: React.CSSProperties = { fontFamily: mono, fontSize: 11, lineHeight: '16px', fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--muted-foreground)' };
 const chipStyle: React.CSSProperties = { height: 28, padding: '0 10px', borderRadius: 9999, fontSize: 12, fontWeight: 500 };
 
-/** Inline markdown the agent uses in a line: `code` and **bold**; anything else stays text. */
-export function inline(text: string): ReactNode[] {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
-  return parts.map((p, i) => {
-    if (p.startsWith('`') && p.endsWith('`') && p.length > 2) return <code key={i} style={{ fontFamily: mono, fontSize: '0.92em', background: 'var(--muted)', padding: '1px 5px', borderRadius: 6, overflowWrap: 'anywhere' }}>{p.slice(1, -1)}</code>;
-    if (p.startsWith('**') && p.endsWith('**') && p.length > 4) return <strong key={i} style={{ fontWeight: 600 }}>{p.slice(2, -2)}</strong>;
-    return p;
-  });
+/** One inline token, first match wins: a code span (nothing is read inside it), a web link, bold, struck, italic.
+ *  Bold and struck spans may hold other tokens; a star or underscore glued to a word (`2*3`, `snake_case`) is text. */
+const TOKEN = /(?<code>`[^`\n]+`)|\[(?<ltext>[^\]\n]+)\]\((?<lurl>https?:\/\/[^\s)]+)\)|\*\*(?<b1>\S(?:.*?\S)?)\*\*(?!\*)|__(?<b2>\S(?:.*?\S)?)__(?!_)|~~(?<s>\S(?:.*?\S)?)~~|(?<![\w*])\*(?<i1>[^\s*](?:[^*\n]*?[^\s*])?)\*(?![\w*])|(?<![\w_])_(?<i2>[^\s_](?:[^_\n]*?[^\s_])?)_(?![\w_])/g;
+const codeStyle: React.CSSProperties = { fontFamily: mono, fontSize: '0.92em', background: 'var(--muted)', padding: '1px 5px', borderRadius: 6, overflowWrap: 'anywhere' };
+const linkStyle: React.CSSProperties = { color: 'inherit', textDecoration: 'underline', textDecorationColor: 'var(--muted-foreground)', textUnderlineOffset: 2 };
+
+/** Inline markdown the agent uses in a line: `code`, [links](https://…) that open in the browser, **bold**, *italic*,
+ *  ~~struck~~; anything else stays text. */
+export function inline(text: string, depth = 0): ReactNode[] {
+  if (depth > 3) return [text];
+  const re = new RegExp(TOKEN.source, 'g');
+  const out: ReactNode[] = [];
+  let last = 0;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const g = m.groups!; const key = m.index;
+    if (g.code) out.push(<code key={key} style={codeStyle}>{g.code.slice(1, -1)}</code>);
+    else if (g.lurl) { const url = g.lurl; out.push(<a key={key} href={url} title={url} onClick={e => { e.preventDefault(); openUrl(url); }} style={linkStyle}>{inline(g.ltext!, depth + 1)}</a>); }
+    else if (g.b1 ?? g.b2) out.push(<strong key={key} style={{ fontWeight: 600 }}>{inline((g.b1 ?? g.b2)!, depth + 1)}</strong>);
+    else if (g.s) out.push(<s key={key}>{inline(g.s, depth + 1)}</s>);
+    else out.push(<em key={key}>{inline((g.i1 ?? g.i2)!, depth + 1)}</em>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
 }
 
 function Check() {
@@ -76,13 +94,16 @@ export function ReplyCard({ doc, raw, t, onDraft, onFocusReply }: ReplyCardProps
   };
   const renderBlock = (b: Block, kind: Section['kind'], key: number): ReactNode => {
     if (b.type === 'code') return <pre key={key} className="mono ledge-scroll" style={{ margin: 0, padding: '10px 12px', background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 12, lineHeight: '18px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 260, overflow: 'auto' }}>{b.text}</pre>;
+    if (b.type === 'quote') {
+      return <blockquote key={key} data-quote style={{ margin: 0, padding: '2px 0 2px 10px', borderLeft: '2px solid var(--border)', color: 'var(--muted-foreground)', display: 'flex', flexDirection: 'column', gap: 6 }}>{b.blocks.map((x, i) => renderBlock(x, kind, i))}</blockquote>;
+    }
     if (b.type === 'table') {
-      const cell: React.CSSProperties = { padding: '7px 10px', textAlign: 'left', verticalAlign: 'top', overflowWrap: 'anywhere' };
+      const cell = (j: number): React.CSSProperties => ({ padding: '7px 10px', textAlign: b.align[j] ?? 'left', verticalAlign: 'top', overflowWrap: 'anywhere' });
       return (
         <div key={key} className="ledge-scroll" style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
           <table data-table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13, lineHeight: '18px' }}>
-            <thead><tr>{b.header.map((h, i) => <th key={i} scope="col" style={{ ...cell, fontSize: 12, fontWeight: 500, color: 'var(--muted-foreground)', background: 'var(--well)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{inline(h)}</th>)}</tr></thead>
-            <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} style={{ ...cell, borderTop: i > 0 ? '1px solid var(--border)' : undefined }}>{inline(c)}</td>)}</tr>)}</tbody>
+            <thead><tr>{b.header.map((h, i) => <th key={i} scope="col" style={{ ...cell(i), fontSize: 12, fontWeight: 500, color: 'var(--muted-foreground)', background: 'var(--well)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{inline(h)}</th>)}</tr></thead>
+            <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} style={{ ...cell(j), borderTop: i > 0 ? '1px solid var(--border)' : undefined }}>{inline(c)}</td>)}</tr>)}</tbody>
           </table>
         </div>
       );
