@@ -328,7 +328,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           onDecide={d => { if (st.bubbleId && !ctl.state().ack && decide(st.bubbleId, d)) dispatch({ type: 'decidedInBubble' }); }}
           onReply={t => {
             const id = st.bubbleId; if (!id || ctl.state().ack || blockedFor(byId.get(id)) !== null || !asks.begin(id)) return;
-            send({ type: 'session.reply', id, text: t }); dispatch({ type: 'decidedInBubble' });
+            send({ type: 'session.reply', id, text: t }); sounds.user('accept'); dispatch({ type: 'decidedInBubble' });
           }} theme={theme} />
         </div>
         <div data-panel style={{ position: 'absolute', inset: 0, zoom: ps, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>

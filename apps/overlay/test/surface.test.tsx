@@ -206,6 +206,16 @@ describe('<Surface>', () => {
       await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); });
       await waitFor(() => expect(p.played.at(-1)).toEqual(['finished', 1]));
     });
+    it('a question bubble answered with its first option ticks like any reply', async () => {
+      const p = fakePlayer();
+      render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} soundPlayer={p as never} />);
+      await act(async () => { vi.advanceTimersByTime(2000); });
+      await act(async () => { mock.upsert(pim({ state: 'waiting_input', pending: { kind: 'question', text: 'Which migration?', options: ['Backfill', 'Shadow'], source: 'hook' } })); await sleep(50); vi.advanceTimersByTime(540); });
+      await waitFor(() => expect(p.played).toEqual([['question', 1]]));
+      fireEvent.click(screen.getByRole('button', { name: 'Answer: Backfill' }));
+      await waitFor(() => expect(mock.received).toContainEqual(expect.objectContaining({ type: 'session.reply', id: 'b' })));
+      await waitFor(() => expect(p.played.at(-1)).toEqual(['accept', 1]));
+    });
     it('the snapshot on connect plays no join; DND and the switch silence everything; Sound-only finish plays without a bubble', async () => {
       const p = fakePlayer();
       localStorage.setItem('ledge.sounds', JSON.stringify({ ...DEFAULT_SOUNDS, categories: { ...DEFAULT_SOUNDS.categories, team: true } })); resetSoundPrefsForTests();
@@ -215,6 +225,13 @@ describe('<Surface>', () => {
       rerender(<Surface screenH={1080} theme="dark" client={client} dnd onToggleDnd={() => {}} soundPlayer={p as never} />);
       await act(async () => { vi.advanceTimersByTime(2000); mock.upsert(pimAsks()); await sleep(50); });
       expect(p.played).toEqual([]);
+      // The switch off, DND off: still nothing.
+      localStorage.setItem('ledge.sounds', JSON.stringify({ ...DEFAULT_SOUNDS, enabled: false, categories: { ...DEFAULT_SOUNDS.categories, team: true } })); resetSoundPrefsForTests();
+      rerender(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} soundPlayer={p as never} />);
+      await act(async () => { mock.upsert(fakeSession('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } })); await sleep(50); });
+      expect(p.played).toEqual([]);
+      localStorage.setItem('ledge.sounds', JSON.stringify({ ...DEFAULT_SOUNDS, categories: { ...DEFAULT_SOUNDS.categories, team: true } }));
+      await act(async () => { mock.upsert(fakeSession('a')); await sleep(50); });
       localStorage.setItem('ledge.finished', 'sound'); resetSoundPrefsForTests();
       rerender(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} soundPlayer={p as never} />);
       await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); vi.advanceTimersByTime(2000); mock.upsert(pim({ state: 'idle' })); await sleep(50); vi.advanceTimersByTime(540); });

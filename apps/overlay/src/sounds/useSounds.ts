@@ -28,7 +28,7 @@ export function useSounds(o: { player: SoundPlayer; dnd: boolean; status: Daemon
   live.current = { player: o.player, dnd: o.dnd, finished, sounds, check: o.terminalInFront ?? foregroundIsTerminal };
   const lastPlayedAt = useRef<number | null>(null);
   const connectedAt = useRef<number | null>(null);
-  useEffect(() => { if (o.status === 'open') connectedAt.current = Date.now(); }, [o.status]);
+  const prevStatus = useRef(o.status);
 
   const play = (cue: Cue) => {
     const l = live.current;
@@ -41,6 +41,12 @@ export function useSounds(o: { player: SoundPlayer; dnd: boolean; status: Daemon
       l.player.play(cue, d.gain);
     });
   };
+  // The daemon lost (spec §7 ter, Échec): once per outage, on open -> unreachable only; retries and the reconnection are silent.
+  useEffect(() => {
+    const was = prevStatus.current; prevStatus.current = o.status;
+    if (o.status === 'open') connectedAt.current = Date.now();
+    if (was === 'open' && o.status === 'unreachable') play('error');
+  }, [o.status]); // eslint-disable-line react-hooks/exhaustive-deps -- play reads the live ref
   return {
     onChange: (c: SessionChange) => { const cue = cueOf(c); if (cue) play(cue); },
     user: (cue: 'accept' | 'deny') => play(cue),
