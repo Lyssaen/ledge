@@ -1,17 +1,16 @@
 import { spawn } from 'node:child_process';
-import { basename, join } from 'node:path';
 import { readFile, rm } from 'node:fs/promises';
-import { randomBytes } from 'node:crypto';
 import { createConnection } from 'node:net';
 import type { Session, Tool } from '@ledge/protocol';
 import { PROTOCOL_PORT } from '@ledge/protocol';
 import { connect, type Client } from '../client.js';
 import { realTmux, type Tmux } from '../tmux.js';
-import { ensureLedgeDir, paths } from '../paths.js';
-import { pickName } from '../names.js';
+import { ensureLedgeDir } from '../paths.js';
+import { exitFile, spawnSession } from '../spawn.js';
 import { log } from '../log.js';
 
-const AGENT_BIN: Record<Tool, string> = { claude: 'claude', codex: 'codex', cursor: 'cursor-agent' };
+export { agentEnv, exitFile } from '../spawn.js';
+
 const TMUX_SOCKET = 'ledge';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -81,47 +80,22 @@ export async function ensureDaemon(opts: { port?: number; spawnDaemon?: () => vo
   return { client: null, reason: 'unreachable' };
 }
 
-/** Where the wrapped agent leaves its exit code (see createSession's `recordExit`). */
-export function exitFile(id: string): string { return join(paths().dir, `exit-${id}`); }
-
-/**
- * The agent's environment: the launching shell's (AWS_PROFILE, venv, ANTHROPIC_*, CLAUDE_CONFIG_DIR...)
- * so `ledge claude` behaves like plain `claude`, minus the launcher's own tmux variables, plus `extra`.
- * Without this the pane only gets the tmux server's global environment, frozen when it started.
- */
-export function agentEnv(base: NodeJS.ProcessEnv, extra: Record<string, string>): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(base)) if (v !== undefined && k !== 'TMUX' && !k.startsWith('TMUX_')) env[k] = v;
-  return { ...env, ...extra };
-}
-
 /** The daemon accepted the connection but failed during session creation: launch untracked instead. */
 export class DaemonError extends Error {}
 
+/** Spawns the agent's tmux session (see `spawnSession`) with names and ids free in the daemon's snapshot, then registers it. */
 export async function createSession(opts: { tool: Tool; args: string[]; command?: string[]; recordExit?: boolean; name?: string; cwd: string; tmux: Tmux; client: Client | null; now?: () => string; env?: NodeJS.ProcessEnv }): Promise<Session> {
-  const now = opts.now ?? (() => new Date().toISOString());
-  const takenNames: string[] = []; const takenIds = new Set<string>();
+  const names: string[] = []; const ids: string[] = [];
   if (opts.client) {
     let snap;
     try { opts.client.send({ type: 'snapshot.request' }); snap = await opts.client.next('snapshot'); }
     catch (e) { throw new DaemonError(`daemon did not answer: ${(e as Error).message}`); }
-    for (const s of snap.sessions) { takenNames.push(s.name); takenIds.add(s.id); }
+    for (const s of snap.sessions) { names.push(s.name); ids.push(s.id); }
   }
-  let id: string; do id = randomBytes(2).toString('hex'); while (takenIds.has(id));
-  const name = pickName(takenNames, opts.name);
-  const project = basename(opts.cwd) || opts.cwd;
-  const tmuxSession = `ledge-${id}`;
-  // `command` replaces the agent binary entirely (tests run a fake agent); `args` are always agent args.
-  const agent = opts.command ?? [AGENT_BIN[opts.tool], ...opts.args];
-  // With recordExit, sh runs the agent with its argv untouched ("$@") and writes its exit code to
-  // the file passed as $0, so the session can die naturally and the code is still readable.
-  const command = opts.recordExit ? ['sh', '-c', '"$@"; echo $? > "$0"', exitFile(id), ...agent] : agent;
-  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(opts.env ?? process.env, { LEDGE_SESSION: id, LEDGE_NAME: name }), command });
-  const at = now();
-  const session: Session = { id, name, tool: opts.tool, cwd: opts.cwd, project, title: `${name} · ${project}`, tmuxSession, state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher' };
+  const session = await spawnSession({ ...opts, taken: { names, ids } });
   // The agent already runs: a lost register only means an untracked session, never a failed launch.
   try { opts.client?.send({ type: 'session.register', session }); }
-  catch (e) { log(`register failed for ${id}: ${(e as Error).message}`); }
+  catch (e) { log(`register failed for ${session.id}: ${(e as Error).message}`); }
   return session;
 }
 

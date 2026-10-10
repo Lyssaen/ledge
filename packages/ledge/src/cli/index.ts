@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const USAGE = `ledge <claude|codex|cursor> [--name <bot>] [-- agent args]   start an agent in a tracked session
+ledge attach <id>                                            put this terminal on a running session
 ledge daemon                                                 run the daemon in the foreground
 ledge hook <Event>                                           receive a hook (reads JSON on stdin)
 ledge setup                                                  install hooks and ~/.ledge
@@ -22,6 +23,7 @@ async function main(argv: string[]): Promise<number> {
     case 'setup': { const { runSetup } = await import('./setup.js'); for (const l of await runSetup()) console.log(l); return 0; }
     case 'status': { const { printStatus } = await import('./status.js'); console.log(await printStatus()); return 0; }
     case 'claude': case 'codex': case 'cursor': { const { launch } = await import('./launch.js'); return launch(cmd, rest); }
+    case 'attach': { const { attach } = await import('./attach.js'); return attach(rest[0] ?? ''); }
     default: console.log(USAGE); return cmd ? 1 : 0;
   }
 }

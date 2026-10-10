@@ -173,6 +173,32 @@ for (const theme of ['dark', 'light'] as const) {
         await shoot(page, `help-${theme}`);
       });
 
+      test('new session, and the empty list', async ({ page }) => {
+        await desktop(page, theme);
+        const recents = [
+          { cwd: '/home/joffrey/Workspace/api-gateway', project: 'api-gateway', lastAt: new Date(Date.now() - 86_400_000).toISOString() },
+          { cwd: '/home/joffrey/Workspace/harness-assistant', project: 'harness-assistant', lastAt: new Date(Date.now() - 18 * 60_000).toISOString() },
+          { cwd: '/home/joffrey/Workspace/speos-portal', project: 'speos-portal', lastAt: new Date(Date.now() - 3 * 86_400_000).toISOString() }
+        ];
+        await fakeDaemon(page, overview().map(s => (s.id === 'otto' ? { ...s, cwd: '/home/joffrey/Workspace/harness-assistant' } : s)), { recents });
+        await ready(page, 4);
+        await openList(page);
+        await layer(page, 'list').getByRole('button', { name: 'Nouvelle session' }).click();
+        await expectMode(page, 'launch');
+        await restInside(page);
+        await layer(page, 'launch').getByLabel('Compagnon', { exact: true }).fill('Juno');
+        await shoot(page, `launch-${theme}`);
+      });
+
+      test('empty list', async ({ page }) => {
+        await desktop(page, theme);
+        await fakeDaemon(page, []);
+        await ready(page, 0);
+        await openList(page);
+        await expect(layer(page, 'list').getByText('Personne au travail.')).toBeVisible();
+        await shoot(page, `launch-empty-${theme}`);
+      });
+
       test('twelve sessions', async ({ page }) => {
         await desktop(page, theme);
         await fakeDaemon(page, team());

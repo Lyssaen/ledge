@@ -23,6 +23,17 @@ describe('geometry', () => {
     const edge = layout({ bots: bots(10, [0]), mode: 'bubble', screenH: 300, bubbleId: '0' });
     expect(edge.top).toBeGreaterThanOrEqual(SIZES.margin);
   });
+  it('the launch form is a detail view at the list width, measured or at its fallback height', () => {
+    const l = layout({ bots: bots(2), mode: 'launch', screenH: 1080 });
+    expect(l.w).toBe(SIZES.listW); expect(l.h).toBe(SIZES.launchH);
+    expect(layout({ bots: bots(2), mode: 'launch', screenH: 1080, detailH: 700 }).h).toBe(700);
+    expect(layout({ bots: bots(0), mode: 'launch', screenH: 500 }).h).toBe(500 - 2 * SIZES.margin);
+  });
+  it('an empty list holds the empty state instead of rows', () => {
+    const l = layout({ bots: bots(0), mode: 'list', screenH: 1080 });
+    expect(l.h).toBe(SIZES.headerH + SIZES.emptyH + SIZES.footerH + SURFACE_CHROME_Y);
+    expect(l.w).toBe(SIZES.listW);
+  });
   it('the list grows with the rows and never exceeds the screen minus margins', () => {
     const l = layout({ bots: bots(3), mode: 'list', screenH: 1080 });
     expect(l.h).toBe(SIZES.headerH + 16 + 3 * SIZES.rowH + SIZES.footerH + SURFACE_CHROME_Y);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, ServerMessageSchema, SessionSchema, PROTOCOL_PORT } from '../src/index.js';
+import { parseClientMessage, ServerMessageSchema, SessionSchema, PROTOCOL_PORT, NAMES, pickName } from '../src/index.js';
 
 const session = {
   id: '7f3a', name: 'Otto', tool: 'claude', cwd: '/home/u/Workspace/harness-assistant',
@@ -57,5 +57,31 @@ describe('protocol', () => {
     expect(ServerMessageSchema.parse({ type: 'session.preview', id: '7f3a', lines: ['a', 'b'] }).type).toBe('session.preview');
     expect(ServerMessageSchema.parse({ type: 'session.removed', id: '7f3a' }).type).toBe('session.removed');
     expect(ServerMessageSchema.parse({ type: 'session.updated', session }).type).toBe('session.updated');
+  });
+});
+
+describe('protocol: launching from the overlay', () => {
+  it('parses session.launch with its optional fields', () => {
+    expect(parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '~/Workspace/api-gateway' }).type).toBe('session.launch');
+    const full = parseClientMessage({ type: 'session.launch', tool: 'codex', cwd: '/w/x', name: 'Juno', prompt: 'run the tests', continue: true });
+    expect(full).toEqual({ type: 'session.launch', tool: 'codex', cwd: '/w/x', name: 'Juno', prompt: 'run the tests', continue: true });
+    expect(() => parseClientMessage({ type: 'session.launch', tool: 'vim', cwd: '/w' })).toThrow();
+    expect(() => parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '' })).toThrow();
+  });
+  it('parses session.launched, recents, and a snapshot carrying recents and the launcher command', () => {
+    expect(ServerMessageSchema.parse({ type: 'session.launched', id: '7f3a' })).toEqual({ type: 'session.launched', id: '7f3a' });
+    const recents = [{ cwd: '/w/api-gateway', project: 'api-gateway', lastAt: '2026-10-10T09:00:00.000Z' }];
+    expect(ServerMessageSchema.parse({ type: 'recents', recents })).toEqual({ type: 'recents', recents });
+    const snap = ServerMessageSchema.parse({ type: 'snapshot', sessions: [], recents, launcher: ['/usr/bin/node', '/opt/ledge/dist/cli/index.js'] });
+    expect(snap).toEqual({ type: 'snapshot', sessions: [], recents, launcher: ['/usr/bin/node', '/opt/ledge/dist/cli/index.js'] });
+    // A daemon from before these fields still speaks the protocol.
+    expect(ServerMessageSchema.parse({ type: 'snapshot', sessions: [] })).toEqual({ type: 'snapshot', sessions: [] });
+  });
+  it('exposes the bot names so the overlay can pick a free one', () => {
+    expect(NAMES.length).toBe(64);
+    expect(NAMES[0]).toBe('Otto');
+    expect(pickName(['Otto', 'Pim'])).toBe('Nova');
+    expect(pickName(['Otto'], 'juno')).toBe('Juno');
+    expect(pickName(['Juno'], 'Juno')).toBe('Juno-2');
   });
 });

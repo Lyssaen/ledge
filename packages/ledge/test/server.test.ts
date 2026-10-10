@@ -6,7 +6,8 @@ import { connect as tcp } from 'node:net';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
-import { startServer, ALLOWED_ORIGINS } from '../src/daemon/server.js';
+import { startServer, ALLOWED_ORIGINS, launchArgs, resolveFolder } from '../src/daemon/server.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 
@@ -16,11 +17,12 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
   tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra
 });
 
-function fakeTmux(panes: Record<string, string[]>): Tmux & { sent: string[][] } {
-  const sent: string[][] = [];
+type NewSession = { name: string; cwd: string; env: Record<string, string>; command: string[] };
+function fakeTmux(panes: Record<string, string[]>): Tmux & { sent: string[][]; created: NewSession[] } {
+  const sent: string[][] = []; const created: NewSession[] = [];
   return {
-    sent,
-    async newSession() {}, async sendText(n, t) { sent.push(['text', n, t]); }, async sendKeys(n, k) { sent.push(['keys', n, ...k]); },
+    sent, created,
+    async newSession(o) { created.push(o); panes[o.name] = ['']; }, async sendText(n, t) { sent.push(['text', n, t]); }, async sendKeys(n, k) { sent.push(['keys', n, ...k]); },
     async capture(n) { const q = panes[n] ?? ['']; return q.length > 1 ? q.shift()! : q[0]!; },
     async hasSession(n) { return n in panes; }, async listSessions() { return Object.keys(panes); },
     async killSession(n) { delete panes[n]; sent.push(['kill', n]); }, attachArgs: n => ['attach', n]
@@ -47,6 +49,22 @@ function handshake(port: number, origin?: string): Promise<'open' | number> {
     ws.once('error', () => {});
   });
 }
+
+describe('launchArgs and resolveFolder', () => {
+  it('builds the agent arguments: resume flag first, then the trimmed prompt; nothing for an empty form', () => {
+    expect(launchArgs({ tool: 'claude' })).toEqual([]);
+    expect(launchArgs({ tool: 'claude', prompt: '  ' })).toEqual([]);
+    expect(launchArgs({ tool: 'claude', prompt: 'fix the build', continue: true })).toEqual(['--continue', 'fix the build']);
+    expect(launchArgs({ tool: 'codex', continue: true })).toEqual(['resume', '--last']);
+  });
+  it('resolves a folder: ~ against the given home, absolute paths normalised', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ledge-home-')); mkdirSync(join(home, 'w'));
+    expect(await resolveFolder('~', home)).toBe(home);
+    expect(await resolveFolder(' ~/w ', home)).toBe(join(home, 'w'));
+    expect(await resolveFolder(`${home}/w/../w/`, home)).toBe(join(home, 'w'));
+    await expect(resolveFolder('w', home)).rejects.toThrow(/not an absolute path/);
+  });
+});
 
 describe('server: origin check', () => {
   it('refuses a handshake from a foreign web page', async () => {
@@ -417,6 +435,67 @@ describe('server', () => {
       c.send({ type: 'session.dismiss', id: 'nope' });
       expect(await c.next('error')).toEqual({ type: 'error', id: 'nope', message: 'unknown session' });
       await expect(c.next('session.removed', 100)).rejects.toThrow(/timeout/);
+      c.close();
+    });
+  });
+
+  describe('launch from the overlay', () => {
+    const home = () => process.env.LEDGE_HOME!;
+    it('creates the tmux session in the folder, registers it starting, answers the requester and broadcasts', async () => {
+      mkdirSync(join(home(), 'api-gateway'));
+      const c = await connect({ port: srv.port }); const snap0 = await c.next('snapshot');
+      expect(snap0.launcher).toEqual([process.execPath, process.argv[1]]);
+      const other = await connect({ port: srv.port }); await other.next('snapshot');
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'api-gateway'), name: 'juno', prompt: ' run the tests ', continue: true });
+      const launched = await c.next('session.launched');
+      const s = store.get(launched.id)!;
+      expect(s).toMatchObject({ name: 'Juno', tool: 'claude', cwd: join(home(), 'api-gateway'), project: 'api-gateway', title: 'Juno · api-gateway', state: 'starting', source: 'launcher', tmuxSession: `ledge-${launched.id}` });
+      expect(tmux.created).toHaveLength(1);
+      expect(tmux.created[0]).toMatchObject({ name: `ledge-${launched.id}`, cwd: join(home(), 'api-gateway'), command: ['claude', '--continue', 'run the tests'] });
+      expect(tmux.created[0]!.env).toMatchObject({ LEDGE_SESSION: launched.id, LEDGE_NAME: 'Juno' });
+      expect((await other.next('session.updated')).session.id).toBe(launched.id);
+      // The other client never gets the launched reply; both learn the new recent folder.
+      await expect(other.next('session.launched', 100)).rejects.toThrow(/timeout/);
+      expect((await other.next('recents')).recents).toEqual([{ cwd: join(home(), 'api-gateway'), project: 'api-gateway', lastAt: s.startedAt }]);
+      c.close(); other.close();
+    });
+    it('picks a free name when none is given or the wanted one is live, and never a live id', async () => {
+      mkdirSync(join(home(), 'p'));
+      store.upsert(mk('a', { name: 'Otto' })); store.upsert(mk('b', { name: 'Pim', state: 'exited' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.launch', tool: 'codex', cwd: join(home(), 'p') });
+      const first = await c.next('session.launched');
+      expect(store.get(first.id)!.name).toBe('Pim'); // exited sessions free their name
+      expect(['a', 'b']).not.toContain(first.id);
+      c.send({ type: 'session.launch', tool: 'cursor', cwd: join(home(), 'p'), name: 'Otto' });
+      const second = await c.next('session.launched');
+      expect(store.get(second.id)!.name).toBe('Otto-2');
+      expect(tmux.created.map(x => x.command[0])).toEqual(['codex', 'cursor-agent']);
+      c.close();
+    });
+    it('expands ~ and refuses a missing folder or a file with an error for the requester', async () => {
+      mkdirSync(join(home(), 'tilde')); writeFileSync(join(home(), 'file.txt'), 'x');
+      const srv2 = await startServer({ store, tmux, port: 0, home: home() });
+      const c = await connect({ port: srv2.port }); await c.next('snapshot');
+      c.send({ type: 'session.launch', tool: 'claude', cwd: '~/tilde' });
+      expect(store.get((await c.next('session.launched')).id)!.cwd).toBe(join(home(), 'tilde'));
+      c.send({ type: 'session.launch', tool: 'claude', cwd: '~/nope' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: `no such folder: ${join(home(), 'nope')}` });
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'file.txt') });
+      expect((await c.next('error')).message).toMatch(/not a folder/);
+      c.send({ type: 'session.launch', tool: 'claude', cwd: 'relative/path' });
+      expect((await c.next('error')).message).toMatch(/not an absolute path/);
+      expect(tmux.created).toHaveLength(1);
+      c.close(); await srv2.close();
+    });
+    it('a terminal launch records its folder among the recents too, most recent first', async () => {
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.register', session: mk('a', { cwd: '/w/one', project: 'one', startedAt: '2026-10-10T09:00:00.000Z' }) });
+      await c.next('session.updated');
+      c.send({ type: 'session.register', session: mk('b', { name: 'Pim', cwd: '/w/two', project: 'two', startedAt: '2026-10-10T10:00:00.000Z' }) });
+      await c.next('session.updated');
+      c.send({ type: 'snapshot.request' });
+      expect((await c.next('snapshot')).recents).toEqual([{ cwd: '/w/two', project: 'two', lastAt: '2026-10-10T10:00:00.000Z' }, { cwd: '/w/one', project: 'one', lastAt: '2026-10-10T09:00:00.000Z' }]);
       c.close();
     });
   });

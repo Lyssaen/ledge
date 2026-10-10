@@ -57,6 +57,30 @@ describe('Store', () => {
   });
 });
 
+describe('Store recents', () => {
+  const T1 = '2026-10-10T09:00:00.000Z', T2 = '2026-10-10T10:00:00.000Z';
+  it('remembers folders most recent first, one entry per folder, and notifies', () => {
+    const s = new Store(); const seen: string[] = []; s.onChange(c => seen.push(c.type));
+    s.touchRecent('/w/a', 'a', T0); s.touchRecent('/w/b', 'b', T1); s.touchRecent('/w/a', 'a', T2);
+    expect(s.recents()).toEqual([{ cwd: '/w/a', project: 'a', lastAt: T2 }, { cwd: '/w/b', project: 'b', lastAt: T1 }]);
+    expect(seen).toEqual(['recents', 'recents', 'recents']);
+  });
+  it('keeps the twelve most recent', () => {
+    const s = new Store();
+    for (let i = 0; i < 15; i++) s.touchRecent(`/w/${i}`, String(i), new Date(Date.parse(T0) + i * 1000).toISOString());
+    expect(s.recents()).toHaveLength(12);
+    expect(s.recents()[0]!.cwd).toBe('/w/14'); expect(s.recents()[11]!.cwd).toBe('/w/3');
+  });
+  it('persists with the journal and loads back; an older journal without recents loads empty', async () => {
+    const s = new Store(); s.touchRecent('/w/a', 'a', T1); await s.save();
+    const s2 = new Store(); await s2.load();
+    expect(s2.recents()).toEqual([{ cwd: '/w/a', project: 'a', lastAt: T1 }]);
+    writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ sessions: [mk('ok')] }));
+    const s3 = new Store(); await s3.load();
+    expect(s3.recents()).toEqual([]); expect(s3.all().map(x => x.id)).toEqual(['ok']);
+  });
+});
+
 describe('Store save serialization', () => {
   it('overlapping save() calls both resolve and leave a valid journal', async () => {
     const s = new Store(); s.upsert(mk('a'));

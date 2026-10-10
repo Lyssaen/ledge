@@ -274,6 +274,31 @@ fn focus_terminal(title: String) -> Result<bool, String> {
 #[tauri::command]
 fn focus_terminal(_title: String) -> Result<bool, String> { Ok(false) }
 
+/// The `wt.exe` arguments that open a tab titled `title` in the current Windows Terminal window (a new one when none
+/// is open) running `command` inside the default WSL distribution. `command` is the daemon's launcher command plus
+/// `attach <id>`, passed verbatim: Windows Terminal hands everything after `wsl.exe --` to WSL untouched.
+pub fn terminal_args(title: &str, command: &[String]) -> Vec<String> {
+    let mut args: Vec<String> = ["-w", "0", "new-tab", "--title", title, "wsl.exe", "--"].iter().map(|s| s.to_string()).collect();
+    args.extend(command.iter().cloned());
+    args
+}
+
+/// Opens a Windows Terminal tab attached to a session the overlay launched itself (`focus_terminal` finds nothing for
+/// it: no tab exists yet). True once `wt.exe` was spawned; the tab's own life is not tracked.
+#[cfg(windows)]
+#[tauri::command]
+fn open_terminal(title: String, command: Vec<String>) -> Result<bool, String> {
+    if command.is_empty() { return Err("empty command".into()); }
+    match std::process::Command::new("wt.exe").args(terminal_args(&title, &command)).spawn() {
+        Ok(_) => Ok(true),
+        Err(e) => Err(format!("wt.exe: {e}")),
+    }
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+fn open_terminal(_title: String, _command: Vec<String>) -> Result<bool, String> { Ok(false) }
+
 #[cfg(windows)]
 fn cursor_position() -> Option<(i32, i32)> {
     use windows::Win32::Foundation::POINT;
@@ -322,7 +347,7 @@ fn main() {
         .manage(HotZones::default())
         .manage(PrevForeground::default())
         .manage(Screen::default())
-        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, list_monitors, set_monitor])
+        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, open_terminal, list_monitors, set_monitor])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") { let _ = w.set_always_on_top(true); }
             spawn_edge_poller(app.handle().clone());
@@ -334,7 +359,12 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{choose, edge_inside, edge_step, frame_rect, title_matches, Area, Band};
+    use super::{choose, edge_inside, edge_step, frame_rect, terminal_args, title_matches, Area, Band};
+
+    #[test] fn a_terminal_tab_runs_the_launcher_command_in_wsl() {
+        let cmd: Vec<String> = ["/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(terminal_args("Juno · api-gateway", &cmd), ["-w", "0", "new-tab", "--title", "Juno · api-gateway", "wsl.exe", "--", "/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"]);
+    }
 
     #[test] fn the_chosen_monitor_is_used_while_plugged_in_else_the_primary() {
         let ids: Vec<String> = ["\\\\.\\DISPLAY1", "\\\\.\\DISPLAY2"].iter().map(|s| s.to_string()).collect();

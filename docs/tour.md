@@ -1,6 +1,6 @@
 # Ledge, a tour
 
-Ledge is a handle on the left edge of your Windows screen. Every agent you start from WSL2 with `ledge claude` gets a mascot in it. When an agent needs you, its mascot lights up, a bubble unfolds, and you answer from there. The terminal tab is one click away when you want the whole conversation.
+Ledge is a handle on the left edge of your Windows screen. Every agent you start from WSL2 with `ledge claude`, or from the handle itself, gets a mascot in it. When an agent needs you, its mascot lights up, a bubble unfolds, and you answer from there. The terminal tab is one click away when you want the whole conversation.
 
 All captures below are the real overlay, in French (its default language, English is one toggle away), running against simulated sessions. Dark theme "Signal" unless noted; the light theme is "Galet".
 
@@ -38,6 +38,15 @@ Resting the cursor on the screen edge, or pressing `Ctrl+Alt+L` from anywhere, o
 It scales to a busy day: twelve sessions scroll inside the panel, with the count of asks in the subtitle.
 
 <img src="screens/team-dark.png" alt="Twelve sessions in the list, three asking for you" width="408">
+
+## Starting a session from Ledge
+
+The `+` in the header (or the button of an empty list) opens "Nouvelle session": the folder (typed, or one of the recent ones, with who already works there), the tool, the companion's name (a die picks another), an optional first instruction, and two options: resume the folder's last conversation, open the terminal tab. Entrée starts it. The session appears in the list at once with the Démarrage badge, a line says so for a few seconds, and the terminal tab is one click away when it was not opened straight away.
+
+<p>
+  <img src="screens/launch-dark.png" alt="New session: folder with recents, tool, companion, first instruction, options" width="408">
+  <img src="screens/launch-empty-dark.png" alt="The empty list: nobody at work, a button to start a companion" width="408">
+</p>
 
 ## Answering from Ledge
 

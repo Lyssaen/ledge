@@ -27,12 +27,17 @@ export function rowHint(s: Session, t: Messages = messagesFor()): string {
 /** Height of a focused row carrying the inline Approve / Deny / Open actions. */
 export const EXPANDED_ROW_H = 100;
 
+/** A line shown under the header for a few seconds (a session the overlay just started), with an optional action. */
+export interface ListNotice { text: string; action?: { label: string; onClick: () => void } }
+
 export interface ListProps {
   sessions: Session[]; visible: boolean; numbered: boolean; selectedId: string | null; focusedId?: string | null; dnd: boolean;
   /** When the layer's fade-in starts, in ms (see `enterDelay` in motion); the rows cascade from there. */
   enterDelay?: number;
   onToggleDnd: () => void; onOpen: (id: string) => void; onDecide?: (id: string, d: 'accept' | 'deny') => void; onClose: () => void;
   onSettings?: () => void; onHelp?: () => void; onHoverRow?: (id: string | null) => void;
+  /** Opens the "New session" form (the header's + and the empty state's button). */
+  onLaunch?: () => void; notice?: ListNotice | null;
   /** Whether a session's decisions may be sent now (reachable daemon, not read-only, nothing in flight). */
   canDecide?: (s: Session) => boolean;
   /** Removes an eligible row (see canDismiss); `offline` disables the button like every other send. */
@@ -40,7 +45,7 @@ export interface ListProps {
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number;
 }
 
-export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
+export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, notice = null, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
   const { t } = useI18n();
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
@@ -51,11 +56,28 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
           <span data-brand style={{ fontSize: 18, lineHeight: '22px', fontWeight: 650, letterSpacing: '-0.02em' }}>Ledge<span style={{ color: 'var(--sidebar-primary)' }}>.</span></span>
           <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.list.summary(sessions.length, waiting)}</span>
         </div>
+        {onLaunch && <Button variant="outline" size="icon" data-launch aria-label={t.list.newSession} title={t.list.newSession} onClick={onLaunch} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon size={16} {...ICONS.plus} /></Button>}
         <Button variant="ghost" size="icon" aria-label={t.list.dnd} title={t.list.dnd} aria-pressed={dnd} onClick={onToggleDnd} style={{ color: dnd ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)' }}><Icon size={18} {...ICONS.dnd} /></Button>
         <Button variant="ghost" size="icon" aria-label={t.list.settings} title={t.list.settings} onClick={onSettings} style={{ color: 'var(--sidebar-foreground)' }}><Icon size={18} {...ICONS.gear} /></Button>
         <Button variant="ghost" size="icon" aria-label={t.list.collapse} title={t.list.collapse} onClick={onClose} style={{ color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.chevronLeft} /></Button>
       </div>
-      <div data-scroll className="ledge-scroll" style={{ display: 'flex', flexDirection: 'column', padding: '8px 0', flexGrow: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      {notice && (
+        <div role="status" data-notice style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 12px 0', padding: '8px 12px', boxSizing: 'border-box', borderRadius: 'var(--radius-lg)', background: 'var(--status-info-soft)', border: '1px solid color-mix(in srgb, var(--info) 25%, transparent)', fontSize: 13, lineHeight: '18px' }}>
+          <span style={{ color: 'var(--info)', display: 'inline-flex', flexShrink: 0 }}><Icon size={16} {...ICONS.rocket} /></span>
+          <span style={{ flexGrow: 1, minWidth: 0 }}>{notice.text}</span>
+          {notice.action && <button type="button" onClick={notice.action.onClick} className="ledge-text-btn" style={{ border: 'none', background: 'transparent', padding: '2px 0', fontSize: 13, fontWeight: 500, color: 'var(--info)', cursor: 'pointer', whiteSpace: 'nowrap' }}>{notice.action.label} ↗</button>}
+        </div>
+      )}
+      <div data-scroll className="ledge-scroll" style={{ display: 'flex', flexDirection: 'column', padding: sessions.length ? '8px 0' : 0, flexGrow: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        {sessions.length === 0 && (
+          // The empty state: a sleeping companion and the other way in (the terminal), with the form one click away.
+          <div data-empty style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6, height: SIZES.emptyH, boxSizing: 'border-box', padding: '18px 24px 16px', borderTop: '1px solid var(--sidebar-border)' }}>
+            <Bot seed="empty" tool="claude" state="done" pose={1} size={44} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} />
+            <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 600, marginTop: 2 }}>{t.list.emptyTitle}</span>
+            <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', maxWidth: 300 }}>{t.list.emptyHint} <code className="mono" style={{ fontSize: 11, padding: '1px 5px', borderRadius: 4, background: 'var(--well)', border: '1px solid var(--border)', color: 'var(--sidebar-foreground)' }}>ledge claude</code> {t.list.emptyHintAfter}</span>
+            {onLaunch && <Button variant="primary" size="sm" data-launch-empty onClick={onLaunch} style={{ marginTop: 8 }}><Icon size={14} {...ICONS.plus} />{t.list.newSession}</Button>}
+          </div>
+        )}
         {sessions.map((s, i) => {
           const hi = s.id === oldestAsk; const delay = enterDelay + 30 + i * 24;
           const focused = focusedId === s.id; const actions = focused && isYesNo(s);
