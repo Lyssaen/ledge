@@ -26,7 +26,7 @@ Needs Windows with Rust (stable MSVC), Node, pnpm and WebView2.
 The Rust side has not been compiled yet. On the first build:
 
 1. `pnpm install`.
-2. `cd apps\overlay\src-tauri; cargo test`: 3 tests must pass (`matches_bot_title_or_terminal`, `frame_is_placed_on_the_work_area_in_physical_px`, `edge_needs_the_left_edge_and_a_band`). Fix compile errors first and commit the generated `Cargo.lock`.
+2. `cd apps\overlay\src-tauri; cargo test`: all tests must pass (`matches_bot_title_or_terminal`, `frame_is_placed_on_the_work_area_in_physical_px`, `edge_needs_the_left_edge_and_a_band`, `a_rearm_never_enters_but_a_real_reentry_does`). Fix compile errors first and commit the generated `Cargo.lock`.
 3. `pnpm tauri dev` with the daemon running in WSL, then check:
    - borderless, transparent, no shadow, not in the taskbar, always on top; handle vertically centered on the left edge of the primary work area, nothing drawn twice or offset; also at 125% and 150% scaling and with the taskbar on the left;
    - hovering a bot shows the full tooltip, even for a long pending text;
@@ -35,6 +35,8 @@ The Rust side has not been compiled yet. On the first build:
    - the window grows with the surface and shrinks only after the shrink animation; the coachmark (first three keyboard opens) is fully visible;
    - with the daemon stopped, "daemon unreachable, retrying" is fully visible beside the handle;
    - in a session, `o` or the terminal button brings Windows Terminal forward;
+   - open the list with Ctrl+Alt+L while the cursor rests on the left edge, then press Esc: it must not reopen until the cursor leaves the edge and comes back;
+   - open and close transitions show no flash of misplaced content;
    - clicks beside the surface reach the app underneath.
 4. `pnpm tauri build`: NSIS installer with the bot icon.
 
@@ -43,10 +45,10 @@ The Rust side has not been compiled yet. On the first build:
 | Key | Action |
 | --- | --- |
 | Ctrl+Alt+L | open / close the list (global) |
-| J K (or arrows) | move |
-| 1-9 | jump to a row; choose an option inside a question card |
-| Enter | open |
-| Y N | decide (approve / deny) |
+| J K (or arrows) | move in the list |
+| 1-9 | jump to a row in the list; choose an option inside a question card |
+| Enter | open the focused row |
+| Y N | approve / deny a yes/no ask; on a question they open it instead |
 | Alt+Right | next ask |
 | R | reply |
 | O | open the terminal tab |
