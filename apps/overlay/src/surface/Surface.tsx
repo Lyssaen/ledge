@@ -4,7 +4,7 @@ import type { Session } from '@ledge/protocol';
 import { useDaemon } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
 import { botState, poseFor } from '../bots/poseFor';
-import { layout, slotSizes, SIZES, SURFACE_BORDER, SURFACE_CHROME_Y, type Layout } from './geometry';
+import { scaledLayout, slotSizes, SIZES, SURFACE_BORDER, SURFACE_CHROME_Y, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
 import { Handle, type HandleBot } from './Handle';
@@ -25,7 +25,7 @@ import { focusTerminal, onShortcut, onEdge, setHotZones, focusOverlay, releaseFo
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { frameOf, type Box } from './frame';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
-import type { UiScale } from '../scale';
+import type { ScaleTarget, UiScale } from '../scale';
 import { Coachmark, countCoachmarkOpen, COACHMARK_H } from '../keyboard/Coachmark';
 
 /** Fallback extents of the extras beside the surface, before (or without) a layout measurement. */
@@ -33,26 +33,27 @@ export const TOOLTIP_BOX = { left: 36, w: 324, h: 30 } as const;
 export const STATUS_BOX = { w: 190, h: 20 } as const;
 /** The native frame waits out the surface's size transition before it shrinks (shrink delay + duration). */
 const SETTLE_MS = Math.max(MOTION.grow.ms, MOTION.shrink.delayMs + MOTION.shrink.ms);
-const measure = (el: HTMLElement | null) => ({ w: el?.offsetWidth ?? 0, h: el?.offsetHeight ?? 0 });
+/** A drawn box in real px (its zoom included); 0 where layout gives nothing (jsdom). */
+const measure = (el: HTMLElement | null) => { const r = el?.getBoundingClientRect(); return { w: r?.width ?? 0, h: r?.height ?? 0 }; };
 const inside = (p: { x: number; y: number } | null, g: Layout) => p !== null && p.x >= 0 && p.x < g.w && p.y >= g.top && p.y < g.top + g.h;
 
 
 export interface SurfaceProps {
-  /** The work-area height in CSS px (the logical height divided by the UI scale). */
+  /** The work-area height in logical px (the page itself is never zoomed). */
   screenH: number; theme: 'dark' | 'light'; client: DaemonClient; dnd: boolean; onToggleDnd: () => void; onToggleTheme?: () => void;
-  /** The applied UI scale: the webview zoom under Tauri, a CSS `zoom` on an ancestor in the browser. */
-  scale?: number;
-  /** The Size setting, its auto value, and how to change it (Settings). */
-  uiScale?: UiScale; autoScale?: number; onUiScale?: (s: UiScale) => void;
+  /** The applied scales: the handle's (its layer, slots and edge bands) and the opened views' (bubble, list, session,
+   *  settings, help, coachmark). Each is a CSS `zoom` on its own layer, with the geometry multiplied to match. */
+  handleScale?: number; panelScale?: number;
+  /** The two size settings, the values Auto resolves to, and how to change them (Settings). */
+  scales?: Record<ScaleTarget, UiScale>; autoScales?: Record<ScaleTarget, number>; onScale?: (target: ScaleTarget, s: UiScale) => void;
   /** The Language setting (Settings). */
   onLang?: (l: Lang) => void;
 }
 
-export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme, scale = 1, uiScale = 'auto', autoScale = 1, onUiScale, onLang }: SurfaceProps) {
-  // The browser emulates the scale with CSS zoom: pointer coordinates and client rects are then in unzoomed viewport
-  // px and are divided by it. Under the webview zoom (Tauri) everything is already in CSS px.
-  const cssZoom = isTauri() ? 1 : scale;
-  const cssZoomRef = useRef(cssZoom); cssZoomRef.current = cssZoom;
+export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang }: SurfaceProps) {
+  // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
+  // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
+  const hs = handleScale, ps = panelScale;
   const { sessions, byId, status, previews, lastError } = useDaemon();
   const { t } = useI18n();
   // One app-level motion preference drives every bot in every layer.
@@ -101,7 +102,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   // The last known pointer position, to tell whether the surface shrank out from under it.
   useEffect(() => {
     // In page coordinates: under Tauri the window (and so the viewport) starts at the frame's top.
-    const track = (e: PointerEvent | MouseEvent) => { const z = cssZoomRef.current; pointer.current = { x: e.clientX / z, y: e.clientY / z + offsetRef.current }; };
+    const track = (e: PointerEvent | MouseEvent) => { pointer.current = { x: e.clientX, y: e.clientY + offsetRef.current }; };
     document.addEventListener('pointermove', track); document.addEventListener('mousemove', track);
     return () => { document.removeEventListener('pointermove', track); document.removeEventListener('mousemove', track); };
   }, []);
@@ -152,18 +153,18 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const shown = shownId ? byId.get(shownId) ?? null : null;
   const bubbleSession = st.bubbleId ? byId.get(st.bubbleId) ?? null : null;
   const bubbleRef = useRef<HTMLDivElement>(null);
-  const bubbleH = useMeasuredHeight(bubbleRef, st.mode === 'bubble', cssZoom);
+  const bubbleH = useMeasuredHeight(bubbleRef, st.mode === 'bubble', ps);
   // The open session sizes itself to its content (header + scroll content + reply area), up to the screen.
   const sessionContentRef = useRef<HTMLDivElement>(null); const sessionReplyRef = useRef<HTMLDivElement>(null);
-  const contentH = useMeasuredHeight(sessionContentRef, st.mode === 'session', cssZoom);
-  const replyH = useMeasuredHeight(sessionReplyRef, st.mode === 'session', cssZoom);
+  const contentH = useMeasuredHeight(sessionContentRef, st.mode === 'session', ps);
+  const replyH = useMeasuredHeight(sessionReplyRef, st.mode === 'session', ps);
   const sessionH = !selected ? 480 : contentH ? SESSION_HEADER_H + contentH + (selected.source === 'hook_only' ? 0 : replyH) + SURFACE_CHROME_Y : measureSessionH(selected, st.reading);
   // Settings and help size themselves to their content too (their header is the 56 px DetailHeader).
   const settingsRef = useRef<HTMLDivElement>(null); const helpRef = useRef<HTMLDivElement>(null);
-  const settingsH = useMeasuredHeight(settingsRef, st.mode === 'settings', cssZoom);
-  const helpH = useMeasuredHeight(helpRef, st.mode === 'help', cssZoom);
+  const settingsH = useMeasuredHeight(settingsRef, st.mode === 'settings', ps);
+  const helpH = useMeasuredHeight(helpRef, st.mode === 'help', ps);
   const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : 0;
-  const geo = layout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -216,10 +217,11 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   // neither fits (a short list) it stays below and the native frame reported to the shell extends to hold it.
   const coachShown = coach && kb && st.mode === 'list';
   const focusIndex = focused ? sessions.findIndex(s => s.id === focused.id) : -1;
-  const rowTop = geo.top + SIZES.headerH + 8 + Math.max(0, focusIndex) * SIZES.rowH;
-  const rowBottom = focusIndex < 0 ? geo.top + SIZES.headerH : rowTop + (focused && isYesNo(focused) ? EXPANDED_ROW_H : SIZES.rowH);
-  const below = rowBottom + 8; const above = rowTop - 8 - COACHMARK_H;
-  const coachTop = below + COACHMARK_H <= geo.top + geo.h || above < geo.top ? below : above;
+  // In real px: the list's base offsets times the window scale.
+  const rowTop = geo.top + (SIZES.headerH + 8 + Math.max(0, focusIndex) * SIZES.rowH) * ps;
+  const rowBottom = focusIndex < 0 ? geo.top + SIZES.headerH * ps : rowTop + (focused && isYesNo(focused) ? EXPANDED_ROW_H : SIZES.rowH) * ps;
+  const below = rowBottom + 8 * ps; const above = rowTop - (8 + COACHMARK_H) * ps;
+  const coachTop = below + COACHMARK_H * ps <= geo.top + geo.h || above < geo.top ? below : above;
   // The native window is the bounding frame of what is visible: the surface plus the tooltip, the status line and the
   // coachmark when shown. Text extras are measured after layout (fixed fallbacks where layout gives nothing).
   const tipRef = useRef<HTMLDivElement>(null); const statusRef = useRef<HTMLDivElement>(null);
@@ -230,16 +232,18 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   });
   const tipShown = st.mode === 'handle' && hovBot !== null;
   const extras: Box[] = [];
-  if (tipShown) { const h = sizes.tip.h || TOOLTIP_BOX.h; extras.push({ left: TOOLTIP_BOX.left, top: (hovSlot?.center ?? geo.top) - h / 2, w: sizes.tip.w || TOOLTIP_BOX.w, h }); }
-  if (unreachable) extras.push({ left: Math.max(geo.w, SIZES.handleW) + 8, top: geo.top, w: sizes.status.w || STATUS_BOX.w, h: sizes.status.h || STATUS_BOX.h });
-  if (coachShown) extras.push({ left: 44, top: coachTop, w: 300, h: COACHMARK_H });
+  // The tooltip and the status line belong to the handle (its scale), the coachmark to the opened list (the windows').
+  const statusLeft = Math.max(geo.w, SIZES.handleW * hs) + 8 * hs;
+  if (tipShown) { const h = sizes.tip.h || TOOLTIP_BOX.h * hs; extras.push({ left: TOOLTIP_BOX.left * hs, top: (hovSlot?.center ?? geo.top) - h / 2, w: sizes.tip.w || TOOLTIP_BOX.w * hs, h }); }
+  if (unreachable) extras.push({ left: statusLeft, top: geo.top, w: sizes.status.w || STATUS_BOX.w * hs, h: sizes.status.h || STATUS_BOX.h * hs });
+  if (coachShown) extras.push({ left: 44 * ps, top: coachTop, w: 300 * ps, h: COACHMARK_H * ps });
   const frame = frameOf(geo, extras, screenH);
-  const offset = useNativeFrame(frame, parseFloat(ms(SETTLE_MS)), scale);
+  const offset = useNativeFrame(frame, parseFloat(ms(SETTLE_MS)));
   offsetRef.current = offset;
   // Armed only while the bare handle shows and the daemon is reachable, exactly like the DOM zones' pointer-events.
   const zonesArmed = st.mode === 'handle' && !unreachable;
-  const zonesKey = zonesArmed ? `${scale}|` + geo.hotZones.map(z => `${z.top}:${z.h}`).join(',') : '';
-  useEffect(() => { setHotZones(zonesArmed ? geo.hotZones : [], scale); }, [zonesKey]); // the bands and scale are captured through `zonesKey`
+  const zonesKey = zonesArmed ? geo.hotZones.map(z => `${z.top}:${z.h}`).join(',') : '';
+  useEffect(() => { setHotZones(zonesArmed ? geo.hotZones : []); }, [zonesKey]); // the bands are captured through `zonesKey`
   // The terminal tab is the fallback for read-only and offline sessions too: only the daemon message needs the daemon.
   const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); void focusTerminal(s.title); };
   const chooseOption = (n: number) => {
@@ -274,7 +278,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const tauri = isTauri();
   const content = (
     <>
-      {!tauri && geo.hotZones.map((z, i) => <div key={i} data-hotzone onMouseEnter={() => dispatch({ type: 'edgeEnter' })} onMouseLeave={() => dispatch({ type: 'edgeLeave' })} style={{ position: 'absolute', left: 0, top: z.top, width: 14, height: z.h, pointerEvents: st.mode === 'handle' && !unreachable ? 'auto' : 'none', background: st.hot ? 'var(--edge-hot)' : 'transparent', transition: transition([['background-color', 'hover']]) }} />)}
+      {!tauri && geo.hotZones.map((z, i) => <div key={i} data-hotzone onMouseEnter={() => dispatch({ type: 'edgeEnter' })} onMouseLeave={() => dispatch({ type: 'edgeLeave' })} style={{ position: 'absolute', left: 0, top: z.top, width: 14 * hs, height: z.h, pointerEvents: st.mode === 'handle' && !unreachable ? 'auto' : 'none', background: st.hot ? 'var(--edge-hot)' : 'transparent', transition: transition([['background-color', 'hover']]) }} />)}
 
       <div ref={surfaceRef} data-surface data-mode={st.mode}
         onMouseEnter={() => dispatch({ type: 'surfaceEnter' })} onMouseLeave={() => dispatch({ type: 'surfaceLeave' })} onMouseMove={onMouseMove}
@@ -284,9 +288,12 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           const row = (e.target as HTMLElement).closest?.('[data-row]') ? (e.target as HTMLElement).closest<HTMLElement>('[data-row-id]')?.dataset.rowId : undefined;
           if (row && kb && ctl.state().mode === 'list') setFocusedId(row);
         }} onBlur={onBlur}
-        style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'hidden', background: 'var(--sidebar)', color: 'var(--sidebar-foreground)', border: `${SURFACE_BORDER}px solid var(--sidebar-border)`, borderLeft: 'none', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
+        style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--sidebar)', color: 'var(--sidebar-foreground)', border: `${SURFACE_BORDER}px solid var(--sidebar-border)`, borderLeft: 'none', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
           transition: ['top', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out` }}>
-        <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+        <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
+          <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+        </div>
+        <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Bubble ref={bubbleRef} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
           ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} failure={st.bubbleId ? asks.failures[st.bubbleId] : undefined} blocked={bubbleSession ? blockedFor(bubbleSession) : null} frozen={unreachable} reducedMotion={reducedMotion}
           onOpen={() => dispatch({ type: 'bubbleClick' })} onDismiss={() => dispatch({ type: 'close' })}
@@ -295,13 +302,14 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
             const id = st.bubbleId; if (!id || ctl.state().ack || blockedFor(byId.get(id)) !== null || !asks.begin(id)) return;
             send({ type: 'session.reply', id, text: t }); dispatch({ type: 'decidedInBubble' });
           }} theme={theme} />
-        <div data-panel style={{ position: 'absolute', inset: 0, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>
+        </div>
+        <div data-panel style={{ position: 'absolute', inset: 0, zoom: ps, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SessionList sessions={sessions} visible={st.mode === 'list'} numbered={kb} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
           </div>
           <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <SettingsView contentRef={settingsRef} onLang={onLang} visible={st.mode === 'settings'} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} uiScale={uiScale} autoScale={autoScale} onUiScale={onUiScale}
+            <SettingsView contentRef={settingsRef} onLang={onLang} visible={st.mode === 'settings'} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} scales={scales} autoScales={autoScales} onScale={onScale}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'help' ? 'auto' : 'none', transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
@@ -318,9 +326,14 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
         </div>
       </div>
 
-      <Coachmark visible={coachShown} top={coachTop} onDismiss={() => { setCoach(false); if (focusedRowId) surfaceRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusedRowId)}"] [data-row]`)?.focus(); }} />
-      <Tooltip ref={tipRef} bot={st.mode === 'handle' ? hovBot : null} y={hovSlot?.center ?? geo.top} />
-      {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: Math.max(geo.w, SIZES.handleW) + 8, top: geo.top, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{t.unreachable}</div>}
+      {/* Zoomed extras: a zoomed element's own offsets are zoomed too, so their real-px positions are divided back. */}
+      <div data-zoom="coachmark" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
+        <Coachmark visible={coachShown} top={coachTop / ps} onDismiss={() => { setCoach(false); if (focusedRowId) surfaceRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusedRowId)}"] [data-row]`)?.focus(); }} />
+      </div>
+      <div data-zoom="tooltip" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
+        <Tooltip ref={tipRef} bot={st.mode === 'handle' ? hovBot : null} y={(hovSlot?.center ?? geo.top) / hs} />
+        {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: statusLeft / hs, top: geo.top / hs, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{t.unreachable}</div>}
+      </div>
     </>
   );
   // Under Tauri the page is shifted so page y = screen y - frame top; the browser renders at page coordinates as is.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { layout, slotSizes, SIZES } from '../src/surface/geometry';
+import { layout, scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
 const bots = (n: number, pending: number[] = []) => Array.from({ length: n }, (_, i) => ({ id: String(i), pending: pending.includes(i) }));
 
 describe('geometry', () => {
@@ -25,7 +25,7 @@ describe('geometry', () => {
   });
   it('the list grows with the rows and never exceeds the screen minus margins', () => {
     const l = layout({ bots: bots(3), mode: 'list', screenH: 1080 });
-    expect(l.h).toBe(SIZES.headerH + 16 + 3 * SIZES.rowH + SIZES.footerH);
+    expect(l.h).toBe(SIZES.headerH + 16 + 3 * SIZES.rowH + SIZES.footerH + SURFACE_CHROME_Y);
     const big = layout({ bots: bots(10, [0, 4, 8]), mode: 'list', screenH: 600 });
     expect(big.h).toBe(600 - 2 * SIZES.margin);
     expect(big.top).toBe(SIZES.margin);
@@ -46,5 +46,26 @@ describe('geometry', () => {
     const base = layout({ bots: bots(3), mode: 'list', screenH: 1080 }).h;
     expect(layout({ bots: bots(3), mode: 'list', screenH: 1080, listExtraH: 42 }).h).toBe(base + 42);
     expect(layout({ bots: bots(30), mode: 'list', screenH: 1080, listExtraH: 42 }).h).toBe(1080 - 2 * SIZES.margin);
+  });
+  it('scaled layout: the handle and its bands follow the handle scale, the opened views the window scale, independently', () => {
+    const input = { bots: bots(2, [1]), screenH: 2160 };
+    const h1 = layout({ ...input, mode: 'handle', screenH: 1080 });
+    const h2 = scaledLayout({ ...input, mode: 'handle' }, { handle: 2, panel: 1 });
+    expect(h2).toMatchObject({ top: h1.top * 2, w: h1.w * 2, h: h1.h * 2 });
+    expect(h2.hotZones).toEqual(h1.hotZones.map(z => ({ top: z.top * 2, h: z.h * 2 })));
+    expect(h2.slots.map(s => s.center)).toEqual(h1.slots.map(s => s.center * 2));
+    // The list at 100 % on the same screen: base width, centered on the real 2160 px; the handle data is unchanged.
+    const l = scaledLayout({ ...input, mode: 'list' }, { handle: 2, panel: 1 });
+    expect(l.w).toBe(SIZES.listW);
+    expect(l.top + l.h / 2).toBeCloseTo(1080, 0);
+    expect(l.hotZones).toEqual(h2.hotZones);
+    // Windows at 150 %: content scaled, the 1 px border kept.
+    const base = layout({ ...input, mode: 'list', screenH: 2160 / 1.5 });
+    const l15 = scaledLayout({ ...input, mode: 'list' }, { handle: 2, panel: 1.5 });
+    expect(l15.w).toBe(SIZES.listW * 1.5);
+    expect(l15.h).toBe((base.h - SURFACE_CHROME_Y) * 1.5 + SURFACE_CHROME_Y);
+    // The bubble still aligns to its bot's real center.
+    const b = scaledLayout({ ...input, mode: 'bubble', bubbleId: '1', bubbleH: 120 }, { handle: 2, panel: 1 });
+    expect(b.top).toBe(Math.round(h2.slots[1]!.center - 38));
   });
 });

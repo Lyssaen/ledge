@@ -79,7 +79,7 @@ const fr = {
     answer: (opt: string) => `Répondre : ${opt}`, firstOption: 'première option'
   },
   settings: {
-    title: 'Votre Ledge', size: 'Taille', sizeHint: 'Agrandit tout l’overlay pour les grands écrans.', auto: (p: string) => `Auto (${p})`,
+    title: 'Votre Ledge', handleSize: 'Taille de la poignée', handleSizeHint: 'La poignée et ses compagnons au bord de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
     dnd: 'Ne pas déranger', dndHint: 'Les demandes restent dans la poignée.',
     reduced: 'Mouvements réduits', reducedHint: 'Les états restent lisibles sans animation.',
     osReduced: 'Votre système demande des mouvements réduits ; Ledge continue de le respecter.',
@@ -171,7 +171,7 @@ const en: Messages = {
     answer: (opt: string) => `Answer: ${opt}`, firstOption: 'first option'
   },
   settings: {
-    title: 'Your Ledge', size: 'Size', sizeHint: 'Scale the whole overlay for large screens.', auto: (p: string) => `Auto (${p})`,
+    title: 'Your Ledge', handleSize: 'Handle size', handleSizeHint: 'The handle and its companions on the screen edge.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
     dnd: 'Do not disturb', dndHint: 'New asks stay in the handle.',
     reduced: 'Reduced motion', reducedHint: 'States stay readable without animation.',
     osReduced: 'Your system asks for reduced motion; Ledge keeps respecting it.',

@@ -18,8 +18,6 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(async (name: string, cb: (e: { payload: unknown }) => void) => { native.listeners.set(name, cb); return () => { native.listeners.delete(name); native.unlisten(); }; })
 }));
 vi.mock('@tauri-apps/api/window', () => ({ primaryMonitor: vi.fn(async () => native.monitor) }));
-const zoom = vi.hoisted(() => ({ setZoom: vi.fn(async (_z: number) => {}) }));
-vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => zoom }));
 vi.mock('@tauri-apps/plugin-global-shortcut', () => ({
   register: vi.fn(async (_k: string, cb: (e: { state: string }) => void) => { native.shortcut = cb; }),
   unregister: vi.fn(async () => { native.shortcut = null; })
@@ -113,19 +111,18 @@ describe('bridge', () => {
     expect(native.unlisten).toHaveBeenCalledTimes(1);
   });
 
-  it('a zoomed frame is rounded outward to whole monitor px; bands are scaled; the zoom goes to the webview in order', async () => {
+  it('a zoomed frame is rounded outward to whole monitor px; bands are scaled; frames go out in order', async () => {
     enterTauri(); const b = await loadBridge();
     expect(b.toMonitorFrame({ top: 101, w: 45, h: 77 }, 1)).toEqual({ top: 101, w: 45, h: 77 });
     // 101 * 1.25 = 126.25 -> 126; (101 + 77) * 1.25 = 222.5 -> 223; 45 * 1.25 = 56.25 -> 57.
     expect(b.toMonitorFrame({ top: 101, w: 45, h: 77 }, 1.25)).toEqual({ top: 126, w: 57, h: 97 });
     const order: string[] = [];
     native.invoke.mockImplementation(async (c: string) => { order.push(c); });
-    zoom.setZoom.mockImplementation(async (z: number) => { order.push(`zoom ${z}`); });
     await b.setFrame({ top: 100, w: 44, h: 80 }, 2);
-    await b.setWebviewZoom(2);
     await b.setFrame({ top: 100, w: 44, h: 80 }, 1.5); // same CSS frame, new zoom: sent again
+    await b.setFrame({ top: 100, w: 44, h: 80 }, 1.5); // unchanged: not sent twice
     expect(calls('set_frame')).toEqual([{ top: 200, width: 88, height: 160 }, { top: 150, width: 66, height: 120 }]);
-    expect(order).toEqual(['set_frame', 'zoom 2', 'set_frame']);
+    expect(order).toEqual(['set_frame', 'set_frame']);
     b.setHotZones([{ top: 40, h: 100 }], 1.5);
     await vi.waitFor(() => expect(calls('set_hot_zones')).toEqual([{ zones: [{ top: 60, h: 150 }] }]));
   });
@@ -145,7 +142,7 @@ describe('<Surface> under Tauri', () => {
   const lastFrame = () => calls('set_frame').at(-1) as { top: number; width: number; height: number };
   const edge = (inside: boolean) => act(async () => { native.listeners.get('ledge://edge')!({ payload: { inside } }); });
 
-  async function mount(opts: { tauri: boolean; scale?: number }) {
+  async function mount(opts: { tauri: boolean; handleScale?: number; panelScale?: number; screenH?: number }) {
     if (opts.tauri) enterTauri();
     vi.resetModules();
     const [{ Surface }, { createDaemonClient }, { attachClient, daemonStore }] = await Promise.all([
@@ -156,7 +153,7 @@ describe('<Surface> under Tauri', () => {
     const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never }); detach = attachClient(client); client.connect();
     close = () => client.close();
     await sleep(100);
-    render(<Surface screenH={1080} scale={opts.scale} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    render(<Surface screenH={opts.screenH ?? 1080} handleScale={opts.handleScale} panelScale={opts.panelScale} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
   }
   beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
   afterEach(async () => { detach(); close(); await mock.close(); vi.useRealTimers(); });
@@ -209,14 +206,22 @@ describe('<Surface> under Tauri', () => {
     await waitFor(() => expect(seen.at(-1)).toEqual({ top: handleTop, offset: `-${handleTop}px` }));
   });
 
-  it('under a UI scale the shell gets monitor px and the page keeps its CSS px offset', async () => {
-    // A 4K work area (2160 logical px) at 2x: the surface lays out in 1080 CSS px, exactly as at 1080p.
-    await mount({ tauri: true, scale: 2 });
-    expect(surface()).toHaveStyle({ top: '518px', width: '28px', height: '45px' });
-    const top = 518 - FRAME_PAD.top;
-    await waitFor(() => expect(lastFrame()).toEqual({ top: 2 * top, width: 2 * (28 + FRAME_PAD.right), height: 2 * (45 + FRAME_PAD.top + FRAME_PAD.bottom) }));
+  it('a handle at 2x on a 4K work area: the surface, the frame and the bands are the 1080p ones doubled', async () => {
+    // A 4K work area (2160 logical px), handle 200 %: the handle lays out in 1080 units and is drawn at 2x.
+    await mount({ tauri: true, screenH: 2160, handleScale: 2, panelScale: 1 });
+    expect(surface()).toHaveStyle({ top: `${2 * 518}px`, width: '56px', height: '90px' });
+    expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('2');
+    expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1');
+    const top = 2 * 518 - FRAME_PAD.top;
+    await waitFor(() => expect(lastFrame()).toEqual({ top, width: 56 + FRAME_PAD.right, height: 90 + FRAME_PAD.top + FRAME_PAD.bottom }));
     expect(content()).toHaveStyle({ top: `-${top}px` });
     await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 80, h: 2 * (518 - 6 - 40) }, { top: 2 * (518 + 45 + 6), h: 2 * (1080 - 40 - (518 + 45 + 6)) }] }));
+    // The windows keep their own scale: the list opens at its base 380 px, centered on the real screen.
+    await waitFor(() => expect(native.shortcut).not.toBeNull());
+    await act(async () => { native.shortcut!({ state: 'Pressed' }); });
+    expect(surface()).toHaveStyle({ width: '380px' });
+    const listTop = parseFloat(surface().style.top), listH = parseFloat(surface().style.height);
+    expect(Math.abs(listTop + listH / 2 - 1080)).toBeLessThanOrEqual(1);
   });
 
   it('the hovered bot tooltip widens the frame beside the handle', async () => {

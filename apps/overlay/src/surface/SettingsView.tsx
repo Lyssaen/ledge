@@ -1,7 +1,7 @@
 import type { ReactNode, Ref } from 'react';
 import { transition } from '../motion';
 import { DetailHeader } from './DetailHeader';
-import { UI_SCALES, percent, type UiScale } from '../scale';
+import { UI_SCALES, percent, type ScaleTarget, type UiScale } from '../scale';
 import { useI18n } from '../i18n/lang';
 import { LANGS, type Lang } from '../i18n/messages';
 
@@ -10,8 +10,8 @@ export interface SettingsViewProps {
   /** The app's own reduced-motion setting, and whether the OS already asks for it (which always wins). */
   reduced: boolean; osReduced: boolean;
   onToggleTheme?: () => void; onToggleDnd: () => void; onReduced: (on: boolean) => void; onBack: () => void; onClose: () => void;
-  /** The Size setting, the scale Auto resolves to on this screen, and how to change it (applied live). */
-  uiScale?: UiScale; autoScale?: number; onUiScale?: (s: UiScale) => void;
+  /** The handle and window size settings, the scales Auto resolves to on this screen, and how to change them (live). */
+  scales?: Record<ScaleTarget, UiScale>; autoScales?: Record<ScaleTarget, number>; onScale?: (target: ScaleTarget, s: UiScale) => void;
   /** The Language setting (applied live). */
   onLang?: (l: Lang) => void;
   /** The body's natural height, measured by the surface to size itself. */
@@ -67,8 +67,11 @@ export function SettingsView(p: SettingsViewProps) {
       <div className="ledge-scroll" style={{ overflowY: 'auto', minHeight: 0, overscrollBehavior: 'contain' }}>
         <div ref={p.contentRef} style={{ display: 'flex', flexDirection: 'column', padding: '4px 17px 12px' }}>
           <Row><Segmented name="ledge-lang" label={t.lang.label} hint={t.lang.hint} value={lang} onChange={p.onLang} options={LANGS.map(l => ({ value: l, label: t.lang[l] }))} /></Row>
-          <Row><Segmented<UiScale> name="ledge-ui-scale" label={t.settings.size} hint={t.settings.sizeHint} value={p.uiScale ?? 'auto'} onChange={p.onUiScale}
-            options={UI_SCALES.map(s => ({ value: s, label: s === 'auto' ? t.settings.auto(percent(p.autoScale ?? 1)) : percent(s), wide: s === 'auto' }))} /></Row>
+          {(['handle', 'panel'] as const).map(target => (
+            <Row key={target}><Segmented<UiScale> name={`ledge-${target}-scale`} label={target === 'handle' ? t.settings.handleSize : t.settings.windowSize} hint={target === 'handle' ? t.settings.handleSizeHint : t.settings.windowSizeHint}
+              value={p.scales?.[target] ?? 'auto'} onChange={p.onScale ? s => p.onScale!(target, s) : undefined}
+              options={UI_SCALES.map(s => ({ value: s, label: s === 'auto' ? t.settings.auto(percent(p.autoScales?.[target] ?? 1)) : percent(s), wide: s === 'auto' }))} /></Row>
+          ))}
           <Row><Switch label={t.settings.dnd} hint={t.settings.dndHint} checked={p.dnd} onChange={on => { if (on !== p.dnd) p.onToggleDnd(); }} /></Row>
           <Row><Switch label={t.settings.reduced} hint={t.settings.reducedHint} checked={p.reduced} onChange={p.onReduced} /></Row>
           {p.osReduced && !p.reduced && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', padding: '8px 0' }}>{t.settings.osReduced}</span>}

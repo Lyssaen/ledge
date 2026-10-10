@@ -8,8 +8,9 @@
  *   focus_terminal { title }           bring the matching terminal window forward
  *   event `ledge://edge` { inside }    cursor entered / left the edge bands
  * Coordinates sent to the shell are logical px from the top of the primary monitor's work area ("monitor px").
- * The page lays itself out in CSS px; with a UI scale (webview zoom) one CSS px is `zoom` monitor px, so `setFrame`
- * and `setHotZones` take CSS px plus the zoom and convert here. The shell itself never knows about the zoom.
+ * The page is never zoomed (each layer applies its own UI scale), so its CSS px are monitor px; `setFrame` and
+ * `setHotZones` still take an optional `zoom` (one CSS px = `zoom` monitor px) and round frames outward here. The shell
+ * itself never knows about any zoom.
  */
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const inTauri = isTauri;
@@ -18,8 +19,7 @@ export interface Frame { top: number; w: number; h: number }
 export interface Band { top: number; h: number }
 export const EDGE_EVENT = 'ledge://edge';
 
-/** The primary monitor's work-area height in logical (monitor) px, before any UI zoom. The surface lays itself out in
- *  this height divided by the UI scale. */
+/** The primary monitor's work-area height in logical (monitor) px: the height the surface lays itself out in. */
 export async function screenHeight(): Promise<number> {
   if (!inTauri()) return window.innerHeight;
   const { primaryMonitor } = await import('@tauri-apps/api/window');
@@ -43,7 +43,7 @@ export function toMonitorFrame(f: Frame, zoom = 1): Frame {
   return { top, w: Math.ceil(f.w * zoom), h: Math.max(1, Math.ceil((f.top + f.h) * zoom) - top) };
 }
 
-// Frames (and zoom changes) are sent one after the other: async commands may otherwise land out of order and leave the
+// Frames are sent one after the other: async commands may otherwise land out of order and leave the
 // window at an older frame than the page offset, which is committed with each request.
 let lastFrame = '';
 let frameChain: Promise<unknown> = Promise.resolve();
@@ -56,17 +56,6 @@ export function setFrame(f: Frame, zoom = 1): Promise<boolean> {
   if (key === lastFrame) return frameChain.then(() => lastFrame === key);
   lastFrame = key;
   const run = frameChain.then(() => invoke('set_frame', { top: m.top, width: m.w, height: m.h })).then(() => true, () => { if (lastFrame === key) lastFrame = ''; return false; });
-  frameChain = run;
-  return run;
-}
-
-/** Applies the UI scale as the webview zoom (Tauri only), in order with the frames. */
-export function setWebviewZoom(scale: number): Promise<boolean> {
-  if (!inTauri()) return Promise.resolve(false);
-  const run = frameChain.then(async () => {
-    const { getCurrentWebview } = await import('@tauri-apps/api/webview');
-    await getCurrentWebview().setZoom(scale);
-  }).then(() => true, () => false);
   frameChain = run;
   return run;
 }
