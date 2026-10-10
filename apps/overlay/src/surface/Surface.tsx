@@ -223,7 +223,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   };
   const openRow = (id: string) => dispatch({ type: 'rowClick', id });
   useKeyboard({
-    enabled: kb && panel, mode: st.mode, sessions, focusedId: st.mode === 'session' ? st.selectedId : st.mode === 'list' ? focused?.id ?? null : null,
+    enabled: panel, mode: st.mode, sessions, focusedId: st.mode === 'session' ? st.selectedId : st.mode === 'list' ? focused?.id ?? null : null,
     onFocus: setFocusedId, onOpen: openRow, onDecide: decide,
     onNextAsk: () => {
       const pend = sessions.filter(isPending).map(s => s.id);
@@ -257,8 +257,6 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           const row = (e.target as HTMLElement).closest?.('[data-row]') ? (e.target as HTMLElement).closest<HTMLElement>('[data-row-id]')?.dataset.rowId : undefined;
           if (row && kb && ctl.state().mode === 'list') setFocusedId(row);
         }} onBlur={onBlur}
-        // A mouse-opened panel has no scoped shortcuts, but Escape still steps back (detail view to list, then closed).
-        onKeyDown={e => { if (!kb && panel && e.key === 'Escape') { e.preventDefault(); dispatch({ type: detail ? 'back' : 'close' }); } }}
         style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'hidden', background: 'var(--sidebar)', color: 'var(--sidebar-foreground)', border: `${SURFACE_BORDER}px solid var(--sidebar-border)`, borderLeft: 'none', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
           transition: ['top', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out` }}>
         <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
@@ -271,18 +269,18 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
             send({ type: 'session.reply', id, text: t }); dispatch({ type: 'decidedInBubble' });
           }} theme={theme} />
         <div data-panel style={{ position: 'absolute', inset: 0, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>
-          <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
+          <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SessionList sessions={sessions} visible={st.mode === 'list'} numbered={kb} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
           </div>
-          <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
+          <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SettingsView visible={st.mode === 'settings'} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
-          <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
+          <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'help' ? 'auto' : 'none', transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <HelpView visible={st.mode === 'help'} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
-          <div aria-hidden={st.mode !== 'session' || undefined} style={{ position: 'absolute', inset: 0, transform: `translateX(${st.mode === 'session' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
+          <div aria-hidden={st.mode !== 'session' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'session' ? 'auto' : 'none', transform: `translateX(${st.mode === 'session' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             {shown && <SessionView session={shown} preview={previews.get(shown.id) ?? []} visible={st.mode === 'session'} reading={st.reading} draft={drafts[shown.id] ?? ''}
               blocked={blockedFor(shown)} deciding={asks.inFlight.has(shown.id)} failure={asks.failures[shown.id]} frozen={unreachable} reducedMotion={reducedMotion}
               onDraft={t => { setDrafts(x => ({ ...x, [shown.id]: t })); dispatch({ type: 'typing', on: t.length > 0 }); }}

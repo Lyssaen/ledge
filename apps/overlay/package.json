@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@ledge/protocol": "workspace:*",
@@ -19,6 +20,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@playwright/test": "1.49.1",
     "@tailwindcss/vite": "^4.0.0",
     "@tauri-apps/cli": "^2.1.0",
     "@testing-library/jest-dom": "^6.6.0",
