@@ -40,6 +40,22 @@ describe('<Handle>', () => {
   });
 });
 
+describe('<Handle> inertness', () => {
+  it('marks the hidden layer inert', () => {
+    const { container } = render(<Handle bots={bots} slots={l.slots} big={20} visible={false} hoverId={null} onHover={() => {}} onOpen={() => {}} />);
+    expect(container.firstChild).toHaveAttribute('inert');
+  });
+  it('keeps visible layer focusable and hides collapsed bots from tab order and a11y tree', () => {
+    const { container } = render(<Handle bots={bots} slots={l.slots.filter(s => s.id !== 'c')} big={20} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
+    expect(container.firstChild).not.toHaveAttribute('inert');
+    expect(screen.getByRole('button', { name: /Otto/ })).not.toHaveAttribute('tabindex', '-1');
+    expect(screen.queryByRole('button', { name: /Lu/ })).toBeNull();
+    const lu = container.querySelector('[aria-label^="Lu"]')!;
+    expect(lu).toHaveAttribute('tabindex', '-1');
+    expect(lu).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
 describe('<Badge>', () => {
   it('shows the word for each state', () => {
     render(<Badge state="readonly" />); expect(screen.getByText('Read only')).toBeInTheDocument();
