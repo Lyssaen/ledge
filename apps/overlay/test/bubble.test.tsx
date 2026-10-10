@@ -116,4 +116,7 @@ describe('<Bubble>', () => {
     render(<Bubble session={fakeSession('a', { state: 'idle' })} kind="finished" moreCount={0} visible paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />);
     expect(screen.getByText('harness-assistant')).toBeInTheDocument();
   });
+  it('a finished bubble survives its session being removed from under it', () => {
+    expect(() => render(<Bubble session={null} kind="finished" moreCount={0} visible={false} paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />)).not.toThrow();
+  });
 });
