@@ -18,7 +18,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
     if (s.tmuxSession && !live.has(s.tmuxSession)) store.remove(s.id);
   }
   const server = await startServer({ store, tmux, port: opts.port });
-  const poller = startPoller({ store, tmux, broadcastPreview: (id, lines) => server.broadcast({ type: 'session.preview', id, lines }) });
+  const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
   await writeFile(paths().pid, String(process.pid));
   log(`daemon started on ${server.port} with ${store.all().length} sessions`);
   let stopping: Promise<void> | null = null;

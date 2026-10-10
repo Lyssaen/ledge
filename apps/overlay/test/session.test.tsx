@@ -77,4 +77,48 @@ describe('<SessionView>', () => {
     expect(measureSessionH(q, false)).toBeGreaterThan(measureSessionH(idle, false));
     expect(measureSessionH(perm, true)).toBeGreaterThan(measureSessionH(perm, false));
   });
+  describe('terminal preview', () => {
+    /** Gives the preview's <pre> a geometry (jsdom has no layout) and records where it is scrolled to. */
+    function geometry(pre: HTMLElement, scrollHeight: number, clientHeight = 200) {
+      let top = 0;
+      Object.defineProperty(pre, 'scrollHeight', { configurable: true, get: () => scrollHeight });
+      Object.defineProperty(pre, 'clientHeight', { configurable: true, get: () => clientHeight });
+      Object.defineProperty(pre, 'scrollTop', { configurable: true, get: () => top, set: v => { top = v; } });
+      return { get top() { return top; }, set height(h: number) { scrollHeight = h; } };
+    }
+    const idle = fakeSession('c', { state: 'idle' });
+    it('renders the lines as received, one per row, in a monospace wrapping block', () => {
+      const lines = ['❯ list the files', '', '● Bash(ls src)', '  ⎿  client.ts'];
+      const { container } = render(<SessionView {...base} session={idle} preview={lines} />);
+      const pre = container.querySelector('pre[data-terminal]') as HTMLElement;
+      expect([...pre.children].map(c => c.textContent)).toEqual(['❯ list the files', ' ', '● Bash(ls src)', '  ⎿  client.ts']);
+      expect(pre).toHaveClass('mono'); expect(pre).toHaveClass('ledge-scroll');
+      expect(pre).toHaveStyle({ whiteSpace: 'pre-wrap' });
+    });
+    it('follows the latest line on update, but not while the user has scrolled up to read', () => {
+      const { container, rerender } = render(<SessionView {...base} session={idle} preview={['a']} />);
+      const pre = container.querySelector('pre[data-terminal]') as HTMLElement;
+      const g = geometry(pre, 600);
+      rerender(<SessionView {...base} session={idle} preview={['a', 'b']} />);
+      expect(g.top).toBe(600);
+      pre.scrollTop = 100; fireEvent.scroll(pre);
+      g.height = 700;
+      rerender(<SessionView {...base} session={idle} preview={['a', 'b', 'c']} />);
+      expect(g.top).toBe(100);
+      pre.scrollTop = 500; fireEvent.scroll(pre);
+      g.height = 800;
+      rerender(<SessionView {...base} session={idle} preview={['a', 'b', 'c', 'd']} />);
+      expect(g.top).toBe(800);
+    });
+    it('opening the collapsed preview scrolls it to its last line', () => {
+      const { container } = render(<SessionView {...base} session={perm} />);
+      const details = container.querySelector('details.ledge-terminal') as HTMLDetailsElement;
+      expect(details.open).toBe(false);
+      const pre = container.querySelector('pre[data-terminal]') as HTMLElement;
+      const g = geometry(pre, 900);
+      pre.scrollTop = 0; fireEvent.scroll(pre);
+      details.open = true; fireEvent(details, new Event('toggle'));
+      expect(g.top).toBe(900);
+    });
+  });
 });

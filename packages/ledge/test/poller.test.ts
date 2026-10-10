@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
@@ -31,12 +31,41 @@ describe('poller', () => {
     const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, lines) => previews.push(lines) });
     clock += 1000; await p.tick();
     expect(store.get('a')!.lastActivityAt).toBe(new Date(T0).toISOString());
-    expect(previews).toEqual([]);
+    // The first sighting sends the preview too: a client has one before the agent writes again.
+    expect(previews).toEqual([['line one']]);
     clock += 1000; await p.tick();
     expect(store.get('a')!.lastActivityAt).toBe(new Date(T0).toISOString());
+    expect(previews).toEqual([['line one']]);
     panes['ledge-a'] = 'line one\nline two'; clock += 1000; await p.tick();
     expect(store.get('a')!.lastActivityAt).toBe(now());
     expect(previews.at(-1)).toEqual(['line one', 'line two']);
+    p.stop();
+  });
+  it('a fullscreen Claude Code pane previews the conversation, not the input box', async () => {
+    panes['ledge-a'] = readFileSync(new URL('./fixtures/panes/claude2-fullscreen-idle.txt', import.meta.url), 'utf8'); store.upsert(mk('a'));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, l) => previews.push(l) });
+    clock += 1000; await p.tick();
+    expect(previews).toHaveLength(1);
+    expect(previews[0]!.at(-1)).toBe('✻ Brewed for 3s · done 1:12 PM');
+    expect(previews[0]).toContain('  1. tmux is a terminal multiplexer that runs several shell sessions inside one terminal window.');
+    expect(previews[0]!.some(l => l.includes('auto mode on'))).toBe(false);
+    p.stop();
+  });
+  it('a pane change that leaves the preview as it was (status line only) is not sent again', async () => {
+    const box = (status: string) => ['● hello', '─'.repeat(40), '❯ ', '─'.repeat(40), status].join('\n');
+    panes['ledge-a'] = box('  ⏵⏵ auto mode on'); store.upsert(mk('a'));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, l) => previews.push(l) });
+    clock += 1000; await p.tick();
+    panes['ledge-a'] = box('  ⏵⏵ manual mode on'); clock += 1000; await p.tick();
+    expect(store.get('a')!.lastActivityAt).toBe(now());
+    expect(previews).toEqual([['● hello']]);
+    p.stop();
+  });
+  it('a tool without an adapter still gets the generic preview', async () => {
+    panes['ledge-a'] = 'codex says hi\n\n\n\n> '; store.upsert(mk('a', { tool: 'codex' }));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, l) => previews.push(l) });
+    clock += 1000; await p.tick();
+    expect(previews).toEqual([['codex says hi', '', '>']]);
     p.stop();
   });
   it('detects a prompt from the pane when no hook spoke recently', async () => {
@@ -110,9 +139,10 @@ describe('poller robustness', () => {
     panes['ledge-a'] = 'x'; store.upsert(mk('a'));
     const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, l) => previews.push(l) });
     clock += 1000; await p.tick();
+    expect(previews).toEqual([['x']]);
     failing['ledge-a'] = true; clock += 1000; await p.tick();
     expect(store.get('a')!.lastActivityAt).toBe(new Date(T0).toISOString());
-    expect(previews).toEqual([]);
+    expect(previews).toEqual([['x']]);
     p.stop();
   });
   it('one throwing session does not abort the tick for later sessions', async () => {

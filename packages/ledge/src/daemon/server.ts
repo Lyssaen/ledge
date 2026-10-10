@@ -21,7 +21,11 @@ export function originAllowed(origin: string | undefined): boolean {
   return origin === undefined || ALLOWED_ORIGINS.includes(origin);
 }
 
-export interface ServerHandle { port: number; close(): Promise<void>; broadcast(msg: ServerMessage): void }
+export interface ServerHandle {
+  port: number; close(): Promise<void>; broadcast(msg: ServerMessage): void;
+  /** Remembers a session's terminal preview and broadcasts it; a client that connects later gets it after the snapshot. */
+  preview(id: string, lines: string[]): void;
+}
 
 /**
  * A permission request that left the pending untouched was dropped by the reducer (session exited, another
@@ -53,7 +57,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
   const broadcast = (msg: ServerMessage) => { for (const c of wss.clients) send(c, msg); };
-  const unsubscribe = store.onChange(c => broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id }));
+  /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
+  const previews = new Map<string, string[]>();
+  const unsubscribe = store.onChange(c => {
+    if (c.type === 'removed') previews.delete(c.id);
+    broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
+  });
+  const sendSnapshot = (ws: WebSocket) => {
+    send(ws, { type: 'snapshot', sessions: store.all() });
+    for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
+  };
+  const preview = (id: string, lines: string[]) => {
+    if (!store.get(id)) return;
+    previews.set(id, lines);
+    broadcast({ type: 'session.preview', id, lines });
+  };
 
   async function runPlan(s: Session, plan: KeyPlan): Promise<void> {
     if (!s.tmuxSession) throw new Error('session has no terminal (started without ledge)');
@@ -107,7 +125,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
-      case 'snapshot.request': return send(ws, { type: 'snapshot', sessions: store.all() });
+      case 'snapshot.request': return sendSnapshot(ws);
       case 'session.register': {
         let incoming = msg.session;
         const existing = store.get(incoming.id);
@@ -179,7 +197,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   wss.on('connection', ws => {
     ws.on('error', e => log(`socket error: ${e.message}`));
-    send(ws, { type: 'snapshot', sessions: store.all() });
+    sendSnapshot(ws);
     ws.on('message', data => {
       let msg: ClientMessage;
       try { msg = parseClientMessage(JSON.parse(String(data))); }
@@ -191,6 +209,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   return {
     port,
     broadcast,
+    preview,
     close: () => new Promise(res => { unsubscribe(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
   };
 }

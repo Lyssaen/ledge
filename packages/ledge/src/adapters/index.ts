@@ -7,3 +7,4 @@ export function adapterFor(tool: Tool): Adapter {
   throw new Error(`adapter for ${tool} not implemented yet`);
 }
 export type { Adapter, KeyPlan, PanePromptMatch } from './types.js';
+export { buildPreview, PREVIEW_LINES, PREVIEW_CAPTURE_LINES } from './preview.js';

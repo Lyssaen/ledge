@@ -20,7 +20,7 @@ let srv: Awaited<ReturnType<typeof startServer>>; let poller: ReturnType<typeof 
 beforeAll(async () => {
   process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-')); await ensureLedgeDir();
   store = new Store(); srv = await startServer({ store, tmux, port: 0 });
-  poller = startPoller({ store, tmux, intervalMs: 150, deadCheckMs: 300, broadcastPreview: (id, lines) => srv.broadcast({ type: 'session.preview', id, lines }) });
+  poller = startPoller({ store, tmux, intervalMs: 150, deadCheckMs: 300, broadcastPreview: srv.preview });
 });
 afterAll(async () => { poller.stop(); await srv.close(); await killTestServer(socket); });
 

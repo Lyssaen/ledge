@@ -114,6 +114,39 @@ function promptStillVisible(lastLines: string): boolean {
   return footer > 0 && lines.slice(0, footer).some(l => OPTION.test(l));
 }
 
+// The idle input box at the bottom of the pane (2.1+ fullscreen and inline alike):
+//
+//   ────────────────────────   rule
+//   ❯ draft text               input, one line or more
+//   ────────────────────────   rule
+//     ⏵⏵ auto mode on · …      status, a line or two
+//
+// It is chrome, not conversation: the preview drops it from its top rule down.
+/** Lines below the input box's bottom rule that can still be status, not conversation. */
+const STATUS_SLACK = 3;
+/** The tallest draft the input box can hold before it is no longer recognised as one. */
+const INPUT_MAX = 12;
+const isInputRule = (l: string) => /^─{10,}$/.test(l.trim());
+
+function previewLines(pane: string): string[] {
+  const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
+  let end = lines.length;
+  while (end > 0 && isBlank(lines[end - 1]!)) end--;
+  // The bottom rule: the lowest rule with at most STATUS_SLACK non-blank lines under it.
+  let bottom = -1; let below = 0;
+  for (let i = end - 1; i >= 0 && below <= STATUS_SLACK; i--) {
+    if (isInputRule(lines[i]!)) { bottom = i; break; }
+    if (!isBlank(lines[i]!)) below++;
+  }
+  if (bottom < 0) return lines;
+  // The top rule: the nearest rule above, with the ❯ input line right under it.
+  for (let top = bottom - 1; top >= 0 && bottom - top <= INPUT_MAX + 1; top--) {
+    if (!isInputRule(lines[top]!)) continue;
+    return lines[top + 1]!.trimStart().startsWith('❯') ? lines.slice(0, top) : lines;
+  }
+  return lines;
+}
+
 // In 2.x a digit selects its option at once: no Enter (an Enter would land on whatever comes next).
 const digit = (n: number): KeyPlan => [{ text: String(n) }];
 
@@ -126,6 +159,7 @@ export const claudeAdapter: Adapter = {
   tool: 'claude',
   detectPrompt,
   promptStillVisible,
+  previewLines,
   keysFor(decision) {
     return decision === 'accept' ? digit(1) : [{ keys: ['Escape'] }];
   },

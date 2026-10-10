@@ -313,6 +313,50 @@ describe('server', () => {
     c.close();
   });
 
+  describe('terminal preview delivery', () => {
+    /** A raw socket that records every message type (and id) in arrival order. */
+    async function recorder() {
+      const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`);
+      const got: Array<{ type: string; id?: string; lines?: string[] }> = [];
+      ws.on('message', d => got.push(JSON.parse(String(d))));
+      await new Promise(res => ws.once('open', res));
+      const until = async (n: number) => { for (let i = 0; i < 100 && got.length < n; i++) await new Promise(r => setTimeout(r, 10)); };
+      return { ws, got, until };
+    }
+    it('broadcasts a preview to connected clients', async () => {
+      store.upsert(mk('a'));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      srv.preview('a', ['● hi']);
+      expect(await c.next('session.preview')).toEqual({ type: 'session.preview', id: 'a', lines: ['● hi'] });
+      c.close();
+    });
+    it('a client that connects later gets the last preview right after the snapshot', async () => {
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim' }));
+      srv.preview('a', ['old']); srv.preview('a', ['● latest']);
+      const r = await recorder(); await r.until(2);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'session.preview']);
+      expect(r.got[1]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
+      r.ws.terminate();
+    });
+    it('a snapshot.request gets the previews again after the snapshot', async () => {
+      store.upsert(mk('a')); srv.preview('a', ['● hi']);
+      const r = await recorder(); await r.until(2);
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(4);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'session.preview', 'snapshot', 'session.preview']);
+      r.ws.terminate();
+    });
+    it('a removed session drops its preview; a preview for an unknown session is ignored', async () => {
+      store.upsert(mk('a')); srv.preview('a', ['● hi']); srv.preview('ghost', ['boo']);
+      store.remove('a');
+      const r = await recorder(); await r.until(1); await new Promise(res => setTimeout(res, 50));
+      expect(r.got.map(m => m.type)).toEqual(['snapshot']);
+      store.upsert(mk('a'));
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(3); await new Promise(res => setTimeout(res, 50));
+      expect(r.got.filter(m => m.type === 'session.preview')).toEqual([]);
+      r.ws.terminate();
+    });
+  });
+
   it('kill removes the tmux session and marks the bot exited', async () => {
     store.upsert(mk('a'));
     const c = await connect({ port: srv.port }); await c.next('snapshot');

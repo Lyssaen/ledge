@@ -1,4 +1,4 @@
-import { useState, type Ref } from 'react';
+import { useLayoutEffect, useRef, useState, type Ref } from 'react';
 import type { Pending, Session } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
 import { botState, poseFor } from '../bots/poseFor';
@@ -77,6 +77,13 @@ export function SessionView(p: SessionViewProps) {
   const shown = pending ?? last;
   const isQ = shown?.kind === 'question';
   const st = botState(s);
+  // The preview follows its latest line, like a terminal: on open, and on each update unless the user scrolled up to read.
+  const termRef = useRef<HTMLPreElement>(null);
+  const stuck = useRef(true);
+  const termFor = useRef(s.id);
+  if (termFor.current !== s.id) { termFor.current = s.id; stuck.current = true; }
+  const toBottom = () => { const el = termRef.current; if (el) el.scrollTop = el.scrollHeight; };
+  useLayoutEffect(() => { if (stuck.current) toBottom(); }, [p.preview, visible, p.reading]);
   // A permission, diff or plan prompt takes Approve/Deny only: the daemon would refuse a typed reply.
   const promptOnly = !!pending && pending.kind !== 'question';
   const replyOff = blocked !== null || promptOnly;
@@ -141,12 +148,12 @@ export function SessionView(p: SessionViewProps) {
             ))}
           </div>
 
-          {p.preview.length > 0 && <details className="ledge-terminal" open={!pending || p.reading} style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+          {p.preview.length > 0 && <details className="ledge-terminal" open={!pending || p.reading} onToggle={e => { if ((e.currentTarget as HTMLDetailsElement).open) { stuck.current = true; toBottom(); } }} style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
             <summary style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--well)', fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
               <span data-caret aria-hidden="true" style={{ display: 'inline-flex', transition: transition([['transform', 'hover']]) }}><Icon size={12} {...ICONS.chevronRight} /></span>
               <span style={{ color: 'var(--sidebar-foreground)' }}>{t.session.terminal}</span><span>· {t.session.terminalNote}</span>
             </summary>
-            <pre className="mono ledge-scroll" style={{ margin: 0, padding: '10px 12px', maxHeight: p.reading ? 360 : 200, overflow: 'auto', fontSize: 12, lineHeight: '18px', color: 'var(--muted-foreground)', background: 'var(--well)', borderTop: '1px solid var(--border)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{p.preview.map((l, i) => <div key={i}>{l || ' '}</div>)}</pre>
+            <pre ref={termRef} data-terminal onScroll={e => { const el = e.currentTarget; stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4; }} className="mono ledge-scroll" style={{ margin: 0, padding: '10px 12px', maxHeight: p.reading ? 360 : 200, overflow: 'auto', fontSize: 12, lineHeight: '18px', color: 'var(--muted-foreground)', background: 'var(--well)', borderTop: '1px solid var(--border)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{p.preview.map((l, i) => <div key={i}>{l || ' '}</div>)}</pre>
           </details>}
         </div>
       </div>

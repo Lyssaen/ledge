@@ -11,4 +11,10 @@ export interface Adapter {
   /** `pending` is what the reply answers, if anything: a question can take an option number. */
   replyPlan(text: string, pending?: Pending): KeyPlan;
   interruptKeys(): string[];
+  /**
+   * The pane lines worth showing in the terminal preview, with the tool's own chrome (input box, status
+   * line) removed. Optional: without it the preview is the raw pane. Blank runs and the last-N cut are
+   * applied afterwards by buildPreview.
+   */
+  previewLines?(pane: string): string[];
 }
