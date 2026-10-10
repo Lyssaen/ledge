@@ -93,13 +93,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       const gone = await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
       if (!stillTheSame()) return; // a newer prompt arrived meanwhile: leave it alone
-      if (gone) store.apply(id, { name: 'Decided', at: now(), source: 'daemon' });
-      else store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: 'the terminal did not take it' });
+      if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon' }); return; }
+      // The client gets an `error` reply for that id (via the caller's catch), so a retry from `error` reads as failed.
+      store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: NOT_TAKEN });
+      throw new Error(NOT_TAKEN);
     } finally { inFlight.delete(id); }
   }
 
   const READ_ONLY = 'session started without ledge, read only';
   const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
+  const NOT_TAKEN = 'the terminal did not take it';
   const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
 
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
