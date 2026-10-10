@@ -4,12 +4,11 @@ import type { DaemonError } from '../daemon/store';
 import type { DaemonStatus } from '../daemon/client';
 import type { SurfaceEvent } from './machine';
 import { useI18n } from '../i18n/lang';
-import { changeOf, type SessionChange } from '../daemon/changes';
+import { changeOf, isPending, sameRequest, type SessionChange } from '../daemon/changes';
 
-export const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
+export { isPending };
 /** A request the surface still tracks: waiting, or failed (state `error`) with its request kept for a retry. */
 const tracked = (s: Session) => !!s.pending && (isPending(s) || s.state === 'error');
-const sameRequest = (a: Session['pending'], b: Session['pending']) => !!a && !!b && a.kind === b.kind && a.text === b.text && a.helperId === b.helperId;
 
 /**
  * Turns daemon updates into machine events (ask, askCleared, askReplaced, removed, decisionFailed) and owns the

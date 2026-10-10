@@ -147,7 +147,7 @@ La colonne des scénarios, le faux bureau, les boutons de simulation et le compt
 
 #### La bulle de fin de tâche (planche 21)
 
-- Déclenchée par le passage d'une session de `working` (ou `starting`) à `idle` : le hook `Stop` de Claude Code, `notify` de Codex, `stop` de Cursor Agent, ou `PaneIdle` quand aucun hook ne l'a précédé. Uniquement quand la surface est en poignée, hors « ne pas déranger », et si le réglage « Quand un bot a terminé » le demande (défaut : bulle et son).
+- Déclenchée par le passage d'une session de `working` à `idle` ; un tour commence par un prompt (`UserPromptSubmit`), jamais par `SessionStart`, donc un lancement, un `/clear` ou une reprise ne « terminent » rien. Le passage vient du hook `Stop` de Claude Code, `notify` de Codex, `stop` de Cursor Agent, ou `PaneIdle` quand aucun hook ne l'a précédé. Uniquement quand la surface est en poignée, hors « ne pas déranger », et si le réglage « Quand un bot a terminé » le demande (défaut : bulle et son).
 - Même chorégraphie qu'une demande : le bot grossit dans la poignée (280 ms), la bulle se déploie 260 ms plus tard depuis sa place. Le bot y est en expression `idle` (yeux souriants, halo vert).
 - Contenu : « <Prénom> a terminé », sous-ligne mono avec le résumé que le daemon connaît (durée du tour, projet ; fichiers modifiés et tests quand l'adaptateur les fournit, sinon seulement la durée et le projet), badge « Disponible », puis OK (replie) et Ouvrir (vers la session, qui montre l'aperçu du terminal).
 - Barre de 2 px sur 6 s (une fin de tâche ne demande rien : elle peut rester un peu plus que les 4 s d'une demande), suspendue au survol, au focus et fenêtre masquée, avec le temps restant exact.

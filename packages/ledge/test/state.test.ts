@@ -22,7 +22,8 @@ describe('reduce: transition table', () => {
   const table: Array<[SessionEvent, SessionState, SessionState | '=']> = [];
   for (const s of states) {
     const terminal = s === 'exited';
-    table.push([ev('SessionStart'), s, terminal ? '=' : 'working']);
+    // A launch, a /clear or a resume starts no turn (only a prompt does): the state stays, so nothing "finishes".
+    table.push([ev('SessionStart'), s, '=']);
     table.push([ev('UserPromptSubmit'), s, terminal ? '=' : 'working']);
     table.push([ev('PreToolUse', { tool: 'Bash' }), s, terminal ? '=' : 'working']);
     table.push([ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Which one?', options: ['a', 'b'] }), s, terminal ? '=' : 'waiting_input']);
@@ -52,6 +53,12 @@ describe('reduce: transition table', () => {
     table.push([ev('Notification', { kind: 'permission', text: 'Claude needs your permission', helperId: 'a1' }), s, '=']);
     table.push([ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }), s, terminal ? '=' : 'waiting_permission']);
   }
+  it('SessionStart only moves the hook clocks: a launch stays starting, a /clear or resume stays idle', () => {
+    for (const from of ['starting', 'idle'] as const) {
+      const next = reduce(session(from), ev('SessionStart'));
+      expect(next).toMatchObject({ state: from, lastHookAt: later(5000), lastActivityAt: later(5000) });
+    }
+  });
   for (const [event, from, to] of table) {
     it(`${event.name}${event.tool ? '(' + event.tool + ')' : ''} from ${from} -> ${to === '=' ? from : to}`, () => {
       const next = reduce(session(from), event);

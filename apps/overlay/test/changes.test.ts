@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { changeOf } from '../src/daemon/changes';
+import { changeOf, isPending, sameRequest } from '../src/daemon/changes';
+import { isPending as asksIsPending } from '../src/surface/useDaemonAsks';
 import { fakeSession } from './mockDaemon';
 
 const s = (extra = {}) => fakeSession('a', extra);
@@ -7,9 +8,9 @@ const ask = { kind: 'permission', text: 'npm test', source: 'hook' } as const;
 
 describe('changeOf', () => {
   it('first sight is a join', () => { expect(changeOf(undefined, s())).toEqual({ kind: 'joined', id: 'a' }); });
-  it('working or starting to idle is a finish; idle again without working in between is not', () => {
+  it('working to idle is a finish; a launch (starting to idle) or idle again without working in between is not', () => {
     expect(changeOf(s({ state: 'working' }), s({ state: 'idle' }))).toEqual({ kind: 'finished', id: 'a' });
-    expect(changeOf(s({ state: 'starting' }), s({ state: 'idle' }))).toEqual({ kind: 'finished', id: 'a' });
+    expect(changeOf(s({ state: 'starting' }), s({ state: 'idle' }))).toBeNull();
     expect(changeOf(s({ state: 'idle' }), s({ state: 'idle' }))).toBeNull();
     expect(changeOf(s({ state: 'waiting_permission', pending: ask }), s({ state: 'idle' }))).toBeNull();
   });
@@ -27,5 +28,15 @@ describe('changeOf', () => {
   });
   it('a preview or activity update is nothing', () => {
     expect(changeOf(s({ state: 'working' }), s({ state: 'working', lastActivityAt: '2026-10-09T18:05:00.000Z' }))).toBeNull();
+  });
+});
+
+describe('shared request helpers', () => {
+  it('live in changes.ts, re-exported unchanged by useDaemonAsks', () => {
+    expect(asksIsPending).toBe(isPending);
+    const q = { kind: 'question' as const, text: 'Which?', source: 'hook' as const };
+    expect(sameRequest(q, { ...q })).toBe(true);
+    expect(sameRequest(q, { ...q, text: 'Other?' })).toBe(false);
+    expect(sameRequest(undefined, q)).toBe(false);
   });
 });

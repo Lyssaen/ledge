@@ -190,7 +190,8 @@ export function reduce(s: Session, ev: SessionEvent): Session {
         const state = pending.kind === 'question' ? 'waiting_input' : 'waiting_permission';
         return { ...s, state, pending, lastHookAt: at, lastActivityAt: at };
       }
-      if (ev.name === 'Notification') return { ...s, lastHookAt: at, lastActivityAt: at };
+      // A launch, a /clear or a resume starts no turn (only UserPromptSubmit does): the state stays, so nothing "finishes".
+      if (ev.name === 'Notification' || ev.name === 'SessionStart') return { ...s, lastHookAt: at, lastActivityAt: at };
       // A helper's routed request outlives the main agent's own activity (background helpers).
       if (s.pending?.helperId) return underHelper(s, 'working', at);
       if (s.state === 'working' && s.lastActivityAt === at && !s.pending) return s;
