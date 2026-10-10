@@ -26,7 +26,7 @@ export function createDaemonClient(opts: { url: string; WebSocketImpl?: WsCtor; 
   }
   return {
     connect: () => { closed = false; if (timer) { clearTimeout(timer); timer = null; } const old = ws; ws = null; old?.close(); open(); },
-    close: () => { closed = true; if (timer) clearTimeout(timer); ws?.close(); ws = null; },
+    close: () => { closed = true; if (timer) clearTimeout(timer); const old = ws; ws = null; old?.close(); setStatus('connecting'); },
     send: m => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); },
     status: () => status,
     onMessage: f => { msgFns.add(f); return () => msgFns.delete(f); },

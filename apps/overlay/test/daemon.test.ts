@@ -61,4 +61,17 @@ describe('daemon client + store', () => {
     expect(mock.clientCount).toBe(1);
     client.close();
   });
+
+  it('leaves the open state synchronously on a plain close()', async () => {
+    const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never });
+    const statuses: string[] = []; client.onStatus(s => statuses.push(s));
+    attachClient(client); client.connect(); await sleep(80);
+    expect(daemonStore.getState().status).toBe('open');
+    client.close();
+    expect(client.status()).not.toBe('open');
+    expect(daemonStore.getState().status).toBe('connecting');
+    expect(statuses).toEqual(['open', 'connecting']);
+    await sleep(100);
+    expect(client.status()).toBe('connecting');
+  });
 });
