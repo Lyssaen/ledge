@@ -15,6 +15,7 @@ export function rowHint(s: Session): string {
   if (s.source === 'hook_only') return 'started without ledge';
   if (s.state === 'exited') return `exited ${s.exitCode ?? '?'}`;
   if (s.state === 'error') return s.lastError ?? 'error';
+  if (s.state === 'idle') return 'available';
   return 'running';
 }
 const Icon = ({ d }: { d: string[] }) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{d.map((p, i) => <path key={i} d={p} />)}</svg>;

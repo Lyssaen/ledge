@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import { SessionList } from '../src/surface/SessionList';
+import { SessionList, rowHint } from '../src/surface/SessionList';
 import { fakeSession } from './mockDaemon';
 
 const sessions = [
@@ -40,5 +40,16 @@ describe('<SessionList>', () => {
     expect(rows[0]!.style.transition).toContain('0ms');
     expect(rows[0]!.getAttribute('data-delay')).toBe('150');
     expect(rows[3]!.getAttribute('data-delay')).toBe('222');
+  });
+});
+
+describe('rowHint', () => {
+  it('matches the badge: idle reads available, working reads running; pending, read-only, exited and error keep theirs', () => {
+    expect(rowHint(fakeSession('i', { state: 'idle' }))).toBe('available');
+    expect(rowHint(fakeSession('w', { state: 'working' }))).toBe('running');
+    expect(rowHint(sessions[0]!)).toBe('npm test');
+    expect(rowHint(sessions[2]!)).toBe('started without ledge');
+    expect(rowHint(sessions[3]!)).toBe('exited 0');
+    expect(rowHint(fakeSession('e', { state: 'error', lastError: 'boom' }))).toBe('boom');
   });
 });
