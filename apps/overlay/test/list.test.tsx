@@ -138,9 +138,18 @@ describe('rowHint', () => {
       expect(screen.queryAllByRole('button', { name: /^Remove from list/ })).toHaveLength(0);
     });
   });
-  it('carries the ask field above the footer', () => {
+  it('places the ask field above the sessions, matching the notch', () => {
     const onAsk = vi.fn();
-    render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} onAsk={onAsk} />);
+    const props = { visible: true, numbered: false, selectedId: null, dnd: false, onToggleDnd: () => {}, onOpen: () => {}, onClose: () => {}, onAsk };
+    const { rerender } = render(<SessionList sessions={sessions} {...props} />);
+    const order = () => {
+      const layer = document.querySelector('[data-layer="list"]')!;
+      return layer.querySelector('[data-ask-field]')!.compareDocumentPosition(layer.querySelector('[data-scroll]')!) & Node.DOCUMENT_POSITION_FOLLOWING;
+    };
+    expect(order()).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    rerender(<SessionList sessions={[]} {...props} />);
+    expect(order()).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(document.querySelector('[data-empty]')).not.toBeNull();
     const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
     fireEvent.change(input, { target: { value: 'hello' } }); fireEvent.keyDown(input, { key: 'Enter' });
     expect(onAsk).toHaveBeenCalledWith('hello');
