@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
+import { dirname } from 'node:path';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
 import { writeContext, stepFor } from '../src/chat/context.js';
@@ -25,6 +26,13 @@ describe('writeContext', () => {
     expect(stepFor(join(dir, 'sessions.md'), ctx)).toEqual({ kind: 'sessions' });
     expect(stepFor('/w/ledge/src/x.ts', ctx)).toEqual({ kind: 'repo', name: 'ledge', path: 'src/x.ts' });
     expect(stepFor('/elsewhere/y', ctx)).toEqual({ kind: 'repo', path: '/elsewhere/y' });
+  });
+  it('never hands the model the home folder, the root or a parent of the home', async () => {
+    const dir = join(mkdtempSync(join(tmpdir(), 'ledge-chat-')), 'context');
+    const repo = join(homedir(), 'w', 'repo');
+    const sessions = [mk('a', { cwd: homedir() }), mk('b', { cwd: '/' }), mk('c', { cwd: dirname(homedir()) }), mk('d', { cwd: `${homedir()}/` }), mk('e', { cwd: repo })];
+    const ctx = await writeContext(dir, { sessions, now: T0, capture: async () => null, git: async () => null });
+    expect(ctx.repoPaths).toEqual([repo]);
   });
   it('starts from an empty folder each time', async () => {
     const dir = join(mkdtempSync(join(tmpdir(), 'ledge-chat-')), 'context');

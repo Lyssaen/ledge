@@ -1,4 +1,5 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import type { ChatStep, Session } from '@ledge/protocol';
 
@@ -32,8 +33,14 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
     lines.push('');
   }
   await writeFile(join(dir, 'sessions.md'), lines.join('\n')); steps.set('sessions.md', { kind: 'sessions' });
-  const repoPaths = [...new Set(input.sessions.map(s => s.repoPath ?? s.cwd).filter(Boolean))];
+  const repoPaths = [...new Set(input.sessions.map(s => s.repoPath ?? s.cwd).filter(p => p && !coversHome(p)).map(p => resolve(p)))];
   return { dir, steps, repoPaths };
+}
+
+/** The home folder, the root or any parent of the home: a hook-only agent started there must not open `.ssh` or `.aws` to the model. */
+function coversHome(path: string): boolean {
+  const p = resolve(path); const home = resolve(homedir());
+  return p === home || home.startsWith(p.endsWith('/') ? p : `${p}/`);
 }
 
 /** The step a file read stands for: a context file by name, a repository file by repository, anything else by its path. */

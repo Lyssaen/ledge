@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,7 +41,7 @@ describe('chat service', () => {
     const spawn = ((file: string, args: string[], o: { env: NodeJS.ProcessEnv }) => { spawned.push(o.env); return nodeSpawn(file, args, o as never); }) as unknown as typeof nodeSpawn;
     const store = new Store({ journalPath: join(home, 'j.json') });
     const chat = createChat({ store, tmux, home, today: () => '2026-10-11', env: async () => ({ ...process.env }), bin: [process.execPath, FAKE], spawn, ...extra });
-    return { chat, spawned, store };
+    return { chat, spawned, store, home };
   }
 
   it('a timeout kills the run, says so, and is not retried with a fresh session', async () => {
@@ -66,12 +66,42 @@ describe('chat service', () => {
     expect(spawned).toHaveLength(1);
   });
 
-  it('runs claude as the chat: LEDGE_CHAT set, LEDGE_SESSION and LEDGE_NAME removed', async () => {
-    const { chat, spawned } = setup({ env: async () => ({ ...process.env, LEDGE_SESSION: 's', LEDGE_NAME: 'Otto' }) });
+  it('a cancel while the context is still being built stops before any spawn', async () => {
+    const slowTmux = { async capture() { await new Promise(r => setTimeout(r, 200)); return 'line'; } } as any;
+    const { chat, spawned, store, home } = setup({ tmux: slowTmux });
+    store.upsert({ id: 'a', name: 'Otto', tool: 'claude', cwd: home, project: 'p', title: 'Otto · p', tmuxSession: 'ledge-a', state: 'working', helpers: [], startedAt: '2026-10-11T10:00:00.000Z', lastActivityAt: '2026-10-11T10:00:00.000Z', source: 'launcher' });
+    const out: ServerMessage[] = [];
+    const asked = chat.ask('q1', 'x', m => out.push(m));
+    chat.cancel('q1');
+    await asked;
+    expect(spawned).toHaveLength(0);
+    expect(out.at(-1)).toEqual({ type: 'chat.error', qid: 'q1', message: 'cancelled' });
+    expect(chat.history()[0]?.error).toBe('cancelled');
+  });
+
+  it('runs claude as the chat: LEDGE_CHAT set, LEDGE_SESSION, LEDGE_NAME and ANTHROPIC_API_KEY removed', async () => {
+    const { chat, spawned } = setup({ env: async () => ({ ...process.env, LEDGE_SESSION: 's', LEDGE_NAME: 'Otto', ANTHROPIC_API_KEY: 'sk-inherited' }) });
     await chat.ask('q1', 'x', () => {});
     expect(spawned[0]?.LEDGE_CHAT).toBe('1');
     expect(spawned[0]).not.toHaveProperty('LEDGE_SESSION');
     expect(spawned[0]).not.toHaveProperty('LEDGE_NAME');
+    expect(spawned[0]).not.toHaveProperty('ANTHROPIC_API_KEY');
+  });
+
+  it('removes the context folder once the run has ended', async () => {
+    const { chat, home } = setup();
+    await chat.ask('q1', 'x', () => {});
+    expect(chat.history()[0]?.answer).toBeTruthy();
+    expect(existsSync(join(home, 'chat', 'context'))).toBe(false);
+  });
+
+  it('announces the turn with chat.history before anything streams', async () => {
+    const { chat } = setup();
+    const out: ServerMessage[] = [];
+    await chat.ask('q1', 'x', m => out.push(structuredClone(m)));
+    expect(out[0]).toMatchObject({ type: 'chat.history', turns: [{ qid: 'q1', question: 'x', steps: [] }] });
+    expect((out[0] as Extract<ServerMessage, { type: 'chat.history' }>).turns[0]).not.toHaveProperty('answer');
+    expect(out[1]?.type).toBe('chat.step');
   });
 
   it('records the sessions step once', async () => {

@@ -687,6 +687,21 @@ describe('chat', () => {
     const h = await c2.next('chat.history'); expect(h.turns).toHaveLength(1); expect(h.turns[0]).toMatchObject({ qid: 'q1', answer: done.text, steps: [{ kind: 'sessions' }, { kind: 'pane', id: 'a', name: 'Otto' }] });
     await c2.close();
   });
+  it('tells a client connected before the question about the turn before its first step', async () => {
+    const got: Array<{ type: string; turns?: Array<Record<string, unknown>> }> = [];
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`);
+    const finished = new Promise<void>(res => ws.on('message', d => { const m = JSON.parse(String(d)); got.push(m); if (m.type === 'chat.done') res(); }));
+    await new Promise(r => ws.once('open', r));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'chat.ask', qid: 'q1', text: 'a' });
+    await finished;
+    const chat = got.filter(m => m.type.startsWith('chat.'));
+    // The connect-time history (empty), then the in-flight turn (no answer yet), then the first step.
+    expect(chat.slice(0, 3).map(m => m.type)).toEqual(['chat.history', 'chat.history', 'chat.step']);
+    expect(chat[1]!.turns).toEqual([expect.objectContaining({ qid: 'q1', question: 'a' })]);
+    expect(chat[1]!.turns![0]).not.toHaveProperty('answer');
+    ws.terminate(); await c.close();
+  });
   it('refuses a second question while one runs', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'chat.ask', qid: 'q1', text: 'a' }); c.send({ type: 'chat.ask', qid: 'q2', text: 'b' });
