@@ -586,7 +586,8 @@ describe('server', () => {
   it('caps the queue of unsolicited messages at the most recent 100', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     for (let i = 0; i < 150; i++) srv.broadcast({ type: 'session.removed', id: `r${i}` });
-    c.send({ type: 'snapshot.request' }); await c.next('snapshot');
+    // The sync point is a reply with nothing after it: a snapshot is followed by chat.history, which would take a queue slot.
+    c.send({ type: 'session.decide', id: 'zzz', decision: 'maybe' } as never); await c.next('error');
     const ids: string[] = [];
     for (let i = 0; i < 100; i++) ids.push((await c.next('session.removed', 200)).id);
     expect(ids[0]).toBe('r50'); expect(ids[99]).toBe('r149');
