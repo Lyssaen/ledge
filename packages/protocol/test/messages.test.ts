@@ -43,6 +43,12 @@ describe('protocol', () => {
     }
   });
 
+  it('a hook event may name its agent and folder; an unknown agent is refused', () => {
+    const event = { name: 'Stop', at: '2026-10-09T18:02:00.000Z', source: 'hook' };
+    expect(parseClientMessage({ type: 'session.event', id: 'u1', event, agent: 'codex', cwd: '/w/x' })).toEqual({ type: 'session.event', id: 'u1', event, agent: 'codex', cwd: '/w/x' });
+    expect(() => parseClientMessage({ type: 'session.event', id: 'u1', event, agent: 'gemini' })).toThrow();
+  });
+
   it('accepts a helper-routed pending and helpers with a state', () => {
     const s = { ...session, pending: { ...session.pending, helperId: 'a1' }, helpers: [{ id: 'a1', kind: 'Explore', task: '', state: 'exited' }] };
     expect(SessionSchema.parse(s)).toEqual(s);

@@ -1,9 +1,13 @@
 import type { Tool } from '@ledge/protocol';
 import type { Adapter } from './types.js';
 import { claudeAdapter } from './claude.js';
+import { codexAdapter } from './codex.js';
+import { cursorAdapter } from './cursor.js';
 
 export function adapterFor(tool: Tool): Adapter {
   if (tool === 'claude') return claudeAdapter;
+  if (tool === 'codex') return codexAdapter;
+  if (tool === 'cursor') return cursorAdapter;
   throw new Error(`adapter for ${tool} not implemented yet`);
 }
 export type { Adapter, KeyPlan, PanePromptMatch } from './types.js';

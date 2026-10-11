@@ -2,17 +2,29 @@ import type { Session, SessionEvent, Pending, Helper, SessionState } from '@ledg
 
 export const HOOK_PRIORITY_MS = 2000;
 
+/**
+ * Claude Code's hooks report its prompts (permission, question, plan), so a pane match right after a hook may be
+ * stale or poorer. Cursor Agent's and Codex's never do: their prompts come from the pane alone, at once.
+ */
+const hooksReportPrompts = (s: Session) => s.tool === 'claude';
+
 export function isPending(s: Session): boolean {
   return s.state === 'waiting_permission' || s.state === 'waiting_input';
 }
 
+/** Tools that ask the user a multiple-choice question: Claude Code's, and Codex's (Plan mode). */
+export const QUESTION_TOOLS: ReadonlySet<string> = new Set(['AskUserQuestion', 'request_user_input']);
+/** Tools whose permission request is a file change: Claude Code's, and Codex's patch. */
+const DIFF_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'apply_patch']);
+
 function pendingFor(ev: SessionEvent): Pending | undefined {
   if (ev.name === 'PermissionRequest') {
-    const diff = ev.tool === 'Edit' || ev.tool === 'Write' || ev.tool === 'MultiEdit';
+    const diff = !!ev.tool && DIFF_TOOLS.has(ev.tool);
     return { kind: diff ? 'diff' : 'permission', text: ev.text ?? '', tool: ev.tool, source: 'hook' };
   }
-  if (ev.name === 'PreToolUse' && ev.tool === 'AskUserQuestion') {
-    return { kind: 'question', text: ev.text ?? '', options: ev.options, source: 'hook' };
+  if (ev.name === 'PreToolUse' && ev.tool && QUESTION_TOOLS.has(ev.tool)) {
+    // The tool is kept only when it is not Claude's, so its PostToolUse can still be matched (see pendingTool).
+    return { kind: 'question', text: ev.text ?? '', options: ev.options, source: 'hook', ...(ev.tool !== 'AskUserQuestion' ? { tool: ev.tool } : {}) };
   }
   if (ev.name === 'PreToolUse' && ev.tool === 'ExitPlanMode') {
     return { kind: 'plan', text: ev.text ?? '', source: 'hook' };
@@ -41,7 +53,7 @@ function mergePending(current: Pending | undefined, incoming: Pending): Pending 
 
 /** The tool whose PostToolUse means a hook pending was answered (in the terminal or from Ledge). */
 function pendingTool(p: Pending): string | undefined {
-  if (p.kind === 'question') return 'AskUserQuestion';
+  if (p.kind === 'question') return p.tool ?? 'AskUserQuestion';
   if (p.kind === 'plan') return 'ExitPlanMode';
   return p.tool;
 }
@@ -79,7 +91,21 @@ function underHelper(s: Session, parentState: SessionState, at: string, extra: P
  * Events fired inside a subagent (helperId set). They never clear or replace the parent's pending and never
  * flip the parent to working; a helper permission is routed to the parent only when nothing is pending there.
  */
+/**
+ * Cursor Agent: a subagent's first hook (its own id) takes over the oldest working helper its parent's Task named
+ * (`task:<call id>`), with that name. Parallel Tasks are matched in launch order.
+ */
+function adoptCursorTask(s: Session, id: string): Session {
+  if (s.tool !== 'cursor' || id.startsWith('task:') || s.helpers.some(h => h.id === id)) return s;
+  const i = s.helpers.findIndex(h => h.id.startsWith('task:') && h.state === 'working');
+  if (i < 0) return s;
+  const helpers = [...s.helpers];
+  helpers[i] = { ...helpers[i]!, id };
+  return { ...s, helpers };
+}
+
 function reduceHelper(s: Session, ev: SessionEvent & { helperId: string }): Session {
+  s = adoptCursorTask(s, ev.helperId);
   const at = ev.at;
   const id = ev.helperId;
   const own = s.pending?.helperId === id;
@@ -126,8 +152,21 @@ function samePending(a: Pending, b: Pending): boolean {
     && JSON.stringify(a.options) === JSON.stringify(b.options);
 }
 
+/**
+ * Cursor Agent never says a subagent stopped. A foreground Task blocks its parent, so the parent's own next step (a tool,
+ * the end of the turn, a new prompt) means its helpers are done; launching more Tasks (helper events) does not. A
+ * background helper ended this way comes back with its next tool run.
+ */
+function endCursorHelpers(s: Session, ev: SessionEvent): Session {
+  if (s.tool !== 'cursor' || ev.source !== 'hook' || ev.helperId || !s.helpers.some(h => h.state === 'working')) return s;
+  const moves = ev.name === 'PostToolUse' || ev.name === 'PostToolUseFailure' || ev.name === 'Stop' || ev.name === 'StopFailure'
+    || ev.name === 'UserPromptSubmit' || ev.name === 'PreToolUse';
+  return moves ? { ...s, helpers: s.helpers.map(h => (h.state === 'working' ? { ...h, state: 'exited' } : h)) } : s;
+}
+
 export function reduce(s: Session, ev: SessionEvent): Session {
   if (s.state === 'exited') return s;
+  s = endCursorHelpers(s, ev);
   const at = ev.at;
   const lastHookAt = s.lastHookAt;
   if (ev.name === 'SubagentStart' || ev.name === 'SubagentStop') return ev.helperId ? reduceHelper(s, { ...ev, helperId: ev.helperId }) : s;
@@ -156,7 +195,9 @@ export function reduce(s: Session, ev: SessionEvent): Session {
         const helpers = s.helpers.some(h => h.id === helperId) ? setHelper(s, helperId, { state: 'working' }) : s.helpers;
         return { ...s, state, helpers, pending: undefined, lastError: state === 'error' ? s.lastError : undefined, lastActivityAt: at };
       }
-      return { ...s, state: 'working', pending: undefined, lastError: undefined, lastActivityAt: at };
+      // Ledge's own keys start the next step as a hook would: the pane, still at rest until the agent redraws (and
+      // its prompt hook has run), gets the same grace instead of ending the turn it just started.
+      return { ...s, state: 'working', pending: undefined, lastError: undefined, lastHookAt: at, lastActivityAt: at };
     }
     case 'Stop': {
       // The turn's last message rides on the hook; a Stop without one keeps what the last Stop said.
@@ -165,6 +206,8 @@ export function reduce(s: Session, ev: SessionEvent): Session {
       return { ...s, state: 'idle', pending: undefined, lastReply, lastHookAt: at, lastActivityAt: at };
     }
     case 'StopFailure': {
+      // A failure reported after the turn already ended (Cursor Agent sends a stray one after an abort) changes nothing.
+      if (s.state === 'idle') return s;
       const lastError = ev.text || 'the turn stopped on an error';
       if (s.pending?.helperId) return underHelper(s, 'error', at, { lastError });
       return { ...s, state: 'error', pending: undefined, lastError, lastHookAt: at, lastActivityAt: at };
@@ -179,7 +222,7 @@ export function reduce(s: Session, ev: SessionEvent): Session {
     }
     case 'PanePrompt': {
       if (s.pending?.source === 'hook') return s;
-      if (lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
+      if (hooksReportPrompts(s) && lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
       const pending = mergePending(s.pending, pendingFor(ev)!);
       if (s.pending && samePending(s.pending, pending)) return s;
       const state = pending.kind === 'question' ? 'waiting_input' : 'waiting_permission';

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -284,6 +284,46 @@ describe('server', () => {
       expectRefused('> ', { type: 'session.reply', id: 'a', text: '2' }, question));
   });
 
+  describe('a plan step that waits for its screen (Cursor Agent deny)', () => {
+    const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
+    const pending = { kind: 'permission' as const, text: 'echo ledge-perm-probe', source: 'pane' as const };
+    async function deny(panes: string[]) {
+      tmux = fakeTmux({ 'ledge-a': panes }); await srv.close();
+      srv = await startServer({ store, tmux, port: 0, untilMs: 300, verify: { attempts: 2, intervalMs: 20 } });
+      store.upsert(mk('a', { tool: 'cursor', state: 'waiting_permission', pending }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.decide', id: 'a', decision: 'deny' });
+      return c;
+    }
+    it('sends Enter only once the skip field is on screen, then the prompt is gone', async () => {
+      const c = await deny([fx('cursor-permission'), fx('cursor-permission'), fx('cursor-skip-field'), fx('cursor-working')]);
+      await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
+      expect(tmux.sent).toEqual([['text', 'ledge-a', 'n'], ['keys', 'ledge-a', 'Enter']]);
+      c.close();
+    });
+    it('never sends Enter when the skip field does not come: the decision fails', async () => {
+      const c = await deny([fx('cursor-permission')]);
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it' });
+      expect(tmux.sent).toEqual([['text', 'ledge-a', 'n']]);
+      expect(store.get('a')?.state).toBe('error');
+      c.close();
+    });
+  });
+
+  it('Cursor Agent: answering question 1 of 2 ticks the option on screen, and question 2 coming up is success', async () => {
+    // Trimmed at the end, as tmux.capture returns it.
+    const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8').replace(/\s+$/, '');
+    const q1 = fx('cursor-question-two'); const ticked = q1.replace('› [ ] c', '› [x] c');
+    tmux = fakeTmux({ 'ledge-a': [q1, q1, ticked, fx('cursor-question-second')] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0, untilMs: 300, verify: { attempts: 2, intervalMs: 20 } });
+    store.upsert(mk('a', { tool: 'cursor', state: 'waiting_input', pending: { kind: 'question', text: 'Which letter should be added to notes.txt?', options: ['c', 'd'], source: 'pane' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: '1' });
+    await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
+    expect(tmux.sent).toEqual([['text', 'ledge-a', ' '], ['keys', 'ledge-a', 'Enter']]);
+    c.close();
+  });
+
   it('a reply with no pending (your turn) is typed without a prompt check', async () => {
     tmux = fakeTmux({ 'ledge-a': ['> '] }); await srv.close(); srv = await startServer({ store, tmux, port: 0 });
     store.upsert(mk('a', { state: 'idle' }));
@@ -472,6 +512,10 @@ describe('server', () => {
       const second = await c.next('session.launched');
       expect(store.get(second.id)!.name).toBe('Otto-2');
       expect(tmux.created.map(x => x.command[0])).toEqual(['codex', 'cursor-agent']);
+      // Codex hooks run in a shared daemon: the session id reaches them through a per-thread config override.
+      expect(tmux.created[0]!.command).toEqual(['codex', '-c', `shell_environment_policy.set.LEDGE_CODEX_HOOK_SESSION="${first.id}"`]);
+      expect(tmux.created[0]!.env).toMatchObject({ LEDGE_SESSION: first.id, LEDGE_CODEX_SESSION: first.id });
+      expect(tmux.created[1]!.env.LEDGE_CODEX_SESSION).toBeUndefined();
       c.close();
     });
     it('expands ~ and refuses a missing folder or a file with an error for the requester', async () => {

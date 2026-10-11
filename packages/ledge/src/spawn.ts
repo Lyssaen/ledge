@@ -7,6 +7,20 @@ import type { Tmux } from './tmux.js';
 
 export const AGENT_BIN: Record<Tool, string> = { claude: 'claude', codex: 'codex', cursor: 'cursor-agent' };
 
+/**
+ * How a Codex hook learns its Ledge session. Codex runs hooks either inside the `codex` process (they get its
+ * environment: `LEDGE_CODEX_SESSION`) or in a shared app-server daemon, which keeps the environment of whichever `codex`
+ * started it and so names the wrong session; there a per-thread config override sets `LEDGE_CODEX_HOOK_SESSION` for
+ * this session's hooks only. The hook trusts the environment variable only outside the daemon (see `codexLedgeId`).
+ */
+export const CODEX_ENV_VAR = 'LEDGE_CODEX_SESSION';
+export const CODEX_HOOK_VAR = 'LEDGE_CODEX_HOOK_SESSION';
+
+/** Extra agent arguments naming the session for its hooks (see `CODEX_HOOK_VAR`). */
+export function agentIdArgs(tool: Tool, id: string): string[] {
+  return tool === 'codex' ? ['-c', `shell_environment_policy.set.${CODEX_HOOK_VAR}="${id}"`] : [];
+}
+
 /** Where the wrapped agent leaves its exit code (see `spawnSession`'s `recordExit`). */
 export function exitFile(id: string): string { return join(paths().dir, `exit-${id}`); }
 
@@ -47,11 +61,11 @@ export async function spawnSession(opts: SpawnOptions): Promise<Session> {
   const name = pickName(opts.taken.names, opts.name);
   const project = basename(opts.cwd) || opts.cwd;
   const tmuxSession = `ledge-${id}`;
-  const agent = opts.command ?? [AGENT_BIN[opts.tool], ...opts.args];
+  const agent = opts.command ?? [AGENT_BIN[opts.tool], ...agentIdArgs(opts.tool, id), ...opts.args];
   // With recordExit, sh runs the agent with its argv untouched ("$@") and writes its exit code to
   // the file passed as $0, so the session can die naturally and the code is still readable.
   const command = opts.recordExit ? ['sh', '-c', '"$@"; echo $? > "$0"', exitFile(id), ...agent] : agent;
-  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(opts.env ?? process.env, { LEDGE_SESSION: id, LEDGE_NAME: name }), command });
+  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(opts.env ?? process.env, { LEDGE_SESSION: id, LEDGE_NAME: name, ...(opts.tool === 'codex' ? { [CODEX_ENV_VAR]: id } : {}) }), command });
   const at = now();
   return { id, name, tool: opts.tool, cwd: opts.cwd, project, title: `${name} · ${project}`, tmuxSession, state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher' };
 }

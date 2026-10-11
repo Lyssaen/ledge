@@ -43,7 +43,8 @@ describe('reduce: transition table', () => {
     table.push([ev('PostToolUse', { tool: 'Bash' }), s, terminal ? '=' : 'working']);
     table.push([ev('PostToolUseFailure', { tool: 'Bash' }), s, terminal ? '=' : 'working']);
     table.push([ev('PostToolUseFailure', { tool: 'Bash', interrupt: true }), s, terminal ? '=' : 'idle']);
-    table.push([ev('StopFailure', { text: 'rate_limit' }), s, terminal ? '=' : 'error']);
+    // A failure after the turn already ended (Cursor Agent's stray one after an abort) leaves the rest alone.
+    table.push([ev('StopFailure', { text: 'rate_limit' }), s, terminal || s === 'idle' ? '=' : 'error']);
     table.push([ev('SubagentStart', { helperId: 'a1', tool: 'Explore' }), s, '=']);
     table.push([ev('SubagentStop', { helperId: 'a1', tool: 'Explore' }), s, '=']);
     // Fired inside a subagent: the parent's state never moves, except a helper permission over no pending.
@@ -99,6 +100,45 @@ describe('reduce: pending rules', () => {
     const next = reduce(s, ev('PanePrompt', { source: 'pane', kind: 'permission', text: 'Do you want to proceed?', at: later(5000 + HOOK_PRIORITY_MS + 1) }));
     expect(next.state).toBe('waiting_permission');
     expect(next.pending?.source).toBe('pane');
+  });
+  it('a Cursor Agent pane prompt right after a hook is taken at once: its hooks never report approvals', () => {
+    const s = reduce(session('working', { tool: 'cursor' }), ev('PreToolUse', { tool: 'Shell', text: 'touch a', at: later(5000) }));
+    const next = reduce(s, ev('PanePrompt', { source: 'pane', kind: 'permission', text: 'touch a', at: later(5200) }));
+    expect(next).toMatchObject({ state: 'waiting_permission', pending: { kind: 'permission', text: 'touch a', source: 'pane' } });
+  });
+  it('Cursor Agent abort: Stop then the stray StopFailure leaves the session at rest, in either order the end is idle', () => {
+    const working = session('working', { tool: 'cursor' });
+    const aborted = reduce(working, ev('Stop', { at: later(5000) }));
+    expect(reduce(aborted, ev('StopFailure', { at: later(5066) }))).toBe(aborted);
+    const flipped = reduce(reduce(working, ev('StopFailure', { at: later(5066) })), ev('Stop', { at: later(5100) }));
+    expect(flipped.state).toBe('idle');
+  });
+  it('a reply sent from Ledge is not ended by the pane still at rest before the agent redraws', () => {
+    const decided = reduce(session('idle', { tool: 'cursor', lastHookAt: T0 }), ev('Decided', { source: 'daemon', at: later(5000) }));
+    expect(reduce(decided, ev('PaneIdle', { source: 'pane', at: later(5300) }))).toBe(decided);
+    expect(reduce(decided, ev('PaneIdle', { source: 'pane', at: later(5000 + HOOK_PRIORITY_MS + 1) })).state).toBe('idle');
+  });
+  it('Cursor Agent helpers: the Task names one, the subagent takes it over, the parent moving on ends it', () => {
+    let s = reduce(session('working', { tool: 'cursor' }), ev('SubagentStart', { helperId: 'task:c1', tool: 'explore', text: 'Read notes' }));
+    s = reduce(s, ev('SubagentStart', { helperId: 'b335' }));
+    expect(s.helpers).toEqual([{ id: 'b335', kind: 'explore', task: 'Read notes', state: 'working' }]);
+    expect(reduce(s, ev('SubagentStart', { helperId: 'task:c2', tool: 'explore', text: 'another' })).helpers[0]!.state).toBe('working');
+    for (const e of [ev('PreToolUse', { tool: 'Shell' }), ev('PostToolUse', { tool: 'Read' }), ev('Stop'), ev('UserPromptSubmit')]) {
+      expect(reduce(s, e).helpers[0]!.state).toBe('exited');
+    }
+    // A background helper comes back with its next tool run, under its name.
+    const back = reduce(reduce(s, ev('Stop')), ev('PostToolUse', { helperId: 'b335', tool: 'Read' }));
+    expect(back.helpers[0]).toMatchObject({ id: 'b335', state: 'working', task: 'Read notes' });
+  });
+  it('Cursor Agent parallel Tasks are taken over in launch order; a subagent with no Task left is a plain helper', () => {
+    let s = session('working', { tool: 'cursor' });
+    for (const [id, text] of [['task:1', 'first'], ['task:2', 'second']]) s = reduce(s, ev('SubagentStart', { helperId: id, tool: 'explore', text }));
+    for (const id of ['s1', 's2', 's3']) s = reduce(s, ev('SubagentStart', { helperId: id }));
+    expect(s.helpers.map(h => [h.id, h.task])).toEqual([['s1', 'first'], ['s2', 'second'], ['s3', '']]);
+  });
+  it('Claude Code helpers are not ended by the parent\'s own steps (it sends SubagentStop)', () => {
+    const s = reduce(session('working'), ev('SubagentStart', { helperId: 'a1', tool: 'Explore' }));
+    expect(reduce(s, ev('PreToolUse', { tool: 'Bash' })).helpers[0]!.state).toBe('working');
   });
   it('SessionEnd clears pending and records exit', () => {
     const s = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));
@@ -231,6 +271,17 @@ describe('reduce: post-tool events', () => {
     const next = reduce(s, ev('PostToolUse', { tool: 'AskUserQuestion', at: later(6000) }));
     expect(next.state).toBe('working');
     expect(next.pending).toBeUndefined();
+  });
+  it('Codex: request_user_input is a question its own PostToolUse clears, another tool run keeps it', () => {
+    const s = reduce(session('working', { tool: 'codex' }), ev('PreToolUse', { tool: 'request_user_input', text: 'Which color?', options: ['Blue', 'Red'] }));
+    expect(s.state).toBe('waiting_input');
+    expect(s.pending).toMatchObject({ kind: 'question', text: 'Which color?', options: ['Blue', 'Red'], source: 'hook' });
+    expect(reduce(s, ev('PostToolUse', { tool: 'Bash', at: later(6000) })).pending).toBeDefined();
+    expect(reduce(s, ev('PostToolUse', { tool: 'request_user_input', at: later(6000) })).pending).toBeUndefined();
+  });
+  it('Codex: an apply_patch permission is a diff', () => {
+    const s = reduce(session('working', { tool: 'codex' }), ev('PermissionRequest', { tool: 'apply_patch', text: '/w/README.md' }));
+    expect(s.pending).toMatchObject({ kind: 'diff', text: '/w/README.md', tool: 'apply_patch' });
   });
   it('PostToolUse of ExitPlanMode clears a plan pending', () => {
     const s = reduce(session('working'), ev('PreToolUse', { tool: 'ExitPlanMode', text: 'plan' }));

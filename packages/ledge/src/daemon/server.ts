@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, resolve } from 'node:path';
+import { basename, isAbsolute, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
@@ -15,7 +15,7 @@ import { spawnSession } from '../spawn.js';
 import { loginShellPath } from '../shell-path.js';
 import { log } from '../log.js';
 
-/** How each agent resumes the folder's last conversation. Only Claude Code's flag is verified; the other adapters are stubs. */
+/** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
 
 /** The agent's arguments for a `session.launch`: the resume flag, then the first instruction as the positional prompt. */
@@ -72,7 +72,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; launcher?: string[]; home?: string; agentPath?: () => Promise<string> }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentPath?: () => Promise<string> }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -108,11 +108,27 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast({ type: 'session.preview', id, lines });
   };
 
+  /** How long an `until` step waits for the screen the next keys are meant for, polled every UNTIL_POLL_MS. */
+  const UNTIL_MS = opts.untilMs ?? 1500;
+  const UNTIL_POLL_MS = 50;
+  /** Enough for a dialog's bottom or a long draft wrapped in the input line, with the status under it. */
+  const UNTIL_LINES = 30;
+
   async function runPlan(s: Session, plan: KeyPlan): Promise<void> {
     if (!s.tmuxSession) throw new Error('session has no terminal (started without ledge)');
     for (const step of plan) {
       if ('text' in step) await tmux.sendText(s.tmuxSession, step.text);
-      else await tmux.sendKeys(s.tmuxSession, step.keys);
+      else if ('waitMs' in step) await new Promise(r => setTimeout(r, step.waitMs));
+      else if ('keys' in step) await tmux.sendKeys(s.tmuxSession, step.keys);
+      else {
+        const end = Date.now() + UNTIL_MS;
+        for (;;) {
+          const pane = await tmux.capture(s.tmuxSession, UNTIL_LINES);
+          if (pane !== null && step.until(pane)) break;
+          if (Date.now() >= end) throw new Error(NOT_TAKEN);
+          await new Promise(r => setTimeout(r, UNTIL_POLL_MS));
+        }
+      }
     }
   }
 
@@ -147,7 +163,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: (e as Error).message });
         throw e;
       }
-      const gone = await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
+      // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.
+      const gone = decided && adapter.promptGone
+        ? await verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
+        : await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
       if (!stillTheSame()) return; // a newer prompt arrived meanwhile: leave it alone
       if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon' }); return; }
       // The client gets an `error` reply for that id (via the caller's catch), so a retry from `error` reads as failed.
@@ -200,7 +219,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const before = store.get(msg.id);
         if (!before) {
           const taken = store.all().map(s => s.name);
-          const base: Session = { id: msg.id, name: pickName(taken), tool: 'claude', cwd: '', project: 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
+          const cwd = msg.cwd ?? '';
+          const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
           store.upsert(reduce(base, msg.event));
         } else store.apply(msg.id, msg.event);
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
@@ -225,7 +245,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // The 2.x question dialog is a select: typed text then Enter would silently pick the highlighted option.
         if (s.pending?.kind === 'question' && !/^[1-9]$/.test(msg.text.trim())) return send(ws, { type: 'error', id: msg.id, message: FREE_TEXT });
         // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
-        return injectAndVerify(msg.id, adapterFor(s.tool).replyPlan(msg.text, s.pending), !!s.pending);
+        const pending = s.pending; const adapter = adapterFor(s.tool);
+        return injectAndVerify(msg.id, pane => adapter.replyPlan(msg.text, pending, pane || undefined), !!pending);
       }
       case 'session.interrupt': {
         const s = store.get(msg.id);

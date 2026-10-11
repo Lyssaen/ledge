@@ -1,17 +1,17 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
-import { mapClaudeHook, runHook, REPLY_MAX } from '../src/cli/hook.js';
+import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, REPLY_MAX } from '../src/cli/hook.js';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import { connect } from '../src/client.js';
 
 const at = '2026-10-09T18:00:00.000Z';
 let home: string;
-beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'ledge-hook-')); process.env.LEDGE_HOME = home; delete process.env.LEDGE_SESSION; });
+beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'ledge-hook-')); process.env.LEDGE_HOME = home; delete process.env.LEDGE_SESSION; delete process.env.LEDGE_CODEX_SESSION; delete process.env.LEDGE_CODEX_HOOK_SESSION; });
 
 describe('mapClaudeHook', () => {
   it('uses LEDGE_SESSION when set, else session_id', () => {
@@ -118,6 +118,72 @@ describe('mapClaudeHook', () => {
   });
 });
 
+// Payloads as Codex CLI 0.162 sends them (recorded, ids shortened).
+const codex = (extra: Record<string, unknown>) => ({ session_id: '01a12b05-ecd8', turn_id: 't1', cwd: '/home/dev/demo', model: 'gpt-5.6-sol', permission_mode: 'default', ...extra });
+
+describe('mapHook codex', () => {
+  it('never names the session from LEDGE_SESSION (that is Claude\'s, or a parent agent\'s)', () => {
+    process.env.LEDGE_SESSION = 'aaaa';
+    expect(mapHook('codex', 'Stop', codex({}), at)?.id).toBe('01a12b05-ecd8');
+    process.env.LEDGE_CODEX_HOOK_SESSION = 'bbbb';
+    expect(mapHook('codex', 'Stop', codex({}), at)?.id).toBe('bbbb');
+  });
+  it('codexLedgeId: the per-thread override first, the environment only when no shared daemon runs the hook', () => {
+    expect(codexLedgeId({ LEDGE_CODEX_HOOK_SESSION: 'b', LEDGE_CODEX_SESSION: 'a' }, () => true)).toBe('b');
+    expect(codexLedgeId({ LEDGE_CODEX_SESSION: 'a' }, () => false)).toBe('a');
+    // Under the daemon, the environment is the one of the codex that started it: another session, or none.
+    expect(codexLedgeId({ LEDGE_CODEX_SESSION: 'a' }, () => true)).toBeUndefined();
+    expect(codexLedgeId({}, () => false)).toBeUndefined();
+  });
+  it('underCodexDaemon walks the parents in /proc, a "(comm)" with spaces included', () => {
+    const procs: Record<number, { ppid: number; cmd: string[] }> = {
+      [process.pid]: { ppid: 900, cmd: ['node', 'hook'] }, 900: { ppid: 800, cmd: ['sh', '-c', 'ledge hook codex Stop'] },
+      800: { ppid: 1, cmd: ['/x/codex', 'app-server', '--listen', 'unix://'] }
+    };
+    const read = (path: string) => {
+      const [, pid, file] = path.match(/^\/proc\/(\d+)\/(stat|cmdline)$/)!;
+      const p = procs[Number(pid)]; if (!p) throw new Error('ENOENT');
+      return file === 'stat' ? `${pid} (a b) S ${p.ppid} 1 1` : p.cmd.join('\0') + '\0';
+    };
+    expect(underCodexDaemon(read)).toBe(true);
+    procs[800]!.cmd = ['/x/codex', '-c', 'shell_environment_policy.set.X="1"'];
+    expect(underCodexDaemon(read)).toBe(false);
+  });
+  it('carries the agent and the folder, for a session Ledge did not launch', () => {
+    expect(mapHook('codex', 'SessionStart', codex({ source: 'startup' }), at)).toMatchObject({ agent: 'codex', cwd: '/home/dev/demo' });
+  });
+  it('maps a Bash PermissionRequest to the command', () => {
+    const m = mapHook('codex', 'PermissionRequest', codex({ tool_name: 'Bash', tool_input: { command: "printf '%s\\n' hi > hello.txt", description: 'Allow the requested shell command?' } }), at);
+    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', tool: 'Bash', text: "printf '%s\\n' hi > hello.txt" });
+  });
+  it('maps an apply_patch PermissionRequest to the files it touches', () => {
+    const command = '*** Begin Patch\n*** Update File: /home/dev/demo/README.md\n@@\n # demo\n+bye\n*** Add File: /home/dev/demo/b.txt\n+b\n*** End Patch';
+    const m = mapHook('codex', 'PermissionRequest', codex({ tool_name: 'apply_patch', tool_input: { command } }), at);
+    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', tool: 'apply_patch', text: '/home/dev/demo/README.md, /home/dev/demo/b.txt' });
+  });
+  it('maps request_user_input to a question with its options', () => {
+    const tool_input = { questions: [{ header: 'Banner color', id: 'banner_color', question: 'Which color should the banner be?', options: [{ label: 'Blue (Recommended)', description: 'calm' }, { label: 'Red', description: 'bold' }] }] };
+    const m = mapHook('codex', 'PreToolUse', codex({ tool_name: 'request_user_input', tool_input }), at);
+    expect(m?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'request_user_input', text: 'Which color should the banner be?', options: ['Blue (Recommended)', 'Red'] });
+  });
+  it('maps Stop with its last message, and a null one to a bare Stop', () => {
+    expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: 'Created `hello.txt`.' }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook', text: 'Created `hello.txt`.' });
+    expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: null }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook' });
+  });
+  it('maps Interrupt (Esc on a turn or on an approval) to an interrupted tool run: Codex waits, no Stop follows', () => {
+    expect(mapHook('codex', 'Interrupt', codex({}), at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', interrupt: true });
+  });
+  it('SessionEnd ends a session Ledge did not launch; under Ledge the pane and the exit code tell', () => {
+    expect(mapHook('codex', 'SessionEnd', codex({}), at)?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', exitCode: null });
+    process.env.LEDGE_CODEX_HOOK_SESSION = 'bbbb';
+    expect(mapHook('codex', 'SessionEnd', codex({}), at)).toBeNull();
+  });
+  it('Claude hooks still read LEDGE_SESSION and carry the claude agent', () => {
+    process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_CODEX_HOOK_SESSION = 'bbbb';
+    expect(mapHook('claude', 'Stop', { session_id: 'uuid-1', cwd: '/w' }, at)).toMatchObject({ id: '7f3a', agent: 'claude', cwd: '/w' });
+  });
+});
+
 describe('runHook', () => {
   it('falls back to session_id when LEDGE_SESSION is empty', () => {
     process.env.LEDGE_SESSION = '';
@@ -146,6 +212,15 @@ describe('runHook', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('Whatever');
   });
+  it('a Codex hook from a session Ledge did not launch creates a read-only Codex session in its folder', async () => {
+    const store = new Store();
+    const srv = await startServer({ store, tmux: {} as never, port: 0 });
+    try {
+      await runHook('UserPromptSubmit', JSON.stringify(codex({ prompt: 'hi' })), { port: srv.port, tool: 'codex' });
+      await new Promise(r => setTimeout(r, 50));
+      expect(store.get('01a12b05-ecd8')).toMatchObject({ tool: 'codex', cwd: '/home/dev/demo', project: 'demo', state: 'working', source: 'hook_only' });
+    } finally { await srv.close(); }
+  });
   it('delivers the event to a live daemon within the latency budget', async () => {
     const store = new Store();
     const srv = await startServer({ store, tmux: {} as never, port: 0 });
@@ -154,6 +229,108 @@ describe('runHook', () => {
     expect(Date.now() - t0).toBeLessThan(200);
     await new Promise(r => setTimeout(r, 50));
     expect(store.get('live-1')?.state).toBe('idle');
+    await srv.close();
+  });
+});
+
+// Payloads as Cursor Agent 2026.10 sends them (trimmed of workspace_roots, user_email, model and token counts).
+const MAIN = { conversation_id: 'b617', session_id: 'b617', generation_id: '3885', hook_event_name: '' };
+const SUB = { conversation_id: 'b335', session_id: 'b335', generation_id: 'b335', hook_event_name: '' };
+const cursor = (name: string, extra: Record<string, unknown> = {}, ids = MAIN) => mapCursorHook(name, { ...ids, hook_event_name: name, ...extra }, at);
+
+describe('mapCursorHook', () => {
+  it('uses LEDGE_SESSION when set, else session_id; names the agent and the first workspace root', () => {
+    expect(cursor('beforeSubmitPrompt', { prompt: 'hi' })).toEqual({ id: 'b617', event: { name: 'UserPromptSubmit', at, source: 'hook' }, agent: 'cursor' });
+    expect(cursor('beforeSubmitPrompt', { workspace_roots: ['/w/demo'] })?.cwd).toBe('/w/demo');
+    process.env.LEDGE_SESSION = '7f3a';
+    expect(cursor('beforeSubmitPrompt')?.id).toBe('7f3a');
+  });
+  it('maps sessionStart (its generation is the conversation) to SessionStart', () => {
+    expect(cursor('sessionStart', {}, { ...MAIN, generation_id: 'b617' })?.event.name).toBe('SessionStart');
+  });
+  it('maps preToolUse Shell to the command and Write to the file', () => {
+    expect(cursor('preToolUse', { tool_name: 'Shell', tool_input: { command: 'touch probe-file', cwd: '', timeout: 30000 } })?.event)
+      .toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'Shell', text: 'touch probe-file' });
+    expect(cursor('preToolUse', { tool_name: 'Write', tool_input: { file_path: '/w/a.txt', content: '' } })?.event.text).toBe('/w/a.txt');
+  });
+  it('maps postToolUse and postToolUseFailure, with the interrupt flag', () => {
+    expect(cursor('postToolUse', { tool_name: 'Shell' })?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', tool: 'Shell' });
+    expect(cursor('postToolUseFailure', { tool_name: 'Read', failure_type: 'error', is_interrupt: false })?.event.interrupt).toBeUndefined();
+    expect(cursor('postToolUseFailure', { tool_name: 'Shell', is_interrupt: true })?.event.interrupt).toBe(true);
+  });
+  it('maps stop completed and aborted to Stop, error to StopFailure', () => {
+    expect(cursor('stop', { status: 'completed', loop_count: 0 })?.event.name).toBe('Stop');
+    expect(cursor('stop', { status: 'aborted' })?.event.name).toBe('Stop');
+    expect(cursor('stop', { status: 'error' })?.event.name).toBe('StopFailure');
+  });
+  it('maps afterAgentResponse to a Stop that carries the reply, capped', () => {
+    expect(cursor('afterAgentResponse', { text: '  done  ' })?.event).toEqual({ name: 'Stop', at, source: 'hook', text: 'done' });
+    expect(cursor('afterAgentResponse', { text: '' })?.event).toEqual({ name: 'Stop', at, source: 'hook' });
+    expect(cursor('afterAgentResponse', { text: 'x'.repeat(REPLY_MAX + 10) })?.event.text?.endsWith('[…]')).toBe(true);
+  });
+  it('maps sessionEnd only for an untracked session: under the launcher the exit is the launcher\'s', () => {
+    expect(cursor('sessionEnd', { reason: 'completed', final_status: 'completed' })?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', exitCode: null });
+    process.env.LEDGE_SESSION = '7f3a';
+    expect(cursor('sessionEnd', { reason: 'completed' })).toBeNull();
+  });
+  describe('subagents (no subagentStart/Stop: the transcript path names the parent)', () => {
+    // As Cursor Agent writes them: ~/.cursor/projects/<slug>/agent-transcripts/<id>/<id>.jsonl
+    let dir: string; let parentPath: string;
+    const line = (role: string, content: unknown[]) => JSON.stringify({ role, message: { content } });
+    const PROMPT = 'Your only job is to read notes.txt and report it.';
+    beforeEach(() => {
+      dir = join(mkdtempSync(join(tmpdir(), 'ledge-tr-')), 'agent-transcripts');
+      mkdirSync(join(dir, 'b617'), { recursive: true });
+      parentPath = join(dir, 'b617', 'b617.jsonl');
+      writeFileSync(parentPath, [
+        line('user', [{ type: 'text', text: '<timestamp>Sunday</timestamp>\n<user_query>\nuse a subagent\n</user_query>' }]),
+        line('assistant', [{ type: 'text', text: 'Launching it.' }, { type: 'tool_use', name: 'Task', input: { description: 'Read notes.txt content', prompt: PROMPT, subagent_type: 'explore', run_in_background: false } }])
+      ].join('\n') + '\n');
+    });
+    const env = (extra: Record<string, string> = {}) => ({ CURSOR_TRANSCRIPT_PATH: parentPath, ...extra });
+    it('the parent\'s Task names a helper; the subagent\'s tool runs are that parent\'s helper', () => {
+      const task = { ...MAIN, conversation_id: 'b617', session_id: 'b617', tool_name: 'Task', tool_use_id: 'call-1\nfc_x', tool_input: { description: 'Read notes.txt content', prompt: PROMPT, subagent_type: 'explore' } };
+      expect(mapCursorHook('preToolUse', task, at, env())?.event).toEqual({ name: 'SubagentStart', at, source: 'hook', helperId: 'task:call-1', tool: 'explore', text: 'Read notes.txt content' });
+      const dynamic = { ...task, tool_name: 'CallDynamicTool', tool_input: { namespace: 'cursor', toolName: 'Task', arguments: task.tool_input } };
+      expect(mapCursorHook('preToolUse', dynamic, at, env())?.event).toMatchObject({ name: 'SubagentStart', tool: 'explore', text: 'Read notes.txt content' });
+      expect(mapCursorHook('preToolUse', { ...SUB, tool_name: 'Read', tool_input: { file_path: '/w/notes.txt' } }, at, env()))
+        .toEqual({ id: 'b617', agent: 'cursor', event: { name: 'SubagentStart', at, source: 'hook', helperId: 'b335' } });
+      expect(mapCursorHook('postToolUse', { ...SUB, tool_name: 'Read' }, at, env())?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', helperId: 'b335', tool: 'Read' });
+    });
+    it('tracked, the helper belongs to the Ledge session', () => {
+      expect(mapCursorHook('preToolUse', { ...SUB, tool_name: 'Read' }, at, env({ LEDGE_SESSION: '7f3a' }))?.id).toBe('7f3a');
+    });
+    it('the main thread, whose session is its transcript\'s, stays the main thread', () => {
+      expect(mapCursorHook('preToolUse', { ...MAIN, conversation_id: 'b617', session_id: 'b617', tool_name: 'Shell', tool_input: { command: 'ls' } }, at, env())?.event)
+        .toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'Shell', text: 'ls' });
+    });
+    it('with no transcript path: a subagent by its generation id; dropped untracked, a helper tracked', () => {
+      expect(mapCursorHook('preToolUse', { ...SUB, tool_name: 'Shell' }, at, {})).toBeNull();
+      expect(mapCursorHook('preToolUse', { ...SUB, tool_name: 'Shell' }, at, { LEDGE_SESSION: '7f3a' })).toMatchObject({ id: '7f3a', event: { name: 'SubagentStart', helperId: 'b335' } });
+    });
+    it('the reply keeps the turn\'s text blocks apart, as the transcript has them', () => {
+      writeFileSync(parentPath, [
+        line('user', [{ type: 'text', text: '<user_query>go</user_query>' }]),
+        line('assistant', [{ type: 'text', text: "I'll run it." }, { type: 'tool_use', name: 'Shell' }]),
+        line('assistant', [{ type: 'text', text: '[REDACTED]' }]),
+        line('assistant', [{ type: 'text', text: 'Done:\n- a' }])
+      ].join('\n') + '\n');
+      expect(mapCursorHook('afterAgentResponse', { ...MAIN, conversation_id: 'b617', session_id: 'b617', text: "I'll run it.Done:\n- a" }, at, env())?.event.text).toBe("I'll run it.\n\nDone:\n- a");
+      // A transcript that says something else (not written yet) leaves the hook's text as it is.
+      expect(mapCursorHook('afterAgentResponse', { ...MAIN, conversation_id: 'b617', session_id: 'b617', text: 'other' }, at, env())?.event.text).toBe('other');
+    });
+  });
+  it('returns null for an event Ledge does not listen to, or a malformed payload', () => {
+    expect(cursor('afterAgentThought', { text: 'thinking' })).toBeNull();
+    expect(mapCursorHook('stop', null, at)).toBeNull();
+    expect(mapCursorHook('stop', { status: 'completed' }, at)).toBeNull();
+  });
+  it('a first Cursor hook makes a read-only Cursor Agent session, not a Claude one', async () => {
+    const store = new Store();
+    const srv = await startServer({ store, tmux: {} as never, port: 0 });
+    await runHook('beforeSubmitPrompt', JSON.stringify({ ...MAIN, prompt: 'hi', workspace_roots: ['/w/demo'] }), { port: srv.port, tool: 'cursor' });
+    await new Promise(r => setTimeout(r, 50));
+    expect(store.get('b617')).toMatchObject({ tool: 'cursor', cwd: '/w/demo', project: 'demo', state: 'working', source: 'hook_only' });
     await srv.close();
   });
 });
@@ -199,5 +376,15 @@ describe('ledge hook (CLI)', () => {
   it('always exits 0, even with invalid stdin and no daemon', () => {
     const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'Stop'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
     expect(r.status).toBe(0);
+  });
+  it('takes the agent before the event (ledge hook codex Stop) and exits 0 too', () => {
+    const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'codex', 'Whatever'], { input: '{"session_id":"s"}', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
+    expect(r.status).toBe(0);
+    expect(readFileSync(join(home, 'daemon.log'), 'utf8')).toContain('hook codex Whatever ignored');
+  });
+  it('a Cursor hook always exits 0 and answers {} on stdout, which lets the agent go on', () => {
+    const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'cursor', 'preToolUse'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe('{}');
   });
 });

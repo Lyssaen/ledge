@@ -1,0 +1,14 @@
+  Cursor Agent
+  v2026.10.01-e373342
+  Tip: Use /run-everything to skip all approvals.
+
+
+  I'll run that command now and nothing else.
+
+  $ echo ledge-perm-probe 0ms
+
+  → Add a follow-up                                             ctrl+c to stop
+
+
+  Grok 4.6 High Fast
+  /tmp/ledge-cursor-perm-ws

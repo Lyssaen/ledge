@@ -1,0 +1,21 @@
+  Cursor Agent
+  v2026.10.01-e373342
+  Tip: Use /run-everything to skip all approvals.
+
+
+  Run exactly this shell command and nothing else: echo ledge-perm-probe
+
+
+  I'll run that command now and nothing else.
+
+  $ echo ledge-perm-probe Waiting for approval...
+
+────────────────────────────────────────────────────────────────────────────────
+ $  echo ledge-perm-probe in .
+
+ Run this command?
+ Shell allowlist is empty
+  → Run (once) (y)
+    Add Shell(echo) to allowlist? (tab)
+    Run Everything (shift+tab)
+    Skip & tell the agent what to do instead (esc or n)
