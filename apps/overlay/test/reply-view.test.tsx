@@ -47,6 +47,31 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
     // Inline code reads as code.
     expect(within(container.querySelector('[data-item="done"]') as HTMLElement).getByText('src/daemon/state.test.ts').tagName).toBe('CODE');
   });
+  it('an ordinary bullet list is a list, not numbered cards', () => {
+    const notes = fakeSession('n', { state: 'idle', lastReply: { at, text: '## Notes\n\n- first file\n- second file' } });
+    const { container } = render(<SessionView {...base} session={notes} />);
+    const list = container.querySelector('[data-list="bullet"]') as HTMLElement;
+    expect(list.tagName).toBe('UL');
+    const items = list.querySelectorAll('[data-item="item"]');
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent('·');
+    expect(items[0]).toHaveTextContent('first file');
+    expect(items[1]).toHaveTextContent('second file');
+    expect(getComputedStyle(items[0]!).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  });
+  it('an ordinary numbered list is a list, not numbered cards', () => {
+    const notes = fakeSession('n', { state: 'idle', lastReply: { at, text: '## Notes\n\n1. first file\n2. second file' } });
+    const { container } = render(<SessionView {...base} session={notes} />);
+    const list = container.querySelector('[data-list="ordered"]') as HTMLElement;
+    expect(list.tagName).toBe('OL');
+    const items = list.querySelectorAll('[data-item="item"]');
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent('1.');
+    expect(items[0]).toHaveTextContent('first file');
+    expect(items[1]).toHaveTextContent('2.');
+    expect(items[1]).toHaveTextContent('second file');
+    expect(getComputedStyle(items[0]!).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  });
   it('a question shows its chips; a chip fills the draft and focuses the field; the hint says so', () => {
     const onDraft = vi.fn();
     const { container } = render(<SessionView {...base} session={idle} onDraft={onDraft} />);

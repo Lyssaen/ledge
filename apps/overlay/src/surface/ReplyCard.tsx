@@ -133,12 +133,28 @@ export function ReplyCard({ doc, raw, t, onDraft, onFocusReply }: ReplyCardProps
         </div>
       );
     }
+    if (kind === 'done' || kind === 'verified') {
+      return (
+        <ol key={key} style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {b.items.map((it, i) => <Row key={i} item={it} kind={kind} n={i + 1} />)}
+        </ol>
+      );
+    }
+    const Tag = b.ordered ? 'ol' : 'ul';
     return (
-      <ol key={key} style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <Tag key={key} data-list={b.ordered ? 'ordered' : 'bullet'} style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {b.items.map((it, i) => it.q !== undefined
           ? <li key={i}><QuestionCard text={doc.questions[it.q]!.text} options={doc.questions[it.q]!.options} n={it.q} total={doc.questions.length} answer={answers[it.q]} onAnswer={o => answer(it.q!, o)} onFree={onFocusReply} t={t} /></li>
-          : <Row key={i} item={it} kind={kind} n={i + 1} />)}
-      </ol>
+          : it.checked === true
+            ? <Row key={i} item={it} kind={kind} n={i + 1} />
+            : <li key={i} data-item="item" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minWidth: 0 }}>
+              <span style={{ fontFamily: mono, flexShrink: 0 }}>{b.ordered ? `${i + 1}.` : '·'}</span>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                <span style={{ fontSize: 14, lineHeight: '21px', overflowWrap: 'anywhere' }}>{inline(it.text)}</span>
+                {it.sub.length > 0 && <span style={{ display: 'flex', flexDirection: 'column', gap: 2, color: 'var(--muted-foreground)' }}>{it.sub.map((s, j) => <span key={j}>{inline(s)}</span>)}</span>}
+              </span>
+            </li>)}
+      </Tag>
     );
   };
   const count = (s: Section) => s.blocks.reduce((n, b) => n + (b.type === 'list' ? b.items.length : 0), 0);
