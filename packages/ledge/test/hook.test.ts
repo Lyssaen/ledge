@@ -240,7 +240,7 @@ const cursor = (name: string, extra: Record<string, unknown> = {}, ids = MAIN) =
 
 describe('mapCursorHook', () => {
   it('uses LEDGE_SESSION when set, else session_id; names the agent and the first workspace root', () => {
-    expect(cursor('beforeSubmitPrompt', { prompt: 'hi' })).toEqual({ id: 'b617', event: { name: 'UserPromptSubmit', at, source: 'hook' }, agent: 'cursor' });
+    expect(cursor('beforeSubmitPrompt', { prompt: 'hi' })).toEqual({ id: 'b617', event: { name: 'UserPromptSubmit', at, source: 'hook', text: 'hi' }, agent: 'cursor' });
     expect(cursor('beforeSubmitPrompt', { workspace_roots: ['/w/demo'] })?.cwd).toBe('/w/demo');
     process.env.LEDGE_SESSION = '7f3a';
     expect(cursor('beforeSubmitPrompt')?.id).toBe('7f3a');
@@ -386,5 +386,18 @@ describe('ledge hook (CLI)', () => {
     const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'cursor', 'preToolUse'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe('{}');
+  });
+});
+
+describe('prompts and the chat marker', () => {
+  const at = '2026-10-11T10:00:00.000Z';
+  it('UserPromptSubmit carries the prompt, cut to 500 characters', () => {
+    const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(600) }, at);
+    expect(m?.event.name).toBe('UserPromptSubmit'); expect(m?.event.text).toHaveLength(500);
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's' }, at)?.event.text).toBeUndefined();
+  });
+  it('Cursor beforeSubmitPrompt carries the prompt too', () => {
+    const m = mapCursorHook('beforeSubmitPrompt', { session_id: 's', prompt: 'Corrige le test' }, at, {});
+    expect(m?.event).toMatchObject({ name: 'UserPromptSubmit', text: 'Corrige le test' });
   });
 });
