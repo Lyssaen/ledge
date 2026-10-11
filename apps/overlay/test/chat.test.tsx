@@ -54,4 +54,22 @@ describe('<ChatView>', () => {
     rerender(<ChatView {...base} turns={[]} live={null} offline="Offline" />);
     expect(screen.getByRole('textbox', { name: 'Ask Ledge' })).toBeDisabled(); expect(screen.getByText('Offline')).toBeInTheDocument();
   });
+  it('an answered turn with an empty answer keeps the chat usable and shows only its sources', () => {
+    const turns: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [{ kind: 'sessions' }], answer: '', answeredAt: T0 }];
+    render(<ChatView {...base} turns={turns} live={null} now={Date.parse(T0) + 10_000} />);
+    expect(screen.getByRole('textbox', { name: 'Ask Ledge' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+    expect(screen.getByText('Sources')).toBeInTheDocument();
+  });
+  it('a cancelled turn says Stopped, not an error', () => {
+    const turns: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [], error: 'cancelled' }];
+    render(<ChatView {...base} turns={turns} live={null} />);
+    expect(screen.getByText('Stopped.')).toBeInTheDocument(); expect(screen.queryByRole('alert')).toBeNull();
+  });
+  it('claims every ledge:// link so none reaches the browser', () => {
+    const onOpen = vi.fn();
+    const turns: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [], answer: '[autre](ledge://other/1)', answeredAt: T0 }];
+    render(<ChatView {...base} turns={turns} live={null} onOpenSession={onOpen} />);
+    fireEvent.click(screen.getByRole('link', { name: 'autre' })); expect(onOpen).not.toHaveBeenCalled();
+  });
 });

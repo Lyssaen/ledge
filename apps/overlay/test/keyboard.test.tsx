@@ -199,12 +199,12 @@ describe('<Surface> keyboard first', () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     act(() => shortcut());
     act(() => press('/'));
-    expect(document.activeElement).toHaveAttribute('data-ask');
+    expect(document.activeElement).toHaveAttribute('data-ask-input');
     (document.activeElement as HTMLElement).blur();
     act(() => press('Enter'));
     expect(surface()).toHaveAttribute('data-mode', 'session');
     act(() => press('/'));
-    expect(document.activeElement).not.toHaveAttribute('data-ask');
+    expect(document.activeElement).not.toHaveAttribute('data-ask-input');
   });
 
   it('digits choose the question options in an open session; a focused radio keeps native arrows; Other is off', async () => {

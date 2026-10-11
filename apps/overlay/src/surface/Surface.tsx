@@ -384,7 +384,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
       if (st.mode === 'session') openRow(next); else setFocusedId(next);
     },
     onClose: () => dispatch({ type: detail ? 'back' : 'close' }),
-    onAsk: () => surfaceRef.current?.querySelector<HTMLInputElement>('[data-ask]')?.focus(),
+    onAsk: () => surfaceRef.current?.querySelector<HTMLInputElement>('[data-ask-input]')?.focus(),
     onReplyFocus: () => {
       if (st.mode !== 'session' && st.mode !== 'list') return;
       if (st.mode === 'session') { surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="session"] [data-reply]')?.focus(); return; }

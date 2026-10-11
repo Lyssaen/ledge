@@ -155,7 +155,8 @@ const fr = {
     step: { sessions: 'Relit les sessions', pane: (name: string) => `Lit le terminal de ${name}`, reply: (name: string) => `Lit la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => `Lit ${path}` },
     source: { sessions: 'les sessions', pane: (name: string) => `le terminal de ${name}`, reply: (name: string) => `la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'aucune lecture', ago: (when: string) => `il y a ${when}`,
-    error: (why: string) => `Ledge n’a pas pu répondre : ${why}`
+    error: (why: string) => `Ledge n’a pas pu répondre : ${why}`,
+    stopped: 'Arrêté.'
   },
   help: {
     title: 'Au bout des doigts.',
@@ -316,7 +317,8 @@ const en: Messages = {
     step: { sessions: 'Reads the sessions', pane: (name: string) => `Reads ${name}'s terminal`, reply: (name: string) => `Reads ${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => `Reads ${path}` },
     source: { sessions: 'the sessions', pane: (name: string) => `${name}'s terminal`, reply: (name: string) => `${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'nothing read', ago: (when: string) => `${when} ago`,
-    error: (why: string) => `Ledge could not answer: ${why}`
+    error: (why: string) => `Ledge could not answer: ${why}`,
+    stopped: 'Stopped.'
   },
   help: {
     title: 'Keyboard',

@@ -28,7 +28,7 @@ function linkBots(text: string, sessions: Session[]): string {
 
 /** Simple Markdown: paragraphs, bullet lists, `###` headings; inline marks through the reply renderer. */
 function Answer({ text, sessions, onOpen }: { text: string; sessions: Session[]; onOpen: (id: string) => void }) {
-  const onLink = (url: string) => { const m = /^ledge:\/\/session\/(.+)$/.exec(url); if (!m) return false; onOpen(m[1]!); return true; };
+  const onLink = (url: string) => { if (!url.startsWith('ledge://')) return false; const m = /^ledge:\/\/session\/(.+)$/.exec(url); if (m) onOpen(m[1]!); return true; };
   const blocks = linkBots(text, sessions).split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13, lineHeight: '19px', minWidth: 0 }}>
@@ -45,7 +45,7 @@ function Answer({ text, sessions, onOpen }: { text: string; sessions: Session[];
 export function ChatView(p: ChatViewProps) {
   const { t } = useI18n();
   const { turns, live, visible, enterDelay = 120 } = p;
-  const running = turns.find(x => !x.answer && !x.error) ?? null;
+  const running = turns.find(x => x.answeredAt === undefined && x.error === undefined) ?? null;
   const busy = !!running;
   const [text, setText] = useState('');
   const field = useRef<HTMLInputElement>(null);
@@ -54,15 +54,15 @@ export function ChatView(p: ChatViewProps) {
   useEffect(() => { if (visible && !busy) field.current?.focus({ preventScroll: true }); }, [visible, busy]);
   // The resident pulses while Ledge reads.
   const [pulse, setPulse] = useState(0);
-  useEffect(() => { if (!busy || p.reducedMotion) return; const id = setInterval(() => setPulse(k => k + 1), 1400); return () => clearInterval(id); }, [busy, p.reducedMotion]);
+  useEffect(() => { if (!busy || !visible || p.reducedMotion) return; const id = setInterval(() => setPulse(k => k + 1), 1400); return () => clearInterval(id); }, [busy, visible, p.reducedMotion]);
   const submit = (q: string) => { const v = q.trim(); if (!v || busy || p.offline) return; p.onAsk(v); setText(''); };
   const repos = groupSessions(p.sessions).length;
-  const mascot = (size: number) => <ResidentMascot size={size} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} gestureKey={busy ? pulse : undefined} gestureKind="pulse" />;
+  const mascot = (size: number, pulsing = false) => <ResidentMascot size={size} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} gestureKey={pulsing && busy ? pulse : undefined} gestureKind="pulse" />;
   return (
     <div data-layer="chat" data-delay={enterDelay} inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay : 0]]) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: CHAT_HEADER_H, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px', borderBottom: '1px solid var(--sidebar-border)' }}>
         <Button variant="ghost" size="icon" aria-label={t.chat.back} title={t.chat.back} data-initial-focus onClick={p.onBack}><Icon {...ICONS.chevronLeft} /></Button>
-        {mascot(28)}
+        {mascot(28, true)}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1, minWidth: 0 }}>
           <span data-brand style={{ fontSize: 14, lineHeight: '18px', fontWeight: 650 }}>{t.chat.title}<span style={{ color: 'var(--sidebar-primary)' }}>.</span></span>
           <span style={{ fontSize: 11, lineHeight: '14px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.chat.subtitle(p.sessions.length, repos)}</span>
@@ -79,26 +79,27 @@ export function ChatView(p: ChatViewProps) {
           {turns.map(turn => (
             <div key={turn.qid} data-turn style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}><span style={{ maxWidth: '85%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', background: 'var(--secondary)', fontSize: 13, lineHeight: '19px', overflowWrap: 'anywhere' }}>{turn.question}</span></div>
-              {turn.error && <span data-chat-error role="alert" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--destructive)' }}>{t.chat.error(turn.error)}</span>}
-              {!turn.error && (turn.answer || turn.steps.length > 0 || live?.qid === turn.qid || running?.qid === turn.qid) && (
+              {turn.error === 'cancelled' ? <span data-chat-stopped style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.chat.stopped}</span>
+                : turn.error !== undefined && <span data-chat-error role="alert" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--destructive)' }}>{t.chat.error(turn.error)}</span>}
+              {turn.error === undefined && (turn.answeredAt !== undefined || turn.steps.length > 0 || live?.qid === turn.qid || running?.qid === turn.qid) && (
                 <div style={{ display: 'grid', gridTemplateColumns: '24px 1fr', gap: 10, alignItems: 'start' }}>
-                  {mascot(24)}
+                  {mascot(24, running?.qid === turn.qid)}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-                    {!turn.answer && (
+                    {turn.answeredAt === undefined && (
                       <div data-steps style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
                         {turn.steps.length === 0 && <span>{t.chat.thinking}</span>}
                         {turn.steps.map((s, i) => <span key={i} style={{ display: 'flex', gap: 4, color: i === turn.steps.length - 1 ? 'var(--sidebar-foreground)' : undefined }}>{i < turn.steps.length - 1 && <span aria-hidden>✓</span>}<span>{stepLabel(s, t)}</span></span>)}
                       </div>
                     )}
-                    {(turn.answer || (live?.qid === turn.qid && live.text)) && <Answer text={turn.answer ?? live!.text} sessions={p.sessions} onOpen={p.onOpenSession} />}
-                    {turn.answer && turn.answeredAt && (
+                    {(turn.answer || (turn.answeredAt === undefined && live?.qid === turn.qid && live.text)) && <Answer text={turn.answer || live!.text} sessions={p.sessions} onOpen={p.onOpenSession} />}
+                    {turn.answeredAt !== undefined && (
                       <div data-sources style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', paddingTop: 6, borderTop: '1px solid var(--sidebar-border)', fontSize: 11, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
                         <span style={{ fontWeight: 500 }}>{t.chat.sources}</span>
                         {turn.steps.length === 0 ? <span>{t.chat.sourcesNone}</span> : [...new Set(turn.steps.map(s => sourceLabel(s, t)))].map(l => <span key={l}>{l}</span>)}
                         <span>{t.chat.ago(relativeTime(turn.answeredAt, p.now, t))}</span>
                       </div>
                     )}
-                    {!turn.answer && running?.qid === turn.qid && <div><Button variant="outline" size="sm" onClick={() => p.onCancel(turn.qid)} style={{ height: 26, padding: '0 8px' }}>{t.chat.stop}</Button></div>}
+                    {running?.qid === turn.qid && <div><Button variant="outline" size="sm" onClick={() => p.onCancel(turn.qid)} style={{ height: 26, padding: '0 8px' }}>{t.chat.stop}</Button></div>}
                   </div>
                 </div>
               )}

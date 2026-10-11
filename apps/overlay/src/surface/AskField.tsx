@@ -11,7 +11,7 @@ export function AskField({ onAsk, onTyping, disabled = false, theme = 'dark', re
   return (
     <div data-ask-field style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, margin: '0 12px 10px', padding: '0 10px', boxSizing: 'border-box', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', background: 'var(--well)', opacity: disabled ? 0.5 : 1 }}>
       <ResidentMascot size={18} theme={theme} reducedMotion={reducedMotion} paused={disabled} />
-      <input data-ask type="text" aria-label={t.chat.ask} placeholder={t.chat.askPlaceholder} value={text} disabled={disabled}
+      <input data-ask-input type="text" aria-label={t.chat.ask} placeholder={t.chat.askPlaceholder} value={text} disabled={disabled}
         onChange={e => { setText(e.target.value); onTyping?.(e.target.value.length > 0); }} onFocus={() => onTyping?.(true)} onBlur={() => onTyping?.(text.length > 0)}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } else if (e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur(); } }}
         style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', color: 'var(--sidebar-foreground)', fontSize: 13, outline: 'none' }} />
