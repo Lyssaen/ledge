@@ -415,7 +415,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
         </div>
       </div>
 
-      {/* Drawn after the surface: each covers the surface's border row up to the end of its curve. */}
+      {/* Drawn after the surface: each overlaps its edge by a pixel, so no seam shows where they meet. */}
       <Shoulders top={geo.top} h={geo.h} w={geo.w} opacity={unreachable ? 0.6 : 1} transition={surfaceTransition} />
 
       {/* Zoomed extras: a zoomed element's own offsets are zoomed too, so their real-px positions are divided back. */}
