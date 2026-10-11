@@ -6,6 +6,7 @@ import { Badge } from '../ui/Badge';
 import { BranchChip } from '../ui/BranchChip';
 import { Button } from '../ui/Button';
 import { Kbd } from '../ui/Kbd';
+import { AskField } from './AskField';
 import { relativeTime, toolName } from '../format';
 import { transition } from '../motion';
 import { SIZES } from './geometry';
@@ -33,6 +34,9 @@ export const GROUP_H = SIZES.groupH;
 /** Height of a focused row carrying the inline Approve / Deny / Open actions. */
 export const EXPANDED_ROW_H = 100;
 
+/** Height of the ask field's slot above the footer: the 36 px field plus its 10 px bottom margin. */
+export const ASK_H = 46;
+
 /** A line shown under the header for a few seconds (a session the overlay just started), with an optional action. */
 export interface ListNotice { text: string; action?: { label: string; onClick: () => void } }
 
@@ -44,6 +48,8 @@ export interface ListProps {
   onSettings?: () => void; onHelp?: () => void; onHoverRow?: (id: string | null) => void;
   /** Opens the "New session" form (the header's + and the empty state's button). */
   onLaunch?: () => void; notice?: ListNotice | null;
+  /** The ask field above the footer (shown when `onAsk` is set); `onTyping` reports focus and typing, `askDisabled` greys it (offline). */
+  onAsk?: (text: string) => void; onTyping?: (on: boolean) => void; askDisabled?: boolean;
   /** Whether a session's decisions may be sent now (reachable daemon, not read-only, nothing in flight). */
   canDecide?: (s: Session) => boolean;
   /** Removes an eligible row (see canDismiss); `offline` disables the button like every other send. */
@@ -51,7 +57,7 @@ export interface ListProps {
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number;
 }
 
-export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, notice = null, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
+export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onTyping, askDisabled = false, notice = null, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
   const { t } = useI18n();
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
@@ -137,6 +143,7 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
           </div>
         )); })()}
       </div>
+      {onAsk && <AskField onAsk={onAsk} onTyping={onTyping} disabled={askDisabled} theme={theme} reducedMotion={reducedMotion} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: SIZES.footerH, flexShrink: 0, boxSizing: 'border-box', padding: '0 17px', borderTop: '1px solid var(--sidebar-border)' }}>
         <button type="button" data-dnd-footer aria-pressed={dnd} onClick={onToggleDnd} className="ledge-text-btn"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 0', border: 'none', background: 'transparent', fontSize: 13, lineHeight: '18px', cursor: 'pointer', color: dnd ? 'var(--sidebar-primary)' : 'var(--muted-foreground)', transition: transition([['color', 'hover']]) }}>

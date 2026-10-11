@@ -146,6 +146,17 @@ const fr = {
     soundsNote: 'Un seul son à la fois : une rafale de demandes ne joue qu’une fois, la poignée montre le reste. Ouvrir, fermer et survoler sont silencieux.',
     themeLight: 'Thème clair · Galet', themeDark: 'Thème sombre · Signal', themeHint: 'Changer le thème et la matière des mascottes'
   },
+  chat: {
+    title: 'Ledge', subtitle: (n: number, repos: number) => `Voit ${n} ${plural(n, 'session', 'sessions')} · ${repos} ${plural(repos, 'dépôt', 'dépôts')} · lecture seule`,
+    ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…', send: 'Envoyer', stop: 'Arrêter', back: 'Retour aux sessions', close: 'Fermer',
+    emptyTitle: 'Demandez-moi des nouvelles.', emptyHint: (n: number) => `Je vois ${n === 0 ? 'aucune session' : `${n} ${plural(n, 'session', 'sessions')}`}, les terminaux et les dépôts. Je lis, je ne touche à rien.`,
+    chips: ['Où en sont les autres ?', 'Qu’est-ce qui attend ma décision ?', 'Quelles branches peuvent être fusionnées ?'],
+    thinking: 'Ledge cherche…',
+    step: { sessions: 'Relit les sessions', pane: (name: string) => `Lit le terminal de ${name}`, reply: (name: string) => `Lit la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => `Lit ${path}` },
+    source: { sessions: 'les sessions', pane: (name: string) => `le terminal de ${name}`, reply: (name: string) => `la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => path },
+    sources: 'Sources', sourcesNone: 'aucune lecture', ago: (when: string) => `il y a ${when}`,
+    error: (why: string) => `Ledge n’a pas pu répondre : ${why}`
+  },
   help: {
     title: 'Au bout des doigts.',
     keys: [['Ouvrir la liste', ['Ctrl Alt L']], ['Choisir une session', ['J', 'K', '1–9']], ['Ouvrir la sélection', ['Entrée']], ['Autoriser / refuser', ['Y', 'N']],
@@ -295,6 +306,17 @@ const en: Messages = {
     behind: 'Only when the terminal is behind', behindHint: 'When Windows Terminal is the front window you are already looking: no sound, the bubble still shows.',
     soundsNote: 'One sound at a time: a burst of asks plays once, the handle shows the rest. Opening, closing and hovering are silent.',
     themeLight: 'Light theme · Pebble', themeDark: 'Dark theme · Signal', themeHint: 'Switch the theme and the mascot material'
+  },
+  chat: {
+    title: 'Ledge', subtitle: (n: number, repos: number) => `Sees ${n} ${plural(n, 'session', 'sessions')} · ${repos} ${plural(repos, 'repository', 'repositories')} · read only`,
+    ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…', send: 'Send', stop: 'Stop', back: 'Back to sessions', close: 'Close',
+    emptyTitle: 'Ask me how things are going.', emptyHint: (n: number) => `I see ${n === 0 ? 'no session' : `${n} ${plural(n, 'session', 'sessions')}`}, the terminals and the repositories. I read, I touch nothing.`,
+    chips: ['How are the others doing?', 'What is waiting for my decision?', 'Which branches can be merged?'],
+    thinking: 'Ledge is looking…',
+    step: { sessions: 'Reads the sessions', pane: (name: string) => `Reads ${name}'s terminal`, reply: (name: string) => `Reads ${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => `Reads ${path}` },
+    source: { sessions: 'the sessions', pane: (name: string) => `${name}'s terminal`, reply: (name: string) => `${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => path },
+    sources: 'Sources', sourcesNone: 'nothing read', ago: (when: string) => `${when} ago`,
+    error: (why: string) => `Ledge could not answer: ${why}`
   },
   help: {
     title: 'Keyboard',

@@ -16,7 +16,7 @@ const chipStyle: React.CSSProperties = { height: 28, padding: '0 10px', borderRa
  *  struck, italic. Bold and struck spans may hold other tokens; a star or underscore glued to a word (`2*3`,
  *  `snake_case`) is text. A bare address stops before whitespace and gives back the punctuation that closes the
  *  sentence around it (`.`, `,`, a `)` it did not open). */
-const TOKEN = /(?<code>`[^`\n]+`)|\[(?<ltext>[^\]\n]+)\]\((?<lurl>https?:\/\/[^\s)]+)\)|(?<url>https?:\/\/[^\s<>]+)|\*\*(?<b1>\S(?:.*?\S)?)\*\*(?!\*)|__(?<b2>\S(?:.*?\S)?)__(?!_)|~~(?<s>\S(?:.*?\S)?)~~|(?<![\w*])\*(?<i1>[^\s*](?:[^*\n]*?[^\s*])?)\*(?![\w*])|(?<![\w_])_(?<i2>[^\s_](?:[^_\n]*?[^\s_])?)_(?![\w_])/g;
+const TOKEN = /(?<code>`[^`\n]+`)|\[(?<ltext>[^\]\n]+)\]\((?<lurl>(?:https?|ledge):\/\/[^\s)]+)\)|(?<url>https?:\/\/[^\s<>]+)|\*\*(?<b1>\S(?:.*?\S)?)\*\*(?!\*)|__(?<b2>\S(?:.*?\S)?)__(?!_)|~~(?<s>\S(?:.*?\S)?)~~|(?<![\w*])\*(?<i1>[^\s*](?:[^*\n]*?[^\s*])?)\*(?![\w*])|(?<![\w_])_(?<i2>[^\s_](?:[^_\n]*?[^\s_])?)_(?![\w_])/g;
 const codeStyle: React.CSSProperties = { fontFamily: mono, fontSize: '0.92em', background: 'var(--muted)', padding: '1px 5px', borderRadius: 6, overflowWrap: 'anywhere' };
 const linkStyle: React.CSSProperties = { color: 'inherit', textDecoration: 'underline', textDecorationColor: 'var(--muted-foreground)', textUnderlineOffset: 2 };
 
@@ -29,7 +29,7 @@ function bareUrl(raw: string): string {
 
 /** Inline markdown the agent uses in a line: `code`, [links](https://…) and bare https://… addresses that open in the
  *  browser, **bold**, *italic*, ~~struck~~; anything else stays text. */
-export function inline(text: string, depth = 0): ReactNode[] {
+export function inline(text: string, depth = 0, onLink?: (url: string) => boolean): ReactNode[] {
   if (depth > 3) return [text];
   const re = new RegExp(TOKEN.source, 'g');
   const out: ReactNode[] = [];
@@ -38,7 +38,7 @@ export function inline(text: string, depth = 0): ReactNode[] {
     if (m.index > last) out.push(text.slice(last, m.index));
     const g = m.groups!; const key = m.index;
     if (g.code) out.push(<code key={key} style={codeStyle}>{g.code.slice(1, -1)}</code>);
-    else if (g.lurl) { const url = g.lurl; out.push(<a key={key} href={url} title={url} onClick={e => { e.preventDefault(); openUrl(url); }} style={linkStyle}>{inline(g.ltext!, depth + 1)}</a>); }
+    else if (g.lurl) { const url = g.lurl; out.push(<a key={key} href={url} title={url} onClick={e => { e.preventDefault(); if (!onLink?.(url)) openUrl(url); }} style={linkStyle}>{inline(g.ltext!, depth + 1, onLink)}</a>); }
     else if (g.url) {
       const url = bareUrl(g.url);
       out.push(<a key={key} href={url} onClick={e => { e.preventDefault(); openUrl(url); }} style={{ ...linkStyle, overflowWrap: 'anywhere' }}>{url}</a>);

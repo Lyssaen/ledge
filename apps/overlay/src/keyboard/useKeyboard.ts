@@ -5,6 +5,8 @@ import type { Mode } from '../surface/geometry';
 export interface KeyboardOptions {
   enabled: boolean; mode: Mode; sessions: Session[]; focusedId: string | null;
   onFocus: (id: string | null) => void; onOpen: (id: string) => void; onDecide: (id: string, d: 'accept' | 'deny') => void;
+  /** `/`: focus the ask field (list only). */
+  onAsk?: () => void;
   onNextAsk: () => void; onClose: () => void; onReplyFocus: () => void; onToggleDnd: () => void; onHelp: () => void;
   /** `o`: open the terminal tab of the focused row (list) or of the open session. */
   onTerminal?: (id: string) => void;
@@ -56,6 +58,7 @@ export function useKeyboard(o: KeyboardOptions) {
       else if (k === 'o') { if (focused) c.onTerminal?.(focused.id); }
       else if (k === 'd') c.onToggleDnd();
       else if (k === 'Escape') c.onClose();
+      else if (list && k === '/') c.onAsk?.();
       else if (k === '?') c.onHelp();
       else return;
       e.preventDefault();

@@ -138,4 +138,11 @@ describe('rowHint', () => {
       expect(screen.queryAllByRole('button', { name: /^Remove from list/ })).toHaveLength(0);
     });
   });
+  it('carries the ask field above the footer', () => {
+    const onAsk = vi.fn();
+    render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} onAsk={onAsk} />);
+    const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
+    fireEvent.change(input, { target: { value: 'hello' } }); fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onAsk).toHaveBeenCalledWith('hello');
+  });
 });

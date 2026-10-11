@@ -195,6 +195,18 @@ describe('<Surface> keyboard first', () => {
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.focus', id: 'a' }));
   });
 
+  it('/ focuses the ask field in the list and does nothing in a session', () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => shortcut());
+    act(() => press('/'));
+    expect(document.activeElement).toHaveAttribute('data-ask');
+    (document.activeElement as HTMLElement).blur();
+    act(() => press('Enter'));
+    expect(surface()).toHaveAttribute('data-mode', 'session');
+    act(() => press('/'));
+    expect(document.activeElement).not.toHaveAttribute('data-ask');
+  });
+
   it('digits choose the question options in an open session; a focused radio keeps native arrows; Other is off', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     await act(async () => { mock.upsert({ ...sessions[1]!, pending: { kind: 'question', text: 'Which?', source: 'hook', options: ['Rebase', 'Merge'] } }); await sleep(50); });

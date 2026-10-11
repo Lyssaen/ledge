@@ -1,0 +1,57 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/react';
+import type { ChatTurn } from '@ledge/protocol';
+import { ChatView } from '../src/surface/ChatView';
+import { AskField } from '../src/surface/AskField';
+import { fakeSession } from './mockDaemon';
+
+const T0 = '2026-10-11T10:00:00.000Z';
+const sessions = [fakeSession('a', { name: 'Nova', repoPath: '/w/ledge' }), fakeSession('b', { name: 'Pim', repoPath: '/w/other' })];
+const base = { sessions, visible: true, offline: null, onAsk: () => {}, onCancel: () => {}, onBack: () => {}, onClose: () => {}, onOpenSession: () => {} };
+
+describe('<AskField>', () => {
+  it('sends a non-empty question on Enter and reports typing', () => {
+    const onAsk = vi.fn(), onTyping = vi.fn();
+    render(<AskField onAsk={onAsk} onTyping={onTyping} />);
+    const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
+    fireEvent.focus(input); expect(onTyping).toHaveBeenCalledWith(true);
+    fireEvent.keyDown(input, { key: 'Enter' }); expect(onAsk).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: ' Où en sont les autres ? ' } }); fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onAsk).toHaveBeenCalledWith('Où en sont les autres ?'); expect(input).toHaveValue('');
+  });
+});
+
+describe('<ChatView>', () => {
+  it('shows the suggestions when empty, and asks one on click', () => {
+    const onAsk = vi.fn();
+    render(<ChatView {...base} turns={[]} live={null} onAsk={onAsk} />);
+    expect(screen.getByText('Sees 2 sessions · 2 repositories · read only')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'How are the others doing?' }));
+    expect(onAsk).toHaveBeenCalledWith('How are the others doing?');
+  });
+  it('shows a running turn with its steps, the live text and a stop button', () => {
+    const onCancel = vi.fn();
+    const turns: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [{ kind: 'sessions' }, { kind: 'pane', id: 'a', name: 'Nova' }] }];
+    render(<ChatView {...base} turns={turns} live={{ qid: 'q1', text: 'Deux ' }} onCancel={onCancel} />);
+    expect(screen.getByText('Reads the sessions')).toBeInTheDocument(); expect(screen.getByText("Reads Nova's terminal")).toBeInTheDocument();
+    expect(screen.getByText('Deux')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' })); expect(onCancel).toHaveBeenCalledWith('q1');
+    expect(screen.getByRole('textbox', { name: 'Ask Ledge' })).toBeDisabled();
+  });
+  it('renders the answer, links bot names to their session, and lists the sources', () => {
+    const onOpen = vi.fn();
+    const turns: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [{ kind: 'sessions' }, { kind: 'git', id: 'b', name: 'Pim' }], answer: '**Nova** attend votre accord.\n\n- `git push` en attente\n- rien d\'autre', answeredAt: T0 }];
+    render(<ChatView {...base} turns={turns} live={null} onOpenSession={onOpen} now={Date.parse(T0) + 10_000} />);
+    fireEvent.click(screen.getByRole('link', { name: 'Nova' })); expect(onOpen).toHaveBeenCalledWith('a');
+    expect(screen.getByText('git push')).toBeInTheDocument();
+    const sources = screen.getByText('Sources').parentElement!;
+    expect(within(sources).getByText('the sessions')).toBeInTheDocument(); expect(within(sources).getByText("git in Pim's folder")).toBeInTheDocument(); expect(within(sources).getByText(/ago$/)).toBeInTheDocument();
+  });
+  it('shows an error under the question and reopens the field; offline disables it with the reason', () => {
+    const turns: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [], error: 'boom' }];
+    const { rerender } = render(<ChatView {...base} turns={turns} live={null} />);
+    expect(screen.getByText('Ledge could not answer: boom')).toBeInTheDocument(); expect(screen.getByRole('textbox', { name: 'Ask Ledge' })).toBeEnabled();
+    rerender(<ChatView {...base} turns={[]} live={null} offline="Offline" />);
+    expect(screen.getByRole('textbox', { name: 'Ask Ledge' })).toBeDisabled(); expect(screen.getByText('Offline')).toBeInTheDocument();
+  });
+});

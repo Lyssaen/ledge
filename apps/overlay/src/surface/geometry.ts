@@ -17,7 +17,7 @@ export function slotSizes(n: number): { big: number; small: number; gap: number 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of an expanded (focused) list row. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. */
-export interface LayoutInput { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; bubbleAnchor?: number }
+export interface LayoutInput { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; bubbleAnchor?: number; /** Extra height of the ask field under the list rows (`ASK_H`). */ askH?: number }
 
 /** `bubbleAnchor` is the y the bubble aligns to (its bot's center) when the handle is laid out apart; otherwise its slot. */
 export function layout(input: LayoutInput): Layout {
@@ -49,7 +49,7 @@ export function layout(input: LayoutInput): Layout {
   }
   // An empty list shows the empty state (a bot, two lines, a button) instead of rows.
   const rowsH = n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.groups ?? 0) * SIZES.groupH + (input.listExtraH ?? 0);
-  const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + rowsH + SIZES.footerH + SURFACE_CHROME_Y : (input.sessionH ?? 480));
+  const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + rowsH + (input.askH ?? 0) + SIZES.footerH + SURFACE_CHROME_Y : (input.sessionH ?? 480));
   const top = clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h);
   const w = mode === 'list' ? SIZES.listW : (input.reading ? SIZES.readingW : SIZES.sessionW);
   return { top, w, h, slots, handle, hotZones };
