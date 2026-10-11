@@ -19,7 +19,9 @@ test('opens a Markdown plan in the same panel and returns to the preserved reply
   await expect(layer(page, 'reader').getByRole('heading', { name: 'Plan' })).toBeVisible();
   await layer(page, 'reader').getByRole('button', { name: 'Contents' }).click();
   await expect(layer(page, 'reader').getByRole('navigation', { name: 'Contents' })).toContainText('Étape');
-  await layer(page, 'reader').getByRole('button', { name: 'Contents' }).click();
+  await page.keyboard.press('Escape');
+  await expect(layer(page, 'reader').getByRole('navigation', { name: 'Contents' })).toHaveCount(0);
+  await expectMode(page, 'reader');
   await layer(page, 'reader').getByRole('link', { name: 'Suite' }).click();
   const child = await received(d.received, 'document.read', m => m.path === 'suite.md');
   expect(child.basePath).toBe('/w/harness-assistant/docs/plan.md');
@@ -38,8 +40,14 @@ test('opens a Markdown plan in the same panel and returns to the preserved reply
   await expect(layer(page, 'reader').locator('[data-document-source]')).toContainText('# Plan');
   await layer(page, 'reader').getByRole('button', { name: 'Expand' }).click();
   await expect(surface(page)).toHaveCSS('width', '800px');
+  await page.keyboard.press('y');
+  await page.keyboard.press('n');
+  await page.keyboard.press('1');
+  await page.keyboard.press('r');
+  await expectMode(page, 'reader');
   await page.keyboard.press('Escape');
   await expectMode(page, 'session');
   await expect(reply).toHaveValue('Mon brouillon');
+  await expect(layer(page, 'session').getByRole('link', { name: 'docs/plan.md' })).toBeFocused();
   expect(d.received.some(m => m.type === 'session.reply' || m.type === 'session.decide')).toBe(false);
 });

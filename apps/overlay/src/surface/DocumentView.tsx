@@ -17,6 +17,7 @@ export function DocumentView({ state, originName, theme, expanded, onBack, onClo
   const { t } = useI18n();
   const [headings, setHeadings] = useState<DocumentHeading[]>([]);
   const [outline, setOutline] = useState(false);
+  const [targetMissing, setTargetMissing] = useState(false);
   const scroll = useRef<HTMLDivElement>(null);
   const path = state.status === 'ready' ? state.document.path : state.path;
   useEffect(() => { setOutline(false); }, [path]);
@@ -27,12 +28,15 @@ export function DocumentView({ state, originName, theme, expanded, onBack, onClo
   useLayoutEffect(() => { if (scroll.current) scroll.current.scrollTop = raw ? reading.sourceScroll : reading.scroll; }, [path, raw, state.status]);
   useLayoutEffect(() => {
     if (state.status !== 'ready' || !scroll.current) return;
+    let node: HTMLElement | null = null;
     if (reading.reference.line) {
-      const node = scroll.current.querySelector<HTMLElement>(`[data-source-line="${reading.reference.line}"]`);
-      node?.scrollIntoView({ block: 'start' });
+      node = scroll.current.querySelector<HTMLElement>(`[data-source-line="${reading.reference.line}"]`);
     } else if (reading.reference.anchor) {
-      scroll.current.querySelector<HTMLElement>(`#${CSS.escape(reading.reference.anchor)}`)?.scrollIntoView({ block: 'start' });
+      node = [...scroll.current.querySelectorAll<HTMLElement>('[id]')].find(x => x.id === reading.reference.anchor) ?? null;
     }
+    setTargetMissing(!!(reading.reference.line || reading.reference.anchor) && !node);
+    if (node) node.scrollIntoView({ block: 'start' });
+    else if (reading.reference.line || reading.reference.anchor) scroll.current.scrollTop = 0;
   }, [path, state.status]);
   return <div data-layer="reader" onKeyDownCapture={e => { if (e.key === 'Escape' && outline) { e.stopPropagation(); e.preventDefault(); setOutline(false); } }} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
     <header style={{ height: 60, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px', borderBottom: '1px solid var(--sidebar-border)', boxSizing: 'border-box' }}>
@@ -56,6 +60,7 @@ export function DocumentView({ state, originName, theme, expanded, onBack, onClo
         {headings.map(h => <button key={h.id} type="button" style={{ display: 'block', marginLeft: (h.depth - 1) * 12, padding: '5px 4px', border: 0, background: 'none', color: 'var(--sidebar-foreground)', textAlign: 'left', cursor: 'pointer' }} onClick={() => { onReading({ raw: false }); setOutline(false); scroll.current?.querySelector<HTMLElement>(`#${CSS.escape(h.id)}`)?.scrollIntoView({ block: 'start' }); }}>{h.text}</button>)}
       </nav>}
       <div ref={scroll} data-scroll className="ledge-scroll" onScroll={e => onReading(raw ? { sourceScroll: e.currentTarget.scrollTop } : { scroll: e.currentTarget.scrollTop })} style={{ height: '100%', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        {targetMissing && state.status === 'ready' && <p role="status" style={{ margin: 0, padding: '10px 24px', color: 'var(--muted-foreground)', fontSize: 12 }}>{t.reader.targetMissing}</p>}
         {state.status === 'loading' && <p role="status" style={{ padding: 24 }}>{t.reader.loading}</p>}
         {state.status === 'error' && <div role="alert" style={{ padding: 24 }}><p>{t.reader.error[state.code]}</p><Button variant="secondary" size="sm" onClick={onReload}>{t.reader.retry}</Button></div>}
         {state.status === 'ready' && (source ? raw ? <pre data-document-source style={{ margin: 0, padding: 24, fontSize: 12, lineHeight: '20px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', userSelect: 'text' }}>{source.split('\n').map((line, i, all) => <span key={i} data-source-line={i + 1}>{line}{i < all.length - 1 ? '\n' : ''}</span>)}</pre> : <MarkdownDocument text={source} onDocument={onDocument} onHeadings={setHeadingsStable} /> : <p style={{ padding: 24 }}>{t.reader.empty}</p>)}

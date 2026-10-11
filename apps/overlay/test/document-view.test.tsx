@@ -26,4 +26,9 @@ describe('DocumentView', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Retour à la réponse' })[0]!);
     expect(props.onBack).toHaveBeenCalled();
   });
+  it('explains when a requested source line is absent', () => {
+    render(<LangProvider lang="fr"><DocumentView {...props} reading={{ ...reading, reference: { path: '/w/README.md', line: 99 }, raw: true }} state={{ status: 'ready', document }} /></LangProvider>);
+    expect(screen.getByRole('status')).toHaveTextContent('La position demandée n’existe pas');
+    expect(screen.getByText(/# Title/)).toBeInTheDocument();
+  });
 });

@@ -102,8 +102,13 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   const [finishedUnread, setFinishedUnread] = useState<Record<string, string>>({});
   const [ctl] = useState(() => createSurfaceController({ onState: s => setSt(s) }));
   const [st, setSt] = useState<SurfaceState>(() => ctl.state());
+  const documentSourceFocus = useRef<HTMLElement | null>(null);
   const dispatch = ctl.dispatch;
   const reader = useDocumentReader({ client, onExit: () => dispatch({ type: 'back' }) });
+  useEffect(() => {
+    if (st.mode !== 'reader' && reader.state.current) reader.close();
+    if (st.mode === 'handle' || st.mode === 'bubble') documentSourceFocus.current = null;
+  }, [st.mode, reader.state.current, reader.close]);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -187,6 +192,13 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   }, [st.mode, st.selectedId, st.openedBy, sessions]);
 
   useFocusRestore(surfaceRef, { mode: st.mode, selectedId: st.selectedId });
+  useEffect(() => {
+    if ((st.mode !== 'session' && st.mode !== 'chat' && st.mode !== 'list') || !documentSourceFocus.current) return;
+    const source = documentSourceFocus.current;
+    documentSourceFocus.current = null;
+    if (source.isConnected && !source.closest('[inert]')) source.focus({ preventScroll: true });
+    else surfaceRef.current?.querySelector<HTMLElement>(`[data-layer="${st.mode}"] [data-initial-focus]`)?.focus({ preventScroll: true });
+  }, [st.mode]);
 
   const kb = st.openedBy === 'keyboard';
   const focused = kb && focusedId ? byId.get(focusedId) ?? null : null;
@@ -368,9 +380,9 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   const hovSlot = geo.slots.find(s => s.id === hoverId);
   const panel = st.mode !== 'handle' && st.mode !== 'bubble';
   const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch' || st.mode === 'chat' || st.mode === 'reader';
-  const openDocument = (ref: DocumentReference, origin: { kind: 'session'; sessionId: string } | { kind: 'chat' }) => { reader.open(ref, origin); dispatch({ type: 'documentOpen', origin }); };
+  const openDocument = (ref: DocumentReference, origin: { kind: 'session'; sessionId: string } | { kind: 'chat' }) => { documentSourceFocus.current = document.activeElement as HTMLElement; reader.open(ref, origin); dispatch({ type: 'documentOpen', origin }); };
   const readerBack = () => reader.back();
-  const readerClose = () => { reader.close(); dispatch({ type: 'close' }); };
+  const readerClose = () => { documentSourceFocus.current = null; reader.close(); dispatch({ type: 'close' }); };
   const activeReading = reader.state.current;
   const documentState: DocumentViewState | null = activeReading?.loading ? { status: 'loading', path: activeReading.reference.path }
     : activeReading?.error ? { status: 'error', path: activeReading.reference.path, code: activeReading.error }

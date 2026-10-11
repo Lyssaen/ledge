@@ -17,4 +17,9 @@ describe('MarkdownDocument', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Next' }));
     expect(onDocument).toHaveBeenCalledWith({ path: 'next.md' });
   });
+  it('does not collide with a heading whose name is another title’s duplicate suffix', () => {
+    const headings = vi.fn();
+    render(<MarkdownDocument text={'# Foo\n# Foo\n# Foo-1'} onDocument={() => {}} onHeadings={headings} />);
+    expect(screen.getAllByRole('heading').map(h => h.id)).toEqual(['foo', 'foo-1', 'foo-1-1']);
+  });
 });

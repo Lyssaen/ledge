@@ -10,12 +10,14 @@ type Node = { type: string; value?: string; depth?: number; children?: Node[]; d
 const plain = (n: Node): string => n.value ?? n.children?.map(plain).join('') ?? '';
 const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-') || 'section';
 export function documentHeadings(root: Node): DocumentHeading[] {
-  const headings: DocumentHeading[] = [], counts = new Map<string, number>();
+  const headings: DocumentHeading[] = [], counts = new Map<string, number>(), used = new Set<string>();
   const visit = (n: Node) => {
     if (n.type === 'heading') {
-      const text = plain(n), base = slug(text), count = counts.get(base) ?? 0;
-      counts.set(base, count + 1);
-      const id = count ? `${base}-${count}` : base;
+      const text = plain(n), base = slug(text);
+      let count = counts.get(base) ?? 0;
+      let id = count ? `${base}-${count}` : base;
+      while (used.has(id)) { count++; id = `${base}-${count}`; }
+      counts.set(base, count + 1); used.add(id);
       n.data = { ...n.data, hProperties: { ...n.data?.hProperties, id } };
       headings.push({ id, depth: n.depth ?? 1, text });
     }

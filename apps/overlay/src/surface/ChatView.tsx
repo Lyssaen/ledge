@@ -52,7 +52,7 @@ export function ChatView(p: ChatViewProps) {
   const [text, setText] = useState('');
   const field = useRef<HTMLInputElement>(null);
   const thread = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => { const el = thread.current; if (el) el.scrollTop = el.scrollHeight; }, [turns, live?.text]);
+  useLayoutEffect(() => { const el = thread.current; if (visible && el) el.scrollTop = el.scrollHeight; }, [turns, live?.text]);
   useEffect(() => { if (visible && !busy) field.current?.focus({ preventScroll: true }); }, [visible, busy]);
   // The resident pulses while Ledge reads.
   const [pulse, setPulse] = useState(0);
