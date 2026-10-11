@@ -51,8 +51,16 @@ The Rust side compiles on Windows and its unit tests pass (`Cargo.lock` is commi
    - sizes on the 4K screen: Settings shows Handle size `Auto (200%)` and Window size `Auto (100%)` at 100% Windows scaling (see Sizes below for the rules), the handle and bots are clearly readable, the handle stays centered on the left edge, and the list opens at its base 380 px;
    - switching each size between Auto, 100%, 125%, 150% and 200% resizes only its own part, live, with nothing clipped or offset: the handle size moves the handle, its bots, the tooltip and the edge bands; the window size moves the bubble, list, session, settings, help and coachmark; the window follows the surface, the edge bands above and below the handle still open the list, clicks beside the surface still reach the app underneath;
    - with two screens: Settings shows a Screen group (`Primary`, `Screen 2`, in the OS order); choosing `Screen 2` moves the handle to that screen's left edge at once, centered in its work area, the edge bands and the tooltip follow, the list opens there; back to `Primary` returns it; the choice survives a restart (`ledge.monitor`); unplugging the chosen screen brings the handle back to the primary and Settings shows the choice as `Unplugged` until the screen returns; a screen plugged in after the start appears in the group the next time Settings opens.
-4. `pnpm tauri build`: NSIS installer with the bot icon.
+4. `pnpm tauri build`: NSIS installer with the Ledge mascot as its icon.
 5. Install it, then check launch at login (see below): the first start turns it on, Settings > Display shows `Lancer au démarrage` checked, turning it off and signing out then in leaves Ledge closed, turning it on again brings it back at the next sign-in; uninstalling removes the `Ledge` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+
+## App icon
+
+The installer, the executable and the uninstall entry show the Ledge mascot. Its source is `src-tauri/icons/ledge-app.svg`, the resident mascot of the notch in its dark colours. After changing it, regenerate every size from `apps/overlay`, then delete the `android` and `ios` folders the command also creates:
+
+```
+pnpm tauri icon src-tauri/icons/ledge-app.svg
+```
 
 ## Keys
 
@@ -75,7 +83,7 @@ Language, screen, theme, do not disturb, reduced motion and the two sizes are al
 
 ## Tray
 
-The overlay has no taskbar button, so the Windows notification area carries a Ledge icon (the app icon) to show that it runs. Its tooltip and the greyed first line of its menu give the version from `tauri.conf.json`, with `(dev)` on a debug build, so an installed Ledge and a `tauri dev` one running side by side can be told apart. The menu's `Quitter Ledge` / `Quit Ledge` exits the overlay (the daemon in WSL keeps running). The shell starts with the French label; the webview relabels it in its language (`set_tray_labels`) at start and on every language change.
+The overlay has no taskbar button, so the Windows notification area carries the Ledge mascot (`icons/ledge-tray.png`, a smaller cut of the app icon without feet) to show that it runs. Its tooltip and the greyed first line of its menu give the version from `tauri.conf.json`, with `(dev)` on a debug build, so an installed Ledge and a `tauri dev` one running side by side can be told apart. The menu's `Quitter Ledge` / `Quit Ledge` exits the overlay (the daemon in WSL keeps running). The shell starts with the French label; the webview relabels it in its language (`set_tray_labels`) at start and on every language change.
 
 ## Launch at login
 
