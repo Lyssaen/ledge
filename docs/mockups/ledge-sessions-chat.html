@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ledge — Qui fait quoi, où.</title>
+  <link rel="stylesheet" href="prototype/mascot.css">
+  <link rel="stylesheet" href="prototype/sessions-chat.css">
+  <script src="prototype/mascot-svg.js" defer></script>
+  <script src="prototype/sessions-chat.js" defer></script>
+</head>
+<body>
+  <div class="page">
+    <header><a class="brand" href="ledge-sessions-chat.html"><span data-resident class="brand-face" aria-hidden="true"></span>Ledge<span class="accent">.</span></a><span class="edition">ÉTUDE INTERACTIVE / 02</span><button id="theme" class="quiet">Passer en clair</button></header>
+    <main>
+
+      <section class="intro"><div><p class="eyebrow">RECONNAÎTRE CHAQUE COMPAGNON</p><h1>Qui fait quoi,<br><span>et où.</span></h1><p class="lead">Quatre bots sur le même dépôt se ressemblent trop.<br>Deux repères les séparent : le dépôt et sa branche, le sujet. Et Ledge se tient à part.</p></div><div class="identity"><span class="status-dot"></span>Deux propositions<span class="identity-sub">Différencier · puis parler à Ledge</span></div></section>
+
+      <section class="board" aria-labelledby="h-list">
+        <div class="section-heading"><div><p class="eyebrow">01 / LA LISTE</p><h2 id="h-list">Avant, après.</h2></div><p>À gauche, la liste d'aujourd'hui.<br>À droite, la même équipe, reconnaissable.</p></div>
+        <div class="compare">
+          <figure><figcaption>Aujourd'hui</figcaption><div class="surface" id="list-today"></div><p class="figure-note">Le projet, le prénom, l'outil, la durée. Quatre lignes <em>harness-assistant</em> : laquelle fusionne la branche ? Les panneaux portent le fond du notch livré : noir pur, blanc pur en clair, sans bordure.</p></figure>
+          <figure><figcaption>Proposé</figcaption><div class="surface" id="list-next"></div><p class="figure-note">Regroupé par dépôt. Le sujet prend toute la largeur ; le badge d'état descend sur la seconde ligne, avec le prénom et la branche. L'outil se lit à la forme de la tête ; son nom reste au survol et dans l'en-tête de session.</p></figure>
+          <aside class="layers">
+            <article><span class="layer-index">01</span><h3>Où · la branche</h3><p>Le daemon lit <code>git rev-parse --abbrev-ref HEAD</code> dans le dossier de la session, et reconnaît un worktree. La branche s'affiche en mono. Un worktree perd son préfixe et prend une bordure pointillée ; nom complet, outil et chemin au survol.</p></article>
+            <article><span class="layer-index">02</span><h3>Quoi · le sujet</h3><p>Une ligne. D'abord le titre de conversation que Claude Code écrit déjà dans son pane, sinon les premiers mots du premier prompt, sinon <code>--task</code> au lancement. Double-clic pour le corriger.</p></article>
+            <article><span class="layer-index">03</span><h3>Ledge · à part</h3><p>Dans le notch, la mascotte résidente reste en tête, puis un fin séparateur, puis les bots. Ledge n'est pas une session : il ne porte ni état, ni trait de couleur, ni sujet.</p></article>
+          </aside>
+        </div>
+      </section>
+
+      <section class="board" aria-labelledby="h-handle">
+        <div class="section-heading"><div><p class="eyebrow">02 / PARTOUT LE MÊME SUJET</p><h2 id="h-handle">La poignée, l'onglet, la session.</h2></div><p>Le sujet voyage avec le bot.<br>Rien de nouveau à apprendre.</p></div>
+        <div class="trio">
+          <figure><figcaption>La poignée, loupe ×2</figcaption><div class="handle-stage"><div class="handle" id="handle"></div><div class="handle-tip" id="handle-tip"><strong>Nova</strong><span>Hooks Codex et approbations</span><small>worktree-codex · Codex · une question</small></div></div><p class="figure-note">Ledge en tête, un séparateur, puis l'équipe. Noir pur, sans bordure, deux congés concaves de 14 px vers le bord de l'écran, comme le notch livré. Le trait sur le bord reste la couleur de l'état ; l'infobulle donne le sujet et la branche.</p></figure>
+          <figure><figcaption>Windows Terminal</figcaption><div class="wterm" id="wt"></div><p class="figure-note">L'onglet prend le sujet pour titre, précédé du prénom. Alt + Tab retrouve le bon bot d'un coup d'œil.</p></figure>
+          <figure><figcaption>En-tête de session</figcaption><div class="surface session-head-demo" id="session-head"></div><p class="figure-note">Le sujet devient le titre. Un clic dessus le renomme ; la branche et le chemin restent en dessous.</p></figure>
+        </div>
+      </section>
+
+
+      <section class="divider"><p class="eyebrow">DEUXIÈME PROPOSITION</p><h1>Parler à Ledge.</h1><p class="lead">Il voit toutes les sessions, lit les terminaux et les dépôts.<br>Autant lui demander des nouvelles.</p></section>
+
+      <section class="board" aria-labelledby="h-chat">
+        <div class="section-heading"><div><p class="eyebrow">04 / DEMANDER À LEDGE</p><h2 id="h-chat">Une question, une réponse, des sources.</h2></div><p>Cliquez une suggestion ou écrivez.<br>Les réponses sont scénarisées, à partir de l'état réel du dépôt.</p></div>
+        <div class="chat-stage">
+          <figure><figcaption>Le point d'entrée</figcaption><div class="surface" id="list-ask"></div><p class="figure-note">Un champ au pied de la liste. <kbd>/</kbd> le prend au clavier. Entrée ouvre la conversation, la liste glisse de 12 px comme vers une session.</p></figure>
+          <figure class="chat-figure"><figcaption>La conversation, 420 px</figcaption><div class="surface chat" id="chat"></div><p class="figure-note">Pendant qu'il cherche, Ledge dit ce qu'il consulte et son antenne s'allume. Les prénoms sont des liens vers la session.</p></figure>
+        </div>
+      </section>
+
+      <section class="board" aria-labelledby="h-scope">
+        <div class="section-heading"><div><p class="eyebrow">05 / CE QU'IL SAIT, CE QU'IL NE FAIT PAS</p><h2 id="h-scope">Un lecteur, pas un chef d'équipe.</h2></div><span class="pill">Cadrage V1</span></div>
+        <div class="use-grid">
+          <article><span class="use-index">01</span><h3>Ses sources</h3><p>La liste des sessions et leurs états. Les trente dernières lignes de chaque terminal. La dernière réponse de chaque bot. Git dans chaque dossier : branche, commits d'avance, fichiers modifiés. Rien d'autre.</p></article>
+          <article><span class="use-index">02</span><h3>Ses limites</h3><p>Il ne tape jamais dans une session. Il ne lance rien. Il propose d'ouvrir un bot, pas de décider à votre place. Chaque réponse cite d'où elle vient et de quand elle date.</p></article>
+          <article><span class="use-index">03</span><h3>Le raccordement</h3><p>Le daemon lance un agent sans interface dans WSL, avec des outils en lecture seule. Deux messages : <code>chat.ask</code> et <code>chat.delta</code>. L'historique vit dans le daemon, le jour même ; l'overlay reste sans état.</p></article>
+          <article><span class="use-index">04</span><h3>Pistes pour plus tard</h3><p>« Dis à Otto de… » : relayer un message à un bot, après confirmation. Un résumé du matin au premier ouvrage. Une mémoire de la journée pour répondre à « qu'ai-je fusionné hier ? ».</p></article>
+        </div>
+      </section>
+
+      <footer><span>Deux repères par session. Un compagnon à qui parler.</span><span>Maquette locale · réponses scénarisées · rien n'est raccordé</span></footer>
+    </main>
+  </div>
+  <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
+</body>
+</html>
