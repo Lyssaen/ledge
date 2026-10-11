@@ -18,6 +18,7 @@ export const ICONS = {
   chevronRight: { d: ['m9 18 6-6-6-6'] },
   close: { d: ['M18 6 6 18', 'm6 6 12 12'] },
   expand: { d: ['M15 3h6v6', 'm21 3-7 7', 'm3 21 7-7', 'M9 21H3v-6'] },
+  refresh: { d: ['M20 11a8 8 0 1 0-2.1 5.4', 'M20 4v7h-7'] },
   external: { d: ['M7 17 17 7', 'M8 7h9v9'] },
   send: { d: ['M12 19V5', 'm5 12 7-7 7 7'] },
   stop: { d: ['M6 6h12v12H6z'] },

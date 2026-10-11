@@ -79,7 +79,7 @@
 - [ ] Tester source brute identique à `document.text`, fichier vide, chargement, chaque famille d’erreur, retour disponible, langues FR/EN. Tester HTML/script et URL `javascript:`/`data:` : aucun élément exécutable ni lien dangereux ; les images ne déclenchent pas de requête.
 - [ ] Lancer `pnpm --filter overlay exec vitest run test/markdown-document.test.tsx test/document-view.test.tsx` ; constater l’échec attendu.
 - [ ] Installer les deux dépendances du renderer dans `overlay` avec versions fixées. Lire leurs API officielles avant de choisir les composants et plugins ; ne pas ajouter d’activation de HTML brut.
-- [ ] Implémenter le renderer dédié et le sommaire depuis un seul arbre. Préserver le frontmatter comme bloc de texte et fournir la même règle d’identifiants aux ancres et aux titres. Router les liens locaux via la tâche 2, les ancres dans le document, HTTP(S) via `openUrl` ; les autres cibles restent explicites et non exécutables.
+- [ ] Implémenter le renderer dédié et le sommaire depuis un seul arbre. Masquer le frontmatter en mode Lecture, utiliser son `title` dans l’en-tête et conserver la source exacte en mode Markdown ; fournir la même règle d’identifiants aux ancres et aux titres. Router les liens locaux via la tâche 2, les ancres dans le document, HTTP(S) via `openUrl` ; les autres cibles restent explicites et non exécutables.
 - [ ] Construire la vue selon les dimensions de la spec. Utiliser les vrais composants UI ; sommaire repliable, Lecture/Markdown, rechargement discret, pied fixe. Ajouter tous les libellés dans les deux langues.
 - [ ] Relancer les tests puis `pnpm --filter overlay typecheck`. Commit ciblé : `feat(overlay): render Markdown documents in the reader`.
 

@@ -18,6 +18,25 @@ describe('DocumentView', () => {
     view.rerender(<LangProvider lang="fr"><DocumentView {...props} reading={{ ...reading, raw: true }} state={{ status: 'ready', document }} /></LangProvider>);
     expect(view.container.querySelector('[data-document-source]')?.textContent).toBe(document.text);
   });
+  it('uses frontmatter title in the header and presents a hierarchical contents panel', () => {
+    const titled = { ...document, text: '---\ntitle: Demo title\n---\n\n# First\n\n## Second' };
+    render(<LangProvider lang="fr"><DocumentView {...props} state={{ status: 'ready', document: titled }} /></LangProvider>);
+    expect(screen.getByText('Demo title')).toBeInTheDocument();
+    expect(screen.queryByText('title: Demo title')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Sommaire' }));
+    const nav = screen.getByRole('navigation', { name: 'Sommaire' });
+    expect(nav.querySelectorAll('[data-depth="1"], [data-depth="2"]')).toHaveLength(2);
+    expect(nav.querySelector('[data-depth="2"]')).toHaveTextContent('Second');
+  });
+  it('reloads from an icon beside the expand button', () => {
+    render(<LangProvider lang="fr"><DocumentView {...props} state={{ status: 'ready', document }} /></LangProvider>);
+    const reload = screen.getByRole('button', { name: 'Recharger' });
+    const expand = screen.getByRole('button', { name: 'Agrandir' });
+    expect(reload.textContent).toBe('');
+    expect(reload.parentElement).toBe(expand.parentElement);
+    fireEvent.click(reload);
+    expect(props.onReload).toHaveBeenCalled();
+  });
   it('keeps return and retry available when a file fails', () => {
     render(<LangProvider lang="fr"><DocumentView {...props} state={{ status: 'error', path: '/w/missing.md', code: 'not_found' }} /></LangProvider>);
     expect(screen.getByRole('alert')).toHaveTextContent('Fichier introuvable');

@@ -10,7 +10,9 @@ import { LangProvider, loadLang, messagesFor, saveLang, type Lang } from './i18n
 import { createWebAudioPlayer } from './sounds/player';
 
 export function App() {
-  const client = useMemo(() => createDaemonClient({ url: `ws://127.0.0.1:${PROTOCOL_PORT}` }), []);
+  // An isolated browser demo can point at a fake daemon without disturbing the live WSL daemon.
+  const client = useMemo(() => createDaemonClient({ url: import.meta.env.DEV && import.meta.env.VITE_LEDGE_DEMO_WS
+    ? import.meta.env.VITE_LEDGE_DEMO_WS : `ws://127.0.0.1:${PROTOCOL_PORT}` }), []);
   // The work-area height in logical px. The page is never zoomed: each layer applies its own scale.
   const [workH, setWorkH] = useState(window.innerHeight);
   const [workW, setWorkW] = useState(window.innerWidth);

@@ -13,6 +13,17 @@ pnpm --filter overlay test:e2e                   # Playwright, the real app in C
 
 The dev mock needs port 47831 free: stop the real daemon first.
 
+### Preview the Markdown reader in a browser
+
+This preview uses separate ports so an existing Ledge daemon and overlay can keep running. From the repository root, start these two commands in separate terminals:
+
+```sh
+pnpm --filter overlay exec tsx test/readerDemo.ts
+VITE_LEDGE_DEMO_WS=ws://127.0.0.1:47832 pnpm --filter overlay exec vite --port 1421 --strictPort --host 127.0.0.1
+```
+
+Open `http://127.0.0.1:1421`, select Otto, then click **Ouvrir le README** in his reply. The sample is [docs/reader-demo/README.md](../../docs/reader-demo/README.md); the demo socket reads that real WSL file and follows its link to `docs/tour.md`. The demo port may be changed with `LEDGE_READER_DEMO_PORT` and the matching `VITE_LEDGE_DEMO_WS` URL. Stop both terminals with Ctrl+C when finished.
+
 The e2e suite (`e2e/*.spec.ts`) drives the real app with a real mouse and keyboard in Chromium; the daemon is simulated
 in the page (`e2e/daemon.ts`), so nothing needs to run on 47831. Vite is started on port 5199 (or an existing server
 there is reused). Any console error or page error fails the spec. The first run may need
