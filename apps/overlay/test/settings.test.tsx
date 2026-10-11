@@ -35,6 +35,17 @@ describe('<SettingsView> tabs', () => {
     expect(screen.getByRole('button', { name: 'Test' })).toBeInTheDocument();
     expect(screen.queryByRole('switch', { name: 'Do not disturb' })).toBeNull();
   });
+  it('offers launch at startup only when the shell does, and reports a flip', () => {
+    view();
+    expect(screen.queryByRole('switch', { name: 'Launch at startup' })).toBeNull(); // browser, `tauri dev`
+    cleanup();
+    const onAutostart = vi.fn();
+    view({ autostart: true, onAutostart });
+    const sw = screen.getByRole('switch', { name: 'Launch at startup' });
+    expect(sw).toBeChecked();
+    fireEvent.click(sw);
+    expect(onAutostart).toHaveBeenCalledWith(false);
+  });
   it('the chosen tab is remembered for the next opening; a stale value falls back to Display', () => {
     view();
     tab('Sounds');

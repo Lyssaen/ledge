@@ -189,6 +189,21 @@ describe('bridge', () => {
     native.invoke.mockImplementation(async () => { throw new Error('no shell'); });
     await expect(b.setTrayLabels('Quit Ledge')).resolves.toBeUndefined();
   });
+
+  it('launch at startup is read and set through the shell; null in the browser, from `tauri dev` and on a failure', async () => {
+    const browser = await loadBridge();
+    await expect(browser.getAutostart()).resolves.toBeNull();
+    await expect(browser.setAutostart(true)).resolves.toBeNull();
+    expect(native.invoke).not.toHaveBeenCalled();
+    enterTauri(); const b = await loadBridge();
+    native.invoke.mockImplementation(async (cmd: string) => (cmd === 'get_autostart' ? true : false));
+    await expect(b.getAutostart()).resolves.toBe(true);
+    await expect(b.setAutostart(false)).resolves.toBe(false);
+    expect(calls('set_autostart')).toEqual([{ on: false }]);
+    native.invoke.mockImplementation(async () => { throw new Error('no shell'); });
+    await expect(b.getAutostart()).resolves.toBeNull();
+    await expect(b.setAutostart(true)).resolves.toBeNull();
+  });
 });
 
 describe('<Surface> under Tauri', () => {

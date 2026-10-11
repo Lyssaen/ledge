@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow, Wry};
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 /// Emitted on every enter/leave transition of the cursor over the edge hot zones; payload `{ "inside": bool }`.
 pub const EDGE_EVENT: &str = "ledge://edge";
@@ -341,6 +342,42 @@ fn open_url(url: String) -> Result<(), String> {
     spawned.map(|_| ()).map_err(|e| format!("open url: {e}"))
 }
 
+/// Launch at login is only offered by an installed (release) build: a `tauri dev` one would register a debug binary
+/// under `target\` that a `cargo clean` removes. `None` there, so the Settings view hides the switch.
+#[tauri::command]
+fn get_autostart(app: AppHandle) -> Option<bool> {
+    if cfg!(debug_assertions) { return None; }
+    app.autolaunch().is_enabled().ok()
+}
+
+/// Turns launch at login on or off (the HKCU Run key), then returns the state Windows now reports.
+#[tauri::command]
+fn set_autostart(app: AppHandle, on: bool) -> Result<Option<bool>, String> {
+    if cfg!(debug_assertions) { return Ok(None); }
+    let launcher = app.autolaunch();
+    if on { launcher.enable() } else { launcher.disable() }.map_err(|e| e.to_string())?;
+    Ok(launcher.is_enabled().ok())
+}
+
+/// The marker left once launch at login was switched on by default, so a later "off" in Settings sticks across restarts
+/// and upgrades. It lives in the app's config dir (`%APPDATA%\be.paradow.ledge`).
+const AUTOSTART_MARKER: &str = "autostart-default";
+
+/// Whether this start should switch launch at login on: the first start of an installed build only.
+pub fn autostart_by_default(debug: bool, marker_exists: bool) -> bool {
+    !debug && !marker_exists
+}
+
+/// The first start of an installed Ledge switches launch at login on, once; after that only the user's choice counts.
+fn default_autostart(app: &tauri::App) {
+    let Ok(dir) = app.path().app_config_dir() else { return };
+    let marker = dir.join(AUTOSTART_MARKER);
+    if !autostart_by_default(cfg!(debug_assertions), marker.exists()) { return; }
+    if app.autolaunch().enable().is_ok() {
+        let _ = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&marker, b""));
+    }
+}
+
 /// Relabels the tray menu in the overlay's language (the shell starts in French, the default).
 #[tauri::command]
 fn set_tray_labels(quit: String, tray: tauri::State<'_, Tray>) -> Result<(), String> {
@@ -408,13 +445,15 @@ fn spawn_edge_poller(app: tauri::AppHandle) {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .manage(HotZones::default())
         .manage(PrevForeground::default())
         .manage(Screen::default())
-        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor, set_tray_labels])
+        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor, set_tray_labels, get_autostart, set_autostart])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") { let _ = w.set_always_on_top(true); }
             build_tray(app)?;
+            default_autostart(app);
             spawn_edge_poller(app.handle().clone());
             Ok(())
         })
@@ -424,7 +463,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{choose, edge_inside, edge_step, frame_rect, terminal_args, title_matches, tray_title, Area, Band};
+    use super::{autostart_by_default, choose, edge_inside, edge_step, frame_rect, terminal_args, title_matches, tray_title, Area, Band};
 
     #[test] fn a_terminal_tab_runs_the_launcher_command_in_wsl() {
         let cmd: Vec<String> = ["/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"].iter().map(|s| s.to_string()).collect();
@@ -434,6 +473,12 @@ mod tests {
     #[test] fn the_tray_tells_a_dev_build_from_an_installed_one() {
         assert_eq!(tray_title("0.1.0", false), "Ledge 0.1.0");
         assert_eq!(tray_title("0.1.0", true), "Ledge 0.1.0 (dev)");
+    }
+
+    #[test] fn launch_at_login_is_switched_on_once_by_an_installed_build() {
+        assert!(autostart_by_default(false, false)); // first start once installed
+        assert!(!autostart_by_default(false, true)); // later starts: the user's choice stands
+        assert!(!autostart_by_default(true, false)); // never from `tauri dev`
     }
 
     #[test] fn the_chosen_monitor_is_used_while_plugged_in_else_the_primary() {
