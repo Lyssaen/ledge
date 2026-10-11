@@ -65,6 +65,7 @@ const fr = {
   },
   detail: { back: 'Retour aux sessions', close: 'Fermer' },
   session: {
+    rename: 'Renommer la session', topicPlaceholder: 'Le sujet de cette session',
     reading: 'Mode lecture', focusTerminal: 'Voir l’onglet du terminal', close: 'Fermer',
     eyebrow: { ask: 'À vous de jouer', working: 'En cours', error: 'À examiner', session: 'Session' },
     title: {
@@ -215,6 +216,7 @@ const en: Messages = {
   },
   detail: { back: 'Back to sessions', close: 'Close' },
   session: {
+    rename: 'Rename the session', topicPlaceholder: 'What this session is about',
     reading: 'Reading mode', focusTerminal: 'Focus terminal tab', close: 'Close',
     eyebrow: { ask: 'Your turn', working: 'In progress', error: 'To check', session: 'Session' },
     title: {

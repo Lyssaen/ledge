@@ -1,4 +1,4 @@
-export const SIZES = { handleW: 28, residentH: 20, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 72, footerH: 44, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420, launchH: 600, emptyH: 200, groupH: 28 } as const;
+export const SIZES = { handleW: 28, residentH: 20, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 72, footerH: 44, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420, launchH: 600, emptyH: 200, groupH: 28, separatorH: 1 } as const;
 /** The surface's top + bottom border (border-box): added to a measured content height so nothing is clipped. None:
  *  the notch is borderless so it merges with the screen edge. */
 export const SURFACE_BORDER = 0;
@@ -25,9 +25,10 @@ export function layout(input: LayoutInput): Layout {
   const n = bots.length; const { big, small, gap } = slotSizes(n);
   const centerY = screenH / 2;
   const maxH = screenH - 2 * SIZES.margin;
-  const handleH = 16 + SIZES.residentH + (n ? gap : 0) + bots.reduce((a, b) => a + (b.pending ? big : small), 0) + Math.max(0, n - 1) * gap;
+  const sep = n ? 2 * gap + SIZES.separatorH : 0;
+  const handleH = 16 + SIZES.residentH + sep + bots.reduce((a, b) => a + (b.pending ? big : small), 0) + Math.max(0, n - 1) * gap;
   const handleTop = Math.round(centerY - handleH / 2);
-  const slots: Slot[] = []; let y = handleTop + 8 + SIZES.residentH + (n ? gap : 0);
+  const slots: Slot[] = []; let y = handleTop + 8 + SIZES.residentH + sep;
   for (const b of bots) { const size = b.pending ? big : small; slots.push({ id: b.id, size, center: y + size / 2 }); y += size + gap; }
   const hotZones = [{ top: SIZES.margin, h: Math.max(0, handleTop - 6 - SIZES.margin) }, { top: handleTop + handleH + 6, h: Math.max(0, screenH - SIZES.margin - (handleTop + handleH + 6)) }];
   const handle = { top: handleTop, h: handleH };

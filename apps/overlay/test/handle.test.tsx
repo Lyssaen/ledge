@@ -46,6 +46,15 @@ describe('<Handle>', () => {
   });
 });
 
+describe('<Handle> separator', () => {
+  it('draws a separator between Ledge and the bots, hidden without bots', () => {
+    const { rerender } = render(<Handle bots={bots} slots={l.slots} big={20} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
+    expect(document.querySelector('[data-separator]')).toHaveStyle({ opacity: '1' });
+    rerender(<Handle bots={[]} slots={[]} big={20} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
+    expect(document.querySelector('[data-separator]')).toHaveStyle({ opacity: '0' });
+  });
+});
+
 describe('<Handle> inertness', () => {
   it('marks the hidden layer inert', () => {
     const { container } = render(<Handle bots={bots} slots={l.slots} big={20} visible={false} hoverId={null} onHover={() => {}} onOpen={() => {}} />);

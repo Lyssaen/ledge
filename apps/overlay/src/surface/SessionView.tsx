@@ -11,6 +11,7 @@ import { transition } from '../motion';
 import { useI18n, type Messages } from '../i18n/lang';
 import { canDismiss } from './SessionList';
 import { parseReply } from '../reply/parse';
+import { BranchChip } from '../ui/BranchChip';
 import { ReplyCard, inline } from './ReplyCard';
 
 const mono = "'Geist Mono', ui-monospace, monospace";
@@ -82,7 +83,7 @@ export interface SessionViewProps {
   /** When the layer's fade-in starts, in ms (see `enterDelay` in motion). */
   enterDelay?: number;
   onDraft: (t: string) => void; onBack: () => void; onClose: () => void; onDecide: (d: 'accept' | 'deny') => void; onReply: (t: string) => void;
-  onInterrupt: () => void; onKill: () => void; onFocus: () => void; onToggleReading: () => void;
+  onInterrupt: () => void; onKill: () => void; onFocus: () => void; onToggleReading: () => void; onRename?: (topic: string) => void;
   /** Removes a finished or read-only session from the list (shown only for those); `dismissOff` while offline. */
   onDismiss?: () => void; dismissOff?: boolean;
   /** Null when commands may be sent; otherwise why every send/decision path is disabled (offline, read-only). */
@@ -146,10 +147,7 @@ export function SessionView(p: SessionViewProps) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: SESSION_HEADER_H, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px 0 6px', borderBottom: rule }}>
         <Button variant="ghost" size="icon" aria-label={t.detail.back} title={t.detail.back} data-initial-focus onClick={p.onBack} style={{ width: 30, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.chevronLeft} /></Button>
         <Bot seed={s.id} readOnly={readOnly} tool={s.tool} state={st} pose={poseFor(s.id, s.state)} size={32} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} askKey={pending?.text} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1, minWidth: 0, paddingLeft: 4 }}>
-          <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name} · {s.project}</span>
-          <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toolName(s.tool)} · {relativeTime(s.startedAt, p.now, t)}</span>
-        </div>
+        <TopicLine session={s} t={t} now={p.now} onRename={p.onRename} />
         <Button variant="ghost" size="icon" aria-label={t.session.reading} title={t.session.reading} aria-pressed={p.reading} onClick={p.onToggleReading} style={{ width: 32, height: 32, color: p.reading ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)' }}><Icon {...ICONS.expand} /></Button>
         <Button variant="ghost" size="icon" aria-label={t.session.focusTerminal} title={t.session.focusTerminal} onClick={p.onFocus} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.external} /></Button>
         {p.onDismiss && canDismiss(s) && <Button variant="ghost" size="icon" data-dismiss aria-label={t.list.dismiss} title={t.list.dismiss} disabled={!!p.dismissOff} onClick={p.onDismiss} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.listRemove} /></Button>}
@@ -230,6 +228,29 @@ export function SessionView(p: SessionViewProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The header's first line is the topic (the user may rename it in place), the second the name, branch, tool and age. */
+function TopicLine({ session: s, t, now, onRename }: { session: Session; t: Messages; now?: number; onRename?: (topic: string) => void }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const shown = s.topic ?? `${s.name} · ${s.project}`;
+  const commit = () => { if (editing !== null && editing.trim() !== (s.topic ?? '')) onRename?.(editing.trim()); setEditing(null); };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1, minWidth: 0, paddingLeft: 4 }}>
+      {editing === null
+        ? <button type="button" data-topic disabled={!onRename} title={onRename ? t.session.rename : undefined} onClick={() => setEditing(s.topic ?? '')}
+            style={{ all: 'unset', display: 'block', cursor: onRename ? 'text' : 'default', fontSize: 14, lineHeight: '18px', fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: s.topic ? undefined : 'var(--muted-foreground)' }}>{shown}</button>
+        : <input autoFocus data-topic-input aria-label={t.session.rename} className="ledge-field" value={editing} placeholder={t.session.topicPlaceholder} onChange={e => setEditing(e.target.value)} onBlur={commit}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') { e.stopPropagation(); setEditing(null); } }}
+            style={{ height: 22, boxSizing: 'border-box', padding: '0 6px', fontSize: 14, fontWeight: 650, background: 'var(--well)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-sm)' }} />}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
+        <span>{s.name}</span>
+        {s.branch && <><span aria-hidden="true">·</span><BranchChip session={s} /></>}
+        <span aria-hidden="true">·</span><span>{toolName(s.tool)}</span>
+        <span aria-hidden="true">·</span><span>{relativeTime(s.startedAt, now, t)}</span>
+      </span>
     </div>
   );
 }
