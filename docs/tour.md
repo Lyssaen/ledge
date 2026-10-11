@@ -6,10 +6,10 @@ All captures below are the real overlay, in French (its default language, Englis
 
 ## The handle
 
-Four sessions, four mascots. Each one wears the colour of its state: red for a permission to give, amber for a question, blue for an agent at work, green for one waiting for your next instruction. A mascot that waits for you breathes.
+Ledge's own mascot sits on top of the handle, grey with a peach antenna light, the same one as the app and tray icon. It stays there with or without sessions: it follows your cursor with its eyes, and a click on it opens the list. Below it, four sessions, four mascots. Each one wears the colour of its state: red for a permission to give, amber for a question, blue for an agent at work, green for one waiting for your next instruction. A mascot that waits for you breathes.
 
 <p>
-  <img src="screens/handle-dark.png" alt="The handle on the left edge, four mascots in dark theme" height="151">
+  <img src="screens/handle-dark.png" alt="The handle on the left edge, the Ledge mascot on top of four session mascots, dark theme" height="151">
   <img src="screens/handle-light.png" alt="The same handle in light theme" height="151">
 </p>
 

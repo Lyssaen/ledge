@@ -1,3 +1,5 @@
+<img src="apps/overlay/src-tauri/icons/128x128@2x.png" alt="The Ledge mascot" width="96" align="right">
+
 # Ledge
 
 A living handle on the left edge of your Windows screen that follows every agentic session running in WSL2 (Claude Code, Codex, Cursor Agent), shows which ones are waiting for you, and lets you answer or approve without hunting for the right terminal tab.
@@ -20,7 +22,7 @@ Personal project. Windows host + WSL2 only.
 - [Session model](#session-model)
 - [Files and settings](#files-and-settings)
 - [Security and failure model](#security-and-failure-model)
-- [Install](#install)
+- [How to install?](#how-to-install)
 - [Development](#development)
 - [Design documents](#design-documents)
 - [Status and known limits](#status-and-known-limits)
@@ -268,11 +270,24 @@ Windows side, the overlay keeps its preferences in the WebView's `localStorage`:
 - A decision is locked in the overlay until the daemon confirms, rejects, or the connection drops, so a double click never sends two answers.
 - The overlay survives the daemon: it shows "daemon unreachable, retrying" beside the handle and reconnects with backoff.
 
-## Install
+## How to install?
 
-### WSL side
+Ledge has two halves: the `ledge` CLI and its daemon in WSL2, and the overlay on Windows. There is no published installer: you build both from this repository, once on each side. It takes about ten minutes, most of it the first Rust compile.
+
+### What you need
+
+| Side | Requirements |
+| --- | --- |
+| WSL2 | A Linux distribution with `systemd=true` in `/etc/wsl.conf`, Git, Node 22, pnpm, tmux, and at least one agent: Claude Code, Codex or Cursor Agent. No root needed. |
+| Windows | Windows 10 or 11, Git, Node and pnpm, Rust stable with the MSVC toolchain (the Visual Studio C++ Build Tools), Windows Terminal. WebView2 is already there on Windows 11; the installer fetches it otherwise. |
+
+Get pnpm with `corepack enable` on either side if it is missing.
+
+### 1. Install the CLI and the daemon in WSL
 
 ```sh
+git clone https://github.com/Paradow-dev/ledge.git ~/Workspace/ledge
+cd ~/Workspace/ledge
 pnpm install
 pnpm --filter ledge build
 chmod +x packages/ledge/dist/cli/index.js
@@ -281,17 +296,73 @@ ln -sf "$PWD/packages/ledge/dist/cli/index.js" ~/.local/bin/ledge   # ~/.local/b
 ledge setup
 ```
 
-`ledge setup` also installs and starts `ledge-daemon.service` (systemd user unit) and enables linger, so the daemon runs as soon as WSL boots. WSL needs `systemd=true` in `/etc/wsl.conf`; without it, setup says so and `ledge claude` keeps starting the daemon on demand.
+`ledge setup` prints what it did. It writes `~/.ledge`, adds Ledge's hooks to Claude Code (`~/.claude/settings.json`), and to Codex (`~/.codex/hooks.json`) and Cursor Agent (`~/.cursor/hooks.json`) when their folders exist. It keeps whatever hooks you already have. Codex asks you to review the new hooks at its next start: trust them there or from Ledge.
 
-Then `ledge claude` (or `ledge claude --name max`), `ledge status`, `ledge daemon` to run it in the foreground. Details in [packages/ledge/README.md](packages/ledge/README.md). Needs Node 22 and tmux in WSL; no root.
+It also installs and starts the `ledge-daemon.service` systemd user unit and enables linger, so the daemon runs as soon as WSL boots. Without systemd, setup says so and `ledge claude` starts the daemon on demand instead. Check it:
 
-### Windows side
-
-```powershell
-pnpm --filter overlay tauri build    # NSIS installer in apps/overlay/src-tauri/target/release/bundle
+```sh
+systemctl --user status ledge-daemon.service
+ledge status
 ```
 
-Needs Rust (stable MSVC), Node and pnpm on Windows. The installer needs no administrator rights: it installs per user under `%LOCALAPPDATA%`, with no UAC prompt, and downloads the WebView2 bootstrapper only if the runtime is missing. Details, first-build checklist and the key reference in [apps/overlay/README.md](apps/overlay/README.md).
+### 2. Build the Windows installer
+
+Clone the repository a second time, on the Windows disk, in PowerShell. Do not build from the `\\wsl$` path: `node_modules` must be the Windows one.
+
+```powershell
+git clone https://github.com/Paradow-dev/ledge.git $HOME\Workspace\ledge
+cd $HOME\Workspace\ledge
+pnpm install --frozen-lockfile
+cd apps\overlay
+pnpm tauri build
+```
+
+The installer lands in `apps\overlay\src-tauri\target\release\bundle\nsis\Ledge_0.1.0_x64-setup.exe`.
+
+### 3. Install Ledge on Windows
+
+Run `Ledge_0.1.0_x64-setup.exe`. It installs for your user only, under `%LOCALAPPDATA%`, with no administrator prompt. At the end, Ledge starts:
+
+- the Ledge mascot appears in the notification area, next to the clock;
+- the handle appears on the left edge of your primary screen, with the mascot on top;
+- Ledge now starts with Windows. Settings > Display > `Lancer au démarrage` turns that off.
+
+If the handle says the daemon is unreachable, go back to step 1 and check the service in WSL.
+
+### 4. Start your first session
+
+In any WSL terminal, start your agent through Ledge:
+
+```sh
+ledge claude          # or: ledge codex, ledge cursor
+```
+
+The Windows Terminal tab takes the bot's name and a new mascot joins the handle. You can also start a session from the overlay itself: open the list with `Ctrl+Alt+L` and press `+`. The [tour](docs/tour.md) shows every screen.
+
+The overlay speaks French by default. Settings > Langue switches it to English.
+
+### Update
+
+```sh
+cd ~/Workspace/ledge && git pull && pnpm install && pnpm --filter ledge build
+systemctl --user restart ledge-daemon.service    # the daemon runs the built CLI
+```
+
+Then on Windows, `git pull`, `pnpm install --frozen-lockfile` and `pnpm tauri build` again in the Windows clone, quit Ledge from its tray menu, and run the new installer over the old one.
+
+### Uninstall
+
+In WSL, one command undoes `ledge setup`:
+
+```sh
+ledge uninstall           # add --purge to also delete ~/.ledge (session journal and log)
+```
+
+It removes only Ledge's own entries from the Claude Code, Codex and Cursor Agent hooks, and keeps every other hook where it was. It stops the daemon, removes the `ledge-daemon.service` unit and deletes the `~/.local/bin/ledge` link. Sessions still running on Ledge's tmux server are reported, not killed. It leaves linger on, since other user services may need it. If a config file is not valid JSON, it is left untouched and the command ends with an error after doing the rest.
+
+On Windows: Settings > Apps > Installed apps > Ledge > Uninstall. It also removes launch at login. Then delete the two clones if you no longer need them.
+
+More details: the WSL side in [packages/ledge/README.md](packages/ledge/README.md), the overlay, its first-build checklist and the key reference in [apps/overlay/README.md](apps/overlay/README.md).
 
 ## Development
 
@@ -331,6 +402,6 @@ docs/                design spec, implementation plans, mockups, the approved pr
 - Cursor Agent (verified on 2026.10.01): hooks give the turn (prompt, tools, `stop`) and the last reply (`afterAgentResponse`, rebuilt from the transcript so the turn's text blocks stay apart). They never report an approval, a question or a plan, so the pane gives them: the shell approval ("Run this command?", `y` runs once, `n` then an empty Enter skips), the workspace trust (`a` trusts, `q` quits), AskQuestion (an option number moves to it, ticks it with Space and goes on with Enter; Esc skips; a question that follows is a new prompt, not a failed answer) and Plan mode's "Ready to build?" (`b` builds locally, never in the cloud; refusing opens "Describe how to revise the plan", which reads as your turn: the next reply goes there). Keys that must not reach the agent in one read wait for the screen they are meant for (`until` steps). Ctrl-C interrupts (`stop` aborted, then a stray `error` that is ignored). Subagents fire no hook of their own kind: the parent's Task call names a helper, the subagent's hooks (its own `session_id`, but the parent's transcript in `CURSOR_TRANSCRIPT_PATH`) take it over, and the parent's next step ends it. Not covered: the "Other" free-text answer of a question, and the cloud build.
 - Codex (verified on 0.162): hooks give the state, approvals (`y` runs once, Esc refuses), `request_user_input` questions and the last reply; the pane gives the Plan mode approval ("Implement this plan?", which has no hook) and the startup hooks review. Codex may run hooks in a shared app-server daemon that keeps the environment of the `codex` that started it, so a launched session names itself to its hooks through `-c shell_environment_policy.set.LEDGE_CODEX_HOOK_SESSION=<id>`, and `LEDGE_CODEX_SESSION` in the environment is trusted only when no app-server runs the hook. Plan mode itself is switched in the terminal (Shift+Tab).
 - Free-text replies to a question are refused (the 2.x question dialog is a select; typed text would pick the highlighted option). Answer with an option number or in the terminal.
-- The Rust shell has not been compiled on a real Windows machine yet; see the first-build checklist in the overlay README.
+- The Rust shell compiles on Windows and the installer builds, but the runtime checks of the first-build checklist in the overlay README have not all been run.
 - The daemon trusts whatever connects on the loopback.
 - A session started from the overlay runs with the daemon's environment (the systemd service's, or the shell that first ran `ledge claude`), not your current shell's. `open_terminal` runs `wt.exe` and the default WSL distribution; neither has been exercised on a real Windows machine yet.
