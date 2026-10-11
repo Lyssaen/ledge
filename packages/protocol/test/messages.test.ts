@@ -85,3 +85,19 @@ describe('protocol: launching from the overlay', () => {
     expect(pickName(['Juno'], 'Juno')).toBe('Juno-2');
   });
 });
+
+describe('protocol: browsing folders from the launch form', () => {
+  it('parses folder.list (home when no path) and folder.create', () => {
+    expect(parseClientMessage({ type: 'folder.list' })).toEqual({ type: 'folder.list' });
+    expect(parseClientMessage({ type: 'folder.list', path: '~/Workspace' })).toEqual({ type: 'folder.list', path: '~/Workspace' });
+    expect(parseClientMessage({ type: 'folder.create', parent: '/w', name: 'new-project' })).toEqual({ type: 'folder.create', parent: '/w', name: 'new-project' });
+    expect(() => parseClientMessage({ type: 'folder.create', parent: '/w', name: '' })).toThrow();
+  });
+  it('parses folder.listing, with a parent, at the root, and carrying an error', () => {
+    const listing = { type: 'folder.listing', path: '/w', parent: '/', entries: ['api', 'web'] };
+    expect(ServerMessageSchema.parse(listing)).toEqual(listing);
+    expect(ServerMessageSchema.parse({ ...listing, path: '/', parent: null })).toEqual({ ...listing, path: '/', parent: null });
+    const failed = { ...listing, entries: [], error: 'no such folder: /w' };
+    expect(ServerMessageSchema.parse(failed)).toEqual(failed);
+  });
+});

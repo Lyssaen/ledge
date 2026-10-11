@@ -1,4 +1,6 @@
-import { useState, type Ref } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
+import type { FolderListing } from '../daemon/store';
+import { FolderBrowser, type FolderRequest } from './FolderBrowser';
 import { NAMES, pickName, type Recent, type Session, type Tool } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
 import { poseFor } from '../bots/poseFor';
@@ -59,6 +61,8 @@ export interface LaunchViewProps {
   /** A launch is in flight (until the daemon answers), or why the last one failed. */
   busy?: boolean; failure?: string | null;
   onLaunch: (req: LaunchRequest) => void; onBack: () => void; onClose: () => void;
+  /** The folder browser's daemon answers and requests; without `onFolders` there is no Browse button. */
+  listing?: FolderListing | null; onFolders?: (m: FolderRequest) => void;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean;
   /** The body's natural height, measured by the surface to size itself. */
   contentRef?: Ref<HTMLDivElement>;
@@ -80,6 +84,12 @@ export function LaunchView(p: LaunchViewProps) {
   const [prompt, setPrompt] = useState('');
   const [resume, setResume] = useState(false);
   const [openTab, setOpenTab] = useState(loadOpenTab);
+  const [browsing, setBrowsing] = useState(false);
+  const browseRef = useRef<HTMLButtonElement>(null);
+  const endBrowse = (chosen?: string) => { if (chosen !== undefined) setCwd(chosen); setBrowsing(false); };
+  // Back from the browser, focus returns to the button that opened it (the form was inert meanwhile).
+  const browsed = useRef(false);
+  useEffect(() => { if (browsing) browsed.current = true; else if (browsed.current) browseRef.current?.focus(); }, [browsing]);
   const shownName = name.trim() || pickName(taken);
   const project = projectOf(cwd) || '…';
   const canStart = cwd.trim() !== '' && !p.busy && !p.offline;
@@ -90,6 +100,7 @@ export function LaunchView(p: LaunchViewProps) {
   const busyIn = (c: string) => live.find(s => s.cwd === c)?.name;
   return (
     <div data-layer="launch" data-delay={p.enterDelay ?? 120} inert={!p.visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: p.visible ? 1 : 0, pointerEvents: p.visible ? 'auto' : 'none', transition: transition([['opacity', p.visible ? 'fadeIn' : 'fadeOut', p.visible ? p.enterDelay ?? 120 : 0]]) }}>
+      <div inert={browsing} style={{ display: 'contents', visibility: browsing ? 'hidden' : undefined }}>
       <DetailHeader title={t.launch.title} onBack={p.onBack} onClose={p.onClose} />
       <form data-launch-form onSubmit={e => { e.preventDefault(); submit(); }} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flexGrow: 1 }}>
         <div className="ledge-scroll" style={{ overflowY: 'auto', minHeight: 0, overscrollBehavior: 'contain' }}>
@@ -97,7 +108,10 @@ export function LaunchView(p: LaunchViewProps) {
             <Row>
               <label htmlFor="ledge-launch-cwd" style={label}>{t.launch.folder}</label>
               <span style={{ ...hint, marginTop: 3 }}>{t.launch.folderHint}</span>
-              <input id="ledge-launch-cwd" data-launch-cwd className="ledge-field mono" value={cwd} onChange={e => setCwd(e.target.value)} placeholder={t.launch.folderPlaceholder} autoComplete="off" spellCheck={false} style={{ ...field, marginTop: 8, fontSize: 12 }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                <input id="ledge-launch-cwd" data-launch-cwd className="ledge-field mono" value={cwd} onChange={e => setCwd(e.target.value)} placeholder={t.launch.folderPlaceholder} autoComplete="off" spellCheck={false} style={{ ...field, fontSize: 12, flexGrow: 1, width: 'auto', minWidth: 0 }} />
+                {p.onFolders && <Button ref={browseRef} variant="outline" size="icon" aria-label={t.launch.browse} title={t.launch.browse} data-launch-browse disabled={!!p.offline} onClick={() => setBrowsing(true)}><Icon size={16} {...ICONS.folder} /></Button>}
+              </div>
               <span style={{ ...hint, marginTop: 10, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>{t.launch.recents}</span>
               {p.recents.length === 0 && <span style={{ ...hint, marginTop: 4 }}>{t.launch.noRecents}</span>}
               <div role="list" style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
@@ -151,6 +165,8 @@ export function LaunchView(p: LaunchViewProps) {
           )}
         </div>
       </form>
+      </div>
+      {browsing && p.onFolders && <FolderBrowser start={cwd} listing={p.listing ?? null} onFolders={p.onFolders} onChoose={endBrowse} onBack={() => endBrowse()} onClose={p.onClose} />}
     </div>
   );
 }

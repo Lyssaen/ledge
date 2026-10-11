@@ -3,7 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { test } from '@playwright/test';
-import { expect, layer, expectMode, ready, surface } from './fixtures';
+import { expect, layer, expectMode, ready, received, surface } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 import { overview, team, perm, openList, restInside } from './scenarios';
 
@@ -213,6 +213,23 @@ for (const theme of ['dark', 'light'] as const) {
         await restInside(page);
         await layer(page, 'launch').getByLabel('Compagnon', { exact: true }).fill('Juno');
         await shoot(page, `launch-${theme}`);
+      });
+
+      test('choosing a folder', async ({ page }) => {
+        await desktop(page, theme);
+        const d = await fakeDaemon(page, overview(), { recents: [{ cwd: '/home/joffrey/Workspace/api-gateway', project: 'api-gateway', lastAt: new Date(Date.now() - 86_400_000).toISOString() }] });
+        await ready(page, 4);
+        await openList(page);
+        await layer(page, 'list').getByRole('button', { name: 'Nouvelle session' }).click();
+        await expectMode(page, 'launch');
+        await restInside(page);
+        await layer(page, 'launch').getByRole('button', { name: 'Parcourir les dossiers' }).click();
+        await received(d.received, 'folder.list');
+        d.listing({ path: '/home/joffrey/Workspace', parent: '/home/joffrey', entries: ['api-gateway', 'dotfiles', 'harness-assistant', 'speos-portal', 'synapse'] });
+        const browser = page.locator('[data-layer="browse"]');
+        await browser.getByRole('button', { name: 'Nouveau dossier' }).click();
+        await browser.getByLabel('Nom du nouveau dossier').fill('nouveau-projet');
+        await shoot(page, `launch-browse-${theme}`);
       });
 
       test('empty list', async ({ page }) => {

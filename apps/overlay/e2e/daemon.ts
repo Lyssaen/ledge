@@ -25,6 +25,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { recen
     error(id: string, message: string) { send({ type: 'error', id, message }); },
     /** Answers a `session.launch`: the new session, then the `session.launched` reply. */
     launched(s: Session) { sessions.set(s.id, s); send({ type: 'session.updated', session: s }); send({ type: 'session.launched', id: s.id }); },
+    /** Answers a `folder.list` or `folder.create`. */
+    listing(l: { path: string; parent: string | null; entries: string[]; error?: string }) { send({ type: 'folder.listing', ...l }); },
     /** A launch refused: an `error` with no id. */
     refuse(message: string) { send({ type: 'error', message }); }
   };

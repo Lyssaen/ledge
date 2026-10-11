@@ -85,6 +85,15 @@ describe('daemon client + store', () => {
     detach(); client.close();
   });
 
+  it('counts folder listings, an error one included, without touching the sessions or the launch error', () => {
+    daemonStore.reset();
+    daemonStore.apply({ type: 'folder.listing', path: '/w', parent: '/', entries: ['api'] });
+    expect(daemonStore.getState().lastListing).toEqual({ path: '/w', parent: '/', entries: ['api'], seq: 1 });
+    daemonStore.apply({ type: 'folder.listing', path: '~/nope', parent: null, entries: [], error: 'no such folder' });
+    expect(daemonStore.getState().lastListing).toMatchObject({ error: 'no such folder', seq: 2 });
+    expect(daemonStore.getState().lastError).toBeNull();
+  });
+
   it('leaves the open state synchronously on a plain close()', async () => {
     const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never });
     const statuses: string[] = []; client.onStatus(s => statuses.push(s));

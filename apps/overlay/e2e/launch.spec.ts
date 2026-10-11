@@ -50,6 +50,41 @@ test('a refused launch keeps the form open with the reason', async ({ page }) =>
   await expectMode(page, 'list');
 });
 
+test('Browse walks the WSL folders, makes a new one and fills the field, keeping what was typed', async ({ page }) => {
+  const d = await fakeDaemon(page, [session('otto')], { recents });
+  await ready(page, 1);
+  await openList(page);
+  await layer(page, 'list').getByRole('button', { name: 'New session' }).click();
+  await expectMode(page, 'launch');
+  const form = layer(page, 'launch');
+  await form.getByLabel(/First instruction/).fill('scaffold the project');
+  await form.getByRole('button', { name: 'Browse folders' }).click();
+  await received(d.received, 'folder.list', m => m.path === '/home/u/Workspace/api-gateway');
+  d.listing({ path: '/home/u/Workspace/api-gateway', parent: '/home/u/Workspace', entries: ['src'] });
+  const browser = page.locator('[data-layer="browse"]');
+  await browser.getByRole('button', { name: 'Workspace' }).click();
+  await received(d.received, 'folder.list', m => m.path === '/home/u/Workspace');
+  d.listing({ path: '/home/u/Workspace', parent: '/home/u', entries: ['api-gateway', 'harness-assistant'] });
+  await expect(browser.getByRole('button', { name: 'Open harness-assistant' })).toBeVisible();
+  await browser.getByRole('button', { name: 'New folder' }).click();
+  await browser.getByLabel('New folder name').fill('new-project');
+  await browser.getByLabel('New folder name').press('Enter');
+  await received(d.received, 'folder.create', m => m.parent === '/home/u/Workspace' && m.name === 'new-project');
+  d.listing({ path: '/home/u/Workspace/new-project', parent: '/home/u/Workspace', entries: [] });
+  await expect(browser.getByText('No subfolders.')).toBeVisible();
+  await browser.getByRole('button', { name: 'Choose this folder' }).click();
+  await expect(browser).toHaveCount(0);
+  await expectMode(page, 'launch');
+  await expect(form.getByLabel('Folder', { exact: true })).toHaveValue('/home/u/Workspace/new-project');
+  await expect(form.getByLabel(/First instruction/)).toHaveValue('scaffold the project');
+  await form.getByRole('button', { name: 'Browse folders' }).click();
+  await received(d.received, 'folder.list', m => m.path === '/home/u/Workspace/new-project');
+  // Escape belongs to the browser while it is open: back to the form, not to the list.
+  await page.keyboard.press('Escape');
+  await expect(browser).toHaveCount(0);
+  await expectMode(page, 'launch');
+});
+
 test('an empty list shows the empty state, whose button opens the form', async ({ page }) => {
   await fakeDaemon(page, []);
   await ready(page, 0);

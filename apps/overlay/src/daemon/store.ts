@@ -13,8 +13,11 @@ export interface DaemonState {
   /** The command that runs `ledge` inside WSL, from the snapshot; null until known. */
   launcher: string[] | null;
   lastLaunched: Launched | null;
+  lastListing: FolderListing | null;
 }
-const empty = (): DaemonState => ({ sessions: [], byId: new Map(), status: 'connecting', previews: new Map(), lastError: null, recents: [], launcher: null, lastLaunched: null });
+/** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
+export type FolderListing = Omit<Extract<ServerMessage, { type: 'folder.listing' }>, 'type'> & { seq: number };
+const empty = (): DaemonState => ({ sessions: [], byId: new Map(), status: 'connecting', previews: new Map(), lastError: null, recents: [], launcher: null, lastLaunched: null, lastListing: null });
 let state: DaemonState = empty();
 const subs = new Set<() => void>();
 const emit = () => subs.forEach(f => f());
@@ -28,6 +31,7 @@ export const daemonStore = {
   apply(m: ServerMessage) {
     if (m.type === 'error') { state = { ...state, lastError: { id: m.id, message: m.message, seq: (state.lastError?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'session.launched') { state = { ...state, lastLaunched: { id: m.id, seq: (state.lastLaunched?.seq ?? 0) + 1 } }; emit(); return; }
+    if (m.type === 'folder.listing') { const { type: _, ...l } = m; state = { ...state, lastListing: { ...l, seq: (state.lastListing?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'recents') { state = { ...state, recents: m.recents }; emit(); return; }
     const byId = new Map(state.byId); const previews = new Map(state.previews);
     let { recents, launcher } = state;

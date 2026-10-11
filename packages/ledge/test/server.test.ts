@@ -489,6 +489,20 @@ describe('server', () => {
       expect(tmux.created).toHaveLength(1);
       c.close(); await srv2.close();
     });
+    it('browses folders for the requester only: lists home, creates a folder and lands in it, says why it cannot', async () => {
+      mkdirSync(join(home(), 'api-gateway'));
+      const srv2 = await startServer({ store, tmux, port: 0, home: home() });
+      const c = await connect({ port: srv2.port }); await c.next('snapshot');
+      const other = await connect({ port: srv2.port }); await other.next('snapshot');
+      c.send({ type: 'folder.list' });
+      expect(await c.next('folder.listing')).toMatchObject({ path: home(), entries: ['api-gateway'] });
+      c.send({ type: 'folder.create', parent: '~', name: 'new-project' });
+      expect(await c.next('folder.listing')).toEqual({ type: 'folder.listing', path: join(home(), 'new-project'), parent: home(), entries: [] });
+      c.send({ type: 'folder.create', parent: '~', name: 'new-project' });
+      expect(await c.next('folder.listing')).toMatchObject({ path: home(), error: 'already exists: new-project' });
+      await expect(other.next('folder.listing', 100)).rejects.toThrow(/timeout/);
+      c.close(); other.close(); await srv2.close();
+    });
     it('a terminal launch records its folder among the recents too, most recent first', async () => {
       const c = await connect({ port: srv.port }); await c.next('snapshot');
       c.send({ type: 'session.register', session: mk('a', { cwd: '/w/one', project: 'one', startedAt: '2026-10-10T09:00:00.000Z' }) });
