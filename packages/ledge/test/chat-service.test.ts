@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn as nodeSpawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 import type { ServerMessage } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createChat } from '../src/chat/service.js';
@@ -72,11 +74,25 @@ describe('chat service', () => {
     expect(spawned[0]).not.toHaveProperty('LEDGE_NAME');
   });
 
-  it('records each step once and keeps only the last 50 turns', async () => {
+  it('records the sessions step once', async () => {
     const { chat } = setup();
+    await chat.ask('q1', 'x', () => {});
+    expect(chat.history().at(-1)?.steps).toEqual([{ kind: 'sessions' }]);
+  });
+
+  it('keeps only the last 50 turns (in-process fake child, no real spawn)', async () => {
+    const spawn = (() => {
+      const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), stdin: new PassThrough(), kill: () => { child.emit('close', null); } });
+      setImmediate(() => {
+        child.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 's' }) + '\n');
+        child.stdout.write(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'ok', session_id: 's' }) + '\n');
+        setImmediate(() => child.emit('close', 0));
+      });
+      return child;
+    }) as unknown as typeof nodeSpawn;
+    const { chat } = setup({ spawn });
     for (let i = 0; i < 51; i++) await chat.ask(`q${i}`, 'x', () => {});
     expect(chat.history()).toHaveLength(50);
     expect(chat.history()[0]?.qid).toBe('q1');
-    expect(chat.history().at(-1)?.steps).toEqual([{ kind: 'sessions' }]);
   });
 });
