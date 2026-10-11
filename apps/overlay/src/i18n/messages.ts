@@ -10,6 +10,8 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 const fr = {
   lang: { label: 'Langue', hint: 'La langue de Ledge.', fr: 'Français', en: 'English' },
+  /** The Windows tray icon's menu (its first line, the product and version, is not translated). */
+  tray: { quit: 'Quitter Ledge' },
   time: { seconds: (n: number) => `${n} s`, minutes: (n: number) => `${n} min`, hours: (n: number) => `${n} h`, locale: 'fr-FR' },
   state: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   /** The bot's accessible state, read after the tool name. */
@@ -151,6 +153,7 @@ export type Messages = typeof fr;
 
 const en: Messages = {
   lang: { label: 'Language', hint: 'The language of Ledge.', fr: 'Français', en: 'English' },
+  tray: { quit: 'Quit Ledge' },
   time: { seconds: (n: number) => `${n}s`, minutes: (n: number) => `${n}m`, hours: (n: number) => `${n}h`, locale: 'en-US' },
   state: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },

@@ -3,10 +3,10 @@ import { PROTOCOL_PORT } from '@ledge/protocol';
 import { createDaemonClient } from './daemon/client';
 import { attachClient } from './daemon/store';
 import { Surface } from './surface/Surface';
-import { isTauri, listMonitors, screenHeight, setMonitor } from './tauri/bridge';
+import { isTauri, listMonitors, screenHeight, setMonitor, setTrayLabels } from './tauri/bridge';
 import { autoScale, loadScale, migrateLegacyScale, resolveScale, saveScale, type ScaleTarget, type UiScale } from './scale';
 import { loadMonitor, saveMonitor, type MonitorInfo } from './monitor';
-import { LangProvider, loadLang, saveLang, type Lang } from './i18n/lang';
+import { LangProvider, loadLang, messagesFor, saveLang, type Lang } from './i18n/lang';
 import { createWebAudioPlayer } from './sounds/player';
 
 export function App() {
@@ -33,7 +33,7 @@ export function App() {
   useEffect(() => { if (tauri) return; const h = () => setWorkH(window.innerHeight); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, [tauri]);
   useEffect(() => { const d = document.documentElement.dataset; d.handleScale = String(handleScale); d.panelScale = String(panelScale); }, [handleScale, panelScale]);
   useEffect(() => { saveScale('handle', scales.handle); saveScale('panel', scales.panel); }, [scales]);
-  useEffect(() => { saveLang(lang); document.documentElement.lang = lang; }, [lang]);
+  useEffect(() => { saveLang(lang); document.documentElement.lang = lang; void setTrayLabels(messagesFor(lang).tray.quit); }, [lang]);
   useEffect(() => { document.documentElement.dataset.theme = theme; try { localStorage.setItem('ledge.theme', theme); } catch { /* ignore */ } }, [theme]);
   useEffect(() => { try { localStorage.setItem('ledge.dnd', dnd ? '1' : '0'); } catch { /* ignore */ } }, [dnd]);
   useEffect(() => { const h = (e: KeyboardEvent) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 't') setTheme(t => (t === 'dark' ? 'light' : 'dark')); }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, []);

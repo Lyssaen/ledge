@@ -3,7 +3,9 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow, Wry};
 
 /// Emitted on every enter/leave transition of the cursor over the edge hot zones; payload `{ "inside": bool }`.
 pub const EDGE_EVENT: &str = "ledge://edge";
@@ -51,6 +53,16 @@ pub struct MonitorInfo {
     #[serde(rename = "workH")]
     pub work_h: u32,
     pub primary: bool,
+}
+
+/// The tray menu's Quit item, kept so the webview can give it the overlay's language (`set_tray_labels`).
+struct Tray(MenuItem<Wry>);
+const TRAY_QUIT: &str = "quit";
+
+/// The tray's tooltip and the title of its menu: the product, its version, and `(dev)` for a debug build, so an
+/// installed Ledge and a `tauri dev` one running side by side can be told apart.
+pub fn tray_title(version: &str, debug: bool) -> String {
+    if debug { format!("Ledge {version} (dev)") } else { format!("Ledge {version}") }
 }
 
 #[derive(Clone, Serialize)]
@@ -329,6 +341,28 @@ fn open_url(url: String) -> Result<(), String> {
     spawned.map(|_| ()).map_err(|e| format!("open url: {e}"))
 }
 
+/// Relabels the tray menu in the overlay's language (the shell starts in French, the default).
+#[tauri::command]
+fn set_tray_labels(quit: String, tray: tauri::State<'_, Tray>) -> Result<(), String> {
+    tray.0.set_text(quit).map_err(|e| e.to_string())
+}
+
+/// The notification-area icon: the overlay has no taskbar button, so this is where you see that Ledge runs and which
+/// version it is (tooltip and the menu's disabled first line), and where you quit it.
+fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    let title = tray_title(&app.package_info().version.to_string(), cfg!(debug_assertions));
+    let version = MenuItem::with_id(app, "version", &title, false, None::<&str>)?;
+    let quit = MenuItem::with_id(app, TRAY_QUIT, "Quitter Ledge", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&version, &PredefinedMenuItem::separator(app)?, &quit])?;
+    let mut tray = TrayIconBuilder::with_id("ledge").tooltip(&title).menu(&menu).on_menu_event(|app, event| {
+        if event.id() == TRAY_QUIT { app.exit(0); }
+    });
+    if let Some(icon) = app.default_window_icon() { tray = tray.icon(icon.clone()); }
+    tray.build(app)?;
+    app.manage(Tray(quit));
+    Ok(())
+}
+
 #[cfg(windows)]
 fn cursor_position() -> Option<(i32, i32)> {
     use windows::Win32::Foundation::POINT;
@@ -377,9 +411,10 @@ fn main() {
         .manage(HotZones::default())
         .manage(PrevForeground::default())
         .manage(Screen::default())
-        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor])
+        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor, set_tray_labels])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") { let _ = w.set_always_on_top(true); }
+            build_tray(app)?;
             spawn_edge_poller(app.handle().clone());
             Ok(())
         })
@@ -389,11 +424,16 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{choose, edge_inside, edge_step, frame_rect, terminal_args, title_matches, Area, Band};
+    use super::{choose, edge_inside, edge_step, frame_rect, terminal_args, title_matches, tray_title, Area, Band};
 
     #[test] fn a_terminal_tab_runs_the_launcher_command_in_wsl() {
         let cmd: Vec<String> = ["/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"].iter().map(|s| s.to_string()).collect();
         assert_eq!(terminal_args("Juno · api-gateway", &cmd), ["-w", "0", "new-tab", "--title", "Juno · api-gateway", "wsl.exe", "--", "/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"]);
+    }
+
+    #[test] fn the_tray_tells_a_dev_build_from_an_installed_one() {
+        assert_eq!(tray_title("0.1.0", false), "Ledge 0.1.0");
+        assert_eq!(tray_title("0.1.0", true), "Ledge 0.1.0 (dev)");
     }
 
     #[test] fn the_chosen_monitor_is_used_while_plugged_in_else_the_primary() {
