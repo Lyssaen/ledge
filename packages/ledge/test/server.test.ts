@@ -310,6 +310,20 @@ describe('server', () => {
     });
   });
 
+  it('Cursor Agent: answering question 1 of 2 ticks the option on screen, and question 2 coming up is success', async () => {
+    // Trimmed at the end, as tmux.capture returns it.
+    const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8').replace(/\s+$/, '');
+    const q1 = fx('cursor-question-two'); const ticked = q1.replace('› [ ] c', '› [x] c');
+    tmux = fakeTmux({ 'ledge-a': [q1, q1, ticked, fx('cursor-question-second')] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0, untilMs: 300, verify: { attempts: 2, intervalMs: 20 } });
+    store.upsert(mk('a', { tool: 'cursor', state: 'waiting_input', pending: { kind: 'question', text: 'Which letter should be added to notes.txt?', options: ['c', 'd'], source: 'pane' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: '1' });
+    await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
+    expect(tmux.sent).toEqual([['text', 'ledge-a', ' '], ['keys', 'ledge-a', 'Enter']]);
+    c.close();
+  });
+
   it('a reply with no pending (your turn) is typed without a prompt check', async () => {
     tmux = fakeTmux({ 'ledge-a': ['> '] }); await srv.close(); srv = await startServer({ store, tmux, port: 0 });
     store.upsert(mk('a', { state: 'idle' }));

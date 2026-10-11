@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
@@ -273,10 +273,52 @@ describe('mapCursorHook', () => {
     process.env.LEDGE_SESSION = '7f3a';
     expect(cursor('sessionEnd', { reason: 'completed' })).toBeNull();
   });
-  it('drops a subagent\'s events when untracked (no phantom session), keeps them as the parent at work when tracked', () => {
-    expect(cursor('preToolUse', { tool_name: 'Shell', tool_input: { command: 'find .' } }, SUB)).toBeNull();
-    process.env.LEDGE_SESSION = '7f3a';
-    expect(cursor('preToolUse', { tool_name: 'Shell', tool_input: { command: 'find .' } }, SUB)).toMatchObject({ id: '7f3a', event: { name: 'PreToolUse', text: 'find .' } });
+  describe('subagents (no subagentStart/Stop: the transcript path names the parent)', () => {
+    // As Cursor Agent writes them: ~/.cursor/projects/<slug>/agent-transcripts/<id>/<id>.jsonl
+    let dir: string; let parentPath: string;
+    const line = (role: string, content: unknown[]) => JSON.stringify({ role, message: { content } });
+    const PROMPT = 'Your only job is to read notes.txt and report it.';
+    beforeEach(() => {
+      dir = join(mkdtempSync(join(tmpdir(), 'ledge-tr-')), 'agent-transcripts');
+      mkdirSync(join(dir, 'b617'), { recursive: true });
+      parentPath = join(dir, 'b617', 'b617.jsonl');
+      writeFileSync(parentPath, [
+        line('user', [{ type: 'text', text: '<timestamp>Sunday</timestamp>\n<user_query>\nuse a subagent\n</user_query>' }]),
+        line('assistant', [{ type: 'text', text: 'Launching it.' }, { type: 'tool_use', name: 'Task', input: { description: 'Read notes.txt content', prompt: PROMPT, subagent_type: 'explore', run_in_background: false } }])
+      ].join('\n') + '\n');
+    });
+    const env = (extra: Record<string, string> = {}) => ({ CURSOR_TRANSCRIPT_PATH: parentPath, ...extra });
+    it('the parent\'s Task names a helper; the subagent\'s tool runs are that parent\'s helper', () => {
+      const task = { ...MAIN, conversation_id: 'b617', session_id: 'b617', tool_name: 'Task', tool_use_id: 'call-1\nfc_x', tool_input: { description: 'Read notes.txt content', prompt: PROMPT, subagent_type: 'explore' } };
+      expect(mapCursorHook('preToolUse', task, at, env())?.event).toEqual({ name: 'SubagentStart', at, source: 'hook', helperId: 'task:call-1', tool: 'explore', text: 'Read notes.txt content' });
+      const dynamic = { ...task, tool_name: 'CallDynamicTool', tool_input: { namespace: 'cursor', toolName: 'Task', arguments: task.tool_input } };
+      expect(mapCursorHook('preToolUse', dynamic, at, env())?.event).toMatchObject({ name: 'SubagentStart', tool: 'explore', text: 'Read notes.txt content' });
+      expect(mapCursorHook('preToolUse', { ...SUB, tool_name: 'Read', tool_input: { file_path: '/w/notes.txt' } }, at, env()))
+        .toEqual({ id: 'b617', agent: 'cursor', event: { name: 'SubagentStart', at, source: 'hook', helperId: 'b335' } });
+      expect(mapCursorHook('postToolUse', { ...SUB, tool_name: 'Read' }, at, env())?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', helperId: 'b335', tool: 'Read' });
+    });
+    it('tracked, the helper belongs to the Ledge session', () => {
+      expect(mapCursorHook('preToolUse', { ...SUB, tool_name: 'Read' }, at, env({ LEDGE_SESSION: '7f3a' }))?.id).toBe('7f3a');
+    });
+    it('the main thread, whose session is its transcript\'s, stays the main thread', () => {
+      expect(mapCursorHook('preToolUse', { ...MAIN, conversation_id: 'b617', session_id: 'b617', tool_name: 'Shell', tool_input: { command: 'ls' } }, at, env())?.event)
+        .toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'Shell', text: 'ls' });
+    });
+    it('with no transcript path: a subagent by its generation id; dropped untracked, a helper tracked', () => {
+      expect(mapCursorHook('preToolUse', { ...SUB, tool_name: 'Shell' }, at, {})).toBeNull();
+      expect(mapCursorHook('preToolUse', { ...SUB, tool_name: 'Shell' }, at, { LEDGE_SESSION: '7f3a' })).toMatchObject({ id: '7f3a', event: { name: 'SubagentStart', helperId: 'b335' } });
+    });
+    it('the reply keeps the turn\'s text blocks apart, as the transcript has them', () => {
+      writeFileSync(parentPath, [
+        line('user', [{ type: 'text', text: '<user_query>go</user_query>' }]),
+        line('assistant', [{ type: 'text', text: "I'll run it." }, { type: 'tool_use', name: 'Shell' }]),
+        line('assistant', [{ type: 'text', text: '[REDACTED]' }]),
+        line('assistant', [{ type: 'text', text: 'Done:\n- a' }])
+      ].join('\n') + '\n');
+      expect(mapCursorHook('afterAgentResponse', { ...MAIN, conversation_id: 'b617', session_id: 'b617', text: "I'll run it.Done:\n- a" }, at, env())?.event.text).toBe("I'll run it.\n\nDone:\n- a");
+      // A transcript that says something else (not written yet) leaves the hook's text as it is.
+      expect(mapCursorHook('afterAgentResponse', { ...MAIN, conversation_id: 'b617', session_id: 'b617', text: 'other' }, at, env())?.event.text).toBe('other');
+    });
   });
   it('returns null for an event Ledge does not listen to, or a malformed payload', () => {
     expect(cursor('afterAgentThought', { text: 'thinking' })).toBeNull();

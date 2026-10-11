@@ -91,7 +91,21 @@ function underHelper(s: Session, parentState: SessionState, at: string, extra: P
  * Events fired inside a subagent (helperId set). They never clear or replace the parent's pending and never
  * flip the parent to working; a helper permission is routed to the parent only when nothing is pending there.
  */
+/**
+ * Cursor Agent: a subagent's first hook (its own id) takes over the oldest working helper its parent's Task named
+ * (`task:<call id>`), with that name. Parallel Tasks are matched in launch order.
+ */
+function adoptCursorTask(s: Session, id: string): Session {
+  if (s.tool !== 'cursor' || id.startsWith('task:') || s.helpers.some(h => h.id === id)) return s;
+  const i = s.helpers.findIndex(h => h.id.startsWith('task:') && h.state === 'working');
+  if (i < 0) return s;
+  const helpers = [...s.helpers];
+  helpers[i] = { ...helpers[i]!, id };
+  return { ...s, helpers };
+}
+
 function reduceHelper(s: Session, ev: SessionEvent & { helperId: string }): Session {
+  s = adoptCursorTask(s, ev.helperId);
   const at = ev.at;
   const id = ev.helperId;
   const own = s.pending?.helperId === id;
@@ -138,8 +152,21 @@ function samePending(a: Pending, b: Pending): boolean {
     && JSON.stringify(a.options) === JSON.stringify(b.options);
 }
 
+/**
+ * Cursor Agent never says a subagent stopped. A foreground Task blocks its parent, so the parent's own next step (a tool,
+ * the end of the turn, a new prompt) means its helpers are done; launching more Tasks (helper events) does not. A
+ * background helper ended this way comes back with its next tool run.
+ */
+function endCursorHelpers(s: Session, ev: SessionEvent): Session {
+  if (s.tool !== 'cursor' || ev.source !== 'hook' || ev.helperId || !s.helpers.some(h => h.state === 'working')) return s;
+  const moves = ev.name === 'PostToolUse' || ev.name === 'PostToolUseFailure' || ev.name === 'Stop' || ev.name === 'StopFailure'
+    || ev.name === 'UserPromptSubmit' || ev.name === 'PreToolUse';
+  return moves ? { ...s, helpers: s.helpers.map(h => (h.state === 'working' ? { ...h, state: 'exited' } : h)) } : s;
+}
+
 export function reduce(s: Session, ev: SessionEvent): Session {
   if (s.state === 'exited') return s;
+  s = endCursorHelpers(s, ev);
   const at = ev.at;
   const lastHookAt = s.lastHookAt;
   if (ev.name === 'SubagentStart' || ev.name === 'SubagentStop') return ev.helperId ? reduceHelper(s, { ...ev, helperId: ev.helperId }) : s;

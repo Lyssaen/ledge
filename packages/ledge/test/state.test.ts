@@ -118,6 +118,28 @@ describe('reduce: pending rules', () => {
     expect(reduce(decided, ev('PaneIdle', { source: 'pane', at: later(5300) }))).toBe(decided);
     expect(reduce(decided, ev('PaneIdle', { source: 'pane', at: later(5000 + HOOK_PRIORITY_MS + 1) })).state).toBe('idle');
   });
+  it('Cursor Agent helpers: the Task names one, the subagent takes it over, the parent moving on ends it', () => {
+    let s = reduce(session('working', { tool: 'cursor' }), ev('SubagentStart', { helperId: 'task:c1', tool: 'explore', text: 'Read notes' }));
+    s = reduce(s, ev('SubagentStart', { helperId: 'b335' }));
+    expect(s.helpers).toEqual([{ id: 'b335', kind: 'explore', task: 'Read notes', state: 'working' }]);
+    expect(reduce(s, ev('SubagentStart', { helperId: 'task:c2', tool: 'explore', text: 'another' })).helpers[0]!.state).toBe('working');
+    for (const e of [ev('PreToolUse', { tool: 'Shell' }), ev('PostToolUse', { tool: 'Read' }), ev('Stop'), ev('UserPromptSubmit')]) {
+      expect(reduce(s, e).helpers[0]!.state).toBe('exited');
+    }
+    // A background helper comes back with its next tool run, under its name.
+    const back = reduce(reduce(s, ev('Stop')), ev('PostToolUse', { helperId: 'b335', tool: 'Read' }));
+    expect(back.helpers[0]).toMatchObject({ id: 'b335', state: 'working', task: 'Read notes' });
+  });
+  it('Cursor Agent parallel Tasks are taken over in launch order; a subagent with no Task left is a plain helper', () => {
+    let s = session('working', { tool: 'cursor' });
+    for (const [id, text] of [['task:1', 'first'], ['task:2', 'second']]) s = reduce(s, ev('SubagentStart', { helperId: id, tool: 'explore', text }));
+    for (const id of ['s1', 's2', 's3']) s = reduce(s, ev('SubagentStart', { helperId: id }));
+    expect(s.helpers.map(h => [h.id, h.task])).toEqual([['s1', 'first'], ['s2', 'second'], ['s3', '']]);
+  });
+  it('Claude Code helpers are not ended by the parent\'s own steps (it sends SubagentStop)', () => {
+    const s = reduce(session('working'), ev('SubagentStart', { helperId: 'a1', tool: 'Explore' }));
+    expect(reduce(s, ev('PreToolUse', { tool: 'Bash' })).helpers[0]!.state).toBe('working');
+  });
   it('SessionEnd clears pending and records exit', () => {
     const s = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));
     const next = reduce(s, ev('SessionEnd', { exitCode: 1 }));

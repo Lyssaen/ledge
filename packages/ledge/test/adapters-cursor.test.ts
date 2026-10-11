@@ -111,3 +111,76 @@ describe('cursor adapter: rest and preview', () => {
     expect(buildPreview(fx('cursor-permission'), cursorAdapter).at(-1)).toContain('(esc or n)');
   });
 });
+
+describe('cursor adapter: questions (AskQuestion, no hook)', () => {
+  const question = { kind: 'question' as const, text: 'x', source: 'pane' as const };
+  it('detects the question on screen with its options, Other left out', () => {
+    expect(cursorAdapter.detectPrompt(fx('cursor-question'))).toEqual({
+      kind: 'question', text: 'notes.txt currently ends with lines a and b. Which new line should I append?', options: ['c', 'd']
+    });
+    expect(cursorAdapter.detectPrompt(fx('cursor-question-second'))).toEqual({
+      kind: 'question', text: 'Which position should the letter be placed in notes.txt?', options: ['top', 'bottom']
+    });
+    expect(cursorAdapter.promptStillVisible(tail(fx('cursor-question')))).toBe(true);
+    expect(cursorAdapter.atRest!(fx('cursor-question'))).toBe(false);
+  });
+  it('a digit moves to its option, ticks it once the cursor is there, then Enter once it is ticked', () => {
+    const plan = cursorAdapter.replyPlan('2', question, fx('cursor-question'));
+    expect(plan.map(s => ('until' in s ? 'until' : s))).toEqual([{ keys: ['Down'] }, 'until', { text: ' ' }, 'until', { keys: ['Enter'] }]);
+    const [, onIt, , ticked] = plan as Array<{ until: (p: string) => boolean }>;
+    expect(onIt!.until(fx('cursor-question'))).toBe(false);
+    const moved = fx('cursor-question').replace('›', ' ').replace('     [ ] d', '   › [ ] d');
+    expect(onIt!.until(moved)).toBe(true);
+    expect(ticked!.until(moved)).toBe(false);
+    expect(ticked!.until(moved.replace('› [ ] d', '› [x] d'))).toBe(true);
+  });
+  it('the first option needs no move; an option out of range is refused; text is typed as a reply', () => {
+    expect(cursorAdapter.replyPlan('1', question, fx('cursor-question')).map(s => ('until' in s ? 'until' : s))).toEqual([{ text: ' ' }, 'until', { keys: ['Enter'] }]);
+    expect(() => cursorAdapter.replyPlan('4', question, fx('cursor-question'))).toThrow('no option 4');
+    expect(cursorAdapter.replyPlan('hello', question, fx('cursor-question'))[0]).toEqual({ text: 'hello' });
+  });
+  it('accept answers with the first option, deny skips with Esc', () => {
+    expect(cursorAdapter.keysFor('accept', question, fx('cursor-question')).at(-1)).toEqual({ keys: ['Enter'] });
+    expect(cursorAdapter.keysFor('deny', question, fx('cursor-question'))).toEqual([{ keys: ['Escape'] }]);
+  });
+  it('the next question is a new prompt, not a failed answer; the same one still on screen is not gone', () => {
+    const first = { ...question, text: 'Which letter should be added to notes.txt?' };
+    expect(cursorAdapter.promptGone!(fx('cursor-question-two'), first)).toBe(false);
+    expect(cursorAdapter.promptGone!(fx('cursor-question-second'), first)).toBe(true);
+  });
+});
+
+describe('cursor adapter: plan (Plan mode, no hook)', () => {
+  const plan = { kind: 'plan' as const, text: 'Add line d to notes.txt', source: 'pane' as const };
+  it('detects "Ready to build?" with the plan\'s title and its options', () => {
+    expect(cursorAdapter.detectPrompt(fx('cursor-plan'))).toEqual({
+      kind: 'plan', text: 'Add line d to notes.txt', options: ['Yes, build locally', 'Yes, build in cloud', 'No, propose changes']
+    });
+    expect(cursorAdapter.promptStillVisible(tail(fx('cursor-plan')))).toBe(true);
+    expect(cursorAdapter.atRest!(fx('cursor-plan'))).toBe(false);
+  });
+  it('accept builds locally (b, never the cloud); deny opens the revise field and waits for it', () => {
+    expect(cursorAdapter.keysFor('accept', plan, fx('cursor-plan'))).toEqual([{ text: 'b' }]);
+    const deny = cursorAdapter.keysFor('deny', plan, fx('cursor-plan'));
+    expect(deny[0]).toEqual({ text: 'p' });
+    const until = (deny[1] as { until: (p: string) => boolean }).until;
+    expect(until(fx('cursor-plan'))).toBe(false);
+    expect(until(fx('cursor-plan-revise'))).toBe(true);
+  });
+  it('the revise field is the agent waiting for text: no prompt, at rest, and a reply is typed there', () => {
+    expect(cursorAdapter.detectPrompt(fx('cursor-plan-revise'))).toBeNull();
+    expect(cursorAdapter.promptGone!(fx('cursor-plan-revise'), plan)).toBe(true);
+    expect(cursorAdapter.atRest!(fx('cursor-plan-revise'))).toBe(true);
+    const reply = cursorAdapter.replyPlan('use the letter z instead');
+    expect((reply[1] as { until: (p: string) => boolean }).until(fx('cursor-plan-revise-typed'))).toBe(true);
+  });
+});
+
+describe('cursor adapter: promptGone on approvals', () => {
+  it('the approval answered is gone; the skip field is not; another command asked next is a new prompt', () => {
+    expect(cursorAdapter.promptGone!(fx('cursor-permission'), perm)).toBe(false);
+    expect(cursorAdapter.promptGone!(fx('cursor-skip-field'), perm)).toBe(false);
+    expect(cursorAdapter.promptGone!(fx('cursor-working'), perm)).toBe(true);
+    expect(cursorAdapter.promptGone!(fx('cursor-permission-wrapped'), perm)).toBe(true);
+  });
+});

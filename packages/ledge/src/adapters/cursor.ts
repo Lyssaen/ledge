@@ -90,6 +90,73 @@ function parseTrust(lines: string[]): { path: string } | null {
   return { path };
 }
 
+/** The inside of the square box that ends the pane (`┌ … └`), borders stripped; its top may be scrolled away. */
+function squareBox(lines: string[]): string[] | null {
+  const end = lastNonBlank(lines);
+  if (end < 0 || !lines[end]!.trim().startsWith('└')) return null;
+  let top = end - 1;
+  while (top >= 0 && !lines[top]!.trim().startsWith('┌')) top--;
+  return lines.slice(top + 1, end).map(boxed);
+}
+
+// The AskQuestion dialog (no hook fires for it), one question at a time. Space ticks the option under the cursor,
+// Enter goes to the next question or submits, Esc skips. "Other" takes typed text: Ledge leaves it out.
+//
+//   ┌──────────────────────────────────────────┐
+//   │ How should the letter be added?          │
+//   │ Question 1 of 2                          │
+//   │ 1. Which letter should be added?         │
+//   │   › [ ] c                                │
+//   │     [ ] d                                │
+//   │     [ ] Other: (type to answer)          │
+//   │ ↑/↓ option · ←/→ question · Space select · Enter next/submit · Esc to skip
+//   └──────────────────────────────────────────┘
+const QUESTION_FOOTER = /Space select\b.*\bEsc to skip\b/;
+const CHOICE = /^(›\s*)?\[([ x])\]\s+(.*)$/;
+const OTHER = /^Other:/;
+
+type Question = { question: string; options: string[]; cursor: number; checked: boolean[] };
+
+function parseQuestion(lines: string[]): Question | null {
+  const box = squareBox(lines);
+  if (!box || !box.some(l => QUESTION_FOOTER.test(l))) return null;
+  const choices = box.map(l => l.match(CHOICE)).filter((m): m is RegExpMatchArray => !!m && !OTHER.test(m[3]!));
+  if (!choices.length) return null;
+  const first = box.findIndex(l => CHOICE.test(l));
+  const question = box.slice(0, first).reverse().find(l => /^\d+\.\s/.test(l))?.replace(/^\d+\.\s+/, '') ?? '';
+  return { question, options: choices.map(m => m[3]!.trim()), cursor: choices.findIndex(m => !!m[1]), checked: choices.map(m => m[2] === 'x') };
+}
+
+// The plan Cursor Agent proposes in Plan mode, after its turn has stopped (no hook either):
+//
+//   │ Suggested Plan                     │
+//   │ Add line d to notes.txt            │
+//   │ …                                  │
+//   │ Ready to build?                    │
+//   │  → 1. Yes, build locally (b)       │
+//   │    2. Yes, build in cloud (c)      │
+//   │    3. No, propose changes (p or Esc)
+//   └────────────────────────────────────┘
+//
+// b builds here (never c: the cloud is not what an approval in Ledge means). p opens "Describe how to revise the
+// plan", which takes text only (an empty Enter does nothing): it reads as the agent waiting for a prompt, and the
+// next reply from Ledge goes there.
+const PLAN_ASK = /^Ready to build\?$/;
+const PLAN_OPTION = /^(?:→\s*)?\d+\.\s+(.+?)\s+\([^)]*\)$/;
+const REVISE = /Describe how to revise the plan\b/;
+
+function parsePlan(lines: string[]): { title: string; options: string[] } | null {
+  const box = squareBox(lines);
+  if (!box) return null;
+  const ask = box.findIndex(l => PLAN_ASK.test(l));
+  if (ask < 0) return null;
+  const options = box.slice(ask + 1).map(l => l.match(PLAN_OPTION)?.[1]).filter((o): o is string => !!o);
+  if (!options.length) return null;
+  const head = box.findIndex(l => l === 'Suggested Plan');
+  const title = head < 0 ? '' : box.slice(head + 1).find(l => l !== '') ?? '';
+  return { title: title || 'Ready to build?', options };
+}
+
 // After n or Esc the dialog becomes a one-line field over the command; an empty Enter skips it:
 //
 //   │ $  touch probe-file in .   │
@@ -124,9 +191,16 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   const lines = toLines(pane);
   const t = parseTrust(lines);
   if (t) return { kind: 'permission', text: `Trust this folder? ${t.path}`.trim(), options: ['Trust this workspace', 'Quit'] };
+  const q = parseQuestion(lines);
+  if (q) return { kind: 'question', text: q.question, options: q.options };
+  const plan = parsePlan(lines);
+  if (plan) return { kind: 'plan', text: plan.title, options: plan.options };
   const d = parseDialog(lines);
   return d ? { kind: 'permission', text: dialogText(d) } : null;
 }
+
+/** Any dialog Ledge reads (approval, trust, question, plan) ends the pane. */
+const anyDialog = (lines: string[]) => !!(parseDialog(lines) || parseTrust(lines) || parseQuestion(lines) || parsePlan(lines));
 
 /**
  * Works on the server's short capture (the last lines of the pane). The skip field counts as the prompt:
@@ -137,6 +211,7 @@ function promptStillVisible(lastLines: string): boolean {
   const end = lastNonBlank(lines);
   if (end >= 0 && lines[end]!.trim().startsWith('╰') && lines.some(l => TRUST_FOOTER.test(l))) return true;
   if (lines.some(l => TELL_INSTEAD.test(l))) return true;
+  if (end >= 0 && lines[end]!.trim().startsWith('└') && lines.some(l => QUESTION_FOOTER.test(l) || /\(p or Esc\)\s*│?$/.test(l))) return true;
   return end >= 0 && DIALOG_FOOTER.test(lines[end]!) && lines.some(l => DIALOG_ACCEPT.test(l.trim()));
 }
 
@@ -155,9 +230,38 @@ const typed = (text: string) => (lastLines: string) => {
 const inSkipField = (lastLines: string) => toLines(lastLines).some(l => TELL_INSTEAD.test(l));
 const inDialog = (lastLines: string) => !inSkipField(lastLines) && promptStillVisible(lastLines);
 
+/**
+ * After keys were sent: the prompt that was answered is no longer the one on screen. A dialog that follows (the next
+ * question, the same agent asking for another command) is a new prompt, not a failed answer; the skip field is not gone.
+ */
+function promptGone(pane: string, pending: Pending): boolean {
+  const lines = toLines(pane);
+  if (inSkipField(lines.slice(0, lastNonBlank(lines) + 1).slice(-5).join('\n'))) return false;
+  const m = detectPrompt(pane);
+  return !m || m.kind !== pending.kind || m.text !== pending.text;
+}
+
+const onChoice = (i: number, what: 'cursor' | 'checked') => (lastLines: string) => {
+  const q = parseQuestion(toLines(lastLines));
+  return !!q && (what === 'cursor' ? q.cursor === i : !!q.checked[i]);
+};
+
+/** Ticks option `n` (1-based) of the question on screen and moves on: to it, Space unless already ticked, Enter. */
+function answerPlan(q: Question, n: number): KeyPlan {
+  const i = n - 1;
+  if (i < 0 || i >= q.options.length) throw new Error(`the question has no option ${n}`);
+  const from = q.cursor < 0 ? 0 : q.cursor;
+  const moves = Array<string>(Math.abs(i - from)).fill(i > from ? 'Down' : 'Up');
+  return [
+    ...(moves.length ? [{ keys: moves }, { until: onChoice(i, 'cursor') }] : []),
+    ...(q.checked[i] ? [] : [{ text: ' ' }, { until: onChoice(i, 'checked') }]),
+    { keys: ['Enter'] }
+  ];
+}
+
 function previewLines(pane: string): string[] {
   const lines = toLines(pane);
-  if (parseDialog(lines) || parseTrust(lines)) return lines;
+  if (anyDialog(lines)) return lines;
   const i = inputLine(lines);
   return i < 0 ? lines : lines.slice(0, i);
 }
@@ -165,7 +269,7 @@ function previewLines(pane: string): string[] {
 /** The input line is on screen, no dialog or skip field replaces it and no turn is running. */
 function atRest(pane: string): boolean {
   const lines = toLines(pane);
-  if (parseDialog(lines) || parseTrust(lines)) return false;
+  if (anyDialog(lines)) return false;
   const i = inputLine(lines);
   return i >= 0 && !TELL_INSTEAD.test(lines[i]!) && !lines.slice(i).some(l => BUSY.test(l));
 }
@@ -176,9 +280,14 @@ export const cursorAdapter: Adapter = {
   promptStillVisible,
   previewLines,
   atRest,
+  promptGone,
   keysFor(decision, _pending, pane) {
     const lines = pane ? toLines(pane) : [];
     if (parseTrust(lines)) return [{ text: decision === 'accept' ? 'a' : 'q' }];
+    const q = parseQuestion(lines);
+    if (q) return decision === 'accept' ? answerPlan(q, 1) : [{ keys: ['Escape'] }];
+    // Refusing a plan asks how to revise it: the field waits for text, which a reply from Ledge then types.
+    if (parsePlan(lines)) return decision === 'accept' ? [{ text: 'b' }] : [{ text: 'p' }, { until: p => REVISE.test(p) }];
     // Each key waits for the screen it is meant for. Sent in one burst, `n` then Enter reach the dialog together and
     // Enter picks the highlighted "Run (once)"; Esc then y reads as Alt+y.
     if (lines.some(l => TELL_INSTEAD.test(l))) {
@@ -187,7 +296,9 @@ export const cursorAdapter: Adapter = {
     }
     return decision === 'accept' ? [{ text: 'y' }] : [{ text: 'n' }, { until: inSkipField }, { keys: ['Enter'] }];
   },
-  replyPlan(text: string, _pending?: Pending): KeyPlan {
+  replyPlan(text: string, pending?: Pending, pane?: string): KeyPlan {
+    const q = pending?.kind === 'question' && /^[1-9]$/.test(text.trim()) && pane ? parseQuestion(toLines(pane)) : null;
+    if (q) return answerPlan(q, Number(text.trim()));
     // Tmux.sendText rejects newlines: flatten here, Enter is a separate key step. An Enter that comes with the
     // text in one read is taken as part of a paste and lost: it waits for the text to be in the input line.
     const flat = text.replace(/\s*[\r\n]+\s*/g, ' ').trim();

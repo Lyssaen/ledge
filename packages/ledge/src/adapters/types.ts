@@ -15,7 +15,8 @@ export interface Adapter {
   /** `pane` is the bottom of the terminal right before the keys are sent, when the plan depends on the dialog. */
   keysFor(decision: 'accept' | 'deny', pending: Pending, pane?: string): KeyPlan;
   /** `pending` is what the reply answers, if anything: a question can take an option number. */
-  replyPlan(text: string, pending?: Pending): KeyPlan;
+  /** `pane` is the bottom of the terminal right before the keys are sent, when a prompt is pending. */
+  replyPlan(text: string, pending?: Pending, pane?: string): KeyPlan;
   interruptKeys(): string[];
   /**
    * The pane lines worth showing in the terminal preview, with the tool's own chrome (input box, status
@@ -28,4 +29,9 @@ export interface Adapter {
    * infers rest from the pane and relies on the hooks alone.
    */
   atRest?(pane: string): boolean;
+  /**
+   * After the keys: the prompt that was answered is gone from the pane (the bottom DETECT_LINES), even if another
+   * one followed it. Optional: without it, `promptStillVisible` on the last lines decides.
+   */
+  promptGone?(pane: string, pending: Pending): boolean;
 }

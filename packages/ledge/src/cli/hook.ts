@@ -2,7 +2,8 @@ import type { SessionEvent, Tool } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
+import { basename } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
 
 type Payload = Record<string, unknown>;
@@ -140,34 +141,106 @@ function describeCursorTool(input: unknown): string {
   return str(i.command) ?? str(i.file_path) ?? str(i.path) ?? str(i.description) ?? JSON.stringify(i).slice(0, 200);
 }
 
+type Entry = { role?: string; message?: { content?: Array<{ type?: string; text?: string; name?: string; input?: Payload }> } };
+
+/** The last `bytes` of a JSONL transcript as entries: a long conversation is only read from its end. */
+export function readTranscript(path: string, bytes = 512 * 1024): Entry[] {
+  let raw: string;
+  try {
+    const fd = openSync(path, 'r');
+    try {
+      const size = fstatSync(fd).size;
+      const len = Math.min(size, bytes);
+      const buf = Buffer.alloc(len);
+      readSync(fd, buf, 0, len, size - len);
+      raw = buf.toString('utf8');
+      if (len < size) raw = raw.slice(raw.indexOf('\n') + 1); // the first line is cut
+    } finally { closeSync(fd); }
+  } catch { return []; }
+  const out: Entry[] = [];
+  for (const line of raw.split('\n')) { try { if (line.trim()) out.push(JSON.parse(line)); } catch { /* a line being written */ } }
+  return out;
+}
+
+const blocks = (e: Entry) => e.message?.content ?? [];
+const compact = (t: string) => t.replace(/\s+/g, '');
+/** A user message's own words, without the `<timestamp>` and `<user_query>` wrapping Cursor Agent adds. */
+
+/**
+ * `afterAgentResponse` glues the turn's text blocks together with nothing between them ("…now.The first…"). The
+ * transcript keeps them apart: the same text, a blank line between blocks, when it says exactly the same thing.
+ */
+export function cursorReply(text: string, entries: Entry[]): string {
+  let u = entries.length - 1;
+  while (u >= 0 && entries[u]!.role !== 'user') u--;
+  const parts = entries.slice(u + 1).filter(e => e.role === 'assistant').flatMap(blocks)
+    .filter(b => b.type === 'text' && b.text && b.text !== '[REDACTED]').map(b => b.text!.trim()).filter(Boolean);
+  const joined = parts.join('\n\n');
+  return parts.length > 1 && compact(joined) === compact(text) ? joined : text;
+}
+
+/** A tool call as the agent meant it: `CallDynamicTool { toolName, arguments }` is that tool with those arguments. */
+function unwrapTool(name: string | undefined, input: unknown): { name: string | undefined; input: Payload } {
+  const i = (input && typeof input === 'object' ? input : {}) as Payload;
+  if (name === 'CallDynamicTool' && str(i.toolName)) return { name: str(i.toolName), input: (i.arguments && typeof i.arguments === 'object' ? i.arguments : {}) as Payload };
+  return { name, input: i };
+}
+
 /**
  * Cursor Agent 2026.10 hooks (`~/.cursor/hooks.json`). They report the turn (prompt, tools, stop, reply) but never
- * an approval: those come from the pane. A subagent's hooks carry its own conversation id as `session_id` and as
- * `generation_id`, the main thread's carry the prompt's generation: untracked, they would make a phantom session.
- * Tracked (`LEDGE_SESSION`), they are the parent at work, which is what they mean there.
+ * an approval, a question or a plan: those come from the pane.
+ *
+ * Subagents fire no subagentStart/subagentStop. The parent's `preToolUse` for Task names one (`task:<tool_use_id>`,
+ * its type and description); the subagent's own hooks carry the subagent's id as `session_id`, but
+ * `CURSOR_TRANSCRIPT_PATH` in their environment is the parent's transcript, named after the parent's id. So a hook
+ * whose session is not its transcript's is a helper of that transcript's session: each of its tool runs keeps the
+ * helper working, the first one taking over the Task's name (see the reducer), and the parent moving on ends it.
+ * Without the variable (an older build), the subagent shows by its `generation_id` equal to its `session_id`: tracked,
+ * it is still a helper; untracked, its parent is unknown and the hook is dropped rather than make a phantom session.
  */
-export function mapCursorHook(eventName: string, payload: unknown, at: string): MappedHook | null {
+export function mapCursorHook(eventName: string, payload: unknown, at: string, env: NodeJS.ProcessEnv = process.env): MappedHook | null {
   if (!payload || typeof payload !== 'object') return null;
   const p = payload as Payload;
-  const id = process.env.LEDGE_SESSION || str(p.session_id) || str(p.conversation_id);
+  const sessionId = str(p.session_id) || str(p.conversation_id);
+  if (!sessionId) return null;
+  const transcript = env.CURSOR_TRANSCRIPT_PATH || undefined;
+  const parentId = transcript ? basename(transcript, '.jsonl') : undefined;
+  const generation = str(p.generation_id);
+  const helper = parentId ? parentId !== sessionId : eventName !== 'sessionStart' && generation === sessionId;
+  const id = env.LEDGE_SESSION || (helper ? parentId : sessionId);
   if (!id) return null;
   const roots = Array.isArray(p.workspace_roots) ? p.workspace_roots : [];
   const cwd = str(roots[0]) || undefined;
-  const event = mapCursorEvent(eventName, p, at);
+  const event = helper ? mapCursorHelperEvent(eventName, p, at, sessionId) : mapCursorEvent(eventName, p, at, !!env.LEDGE_SESSION, transcript);
   return event ? { id, event, agent: 'cursor', ...(cwd ? { cwd } : {}) } : null;
 }
 
-function mapCursorEvent(eventName: string, p: Payload, at: string): SessionEvent | null {
-  const launched = !!process.env.LEDGE_SESSION;
-  const sessionId = str(p.session_id) || str(p.conversation_id);
-  const generation = str(p.generation_id);
-  if (!launched && eventName !== 'sessionStart' && generation && generation === sessionId) return null;
+function mapCursorHelperEvent(eventName: string, p: Payload, at: string, helperId: string): SessionEvent | null {
+  const base = { at, source: 'hook' as const, helperId };
   const tool = str(p.tool_name);
+  switch (eventName) {
+    case 'preToolUse': return { name: 'SubagentStart', ...base };
+    case 'postToolUse': return { name: 'PostToolUse', ...base, tool };
+    case 'postToolUseFailure': return { name: 'PostToolUseFailure', ...base, tool };
+    default: return null;
+  }
+}
+
+function mapCursorEvent(eventName: string, p: Payload, at: string, launched: boolean, transcript: string | undefined): SessionEvent | null {
+  const { name: tool, input } = unwrapTool(str(p.tool_name), p.tool_input);
   const base = { at, source: 'hook' as const };
   switch (eventName) {
     case 'sessionStart': return { name: 'SessionStart', ...base };
     case 'beforeSubmitPrompt': return { name: 'UserPromptSubmit', ...base };
-    case 'preToolUse': return { name: 'PreToolUse', ...base, tool, text: describeCursorTool(p.tool_input) };
+    case 'preToolUse': {
+      if (tool === 'Task') {
+        // The subagent it launches: named here, taken over by the subagent's first hook (its own id).
+        const callId = (str(p.tool_use_id) ?? '').split('\n')[0] || at;
+        const task = str(input.description) || str(input.prompt)?.split('\n')[0] || '';
+        return { name: 'SubagentStart', ...base, helperId: `task:${callId}`, tool: str(input.subagent_type) || 'subagent', ...(task ? { text: task } : {}) };
+      }
+      return { name: 'PreToolUse', ...base, tool, text: describeCursorTool(input) };
+    }
     case 'postToolUse': return { name: 'PostToolUse', ...base, tool };
     case 'postToolUseFailure': return { name: 'PostToolUseFailure', ...base, tool, ...(p.is_interrupt === true ? { interrupt: true } : {}) };
     case 'stop':
@@ -176,7 +249,8 @@ function mapCursorEvent(eventName: string, p: Payload, at: string): SessionEvent
       return { name: 'Stop', ...base };
     case 'afterAgentResponse': {
       // The turn's text, sent once at its end, just before or just after `stop`: a Stop that carries the reply.
-      const text = lastReply({ last_assistant_message: p.text });
+      const raw = str(p.text) ?? '';
+      const text = lastReply({ last_assistant_message: raw && transcript ? cursorReply(raw, readTranscript(transcript)) : raw });
       return { name: 'Stop', ...base, ...(text ? { text } : {}) };
     }
     case 'sessionEnd':

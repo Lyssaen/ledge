@@ -163,7 +163,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: (e as Error).message });
         throw e;
       }
-      const gone = await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
+      // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.
+      const gone = decided && adapter.promptGone
+        ? await verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
+        : await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
       if (!stillTheSame()) return; // a newer prompt arrived meanwhile: leave it alone
       if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon' }); return; }
       // The client gets an `error` reply for that id (via the caller's catch), so a retry from `error` reads as failed.
@@ -242,7 +245,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // The 2.x question dialog is a select: typed text then Enter would silently pick the highlighted option.
         if (s.pending?.kind === 'question' && !/^[1-9]$/.test(msg.text.trim())) return send(ws, { type: 'error', id: msg.id, message: FREE_TEXT });
         // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
-        return injectAndVerify(msg.id, adapterFor(s.tool).replyPlan(msg.text, s.pending), !!s.pending);
+        const pending = s.pending; const adapter = adapterFor(s.tool);
+        return injectAndVerify(msg.id, pane => adapter.replyPlan(msg.text, pending, pane || undefined), !!pending);
       }
       case 'session.interrupt': {
         const s = store.get(msg.id);
