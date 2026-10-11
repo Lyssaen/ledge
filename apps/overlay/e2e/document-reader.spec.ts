@@ -51,3 +51,29 @@ test('opens a Markdown plan in the same panel and returns to the preserved reply
   await expect(layer(page, 'session').getByRole('link', { name: 'docs/plan.md' })).toBeFocused();
   expect(d.received.some(m => m.type === 'session.reply' || m.type === 'session.decide')).toBe(false);
 });
+
+test('does not guess a repository for a relative chat path and opens an absolute skill', async ({ page }) => {
+  const d = await fakeDaemon(page, [session('otto'), session('pim', { name: 'Pim', cwd: '/w/another-project', project: 'another-project' })]);
+  await ready(page, 2);
+  await openList(page);
+  await layer(page, 'list').getByRole('textbox', { name: 'Ask Ledge' }).fill('Where is the plan?');
+  await page.keyboard.press('Enter');
+  await expectMode(page, 'chat');
+  const ask = await received(d.received, 'chat.ask');
+  d.emit({ type: 'chat.done', qid: ask.qid, text: 'See [Plan](docs/plan.md) and [Skill](/home/user/.agents/skills/demo/SKILL.md).', at: new Date().toISOString() });
+  await layer(page, 'chat').getByRole('link', { name: 'Plan' }).click();
+  const relative = await received(d.received, 'document.read', m => m.path === 'docs/plan.md');
+  expect(relative).not.toHaveProperty('sessionId');
+  expect(relative).not.toHaveProperty('basePath');
+  d.emit({ type: 'document.error', requestId: relative.requestId, path: relative.path, code: 'ambiguous_path' });
+  await expect(layer(page, 'reader').getByRole('alert')).toContainText('Cannot determine this document’s folder');
+  await page.keyboard.press('Escape');
+  await expectMode(page, 'chat');
+  await layer(page, 'chat').getByRole('link', { name: 'Skill' }).click();
+  const absolute = await received(d.received, 'document.read', m => m.path.endsWith('/SKILL.md'));
+  expect(absolute).not.toHaveProperty('sessionId');
+  d.emit({ type: 'document.content', requestId: absolute.requestId, path: absolute.path, text: '# Skill', bytes: 7, modifiedAt: new Date().toISOString() });
+  await expect(layer(page, 'reader').getByRole('heading', { name: 'Skill' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expectMode(page, 'chat');
+});

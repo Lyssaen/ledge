@@ -10,7 +10,7 @@
 
 **Spec:** [Design validé et contrats](../specs/2026-10-11-markdown-reader-design.md). [Maquette de référence](../../mockups/ledge-reader-existing.html).
 
-**Statut :** implémentation livrée dans l’overlay et le daemon WSL le 2026-10-11. Vérifications : protocole 23/23, daemon 703/703, overlay 444/444, scénario Playwright 1/1, typage et build réussis. La validation visuelle de la fenêtre native sur Windows reste à faire. Les cases ci-dessous conservent la checklist de planification initiale ; ce statut et les tests cités décrivent le résultat réel.
+**Statut :** implémentation livrée dans l’overlay et le daemon WSL le 2026-10-11. Vérifications : protocole 23/23, daemon 703/703, overlay 444/444, scénarios Playwright 2/2, typage et build réussis. La validation visuelle de la fenêtre native sur Windows reste à faire. Les cases ci-dessous conservent la checklist de planification initiale ; ce statut et les tests cités décrivent le résultat réel.
 
 ## Global Constraints
 
