@@ -32,4 +32,13 @@ describe('writeContext', () => {
     await writeContext(dir, { sessions: [], now: T0, capture: async () => null, git: async () => null });
     expect(existsSync(join(dir, 'reply-a.md'))).toBe(false);
   });
+  it('omits a file whose source throws, is empty or is blank', async () => {
+    const dir = join(mkdtempSync(join(tmpdir(), 'ledge-chat-')), 'context');
+    const sessions = [mk('a'), mk('b', { lastReply: { text: 'ok', at: T0 } }), mk('c', { lastReply: { text: '  \n', at: T0 } })];
+    await writeContext(dir, { sessions, now: T0, capture: async s => { if (s.id === 'a') throw new Error('gone'); return s.id === 'c' ? [] : ['x']; }, git: async cwd => { if (cwd) throw new Error('nope'); return ''; } });
+    const md = readFileSync(join(dir, 'sessions.md'), 'utf8');
+    expect(existsSync(join(dir, 'pane-a.txt'))).toBe(false); expect(existsSync(join(dir, 'pane-b.txt'))).toBe(true); expect(existsSync(join(dir, 'reply-b.md'))).toBe(true);
+    expect(existsSync(join(dir, 'pane-c.txt'))).toBe(false); expect(existsSync(join(dir, 'reply-c.md'))).toBe(false);
+    expect(md).not.toContain('pane-a.txt'); expect(md).not.toContain('pane-c.txt'); expect(md).not.toContain('reply-c.md'); expect(md).not.toContain('git-');
+  });
 });

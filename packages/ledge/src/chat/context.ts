@@ -24,10 +24,10 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
     if (s.pending) lines.push(`- pending ${s.pending.kind}: ${s.pending.text}`);
     const live = s.helpers.filter(h => h.state !== 'exited');
     if (live.length) lines.push(`- subagents: ${live.map(h => h.task || h.kind).join('; ')}`);
-    const pane = await input.capture(s);
-    if (pane) { const f = `pane-${s.id}.txt`; await writeFile(join(dir, f), pane.join('\n')); steps.set(f, { kind: 'pane', id: s.id, name: s.name }); lines.push(`- terminal, last lines: ${f}`); }
-    if (s.lastReply) { const f = `reply-${s.id}.md`; await writeFile(join(dir, f), s.lastReply.text); steps.set(f, { kind: 'reply', id: s.id, name: s.name }); lines.push(`- last reply (${s.lastReply.at}): ${f}`); }
-    const g = await input.git(s.cwd);
+    const pane = await input.capture(s).catch(() => null);
+    if (pane?.length) { const f = `pane-${s.id}.txt`; await writeFile(join(dir, f), pane.join('\n')); steps.set(f, { kind: 'pane', id: s.id, name: s.name }); lines.push(`- terminal, last lines: ${f}`); }
+    if (s.lastReply?.text.trim()) { const f = `reply-${s.id}.md`; await writeFile(join(dir, f), s.lastReply.text); steps.set(f, { kind: 'reply', id: s.id, name: s.name }); lines.push(`- last reply (${s.lastReply.at}): ${f}`); }
+    const g = await input.git(s.cwd).catch(() => null);
     if (g) { const f = `git-${s.id}.txt`; await writeFile(join(dir, f), g); steps.set(f, { kind: 'git', id: s.id, name: s.name }); lines.push(`- git status, log and diff stat: ${f}`); }
     lines.push('');
   }
