@@ -4,6 +4,7 @@ ledge attach <id>                                            put this terminal o
 ledge daemon                                                 run the daemon in the foreground
 ledge hook [codex|cursor] <Event>                            receive a hook (reads JSON on stdin)
 ledge setup                                                  install hooks and ~/.ledge
+ledge uninstall [--purge]                                    remove hooks, service and link (--purge: ~/.ledge too)
 ledge status                                                 list sessions`;
 
 /**
@@ -28,6 +29,7 @@ async function main(argv: string[]): Promise<number> {
   switch (cmd) {
     case 'daemon': { const { startDaemon } = await import('../daemon/index.js'); await startDaemon(); await new Promise(() => {}); return 0; }
     case 'setup': { const { runSetup } = await import('./setup.js'); for (const l of await runSetup()) console.log(l); return 0; }
+    case 'uninstall': { const { runUninstall } = await import('./uninstall.js'); const r = await runUninstall({ purge: rest.includes('--purge') }); for (const l of r.lines) console.log(l); return r.ok ? 0 : 1; }
     case 'status': { const { printStatus } = await import('./status.js'); console.log(await printStatus()); return 0; }
     case 'claude': case 'codex': case 'cursor': { const { launch } = await import('./launch.js'); return launch(cmd, rest); }
     case 'attach': { const { attach } = await import('./attach.js'); return attach(rest[0] ?? ''); }

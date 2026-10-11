@@ -93,9 +93,9 @@ async function mergeJsonFile(path: string, merge: (current: unknown) => { settin
 
 export const SERVICE = 'ledge-daemon.service';
 
-type Runner = (cmd: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string }>;
+export type Runner = (cmd: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string }>;
 
-const execRunner: Runner = (cmd, args) => new Promise(resolve => {
+export const execRunner: Runner = (cmd, args) => new Promise(resolve => {
   execFile(cmd, args, (err, stdout, stderr) => {
     const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number' ? (err as unknown as { code: number }).code : err ? 1 : 0;
     resolve({ code, stdout: String(stdout), stderr: String(stderr) });
@@ -129,7 +129,7 @@ async function writeIfChanged(path: string, content: string): Promise<boolean> {
 }
 
 /** A daemon spawned detached by `ledge claude` holds the port: stop it so the service can take over. Returns its pid, or null. */
-async function stopDetachedDaemon(pidFile: string): Promise<number | null> {
+export async function stopDetachedDaemon(pidFile: string): Promise<number | null> {
   let pid: number;
   try { pid = Number((await readFile(pidFile, 'utf8')).trim()); } catch { return null; }
   if (!Number.isInteger(pid) || pid <= 0) return null;
@@ -180,7 +180,7 @@ export async function installService(opts: { unitDir?: string; node?: string; sc
   return out;
 }
 
-async function isDir(path: string): Promise<boolean> {
+export async function isDir(path: string): Promise<boolean> {
   try { return (await stat(path)).isDirectory(); } catch { return false; }
 }
 
