@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SessionList, rowHint } from '../src/surface/SessionList';
+import { displayOrder } from '../src/surface/groups';
 import { fakeSession } from './mockDaemon';
 
 const sessions = [
@@ -58,6 +59,17 @@ describe('<SessionList>', () => {
     const rows = screen.getAllByRole('button', { name: /open/ });
     expect(rows[0]!.getAttribute('data-delay')).toBe('310');
     expect(rows[3]!.getAttribute('data-delay')).toBe('382');
+  });
+});
+
+describe('<SessionList> grouping', () => {
+  it('numbers rows in display order when repositories interleave', () => {
+    const x = (id: string) => fakeSession(id, { name: id.toUpperCase(), repo: 'X', repoPath: '/w/x', cwd: '/w/x' });
+    const mixed = [x('a'), fakeSession('c', { name: 'C', repo: 'Y', repoPath: '/w/y', cwd: '/w/y' }), x('b')];
+    render(<SessionList sessions={displayOrder(mixed)} visible numbered selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
+    const rows = screen.getAllByRole('button', { name: /open/ });
+    expect(rows.map(r => r.parentElement!.getAttribute('data-row-id'))).toEqual(['a', 'b', 'c']);
+    rows.forEach((r, i) => expect(within(r).getByText(String(i + 1))).toBeInTheDocument());
   });
 });
 

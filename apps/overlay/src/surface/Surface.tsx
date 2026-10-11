@@ -5,7 +5,7 @@ import { useDaemon } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
 import { botState, poseFor } from '../bots/poseFor';
 import type { ResidentGesture } from '../bots/ResidentMascot';
-import { groupSessions, headersBefore } from './groups';
+import { displayOrder, groupSessions, headersBefore } from './groups';
 import { scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
@@ -73,7 +73,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
-  const { sessions, byId, status, previews, lastError, recents, launcher, lastLaunched, lastListing } = useDaemon();
+  const { sessions: daemonSessions, byId, status, previews, lastError, recents, launcher, lastLaunched, lastListing } = useDaemon();
+  // Everything indexed (digits, J/K, the handle, the coachmark row) follows the order the list displays: grouped by repository.
+  const sessions = useMemo(() => displayOrder(daemonSessions), [daemonSessions]);
+  const groups = useMemo(() => groupSessions(sessions), [sessions]);
   const { t } = useI18n();
   // One app-level motion preference drives every bot in every layer.
   const motionPrefs = useMotionPreferences();
@@ -263,7 +266,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
     setLaunching(null); setLaunchFailure(lastError.message);
   }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, groups: groupSessions(sessions).length, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, groups: groups.length, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -317,7 +320,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const coachShown = coach && kb && st.mode === 'list';
   const focusIndex = focused ? sessions.findIndex(s => s.id === focused.id) : -1;
   // In real px: the list's base offsets times the window scale.
-  const rowTop = geo.top + (SIZES.headerH + 8 + headersBefore(groupSessions(sessions), focused?.id ?? null) * SIZES.groupH + Math.max(0, focusIndex) * SIZES.rowH) * ps;
+  const rowTop = geo.top + (SIZES.headerH + 8 + headersBefore(groups, focused?.id ?? null) * SIZES.groupH + Math.max(0, focusIndex) * SIZES.rowH) * ps;
   const rowBottom = focusIndex < 0 ? geo.top + SIZES.headerH * ps : rowTop + (focused && isYesNo(focused) ? EXPANDED_ROW_H : SIZES.rowH) * ps;
   const below = rowBottom + 8 * ps; const above = rowTop - (8 + COACHMARK_H) * ps;
   const coachTop = below + COACHMARK_H * ps <= geo.top + geo.h || above < geo.top ? below : above;

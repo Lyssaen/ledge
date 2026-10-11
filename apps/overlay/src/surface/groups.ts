@@ -13,6 +13,9 @@ export function groupSessions(sessions: Session[]): SessionGroup[] {
   return out;
 }
 
+/** The order the list shows: the sessions group by group. Digits, J/K and the handle all follow it. */
+export const displayOrder = (sessions: Session[]): Session[] => groupSessions(sessions).flatMap(g => g.sessions);
+
 /** How many group headers sit above the row of `id` (0 when the id is not listed). */
 export function headersBefore(groups: SessionGroup[], id: string | null): number {
   let n = 0;

@@ -283,3 +283,18 @@ describe('<Surface> keyboard first', () => {
     } finally { vi.useRealTimers(); }
   });
 });
+
+describe('<Surface> keyboard with interleaved repositories', () => {
+  it('digit 2 focuses the second displayed row', async () => {
+    daemonStore.reset(); const mock = await createMockDaemon();
+    const at = (id: string, name: string, repo: string) => fakeSession(id, { name, repo, repoPath: `/w/${repo}`, cwd: `/w/${repo}` });
+    for (const s of [at('a', 'Aa', 'x'), at('c', 'Cc', 'y'), at('b', 'Bb', 'x')]) mock.sessions.set(s.id, s);
+    const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never }); const detach = attachClient(client); client.connect();
+    await new Promise(r => setTimeout(r, 100));
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => press('l', { ctrlKey: true, altKey: true }));
+    act(() => press('2'));
+    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Bb/));
+    detach(); client.close(); await mock.close();
+  });
+});
