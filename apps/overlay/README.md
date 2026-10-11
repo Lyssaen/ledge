@@ -31,10 +31,10 @@ The installer needs no administrator rights: `installMode` is `currentUser` in `
 
 ### First Windows build
 
-The Rust side has not been compiled yet. On the first build:
+The Rust side compiles on Windows and its unit tests pass (`Cargo.lock` is committed); the runtime checks below have not all been run yet. Build from a clone on the Windows disk (for example `C:\Users\<you>\Workspace\ledge`), not from the WSL path: `node_modules` must be the Windows one.
 
 1. `pnpm install`.
-2. `cd apps\overlay\src-tauri; cargo test`: all tests must pass (`the_tray_tells_a_dev_build_from_an_installed_one`, `matches_bot_title_or_terminal`, `frame_is_placed_on_the_work_area_in_physical_px`, `edge_needs_the_left_edge_and_a_band`, `a_rearm_never_enters_but_a_real_reentry_does`). Fix compile errors first and commit the generated `Cargo.lock`.
+2. `cd apps\overlay\src-tauri; cargo test`: all tests must pass.
 3. `pnpm tauri dev` with the daemon running in WSL, then check:
    - the Ledge icon is in the notification area (tray): its tooltip and the first, greyed line of its menu read `Ledge 0.1.0 (dev)` under `tauri dev` and `Ledge 0.1.0` once installed; `Quitter Ledge` (`Quit Ledge` in English, it follows Settings > Language live) closes the overlay;
    - borderless, transparent, no shadow, not in the taskbar, always on top; handle vertically centered on the left edge of the primary work area, nothing drawn twice or offset; also at 125% and 150% scaling and with the taskbar on the left;
@@ -52,6 +52,7 @@ The Rust side has not been compiled yet. On the first build:
    - switching each size between Auto, 100%, 125%, 150% and 200% resizes only its own part, live, with nothing clipped or offset: the handle size moves the handle, its bots, the tooltip and the edge bands; the window size moves the bubble, list, session, settings, help and coachmark; the window follows the surface, the edge bands above and below the handle still open the list, clicks beside the surface still reach the app underneath;
    - with two screens: Settings shows a Screen group (`Primary`, `Screen 2`, in the OS order); choosing `Screen 2` moves the handle to that screen's left edge at once, centered in its work area, the edge bands and the tooltip follow, the list opens there; back to `Primary` returns it; the choice survives a restart (`ledge.monitor`); unplugging the chosen screen brings the handle back to the primary and Settings shows the choice as `Unplugged` until the screen returns; a screen plugged in after the start appears in the group the next time Settings opens.
 4. `pnpm tauri build`: NSIS installer with the bot icon.
+5. Install it, then check launch at login (see below): the first start turns it on, Settings > Display shows `Lancer au démarrage` checked, turning it off and signing out then in leaves Ledge closed, turning it on again brings it back at the next sign-in; uninstalling removes the `Ledge` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
 
 ## Keys
 
@@ -75,6 +76,10 @@ Language, screen, theme, do not disturb, reduced motion and the two sizes are al
 ## Tray
 
 The overlay has no taskbar button, so the Windows notification area carries a Ledge icon (the app icon) to show that it runs. Its tooltip and the greyed first line of its menu give the version from `tauri.conf.json`, with `(dev)` on a debug build, so an installed Ledge and a `tauri dev` one running side by side can be told apart. The menu's `Quitter Ledge` / `Quit Ledge` exits the overlay (the daemon in WSL keeps running). The shell starts with the French label; the webview relabels it in its language (`set_tray_labels`) at start and on every language change.
+
+## Launch at login
+
+An installed Ledge starts with Windows: `tauri-plugin-autostart` writes a `Ledge` value (the product name) under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, no administrator rights needed. The first start of an installed build turns it on once and leaves a marker, `%APPDATA%\be.paradow.ledge\autostart-default`, so an "off" chosen later sticks across restarts. Settings > Display > `Lancer au démarrage` / `Launch at startup` reads the state from Windows each time Settings opens (it can also be changed from the Task Manager's Startup apps) and sets it (`get_autostart`, `set_autostart`). A `tauri dev` build never offers it and never turns it on: it would register a debug binary under `target\`. Uninstalling removes the Run value, the Task Manager flag and the marker (`src-tauri/windows/hooks.nsh`), so a new install starts with launch at login on again.
 
 ## Screen
 
@@ -106,4 +111,4 @@ The parser never drops content: a reply with no structure is shown as prose unde
 - "Toujours pour cette session" (allow for the session) is shown off: no adapter confirms a scoped authorization yet.
 - The review of a diff or a plan is the session's terminal preview for now.
 - The last reply comes from Claude Code's `Stop` hook only: Codex and Cursor Agent sessions keep the terminal preview when they finish a turn.
-- The Rust shell is untested on a real Windows build until the first-build checks above pass.
+- The Rust shell compiles and passes its unit tests on Windows, but the runtime checks of the first build above are not all done.
