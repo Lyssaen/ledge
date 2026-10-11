@@ -232,6 +232,17 @@ describe('reduce: post-tool events', () => {
     expect(next.state).toBe('working');
     expect(next.pending).toBeUndefined();
   });
+  it('Codex: request_user_input is a question its own PostToolUse clears, another tool run keeps it', () => {
+    const s = reduce(session('working', { tool: 'codex' }), ev('PreToolUse', { tool: 'request_user_input', text: 'Which color?', options: ['Blue', 'Red'] }));
+    expect(s.state).toBe('waiting_input');
+    expect(s.pending).toMatchObject({ kind: 'question', text: 'Which color?', options: ['Blue', 'Red'], source: 'hook' });
+    expect(reduce(s, ev('PostToolUse', { tool: 'Bash', at: later(6000) })).pending).toBeDefined();
+    expect(reduce(s, ev('PostToolUse', { tool: 'request_user_input', at: later(6000) })).pending).toBeUndefined();
+  });
+  it('Codex: an apply_patch permission is a diff', () => {
+    const s = reduce(session('working', { tool: 'codex' }), ev('PermissionRequest', { tool: 'apply_patch', text: '/w/README.md' }));
+    expect(s.pending).toMatchObject({ kind: 'diff', text: '/w/README.md', tool: 'apply_patch' });
+  });
   it('PostToolUse of ExitPlanMode clears a plan pending', () => {
     const s = reduce(session('working'), ev('PreToolUse', { tool: 'ExitPlanMode', text: 'plan' }));
     expect(reduce(s, ev('PostToolUse', { tool: 'ExitPlanMode', at: later(6000) })).pending).toBeUndefined();

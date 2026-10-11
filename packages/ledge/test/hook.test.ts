@@ -4,14 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
-import { mapClaudeHook, runHook, REPLY_MAX } from '../src/cli/hook.js';
+import { mapClaudeHook, mapHook, runHook, codexLedgeId, underCodexDaemon, REPLY_MAX } from '../src/cli/hook.js';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import { connect } from '../src/client.js';
 
 const at = '2026-10-09T18:00:00.000Z';
 let home: string;
-beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'ledge-hook-')); process.env.LEDGE_HOME = home; delete process.env.LEDGE_SESSION; });
+beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'ledge-hook-')); process.env.LEDGE_HOME = home; delete process.env.LEDGE_SESSION; delete process.env.LEDGE_CODEX_SESSION; delete process.env.LEDGE_CODEX_HOOK_SESSION; });
 
 describe('mapClaudeHook', () => {
   it('uses LEDGE_SESSION when set, else session_id', () => {
@@ -118,6 +118,72 @@ describe('mapClaudeHook', () => {
   });
 });
 
+// Payloads as Codex CLI 0.162 sends them (recorded, ids shortened).
+const codex = (extra: Record<string, unknown>) => ({ session_id: '01a12b05-ecd8', turn_id: 't1', cwd: '/home/dev/demo', model: 'gpt-5.6-sol', permission_mode: 'default', ...extra });
+
+describe('mapHook codex', () => {
+  it('never names the session from LEDGE_SESSION (that is Claude\'s, or a parent agent\'s)', () => {
+    process.env.LEDGE_SESSION = 'aaaa';
+    expect(mapHook('codex', 'Stop', codex({}), at)?.id).toBe('01a12b05-ecd8');
+    process.env.LEDGE_CODEX_HOOK_SESSION = 'bbbb';
+    expect(mapHook('codex', 'Stop', codex({}), at)?.id).toBe('bbbb');
+  });
+  it('codexLedgeId: the per-thread override first, the environment only when no shared daemon runs the hook', () => {
+    expect(codexLedgeId({ LEDGE_CODEX_HOOK_SESSION: 'b', LEDGE_CODEX_SESSION: 'a' }, () => true)).toBe('b');
+    expect(codexLedgeId({ LEDGE_CODEX_SESSION: 'a' }, () => false)).toBe('a');
+    // Under the daemon, the environment is the one of the codex that started it: another session, or none.
+    expect(codexLedgeId({ LEDGE_CODEX_SESSION: 'a' }, () => true)).toBeUndefined();
+    expect(codexLedgeId({}, () => false)).toBeUndefined();
+  });
+  it('underCodexDaemon walks the parents in /proc, a "(comm)" with spaces included', () => {
+    const procs: Record<number, { ppid: number; cmd: string[] }> = {
+      [process.pid]: { ppid: 900, cmd: ['node', 'hook'] }, 900: { ppid: 800, cmd: ['sh', '-c', 'ledge hook codex Stop'] },
+      800: { ppid: 1, cmd: ['/x/codex', 'app-server', '--listen', 'unix://'] }
+    };
+    const read = (path: string) => {
+      const [, pid, file] = path.match(/^\/proc\/(\d+)\/(stat|cmdline)$/)!;
+      const p = procs[Number(pid)]; if (!p) throw new Error('ENOENT');
+      return file === 'stat' ? `${pid} (a b) S ${p.ppid} 1 1` : p.cmd.join('\0') + '\0';
+    };
+    expect(underCodexDaemon(read)).toBe(true);
+    procs[800]!.cmd = ['/x/codex', '-c', 'shell_environment_policy.set.X="1"'];
+    expect(underCodexDaemon(read)).toBe(false);
+  });
+  it('carries the agent and the folder, for a session Ledge did not launch', () => {
+    expect(mapHook('codex', 'SessionStart', codex({ source: 'startup' }), at)).toMatchObject({ agent: 'codex', cwd: '/home/dev/demo' });
+  });
+  it('maps a Bash PermissionRequest to the command', () => {
+    const m = mapHook('codex', 'PermissionRequest', codex({ tool_name: 'Bash', tool_input: { command: "printf '%s\\n' hi > hello.txt", description: 'Allow the requested shell command?' } }), at);
+    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', tool: 'Bash', text: "printf '%s\\n' hi > hello.txt" });
+  });
+  it('maps an apply_patch PermissionRequest to the files it touches', () => {
+    const command = '*** Begin Patch\n*** Update File: /home/dev/demo/README.md\n@@\n # demo\n+bye\n*** Add File: /home/dev/demo/b.txt\n+b\n*** End Patch';
+    const m = mapHook('codex', 'PermissionRequest', codex({ tool_name: 'apply_patch', tool_input: { command } }), at);
+    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', tool: 'apply_patch', text: '/home/dev/demo/README.md, /home/dev/demo/b.txt' });
+  });
+  it('maps request_user_input to a question with its options', () => {
+    const tool_input = { questions: [{ header: 'Banner color', id: 'banner_color', question: 'Which color should the banner be?', options: [{ label: 'Blue (Recommended)', description: 'calm' }, { label: 'Red', description: 'bold' }] }] };
+    const m = mapHook('codex', 'PreToolUse', codex({ tool_name: 'request_user_input', tool_input }), at);
+    expect(m?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'request_user_input', text: 'Which color should the banner be?', options: ['Blue (Recommended)', 'Red'] });
+  });
+  it('maps Stop with its last message, and a null one to a bare Stop', () => {
+    expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: 'Created `hello.txt`.' }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook', text: 'Created `hello.txt`.' });
+    expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: null }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook' });
+  });
+  it('maps Interrupt (Esc on a turn or on an approval) to an interrupted tool run: Codex waits, no Stop follows', () => {
+    expect(mapHook('codex', 'Interrupt', codex({}), at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', interrupt: true });
+  });
+  it('SessionEnd ends a session Ledge did not launch; under Ledge the pane and the exit code tell', () => {
+    expect(mapHook('codex', 'SessionEnd', codex({}), at)?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', exitCode: null });
+    process.env.LEDGE_CODEX_HOOK_SESSION = 'bbbb';
+    expect(mapHook('codex', 'SessionEnd', codex({}), at)).toBeNull();
+  });
+  it('Claude hooks still read LEDGE_SESSION and carry the claude agent', () => {
+    process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_CODEX_HOOK_SESSION = 'bbbb';
+    expect(mapHook('claude', 'Stop', { session_id: 'uuid-1', cwd: '/w' }, at)).toMatchObject({ id: '7f3a', agent: 'claude', cwd: '/w' });
+  });
+});
+
 describe('runHook', () => {
   it('falls back to session_id when LEDGE_SESSION is empty', () => {
     process.env.LEDGE_SESSION = '';
@@ -145,6 +211,15 @@ describe('runHook', () => {
     const lines = readFileSync(join(home, 'daemon.log'), 'utf8').trim().split('\n');
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('Whatever');
+  });
+  it('a Codex hook from a session Ledge did not launch creates a read-only Codex session in its folder', async () => {
+    const store = new Store();
+    const srv = await startServer({ store, tmux: {} as never, port: 0 });
+    try {
+      await runHook('UserPromptSubmit', JSON.stringify(codex({ prompt: 'hi' })), { port: srv.port, tool: 'codex' });
+      await new Promise(r => setTimeout(r, 50));
+      expect(store.get('01a12b05-ecd8')).toMatchObject({ tool: 'codex', cwd: '/home/dev/demo', project: 'demo', state: 'working', source: 'hook_only' });
+    } finally { await srv.close(); }
   });
   it('delivers the event to a live daemon within the latency budget', async () => {
     const store = new Store();
@@ -199,5 +274,10 @@ describe('ledge hook (CLI)', () => {
   it('always exits 0, even with invalid stdin and no daemon', () => {
     const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'Stop'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
     expect(r.status).toBe(0);
+  });
+  it('takes the agent before the event (ledge hook codex Stop) and exits 0 too', () => {
+    const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'codex', 'Whatever'], { input: '{"session_id":"s"}', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
+    expect(r.status).toBe(0);
+    expect(readFileSync(join(home, 'daemon.log'), 'utf8')).toContain('hook codex Whatever ignored');
   });
 });

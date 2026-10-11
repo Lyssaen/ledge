@@ -472,6 +472,10 @@ describe('server', () => {
       const second = await c.next('session.launched');
       expect(store.get(second.id)!.name).toBe('Otto-2');
       expect(tmux.created.map(x => x.command[0])).toEqual(['codex', 'cursor-agent']);
+      // Codex hooks run in a shared daemon: the session id reaches them through a per-thread config override.
+      expect(tmux.created[0]!.command).toEqual(['codex', '-c', `shell_environment_policy.set.LEDGE_CODEX_HOOK_SESSION="${first.id}"`]);
+      expect(tmux.created[0]!.env).toMatchObject({ LEDGE_SESSION: first.id, LEDGE_CODEX_SESSION: first.id });
+      expect(tmux.created[1]!.env.LEDGE_CODEX_SESSION).toBeUndefined();
       c.close();
     });
     it('expands ~ and refuses a missing folder or a file with an error for the requester', async () => {

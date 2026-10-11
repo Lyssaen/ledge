@@ -6,13 +6,19 @@ export function isPending(s: Session): boolean {
   return s.state === 'waiting_permission' || s.state === 'waiting_input';
 }
 
+/** Tools that ask the user a multiple-choice question: Claude Code's, and Codex's (Plan mode). */
+export const QUESTION_TOOLS: ReadonlySet<string> = new Set(['AskUserQuestion', 'request_user_input']);
+/** Tools whose permission request is a file change: Claude Code's, and Codex's patch. */
+const DIFF_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'apply_patch']);
+
 function pendingFor(ev: SessionEvent): Pending | undefined {
   if (ev.name === 'PermissionRequest') {
-    const diff = ev.tool === 'Edit' || ev.tool === 'Write' || ev.tool === 'MultiEdit';
+    const diff = !!ev.tool && DIFF_TOOLS.has(ev.tool);
     return { kind: diff ? 'diff' : 'permission', text: ev.text ?? '', tool: ev.tool, source: 'hook' };
   }
-  if (ev.name === 'PreToolUse' && ev.tool === 'AskUserQuestion') {
-    return { kind: 'question', text: ev.text ?? '', options: ev.options, source: 'hook' };
+  if (ev.name === 'PreToolUse' && ev.tool && QUESTION_TOOLS.has(ev.tool)) {
+    // The tool is kept only when it is not Claude's, so its PostToolUse can still be matched (see pendingTool).
+    return { kind: 'question', text: ev.text ?? '', options: ev.options, source: 'hook', ...(ev.tool !== 'AskUserQuestion' ? { tool: ev.tool } : {}) };
   }
   if (ev.name === 'PreToolUse' && ev.tool === 'ExitPlanMode') {
     return { kind: 'plan', text: ev.text ?? '', source: 'hook' };
@@ -41,7 +47,7 @@ function mergePending(current: Pending | undefined, incoming: Pending): Pending 
 
 /** The tool whose PostToolUse means a hook pending was answered (in the terminal or from Ledge). */
 function pendingTool(p: Pending): string | undefined {
-  if (p.kind === 'question') return 'AskUserQuestion';
+  if (p.kind === 'question') return p.tool ?? 'AskUserQuestion';
   if (p.kind === 'plan') return 'ExitPlanMode';
   return p.tool;
 }

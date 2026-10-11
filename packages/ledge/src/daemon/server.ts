@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, resolve } from 'node:path';
+import { basename, isAbsolute, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
@@ -15,7 +15,7 @@ import { spawnSession } from '../spawn.js';
 import { loginShellPath } from '../shell-path.js';
 import { log } from '../log.js';
 
-/** How each agent resumes the folder's last conversation. Only Claude Code's flag is verified; the other adapters are stubs. */
+/** How each agent resumes the folder's last conversation. Claude Code's and Codex's are verified; Cursor Agent's is not. */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
 
 /** The agent's arguments for a `session.launch`: the resume flag, then the first instruction as the positional prompt. */
@@ -112,6 +112,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (!s.tmuxSession) throw new Error('session has no terminal (started without ledge)');
     for (const step of plan) {
       if ('text' in step) await tmux.sendText(s.tmuxSession, step.text);
+      else if ('waitMs' in step) await new Promise(r => setTimeout(r, step.waitMs));
       else await tmux.sendKeys(s.tmuxSession, step.keys);
     }
   }
@@ -200,7 +201,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const before = store.get(msg.id);
         if (!before) {
           const taken = store.all().map(s => s.name);
-          const base: Session = { id: msg.id, name: pickName(taken), tool: 'claude', cwd: '', project: 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
+          const cwd = msg.cwd ?? '';
+          const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
           store.upsert(reduce(base, msg.event));
         } else store.apply(msg.id, msg.event);
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));

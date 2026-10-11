@@ -28,7 +28,7 @@ Personal project. Windows host + WSL2 only.
 ## How it works
 
 1. You start an agent with `ledge claude` instead of `claude`. The launcher puts the agent in a tmux session on a dedicated tmux server, registers it with the daemon, renames the Windows Terminal tab after the bot (`Otto · my-project`) and attaches your terminal to it. Or you start one from the overlay's list (`+`): the daemon spawns the same tmux session itself and, if asked, the overlay opens a Windows Terminal tab on it (`ledge attach <id>`).
-2. The agent's own hooks (installed once by `ledge setup`) call `ledge hook <Event>` on every lifecycle event. Each call forwards one message to the daemon and exits in a few milliseconds.
+2. The agent's own hooks (installed once by `ledge setup`) call `ledge hook <Event>` (Codex: `ledge hook codex <Event>`) on every lifecycle event. Each call forwards one message to the daemon and exits in a few milliseconds.
 3. The daemon keeps the state of every session, polls each tmux pane once a second to detect prompts the hooks do not report and to build a terminal preview, and pushes every change over a local WebSocket.
 4. The Windows overlay shows one mascot per session in the handle, pops a bubble when a session waits for you, and sends your decision back. The daemon types it into the right pane and checks that the prompt went away.
 
@@ -88,8 +88,8 @@ One binary, `ledge`, with six modes. Source under `src/`:
 | --- | --- |
 | `cli/index.ts` | Entry point and dispatch. The `hook` path is isolated so it can never throw or exit non-zero. |
 | `cli/launch.ts` | `ledge <claude\|codex\|cursor> [--name <bot>] [-- args]`: finds or spawns the daemon, picks an id and a name, creates the tmux session with `LEDGE_SESSION` and `LEDGE_NAME` in the agent's environment, registers, renames the tab, attaches, and reports the agent's exit code through `session.unregister`. |
-| `cli/hook.ts` | `ledge hook <Event>`: maps a Claude Code hook payload (read on stdin) to a `SessionEvent` and sends it. Subagent events carry `helperId`. |
-| `cli/setup.ts` | `ledge setup`: creates `~/.ledge` and merges `ledge hook <Event>` entries into `~/.claude/settings.json` for the twelve Claude Code events, never overwriting what is there. |
+| `cli/hook.ts` | `ledge hook [codex] <Event>`: maps a Claude Code or Codex hook payload (read on stdin) to a `SessionEvent` and sends it, with the agent and its folder for a session the daemon does not know yet. Subagent events carry `helperId`. |
+| `cli/setup.ts` | `ledge setup`: creates `~/.ledge` and merges `ledge hook <Event>` entries into `~/.claude/settings.json` for the twelve Claude Code events, and `ledge hook codex <Event>` entries into `~/.codex/hooks.json` (or `$CODEX_HOME`) for the ten Codex events, never overwriting what is there. |
 | `cli/status.ts` | `ledge status`: one line per session from a fresh snapshot. |
 | `cli/attach.ts` | `ledge attach <id>`: renames the tab after the session and puts this terminal on its pane. What the overlay runs in a new Windows Terminal tab for a session it started itself. |
 | `spawn.ts` | `spawnSession`: the tmux session that runs the agent (with `LEDGE_SESSION` and `LEDGE_NAME`) and the `starting` session record. Shared by the launcher and the daemon's `session.launch`. |
@@ -248,6 +248,8 @@ WSL side, under `~/.ledge` (or `$LEDGE_HOME`):
 
 `ledge setup` also edits `~/.claude/settings.json` to add one `ledge hook <Event>` command hook (5 s timeout) for each of: SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, Notification, Stop, SessionEnd, PostToolUse, PostToolUseFailure, StopFailure, SubagentStart, SubagentStop.
 
+When `~/.codex` exists, it appends one `ledge hook codex <Event>` hook to `~/.codex/hooks.json` for each of: SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, Stop, SubagentStart, SubagentStop, Interrupt, SessionEnd. Other tools' entries keep their place, so Codex keeps trusting them; Codex asks to review the new ones on its next start ("Hooks need review"), and a session launched by Ledge shows that request in the overlay.
+
 The journal also keeps `recents`, the folders of the last twelve sessions, for the overlay's launch form.
 
 Windows side, the overlay keeps its preferences in the WebView's `localStorage`: `ledge.lang`, `ledge.theme`, `ledge.dnd`, `ledge.monitor`, `ledge.reducedMotion`, `ledge.handleScale`, `ledge.panelScale` and `ledge.coachmarks`.
@@ -319,7 +321,8 @@ docs/                design spec, implementation plans, mockups, the approved pr
 
 ## Status and known limits
 
-- Only the Claude Code adapter exists. `ledge codex` and `ledge cursor` launch and track the pane, but `adapterFor` throws for them, so no prompt detection, preview cleaning or injection.
+- Claude Code and Codex have adapters. `ledge cursor` launches and tracks the pane, but `adapterFor` throws for it, so no prompt detection, preview cleaning or injection.
+- Codex (verified on 0.162): hooks give the state, approvals (`y` runs once, Esc refuses), `request_user_input` questions and the last reply; the pane gives the Plan mode approval ("Implement this plan?", which has no hook) and the startup hooks review. Codex may run hooks in a shared app-server daemon that keeps the environment of the `codex` that started it, so a launched session names itself to its hooks through `-c shell_environment_policy.set.LEDGE_CODEX_HOOK_SESSION=<id>`, and `LEDGE_CODEX_SESSION` in the environment is trusted only when no app-server runs the hook. Plan mode itself is switched in the terminal (Shift+Tab).
 - Free-text replies to a question are refused (the 2.x question dialog is a select; typed text would pick the highlighted option). Answer with an option number or in the terminal.
 - The Rust shell has not been compiled on a real Windows machine yet; see the first-build checklist in the overlay README.
 - The daemon trusts whatever connects on the loopback.

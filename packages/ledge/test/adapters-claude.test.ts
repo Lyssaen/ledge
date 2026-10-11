@@ -112,7 +112,7 @@ describe('claude adapter: keys', () => {
   });
   it('adapterFor returns the claude adapter and throws for others', () => {
     expect(adapterFor('claude')).toBe(claudeAdapter);
-    expect(() => adapterFor('codex')).toThrow(/not implemented/);
+    expect(() => adapterFor('cursor')).toThrow(/not implemented/);
   });
 });
 

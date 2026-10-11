@@ -100,5 +100,5 @@ The parser never drops content: a reply with no structure is shown as prose unde
 - Free-text answers to a question are not supported by the daemon yet: the question's free field ("Ou proposez autre chose…") is off; answer in the terminal.
 - "Toujours pour cette session" (allow for the session) is shown off: no adapter confirms a scoped authorization yet.
 - The review of a diff or a plan is the session's terminal preview for now.
-- The last reply comes from Claude Code's `Stop` hook only: Codex and Cursor Agent sessions keep the terminal preview when they finish a turn.
+- The last reply comes from the `Stop` hook of Claude Code and Codex: Cursor Agent sessions keep the terminal preview when they finish a turn.
 - The Rust shell is untested on a real Windows build until the first-build checks above pass.

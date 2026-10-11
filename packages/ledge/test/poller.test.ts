@@ -62,10 +62,10 @@ describe('poller', () => {
     p.stop();
   });
   it('a tool without an adapter still gets the generic preview', async () => {
-    panes['ledge-a'] = 'codex says hi\n\n\n\n> '; store.upsert(mk('a', { tool: 'codex' }));
+    panes['ledge-a'] = 'cursor says hi\n\n\n\n> '; store.upsert(mk('a', { tool: 'cursor' }));
     const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, l) => previews.push(l) });
     clock += 1000; await p.tick();
-    expect(previews).toEqual([['codex says hi', '', '>']]);
+    expect(previews).toEqual([['cursor says hi', '', '>']]);
     p.stop();
   });
   it('detects a prompt from the pane when no hook spoke recently', async () => {

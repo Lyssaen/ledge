@@ -48,7 +48,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** Removes a finished (exited) or read-only (hook_only) session from the list; refused for a live launcher session. */
   z.object({ type: z.literal('session.dismiss'), id: z.string() }),
   z.object({ type: z.literal('session.register'), session: SessionSchema }),
-  z.object({ type: z.literal('session.event'), id: z.string(), event: SessionEventSchema }),
+  /** `agent` and `cwd` describe the session when the daemon does not know it yet (a hook from an agent started without ledge). */
+  z.object({ type: z.literal('session.event'), id: z.string(), event: SessionEventSchema, agent: ToolSchema.optional(), cwd: z.string().optional() }),
   z.object({ type: z.literal('session.unregister'), id: z.string(), exitCode: z.number().int().nullable() }),
   z.object({ type: z.literal('snapshot.request') })
 ]);

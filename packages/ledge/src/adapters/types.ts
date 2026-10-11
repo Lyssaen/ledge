@@ -1,6 +1,7 @@
 import type { Pending, Tool } from '@ledge/protocol';
 
-export type KeyPlan = Array<{ text: string } | { keys: string[] }>;
+/** Steps sent to the pane in order: literal text, tmux key names, or a pause (some TUIs need one before Enter). */
+export type KeyPlan = Array<{ text: string } | { keys: string[] } | { waitMs: number }>;
 export type PanePromptMatch = { kind: 'permission' | 'question' | 'plan'; text: string; options?: string[] };
 
 export interface Adapter {

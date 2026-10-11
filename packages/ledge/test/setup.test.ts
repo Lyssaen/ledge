@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mergeClaudeHooks, runSetup, CLAUDE_EVENTS, systemdUnit, installService, SERVICE } from '../src/cli/setup.js';
+import { mergeClaudeHooks, mergeCodexHooks, runSetup, CLAUDE_EVENTS, CODEX_EVENTS, systemdUnit, installService, SERVICE } from '../src/cli/setup.js';
 
 describe('mergeClaudeHooks', () => {
   it('appends a ledge entry to every event, keeping foreign hooks', () => {
@@ -48,8 +48,27 @@ describe('mergeClaudeHooks', () => {
   });
 });
 
+describe('mergeCodexHooks', () => {
+  // ~/.codex/hooks.json as another tool left it: its entries keep their place, so Codex keeps trusting them.
+  const foreign = () => ({ hooks: { Stop: [{ hooks: [{ type: 'command', command: '/other/hook --agent codex Stop', timeout: 10 }] }] } });
+  it('appends `ledge hook codex <Event>` to every Codex event after the existing entries', () => {
+    const { settings, changed } = mergeCodexHooks(foreign());
+    expect(changed).toBe(true);
+    const o = settings as { hooks: Record<string, Array<{ hooks: Array<{ command: string; timeout: number }> }>> };
+    expect(o.hooks.Stop![0]!.hooks[0]!.command).toBe('/other/hook --agent codex Stop');
+    expect(o.hooks.Stop![1]!.hooks[0]).toEqual({ type: 'command', command: 'ledge hook codex Stop', timeout: 5 });
+    for (const ev of CODEX_EVENTS) expect(o.hooks[ev]!.some(e => e.hooks.some(h => h.command === `ledge hook codex ${ev}`))).toBe(true);
+    expect(mergeCodexHooks(settings).changed).toBe(false);
+  });
+  it('wires the events Codex 0.162 fires, Interrupt included', () => {
+    expect([...CODEX_EVENTS]).toEqual(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'Stop',
+      'SubagentStart', 'SubagentStop', 'Interrupt', 'SessionEnd']);
+  });
+});
+
 describe('runSetup', () => {
-  const tmp = () => { const d = mkdtempSync(join(tmpdir(), 'ledge-setup-')); process.env.LEDGE_HOME = join(d, 'ledge'); return d; };
+  // CODEX_HOME too: a test without codexDir must never reach the real ~/.codex.
+  const tmp = () => { const d = mkdtempSync(join(tmpdir(), 'ledge-setup-')); process.env.LEDGE_HOME = join(d, 'ledge'); process.env.CODEX_HOME = join(d, 'no-codex'); return d; };
   it('creates settings.json when missing, then is idempotent', async () => {
     const d = tmp(); const p = join(d, 'claude', 'settings.json');
     await runSetup({ settingsPath: p, service: false });
@@ -82,6 +101,23 @@ describe('runSetup', () => {
     const text = readFileSync(p, 'utf8');
     expect((await runSetup({ settingsPath: p, service: false })).join('\n')).toContain('already present');
     expect(readFileSync(p, 'utf8')).toBe(text);
+  });
+  it('wires Codex hooks when ~/.codex exists, then is idempotent', async () => {
+    const d = tmp(); const codexDir = join(d, 'codex'); mkdirSync(codexDir);
+    writeFileSync(join(codexDir, 'hooks.json'), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: '/other Stop' }] }] } }));
+    const out = (await runSetup({ settingsPath: join(d, 'settings.json'), codexDir, service: false })).join('\n');
+    expect(out).toContain('Codex hooks added');
+    expect(out).toContain('trust');
+    const hooks = JSON.parse(readFileSync(join(codexDir, 'hooks.json'), 'utf8')).hooks;
+    expect(hooks.Stop.map((e: { hooks: Array<{ command: string }> }) => e.hooks[0]!.command)).toEqual(['/other Stop', 'ledge hook codex Stop']);
+    const text = readFileSync(join(codexDir, 'hooks.json'), 'utf8');
+    expect((await runSetup({ settingsPath: join(d, 'settings.json'), codexDir, service: false })).join('\n')).toContain('Codex hooks already present');
+    expect(readFileSync(join(codexDir, 'hooks.json'), 'utf8')).toBe(text);
+  });
+  it('skips Codex when it is not installed (no ~/.codex)', async () => {
+    const d = tmp(); const codexDir = join(d, 'codex');
+    expect((await runSetup({ settingsPath: join(d, 'settings.json'), codexDir, service: false })).join('\n')).toContain('Codex not found');
+    expect(existsSync(codexDir)).toBe(false);
   });
   it('leaves no temp file behind after writing', async () => {
     const d = tmp(); const p = join(d, 'settings.json');
