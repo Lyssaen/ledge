@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ledge — Un compagnon, toujours là.</title>
+  <link rel="stylesheet" href="prototype/ledge-mascot.css">
+  <script src="prototype/ledge-mascot.js" defer></script>
+</head>
+<body>
+  <div class="page">
+    <header><a class="brand" href="ledge-mascot.html"><span data-character class="brand-face" aria-hidden="true"></span>Ledge<span class="accent">.</span></a><span class="edition">ÉTUDE INTERACTIVE / 01</span><button id="theme" class="quiet">Passer en clair</button></header>
+    <main>
+      <section class="intro"><div><p class="eyebrow">LE VISAGE DE LEDGE</p><h1>Un compagnon.<br><span>Toujours là.</span></h1><p class="lead">Les sessions vont et viennent. Lui reste au bord de votre écran.<br>Un petit gardien curieux, qui sait aussi se faire discret.</p></div><div class="identity"><span class="status-dot"></span>Une seule identité<span class="identity-sub">Notch · accueil · tray</span></div></section>
+      <section class="lab" aria-label="Maquette interactive">
+        <div class="workspace">
+          <div class="toolbar"><span class="eyebrow">01 / EN SITUATION</span><div class="segments" aria-label="Taille du notch"><button data-scale="1" aria-pressed="false">Taille réelle</button><button data-scale="2" aria-pressed="true">Loupe ×2</button></div></div>
+          <div class="desktop" id="desktop" data-scale="2">
+            <div class="desktop-title">Un peu de calme.<span>Tout est à sa place.</span></div>
+            <div class="editor" aria-hidden="true"><div class="editor-top"><i></i><i></i><i></i><span>harness-assistant</span></div><div class="editor-content"><span class="code-muted">// Une nouvelle idée commence ici.</span><br><span class="code-coral">const</span> next = {<br>&nbsp;&nbsp;space: <span class="code-green">"pour créer"</span>,<br>&nbsp;&nbsp;distractions: <span class="code-green">false</span><br>};<div class="editor-caret"></div></div></div>
+            <div class="notch-anchor"><div class="notch" id="notch"><button id="resident" class="character-button" aria-label="Ledge, ouvrir l’accueil" aria-expanded="false" aria-controls="welcome"><span data-character class="resident-art"></span></button><div id="session-slot" hidden><span class="notch-divider"></span><span class="session-mini" aria-label="Une session Codex en cours">··</span></div></div><div class="notch-tip" id="notch-tip">Ledge est là.<small>Aucune session · cliquer pour commencer</small></div></div>
+            <section id="welcome" class="welcome" aria-label="Accueil Ledge" hidden><div class="welcome-head"><strong>Ledge<span class="accent">.</span></strong><button id="close-welcome" class="quiet" aria-label="Fermer l’accueil">×</button></div><div data-character class="welcome-mascot"></div><h2>On commence quelque chose ?</h2><p>Je garde votre place. Lancez un compagnon quand vous êtes prêt.</p><button class="primary" id="launch">＋ Nouvelle session</button><button class="text-link" id="shortcut">Découvrir les raccourcis <span>↗</span></button></section>
+            <div class="desktop-hint"><span>↖</span> Approchez la souris du notch.<br>Puis faites-lui un petit coucou.</div>
+            <div class="taskbar"><span class="taskbar-brand">Ledge est à vos côtés.</span><div class="tray-group"><span class="tray-network" aria-hidden="true">⌁</span><button id="tray" class="tray-button" aria-label="Ledge dans le tray, ouvrir le menu" aria-expanded="false" aria-controls="tray-menu"><span data-character data-tray="true"></span><i id="tray-badge" hidden></i></button><span class="clock">14:32<small>Dimanche</small></span></div></div>
+            <div id="tray-menu" class="tray-menu" hidden><strong>Ledge<span class="accent">.</span><small id="tray-status">Présent · aucune session</small></strong><button id="tray-open">Ouvrir Ledge <kbd>Ctrl Alt L</kbd></button><button id="tray-new">Nouvelle session <span>＋</span></button><button id="tray-dnd">Ne pas déranger <span id="dnd-mark">○</span></button></div>
+          </div>
+          <div class="scenario-bar"><span>Scénario</span><button id="session" aria-pressed="false">＋ Une session arrive</button><button id="offline" aria-pressed="false">Connexion perdue</button><button id="dnd" aria-pressed="false">Ne pas déranger</button></div>
+        </div>
+        <aside class="inspector"><div class="inspector-top"><span class="eyebrow">02 / À SA RENCONTRE</span><span class="pill">Ledge</span></div><div class="portrait" id="portrait"><div class="orbit"></div><button id="portrait-button" class="character-button" aria-label="Saluer la mascotte Ledge"><span data-character></span></button><span class="portrait-shadow"></span></div><div class="expression"><span class="status-dot"></span><strong id="expression">À votre rythme</strong></div><p id="expression-copy">Il respire doucement, cligne des yeux et garde votre place.</p><div class="inspector-bottom"><span>PERSONNALITÉ</span><p>Curieux. Attentif. Un peu joueur.</p><label class="motion-option"><input id="reduced" type="checkbox"> Animations réduites</label></div></aside>
+      </section>
+      <section class="repertoire"><div class="section-heading"><div><p class="eyebrow">03 / SON PETIT RÉPERTOIRE</p><h2>Chaque geste a son moment.</h2></div><p>Cliquez pour jouer une animation.<br>Le notch et le portrait réagissent ensemble.</p></div><div class="gesture-grid" id="gesture-grid"></div></section>
+      <section class="usefulness"><div class="section-heading"><div><p class="eyebrow">04 / PLUS QU’UNE PRÉSENCE</p><h2>Petit compagnon, vrais services.</h2></div><span class="pill">Pistes de comportement</span></div><div class="use-grid"><article><span class="use-index">01</span><h3>Un point de départ</h3><p>Un clic ouvre l’accueil. Nouvelle session, projets récents et raccourcis restent à portée de main.</p></article><article><span class="use-index">02</span><h3>Le gardien de l’équipe</h3><p>Il reste en tête du notch quand les compagnons arrivent. Un signe de tête les accueille ; chaque session garde sa propre identité.</p></article><article><span class="use-index">03</span><h3>Un statut au premier regard</h3><p>L’antenne s’éteint si la connexion est perdue. Dans le tray, sa silhouette et un petit repère portent le même état.</p></article><article><span class="use-index">04</span><h3>Le respect de votre attention</h3><p>En mode concentration, il se pose. Les grands gestes répondent à vos interactions, les animations de repos restent rares.</p></article></div></section>
+      <footer><span>Une mascotte permanente. Des interactions à votre initiative.</span><span>Maquette locale · actions simulées</span></footer>
+    </main>
+  </div><div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
+</body>
+</html>

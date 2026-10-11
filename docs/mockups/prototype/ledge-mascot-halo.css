@@ -1,0 +1,71 @@
+/* Separate visual direction for the resident mascot. The original study stays intact. */
+:root {
+  --resident-glow: #ee9c87;
+  --resident-glow-soft: #8bc7b6;
+}
+:root[data-theme=light] {
+  --resident-glow: #bb6047;
+  --resident-glow-soft: #538e79;
+}
+
+/* The large portrait carries a broad ambient pool plus two crisp rings. */
+.portrait::before {
+  content: "";
+  position: absolute;
+  width: 218px;
+  height: 218px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--resident-glow) 22%, transparent) 0%, color-mix(in srgb, var(--resident-glow-soft) 12%, transparent) 42%, transparent 73%);
+  filter: blur(12px);
+  pointer-events: none;
+}
+.portrait .orbit {
+  border-color: color-mix(in srgb, var(--resident-glow) 35%, transparent);
+  box-shadow: 0 0 15px color-mix(in srgb, var(--resident-glow) 17%, transparent), inset 0 0 16px color-mix(in srgb, var(--resident-glow-soft) 13%, transparent);
+}
+.portrait .orbit::after {
+  border-color: color-mix(in srgb, var(--resident-glow-soft) 45%, transparent);
+  box-shadow: 0 0 13px color-mix(in srgb, var(--resident-glow-soft) 19%, transparent);
+  opacity: 1;
+}
+
+/* The glow follows the SVG silhouette and scales with each rendering. */
+.brand-face .ledge-character,
+.resident-art .ledge-character,
+.welcome-mascot .ledge-character,
+.portrait .ledge-character {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--resident-glow) 68%, transparent))
+          drop-shadow(0 0 14px color-mix(in srgb, var(--resident-glow) 32%, transparent));
+}
+.portrait .ledge-character {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--resident-glow) 65%, transparent))
+          drop-shadow(0 0 24px color-mix(in srgb, var(--resident-glow-soft) 38%, transparent));
+}
+.notch {
+  box-shadow: 6px 8px 23px var(--shadow), 7px 0 20px color-mix(in srgb, var(--resident-glow) 21%, transparent);
+}
+.welcome {
+  box-shadow: 0 20px 50px var(--shadow), 0 0 28px color-mix(in srgb, var(--resident-glow) 16%, transparent);
+}
+.mascot-light {
+  filter: drop-shadow(0 0 3px var(--resident-glow));
+}
+
+/* Calm states keep Ledge legible without implying an alert. */
+html[data-dnd=true] .ledge-character,
+html[data-offline=true] .ledge-character {
+  filter: none;
+}
+html[data-dnd=true] .portrait::before,
+html[data-offline=true] .portrait::before {
+  opacity: .22;
+}
+html[data-dnd=true] .portrait .orbit,
+html[data-offline=true] .portrait .orbit {
+  box-shadow: none;
+}
+html[data-offline=true] .mascot-light { filter: none; }
+
+@media (max-width: 760px) {
+  .portrait::before { width: 160px; height: 160px; }
+}
