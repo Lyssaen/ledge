@@ -25,9 +25,11 @@ export function startPoller(opts: {
   /** The last preview sent per session, so an unchanged one is not sent again. */
   const previews = new Map<string, string>();
   const matches = new Map<string, NonNullable<ReturnType<ReturnType<typeof defaultAdapterFor>['detectPrompt']>>>();
+  /** The last pane title emitted per session, so each distinct title is sent once. */
+  const titles = new Map<string, string>();
   /** Since when each pane has been at rest (the agent waiting for a prompt), as read on its last change. */
   const restSince = new Map<string, number>();
-  const forget = (id: string) => { hashes.delete(id); matches.delete(id); previews.delete(id); restSince.delete(id); };
+  const forget = (id: string) => { hashes.delete(id); matches.delete(id); previews.delete(id); restSince.delete(id); titles.delete(id); };
   let lastDeadCheck = 0;
   let running = false;
 
@@ -80,6 +82,8 @@ export function startPoller(opts: {
     const key = lines.join('\n');
     if (previews.get(s.id) !== key) { previews.set(s.id, key); opts.broadcastPreview?.(s.id, lines); }
     if (!adapter) return;
+    const title = adapter.paneTitle?.(pane) ?? null;
+    if (title && title !== titles.get(s.id)) { titles.set(s.id, title); store.apply(s.id, { name: 'PaneTitle', at: now(), source: 'pane', text: title }); }
     if (adapter.atRest?.(pane)) { if (!restSince.has(s.id)) restSince.set(s.id, t); }
     else restSince.delete(s.id);
     const m = adapter.detectPrompt(pane);

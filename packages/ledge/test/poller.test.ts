@@ -41,6 +41,16 @@ describe('poller', () => {
     expect(previews.at(-1)).toEqual(['line one', 'line two']);
     p.stop();
   });
+  it('emits PaneTitle once per title', async () => {
+    const titled = (t: string) => `● Done.\n\n${'─'.repeat(28)} ${t} ─\n❯ \n${'─'.repeat(40)}\n  ⏸ manual mode on`;
+    panes['ledge-a'] = titled('first'); store.upsert(mk('a'));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
+    clock += 1000; await p.tick(); expect(store.get('a')?.topic).toBe('first');
+    const after = store.get('a');
+    clock += 1000; await p.tick(); expect(store.get('a')).toBe(after); // same title, same pane: nothing emitted
+    panes['ledge-a'] = titled('second'); clock += 1000; await p.tick(); expect(store.get('a')?.topic).toBe('second');
+    p.stop();
+  });
   it('a fullscreen Claude Code pane previews the conversation, not the input box', async () => {
     panes['ledge-a'] = readFileSync(new URL('./fixtures/panes/claude2-fullscreen-idle.txt', import.meta.url), 'utf8'); store.upsert(mk('a'));
     const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, l) => previews.push(l) });

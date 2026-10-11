@@ -29,6 +29,8 @@ export interface Adapter {
    * infers rest from the pane and relies on the hooks alone.
    */
   atRest?(pane: string): boolean;
+  /** The conversation's title the tool shows in its chrome (Claude Code: on the input box's top rule), or null before it has one. Optional. */
+  paneTitle?(pane: string): string | null;
   /**
    * After the keys: the prompt that was answered is gone from the pane (the bottom DETECT_LINES), even if another
    * one followed it. Optional: without it, `promptStillVisible` on the last lines decides.
