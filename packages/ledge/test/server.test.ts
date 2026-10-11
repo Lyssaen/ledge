@@ -338,6 +338,31 @@ describe('server', () => {
     c.close();
   });
 
+  describe('Claude Code: an AskUserQuestion with two questions, answered from Ledge', () => {
+    const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8').replace(/\s+$/, '');
+    async function answer(panes: string[], pending: { kind: 'question'; text: string; source: 'hook' | 'pane' }) {
+      tmux = fakeTmux({ 'ledge-a': panes }); await srv.close();
+      srv = await startServer({ store, tmux, port: 0, verify: { attempts: 2, intervalMs: 20 } });
+      store.upsert(mk('a', { tool: 'claude', state: 'waiting_input', pending }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.reply', id: 'a', text: '1' });
+      return c;
+    }
+    it('question 2 coming up after question 1 is success, not a refused answer', async () => {
+      const c = await answer([fx('claude2-question-multi-first'), fx('claude2-question-multi-second')], { kind: 'question', text: 'Color?', source: 'hook' });
+      await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
+      expect(store.get('a')?.pending).toBeUndefined();
+      expect(tmux.sent).toEqual([['text', 'ledge-a', '1']]);
+      c.close();
+    });
+    it('the review screen takes its answer: Submit answers', async () => {
+      const c = await answer([fx('claude2-question-multi-review'), fx('claude2-idle')], { kind: 'question', text: 'Ready to submit your answers?', source: 'pane' });
+      await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
+      expect(tmux.sent).toEqual([['text', 'ledge-a', '1']]);
+      c.close();
+    });
+  });
+
   it('a reply with no pending (your turn) is typed without a prompt check', async () => {
     tmux = fakeTmux({ 'ledge-a': ['> '] }); await srv.close(); srv = await startServer({ store, tmux, port: 0 });
     store.upsert(mk('a', { state: 'idle' }));

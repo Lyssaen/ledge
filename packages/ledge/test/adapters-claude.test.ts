@@ -141,6 +141,44 @@ describe('claude adapter: start-up and plan dialogs (Claude Code 2.1 captures)',
   });
 });
 
+describe('claude adapter: several questions in one AskUserQuestion (Claude Code 2.1.296 captures)', () => {
+  const color = { kind: 'question' as const, text: 'Color?', options: ['Red', 'Blue'], source: 'hook' as const };
+  const size = { kind: 'question' as const, text: 'Size?', source: 'pane' as const };
+  it('detects each tab as a question, the answered mark dropped from the option', () => {
+    expect(claudeAdapter.detectPrompt(fx('claude2-question-multi-first'))).toEqual({
+      kind: 'question', text: 'Color?', options: ['Red', 'Blue', 'Type something.', 'Chat about this']
+    });
+    expect(claudeAdapter.detectPrompt(fx('claude2-question-multi-second'))?.text).toBe('Size?');
+  });
+  it('detects the review screen, which has no footer, as a question', () => {
+    expect(claudeAdapter.detectPrompt(fx('claude2-question-multi-review'))).toEqual({
+      kind: 'question', text: 'Ready to submit your answers?', options: ['Submit answers', 'Cancel']
+    });
+    expect(claudeAdapter.promptStillVisible(tail(fx('claude2-question-multi-review')))).toBe(true);
+    expect(claudeAdapter.atRest!(fx('claude2-question-multi-review'))).toBe(false);
+  });
+  it('does not take chat quoting the review screen for one', () => {
+    const pane = fx('claude2-question-multi-review') + '\n' + fx('claude2-idle');
+    expect(claudeAdapter.detectPrompt(pane)).toBeNull();
+    expect(claudeAdapter.promptStillVisible(tail(pane))).toBe(false);
+  });
+  it('a question is answered once the next tab or the review replaces it', () => {
+    expect(claudeAdapter.promptGone!(fx('claude2-question-multi-first'), color)).toBe(false);
+    expect(claudeAdapter.promptGone!(fx('claude2-question-multi-second'), color)).toBe(true);
+    expect(claudeAdapter.promptGone!(fx('claude2-question-multi-review'), size)).toBe(true);
+    expect(claudeAdapter.promptGone!(fx('claude2-idle'), color)).toBe(true);
+  });
+  it('a hook question whose text the pane wraps or cuts is still the same question', () => {
+    const long = { ...color, text: 'Color?\nPick the one you like best for the background.' };
+    expect(claudeAdapter.promptGone!(fx('claude2-question-multi-first'), long)).toBe(false);
+  });
+  it('an approval is gone only when no dialog is left, whatever the hook named it', () => {
+    const perm = { kind: 'permission' as const, text: 'Bash: mkdir zz-ledge-probe (create the folder)', source: 'hook' as const };
+    expect(claudeAdapter.promptGone!(fx('claude2-permission-bash'), perm)).toBe(false);
+    expect(claudeAdapter.promptGone!(fx('claude2-idle'), perm)).toBe(true);
+  });
+});
+
 describe('claude adapter: at rest', () => {
   it('is at rest on the input box with no turn running', () => {
     expect(claudeAdapter.atRest!(fx('claude2-idle'))).toBe(true);

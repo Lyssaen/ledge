@@ -19,9 +19,21 @@ import type { Adapter, KeyPlan, PanePromptMatch } from './types.js';
 //
 // The footer is what makes it a live dialog: the idle input line ("❯ ") and chat that quotes a
 // dialog have numbered lines but no footer at the bottom.
+//
+// AskUserQuestion with several questions shows one tab per question (each with the question footer; an answered
+// option is marked ✔), then a review that has no footer at all, its two options last on the pane:
+//
+//   ←  ☒ Color  ☒ Size  ✔ Submit  →
+//   Review your answers
+//    ● Color?
+//      → Red
+//   Ready to submit your answers?
+//   ❯ 1. Submit answers
+//     2. Cancel
 const OPTION = /^\s*(?:❯\s*)?(\d+)\.\s+(\S.*?)\s*$/;
 const FOOTER = /^\s*(?:(?:Enter to select\b.*)?Esc to cancel\b|ctrl\+g to edit\b)/;
 const PLAN_FOOTER = /^\s*ctrl\+g to edit\b/;
+const REVIEW_QUESTION = /^\s*Ready to submit your answers\?$/;
 const RULE = /^─{10,}$/;
 const DASHED = /^╌{10,}$/;
 /** The footer may have at most this many non-blank lines below it. */
@@ -43,12 +55,31 @@ function footerIndex(lines: string[]): number {
   return -1;
 }
 
+/**
+ * The end of the multi-question review (the line after its last option), or -1: options 1 and 2 are the last lines
+ * on the pane, right under the review's question.
+ */
+function reviewEnd(lines: string[]): number {
+  let last = lines.length - 1;
+  while (last >= 0 && isBlank(lines[last]!)) last--;
+  if (last < 1 || lines[last]!.match(OPTION)?.[1] !== '2' || lines[last - 1]!.match(OPTION)?.[1] !== '1') return -1;
+  let q = last - 2;
+  while (q >= 0 && isBlank(lines[q]!)) q--;
+  return q >= 0 && REVIEW_QUESTION.test(lines[q]!) ? last + 1 : -1;
+}
+
+/** Where a live dialog ends: its footer, or the end of the review; -1 when none is on screen. */
+function dialogEnd(lines: string[]): number {
+  const footer = footerIndex(lines);
+  return footer >= 0 ? footer : reviewEnd(lines);
+}
+
 /** Options 1..n between `from` (option 1) and the footer; any other line is a description or a rule. */
 function optionsBetween(lines: string[], from: number, footer: number): string[] {
   const options: string[] = [];
   for (let i = from; i < footer; i++) {
     const m = lines[i]!.match(OPTION);
-    if (m && Number(m[1]) === options.length + 1) options.push(m[2]!);
+    if (m && Number(m[1]) === options.length + 1) options.push(m[2]!.replace(/\s+✔$/, ''));
   }
   return options;
 }
@@ -57,7 +88,7 @@ type Dialog = { kind: 'permission' | 'question' | 'plan'; title: string[]; quest
 
 function parseDialog(pane: string): Dialog | null {
   const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
-  const footer = footerIndex(lines);
+  const footer = dialogEnd(lines);
   if (footer < 0) return null;
 
   let first = -1;
@@ -80,7 +111,8 @@ function parseDialog(pane: string): Dialog | null {
   if (top < 0) return null;
 
   return {
-    kind: /Enter to select/.test(lines[footer]!) ? 'question' : PLAN_FOOTER.test(lines[footer]!) ? 'plan' : 'permission',
+    kind: /Enter to select/.test(lines[footer] ?? '') || REVIEW_QUESTION.test(questionLines.join(' '))
+      ? 'question' : PLAN_FOOTER.test(lines[footer] ?? '') ? 'plan' : 'permission',
     title: lines.slice(top + 1, q + 1),
     question: questionLines.join(' '),
     options
@@ -150,8 +182,24 @@ function detectPrompt(pane: string): PanePromptMatch | null {
 function promptStillVisible(lastLines: string): boolean {
   const lines = lastLines.split('\n').map(l => l.replace(/\s+$/, ''));
   if (lines.some(l => TRUST_FOOTER.test(l)) && lines.some(l => TRUST_OPTION.test(l))) return true;
-  const footer = footerIndex(lines);
+  const footer = dialogEnd(lines);
   return footer > 0 && lines.slice(0, footer).some(l => OPTION.test(l));
+}
+
+const squash = (t: string) => t.replace(/\s+/g, ' ').trim();
+
+/**
+ * After keys were sent: the prompt that was answered is no longer the one on screen. A question that gives way to the
+ * next one (several questions, then their review) was answered. The pane cuts a long question to three lines, so a
+ * question that starts the same is the same one. An approval's hook text is not what the pane shows: any dialog left
+ * at the bottom means it was not taken.
+ */
+function promptGone(pane: string, pending: Pending): boolean {
+  if (pending.kind !== 'question' || !squash(pending.text)) return !promptStillVisible(pane.replace(/\s+$/, '').split('\n').slice(-5).join('\n'));
+  const m = detectPrompt(pane);
+  if (!m || m.kind !== 'question') return true;
+  const shown = squash(m.text); const asked = squash(pending.text);
+  return !(shown === asked || asked.startsWith(shown) || shown.startsWith(asked));
 }
 
 // The idle input box at the bottom of the pane (2.1+ fullscreen and inline alike):
@@ -213,7 +261,7 @@ const BUSY = /\besc to interrupt\b/;
 /** The input box is on screen, no dialog replaces it and no turn is running: Claude waits for a prompt. */
 function atRest(pane: string): boolean {
   const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
-  if (footerIndex(lines) >= 0 || parseTrust(pane)) return false;
+  if (dialogEnd(lines) >= 0 || parseTrust(pane)) return false;
   const box = inputBox(lines);
   return !!box && !lines.slice(box.bottom + 1).some(l => BUSY.test(l));
 }
@@ -233,6 +281,7 @@ export const claudeAdapter: Adapter = {
   tool: 'claude',
   detectPrompt,
   promptStillVisible,
+  promptGone,
   previewLines,
   atRest,
   paneTitle,
