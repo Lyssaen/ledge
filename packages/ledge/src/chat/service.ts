@@ -65,10 +65,12 @@ export function createChat(deps: ChatDeps): Chat {
       else if (e.type === 'result') { if (e.text) answer = e.text; if (e.isError) resultError = e.text || 'Claude Code reported an error'; }
     }, deps.spawn);
     const mine = current = { qid: turn.qid, handle, cancelled: false };
-    const timer = setTimeout(() => { log(`chat ${turn.qid}: timed out`); handle.kill(); }, deps.timeoutMs ?? 180_000);
+    let timedOut = false;
+    const timer = setTimeout(() => { log(`chat ${turn.qid}: timed out`); timedOut = true; handle.kill(); }, deps.timeoutMs ?? 180_000);
     const r = await handle.done; clearTimeout(timer);
     current = null;
     if (mine.cancelled) return { ok: false, message: 'cancelled', resumed: false };
+    if (timedOut) return { ok: false, message: 'Claude Code did not answer within 3 minutes', resumed: false };
     if (r.code !== 0) return { ok: false, message: r.code === null ? `Claude Code could not start: ${r.stderr.trim() || 'not found in PATH'}` : r.stderr.trim() || `Claude Code exited with code ${r.code}`, resumed: resume };
     if (resultError) return { ok: false, message: resultError, resumed: false };
     turn.answer = answer; turn.answeredAt = now();

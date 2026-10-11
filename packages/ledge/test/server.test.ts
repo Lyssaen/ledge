@@ -687,7 +687,7 @@ describe('chat', () => {
     const h = await c2.next('chat.history'); expect(h.turns).toHaveLength(1); expect(h.turns[0]).toMatchObject({ qid: 'q1', answer: done.text, steps: [{ kind: 'sessions' }, { kind: 'pane', id: 'a', name: 'Otto' }] });
     await c2.close();
   });
-  it('refuses a second question while one runs, and retries once with a fresh day session', async () => {
+  it('refuses a second question while one runs', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'chat.ask', qid: 'q1', text: 'a' }); c.send({ type: 'chat.ask', qid: 'q2', text: 'b' });
     const err = await c.next('chat.error'); expect(err.qid).toBe('q2');
