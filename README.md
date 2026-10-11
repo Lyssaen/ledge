@@ -272,14 +272,14 @@ Windows side, the overlay keeps its preferences in the WebView's `localStorage`:
 
 ## How to install?
 
-Ledge has two halves: the `ledge` CLI and its daemon in WSL2, and the overlay on Windows. There is no published installer: you build both from this repository, once on each side. It takes about ten minutes, most of it the first Rust compile.
+Ledge has two halves: the `ledge` CLI and its daemon in WSL2, and the overlay on Windows. The WSL side installs from this repository. The Windows side is a ready-made installer from the [Releases](https://github.com/Paradow-dev/ledge/releases) page, or one you build yourself.
 
 ### What you need
 
 | Side | Requirements |
 | --- | --- |
 | WSL2 | A Linux distribution with `systemd=true` in `/etc/wsl.conf`, Git, Node 22, pnpm, tmux, and at least one agent: Claude Code, Codex or Cursor Agent. No root needed. |
-| Windows | Windows 10 or 11, Git, Node and pnpm, Rust stable with the MSVC toolchain (the Visual Studio C++ Build Tools), Windows Terminal. WebView2 is already there on Windows 11; the installer fetches it otherwise. |
+| Windows | Windows 10 or 11 and Windows Terminal. WebView2 is already there on Windows 11; the installer fetches it otherwise. To build the installer yourself: Git, Node, pnpm and Rust stable with the MSVC toolchain (the Visual Studio C++ Build Tools). |
 
 Get pnpm with `corepack enable` on either side if it is missing.
 
@@ -305,9 +305,11 @@ systemctl --user status ledge-daemon.service
 ledge status
 ```
 
-### 2. Build the Windows installer
+### 2. Get the Windows installer
 
-Clone the repository a second time, on the Windows disk, in PowerShell. Do not build from the `\\wsl$` path: `node_modules` must be the Windows one.
+Download `Ledge_0.1.0_x64-setup.exe` from the [latest release](https://github.com/Paradow-dev/ledge/releases/latest). The release notes give its SHA-256.
+
+Or build it yourself. Clone the repository a second time, on the Windows disk, in PowerShell. Do not build from the `\\wsl$` path: `node_modules` must be the Windows one.
 
 ```powershell
 git clone https://github.com/Paradow-dev/ledge.git $HOME\Workspace\ledge
@@ -321,7 +323,7 @@ The installer lands in `apps\overlay\src-tauri\target\release\bundle\nsis\Ledge_
 
 ### 3. Install Ledge on Windows
 
-Run `Ledge_0.1.0_x64-setup.exe`. It installs for your user only, under `%LOCALAPPDATA%`, with no administrator prompt. At the end, Ledge starts:
+Run `Ledge_0.1.0_x64-setup.exe`. It installs for your user only, under `%LOCALAPPDATA%`, with no administrator prompt. The installer is not code-signed, so SmartScreen may warn the first time: More info, then Run anyway. At the end, Ledge starts:
 
 - the Ledge mascot appears in the notification area, next to the clock;
 - the handle appears on the left edge of your primary screen, with the mascot on top;
@@ -348,7 +350,7 @@ cd ~/Workspace/ledge && git pull && pnpm install && pnpm --filter ledge build
 systemctl --user restart ledge-daemon.service    # the daemon runs the built CLI
 ```
 
-Then on Windows, `git pull`, `pnpm install --frozen-lockfile` and `pnpm tauri build` again in the Windows clone, quit Ledge from its tray menu, and run the new installer over the old one.
+Then on Windows, quit Ledge from its tray menu and run the newer installer over the old one, downloaded from the releases or rebuilt in your Windows clone.
 
 ### Uninstall
 
@@ -360,7 +362,7 @@ ledge uninstall           # add --purge to also delete ~/.ledge (session journal
 
 It removes only Ledge's own entries from the Claude Code, Codex and Cursor Agent hooks, and keeps every other hook where it was. It stops the daemon, removes the `ledge-daemon.service` unit and deletes the `~/.local/bin/ledge` link. Sessions still running on Ledge's tmux server are reported, not killed. It leaves linger on, since other user services may need it. If a config file is not valid JSON, it is left untouched and the command ends with an error after doing the rest.
 
-On Windows: Settings > Apps > Installed apps > Ledge > Uninstall. It also removes launch at login. Then delete the two clones if you no longer need them.
+On Windows: Settings > Apps > Installed apps > Ledge > Uninstall. It also removes launch at login. Then delete the clones if you no longer need them.
 
 More details: the WSL side in [packages/ledge/README.md](packages/ledge/README.md), the overlay, its first-build checklist and the key reference in [apps/overlay/README.md](apps/overlay/README.md).
 
