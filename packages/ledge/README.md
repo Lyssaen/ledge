@@ -41,10 +41,28 @@ systemctl --user disable --now ledge-daemon.service   # back to on-demand start 
 ~/.ledge/tmux.conf      dedicated tmux server config (status off, mouse on)
 ~/.ledge/sessions.json  journal, reloaded when the daemon restarts
 ~/.ledge/daemon.log     dropped hooks, failed injections, poll errors
+~/.ledge/chat.json      the day's chat conversation (date, session id)
+~/.ledge/chat/context/  files the chat reads (sessions.md, pane-*, reply-*, git-*)
 ~/.ledge/daemon.pid     PID of the running daemon, removed when it stops cleanly
 ~/.config/systemd/user/ledge-daemon.service   user unit written by `ledge setup`
 ~/.ledge/exit-<id>      transient: the agent's exit code, written by the launcher's wrapper when the agent ends and read and deleted by `ledge claude`
 ```
+
+## Ask Ledge (chat)
+
+The overlay's ask field sends a question to the daemon, which answers it with one headless Claude Code run:
+
+```sh
+claude -p --restricted --tools Read,Grep,Glob --permission-mode dontAsk --output-format stream-json --verbose --include-partial-messages --max-turns 16 --append-system-prompt <persona> --add-dir <each session folder> --session-id <id>   # --resume <id> for the next questions of the day
+```
+
+The question goes on stdin, never in argv, and `LEDGE_CHAT=1` is set so Ledge's own hooks ignore the run. `--restricted` ignores the user, project and local settings, so none of your hooks run and no setting can widen the tools, while the CLI keeps its own authentication (your Claude subscription login, no API key needed). Only `Read`, `Grep` and `Glob` are allowed, and anything else is denied rather than asked.
+
+- `~/.ledge/chat/context/` is the folder Claude runs in, rewritten before each question: `sessions.md` (every session, its state and its file names), `pane-<id>.txt` (last terminal lines), `reply-<id>.md` (last reply), `git-<id>.txt` (status, log and diff stat). A source that fails or is empty is just left out.
+- `~/.ledge/chat.json` holds the day's conversation (its date and session id); a new day starts a new conversation, and a question after a failed resume starts a new one too.
+- One question at a time; a turn that takes more than 180 s is stopped and the chat says it timed out (no retry).
+
+Session names and tab titles: Ledge sets `set-titles` in `~/.ledge/tmux.conf`. A tmux server that is already running re-reads `tmux.conf` only after it restarts, so `set-titles` applies to new tmux servers.
 
 ## Tests
 
