@@ -1,5 +1,6 @@
 import type { Session } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
+import { ResidentMascot } from '../bots/ResidentMascot';
 import { botState, liveHelpers, poseFor } from '../bots/poseFor';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -70,9 +71,9 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
       )}
       <div data-scroll className="ledge-scroll" style={{ display: 'flex', flexDirection: 'column', padding: sessions.length ? '8px 0' : 0, flexGrow: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {sessions.length === 0 && (
-          // The empty state: a sleeping companion and the other way in (the terminal), with the form one click away.
+          // The permanent Ledge resident also greets the empty list.
           <div data-empty style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6, height: SIZES.emptyH, boxSizing: 'border-box', padding: '18px 24px 16px', borderTop: '1px solid var(--sidebar-border)' }}>
-            <Bot seed="empty" tool="claude" state="done" pose={1} size={44} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} />
+            <ResidentMascot size={44} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} dnd={dnd} />
             <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 600, marginTop: 2 }}>{t.list.emptyTitle}</span>
             <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', maxWidth: 300 }}>{t.list.emptyHint} <code className="mono" style={{ fontSize: 11, padding: '1px 5px', borderRadius: 4, background: 'var(--well)', border: '1px solid var(--border)', color: 'var(--sidebar-foreground)' }}>ledge claude</code> {t.list.emptyHintAfter}</span>
             {onLaunch && <Button variant="primary" size="sm" data-launch-empty onClick={onLaunch} style={{ marginTop: 8 }}><Icon size={14} {...ICONS.plus} />{t.list.newSession}</Button>}

@@ -27,7 +27,7 @@ describe('<Surface>', () => {
   it('starts as the handle sized to the team', () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     expect(surface()).toHaveStyle({ width: '28px' });
-    expect(screen.getAllByRole('button', { name: /open$/ })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /open$/ })).toHaveLength(3);
   });
 
   it('an ask grows the bot, unfolds the bubble at its slot, approve sends the decision, then it folds back', async () => {

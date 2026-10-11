@@ -145,10 +145,10 @@ test.describe('light theme', () => {
     await ready(page, 4);
     await openList(page);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    // The surface paints the light sidebar token (oklch lightness near 1), not the dark one.
+    // The surface paints the light notch token (white), not the dark one; panel rows use sidebar tokens.
     const bg = await surface(page).evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(bg).toBe(await page.evaluate(() => { const d = document.createElement('div'); d.style.background = 'var(--sidebar)'; document.body.append(d); const c = getComputedStyle(d).backgroundColor; d.remove(); return c; }));
-    expect(Number(bg.match(/oklch\(([\d.]+)/)?.[1] ?? 0)).toBeGreaterThan(0.9);
+    expect(bg).toBe(await page.evaluate(() => { const d = document.createElement('div'); d.style.background = 'var(--notch)'; document.body.append(d); const c = getComputedStyle(d).backgroundColor; d.remove(); return c; }));
+    expect(bg).toBe('rgb(255, 255, 255)');
     await expect(layer(page, 'list').getByText('Votre accord')).toBeVisible();
   });
 });

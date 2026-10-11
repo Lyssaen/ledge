@@ -203,13 +203,13 @@ describe('prototype parity', () => {
     vi.stubGlobal('ResizeObserver', FakeResizeObserver); FakeResizeObserver.all = [];
     snapshot([]);
     const { unmount } = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    expect(surface()).toHaveStyle({ width: '6px', height: '60px' });
+    expect(surface()).toHaveStyle({ width: '28px', height: '36px' });
     unmount();
 
     const team = Array.from({ length: 12 }, (_, i) => fakeSession(`s${String(i).padStart(2, '0')}`, { name: `Bot${i}`, ...(i % 4 === 1 ? asks(`cmd ${i}`) : {}) }));
     snapshot(team);
     const big = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd onToggleDnd={() => {}} />);
-    const buttons = within(layer('handle')).getAllByRole('button', { name: /open$/ });
+    const buttons = within(layer('handle')).getAllByRole('button', { name: /open$/ }).filter(b => !b.hasAttribute('data-resident'));
     expect(buttons).toHaveLength(12);
     expect(buttons.filter(b => b.style.width === '18px')).toHaveLength(3);
     expect(buttons.filter(b => b.style.width === '11px')).toHaveLength(9);

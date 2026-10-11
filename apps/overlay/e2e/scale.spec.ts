@@ -15,7 +15,7 @@ test.describe('4K work area', () => {
     await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '2');
     await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1');
     await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(56, 0);
-    const bots = layer(page, 'handle').getByRole('button');
+    const bots = layer(page, 'handle').locator('button:not([data-resident])');
     await expect.poll(async () => (await box(bots.nth(0))).width).toBeCloseTo(24, 0); // a quiet bot: 12 x 2
     await expect.poll(async () => (await box(bots.nth(2))).width).toBeCloseTo(40, 0); // an ask: 20 x 2
     // Still vertically centered on the real screen.
@@ -31,7 +31,7 @@ test.describe('4K work area', () => {
   test('the handle tooltip reads at the windows size, beside the 2x handle', async ({ page }) => {
     await fakeDaemon(page, [session('a'), session('b', { name: 'Pim', project: 'speos-api' })]);
     await ready(page, 2);
-    await layer(page, 'handle').getByRole('button').nth(1).hover();
+    await layer(page, 'handle').locator('button:not([data-resident])').nth(1).hover();
     const tip = page.getByRole('tooltip');
     await expect(tip).toHaveCSS('opacity', '1');
     const t = await box(tip);
@@ -128,5 +128,5 @@ test('at 1920x1080 both Autos stay at 100%', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '1');
   await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1');
   await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(28, 0);
-  await expect.poll(async () => (await box(layer(page, 'handle').getByRole('button').nth(0))).width).toBeCloseTo(12, 0);
+  await expect.poll(async () => (await box(layer(page, 'handle').locator('button:not([data-resident])').nth(0))).width).toBeCloseTo(12, 0);
 });

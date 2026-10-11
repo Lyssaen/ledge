@@ -10,9 +10,9 @@ describe('geometry', () => {
   it('centres the handle and sizes it to the team', () => {
     const l = layout({ bots: bots(5, [0, 1]), mode: 'handle', screenH: 1080 });
     expect(l.w).toBe(SIZES.handleW);
-    expect(l.h).toBe(16 + 20 + 20 + 12 + 12 + 12 + 4 * 5);
+    expect(l.h).toBe(16 + SIZES.residentH + 5 + 20 + 20 + 12 + 12 + 12 + 4 * 5);
     expect(l.top).toBe(Math.round(540 - l.h / 2));
-    expect(l.slots[0]!.center).toBe(l.top + 8 + 10);
+    expect(l.slots[0]!.center).toBe(l.top + 8 + SIZES.residentH + 5 + 10);
     expect(l.slots[2]!.size).toBe(12);
   });
   it('a bubble sits at the asking bot slot, clamped to the margins', () => {
@@ -46,9 +46,9 @@ describe('geometry', () => {
     expect(l.hotZones[0]).toEqual({ top: SIZES.margin, h: l.handle.top - 6 - SIZES.margin });
     expect(l.hotZones[1]!.top).toBe(l.handle.top + l.handle.h + 6);
   });
-  it('an empty team gives a 6px strip 60px tall', () => {
+  it('an empty team still has a visible mascot in the full-width notch', () => {
     const l = layout({ bots: [], mode: 'handle', screenH: 1080 });
-    expect(l).toMatchObject({ w: 6, h: 60 });
+    expect(l).toMatchObject({ w: 28, h: 36 });
   });
   it('reading mode widens the session', () => {
     expect(layout({ bots: bots(2), mode: 'session', screenH: 1080, sessionH: 500, reading: true }).w).toBe(SIZES.readingW);

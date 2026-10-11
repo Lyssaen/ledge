@@ -39,7 +39,7 @@ export function App() {
   useEffect(() => { if (tauri) return; const h = () => setWorkH(window.innerHeight); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, [tauri]);
   useEffect(() => { const d = document.documentElement.dataset; d.handleScale = String(handleScale); d.panelScale = String(panelScale); }, [handleScale, panelScale]);
   useEffect(() => { saveScale('handle', scales.handle); saveScale('panel', scales.panel); }, [scales]);
-  useEffect(() => { saveLang(lang); document.documentElement.lang = lang; void setTrayLabels(messagesFor(lang).tray.quit); }, [lang]);
+  useEffect(() => { saveLang(lang); document.documentElement.lang = lang; void setTrayLabels(messagesFor(lang).tray); }, [lang]);
   useEffect(() => { document.documentElement.dataset.theme = theme; try { localStorage.setItem('ledge.theme', theme); } catch { /* ignore */ } }, [theme]);
   useEffect(() => { try { localStorage.setItem('ledge.dnd', dnd ? '1' : '0'); } catch { /* ignore */ } }, [dnd]);
   useEffect(() => { const h = (e: KeyboardEvent) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 't') setTheme(t => (t === 'dark' ? 'light' : 'dark')); }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, []);

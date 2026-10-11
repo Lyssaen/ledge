@@ -88,8 +88,8 @@ describe('App UI scales (browser)', () => {
       expect(document.documentElement.dataset.panelScale).toBe('1');
       expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('2');
       expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1');
-      // The empty handle (a 60 px strip at 2x) is centered in the real 2160 px.
-      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: `${2160 / 2 - 60}px`, height: '120px' });
+      // The 36 px mascot notch at 2x remains centered in the real 2160 px.
+      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: `${2160 / 2 - 36}px`, height: '72px' });
       expect(localStorage.getItem('ledge.handleScale')).toBe('auto');
       expect(localStorage.getItem('ledge.panelScale')).toBe('auto');
       unmount();
@@ -98,7 +98,7 @@ describe('App UI scales (browser)', () => {
       expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('1.5');
       expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1.25');
       act(() => { Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1200 }); window.dispatchEvent(new Event('resize')); });
-      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: `${1200 / 2 - 45}px` });
+      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: `${1200 / 2 - 27}px` });
     } finally {
       Object.defineProperty(window, 'innerHeight', { configurable: true, value: h });
     }

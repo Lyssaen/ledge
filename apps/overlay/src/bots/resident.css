@@ -1,0 +1,40 @@
+.resident{display:block;overflow:visible;--resident-shell:#566365;--resident-foot:#313b3e;--resident-visor:#182224;--resident-eye:#ffc3a8;--resident-line:#91a2a272}
+.resident[data-theme="light"]{--resident-shell:#f5eee2;--resident-foot:#c8bda9;--resident-visor:#384340;--resident-eye:#ffceb5;--resident-line:#968875}
+.resident-body{transform-origin:48px 75px;animation:resident-breathe 5.5s ease-in-out infinite}
+.resident-pose{transform-origin:48px 64px;transform:rotate(var(--resident-tilt,0deg));transition:transform .3s cubic-bezier(.22,1,.36,1)}
+.resident-gaze{transform:translate(var(--resident-gx,0px),var(--resident-gy,0px));transition:transform .15s ease-out}
+.resident-shell{fill:var(--resident-shell);stroke:var(--resident-line);stroke-width:1.2}
+.resident-foot,.resident-antenna,.resident-hand{fill:var(--resident-foot)}
+.resident-antenna{fill:none;stroke:var(--resident-foot);stroke-width:3;stroke-linecap:round}
+.resident-light{fill:var(--resident-eye)}.resident-shine{fill:none;stroke:#ffffff50;stroke-width:1.5;stroke-linecap:round}
+.resident-visor{fill:var(--resident-visor)}.resident-eyes{fill:var(--resident-eye)}
+.resident-smile,.resident-sleep{fill:none;stroke:var(--resident-eye);stroke-width:3;stroke-linecap:round;opacity:0}
+.resident-hand{opacity:0;transform-origin:76px 66px}.resident-blink{transform-origin:48px 48px}
+.resident[data-gesture="blink"] .resident-blink{animation:resident-blink .18s ease-in-out}
+.resident[data-gesture="happy"] .resident-eyes,.resident[data-gesture="sleep"] .resident-eyes{opacity:0}
+.resident[data-gesture="happy"] .resident-smile,.resident[data-gesture="sleep"] .resident-sleep{opacity:1}
+.resident[data-gesture="boop"] .resident-pose{animation:resident-boop .7s cubic-bezier(.22,1,.36,1)}
+.resident[data-gesture="curious"] .resident-pose{transform:rotate(-9deg)}
+.resident[data-gesture="look"] .resident-gaze{animation:resident-look 1.8s ease-in-out}
+.resident[data-gesture="stretch"] .resident-pose{animation:resident-stretch 1.6s ease-in-out}
+.resident[data-gesture="sleep"] .resident-pose{transform:rotate(7deg) translateY(3px)}
+.resident[data-gesture="hello"] .resident-hand{opacity:1;animation:resident-wave .55s ease-in-out 2}
+.resident[data-gesture="tap"] .resident-hand{opacity:1;animation:resident-tap .38s ease-in-out 3}
+.resident[data-gesture="pulse"] .resident-light{animation:resident-pulse .7s ease-in-out 2}
+.resident[data-gesture="nod"] .resident-pose{animation:resident-nod .7s ease-in-out}
+.resident[data-gesture="yawn"] .resident-pose{animation:resident-stretch 1.7s ease-in-out}
+.resident[data-gesture="yawn"] .resident-eyes{opacity:0}.resident[data-gesture="yawn"] .resident-sleep{opacity:1}
+.resident[data-frozen="true"] .resident-light{opacity:.25}.resident[data-frozen="true"] .resident-eyes{fill:#a8abaa}
+.resident[data-quiet="true"],.resident[data-quiet="true"] *{animation:none!important;transition:none!important}
+.resident[data-quiet="true"] .resident-pose,.resident[data-quiet="true"] .resident-gaze{transform:none!important}
+[inert] .resident,[inert] .resident *, .resident[data-frozen="true"],.resident[data-frozen="true"] *{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.resident,.resident *{animation:none!important;transition:none!important}.resident-pose,.resident-gaze{transform:none!important}}
+@keyframes resident-breathe{0%,100%{transform:translateY(0) scaleY(1)}50%{transform:translateY(-1px) scaleY(1.018)}}
+@keyframes resident-blink{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.08)}}
+@keyframes resident-boop{0%,100%{transform:scale(1)}20%{transform:translateY(3px) scale(1.1,.85)}55%{transform:translateY(-8px) scale(.94,1.07)}80%{transform:translateY(1px) scale(1.03,.97)}}
+@keyframes resident-look{0%,100%{transform:translate(0,0)}25%,40%{transform:translate(-4px,-1px)}65%,80%{transform:translate(4px,-1px)}}
+@keyframes resident-stretch{0%,100%{transform:scale(1)}45%{transform:translateY(-3px) scale(.94,1.1) rotate(-4deg)}75%{transform:scale(1.03,.97)}}
+@keyframes resident-wave{0%,100%{transform:rotate(-20deg) translateY(-5px)}35%{transform:rotate(-65deg) translateY(-7px)}70%{transform:rotate(-28deg) translateY(-5px)}}
+@keyframes resident-tap{0%,100%{transform:translate(-57px,0) rotate(15deg)}50%{transform:translate(-60px,-2px) rotate(30deg)}}
+@keyframes resident-pulse{50%{filter:drop-shadow(0 0 5px var(--resident-eye));opacity:.4}}
+@keyframes resident-nod{0%,100%{transform:rotate(0)}40%{transform:translateY(3px) rotate(6deg)}70%{transform:translateY(-1px) rotate(-2deg)}}

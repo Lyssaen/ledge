@@ -9,6 +9,12 @@ const run = (events: SurfaceEvent[], start: SurfaceState = initialSurface()) => 
 };
 
 describe('surface machine', () => {
+  it('the resident opens the list without selecting a session', () => {
+    const { s } = run([{ type: 'homeClick' }]);
+    expect(s.mode).toBe('list');
+    expect(s.selectedId).toBeNull();
+    expect(s.openedBy).toBe('mouse');
+  });
   it('an ask grows the bot first, then unfolds the bubble', () => {
     const r = run([{ type: 'ask', id: 'a' }]);
     expect(r.s.mode).toBe('handle'); expect(r.s.queue).toEqual(['a']); expect(r.effects).toContain('startTimer:unfold');

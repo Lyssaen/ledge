@@ -1,5 +1,7 @@
 import type { Tool } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
+import { ResidentMascot, type ResidentGesture } from '../bots/ResidentMascot';
+import { useEffect, useRef, useState } from 'react';
 import type { BotState } from '../bots/poseFor';
 import { BADGE } from '../ui/Badge';
 import { transition } from '../motion';
@@ -9,11 +11,17 @@ import { useI18n } from '../i18n/lang';
 
 export interface HandleBot { id: string; name: string; tool: Tool; state: BotState; pose: 1 | 2 | 3; pending: boolean; lifted?: boolean; readOnly?: boolean; tip: string }
 
-export function Handle({ bots, slots, big, visible, hoverId, onHover, onOpen, theme = 'dark', frozen = false, reducedMotion }: { bots: HandleBot[]; slots: Slot[]; big: number; visible: boolean; hoverId: string | null; onHover: (id: string | null) => void; onOpen: (id: string) => void; theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean }) {
+export function Handle({ bots, slots, big, visible, hoverId, onHover, onOpen, onOpenHome, top = 0, scale = 1, pointer = null, dnd = false, residentSignal, theme = 'dark', frozen = false, reducedMotion }: { bots: HandleBot[]; slots: Slot[]; big: number; visible: boolean; hoverId: string | null; onHover: (id: string | null) => void; onOpen: (id: string) => void; onOpenHome?: () => void; top?: number; scale?: number; pointer?: { x: number; y: number } | null; dnd?: boolean; residentSignal?: { key: number; kind: ResidentGesture }; theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean }) {
   const { small, gap } = slotSizes(bots.length);
   const { t } = useI18n();
+  const opening = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [boopKey, setBoopKey] = useState(0);
+  useEffect(() => () => clearTimeout(opening.current), []);
   return (
     <div data-layer="handle" inert={!visible} style={{ position: 'absolute', left: 0, top: 0, width: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', gap, padding: '8px 0', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? 200 : 0]]) }}>
+      <button data-resident type="button" aria-label={`${t.resident.name}, ${t.open}`} onClick={() => { setBoopKey(k => k + 1); clearTimeout(opening.current); opening.current = setTimeout(() => onOpenHome?.(), reducedMotion ? 0 : 180); }} title={frozen ? t.resident.offline : t.resident.tip(bots.length)} style={{ display: 'grid', placeItems: 'center', flexShrink: 0, width: 24, height: 20, padding: 0, border: 0, background: 'transparent', cursor: 'pointer' }}>
+        <ResidentMascot size={20} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} dnd={dnd} center={{ x: 14 * scale, y: top + 18 * scale }} pointer={pointer} gestureKey={residentSignal?.key} gestureKind={residentSignal?.kind} boopKey={boopKey} />
+      </button>
       {bots.map(b => {
         const on = slots.some(s => s.id === b.id);
         const up = b.pending || !!b.lifted;

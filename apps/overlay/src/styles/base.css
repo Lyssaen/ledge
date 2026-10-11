@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./tokens.css";
 @import "../bots/bots.css";
+@import "../bots/resident.css";
 /* Native controls (radios, checkboxes, scrollbars) follow the theme inside the overlay's own boxes only: on the root it
    would paint the transparent window's canvas. */
 :root[data-theme="dark"] [data-surface], :root[data-theme="dark"] [data-coachmark] { color-scheme: dark; }

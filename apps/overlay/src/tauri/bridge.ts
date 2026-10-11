@@ -10,16 +10,19 @@
  *   focus_terminal { title }           bring the matching terminal window forward (true when found)
  *   open_terminal { title, command }   open a Windows Terminal tab running `command` in WSL (true once spawned)
  *   open_url { url }                   open a web URL in the default browser (the webview never navigates)
- *   set_tray_labels { quit }           the tray menu's Quit item, in the overlay's language
+ *   set_tray_labels { open, newSession, dnd, quit }  translated tray menu items
  *   get_autostart                      whether Ledge launches at login (null: not offered, a `tauri dev` build)
  *   set_autostart { on }               turn launch at login on or off; returns the state Windows now reports
  *   event `ledge://edge` { inside }    cursor entered / left the edge bands
+ *   event `ledge://cursor-near` { x, y } | null    cursor near the notch, in logical work-area coordinates
+ *   event `ledge://tray` { action }    tray menu action
  * Coordinates sent to the shell are logical px from the top of the chosen monitor's work area ("monitor px").
  * The page is never zoomed (each layer applies its own UI scale), so its CSS px are monitor px; `setFrame` and
  * `setHotZones` still take an optional `zoom` (one CSS px = `zoom` monitor px) and round frames outward here. The shell
  * itself never knows about any zoom.
  */
 import { resolveMonitor, type MonitorInfo } from '../monitor';
+import { listen } from '@tauri-apps/api/event';
 
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const inTauri = isTauri;
@@ -27,6 +30,8 @@ const inTauri = isTauri;
 export interface Frame { top: number; w: number; h: number }
 export interface Band { top: number; h: number }
 export const EDGE_EVENT = 'ledge://edge';
+export const CURSOR_NEAR_EVENT = 'ledge://cursor-near';
+export const TRAY_EVENT = 'ledge://tray';
 
 /** The work-area height, in logical (monitor) px, of the monitor the Screen setting `choice` resolves to (`null`: the
  *  primary): the height the surface lays itself out in. */
@@ -130,9 +135,9 @@ export function openUrl(url: string): void {
 }
 
 /** Relabels the tray menu in the overlay's language (the shell starts in French). */
-export async function setTrayLabels(quit: string): Promise<void> {
+export async function setTrayLabels(labels: { open: string; newSession: string; dnd: string; quit: string }): Promise<void> {
   if (!inTauri()) return;
-  await invoke('set_tray_labels', { quit }).catch(() => {});
+  await invoke('set_tray_labels', labels).catch(() => {});
 }
 
 /** Whether Ledge launches at Windows login. `null` when it is not offered: in the browser and in a `tauri dev` build. */
@@ -157,8 +162,30 @@ export async function foregroundIsTerminal(): Promise<boolean> {
 export function onEdge(fn: (inside: boolean) => void): () => void {
   if (!inTauri()) return () => {};
   let off = () => {}; let disposed = false;
-  import('@tauri-apps/api/event').then(async ({ listen }) => {
-    const un = await listen<{ inside: boolean }>(EDGE_EVENT, e => { if (!disposed) fn(e.payload.inside); });
+  void listen<{ inside: boolean }>(EDGE_EVENT, e => { if (!disposed) fn(e.payload.inside); }).then(un => {
+    off = un;
+    if (disposed) un();
+  }).catch(() => {});
+  return () => { disposed = true; off(); };
+}
+
+/** The native window is only as wide as the notch, so the shell reports cursor movement just outside it.
+ *  Null means the cursor left the nearby region. Browser previews use document pointer events instead. */
+export function onCursorProximity(fn: (point: { x: number; y: number } | null) => void): () => void {
+  if (!inTauri()) return () => {};
+  let off = () => {}; let disposed = false;
+  void listen<{ x: number; y: number } | null>(CURSOR_NEAR_EVENT, e => { if (!disposed) fn(e.payload); }).then(un => {
+    off = un;
+    if (disposed) un();
+  }).catch(() => {});
+  return () => { disposed = true; off(); };
+}
+
+export type TrayAction = 'open' | 'new' | 'dnd';
+export function onTrayAction(fn: (action: TrayAction) => void): () => void {
+  if (!inTauri()) return () => {};
+  let off = () => {}; let disposed = false;
+  void listen<{ action: TrayAction }>(TRAY_EVENT, e => { if (!disposed) fn(e.payload.action); }).then(un => {
     off = un;
     if (disposed) un();
   }).catch(() => {});

@@ -33,7 +33,7 @@ export type SurfaceEvent =
   | { type: 'edgeEnter' } | { type: 'edgeLeave' } | Elapsed<'dwellElapsed'> | Elapsed<'unfoldElapsed'>
   | { type: 'surfaceEnter' } | { type: 'surfaceLeave' } | Elapsed<'leaveElapsed'>
   | { type: 'focusWithin'; on: boolean } | { type: 'visibility'; hidden: boolean }
-  | { type: 'botClick'; id: string } | { type: 'rowClick'; id: string } | { type: 'bubbleClick' } | Elapsed<'bubbleElapsed'>
+  | { type: 'botClick'; id: string } | { type: 'rowClick'; id: string } | { type: 'homeClick' } | { type: 'bubbleClick' } | Elapsed<'bubbleElapsed'>
   | { type: 'decidedInBubble' } | Elapsed<'holdElapsed'> | { type: 'decisionFailed'; id: string }
   | { type: 'back' } | { type: 'close' } | { type: 'shortcut' } | { type: 'settings' } | { type: 'help' } | { type: 'launch' }
   | { type: 'typing'; on: boolean } | { type: 'reading'; on: boolean } | { type: 'dnd'; on: boolean };
@@ -160,6 +160,7 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
     }
     case 'leaveElapsed': return listMayFold(s) ? { state: toHandle(s), effects: [] } : same(s);
     case 'botClick': case 'rowClick': return open(s, e.id);
+    case 'homeClick': return s.mode === 'handle' ? { state: { ...s, mode: 'list', openedBy: 'mouse', hot: false, unfoldDue: false }, effects: cancelAll } : same(s);
     case 'bubbleClick': return s.bubbleId ? open(s, s.bubbleId) : same(s);
     case 'bubbleElapsed': {
       if (s.mode !== 'bubble' || s.ack) return same(s);

@@ -10,6 +10,8 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 /// Emitted on every enter/leave transition of the cursor over the edge hot zones; payload `{ "inside": bool }`.
 pub const EDGE_EVENT: &str = "ledge://edge";
+/// Cursor positions near the notch, including while outside the webview. `null` ends the proximity gesture.
+pub const CURSOR_NEAR_EVENT: &str = "ledge://cursor-near";
 const EDGE_POLL: Duration = Duration::from_millis(50);
 /// Re-read the chosen monitor every 40 polls (2 s): resolution, scale or taskbar changes are picked up.
 const MONITOR_REFRESH_TICKS: u32 = 40;
@@ -56,9 +58,16 @@ pub struct MonitorInfo {
     pub primary: bool,
 }
 
-/// The tray menu's Quit item, kept so the webview can give it the overlay's language (`set_tray_labels`).
-struct Tray(MenuItem<Wry>);
+/// The tray menu items, kept so the webview can give them the overlay's language.
+struct Tray { open: MenuItem<Wry>, new_session: MenuItem<Wry>, dnd: MenuItem<Wry>, quit: MenuItem<Wry> }
+const TRAY_EVENT: &str = "ledge://tray";
+const TRAY_OPEN: &str = "open";
+const TRAY_NEW: &str = "new";
+const TRAY_DND: &str = "dnd";
 const TRAY_QUIT: &str = "quit";
+
+#[derive(Clone, Serialize)]
+struct TrayPayload { action: &'static str }
 
 /// The tray's tooltip and the title of its menu: the product, its version, and `(dev)` for a debug build, so an
 /// installed Ledge and a `tauri dev` one running side by side can be told apart.
@@ -70,6 +79,9 @@ pub fn tray_title(version: &str, debug: bool) -> String {
 struct EdgePayload {
     inside: bool,
 }
+
+#[derive(Clone, Serialize)]
+struct CursorPayload { x: f64, y: f64 }
 
 /// The chosen monitor in physical px: its left edge, its work area and its scale factor.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -380,8 +392,11 @@ fn default_autostart(app: &tauri::App) {
 
 /// Relabels the tray menu in the overlay's language (the shell starts in French, the default).
 #[tauri::command]
-fn set_tray_labels(quit: String, tray: tauri::State<'_, Tray>) -> Result<(), String> {
-    tray.0.set_text(quit).map_err(|e| e.to_string())
+fn set_tray_labels(open: String, new_session: String, dnd: String, quit: String, tray: tauri::State<'_, Tray>) -> Result<(), String> {
+    tray.open.set_text(open).map_err(|e| e.to_string())?;
+    tray.new_session.set_text(new_session).map_err(|e| e.to_string())?;
+    tray.dnd.set_text(dnd).map_err(|e| e.to_string())?;
+    tray.quit.set_text(quit).map_err(|e| e.to_string())
 }
 
 /// The notification-area icon: the overlay has no taskbar button, so this is where you see that Ledge runs and which
@@ -389,14 +404,19 @@ fn set_tray_labels(quit: String, tray: tauri::State<'_, Tray>) -> Result<(), Str
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let title = tray_title(&app.package_info().version.to_string(), cfg!(debug_assertions));
     let version = MenuItem::with_id(app, "version", &title, false, None::<&str>)?;
+    let open = MenuItem::with_id(app, TRAY_OPEN, "Ouvrir Ledge", true, None::<&str>)?;
+    let new_session = MenuItem::with_id(app, TRAY_NEW, "Nouvelle session", true, None::<&str>)?;
+    let dnd = MenuItem::with_id(app, TRAY_DND, "Ne pas déranger", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, TRAY_QUIT, "Quitter Ledge", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&version, &PredefinedMenuItem::separator(app)?, &quit])?;
+    let menu = Menu::with_items(app, &[&version, &PredefinedMenuItem::separator(app)?, &open, &new_session, &dnd, &PredefinedMenuItem::separator(app)?, &quit])?;
     let mut tray = TrayIconBuilder::with_id("ledge").tooltip(&title).menu(&menu).on_menu_event(|app, event| {
+        let action = if event.id() == TRAY_OPEN { Some(TRAY_OPEN) } else if event.id() == TRAY_NEW { Some(TRAY_NEW) } else if event.id() == TRAY_DND { Some(TRAY_DND) } else { None };
+        if let Some(action) = action { let _ = app.emit(TRAY_EVENT, TrayPayload { action }); }
         if event.id() == TRAY_QUIT { app.exit(0); }
     });
-    if let Some(icon) = app.default_window_icon() { tray = tray.icon(icon.clone()); }
+    tray = tray.icon(tauri::include_image!("icons/ledge-tray.png"));
     tray.build(app)?;
-    app.manage(Tray(quit));
+    app.manage(Tray { open, new_session, dnd, quit });
     Ok(())
 }
 
@@ -417,6 +437,7 @@ fn cursor_position() -> Option<(i32, i32)> { None }
 fn spawn_edge_poller(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut inside = false;
+        let mut cursor_near = false;
         let mut seen_gen: u64 = 0;
         let mut seen_screen: u64 = 0;
         let mut area: Option<Area> = None;
@@ -430,6 +451,15 @@ fn spawn_edge_poller(app: tauri::AppHandle) {
             }
             tick = tick.wrapping_add(1);
             let (Some(a), Some(c)) = (area, cursor_position()) else { continue };
+            let x = (c.0 - a.x) as f64 / a.scale;
+            let y = (c.1 - a.y) as f64 / a.scale;
+            let near = (0.0..=170.0).contains(&x);
+            if near {
+                let _ = app.emit(CURSOR_NEAR_EVENT, Some(CursorPayload { x, y }));
+            } else if cursor_near {
+                let _ = app.emit::<Option<CursorPayload>>(CURSOR_NEAR_EVENT, None);
+            }
+            cursor_near = near;
             let (zones, gen) = match app.state::<HotZones>().0.lock() { Ok(z) => z.clone(), Err(_) => continue };
             let rearmed = gen != seen_gen;
             seen_gen = gen;

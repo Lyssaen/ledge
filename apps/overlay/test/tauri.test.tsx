@@ -31,7 +31,7 @@ const calls = (cmd: string) => native.invoke.mock.calls.filter(c => c[0] === cmd
 const loadBridge = async () => { vi.resetModules(); return import('../src/tauri/bridge'); };
 
 beforeEach(() => { native.invoke.mockClear(); native.invoke.mockImplementation(async () => undefined); native.listeners.clear(); native.unlisten.mockClear(); native.shortcut = null; });
-afterEach(leaveTauri);
+afterEach(() => { leaveTauri(); vi.unstubAllEnvs(); });
 
 describe('frameOf', () => {
   it('pads the surface for its shadow, from the left screen edge, in whole px', () => {
@@ -182,13 +182,13 @@ describe('bridge', () => {
 
   it('setTrayLabels sends the Quit label to the shell; in the browser and on a failure it is a no-op', async () => {
     const browser = await loadBridge();
-    await browser.setTrayLabels('Quit Ledge');
+    await browser.setTrayLabels({ open: 'Open Ledge', newSession: 'New session', dnd: 'Do not disturb', quit: 'Quit Ledge' });
     expect(native.invoke).not.toHaveBeenCalled();
     enterTauri(); const b = await loadBridge();
-    await b.setTrayLabels('Quitter Ledge');
-    expect(calls('set_tray_labels')).toEqual([{ quit: 'Quitter Ledge' }]);
+    await b.setTrayLabels({ open: 'Ouvrir Ledge', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', quit: 'Quitter Ledge' });
+    expect(calls('set_tray_labels')).toEqual([{ open: 'Ouvrir Ledge', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', quit: 'Quitter Ledge' }]);
     native.invoke.mockImplementation(async () => { throw new Error('no shell'); });
-    await expect(b.setTrayLabels('Quit Ledge')).resolves.toBeUndefined();
+    await expect(b.setTrayLabels({ open: 'Open Ledge', newSession: 'New session', dnd: 'Do not disturb', quit: 'Quit Ledge' })).resolves.toBeUndefined();
   });
 
   it('launch at startup is read and set through the shell; null in the browser, from `tauri dev` and on a failure', async () => {
@@ -215,7 +215,7 @@ describe('<Surface> under Tauri', () => {
   const lastFrame = () => calls('set_frame').at(-1) as { top: number; width: number; height: number };
   const edge = (inside: boolean) => act(async () => { native.listeners.get('ledge://edge')!({ payload: { inside } }); });
 
-  async function mount(opts: { tauri: boolean; handleScale?: number; panelScale?: number; screenH?: number; launcher?: string[] }) {
+  async function mount(opts: { tauri: boolean; handleScale?: number; panelScale?: number; screenH?: number; launcher?: string[]; onToggleDnd?: () => void }) {
     if (opts.tauri) enterTauri();
     vi.resetModules();
     const [{ Surface }, { createDaemonClient }, { attachClient, daemonStore }] = await Promise.all([
@@ -227,7 +227,7 @@ describe('<Surface> under Tauri', () => {
     const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never }); detach = attachClient(client); client.connect();
     close = () => client.close();
     await sleep(100);
-    render(<Surface screenH={opts.screenH ?? 1080} handleScale={opts.handleScale} panelScale={opts.panelScale} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    render(<Surface screenH={opts.screenH ?? 1080} handleScale={opts.handleScale} panelScale={opts.panelScale} theme="dark" client={client} dnd={false} onToggleDnd={opts.onToggleDnd ?? (() => {})} />);
   }
   beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
   afterEach(async () => { detach(); close(); await mock.close(); vi.useRealTimers(); });
@@ -264,11 +264,11 @@ describe('<Surface> under Tauri', () => {
 
   it('sends the bounding frame and offsets the page by its top', async () => {
     await mount({ tauri: true });
-    // Two quiet bots: the handle is 45 px tall at 518 on a 1080 px work area.
-    expect(surface()).toHaveStyle({ top: '518px', width: '28px', height: '45px' });
+    // Two quiet bots plus Ledge: the handle is 70 px tall at 505 on a 1080 px work area.
+    expect(surface()).toHaveStyle({ top: '505px', width: '28px', height: '70px' });
     // The frame also holds the fillets joining the handle to the screen edge, above and below it.
-    await waitFor(() => expect(lastFrame()).toEqual({ top: 518 - SHOULDER_R - FRAME_PAD.top, width: 28 + FRAME_PAD.right, height: 45 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
-    await waitFor(() => expect(content()).toHaveStyle({ top: `-${518 - SHOULDER_R - FRAME_PAD.top}px` }));
+    await waitFor(() => expect(lastFrame()).toEqual({ top: 505 - SHOULDER_R - FRAME_PAD.top, width: 28 + FRAME_PAD.right, height: 70 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
+    await waitFor(() => expect(content()).toHaveStyle({ top: `-${505 - SHOULDER_R - FRAME_PAD.top}px` }));
     // No DOM hot zones: they would lie outside the window.
     expect(document.querySelectorAll('[data-hotzone]')).toHaveLength(0);
   });
@@ -285,7 +285,7 @@ describe('<Surface> under Tauri', () => {
       return new Promise<undefined>(r => pending.push(() => r(undefined)));
     });
     await mount({ tauri: true });
-    const handleTop = 518 - SHOULDER_R - FRAME_PAD.top;
+    const handleTop = 505 - SHOULDER_R - FRAME_PAD.top;
     await waitFor(() => expect(seen.at(-1)).toEqual({ top: handleTop, offset: `-${handleTop}px` }));
     expect(content()).toHaveStyle({ top: `-${handleTop}px` }); // still unanswered
     await answer();
@@ -310,13 +310,13 @@ describe('<Surface> under Tauri', () => {
   it('a handle at 2x on a 4K work area: the surface, the frame and the bands are the 1080p ones doubled', async () => {
     // A 4K work area (2160 logical px), handle 200 %: the handle lays out in 1080 units and is drawn at 2x.
     await mount({ tauri: true, screenH: 2160, handleScale: 2, panelScale: 1 });
-    expect(surface()).toHaveStyle({ top: `${2 * 518}px`, width: '56px', height: '90px' });
+    expect(surface()).toHaveStyle({ top: `${2 * 505}px`, width: '56px', height: '140px' });
     expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('2');
     expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1');
-    const top = 2 * 518 - SHOULDER_R - FRAME_PAD.top;
-    await waitFor(() => expect(lastFrame()).toEqual({ top, width: 56 + FRAME_PAD.right, height: 90 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
+    const top = 2 * 505 - SHOULDER_R - FRAME_PAD.top;
+    await waitFor(() => expect(lastFrame()).toEqual({ top, width: 56 + FRAME_PAD.right, height: 140 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
     expect(content()).toHaveStyle({ top: `-${top}px` });
-    await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 80, h: 2 * (518 - 6 - 40) }, { top: 2 * (518 + 45 + 6), h: 2 * (1080 - 40 - (518 + 45 + 6)) }] }));
+    await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 80, h: 2 * (505 - 6 - 40) }, { top: 2 * (505 + 70 + 6), h: 2 * (1080 - 40 - (505 + 70 + 6)) }] }));
     // The windows keep their own scale: the list opens at its base 380 px, centered on the real screen.
     await waitFor(() => expect(native.shortcut).not.toBeNull());
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
@@ -332,10 +332,38 @@ describe('<Surface> under Tauri', () => {
     await waitFor(() => expect(lastFrame().width).toBe(36 + 324 + FRAME_PAD.right));
   });
 
+  it('the native cursor event moves Ledge’s gaze outside the narrow webview, and null recentres it', async () => {
+    vi.stubEnv('VITE_LEDGE_MOTION', '1');
+    await mount({ tauri: true });
+    await waitFor(() => expect([...native.listeners.keys()]).toContain('ledge://cursor-near'));
+    const face = document.querySelector('[data-resident] svg') as SVGSVGElement;
+    const center = parseFloat(surface().style.top) + 18;
+    act(() => native.listeners.get('ledge://cursor-near')!({ payload: { x: 80, y: center } }));
+    expect(face).toHaveAttribute('data-near', 'true');
+    expect(face.style.getPropertyValue('--resident-gx')).not.toBe('0px');
+    act(() => native.listeners.get('ledge://cursor-near')!({ payload: null }));
+    expect(face).toHaveAttribute('data-near', 'false');
+  });
+
+  it('the Ledge tray opens the list, starts a new session, and toggles DND', async () => {
+    const toggleDnd = vi.fn();
+    await mount({ tauri: true, onToggleDnd: toggleDnd });
+    await waitFor(() => expect(native.listeners.has('ledge://tray')).toBe(true));
+    const tray = native.listeners.get('ledge://tray')!;
+    await act(async () => tray({ payload: { action: 'open' } }));
+    await waitFor(() => expect(surface()).toHaveAttribute('data-mode', 'list'));
+    expect(document.querySelector('[data-row-id="a"]')).toHaveTextContent('1');
+    await act(async () => tray({ payload: { action: 'new' } }));
+    await waitFor(() => expect(surface()).toHaveAttribute('data-mode', 'launch'));
+    await act(async () => tray({ payload: { action: 'dnd' } }));
+    expect(toggleDnd).toHaveBeenCalledOnce();
+    expect(calls('focus_overlay').length).toBeGreaterThanOrEqual(2);
+  });
+
   it('the shell edge event drives edgeEnter/edgeLeave, and the hot zones are armed only on the bare handle', async () => {
     await mount({ tauri: true });
     await waitFor(() => expect(native.listeners.has('ledge://edge')).toBe(true));
-    await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 40, h: 518 - 6 - 40 }, { top: 518 + 45 + 6, h: 1080 - 40 - (518 + 45 + 6) }] }));
+    await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 40, h: 505 - 6 - 40 }, { top: 505 + 70 + 6, h: 1080 - 40 - (505 + 70 + 6) }] }));
     await edge(true); await edge(false);
     await act(async () => { vi.advanceTimersByTime(200); });
     expect(surface()).toHaveAttribute('data-mode', 'handle'); // left before the 180 ms dwell

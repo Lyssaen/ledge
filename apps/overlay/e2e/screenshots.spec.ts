@@ -81,7 +81,7 @@ for (const theme of ['dark', 'light'] as const) {
       await expectMode(page, 'bubble');
       await expect(surface(page)).toHaveAttribute('data-mode', 'handle', { timeout: 10_000 });
       await shoot(page, `handle-${theme}`, [], 240);
-      const bot = layer(page, 'handle').getByRole('button').first();
+      const bot = layer(page, 'handle').locator('button:not([data-resident])').first();
       await bot.hover();
       await page.waitForTimeout(400);
       await shoot(page, `handle-tooltip-${theme}`, ['[role="tooltip"]']);

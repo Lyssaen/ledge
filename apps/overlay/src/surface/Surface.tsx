@@ -4,6 +4,7 @@ import type { Session } from '@ledge/protocol';
 import { useDaemon } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
 import { botState, poseFor } from '../bots/poseFor';
+import type { ResidentGesture } from '../bots/ResidentMascot';
 import { scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
@@ -25,7 +26,7 @@ import { SessionList, rowHint, EXPANDED_ROW_H, type ListNotice } from './Session
 import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
 import { useI18n, type Lang } from '../i18n/lang';
 import { transition, MOTION, ms, enterDelay } from '../motion';
-import { focusTerminal, openTerminal, onShortcut, onEdge, setHotZones, focusOverlay, releaseFocus, isTauri } from '../tauri/bridge';
+import { focusTerminal, openTerminal, onShortcut, onEdge, onCursorProximity, onTrayAction, setHotZones, focusOverlay, releaseFocus, isTauri } from '../tauri/bridge';
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { frameOf, type Box } from './frame';
 import { Shoulders, shoulderR } from './Shoulders';
@@ -88,6 +89,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const surfaceRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
+  const [residentPointer, setResidentPointer] = useState<{ x: number; y: number } | null>(null);
   const offsetRef = useRef(0);
   useEffect(() => () => ctl.dispose(), [ctl]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -104,6 +106,14 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
 
   // The native window only covers what it draws, so in Tauri the shell watches the edge bands and reports crossings.
   useEffect(() => onEdge(on => dispatch({ type: on ? 'edgeEnter' : 'edgeLeave' })), [dispatch]);
+  useEffect(() => onCursorProximity(point => setResidentPointer(ctl.state().mode === 'handle' ? point : null)), [ctl]);
+  useEffect(() => onTrayAction(action => {
+    if (action === 'dnd') { onToggleDnd(); return; }
+    dispatch({ type: 'close' });
+    dispatch({ type: 'shortcut' });
+    if (action === 'new') dispatch({ type: 'launch' });
+    void focusOverlay();
+  }), [dispatch, onToggleDnd]);
 
   // Daemon changes drive the machine. DND keeps the bot growing in the handle but never asks for a bubble.
   // A reply the daemon rejects comes back into its draft (unless something new was typed meanwhile).
@@ -125,7 +135,11 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   // The last known pointer position, to tell whether the surface shrank out from under it.
   useEffect(() => {
     // In page coordinates: under Tauri the window (and so the viewport) starts at the frame's top.
-    const track = (e: PointerEvent | MouseEvent) => { pointer.current = { x: e.clientX, y: e.clientY + offsetRef.current }; };
+    const track = (e: PointerEvent | MouseEvent) => {
+      pointer.current = { x: e.clientX, y: e.clientY + offsetRef.current };
+      // The native poller covers the screen beyond the tiny webview; browser previews use document events.
+      if (!isTauri()) setResidentPointer(e.clientX <= 170 ? pointer.current : null);
+    };
     document.addEventListener('pointermove', track); document.addEventListener('mousemove', track);
     return () => { document.removeEventListener('pointermove', track); document.removeEventListener('mousemove', track); };
   }, []);
@@ -169,6 +183,17 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   // The finishing bot is big from the moment its notice is due until the bubble folds.
   const liftedId = st.queue.length === 0 && st.done.length > 0 && (st.unfoldDue || (st.mode === 'bubble' && st.bubbleKind === 'finished')) ? st.done[0] : null;
   const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, readOnly: s.source === 'hook_only', tip: isPending(s) ? `${t.handleLabel[botState(s)]} · ${s.pending?.text ?? ''}` : rowHint(s, t) })), [sessions, t, liftedId]);
+  const previousResident = useRef({ ids: new Set(sessions.map(s => s.id)), pending: new Set(sessions.filter(isPending).map(s => s.id)) });
+  const signalCounter = useRef(0);
+  const [residentSignal, setResidentSignal] = useState<{ key: number; kind: ResidentGesture }>();
+  useEffect(() => {
+    const before = previousResident.current;
+    const ids = new Set(sessions.map(s => s.id));
+    const pending = new Set(sessions.filter(isPending).map(s => s.id));
+    if ([...ids].some(id => !before.ids.has(id))) setResidentSignal({ key: ++signalCounter.current, kind: 'hello' });
+    else if ([...pending].some(id => !before.pending.has(id))) setResidentSignal({ key: ++signalCounter.current, kind: 'pulse' });
+    previousResident.current = { ids, pending };
+  }, [sessions]);
   const selected = st.selectedId ? byId.get(st.selectedId) ?? null : null;
   // The last open session stays mounted (inert) while the view slides out, so its content fades instead of vanishing
   // and focus left on it is detectably stranded (see useFocusRestore). A session removed by the daemon leaves the same
@@ -372,7 +397,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
         style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--notch)', color: 'var(--sidebar-foreground)', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
           transition: surfaceTransition }}>
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-          <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+          <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: 'homeClick' })} top={geo.top} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
