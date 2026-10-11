@@ -3,7 +3,7 @@ import { PROTOCOL_PORT } from '@ledge/protocol';
 import { createDaemonClient } from './daemon/client';
 import { attachClient } from './daemon/store';
 import { Surface } from './surface/Surface';
-import { isTauri, listMonitors, screenHeight, setMonitor, setTrayLabels } from './tauri/bridge';
+import { getAutostart, isTauri, listMonitors, screenHeight, setAutostart, setMonitor, setTrayLabels } from './tauri/bridge';
 import { autoScale, loadScale, migrateLegacyScale, resolveScale, saveScale, type ScaleTarget, type UiScale } from './scale';
 import { loadMonitor, saveMonitor, type MonitorInfo } from './monitor';
 import { LangProvider, loadLang, messagesFor, saveLang, type Lang } from './i18n/lang';
@@ -17,6 +17,9 @@ export function App() {
   // The Screen setting (null: the primary monitor) and the monitors it can choose from, listed again when Settings opens.
   const [monitor, setMonitorChoice] = useState<string | null>(loadMonitor);
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
+  // Launch at login lives in Windows (the Run key), not in localStorage: read again whenever Settings opens, since it
+  // can also be changed from the Task Manager. null: not offered (browser, `tauri dev`).
+  const [autostart, setAutostartState] = useState<boolean | null>(null);
   const [lang, setLang] = useState<Lang>(loadLang);
   const [dnd, setDnd] = useState(() => { try { return localStorage.getItem('ledge.dnd') === '1'; } catch { return false; } });
   const [theme, setTheme] = useState<'dark' | 'light'>(() => { try { return (localStorage.getItem('ledge.theme') as 'dark' | 'light') || 'dark'; } catch { return 'dark'; } });
@@ -27,6 +30,9 @@ export function App() {
   useEffect(() => { const off = attachClient(client); client.connect(); return () => { off(); client.close(); }; }, [client]);
   const refreshMonitors = () => { listMonitors().then(setMonitors).catch(() => {}); };
   useEffect(refreshMonitors, []);
+  const refreshAutostart = () => { getAutostart().then(setAutostartState).catch(() => {}); };
+  const onSettingsOpen = () => { refreshMonitors(); refreshAutostart(); };
+  const onAutostart = (on: boolean) => { setAutostartState(on); setAutostart(on).then(setAutostartState).catch(() => {}); };
   // The shell moves the overlay to the chosen monitor; the surface then lays itself out in that monitor's work area.
   useEffect(() => { saveMonitor(monitor); let live = true; setMonitor(monitor).then(() => screenHeight(monitor)).then(h => { if (live) setWorkH(h); }).catch(() => {}); return () => { live = false; }; }, [monitor]);
   // In the browser the viewport is the work area: follow its resizes.
@@ -41,7 +47,8 @@ export function App() {
     <LangProvider lang={lang}>
       <Surface screenH={workH} handleScale={handleScale} panelScale={panelScale} scales={scales} autoScales={{ handle: autoScale(workH, 'handle'), panel: autoScale(workH, 'panel') }}
         onScale={(target, s) => setScales(x => ({ ...x, [target]: s }))} onLang={setLang}
-        monitors={monitors} monitor={monitor} onMonitor={setMonitorChoice} onSettingsOpen={refreshMonitors}
+        monitors={monitors} monitor={monitor} onMonitor={setMonitorChoice} onSettingsOpen={onSettingsOpen}
+        autostart={autostart} onAutostart={onAutostart}
         theme={theme} client={client} dnd={dnd} soundPlayer={player} onToggleDnd={() => setDnd(d => !d)} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />
     </LangProvider>
   );

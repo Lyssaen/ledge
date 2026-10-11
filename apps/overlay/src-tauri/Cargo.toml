@@ -11,6 +11,8 @@ tauri-build = { version = "2", features = [] }
 # `tray-icon`: the notification-area icon (version, quit).
 tauri = { version = "2.6", features = ["tray-icon"] }
 tauri-plugin-global-shortcut = "2"
+# Launch at login: the HKCU Run key on Windows, no administrator rights.
+tauri-plugin-autostart = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
