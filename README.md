@@ -389,6 +389,7 @@ docs/                design spec, implementation plans, mockups, the approved pr
 
 ## Design documents
 
+- Ideas from the two latest Claude Code sessions (features and bot motion): [next steps](docs/ideas/2026-10-11-next-steps.md).
 - Design spec: [docs/superpowers/specs/2026-10-09-ledge-design.md](docs/superpowers/specs/2026-10-09-ledge-design.md)
 - Starting a session from Ledge: [spec](docs/superpowers/specs/2026-10-10-launch-from-ledge-design.md) and [mockups](https://claude.ai/artifact/YBX4UV7Z2eBRNKAwNh3876)
 - Design canvas (mockups and playable prototype): https://claude.ai/artifact/57oDjsKdabQBmPgAXn15mc
