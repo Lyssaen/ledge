@@ -338,7 +338,7 @@ describe('mapCursorHook', () => {
 describe('SessionEnd against a live daemon', () => {
   it('a launcher session survives Claude SessionEnd and unregister records the real exit code', async () => {
     const store = new Store();
-    const srv = await startServer({ store, tmux: {} as never, port: 0 });
+    const srv = await startServer({ store, tmux: { async setOption() {} } as never, port: 0 });
     try {
       store.upsert({ id: '7f3a', name: 'Otto', tool: 'claude', cwd: '/w', project: 'w', title: 'Otto · w', tmuxSession: 'ledge-7f3a', state: 'working', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher' });
       process.env.LEDGE_SESSION = '7f3a';
@@ -356,7 +356,7 @@ describe('SessionEnd against a live daemon', () => {
   });
   it('register keeps the exit of a hook_only session that already ended', async () => {
     const store = new Store();
-    const srv = await startServer({ store, tmux: {} as never, port: 0 });
+    const srv = await startServer({ store, tmux: { async setOption() {} } as never, port: 0 });
     try {
       const ended = { id: 'b', name: 'Pim', tool: 'claude' as const, cwd: '', project: 'unknown', title: 'untracked session', tmuxSession: null, state: 'exited' as const, helpers: [], startedAt: at, lastActivityAt: at, exitCode: 2, exitedAt: at, source: 'hook_only' as const };
       store.upsert(ended);

@@ -82,9 +82,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const broadcast = (msg: ServerMessage) => { for (const c of wss.clients) send(c, msg); };
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
+  /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
+  const titles = new Map<string, string>();
   const unsubscribe = store.onChange(c => {
     if (c.type === 'recents') return broadcast({ type: 'recents', recents: c.recents });
-    if (c.type === 'removed') previews.delete(c.id);
+    if (c.type === 'updated' && c.session.tmuxSession && titles.get(c.session.id) !== c.session.title) {
+      titles.set(c.session.id, c.session.title);
+      tmux.setOption(c.session.tmuxSession, '@ledge_title', c.session.title).catch(e => log(`tab title not set for ${c.session.id}: ${(e as Error).message}`));
+    }
+    if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); }
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
@@ -219,6 +225,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           store.upsert(reduce(base, msg.event));
         } else store.apply(msg.id, msg.event);
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
+        return;
+      }
+      case 'session.rename': {
+        if (!store.get(msg.id)) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
+        store.apply(msg.id, { name: 'Renamed', at: now(), source: 'daemon', text: msg.topic });
         return;
       }
       case 'session.unregister':

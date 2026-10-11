@@ -11,6 +11,8 @@ export interface Tmux {
   /** Empty when no tmux server runs; throws on any other failure. */
   listSessions(): Promise<string[]>;
   killSession(name: string): Promise<void>;
+  /** Sets a user option (`@name`) on the session; the tmux conf shows `@ledge_title` as the terminal tab's title. */
+  setOption(name: string, option: string, value: string): Promise<void>;
   attachArgs(name: string): string[];
 }
 
@@ -60,6 +62,10 @@ export function realTmux(socket = 'ledge'): Tmux {
       // No server is the only failure that legitimately means "no sessions".
       if (/no server running|error connecting to/i.test(r.stderr)) return [];
       throw new Error(`tmux list-sessions failed: ${r.stderr.trim()}`);
+    },
+    async setOption(name, option, value) {
+      const r = await t(['set-option', '-t', `=${name}:`, option, value]);
+      if (r.code !== 0) throw new Error(`tmux set-option failed: ${r.stderr.trim()}`);
     },
     async killSession(name) { await t(['kill-session', '-t', `=${name}`]); },
     attachArgs(name) { return [...base(), 'attach-session', '-t', `=${name}`]; }

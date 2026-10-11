@@ -19,7 +19,7 @@ function fakeTmux(panes: Record<string, string>): Tmux {
   return {
     async newSession() {}, async sendText() {}, async sendKeys() {},
     async capture(n, lines) { if (n in failing) return null; if (n in throwing) throw new Error('boom'); return (panes[n] ?? '').split('\n').slice(-lines).join('\n'); }, async hasSession(n) { return n in panes; },
-    async listSessions() { return Object.keys(panes); }, async killSession(n) { delete panes[n]; }, attachArgs: () => []
+    async listSessions() { return Object.keys(panes); }, async setOption() {}, async killSession(n) { delete panes[n]; }, attachArgs: () => []
   };
 }
 let store: Store; let panes: Record<string, string>; let previews: string[][];

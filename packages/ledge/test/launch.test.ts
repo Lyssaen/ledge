@@ -13,7 +13,7 @@ import { killTestServer, until } from './helpers.js';
 import { realTmux, type Tmux } from '../src/tmux.js';
 
 const agent = fileURLToPath(new URL('./fake-agent.mjs', import.meta.url));
-const noop: Tmux = { async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return ''; }, async hasSession() { return false; }, async listSessions() { return []; }, async killSession() {}, attachArgs: () => [] };
+const noop: Tmux = { async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return ''; }, async hasSession() { return false; }, async listSessions() { return []; }, async setOption() {}, async killSession() {}, attachArgs: () => [] };
 const freePort = async () => { const s = createServer(); await new Promise<void>(r => s.listen(0, '127.0.0.1', r)); const p = (s.address() as { port: number }).port; await new Promise(r => s.close(r)); return p; };
 
 /** Runs the real `tmux attach` inside a pseudo-terminal (util-linux `script`), like a user's terminal tab. */

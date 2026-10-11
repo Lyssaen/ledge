@@ -18,13 +18,15 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
 });
 
 type NewSession = { name: string; cwd: string; env: Record<string, string>; command: string[] };
-function fakeTmux(panes: Record<string, string[]>): Tmux & { sent: string[][]; created: NewSession[] } {
-  const sent: string[][] = []; const created: NewSession[] = [];
+function fakeTmux(panes: Record<string, string[]>): Tmux & { sent: string[][]; options: string[][]; created: NewSession[] } {
+  // Options are kept apart from `sent`: every session update may set a tab title, and the tests on `sent` assert what was typed.
+  const sent: string[][] = []; const options: string[][] = []; const created: NewSession[] = [];
   return {
-    sent, created,
+    sent, options, created,
     async newSession(o) { created.push(o); panes[o.name] = ['']; }, async sendText(n, t) { sent.push(['text', n, t]); }, async sendKeys(n, k) { sent.push(['keys', n, ...k]); },
     async capture(n) { const q = panes[n] ?? ['']; return q.length > 1 ? q.shift()! : q[0]!; },
     async hasSession(n) { return n in panes; }, async listSessions() { return Object.keys(panes); },
+    async setOption(n, o, v) { options.push(['option', n, o, v]); },
     async killSession(n) { delete panes[n]; sent.push(['kill', n]); }, attachArgs: n => ['attach', n]
   };
 }
@@ -51,6 +53,17 @@ function handshake(port: number, origin?: string): Promise<'open' | number> {
 }
 
 describe('launchArgs and resolveFolder', () => {
+  it('renames a session and tells tmux the new tab title', async () => {
+    store.upsert(mk('a'));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.rename', id: 'a', topic: 'Hooks Codex' });
+    const m = await c.next('session.updated');
+    expect(m.session).toMatchObject({ topic: 'Hooks Codex', topicSource: 'user', title: 'Otto · Hooks Codex' });
+    expect(tmux.options).toContainEqual(['option', 'ledge-a', '@ledge_title', 'Otto · Hooks Codex']);
+    c.send({ type: 'session.rename', id: 'zz', topic: 'x' });
+    expect((await c.next('error')).id).toBe('zz');
+    await c.close();
+  });
   it('builds the agent arguments: resume flag first, then the trimmed prompt; nothing for an empty form', () => {
     expect(launchArgs({ tool: 'claude' })).toEqual([]);
     expect(launchArgs({ tool: 'claude', prompt: '  ' })).toEqual([]);
