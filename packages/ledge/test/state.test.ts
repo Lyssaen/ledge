@@ -540,3 +540,35 @@ describe('reduce: PaneIdle (the pane is at rest)', () => {
     expect(reduce(s, idle())).toBe(s);
   });
 });
+
+describe('topics', () => {
+  const at = '2026-10-11T10:00:00.000Z';
+  const mk = (_id: string) => session('idle');
+  it('takes the first prompt as topic, never a later one', () => {
+    let s = reduce(mk('a'), { name: 'UserPromptSubmit', at, source: 'hook', text: 'Ajoute un README\nIl manque.' });
+    expect(s.topic).toBe('Ajoute un README'); expect(s.topicSource).toBe('prompt'); expect(s.title).toBe('Otto · Ajoute un README');
+    s = reduce(s, { name: 'UserPromptSubmit', at, source: 'hook', text: 'Autre chose' });
+    expect(s.topic).toBe('Ajoute un README');
+  });
+  it('a pane title replaces a prompt topic, not a user one', () => {
+    let s = reduce(mk('a'), { name: 'UserPromptSubmit', at, source: 'hook', text: 'premier prompt' });
+    s = reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'add-readme-file' });
+    expect(s.topic).toBe('add-readme-file'); expect(s.topicSource).toBe('pane');
+    s = reduce(s, { name: 'Renamed', at, source: 'daemon', text: 'Mon sujet' });
+    s = reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'other-title' });
+    expect(s.topic).toBe('Mon sujet'); expect(s.topicSource).toBe('user'); expect(s.title).toBe('Otto · Mon sujet');
+  });
+  it('an empty rename hands back to the automatic sources', () => {
+    let s = reduce(mk('a'), { name: 'Renamed', at, source: 'daemon', text: 'Mon sujet' });
+    s = reduce(s, { name: 'Renamed', at, source: 'daemon', text: '  ' });
+    expect(s.topic).toBeUndefined(); expect(s.topicSource).toBeUndefined(); expect(s.title).toBe('Otto · harness-assistant');
+    s = reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'again' });
+    expect(s.topic).toBe('again');
+  });
+  it('titles touch neither activity nor the hook clock, and an unchanged title is a no-op', () => {
+    const base = mk('a');
+    const s = reduce(base, { name: 'PaneTitle', at, source: 'pane', text: 'x' });
+    expect(s.lastActivityAt).toBe(base.lastActivityAt); expect(s.lastHookAt).toBe(base.lastHookAt);
+    expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'x' })).toBe(s);
+  });
+});

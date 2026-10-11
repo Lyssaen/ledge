@@ -189,6 +189,15 @@ function inputBox(lines: string[]): { top: number; bottom: number } | null {
   return null;
 }
 
+const TITLE_RULE = /^─{10,} (\S.*?) ─+$/;
+/** `───── add-readme-file ─`: the title Claude Code writes on the input box's top rule once the conversation has one. */
+function paneTitle(pane: string): string | null {
+  const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
+  const box = inputBox(lines);
+  const m = box ? TITLE_RULE.exec(lines[box.top]!.trim()) : null;
+  return m ? m[1]! : null;
+}
+
 function previewLines(pane: string): string[] {
   const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
   const box = inputBox(lines);
@@ -226,6 +235,7 @@ export const claudeAdapter: Adapter = {
   promptStillVisible,
   previewLines,
   atRest,
+  paneTitle,
   keysFor(decision, pending, pane) {
     if (decision === 'deny') return [{ keys: ['Escape'] }];
     const t = pane ? parseTrust(pane) : null;

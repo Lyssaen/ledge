@@ -1,13 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SessionList, rowHint } from '../src/surface/SessionList';
+import { displayOrder } from '../src/surface/groups';
 import { fakeSession } from './mockDaemon';
 
 const sessions = [
-  fakeSession('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } }),
-  fakeSession('b', { name: 'Pim', tool: 'codex', project: 'speos-api', startedAt: '2026-10-09T18:01:00.000Z' }),
-  fakeSession('c', { name: 'Bix', source: 'hook_only', tmuxSession: null, startedAt: '2026-10-09T18:02:00.000Z' }),
-  fakeSession('d', { name: 'Lu', state: 'exited', exitCode: 0, startedAt: '2026-10-09T18:03:00.000Z' })
+  fakeSession('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' }, topic: 'Mascotte et tray', branch: 'main', repo: 'harness-assistant', repoPath: '/w/harness-assistant' }),
+  fakeSession('b', { name: 'Pim', tool: 'codex', project: 'speos-api', cwd: '/w/speos-api', startedAt: '2026-10-09T18:01:00.000Z', branch: 'worktree-codex', worktree: true, repo: 'speos-api', repoPath: '/w/speos-api' }),
+  fakeSession('c', { name: 'Bix', source: 'hook_only', tmuxSession: null, cwd: '/w/notes', project: 'notes', startedAt: '2026-10-09T18:02:00.000Z' }),
+  fakeSession('d', { name: 'Lu', state: 'exited', exitCode: 0, cwd: '/w/blog', project: 'blog', startedAt: '2026-10-09T18:03:00.000Z' })
 ];
 
 describe('<SessionList>', () => {
@@ -18,8 +19,15 @@ describe('<SessionList>', () => {
     expect(rows).toHaveLength(4);
     expect(rows[0]).toHaveStyle({ backgroundColor: 'var(--secondary)', borderLeftColor: 'var(--sidebar-primary)' });
     expect(within(rows[0]!).getByText('Approval')).toBeInTheDocument();
-    // The secondary line is "Name · Tool · age" only; the badge carries the state.
-    expect(within(rows[1]!).getByText(/^Pim · Codex · /)).toBeInTheDocument();
+    // Line 1 is the topic (or the placeholder), line 2 the name, the branch chip and the age; the badge sits on line 2.
+    expect(within(rows[0]!).getByText('Mascotte et tray')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('No topic yet')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('codex').closest('[data-branch]')).toHaveAttribute('title', 'worktree worktree-codex');
+    expect(within(rows[1]!).getByText(/^Pim$/)).toBeInTheDocument();
+    expect(rows[1]).toHaveAttribute('title', 'Codex · /w/speos-api');
+    // One header per repository (the fixture has four), each with its count.
+    expect(screen.getByText('harness-assistant')).toBeInTheDocument();
+    expect(screen.getAllByText(/^\d+ bots?$/)).toHaveLength(4);
     expect(within(rows[2]!).getByText('Read only')).toBeInTheDocument();
     expect(within(rows[3]!).getByText('Done')).toBeInTheDocument();
   });
@@ -51,6 +59,17 @@ describe('<SessionList>', () => {
     const rows = screen.getAllByRole('button', { name: /open/ });
     expect(rows[0]!.getAttribute('data-delay')).toBe('310');
     expect(rows[3]!.getAttribute('data-delay')).toBe('382');
+  });
+});
+
+describe('<SessionList> grouping', () => {
+  it('numbers rows in display order when repositories interleave', () => {
+    const x = (id: string) => fakeSession(id, { name: id.toUpperCase(), repo: 'X', repoPath: '/w/x', cwd: '/w/x' });
+    const mixed = [x('a'), fakeSession('c', { name: 'C', repo: 'Y', repoPath: '/w/y', cwd: '/w/y' }), x('b')];
+    render(<SessionList sessions={displayOrder(mixed)} visible numbered selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
+    const rows = screen.getAllByRole('button', { name: /open/ });
+    expect(rows.map(r => r.parentElement!.getAttribute('data-row-id'))).toEqual(['a', 'b', 'c']);
+    rows.forEach((r, i) => expect(within(r).getByText(String(i + 1))).toBeInTheDocument());
   });
 });
 
@@ -118,5 +137,12 @@ describe('rowHint', () => {
       rerender(<SessionList {...props} sessions={sessions} onOpen={() => {}} />);
       expect(screen.queryAllByRole('button', { name: /^Remove from list/ })).toHaveLength(0);
     });
+  });
+  it('carries the ask field above the footer', () => {
+    const onAsk = vi.fn();
+    render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} onAsk={onAsk} />);
+    const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
+    fireEvent.change(input, { target: { value: 'hello' } }); fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onAsk).toHaveBeenCalledWith('hello');
   });
 });

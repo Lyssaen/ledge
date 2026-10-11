@@ -13,6 +13,8 @@ import { spawnSession } from '../spawn.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
 import { loginShellPath } from '../shell-path.js';
 import { log } from '../log.js';
+import { createChat, type Chat } from '../chat/service.js';
+import { paths } from '../paths.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -61,12 +63,13 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentPath?: () => Promise<string> }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentPath?: () => Promise<string>; chat?: Chat; claudeBin?: string[] }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
   // Under systemd the daemon has the bare system PATH: a launched agent gets the login shell's, as a terminal would.
   const agentPath = opts.agentPath ?? (() => loginShellPath({ fallback: process.env.PATH ?? '' }));
+  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, env: async () => ({ ...process.env, PATH: await agentPath() }), bin: opts.claudeBin, now });
   const wss = new WebSocketServer({
     host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT,
     verifyClient: ({ req }: { req: IncomingMessage }) => {
@@ -82,14 +85,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const broadcast = (msg: ServerMessage) => { for (const c of wss.clients) send(c, msg); };
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
+  /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
+  const titles = new Map<string, string>();
   const unsubscribe = store.onChange(c => {
     if (c.type === 'recents') return broadcast({ type: 'recents', recents: c.recents });
-    if (c.type === 'removed') previews.delete(c.id);
+    if (c.type === 'updated' && c.session.tmuxSession && titles.get(c.session.id) !== c.session.title) {
+      titles.set(c.session.id, c.session.title);
+      tmux.setOption(c.session.tmuxSession, '@ledge_title', c.session.title).catch(e => log(`tab title not set for ${c.session.id}: ${(e as Error).message}`));
+    }
+    if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); }
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
     send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher });
     for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
+    send(ws, { type: 'chat.history', turns: chat.history() });
   };
   const preview = (id: string, lines: string[]) => {
     if (!store.get(id)) return;
@@ -221,6 +231,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
         return;
       }
+      case 'session.rename': {
+        if (!store.get(msg.id)) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
+        store.apply(msg.id, { name: 'Renamed', at: now(), source: 'daemon', text: msg.topic });
+        return;
+      }
       case 'session.unregister':
         store.apply(msg.id, { name: 'SessionEnd', at: now(), source: 'hook', exitCode: msg.exitCode });
         return;
@@ -266,6 +281,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.remove(msg.id);
         return;
       }
+      case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast);
+      case 'chat.cancel': return chat.cancel(msg.qid);
       case 'session.focus':
         return; // handled by the overlay plan via wt.exe; the daemon only acknowledges
     }

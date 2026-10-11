@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, ServerMessageSchema, SessionSchema, PROTOCOL_PORT, NAMES, pickName } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName } from '../src/index.js';
+
+const T0 = '2026-10-09T18:02:00.000Z';
 
 const session = {
   id: '7f3a', name: 'Otto', tool: 'claude', cwd: '/home/u/Workspace/harness-assistant',
@@ -15,6 +17,22 @@ describe('protocol', () => {
 
   it('accepts a full session', () => {
     expect(SessionSchema.parse(session)).toEqual(session);
+  });
+
+  it('accepts a session with topic and repository fields', () => {
+    const s = { ...session, topic: 'Hooks Codex', topicSource: 'pane', repo: 'harness-assistant', repoPath: '/w/harness-assistant', branch: 'worktree-codex', worktree: true };
+    expect(SessionSchema.parse(s).worktree).toBe(true);
+  });
+
+  it('accepts the new session events and the rename message', () => {
+    expect(SessionEventSchema.parse({ name: 'PaneTitle', at: T0, source: 'pane', text: 'add-readme' }).name).toBe('PaneTitle');
+    expect(SessionEventSchema.parse({ name: 'Renamed', at: T0, source: 'daemon', text: 'Mon sujet' }).name).toBe('Renamed');
+    expect(parseClientMessage({ type: 'session.rename', id: 'a', topic: 'Mon sujet' }).type).toBe('session.rename');
+  });
+
+  it('caps a rename topic at 500 characters, like the hook caps a prompt', () => {
+    expect(parseClientMessage({ type: 'session.rename', id: 'a', topic: 'x'.repeat(500) }).type).toBe('session.rename');
+    expect(() => parseClientMessage({ type: 'session.rename', id: 'a', topic: 'x'.repeat(501) })).toThrow();
   });
 
   it('rejects an unknown state', () => {
@@ -63,6 +81,14 @@ describe('protocol', () => {
     expect(ServerMessageSchema.parse({ type: 'session.preview', id: '7f3a', lines: ['a', 'b'] }).type).toBe('session.preview');
     expect(ServerMessageSchema.parse({ type: 'session.removed', id: '7f3a' }).type).toBe('session.removed');
     expect(ServerMessageSchema.parse({ type: 'session.updated', session }).type).toBe('session.updated');
+  });
+
+  it('carries the chat messages', () => {
+    expect(parseClientMessage({ type: 'chat.ask', qid: 'q1', text: 'Où en sont les autres ?' }).type).toBe('chat.ask');
+    expect(() => parseClientMessage({ type: 'chat.ask', qid: 'q1', text: '' })).toThrow();
+    expect(parseServerMessage({ type: 'chat.step', qid: 'q1', step: { kind: 'pane', id: 'a', name: 'Nova' } }).type).toBe('chat.step');
+    expect(parseServerMessage({ type: 'chat.history', turns: [{ qid: 'q1', question: 'x', askedAt: T0, steps: [] }] }).type).toBe('chat.history');
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0 }).type).toBe('chat.done');
   });
 });
 

@@ -1,4 +1,4 @@
-import type { Session, SessionEvent, Pending, Helper, SessionState } from '@ledge/protocol';
+import { cleanTopic, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
 export const HOOK_PRIORITY_MS = 2000;
 
@@ -164,6 +164,15 @@ function endCursorHelpers(s: Session, ev: SessionEvent): Session {
   return moves ? { ...s, helpers: s.helpers.map(h => (h.state === 'working' ? { ...h, state: 'exited' } : h)) } : s;
 }
 
+/** The session with a (possibly empty) topic from `source`, its title following; identical when nothing changes. */
+function withTopic(s: Session, text: string, source: TopicSource | undefined): Session {
+  const topic = cleanTopic(text) || undefined;
+  if (topic === s.topic && (topic ? source : undefined) === s.topicSource) return s;
+  const { topic: _t, topicSource: _ts, ...rest } = s;
+  const next: Session = topic ? { ...rest, topic, topicSource: source } : rest;
+  return { ...next, title: sessionTitle(next) };
+}
+
 export function reduce(s: Session, ev: SessionEvent): Session {
   if (s.state === 'exited') return s;
   s = endCursorHelpers(s, ev);
@@ -179,6 +188,8 @@ export function reduce(s: Session, ev: SessionEvent): Session {
       return { ...s, state: 'exited', pending: undefined, exitCode: null, exitedAt: s.exitedAt ?? at, lastActivityAt: at };
     case 'PaneChanged':
       return s.lastActivityAt === at ? s : { ...s, lastActivityAt: at };
+    case 'PaneTitle': return s.topicSource === 'user' ? s : withTopic(s, ev.text ?? '', 'pane');
+    case 'Renamed': return withTopic(s, ev.text ?? '', ev.text?.trim() ? 'user' : undefined);
     case 'PaneIdle': {
       // The pane shows Claude waiting for a prompt. Ends what no hook ends (a denied request, an Esc) and drops a
       // request answered or dismissed in the terminal. A recent hook describes the turn better; a helper may still wait.
@@ -233,6 +244,7 @@ export function reduce(s: Session, ev: SessionEvent): Session {
     case 'PreToolUse':
     case 'PermissionRequest':
     case 'Notification': {
+      if (ev.name === 'UserPromptSubmit' && ev.text && !s.topic) s = withTopic(s, ev.text, 'prompt');
       const incoming = pendingFor(ev);
       if (incoming) {
         // A Notification never overwrites an existing hook pending: only the hook timestamp moves.

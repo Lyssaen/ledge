@@ -195,6 +195,40 @@ describe('<Surface> keyboard first', () => {
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.focus', id: 'a' }));
   });
 
+  it('/ focuses the ask field in the list and does nothing in a session', () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => shortcut());
+    act(() => press('/'));
+    expect(document.activeElement).toHaveAttribute('data-ask-input');
+    (document.activeElement as HTMLElement).blur();
+    act(() => press('Enter'));
+    expect(surface()).toHaveAttribute('data-mode', 'session');
+    act(() => press('/'));
+    expect(document.activeElement).not.toHaveAttribute('data-ask-input');
+  });
+
+  it('Enter on the empty ask field opens the chat without asking', () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => shortcut());
+    act(() => press('/'));
+    act(() => { fireEvent.keyDown(document.activeElement!, { key: 'Enter' }); });
+    expect(surface()).toHaveAttribute('data-mode', 'chat');
+    expect(screen.getByRole('button', { name: 'How are the others doing?' })).toBeInTheDocument();
+    expect(mock.received.some(m => m.type === 'chat.ask')).toBe(false);
+  });
+
+  it('the ask field stays off until the daemon connection is open', () => {
+    act(() => daemonStore.setStatus('connecting'));
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => shortcut());
+    // The list's field and the chat's composer alike.
+    const fields = () => [...document.querySelectorAll<HTMLInputElement>('[data-ask-input]')];
+    expect(fields().length).toBeGreaterThan(0);
+    expect(fields().every(f => f.disabled)).toBe(true);
+    act(() => daemonStore.setStatus('open'));
+    expect(fields().every(f => !f.disabled)).toBe(true);
+  });
+
   it('digits choose the question options in an open session; a focused radio keeps native arrows; Other is off', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     await act(async () => { mock.upsert({ ...sessions[1]!, pending: { kind: 'question', text: 'Which?', source: 'hook', options: ['Rebase', 'Merge'] } }); await sleep(50); });
@@ -281,5 +315,20 @@ describe('<Surface> keyboard first', () => {
       await sleep(30);
       expect(mock.received.some(m => m.type === 'session.decide')).toBe(false);
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('<Surface> keyboard with interleaved repositories', () => {
+  it('digit 2 focuses the second displayed row', async () => {
+    daemonStore.reset(); const mock = await createMockDaemon();
+    const at = (id: string, name: string, repo: string) => fakeSession(id, { name, repo, repoPath: `/w/${repo}`, cwd: `/w/${repo}` });
+    for (const s of [at('a', 'Aa', 'x'), at('c', 'Cc', 'y'), at('b', 'Bb', 'x')]) mock.sessions.set(s.id, s);
+    const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never }); const detach = attachClient(client); client.connect();
+    await new Promise(r => setTimeout(r, 100));
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => press('l', { ctrlKey: true, altKey: true }));
+    act(() => press('2'));
+    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Bb/));
+    detach(); client.close(); await mock.close();
   });
 });

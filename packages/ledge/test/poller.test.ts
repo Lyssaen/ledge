@@ -19,7 +19,7 @@ function fakeTmux(panes: Record<string, string>): Tmux {
   return {
     async newSession() {}, async sendText() {}, async sendKeys() {},
     async capture(n, lines) { if (n in failing) return null; if (n in throwing) throw new Error('boom'); return (panes[n] ?? '').split('\n').slice(-lines).join('\n'); }, async hasSession(n) { return n in panes; },
-    async listSessions() { return Object.keys(panes); }, async killSession(n) { delete panes[n]; }, attachArgs: () => []
+    async listSessions() { return Object.keys(panes); }, async setOption() {}, async killSession(n) { delete panes[n]; }, attachArgs: () => []
   };
 }
 let store: Store; let panes: Record<string, string>; let previews: string[][];
@@ -39,6 +39,16 @@ describe('poller', () => {
     panes['ledge-a'] = 'line one\nline two'; clock += 1000; await p.tick();
     expect(store.get('a')!.lastActivityAt).toBe(now());
     expect(previews.at(-1)).toEqual(['line one', 'line two']);
+    p.stop();
+  });
+  it('emits PaneTitle once per title', async () => {
+    const titled = (t: string) => `● Done.\n\n${'─'.repeat(28)} ${t} ─\n❯ \n${'─'.repeat(40)}\n  ⏸ manual mode on`;
+    panes['ledge-a'] = titled('first'); store.upsert(mk('a'));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
+    clock += 1000; await p.tick(); expect(store.get('a')?.topic).toBe('first');
+    const after = store.get('a');
+    clock += 1000; await p.tick(); expect(store.get('a')).toBe(after); // same title, same pane: nothing emitted
+    panes['ledge-a'] = titled('second'); clock += 1000; await p.tick(); expect(store.get('a')?.topic).toBe('second');
     p.stop();
   });
   it('a fullscreen Claude Code pane previews the conversation, not the input box', async () => {
@@ -195,6 +205,15 @@ describe('poller rest detection', () => {
     clock += 1000; await p.tick();
     expect(store.get('a')!.state).toBe('waiting_permission');
     expect(store.get('a')!.pending?.text).toBe('Trust this folder? /home/dev/demo');
+    p.stop();
+  });
+  it('refreshes repository fields on first sight and on the dead check, hook-only sessions included', async () => {
+    store.upsert(mk('a')); store.upsert(mk('h', { tmuxSession: null, source: 'hook_only', cwd: '/h' }));
+    const calls: string[] = [];
+    const p = startPoller({ store, tmux: fakeTmux({ 'ledge-a': 'x' }), intervalMs: 1_000_000, deadCheckMs: 1_000_000, now, gitInfo: async cwd => { calls.push(cwd); return { repo: 'r', repoPath: cwd, branch: 'main', worktree: false }; } });
+    await p.tick();
+    expect(calls.sort()).toEqual(['/h', mk('a').cwd].sort()); expect(store.get('h')?.branch).toBe('main');
+    await p.tick(); expect(calls).toHaveLength(2); // no dead check yet: no refresh
     p.stop();
   });
 });

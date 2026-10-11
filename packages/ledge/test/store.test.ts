@@ -88,4 +88,12 @@ describe('Store save serialization', () => {
     const s2 = new Store(); await s2.load();
     expect(s2.get('a')?.id).toBe('a');
   });
+  it('patch sets repository fields and is silent when nothing changes', () => {
+    const store = new Store(); store.upsert(mk('a'));
+    const seen: string[] = []; store.onChange(c => seen.push(c.type));
+    store.patch('a', { repo: 'r', repoPath: '/r', branch: 'main', worktree: false });
+    expect(store.get('a')).toMatchObject({ repo: 'r', branch: 'main' }); expect(seen).toEqual(['updated']);
+    store.patch('a', { repo: 'r', repoPath: '/r', branch: 'main', worktree: false }); expect(seen).toEqual(['updated']);
+    store.patch('zz', { branch: 'x' }); expect(seen).toEqual(['updated']);
+  });
 });

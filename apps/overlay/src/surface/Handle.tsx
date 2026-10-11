@@ -22,6 +22,7 @@ export function Handle({ bots, slots, big, visible, hoverId, onHover, onOpen, on
       <button data-resident type="button" aria-label={`${t.resident.name}, ${t.open}`} onClick={() => { setBoopKey(k => k + 1); clearTimeout(opening.current); opening.current = setTimeout(() => onOpenHome?.(), reducedMotion ? 0 : 180); }} title={frozen ? t.resident.offline : t.resident.tip(bots.length)} style={{ display: 'grid', placeItems: 'center', flexShrink: 0, width: 24, height: 20, padding: 0, border: 0, background: 'transparent', cursor: 'pointer' }}>
         <ResidentMascot size={20} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} dnd={dnd} center={{ x: 14 * scale, y: top + 18 * scale }} pointer={pointer} gestureKey={residentSignal?.key} gestureKind={residentSignal?.kind} boopKey={boopKey} />
       </button>
+      <span data-separator aria-hidden="true" style={{ display: 'block', width: 12, height: 1, flexShrink: 0, background: 'var(--sidebar-border)', opacity: bots.length ? 1 : 0, marginTop: bots.length ? 0 : -gap - 1, transition: transition([['opacity', 'fadeIn', 0], ['margin-top', 'grow', 0]]) }} />
       {bots.map(b => {
         const on = slots.some(s => s.id === b.id);
         const up = b.pending || !!b.lifted;

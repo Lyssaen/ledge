@@ -9,6 +9,10 @@ import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
 type Payload = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
+/** The longest first prompt sent as a topic candidate; the reducer cuts it to one line of TOPIC_MAX. */
+const PROMPT_MAX = 500;
+const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, PROMPT_MAX) } : {}; };
+
 function describeTool(tool: string | undefined, input: unknown): string {
   const i = (input && typeof input === 'object' ? input : {}) as Payload;
   if (tool === 'Bash') return str(i.command) ?? '';
@@ -104,7 +108,7 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
     // Codex: Esc on a running turn or on an approval. Like Claude's interrupted tool run, no Stop follows.
     case 'Interrupt': return { name: 'PostToolUseFailure', ...base, interrupt: true };
     case 'SessionStart': return { name: 'SessionStart', ...base };
-    case 'UserPromptSubmit': return { name: 'UserPromptSubmit', ...base };
+    case 'UserPromptSubmit': return { name: 'UserPromptSubmit', ...base, ...promptText(p) };
     case 'Stop': {
       const text = lastReply(p);
       return { name: 'Stop', ...base, ...(text ? { text } : {}) };
@@ -231,7 +235,7 @@ function mapCursorEvent(eventName: string, p: Payload, at: string, launched: boo
   const base = { at, source: 'hook' as const };
   switch (eventName) {
     case 'sessionStart': return { name: 'SessionStart', ...base };
-    case 'beforeSubmitPrompt': return { name: 'UserPromptSubmit', ...base };
+    case 'beforeSubmitPrompt': return { name: 'UserPromptSubmit', ...base, ...promptText(p) };
     case 'preToolUse': {
       if (tool === 'Task') {
         // The subagent it launches: named here, taken over by the subagent's first hook (its own id).
@@ -267,6 +271,8 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
   const deadline = Date.now() + timeoutMs;
   const agent = opts.tool ?? 'claude';
   const label = agent === 'claude' ? eventName : `${agent} ${eventName}`;
+  // Ledge's own chat runs Claude Code headless: its hooks (if any ran) must never make a session.
+  if (process.env.LEDGE_CHAT === '1') { log(`hook ${label} ignored: Ledge chat`); return; }
   try {
     const payload = JSON.parse(stdin || '{}');
     const mapped = agent === 'cursor' ? mapCursorHook(eventName, payload, new Date().toISOString()) : mapHook(agent, eventName, payload, new Date().toISOString());

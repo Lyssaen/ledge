@@ -59,6 +59,13 @@ export class Store {
     this.emit({ type: 'recents', recents: this.recents() });
   }
 
+  /** Facts no event carries (the session's repository): the changed fields only, nothing emitted when they are equal. */
+  patch(id: string, fields: Partial<Pick<Session, 'repo' | 'repoPath' | 'branch' | 'worktree'>>): void {
+    const cur = this.sessions.get(id); if (!cur) return;
+    if ((Object.keys(fields) as Array<keyof typeof fields>).every(k => cur[k] === fields[k])) return;
+    this.upsert({ ...cur, ...fields });
+  }
+
   apply(id: string, event: SessionEvent): Session | undefined {
     const cur = this.sessions.get(id);
     if (!cur) return undefined;

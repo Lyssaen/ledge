@@ -161,3 +161,16 @@ describe('claude adapter: titled input box', () => {
     expect(lines.some(l => l.includes('Cooked for 7s'))).toBe(true);
   });
 });
+
+describe('claude adapter: pane title', () => {
+  const box = (top: string) => `● Done.\n\n${top}\n❯ \n${'─'.repeat(40)}\n  ⏸ manual mode on · ? for shortcuts`;
+  it('reads the conversation title from the input box top rule', () => {
+    expect(claudeAdapter.paneTitle!(box(`${'─'.repeat(28)} add-readme-file ─`))).toBe('add-readme-file');
+    expect(claudeAdapter.paneTitle!(box(`${'─'.repeat(20)} Fix the flaky test ────`))).toBe('Fix the flaky test');
+  });
+  it('is null on an untitled box, a dialog or plain output', () => {
+    expect(claudeAdapter.paneTitle!(box('─'.repeat(40)))).toBeNull();
+    expect(claudeAdapter.paneTitle!(fx('claude2-permission-bash'))).toBeNull();
+    expect(claudeAdapter.paneTitle!('just text\nmore text')).toBeNull();
+  });
+});

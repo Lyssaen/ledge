@@ -264,11 +264,11 @@ describe('<Surface> under Tauri', () => {
 
   it('sends the bounding frame and offsets the page by its top', async () => {
     await mount({ tauri: true });
-    // Two quiet bots plus Ledge: the handle is 70 px tall at 505 on a 1080 px work area.
-    expect(surface()).toHaveStyle({ top: '505px', width: '28px', height: '70px' });
+    // Two quiet bots plus Ledge: the handle is 76 px tall at 502 on a 1080 px work area.
+    expect(surface()).toHaveStyle({ top: '502px', width: '28px', height: '76px' });
     // The frame also holds the fillets joining the handle to the screen edge, above and below it.
-    await waitFor(() => expect(lastFrame()).toEqual({ top: 505 - SHOULDER_R - FRAME_PAD.top, width: 28 + FRAME_PAD.right, height: 70 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
-    await waitFor(() => expect(content()).toHaveStyle({ top: `-${505 - SHOULDER_R - FRAME_PAD.top}px` }));
+    await waitFor(() => expect(lastFrame()).toEqual({ top: 502 - SHOULDER_R - FRAME_PAD.top, width: 28 + FRAME_PAD.right, height: 76 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
+    await waitFor(() => expect(content()).toHaveStyle({ top: `-${502 - SHOULDER_R - FRAME_PAD.top}px` }));
     // No DOM hot zones: they would lie outside the window.
     expect(document.querySelectorAll('[data-hotzone]')).toHaveLength(0);
   });
@@ -285,7 +285,7 @@ describe('<Surface> under Tauri', () => {
       return new Promise<undefined>(r => pending.push(() => r(undefined)));
     });
     await mount({ tauri: true });
-    const handleTop = 505 - SHOULDER_R - FRAME_PAD.top;
+    const handleTop = 502 - SHOULDER_R - FRAME_PAD.top;
     await waitFor(() => expect(seen.at(-1)).toEqual({ top: handleTop, offset: `-${handleTop}px` }));
     expect(content()).toHaveStyle({ top: `-${handleTop}px` }); // still unanswered
     await answer();
@@ -310,13 +310,13 @@ describe('<Surface> under Tauri', () => {
   it('a handle at 2x on a 4K work area: the surface, the frame and the bands are the 1080p ones doubled', async () => {
     // A 4K work area (2160 logical px), handle 200 %: the handle lays out in 1080 units and is drawn at 2x.
     await mount({ tauri: true, screenH: 2160, handleScale: 2, panelScale: 1 });
-    expect(surface()).toHaveStyle({ top: `${2 * 505}px`, width: '56px', height: '140px' });
+    expect(surface()).toHaveStyle({ top: `${2 * 502}px`, width: '56px', height: '152px' });
     expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('2');
     expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1');
-    const top = 2 * 505 - SHOULDER_R - FRAME_PAD.top;
-    await waitFor(() => expect(lastFrame()).toEqual({ top, width: 56 + FRAME_PAD.right, height: 140 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
+    const top = 2 * 502 - SHOULDER_R - FRAME_PAD.top;
+    await waitFor(() => expect(lastFrame()).toEqual({ top, width: 56 + FRAME_PAD.right, height: 152 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
     expect(content()).toHaveStyle({ top: `-${top}px` });
-    await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 80, h: 2 * (505 - 6 - 40) }, { top: 2 * (505 + 70 + 6), h: 2 * (1080 - 40 - (505 + 70 + 6)) }] }));
+    await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 80, h: 2 * (502 - 6 - 40) }, { top: 2 * (502 + 76 + 6), h: 2 * (1080 - 40 - (502 + 76 + 6)) }] }));
     // The windows keep their own scale: the list opens at its base 380 px, centered on the real screen.
     await waitFor(() => expect(native.shortcut).not.toBeNull());
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
@@ -363,7 +363,7 @@ describe('<Surface> under Tauri', () => {
   it('the shell edge event drives edgeEnter/edgeLeave, and the hot zones are armed only on the bare handle', async () => {
     await mount({ tauri: true });
     await waitFor(() => expect(native.listeners.has('ledge://edge')).toBe(true));
-    await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 40, h: 505 - 6 - 40 }, { top: 505 + 70 + 6, h: 1080 - 40 - (505 + 70 + 6) }] }));
+    await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 40, h: 502 - 6 - 40 }, { top: 502 + 76 + 6, h: 1080 - 40 - (502 + 76 + 6) }] }));
     await edge(true); await edge(false);
     await act(async () => { vi.advanceTimersByTime(200); });
     expect(surface()).toHaveAttribute('data-mode', 'handle'); // left before the 180 ms dwell

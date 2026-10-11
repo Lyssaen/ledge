@@ -10,9 +10,9 @@ describe('geometry', () => {
   it('centres the handle and sizes it to the team', () => {
     const l = layout({ bots: bots(5, [0, 1]), mode: 'handle', screenH: 1080 });
     expect(l.w).toBe(SIZES.handleW);
-    expect(l.h).toBe(16 + SIZES.residentH + 5 + 20 + 20 + 12 + 12 + 12 + 4 * 5);
+    expect(l.h).toBe(16 + SIZES.residentH + 5 + SIZES.separatorH + 5 + 20 + 20 + 12 + 12 + 12 + 4 * 5);
     expect(l.top).toBe(Math.round(540 - l.h / 2));
-    expect(l.slots[0]!.center).toBe(l.top + 8 + SIZES.residentH + 5 + 10);
+    expect(l.slots[0]!.center).toBe(l.top + 8 + SIZES.residentH + 5 + SIZES.separatorH + 5 + 10);
     expect(l.slots[2]!.size).toBe(12);
   });
   it('a bubble sits at the asking bot slot, clamped to the margins', () => {
@@ -78,5 +78,23 @@ describe('geometry', () => {
     // The bubble still aligns to its bot's real center.
     const b = scaledLayout({ ...input, mode: 'bubble', bubbleId: '1', bubbleH: 120 }, { handle: 2, panel: 1 });
     expect(b.top).toBe(Math.round(h2.slots[1]!.center - 38));
+  });
+  it('adds a header height per group to the list', () => {
+    const bots = [{ id: 'a', pending: false }, { id: 'b', pending: false }];
+    const one = layout({ bots, mode: 'list', screenH: 1000, groups: 1 });
+    const two = layout({ bots, mode: 'list', screenH: 1000, groups: 2 });
+    expect(two.h - one.h).toBe(SIZES.groupH);
+  });
+  it('the first slot sits under the resident, a gap, the separator and a gap', () => {
+    const l = layout({ bots: [{ id: 'a', pending: false }], mode: 'handle', screenH: 1000 });
+    const { small, gap } = slotSizes(1);
+    expect(l.slots[0]!.center).toBe(l.handle.top + 8 + SIZES.residentH + gap + SIZES.separatorH + gap + small / 2);
+    expect(l.handle.h).toBe(16 + SIZES.residentH + gap + SIZES.separatorH + gap + small);
+  });
+
+  it('sizes the chat like a session, by its measured height', () => {
+    const l = layout({ bots: [], mode: 'chat', screenH: 1000, detailH: 500 });
+    expect(l.w).toBe(SIZES.sessionW); expect(l.h).toBe(500);
+    expect(layout({ bots: [], mode: 'chat', screenH: 1000 }).h).toBe(SIZES.chatH);
   });
 });

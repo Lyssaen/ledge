@@ -403,4 +403,11 @@ describe('surface machine: decision failure and detail views', () => {
       expect(run([{ type: 'decidedInBubble' }], up).s.ack).toBeNull();
     });
   });
+
+  it('opens the chat over the list and goes back to it', () => {
+    let r = transition({ ...initialSurface(), mode: 'list', openedBy: 'mouse' }, { type: 'chat' });
+    expect(r.state.mode).toBe('chat');
+    r = transition(r.state, { type: 'back' }); expect(r.state.mode).toBe('list');
+    expect(transition(initialSurface(), { type: 'chat' }).state.mode).toBe('handle');
+  });
 });

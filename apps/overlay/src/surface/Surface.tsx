@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
 import type { Session } from '@ledge/protocol';
-import { useDaemon } from '../daemon/store';
+import { useDaemon, daemonStore } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
 import { botState, poseFor } from '../bots/poseFor';
 import type { ResidentGesture } from '../bots/ResidentMascot';
+import { displayOrder, groupSessions, headersBefore } from './groups';
 import { scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
@@ -14,6 +15,7 @@ import { Bubble, type BubbleAck } from './Bubble';
 import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
 import { LaunchView, LAUNCH_FOOTER_H, type LaunchRequest } from './LaunchView';
+import { ChatView, CHAT_HEADER_H } from './ChatView';
 import { DETAIL_HEADER_H } from './DetailHeader';
 import { useMeasuredHeight } from './useMeasuredHeight';
 import { useDaemonAsks, isPending } from './useDaemonAsks';
@@ -22,7 +24,7 @@ import { useSoundPrefs } from '../sounds/preferences';
 import { useSounds } from '../sounds/useSounds';
 import { createSilentPlayer, type SoundPlayer } from '../sounds/player';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
-import { SessionList, rowHint, EXPANDED_ROW_H, type ListNotice } from './SessionList';
+import { SessionList, rowHint, EXPANDED_ROW_H, ASK_H, type ListNotice } from './SessionList';
 import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
 import { useI18n, type Lang } from '../i18n/lang';
 import { transition, MOTION, ms, enterDelay } from '../motion';
@@ -72,7 +74,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
-  const { sessions, byId, status, previews, lastError, recents, launcher, lastLaunched, lastListing } = useDaemon();
+  const { sessions: daemonSessions, byId, status, previews, lastError, recents, launcher, lastLaunched, lastListing, chat, chatLive } = useDaemon();
+  // Everything indexed (digits, J/K, the handle, the coachmark row) follows the order the list displays: grouped by repository.
+  const sessions = useMemo(() => displayOrder(daemonSessions), [daemonSessions]);
+  const groups = useMemo(() => groupSessions(sessions), [sessions]);
   const { t } = useI18n();
   // One app-level motion preference drives every bot in every layer.
   const motionPrefs = useMotionPreferences();
@@ -182,7 +187,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
 
   // The finishing bot is big from the moment its notice is due until the bubble folds.
   const liftedId = st.queue.length === 0 && st.done.length > 0 && (st.unfoldDue || (st.mode === 'bubble' && st.bubbleKind === 'finished')) ? st.done[0] : null;
-  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, readOnly: s.source === 'hook_only', tip: isPending(s) ? `${t.handleLabel[botState(s)]} · ${s.pending?.text ?? ''}` : rowHint(s, t) })), [sessions, t, liftedId]);
+  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, readOnly: s.source === 'hook_only', tip: isPending(s) ? `${t.handleLabel[botState(s)]} · ${s.pending?.text ?? ''}` : (s.topic ? `${s.topic} · ${rowHint(s, t)}` : rowHint(s, t)) })), [sessions, t, liftedId]);
   const previousResident = useRef({ ids: new Set(sessions.map(s => s.id)), pending: new Set(sessions.filter(isPending).map(s => s.id)) });
   const signalCounter = useRef(0);
   const [residentSignal, setResidentSignal] = useState<{ key: number; kind: ResidentGesture }>();
@@ -224,6 +229,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const launchH = useMeasuredHeight(launchRef, st.mode === 'launch', ps);
   // The launch form's footer (the actions) sits under the measured, scrolling body.
   const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : st.mode === 'launch' && launchH ? launchH + LAUNCH_FOOTER_H : 0;
+  // The chat sizes itself to its thread: header + measured content + the composer (+ the suggestion chips while empty).
+  const chatRef = useRef<HTMLDivElement>(null);
+  const chatH = useMeasuredHeight(chatRef, st.mode === 'chat', ps);
+  const chatBody = st.mode === 'chat' && chatH ? CHAT_HEADER_H + chatH + 60 + (chat.length === 0 ? 44 : 0) + SURFACE_CHROME_Y : undefined;
 
   // Starting a session from the form: one request at a time; the daemon answers `session.launched` (back to the list,
   // a notice for a few seconds, the terminal tab when asked) or an `error` without id (shown in the form). The form is
@@ -262,7 +271,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
     setLaunching(null); setLaunchFailure(lastError.message);
   }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -289,8 +298,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const hovBot = bots.find(b => b.id === hoverId) ?? null;
   const hovSlot = geo.slots.find(s => s.id === hoverId);
   const panel = st.mode !== 'handle' && st.mode !== 'bubble';
-  const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch';
+  const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch' || st.mode === 'chat';
   const unreachable = status === 'unreachable';
+  // A question needs the socket open: the client drops a send while it is still connecting, so the turn would hang.
+  const chatOffline = status !== 'open' ? t.offline : null;
   const bubblePaused = st.hovering || st.focusWithin || st.hidden || st.ack !== null;
   const send = (m: Parameters<DaemonClient['send']>[0]) => client.send(m);
   // Offline or read-only: every send/decision path (buttons and keys alike) is off, with the reason shown.
@@ -316,7 +327,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const coachShown = coach && kb && st.mode === 'list';
   const focusIndex = focused ? sessions.findIndex(s => s.id === focused.id) : -1;
   // In real px: the list's base offsets times the window scale.
-  const rowTop = geo.top + (SIZES.headerH + 8 + Math.max(0, focusIndex) * SIZES.rowH) * ps;
+  const rowTop = geo.top + (SIZES.headerH + 8 + headersBefore(groups, focused?.id ?? null) * SIZES.groupH + Math.max(0, focusIndex) * SIZES.rowH) * ps;
   const rowBottom = focusIndex < 0 ? geo.top + SIZES.headerH * ps : rowTop + (focused && isYesNo(focused) ? EXPANDED_ROW_H : SIZES.rowH) * ps;
   const below = rowBottom + 8 * ps; const above = rowTop - (8 + COACHMARK_H) * ps;
   const coachTop = below + COACHMARK_H * ps <= geo.top + geo.h || above < geo.top ? below : above;
@@ -356,6 +367,13 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
     r.click(); r.focus();
   };
   const openRow = (id: string) => dispatch({ type: 'rowClick', id });
+  /** Asks Ledge: the turn appears at once in the store, the daemon streams its steps and answer back. */
+  const ask = (text: string) => {
+    const qid = `q-${Date.now().toString(36)}`;
+    daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
+    send({ type: 'chat.ask', qid, text });
+    if (ctl.state().mode !== 'chat') dispatch({ type: 'chat' });
+  };
   useKeyboard({
     enabled: panel, mode: st.mode, sessions, focusedId: st.mode === 'session' ? st.selectedId : st.mode === 'list' ? focused?.id ?? null : null,
     onFocus: setFocusedId, onOpen: openRow, onDecide: decide,
@@ -368,6 +386,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
       if (st.mode === 'session') openRow(next); else setFocusedId(next);
     },
     onClose: () => dispatch({ type: detail ? 'back' : 'close' }),
+    onAsk: () => surfaceRef.current?.querySelector<HTMLInputElement>('[data-ask-input]')?.focus(),
     onReplyFocus: () => {
       if (st.mode !== 'session' && st.mode !== 'list') return;
       if (st.mode === 'session') { surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="session"] [data-reply]')?.focus(); return; }
@@ -413,7 +432,13 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} numbered={kb} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               onDismiss={id => { if (!unreachable) send({ type: 'session.dismiss', id }); }} offline={unreachable}
-              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
+              onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />
+          </div>
+          <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
+            <ChatView contentRef={chatRef} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
+              onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onOpenSession={openRow}
+              theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
           </div>
           <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <LaunchView key={launchOpen} contentRef={launchRef} visible={st.mode === 'launch'} enterDelay={enter} recents={recents} sessions={sessions} offline={unreachable ? t.offline : null} busy={!!launching} failure={launchFailure}
@@ -435,7 +460,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
               onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onDecide={d => decide(shown.id, d)} onReply={t => reply(shown.id, t)}
               onInterrupt={() => send({ type: 'session.interrupt', id: shown.id })} onKill={() => send({ type: 'session.kill', id: shown.id })}
               onDismiss={() => { if (!unreachable) send({ type: 'session.dismiss', id: shown.id }); }} dismissOff={unreachable}
-              onFocus={() => focusTab(shown.id)} onToggleReading={() => dispatch({ type: 'reading', on: !st.reading })} theme={theme} />}
+              onFocus={() => focusTab(shown.id)} onToggleReading={() => dispatch({ type: 'reading', on: !st.reading })} onRename={shown.state !== 'exited' ? topic => send({ type: 'session.rename', id: shown.id, topic }) : undefined} theme={theme} />}
           </div>
         </div>
       </div>

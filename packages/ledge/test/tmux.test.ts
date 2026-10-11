@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { realTmux } from '../src/tmux.js';
+import { realTmux, run } from '../src/tmux.js';
 import { killTestServer, testSocketPath } from './helpers.js';
 import { ensureLedgeDir } from '../src/paths.js';
 import { mkdtempSync, existsSync } from 'node:fs';
@@ -29,6 +29,10 @@ describe('tmux', () => {
     await sleep(300);
     expect(await tmux.capture(n, 5)).toContain('P=/ledge-test-first:/usr/bin:/bin');
     await tmux.killSession(n);
+  });
+  it('sets a session option the terminal title can show', async () => {
+    await tmux.setOption(name, '@ledge_title', 'Otto · x');
+    expect((await run(['-L', socket, 'show-option', '-v', '-t', `=${name}:`, '@ledge_title'])).stdout.trim()).toBe('Otto · x');
   });
   it('sends text literally, then Enter separately', async () => {
     await tmux.sendText(name, '-n ; echo not-a-flag');

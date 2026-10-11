@@ -32,7 +32,7 @@ When an agent asks something, the bubble unfolds beside the handle for a few sec
 
 ## The list
 
-Resting the cursor on the screen edge, or pressing `Ctrl+Alt+L` from anywhere, opens the list. One row per session: project, mascot name, tool and age, and a badge for the state. Asks come first, oldest on top with the red bar. The header has do-not-disturb, settings and collapse; the footer shows the shortcut.
+Resting the cursor on the screen edge, or pressing `Ctrl+Alt+L` from anywhere, opens the list. Rows are grouped by repository. Line 1 of a row is the topic (what the agent is working on), line 2 is the bot's name · branch · age, with the badge for the state on the right. Rename a bot from the session header. Asks come first, oldest on top with the red bar.
 
 <p>
   <img src="screens/list-dark.png" alt="The list of four sessions in dark theme" width="408">
@@ -42,6 +42,10 @@ Resting the cursor on the screen edge, or pressing `Ctrl+Alt+L` from anywhere, o
 It scales to a busy day: twelve sessions scroll inside the panel, with the count of asks in the subtitle.
 
 <img src="screens/team-dark.png" alt="Twelve sessions in the list, three asking for you" width="408">
+
+## Asking Ledge
+
+Under the list, the "Demander à Ledge" field takes a question about your sessions, for example "Où en sont les autres ?". `/` focuses it from the list, `Enter` sends it. The chat view opens: first the steps (the terminals, replies and repositories Ledge reads), then the answer writing itself live, with its sources underneath and the bots' names as links that open their session. A second question resumes the same conversation, one per day. Ledge only reads: it never touches anything and never sends an instruction to a session.
 
 ## Starting a session from Ledge
 

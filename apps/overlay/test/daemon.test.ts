@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import WebSocket from 'ws';
-import { createMockDaemon, fakeSession } from './mockDaemon';
+import { createMockDaemon, fakeSession, T0 } from './mockDaemon';
 import { createDaemonClient } from '../src/daemon/client';
 import { daemonStore, attachClient } from '../src/daemon/store';
 
@@ -105,5 +105,18 @@ describe('daemon client + store', () => {
     expect(statuses).toEqual(['open', 'connecting']);
     await sleep(100);
     expect(client.status()).toBe('connecting');
+  });
+
+  it('keeps the chat turns and the live answer', () => {
+    daemonStore.reset();
+    daemonStore.apply({ type: 'chat.history', turns: [{ qid: 'q0', question: 'hier', askedAt: T0, steps: [], answer: 'ok', answeredAt: T0 }] });
+    daemonStore.beginTurn({ qid: 'q1', question: 'Où en sont les autres ?', askedAt: T0, steps: [] });
+    daemonStore.apply({ type: 'chat.step', qid: 'q1', step: { kind: 'sessions' } });
+    daemonStore.apply({ type: 'chat.delta', qid: 'q1', text: 'Deux ' }); daemonStore.apply({ type: 'chat.delta', qid: 'q1', text: 'bots.' });
+    expect(daemonStore.getState().chatLive).toEqual({ qid: 'q1', text: 'Deux bots.' });
+    daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'Deux bots travaillent.', at: T0 });
+    const s = daemonStore.getState();
+    expect(s.chatLive).toBeNull(); expect(s.chat.map(t => t.qid)).toEqual(['q0', 'q1']); expect(s.chat[1]).toMatchObject({ answer: 'Deux bots travaillent.', steps: [{ kind: 'sessions' }] });
+    daemonStore.apply({ type: 'chat.error', qid: 'q1', message: 'boom' }); expect(daemonStore.getState().chat[1]?.error).toBe('boom');
   });
 });

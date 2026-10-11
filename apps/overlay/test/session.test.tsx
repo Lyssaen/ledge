@@ -155,4 +155,26 @@ describe('<SessionView>', () => {
       expect(screen.queryByRole('button', { name: 'Remove from list' })).toBeNull();
     });
   });
+  it('shows the topic and branch in the header and renames in place', () => {
+    const onRename = vi.fn();
+    const s = fakeSession('a', { topic: 'Hooks Codex', branch: 'worktree-codex', worktree: true });
+    render(<SessionView {...base} session={s} onRename={onRename} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hooks Codex' }));
+    const input = screen.getByRole('textbox', { name: 'Rename the session' });
+    fireEvent.change(input, { target: { value: 'Codex approvals' } }); fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onRename).toHaveBeenCalledWith('Codex approvals');
+    expect(screen.getByText('codex').closest('[data-branch]')).toHaveAttribute('title', 'worktree worktree-codex');
+  });
+  it('Escape in the rename field cancels without closing the view', () => {
+    const onClose = vi.fn(); const onRename = vi.fn();
+    render(<SessionView {...base} onClose={onClose} session={fakeSession('a', { topic: 'T' })} onRename={onRename} />);
+    fireEvent.click(screen.getByRole('button', { name: 'T' }));
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Rename the session' }), { key: 'Escape' });
+    expect(screen.getByRole('button', { name: 'T' })).toBeInTheDocument(); expect(onRename).not.toHaveBeenCalled(); expect(onClose).not.toHaveBeenCalled();
+  });
+  it('the topic button keeps the focus ring: explicit resets, no all: unset', () => {
+    render(<SessionView {...base} session={fakeSession('a', { topic: 'T' })} onRename={() => {}} />);
+    const style = screen.getByRole('button', { name: 'T' }).getAttribute('style') ?? '';
+    expect(style).not.toMatch(/(^|;\s*)all:/); expect(style).toMatch(/border: 0/);
+  });
 });
