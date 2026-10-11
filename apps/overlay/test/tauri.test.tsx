@@ -13,7 +13,7 @@ const native = vi.hoisted(() => ({
   listeners: new Map<string, (e: { payload: unknown }) => void>(),
   unlisten: vi.fn(),
   shortcut: null as null | ((e: { state: string }) => void),
-  monitor: null as null | { scaleFactor: number; size: { height: number }; workArea: { size: { height: number } } }
+  monitor: null as null | { scaleFactor: number; size: { height: number; width: number }; workArea: { size: { height: number; width: number } } }
 }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: native.invoke }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -146,8 +146,9 @@ describe('bridge', () => {
 
   it('screenHeight is the primary work area in logical px', async () => {
     enterTauri(); const b = await loadBridge();
-    native.monitor = { scaleFactor: 1.5, size: { height: 1620 }, workArea: { size: { height: 1548 } } };
+    native.monitor = { scaleFactor: 1.5, size: { height: 1620, width: 2880 }, workArea: { size: { height: 1548, width: 2760 } } };
     await expect(b.screenHeight()).resolves.toBe(1032);
+    await expect(b.screenWidth()).resolves.toBe(1840);
   });
 
   const monitors = [
@@ -157,17 +158,18 @@ describe('bridge', () => {
 
   it('screenHeight follows the Screen setting: the chosen monitor while listed, else the primary', async () => {
     enterTauri(); const b = await loadBridge();
-    native.monitor = { scaleFactor: 1.5, size: { height: 1620 }, workArea: { size: { height: 1548 } } };
+    native.monitor = { scaleFactor: 1.5, size: { height: 1620, width: 2880 }, workArea: { size: { height: 1548, width: 2760 } } };
     native.invoke.mockImplementation(async cmd => (cmd === 'list_monitors' ? monitors : undefined));
     await expect(b.screenHeight(monitors[1]!.id)).resolves.toBe(1400);
     await expect(b.screenHeight('\\\\.\\DISPLAY3')).resolves.toBe(1032);
     await expect(b.screenHeight(null)).resolves.toBe(1032);
-    expect(calls('list_monitors')).toHaveLength(2);
+    await expect(b.screenWidth(monitors[1]!.id)).resolves.toBe(2560);
+    expect(calls('list_monitors')).toHaveLength(3);
   });
 
   it('listMonitors and setMonitor go to the shell; the browser lists its viewport as the one primary screen', async () => {
     const browser = await loadBridge();
-    await expect(browser.listMonitors()).resolves.toEqual([{ id: 'primary', name: null, width: window.innerWidth, height: window.innerHeight, workH: window.innerHeight, primary: true }]);
+    await expect(browser.listMonitors()).resolves.toEqual([{ id: 'primary', name: null, width: window.innerWidth, height: window.innerHeight, workH: window.innerHeight, workW: window.innerWidth, primary: true }]);
     await browser.setMonitor('x');
     expect(native.invoke).not.toHaveBeenCalled();
     enterTauri(); const b = await loadBridge();

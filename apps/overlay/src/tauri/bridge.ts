@@ -48,9 +48,22 @@ export async function screenHeight(choice: string | null = null): Promise<number
   return Math.round(h / m.scaleFactor);
 }
 
+/** Work-area width in logical monitor pixels, independent of the current overlay window. */
+export async function screenWidth(choice: string | null = null): Promise<number> {
+  if (!inTauri()) return window.innerWidth;
+  if (choice !== null) {
+    const m = resolveMonitor(choice, await listMonitors());
+    if (m) return m.workW ?? m.width;
+  }
+  const { primaryMonitor } = await import('@tauri-apps/api/window');
+  const m = await primaryMonitor();
+  if (!m) return window.innerWidth;
+  return Math.round((m.workArea?.size.width ?? m.size.width) / m.scaleFactor);
+}
+
 /** The monitors the Screen setting can choose from. In the browser: the viewport, as the one primary monitor. */
 export async function listMonitors(): Promise<MonitorInfo[]> {
-  if (!inTauri()) return [{ id: 'primary', name: null, width: window.innerWidth, height: window.innerHeight, workH: window.innerHeight, primary: true }];
+  if (!inTauri()) return [{ id: 'primary', name: null, width: window.innerWidth, height: window.innerHeight, workH: window.innerHeight, workW: window.innerWidth, primary: true }];
   try { return await invoke<MonitorInfo[]>('list_monitors'); } catch { return []; }
 }
 

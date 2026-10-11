@@ -17,7 +17,16 @@ const fr = {
   /** The bot's accessible state, read after the tool name. */
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
   botReadOnly: 'Lecture seule',
-  resident: { name: 'Ledge', offline: 'Ledge · connexion perdue', tip: (n: number) => n === 0 ? 'Aucune session · cliquer pour ouvrir' : `${n} session${n > 1 ? 's' : ''} · cliquer pour ouvrir` },
+  resident: { name: 'Ledge', offline: 'Ledge · connexion perdue', tip: (n: number) => n === 0 ? 'Aucune session · cliquer pour ouvrir' : `${n} session${n > 1 ? 's' : ''} · cliquer pour ouvrir`, unread: 'a répondu', unreadTip: 'Ledge a répondu · cliquer pour ouvrir' },
+  say: {
+    ledge: ['Hey ! Je t’ai répondu !', 'C’est prêt, jette un œil.', 'Voilà ce que j’en pense.', 'Je t’attendais là-dessus.'],
+    finished: ['J’ai fini !', 'Mission accomplie.', 'C’est tout bon de mon côté.', 'Je te laisse relire.'],
+    approval: ['J’ai besoin de ton OK.', 'Je bloque sans toi.', 'Un petit feu vert ?', 'Ça attend ton accord.'],
+    question: ['Une question pour toi.', 'Je suis pas sûr — tu confirmes ?', 'Faut que je te demande.', 'Ton avis ?'],
+    diff: ['J’ai un diff à te montrer.', 'Des changements à relire.', 'Un coup d’œil sur le patch ?'],
+    plan: ['J’ai un plan à te soumettre.', 'On valide la suite ?', 'Le plan est prêt.'],
+    error: ['Oups, ça a planté.', 'Je suis bloqué.', 'Il y a un souci.']
+  },
   botNotLive: 'Figé',
   /** The handle's bot buttons: "<Name> <label>, open". */
   handleLabel: { starting: 'démarre', idle: 'disponible', approval: 'attend votre accord', question: 'a une question', working: 'au travail', done: 'terminée', error: 'en erreur', readonly: 'en lecture seule' } as Record<BotState, string>,
@@ -64,6 +73,7 @@ const fr = {
     failed: (why: string) => `Impossible : ${why}`
   },
   detail: { back: 'Retour aux sessions', close: 'Fermer' },
+  reader: { title: 'Document', back: 'Retour à la réponse', close: 'Replier', expand: 'Agrandir', shrink: 'Réduire', read: 'Lecture', source: 'Markdown', outline: 'Sommaire', reload: 'Recharger', retry: 'Réessayer', readonly: 'Lecture seule', loading: 'Ouverture du document…', empty: 'Ce document est vide.', escape: 'Échap pour revenir', error: { not_found: 'Fichier introuvable', not_file: 'Ce chemin ne désigne pas un fichier', unsupported_path: 'Chemin non pris en charge', unsupported_type: 'Seuls les fichiers Markdown sont pris en charge', too_large: 'Fichier trop volumineux', invalid_utf8: 'Le fichier n’est pas en UTF-8', permission_denied: 'Accès refusé', ambiguous_path: 'Impossible de déterminer le dossier de ce document', session_missing: 'La session d’origine n’existe plus', read_failed: 'Lecture impossible', timeout: 'Le document ne répond pas', offline: 'Connexion au daemon perdue' } },
   session: {
     rename: 'Renommer la session', topicPlaceholder: 'Le sujet de cette session',
     reading: 'Mode lecture', focusTerminal: 'Voir l’onglet du terminal', close: 'Fermer',
@@ -137,12 +147,12 @@ const fr = {
     dnd: 'Ne pas déranger', dndHint: 'Les demandes restent dans la poignée.',
     reduced: 'Mouvements réduits', reducedHint: 'Les états restent lisibles sans animation.',
     osReduced: 'Votre système demande des mouvements réduits ; Ledge continue de le respecter.',
-    finished: 'Quand un bot a terminé', finishedHint: 'Une bulle de 6 s, un son, les deux, ou seulement la poignée.',
+    finished: 'Quand un bot ou Ledge a terminé', finishedHint: 'Une bulle de 6 s, un son, les deux, ou seulement la poignée.',
     finishedBoth: 'Bulle et son', finishedBubble: 'Bulle', finishedSound: 'Son', finishedNone: 'Poignée seule',
     sounds: 'Sons', soundsHint: 'Des tons courts et doux pour ce qui vous attend. Jamais en Ne pas déranger.',
     volume: 'Volume', volumeHint: 'Test joue le signal de question.', volumeQuiet: 'Bas', volumeNormal: 'Normal', volumeLoud: 'Fort', test: 'Test',
     playWhen: 'Jouer un son quand',
-    category: { requests: 'Un bot a besoin de vous · accord, question', finished: 'Un bot a terminé sa tâche', errors: 'Quelque chose échoue', decisions: 'Vous acceptez ou refusez', team: 'Un bot arrive ou part' } as Record<SoundCategory, string>,
+    category: { requests: 'Un bot a besoin de vous · accord, question', finished: 'Un bot ou Ledge a terminé sa tâche', errors: 'Quelque chose échoue', decisions: 'Vous acceptez ou refusez', team: 'Un bot arrive ou part' } as Record<SoundCategory, string>,
     behind: 'Seulement quand le terminal est derrière', behindHint: 'Si Windows Terminal est la fenêtre au premier plan, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
     soundsNote: 'Un seul son à la fois : une rafale de demandes ne joue qu’une fois, la poignée montre le reste. Ouvrir, fermer et survoler sont silencieux.',
     themeLight: 'Thème clair · Galet', themeDark: 'Thème sombre · Signal', themeHint: 'Changer le thème et la matière des mascottes'
@@ -183,7 +193,16 @@ const en: Messages = {
   state: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },
   botReadOnly: 'Read-only',
-  resident: { name: 'Ledge', offline: 'Ledge · connection lost', tip: (n: number) => n === 0 ? 'No sessions · click to open' : `${n} session${n > 1 ? 's' : ''} · click to open` },
+  resident: { name: 'Ledge', offline: 'Ledge · connection lost', tip: (n: number) => n === 0 ? 'No sessions · click to open' : `${n} session${n > 1 ? 's' : ''} · click to open`, unread: 'replied', unreadTip: 'Ledge replied · click to open' },
+  say: {
+    ledge: ['Hey! I answered you!', "It's ready, take a look.", "Here's what I think.", "I've been waiting on this."],
+    finished: ["I'm done!", 'Mission accomplished.', 'All good on my side.', "I'll let you review."],
+    approval: ['I need your OK.', "I'm stuck without you.", 'A quick green light?', 'Waiting on your OK.'],
+    question: ['A question for you.', "I'm not sure — can you confirm?", 'I have to ask you.', 'Your call?'],
+    diff: ["I've got a diff to show you.", 'Changes to review.', 'A look at the patch?'],
+    plan: ["I've got a plan for you.", 'Shall we lock the next steps?', 'The plan is ready.'],
+    error: ['Oops, that crashed.', "I'm stuck.", 'Something went wrong.']
+  },
   botNotLive: 'Not live',
   handleLabel: { starting: 'starting', idle: 'available', approval: 'needs your approval', question: 'has a question', working: 'working', done: 'done', error: 'error', readonly: 'read only' },
   open: 'open',
@@ -229,6 +248,7 @@ const en: Messages = {
     failed: (why: string) => `Could not: ${why}`
   },
   detail: { back: 'Back to sessions', close: 'Close' },
+  reader: { title: 'Document', back: 'Back to reply', close: 'Collapse', expand: 'Expand', shrink: 'Shrink', read: 'Reading', source: 'Markdown', outline: 'Contents', reload: 'Reload', retry: 'Retry', readonly: 'Read only', loading: 'Opening document…', empty: 'This document is empty.', escape: 'Esc to go back', error: { not_found: 'File not found', not_file: 'This path is not a file', unsupported_path: 'Unsupported path', unsupported_type: 'Only Markdown files are supported', too_large: 'File is too large', invalid_utf8: 'File is not UTF-8', permission_denied: 'Access denied', ambiguous_path: 'Cannot determine this document’s folder', session_missing: 'The source session no longer exists', read_failed: 'Cannot read file', timeout: 'Document did not respond', offline: 'Lost connection to daemon' } },
   session: {
     rename: 'Rename the session', topicPlaceholder: 'What this session is about',
     reading: 'Reading mode', focusTerminal: 'Focus terminal tab', close: 'Close',
@@ -301,12 +321,12 @@ const en: Messages = {
     dnd: 'Do not disturb', dndHint: 'New asks stay in the handle.',
     reduced: 'Reduced motion', reducedHint: 'States stay readable without animation.',
     osReduced: 'Your system asks for reduced motion; Ledge keeps respecting it.',
-    finished: 'When a bot finishes', finishedHint: 'A 6 s bubble, a sound, both, or the handle only.',
+    finished: 'When a bot or Ledge finishes', finishedHint: 'A 6 s bubble, a sound, both, or the handle only.',
     finishedBoth: 'Bubble and sound', finishedBubble: 'Bubble', finishedSound: 'Sound', finishedNone: 'Handle only',
     sounds: 'Sounds', soundsHint: 'Short, soft tones for what needs you. Never while Do not disturb is on.',
     volume: 'Volume', volumeHint: 'Test plays the question cue.', volumeQuiet: 'Quiet', volumeNormal: 'Normal', volumeLoud: 'Loud', test: 'Test',
     playWhen: 'Play a sound when',
-    category: { requests: 'A bot needs you · approval, question', finished: 'A bot finishes its task', errors: 'Something fails', decisions: 'You approve or deny', team: 'A bot joins or leaves' } as Record<SoundCategory, string>,
+    category: { requests: 'A bot needs you · approval, question', finished: 'A bot or Ledge finishes its task', errors: 'Something fails', decisions: 'You approve or deny', team: 'A bot joins or leaves' } as Record<SoundCategory, string>,
     behind: 'Only when the terminal is behind', behindHint: 'When Windows Terminal is the front window you are already looking: no sound, the bubble still shows.',
     soundsNote: 'One sound at a time: a burst of asks plays once, the handle shows the rest. Opening, closing and hovering are silent.',
     themeLight: 'Light theme · Pebble', themeDark: 'Dark theme · Signal', themeHint: 'Switch the theme and the mascot material'

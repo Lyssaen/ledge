@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type Ref } from 'react';
 import type { Session } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
+import { ResidentMascot } from '../bots/ResidentMascot';
 import { botState, poseFor } from '../bots/poseFor';
 import { Button } from '../ui/Button';
 import { transition } from '../motion';
@@ -27,6 +28,8 @@ interface BubbleProps {
   kind?: BubbleKind;
   /** The work time of a finished notice (ms), when known. */
   elapsedMs?: number;
+  /** A Ledge chat finish: the answer shown under the title when there is no session. */
+  preview?: string;
   /** Why the last decision failed (shown only with `ack === 'failed'`). */
   failure?: string;
   /** A decision for this request is in flight (sent from any path): the actions stay locked until the daemon answers. */
@@ -44,12 +47,13 @@ interface BubbleProps {
   ref?: Ref<HTMLDivElement>;
 }
 
-export function Bubble({ session, moreCount, visible, paused, remainingMs, ack = null, kind = 'ask', elapsedMs, failure, deciding = false, blocked = null, frozen = false, reducedMotion, onOpen, onDismiss, onDecide, onReply, theme = 'dark', ref }: BubbleProps) {
+export function Bubble({ session, moreCount, visible, paused, remainingMs, ack = null, kind = 'ask', elapsedMs, preview, failure, deciding = false, blocked = null, frozen = false, reducedMotion, onOpen, onDismiss, onDecide, onReply, theme = 'dark', ref }: BubbleProps) {
   const pending = session?.pending;
   const holdMs = kind === 'finished' ? FINISHED_BUBBLE_MS : BUBBLE_HOLD_MS;
   const remaining = remainingMs ?? holdMs;
   const { t } = useI18n();
-  const askKey = session ? (kind === 'finished' ? `${session.id}:finished` : `${session.id}:${pending?.helperId ?? ''}:${pending?.text ?? ''}`) : undefined;
+  const ledge = kind === 'finished' && !session;
+  const askKey = ledge ? 'ledge:finished' : session ? (kind === 'finished' ? `${session.id}:finished` : `${session.id}:${pending?.helperId ?? ''}:${pending?.text ?? ''}`) : undefined;
   // A click locks this request until the daemon answers; a failure unlocks it, a new request starts unlocked.
   const [lockedKey, setLockedKey] = useState<string | undefined>(undefined);
   if (!visible && lockedKey !== undefined) setLockedKey(undefined);
@@ -59,7 +63,8 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
   // A diff or a plan opens its review before any decision (spec §5): the bubble offers Review, never Approve.
   const review = pending?.kind === 'diff' || pending?.kind === 'plan';
   const first = pending?.options?.[0];
-  const title = !session ? '' : kind === 'finished' ? t.bubble.finished(session.name) : isQ ? t.bubble.question(session.name) : review ? t.bubble.review(session.name, pending!.kind) : t.bubble.approval(session.name);
+  const title = ledge ? t.bubble.finished(t.resident.name) : !session ? '' : kind === 'finished' ? t.bubble.finished(session.name) : isQ ? t.bubble.question(session.name) : review ? t.bubble.review(session.name, pending!.kind) : t.bubble.approval(session.name);
+  const finishedSub = preview ?? (elapsedMs !== undefined ? t.bubble.finishedSub(duration(elapsedMs, t), session?.project ?? '') : t.bubble.finishedSubNoTime(session?.project ?? ''));
   const act = (fn: () => void) => () => { if (disabled) return; setLockedKey(askKey); fn(); };
 
   // The bar restarts per request and per pause/resume segment, from the remainder the controller reports.
@@ -80,10 +85,10 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
   return (
     <div ref={ref} data-layer="bubble" data-kind={kind} data-ack={ack ?? 'none'} inert={!visible} style={{ position: 'absolute', left: 0, top: 0, width: SIZES.bubbleW, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px 12px', opacity: visible ? 1 : 0, transform: `translateX(${visible ? 0 : -12}px)`, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut'], ['transform', visible ? 'grow' : 'fadeOut', visible ? 140 : 0]]) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {session && <Bot seed={session.id} readOnly={session.source === 'hook_only'} tool={session.tool} state={botState(session)} pose={poseFor(session.id, session.state)} size={48} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} askKey={askKey} nodKey={nod} />}
+        {ledge ? <ResidentMascot size={48} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} /> : session && <Bot seed={session.id} readOnly={session.source === 'hook_only'} tool={session.tool} state={botState(session)} pose={poseFor(session.id, session.state)} size={48} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} askKey={askKey} nodKey={nod} />}
         <a href="#open" onClick={e => { e.preventDefault(); onOpen(); }} style={{ display: 'flex', flexDirection: 'column', gap: 4, flexGrow: 1, minWidth: 0, textDecoration: 'none', color: 'inherit' }}>
           <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{title}</span>
-          <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{kind === 'finished' ? (elapsedMs !== undefined ? t.bubble.finishedSub(duration(elapsedMs, t), session?.project ?? '') : t.bubble.finishedSubNoTime(session?.project ?? '')) : <>{pending?.text} · {session?.project}</>}</span>
+          <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{kind === 'finished' ? finishedSub : <>{pending?.text} · {session?.project}</>}</span>
           {moreCount > 0 && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.bubble.more(moreCount)}</span>}
         </a>
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted-foreground)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>

@@ -1,0 +1,81 @@
+{
+  "plan": {
+    "name": "2026-10-11-reader-plan.md",
+    "path": "harness-assistant / docs / superpowers / plans",
+    "tag": "PLAN DE RÉALISATION",
+    "title": "Un lecteur pour les<br>documents des agents.",
+    "lead": "Consulter les fichiers Markdown cités dans une session, sans interrompre le fil de la conversation.",
+    "meta": "Superpowers · writing-plans",
+    "time": "4 min de lecture",
+    "sections": [
+      [
+        "intention",
+        "Intention"
+      ],
+      [
+        "parcours",
+        "Parcours de lecture"
+      ],
+      [
+        "etapes",
+        "Étapes du plan"
+      ],
+      [
+        "verification",
+        "Vérification"
+      ]
+    ],
+    "body": "<section id=\"intention\"><h2><span class=\"num\">01</span>Intention</h2><p>Quand Otto partage un plan, le fichier devient un document que l’on peut ouvrir et parcourir directement dans Ledge.</p><div class=\"callout\"><strong>Le principe</strong>Un clic pour lire. Un retour immédiat à la session pour poser une question ou donner son accord.</div></section><section id=\"parcours\"><h2><span class=\"num\">02</span>Parcours de lecture</h2><p>Le fichier cité dans la réponse devient un lien. Un clic ouvre le document dans le même panneau, élargi à 560 px. La flèche de retour restitue la réponse d’Otto.</p><table><thead><tr><th>Action</th><th>Ce qui se passe</th></tr></thead><tbody><tr><td>Ouvrir un fichier</td><td>Afficher le Markdown mis en forme</td></tr><tr><td>Choisir une section</td><td>Aller au titre dans le document</td></tr><tr><td>Revenir à Otto</td><td>Retrouver la réponse et sa position</td></tr></tbody></table></section><section id=\"etapes\"><h2><span class=\"num\">03</span>Étapes du plan</h2><ul class=\"checks\"><li><span class=\"check\">☐</span> Repérer les références aux fichiers Markdown.</li><li><span class=\"check\">☐</span> Rendre les fichiers cités consultables en un clic.</li><li><span class=\"check\">☐</span> Ouvrir le lecteur avec son sommaire.</li><li><span class=\"check\">☐</span> Retrouver sa position après fermeture.</li></ul><pre>docs/<br>└── superpowers/<br>    ├── plans/2026-10-11-reader-plan.md<br>    └── specs/2026-10-11-reader-design.md</pre></section><section id=\"verification\"><h2><span class=\"num\">04</span>Vérification</h2><p>Essayer un long plan, un README avec un tableau et un skill avec des blocs de code. Vérifier le retour à la session et l’accès au clavier.</p><div class=\"callout\"><strong>Si le fichier n’est plus disponible</strong>Afficher le chemin recherché, expliquer qu’il est introuvable et proposer de réessayer ou de revenir à la session.</div></section>",
+    "markdown": "# Un lecteur pour les documents des agents.\n\nConsulter les fichiers Markdown cités dans une session, sans interrompre le fil de la conversation.\n\n\n## Intention\n\nQuand Otto partage un plan, le fichier devient un document que l’on peut ouvrir et parcourir directement dans Ledge.\n\nLe principeUn clic pour lire. Un retour immédiat à la session pour poser une question ou donner son accord.\n\n\n\n\n## Parcours de lecture\n\nLe fichier cité dans la réponse devient un lien. Un clic ouvre le document dans le même panneau, élargi à 560 px. La flèche de retour restitue la réponse d’Otto.\n\nActionCe qui se passeOuvrir un fichierAfficher le Markdown mis en formeChoisir une sectionAller au titre dans le documentRevenir à OttoRetrouver la réponse et sa position\n\n\n## Étapes du plan\n\n\n- ☐ Repérer les références aux fichiers Markdown.\n- ☐ Rendre les fichiers cités consultables en un clic.\n- ☐ Ouvrir le lecteur avec son sommaire.\n- ☐ Retrouver sa position après fermeture.docs/\n└── superpowers/\n    ├── plans/2026-10-11-reader-plan.md\n    └── specs/2026-10-11-reader-design.md\n\n\n## Vérification\n\nEssayer un long plan, un README avec un tableau et un skill avec des blocs de code. Vérifier le retour à la session et l’accès au clavier.\n\nSi le fichier n’est plus disponibleAfficher le chemin recherché, expliquer qu’il est introuvable et proposer de réessayer ou de revenir à la session.\n\n\n\n"
+  },
+  "design": {
+    "name": "2026-10-11-reader-design.md",
+    "path": "harness-assistant / docs / superpowers / specs",
+    "tag": "DESIGN",
+    "title": "Le document au premier plan.<br>La session à portée de main.",
+    "lead": "Un espace calme pour relire ce que les agents vous proposent.",
+    "meta": "Superpowers · brainstorming",
+    "time": "2 min de lecture",
+    "sections": [
+      [
+        "intention",
+        "Intention"
+      ],
+      [
+        "surface",
+        "Surface de lecture"
+      ],
+      [
+        "details",
+        "Détails utiles"
+      ]
+    ],
+    "body": "<section id=\"intention\"><h2><span class=\"num\">01</span>Intention</h2><p>Donner aux plans et aux designs la place nécessaire pour être compris. Le lecteur s’ouvre depuis un fichier cité et garde l’origine du document visible.</p></section><section id=\"surface\"><h2><span class=\"num\">02</span>Surface de lecture</h2><p>Le panneau existant passe de 480 à 560 px et affiche le document. Le sommaire se déplie à la demande ; le texte défile entre l’en-tête et le bouton de retour.</p><div class=\"callout\"><strong>Pour une lecture longue</strong>Le bouton d’agrandissement dédie la fenêtre au document. La longueur des lignes reste limitée pour faciliter la lecture.</div><p>Sur une fenêtre étroite, le lecteur occupe toute la largeur ; le bouton de retour restitue la session.</p></section><section id=\"details\"><h2><span class=\"num\">03</span>Détails utiles</h2><ul><li>Thèmes clair et sombre cohérents avec Ledge.</li><li>Une taille de texte confortable et ajustable.</li><li>Un onglet Markdown pour consulter la source du document.</li><li>Des cases de plan affichées en lecture seule.</li></ul><p>Un document modifié pendant sa lecture proposerait « Nouvelle version disponible » sans déplacer automatiquement votre position.</p></section>",
+    "markdown": "# Le document au premier plan. La session à portée de main.\n\nUn espace calme pour relire ce que les agents vous proposent.\n\n\n## Intention\n\nDonner aux plans et aux designs la place nécessaire pour être compris. Le lecteur s’ouvre depuis un fichier cité et garde l’origine du document visible.\n\n\n\n\n## Surface de lecture\n\nLe panneau existant passe de 480 à 560 px et affiche le document. Le sommaire se déplie à la demande ; le texte défile entre l’en-tête et le bouton de retour.\n\nPour une lecture longueLe bouton d’agrandissement dédie la fenêtre au document. La longueur des lignes reste limitée pour faciliter la lecture.\n\nSur une fenêtre étroite, le lecteur occupe toute la largeur ; le bouton de retour restitue la session.\n\n\n\n\n## Détails utiles\n\n\n- Thèmes clair et sombre cohérents avec Ledge.\n- Une taille de texte confortable et ajustable.\n- Un onglet Markdown pour consulter la source du document.\n- Des cases de plan affichées en lecture seule.Un document modifié pendant sa lecture proposerait « Nouvelle version disponible » sans déplacer automatiquement votre position.\n\n\n\n"
+  },
+  "skill": {
+    "name": "SKILL.md",
+    "path": "superpowers / skills / brainstorming",
+    "tag": "SKILL · EXEMPLE ABRÉGÉ",
+    "title": "Brainstorming",
+    "lead": "Transformer une intention en design que l’on peut lire, discuter et ajuster.",
+    "meta": "Superpowers",
+    "time": "1 min de lecture",
+    "sections": [
+      [
+        "role",
+        "Rôle"
+      ],
+      [
+        "deroulement",
+        "Déroulement"
+      ],
+      [
+        "sortie",
+        "Résultat attendu"
+      ]
+    ],
+    "body": "<section id=\"role\"><h2><span class=\"num\">01</span>Rôle</h2><p>Comprendre le besoin, explorer les choix possibles et rendre la proposition concrète avant de commencer à développer.</p><div class=\"callout\"><strong>Contenu de démonstration</strong>Ce texte illustre la lecture d’un SKILL.md. Il ne reproduit pas le fichier installé.</div></section><section id=\"deroulement\"><h2><span class=\"num\">02</span>Déroulement</h2><ul><li>Comprendre l’usage et les contraintes.</li><li>Explorer le contexte existant.</li><li>Proposer une approche et ses compromis.</li><li>Présenter le design et recueillir les retours.</li></ul></section><section id=\"sortie\"><h2><span class=\"num\">03</span>Résultat attendu</h2><p>Une compréhension partagée du résultat souhaité et un design suffisamment précis pour être relu.</p><pre>name: brainstorming<br>description: Explorer une idée avant réalisation.</pre></section>",
+    "markdown": "# Brainstorming\n\nTransformer une intention en design que l’on peut lire, discuter et ajuster.\n\n\n## Rôle\n\nComprendre le besoin, explorer les choix possibles et rendre la proposition concrète avant de commencer à développer.\n\nContenu de démonstrationCe texte illustre la lecture d’un SKILL.md. Il ne reproduit pas le fichier installé.\n\n\n\n\n## Déroulement\n\n\n- Comprendre l’usage et les contraintes.\n- Explorer le contexte existant.\n- Proposer une approche et ses compromis.\n- Présenter le design et recueillir les retours.\n\n\n## Résultat attendu\n\nUne compréhension partagée du résultat souhaité et un design suffisamment précis pour être relu.\n\nname: brainstorming\ndescription: Explorer une idée avant réalisation.\n\n"
+  }
+}

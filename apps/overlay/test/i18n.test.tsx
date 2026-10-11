@@ -21,6 +21,9 @@ describe('message catalogue', () => {
   it('French and English have the same keys', () => {
     expect(keys(MESSAGES.fr).sort()).toEqual(keys(MESSAGES.en).sort());
     expect(MESSAGES.fr.help.keys).toHaveLength(MESSAGES.en.help.keys.length);
+    (Object.keys(MESSAGES.fr.say) as (keyof typeof MESSAGES.fr.say)[]).forEach(k => {
+      expect(MESSAGES.fr.say[k]).toHaveLength(MESSAGES.en.say[k].length);
+    });
   });
   it('French is the default; the stored language wins; garbage falls back', () => {
     setFallbackLang('fr');

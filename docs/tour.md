@@ -78,6 +78,12 @@ When a turn ends, the agent's last message is read like a plan instead of being 
 
 The text comes from the `Stop` hook of Claude Code (its `last_assistant_message`), so it is the real message, not a capture of the pane. A reply without headings or lists still shows as readable prose.
 
+## Reading a cited Markdown file
+
+Click a `.md` or `.markdown` reference in an agent reply or in Ledge's chat. Ledge opens the file in the same panel, at 560 px or 800 px when expanded. The reader has a collapsible table of contents, a rendered view and a Markdown source view. Links to another local Markdown file open inside the reader; Back walks through those documents before returning to the original conversation. The reply and any draft remain in place. Escape goes back; the close button folds the panel to the handle.
+
+The WSL daemon reads a regular UTF-8 Markdown file, up to 1 MiB, from the session's working directory or an absolute WSL path. Relative paths in the Ledge chat need a known source and otherwise show a clear error. The reader does not edit files or send decisions to agents. HTML and images in documents remain inert. Reload explicitly reads the file again. Windows drive paths and `file:` links are outside this first version. The browser flow is covered by `apps/overlay/e2e/document-reader.spec.ts`; native Windows display and DPI validation remains to be done.
+
 ## Following an agent at work
 
 A working session shows the terminal preview: the last thirty lines of the conversation, kept on the latest line as the agent writes. From here you can interrupt the turn, stop the session, or jump to its terminal tab.

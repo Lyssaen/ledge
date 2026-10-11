@@ -70,6 +70,23 @@ const openSession = async (page: Page, row: string) => {
   await restInside(page);
 };
 
+test('ledge finished bubble', async ({ page }) => {
+  await desktop(page, 'dark');
+  const d = await fakeDaemon(page, [session('otto', { name: 'Otto', state: 'working' })]);
+  await ready(page, 1);
+  await openList(page);
+  await layer(page, 'list').getByRole('textbox', { name: 'Demander à Ledge' }).fill('Où en sont les autres ?');
+  await page.keyboard.press('Enter');
+  await expectMode(page, 'chat');
+  const ask = await received(d.received, 'chat.ask');
+  await layer(page, 'chat').getByRole('button', { name: 'Fermer' }).click();
+  await expectMode(page, 'handle');
+  d.emit({ type: 'chat.done', qid: ask.qid, text: 'Otto travaille encore sur les tests. Pim est disponible.', at: new Date().toISOString() });
+  await expectMode(page, 'bubble');
+  await expect(layer(page, 'bubble').getByText('Ledge a terminé')).toBeVisible();
+  await shoot(page, 'ledge-finished', undefined, 360);
+});
+
 for (const theme of ['dark', 'light'] as const) {
   test.describe(theme, () => {
     test('handle and tooltip', async ({ page }) => {

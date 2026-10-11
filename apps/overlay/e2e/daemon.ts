@@ -28,6 +28,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { recen
     /** Answers a `folder.list` or `folder.create`. */
     listing(l: { path: string; parent: string | null; entries: string[]; error?: string }) { send({ type: 'folder.listing', ...l }); },
     /** A launch refused: an `error` with no id. */
-    refuse(message: string) { send({ type: 'error', message }); }
+    refuse(message: string) { send({ type: 'error', message }); },
+    /** Any other server message (chat.done, chat.history, …). */
+    emit(m: unknown) { send(m); }
   };
 }

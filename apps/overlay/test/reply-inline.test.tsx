@@ -5,6 +5,16 @@ import { inline } from '../src/surface/ReplyCard';
 afterEach(() => vi.restoreAllMocks());
 
 describe('inline markdown', () => {
+  it('opens local Markdown links, code paths and bare paths through the document callback', () => {
+    const onDocument = vi.fn();
+    render(<p>{inline('Voir [le plan](docs/my plan.md), `SKILL.md` et README.md.', 0, undefined, onDocument)}</p>);
+    fireEvent.click(screen.getByRole('link', { name: 'le plan' }));
+    fireEvent.click(screen.getByRole('link', { name: 'SKILL.md' }));
+    fireEvent.click(screen.getByRole('link', { name: 'README.md' }));
+    expect(onDocument.mock.calls.map(x => x[0])).toEqual([
+      { path: 'docs/my plan.md' }, { path: 'SKILL.md' }, { path: 'README.md' }
+    ]);
+  });
   it('renders links that open outside, italics, strikethrough and bold with italics inside', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(<p>{inline('voir [la doc](https://example.com/a?b=1&c=2) et *vite* ou _lent_, ~~rayé~~, **gras avec *italique***')}</p>);

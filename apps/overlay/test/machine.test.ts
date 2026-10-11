@@ -9,6 +9,15 @@ const run = (events: SurfaceEvent[], start: SurfaceState = initialSurface()) => 
 };
 
 describe('surface machine', () => {
+  it('returns from a document to its source and keeps later asks queued', () => {
+    const origin = { kind: 'session' as const, sessionId: 'a' };
+    const { s } = run([{ type: 'homeClick' }, { type: 'rowClick', id: 'a' }, { type: 'documentOpen', origin }, { type: 'ask', id: 'b' }, { type: 'documentExpanded', on: true }, { type: 'surfaceLeave' }, { type: 'back' }]);
+    expect(s).toMatchObject({ mode: 'session', selectedId: 'a', queue: ['b'], documentOrigin: null, documentExpanded: false });
+    const missing = run([{ type: 'documentOpen', origin }, { type: 'removed', id: 'a', remaining: ['b'] }, { type: 'back' }], run([{ type: 'rowClick', id: 'a' }]).s);
+    expect(missing.s.mode).toBe('list');
+    const chat = run([{ type: 'chat' }, { type: 'documentOpen', origin: { kind: 'chat' } }, { type: 'back' }]);
+    expect(chat.s.mode).toBe('chat');
+  });
   it('the resident opens the list without selecting a session', () => {
     const { s } = run([{ type: 'homeClick' }]);
     expect(s.mode).toBe('list');
@@ -408,6 +417,20 @@ describe('surface machine: decision failure and detail views', () => {
     let r = transition({ ...initialSurface(), mode: 'list', openedBy: 'mouse' }, { type: 'chat' });
     expect(r.state.mode).toBe('chat');
     r = transition(r.state, { type: 'back' }); expect(r.state.mode).toBe('list');
-    expect(transition(initialSurface(), { type: 'chat' }).state.mode).toBe('handle');
+    expect(transition(initialSurface(), { type: 'chat' }).state.mode).toBe('chat');
+  });
+  it('the chat stays open when the pointer leaves, like a session', () => {
+    const chat = transition({ ...initialSurface(), mode: 'chat', openedBy: 'mouse', hovering: true }, { type: 'surfaceLeave' });
+    expect(chat.state.mode).toBe('chat');
+    expect(chat.effects.filter(e => e.type === 'startTimer' && e.name === 'leave')).toHaveLength(0);
+    expect(run([{ type: 'leaveElapsed' }], chat.state).s.mode).toBe('chat');
+    const list = transition({ ...initialSurface(), mode: 'list', openedBy: 'mouse', hovering: true }, { type: 'surfaceLeave' });
+    expect(list.effects.some(e => e.type === 'startTimer' && e.name === 'leave')).toBe(true);
+  });
+  it('a Ledge finish unfolds like a bot, and opening it goes to the chat', () => {
+    const unfold = { type: 'unfoldElapsed' } as never;
+    const r = run([{ type: 'finished', id: 'ledge' }, unfold]);
+    expect(r.s).toMatchObject({ mode: 'bubble', bubbleId: 'ledge', bubbleKind: 'finished' });
+    expect(run([{ type: 'bubbleClick' }], r.s).s).toMatchObject({ mode: 'chat', bubbleId: null, selectedId: null });
   });
 });

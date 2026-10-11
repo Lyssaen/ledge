@@ -35,6 +35,7 @@ export function useKeyboard(o: KeyboardOptions) {
     const h = (e: KeyboardEvent) => {
       const c = latest.current;
       const k = e.key;
+      if (c.mode === 'reader') { if (k === 'Escape' && !e.ctrlKey && !e.metaKey && !e.altKey) { c.onClose(); e.preventDefault(); } return; }
       const nextAsk = e.altKey && k === 'ArrowRight' && !e.ctrlKey && !e.metaKey;
       if (!nextAsk && (e.ctrlKey || e.metaKey || e.altKey)) return;
       const active = document.activeElement;

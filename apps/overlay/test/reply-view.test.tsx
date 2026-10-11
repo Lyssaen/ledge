@@ -33,6 +33,14 @@ const idle = fakeSession('r', { state: 'idle', lastReply: { text, at } });
 const base = { preview: ['● Bash(pnpm test)', '  ⎿  112 passed'], visible: true, reading: false, draft: '', onDraft: () => {}, onBack: () => {}, onClose: () => {}, onDecide: () => {}, onReply: () => {}, onInterrupt: () => {}, onKill: () => {}, onFocus: () => {}, onToggleReading: () => {}, now };
 
 describe('<SessionView> your turn: the last reply read like a plan', () => {
+  it('opens a Markdown file cited in the structured reply without sending a reply', () => {
+    const onDocument = vi.fn(); const onReply = vi.fn();
+    const notes = fakeSession('n', { state: 'idle', lastReply: { at, text: '## Documents\n\n- [Lire le plan](docs/my plan.md)' } });
+    render(<SessionView {...base} session={notes} onDocument={onDocument} onReply={onReply} />);
+    fireEvent.click(screen.getByRole('link', { name: 'Lire le plan' }));
+    expect(onDocument).toHaveBeenCalledWith({ path: 'docs/my plan.md' });
+    expect(onReply).not.toHaveBeenCalled();
+  });
   it('shows the title, the meta line, the lead and the sections with their markers', () => {
     const { container } = render(<SessionView {...base} session={idle} />);
     expect(screen.getByRole('heading', { level: 2, name: 'Three reducer findings fixed' })).toBeInTheDocument();

@@ -13,6 +13,7 @@ import { canDismiss } from './SessionList';
 import { parseReply } from '../reply/parse';
 import { BranchChip } from '../ui/BranchChip';
 import { ReplyCard, inline } from './ReplyCard';
+import type { DocumentReference } from '../documents/references';
 
 const mono = "'Geist Mono', ui-monospace, monospace";
 const well: React.CSSProperties = { fontFamily: mono, fontSize: 13, lineHeight: '20px', padding: '10px 12px', background: 'var(--sidebar)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' };
@@ -84,6 +85,7 @@ export interface SessionViewProps {
   enterDelay?: number;
   onDraft: (t: string) => void; onBack: () => void; onClose: () => void; onDecide: (d: 'accept' | 'deny') => void; onReply: (t: string) => void;
   onInterrupt: () => void; onKill: () => void; onFocus: () => void; onToggleReading: () => void; onRename?: (topic: string) => void;
+  onDocument?: (ref: DocumentReference) => void;
   /** Removes a finished or read-only session from the list (shown only for those); `dismissOff` while offline. */
   onDismiss?: () => void; dismissOff?: boolean;
   /** Null when commands may be sent; otherwise why every send/decision path is disabled (offline, read-only). */
@@ -166,9 +168,9 @@ export function SessionView(p: SessionViewProps) {
             <span data-reply-meta style={{ marginTop: 6, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
               {[t.reply.finished(s.name, relativeTime(reply.at, p.now, t)), doneCount ? t.reply.doneCount(doneCount) : null, questions ? t.reply.questionCount(questions) : null].filter(Boolean).join(' · ')}
             </span>
-            {doc.lead && <p data-reply-lead style={{ margin: '10px 0 0', fontSize: 14, lineHeight: '21px', color: 'var(--sidebar-foreground)', overflowWrap: 'anywhere' }}>{inline(doc.lead)}</p>}
+            {doc.lead && <p data-reply-lead style={{ margin: '10px 0 0', fontSize: 14, lineHeight: '21px', color: 'var(--sidebar-foreground)', overflowWrap: 'anywhere' }}>{inline(doc.lead, 0, undefined, p.onDocument)}</p>}
             <div style={{ marginTop: 14 }}>
-              <ReplyCard key={reply.at} doc={doc} raw={reply.text} t={t} onDraft={p.onDraft} onFocusReply={() => replyField.current?.focus()} />
+              <ReplyCard key={reply.at} doc={doc} raw={reply.text} t={t} onDraft={p.onDraft} onFocusReply={() => replyField.current?.focus()} onDocument={p.onDocument} />
             </div>
           </>}
           {readOnly && <>

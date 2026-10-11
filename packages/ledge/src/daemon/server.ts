@@ -15,6 +15,7 @@ import { loginShellPath } from '../shell-path.js';
 import { log } from '../log.js';
 import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
+import { readDocument } from './documents.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -181,6 +182,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
+      case 'document.read': {
+        const session = msg.sessionId ? store.get(msg.sessionId) : undefined;
+        if (msg.sessionId && !session) return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'session_missing' });
+        return send(ws, await readDocument(msg, { cwd: session?.cwd, home: opts.home ?? process.env.HOME ?? '' }));
+      }
       case 'snapshot.request': return sendSnapshot(ws);
       case 'session.register': {
         let incoming = msg.session;
@@ -296,7 +302,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       let msg: ClientMessage;
       try { msg = parseClientMessage(JSON.parse(String(data))); }
       catch (e) { log(`invalid message: ${(e as Error).message}`); return send(ws, { type: 'error', message: 'invalid message' }); }
-      handle(ws, msg).catch(e => { log(`${msg.type} failed: ${(e as Error).message}`); send(ws, { type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message }); });
+      handle(ws, msg).catch(e => {
+        if (msg.type === 'document.read') return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
+        log(`${msg.type} failed: ${(e as Error).message}`);
+        send(ws, { type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message });
+      });
     });
   });
 

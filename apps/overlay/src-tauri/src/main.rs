@@ -55,6 +55,8 @@ pub struct MonitorInfo {
     pub height: u32,
     #[serde(rename = "workH")]
     pub work_h: u32,
+    #[serde(rename = "workW")]
+    pub work_w: u32,
     pub primary: bool,
 }
 
@@ -180,7 +182,7 @@ fn list_monitors(app: AppHandle) -> Vec<MonitorInfo> {
     all.iter().enumerate().map(|(i, m)| {
         let s = m.scale_factor();
         let logical = |v: u32| (v as f64 / s).round() as u32;
-        MonitorInfo { id: monitor_id(m, i), name: m.name().cloned(), width: logical(m.size().width), height: logical(m.size().height), work_h: logical(m.work_area().size.height), primary: i == primary }
+        MonitorInfo { id: monitor_id(m, i), name: m.name().cloned(), width: logical(m.size().width), height: logical(m.size().height), work_h: logical(m.work_area().size.height), work_w: logical(m.work_area().size.width), primary: i == primary }
     }).collect()
 }
 

@@ -29,7 +29,7 @@ describe('<SettingsView> tabs', () => {
     expect(screen.queryByRole('switch', { name: 'Sounds' })).toBeNull();
     tab('Notifications');
     expect(screen.getByRole('switch', { name: 'Do not disturb' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'When a bot finishes' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'When a bot or Ledge finishes' })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Language' })).toBeNull();
     tab('Sounds');
     expect(screen.getByRole('switch', { name: 'Sounds' })).toBeInTheDocument();

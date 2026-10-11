@@ -13,6 +13,20 @@ const session = {
 };
 
 describe('protocol', () => {
+  it('validates document requests and replies without accepting empty or oversized paths', () => {
+    const request = { type: 'document.read', requestId: 'r1', path: 'docs/plan.md', sessionId: 's1' };
+    expect(parseClientMessage(request)).toEqual(request);
+    expect(() => parseClientMessage({ ...request, requestId: '' })).toThrow();
+    expect(() => parseClientMessage({ ...request, path: '' })).toThrow();
+    expect(() => parseClientMessage({ ...request, path: 'a'.repeat(4097) })).toThrow();
+    expect(() => parseClientMessage({ ...request, basePath: 'a'.repeat(4097) })).toThrow();
+    const content = { type: 'document.content', requestId: 'r1', path: '/w/docs/plan.md', text: '# Plan', bytes: 6, modifiedAt: T0 };
+    expect(parseServerMessage(content)).toEqual(content);
+    expect(() => parseServerMessage({ ...content, bytes: -1 })).toThrow();
+    expect(() => parseServerMessage({ ...content, modifiedAt: 'yesterday' })).toThrow();
+    expect(parseServerMessage({ type: 'document.error', requestId: 'r1', path: 'docs/no.md', code: 'not_found' }).type).toBe('document.error');
+    expect(() => parseServerMessage({ type: 'document.error', requestId: 'r1', path: 'x', code: 'unknown' })).toThrow();
+  });
   it('exposes the port', () => { expect(PROTOCOL_PORT).toBe(47831); });
 
   it('accepts a full session', () => {

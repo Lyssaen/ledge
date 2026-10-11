@@ -8,6 +8,7 @@ import { transition } from '../motion';
 import { useI18n, type Messages } from '../i18n/lang';
 import { inline } from './ReplyCard';
 import { groupSessions } from './groups';
+import type { DocumentReference } from '../documents/references';
 
 export const CHAT_HEADER_H = 56;
 export interface ChatViewProps {
@@ -15,6 +16,7 @@ export interface ChatViewProps {
   /** Null when questions may be sent; otherwise why not (offline). */
   offline: string | null;
   onAsk: (text: string) => void; onCancel: (qid: string) => void; onReset: () => void; onBack: () => void; onClose: () => void; onOpenSession: (id: string) => void;
+  onDocument?: (ref: DocumentReference) => void;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number; contentRef?: Ref<HTMLDivElement>;
 }
 
@@ -27,16 +29,16 @@ function linkBots(text: string, sessions: Session[]): string {
 }
 
 /** Simple Markdown: paragraphs, bullet lists, `###` headings; inline marks through the reply renderer. */
-function Answer({ text, sessions, onOpen }: { text: string; sessions: Session[]; onOpen: (id: string) => void }) {
+function Answer({ text, sessions, onOpen, onDocument }: { text: string; sessions: Session[]; onOpen: (id: string) => void; onDocument?: (ref: DocumentReference) => void }) {
   const onLink = (url: string) => { if (!url.startsWith('ledge://')) return false; const m = /^ledge:\/\/session\/(.+)$/.exec(url); if (m) onOpen(m[1]!); return true; };
   const blocks = linkBots(text, sessions).split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13, lineHeight: '19px', minWidth: 0 }}>
       {blocks.map((b, i) => {
         const lines = b.split('\n');
-        if (lines.every(l => /^[-*] /.test(l))) return <ul key={i} style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>{lines.map((l, j) => <li key={j}>{inline(l.slice(2), 0, onLink)}</li>)}</ul>;
-        if (/^#{1,3} /.test(b)) return <h3 key={i} style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{inline(b.replace(/^#{1,3} /, ''), 0, onLink)}</h3>;
-        return <p key={i} style={{ margin: 0, overflowWrap: 'anywhere' }}>{lines.map((l, j) => <span key={j}>{j > 0 && <br />}{inline(l, 0, onLink)}</span>)}</p>;
+        if (lines.every(l => /^[-*] /.test(l))) return <ul key={i} style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>{lines.map((l, j) => <li key={j}>{inline(l.slice(2), 0, onLink, onDocument)}</li>)}</ul>;
+        if (/^#{1,3} /.test(b)) return <h3 key={i} style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{inline(b.replace(/^#{1,3} /, ''), 0, onLink, onDocument)}</h3>;
+        return <p key={i} style={{ margin: 0, overflowWrap: 'anywhere' }}>{lines.map((l, j) => <span key={j}>{j > 0 && <br />}{inline(l, 0, onLink, onDocument)}</span>)}</p>;
       })}
     </div>
   );
@@ -93,7 +95,7 @@ export function ChatView(p: ChatViewProps) {
                         {turn.steps.map((s, i) => <span key={i} style={{ display: 'flex', gap: 4, color: i === turn.steps.length - 1 ? 'var(--sidebar-foreground)' : undefined }}>{i < turn.steps.length - 1 && <span aria-hidden>✓</span>}<span>{stepLabel(s, t)}</span></span>)}
                       </div>
                     )}
-                    {(turn.answer || (turn.answeredAt === undefined && live?.qid === turn.qid && live.text)) && <Answer text={turn.answer || live!.text} sessions={p.sessions} onOpen={p.onOpenSession} />}
+                    {(turn.answer || (turn.answeredAt === undefined && live?.qid === turn.qid && live.text)) && <Answer text={turn.answer || live!.text} sessions={p.sessions} onOpen={p.onOpenSession} onDocument={p.onDocument} />}
                     {turn.answeredAt !== undefined && (
                       <div data-sources style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', paddingTop: 6, borderTop: '1px solid var(--sidebar-border)', fontSize: 11, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
                         <span style={{ fontWeight: 500 }}>{t.chat.sources}</span>

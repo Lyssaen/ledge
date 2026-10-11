@@ -5,7 +5,7 @@
  */
 const KEY = 'ledge.monitor';
 
-export interface MonitorInfo { id: string; name: string | null; width: number; height: number; workH: number; primary: boolean }
+export interface MonitorInfo { id: string; name: string | null; width: number; height: number; workH: number; workW?: number; primary: boolean }
 
 /** The persisted choice; `null` (the primary) when absent or when storage is unavailable. */
 export function loadMonitor(): string | null {

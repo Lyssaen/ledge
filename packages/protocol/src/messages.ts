@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SessionSchema, ToolSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema } from './chat.js';
+import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 
 export const PROTOCOL_PORT = 47831;
 
@@ -24,6 +25,8 @@ export const RecentSchema = z.object({ cwd: z.string().min(1), project: z.string
 export type Recent = z.infer<typeof RecentSchema>;
 
 export const ServerMessageSchema = z.discriminatedUnion('type', [
+  DocumentContentSchema,
+  DocumentErrorSchema,
   /** `recents`: the folders of past sessions, most recent first. `launcher`: the command that runs `ledge` inside WSL
    *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. */
   z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional() }),
@@ -48,6 +51,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
+  DocumentReadSchema,
   /** The overlay starts a session: `cwd` is a WSL path (`~` allowed), `name` a preferred bot name (the daemon picks a
    *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation. */
   z.object({ type: z.literal('session.launch'), tool: ToolSchema, cwd: z.string().min(1), name: z.string().optional(), prompt: z.string().optional(), continue: z.boolean().optional() }),

@@ -435,6 +435,7 @@ docs/                design specs, implementation plans, mockups, the approved p
 - Design spec: [docs/superpowers/specs/2026-10-09-ledge-design.md](docs/superpowers/specs/2026-10-09-ledge-design.md)
 - Session topics, repository grouping and the Ledge chat: [spec](docs/superpowers/specs/2026-10-11-sessions-identity-and-chat-design.md), [plan](docs/superpowers/plans/2026-10-11-sessions-identity-and-chat.md) and [mockup](docs/mockups/ledge-sessions-chat.html).
 - Last-reply lists as real markdown lists: [spec](docs/superpowers/specs/2026-10-11-session-reply-lists-design.md).
+- Markdown document reader — **implemented in the overlay and WSL daemon**: [spec](docs/superpowers/specs/2026-10-11-markdown-reader-design.md), [implementation plan](docs/superpowers/plans/2026-10-11-markdown-reader.md), and [approved mockup](docs/mockups/ledge-reader-existing.html). Opens cited plans, designs and skills in the same 560 px panel, supports an 800 px expanded view, and returns to the conversation with its draft and scroll position preserved. Browser integration is tested; native Windows validation is still pending.
 - Starting a session from Ledge: [spec](docs/superpowers/specs/2026-10-10-launch-from-ledge-design.md) and [mockups](https://claude.ai/artifact/YBX4UV7Z2eBRNKAwNh3876)
 - Design canvas (mockups and playable prototype): https://claude.ai/artifact/57oDjsKdabQBmPgAXn15mc
 - Design system "Shadcn Red": https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV

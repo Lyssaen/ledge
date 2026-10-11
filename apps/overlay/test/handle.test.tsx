@@ -69,6 +69,27 @@ describe('<Handle> inertness', () => {
     expect(lu).toHaveAttribute('tabindex', '-1');
     expect(lu).toHaveAttribute('aria-hidden', 'true');
   });
+  it('an unread Ledge answer keeps the resident at rest and names the reply in its label', () => {
+    render(<Handle bots={bots} slots={l.slots} big={20} visible hoverId={null} onHover={() => {}} onOpen={() => {}} unread />);
+    const resident = screen.getByRole('button', { name: /Ledge replied, open/ });
+    expect(resident).toHaveStyle({ width: '24px', height: '20px' });
+    expect(resident.querySelector('[data-tick]')).toBeNull();
+    expect(resident.querySelector('[data-unread-pip]')).toBeNull();
+    expect(resident.querySelector('svg.resident')).not.toHaveAttribute('data-unread');
+  });
+  it('hides the edge tick on the bot that is speaking and grows a held finished bot', () => {
+    const asking = [
+      { id: 'a', name: 'Otto', tool: 'claude' as const, state: 'approval' as const, pose: 1 as const, pending: true, tip: '' },
+      { id: 'b', name: 'Pim', tool: 'codex' as const, state: 'idle' as const, pose: 1 as const, pending: false, held: true, tip: '' }
+    ];
+    render(<Handle bots={asking} slots={[{ id: 'a', size: 20, center: 18 }, { id: 'b', size: 20, center: 42 }]} big={20} visible hoverId={null} onHover={() => {}} onOpen={() => {}} sayId="a" />);
+    const otto = screen.getByRole('button', { name: /Otto/ });
+    const pim = screen.getByRole('button', { name: /Pim/ });
+    expect(otto.querySelector('[data-tick]')).toHaveStyle({ opacity: '0' });
+    expect(otto).toHaveStyle({ width: '20px' });
+    expect(pim).toHaveStyle({ width: '20px', opacity: '1' });
+    expect(pim.querySelector('[data-tick]')).toHaveStyle({ opacity: '0' });
+  });
   it('a lifted bot (finishing) is drawn big without the edge tick', () => {
     const lifted = [{ id: 'a', name: 'Otto', tool: 'claude', state: 'idle', pose: 1, pending: false, lifted: true, tip: '' }] as const;
     render(<Handle bots={lifted as never} slots={[{ id: 'a', size: 20, center: 18 }]} big={20} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);

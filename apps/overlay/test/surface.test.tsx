@@ -6,6 +6,7 @@ import { createDaemonClient } from '../src/daemon/client';
 import { attachClient, daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
 import { DEFAULT_SOUNDS, resetSoundPrefsForTests } from '../src/sounds/preferences';
+import { MESSAGES } from '../src/i18n/messages';
 
 let mock: Awaited<ReturnType<typeof createMockDaemon>>; let client: ReturnType<typeof createDaemonClient>; let detach: () => void;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -231,6 +232,63 @@ describe('<Surface>', () => {
     expect(screen.getByRole('button', { name: /Otto has a question, open/ })).toHaveStyle({ width: '20px' });
   });
 
+  it('the chat stays open when the pointer leaves', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    await act(async () => { vi.advanceTimersByTime(180); });
+    fireEvent.click(screen.getByRole('button', { name: 'Open the conversation with Ledge' }));
+    expect(surface()).toHaveAttribute('data-mode', 'chat');
+    // The composer takes focus on open; leaving the overlay drops hover and focus, like clicking the terminal.
+    fireEvent.blur(screen.getByRole('textbox', { name: 'Ask Ledge' }));
+    fireEvent.mouseLeave(surface());
+    await act(async () => { vi.advanceTimersByTime(800); });
+    expect(surface()).toHaveAttribute('data-mode', 'chat');
+  });
+
+  it('Ledge finishing an answer unfolds a finished bubble; Open goes to the chat', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => {
+      daemonStore.beginTurn({ qid: 'q1', question: 'How are the others doing?', askedAt: '2026-10-11T10:00:00.000Z', steps: [] });
+      await sleep(20);
+      daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'Deux bots travaillent.', at: '2026-10-11T10:01:20.000Z' });
+      await sleep(50);
+    });
+    expect(surface()).toHaveStyle({ width: '28px' });
+    await act(async () => { vi.advanceTimersByTime(540); });
+    expect(surface()).toHaveStyle({ width: '336px' });
+    const bubble = document.querySelector('[data-layer="bubble"]') as HTMLElement;
+    expect(bubble).toHaveTextContent('Ledge finished');
+    expect(bubble).toHaveTextContent('Deux bots travaillent.');
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    expect(surface()).toHaveAttribute('data-mode', 'chat');
+    expect(document.querySelector('[data-layer="chat"]')).toHaveTextContent('Deux bots travaillent.');
+  });
+
+  it('Ledge finishing while the handle is up keeps a speech bubble until the chat is opened', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => {
+      daemonStore.beginTurn({ qid: 'q1', question: 'How are the others doing?', askedAt: '2026-10-11T10:00:00.000Z', steps: [] });
+      await sleep(20);
+      daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'Deux bots travaillent.', at: '2026-10-11T10:01:20.000Z' });
+      await sleep(50);
+    });
+    const say = () => document.querySelector('[data-unread-say]') as HTMLElement;
+    expect(say()).toHaveAttribute('data-say-kind', 'ledge');
+    expect(MESSAGES.en.say.ledge).toContain(say().textContent);
+    expect(say()).toHaveStyle({ opacity: '1' });
+    await act(async () => { vi.advanceTimersByTime(540); });
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    expect(say()).toHaveStyle({ opacity: '0' });
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    expect(say()).toHaveStyle({ opacity: '1' });
+    fireEvent.click(say());
+    expect(surface()).toHaveAttribute('data-mode', 'chat');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    expect(say()).toHaveStyle({ opacity: '0' });
+  });
+
   it('a bot that finishes its task (working → idle) unfolds a finished bubble that folds after 6 s', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); });
@@ -242,6 +300,35 @@ describe('<Surface>', () => {
     expect(surface()).toHaveStyle({ width: '336px' });
     await act(async () => { vi.advanceTimersByTime(200); });
     expect(surface()).toHaveStyle({ width: '28px' });
+    const say = document.querySelector('[data-unread-say]') as HTMLElement;
+    expect(say).toHaveAttribute('data-say-kind', 'finished');
+    expect(MESSAGES.en.say.finished).toContain(say.textContent);
+    expect(say).toHaveStyle({ opacity: '1' });
+    fireEvent.click(say);
+    expect(surface()).toHaveAttribute('data-mode', 'session');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    expect(document.querySelector('[data-unread-say]')).toHaveStyle({ opacity: '0' });
+  });
+
+  it('an ask that folds back leaves an approval balloon; a Ledge unread waits behind it', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => {
+      daemonStore.beginTurn({ qid: 'q1', question: 'How are the others doing?', askedAt: '2026-10-11T10:00:00.000Z', steps: [] });
+      await sleep(20);
+      daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'Deux bots travaillent.', at: '2026-10-11T10:01:20.000Z' });
+      await sleep(50);
+    });
+    await act(async () => { mock.upsert(pimAsks()); await sleep(50); vi.advanceTimersByTime(540); });
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    await act(async () => { vi.advanceTimersByTime(4100); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    const say = () => document.querySelector('[data-unread-say]') as HTMLElement;
+    expect(say()).toHaveAttribute('data-say-kind', 'approval');
+    expect(MESSAGES.en.say.approval).toContain(say().textContent);
+    await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); });
+    expect(say()).toHaveAttribute('data-say-kind', 'ledge');
+    expect(MESSAGES.en.say.ledge).toContain(say().textContent);
   });
 
   it('idle again without working in between is not a finish, and DND or the Handle-only setting keep the handle', async () => {

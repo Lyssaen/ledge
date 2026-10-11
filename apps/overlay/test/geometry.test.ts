@@ -1,8 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { layout, scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
+import { frameOf } from '../src/surface/frame';
 const bots = (n: number, pending: number[] = []) => Array.from({ length: n }, (_, i) => ({ id: String(i), pending: pending.includes(i) }));
 
 describe('geometry', () => {
+  it('sizes the reader at 560 or 800 and keeps its native frame within a narrow work area', () => {
+    const base = layout({ bots: [], mode: 'reader', screenH: 1080, screenW: 1200 });
+    expect(base).toMatchObject({ w: 560, h: 760 });
+    expect(layout({ bots: [], mode: 'reader', screenH: 600, screenW: 1200, readerExpanded: true })).toMatchObject({ w: 800, h: 520 });
+    for (const panel of [1, 1.5, 2]) {
+      const g = scaledLayout({ bots: [], mode: 'reader', screenH: 900, screenW: 700, readerExpanded: true }, { handle: 1, panel });
+      expect(frameOf(g, [], 900).w).toBeLessThanOrEqual(700);
+    }
+  });
   it('uses 20/12/5 up to five bots and 18/11/3 after', () => {
     expect(slotSizes(5)).toEqual({ big: 20, small: 12, gap: 5 });
     expect(slotSizes(6)).toEqual({ big: 18, small: 11, gap: 3 });
@@ -97,5 +107,12 @@ describe('geometry', () => {
     const l = layout({ bots: [], mode: 'chat', screenH: 1000, detailH: 500 });
     expect(l.w).toBe(SIZES.sessionW); expect(l.h).toBe(500);
     expect(layout({ bots: [], mode: 'chat', screenH: 1000 }).h).toBe(SIZES.chatH);
+  });
+  it('a Ledge finish bubble sits at the resident, not the first bot', () => {
+    const h = layout({ bots: bots(3, [0]), mode: 'handle', screenH: 1080 });
+    const l = layout({ bots: bots(3, [0]), mode: 'bubble', screenH: 1080, bubbleId: 'ledge' });
+    const resident = h.handle.top + 8 + SIZES.residentH / 2;
+    expect(l.top).toBe(Math.round(resident - 38));
+    expect(l.top).not.toBe(h.slots[0]!.center - 38);
   });
 });

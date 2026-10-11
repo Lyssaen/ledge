@@ -7,11 +7,13 @@ import type { DaemonClient } from '../daemon/client';
 import { botState, poseFor } from '../bots/poseFor';
 import type { ResidentGesture } from '../bots/ResidentMascot';
 import { displayOrder, groupSessions, headersBefore } from './groups';
-import { scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y, type Layout } from './geometry';
+import { LEDGE_ID, scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
 import { Handle, type HandleBot } from './Handle';
 import { Tooltip } from './Tooltip';
+import { UnreadSay, UNREAD_SAY_BOX } from './UnreadSay';
+import { pickSay, pickSpeaker, sayKindOf, type SayCandidate } from './say';
 import { Bubble, type BubbleAck } from './Bubble';
 import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
@@ -34,6 +36,9 @@ import { useNativeFrame } from '../tauri/useNativeFrame';
 import { frameOf, type Box } from './frame';
 import { Shoulders, shoulderR } from './Shoulders';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
+import { useDocumentReader } from '../documents/useDocumentReader';
+import type { DocumentReference } from '../documents/references';
+import { DocumentView, type DocumentViewState } from './DocumentView';
 import type { ScaleTarget, UiScale } from '../scale';
 import type { MonitorInfo } from '../monitor';
 import { Coachmark, countCoachmarkOpen, COACHMARK_H } from '../keyboard/Coachmark';
@@ -55,6 +60,7 @@ export const LAUNCH_NOTICE_MS = 6000;
 export interface SurfaceProps {
   /** The work-area height in logical px (the page itself is never zoomed). */
   screenH: number; theme: 'dark' | 'light'; client: DaemonClient; dnd: boolean; onToggleDnd: () => void; onToggleTheme?: () => void;
+  screenW?: number;
   /** The applied scales: the handle's (its layer, slots and edge bands) and the opened views' (bubble, list, session,
    *  settings, help, coachmark). Each is a CSS `zoom` on its own layer, with the geometry multiplied to match. */
   handleScale?: number; panelScale?: number;
@@ -71,7 +77,7 @@ export interface SurfaceProps {
   soundPlayer?: SoundPlayer;
 }
 
-export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, soundPlayer }: SurfaceProps) {
+export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, soundPlayer }: SurfaceProps) {
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
@@ -90,9 +96,14 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const chooseDefaultTool = (tool: Tool) => { setDefaultTool(tool); saveDefaultTool(tool); };
   // Work time of the last finish per session, so the finished bubble can say "2m 40s of work".
   const [elapsed, setElapsed] = useState<Record<string, number>>({});
+  const [ledgePreview, setLedgePreview] = useState<string | undefined>();
+  const [ledgeUnread, setLedgeUnread] = useState(false);
+  const [ledgeSaySeed, setLedgeSaySeed] = useState('ledge');
+  const [finishedUnread, setFinishedUnread] = useState<Record<string, string>>({});
   const [ctl] = useState(() => createSurfaceController({ onState: s => setSt(s) }));
   const [st, setSt] = useState<SurfaceState>(() => ctl.state());
   const dispatch = ctl.dispatch;
+  const reader = useDocumentReader({ client, onExit: () => dispatch({ type: 'back' }) });
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -127,7 +138,15 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   // A reply the daemon rejects comes back into its draft (unless something new was typed meanwhile).
   const player = useMemo(() => soundPlayer ?? createSilentPlayer(), [soundPlayer]);
   const sounds = useSounds({ player, dnd, status });
-  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, finishedBubble, onChange: (c, info) => { sounds.onChange(c); if (c.kind === 'finished' && info.elapsedMs !== undefined) setElapsed(x => ({ ...x, [c.id]: info.elapsedMs! })); }, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
+  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, finishedBubble, onChange: (c, info) => {
+    sounds.onChange(c);
+    if (c.kind === 'finished' && info.elapsedMs !== undefined) setElapsed(x => ({ ...x, [c.id]: info.elapsedMs! }));
+    if (c.kind === 'finished') {
+      const looking = ctl.state().mode === 'session' && ctl.state().selectedId === c.id;
+      if (!looking) setFinishedUnread(x => ({ ...x, [c.id]: `${c.id}:finished:${info.elapsedMs ?? 0}` }));
+    }
+    if (c.kind === 'asked' || c.kind === 'left' || c.kind === 'failed') setFinishedUnread(x => { if (!(c.id in x)) return x; const { [c.id]: _gone, ...rest } = x; return rest; });
+  }, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
 
   // DND switched on takes any bubble down and drops queued asks. Turning it off does not re-bubble asks already pending.
   useEffect(() => { if (dnd) dispatch({ type: 'dnd', on: true }); }, [dnd, dispatch]);
@@ -190,7 +209,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
 
   // The finishing bot is big from the moment its notice is due until the bubble folds.
   const liftedId = st.queue.length === 0 && st.done.length > 0 && (st.unfoldDue || (st.mode === 'bubble' && st.bubbleKind === 'finished')) ? st.done[0] : null;
-  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, readOnly: s.source === 'hook_only', tip: isPending(s) ? `${t.handleLabel[botState(s)]} · ${s.pending?.text ?? ''}` : (s.topic ? `${s.topic} · ${rowHint(s, t)}` : rowHint(s, t)) })), [sessions, t, liftedId]);
+  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, held: !!finishedUnread[s.id], readOnly: s.source === 'hook_only', tip: isPending(s) ? `${t.handleLabel[botState(s)]} · ${s.pending?.text ?? ''}` : (s.topic ? `${s.topic} · ${rowHint(s, t)}` : rowHint(s, t)) })), [sessions, t, liftedId, finishedUnread]);
   const previousResident = useRef({ ids: new Set(sessions.map(s => s.id)), pending: new Set(sessions.filter(isPending).map(s => s.id)) });
   const signalCounter = useRef(0);
   const [residentSignal, setResidentSignal] = useState<{ key: number; kind: ResidentGesture }>();
@@ -202,6 +221,40 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
     else if ([...pending].some(id => !before.pending.has(id))) setResidentSignal({ key: ++signalCounter.current, kind: 'pulse' });
     previousResident.current = { ids, pending };
   }, [sessions]);
+  // A turn Ledge just answered, while we were watching it (history on connect is ignored): same finished cue as a bot.
+  const prevChat = useRef(chat);
+  useEffect(() => {
+    const before = prevChat.current;
+    prevChat.current = chat;
+    for (const turn of chat) {
+      const was = before.find(t => t.qid === turn.qid);
+      if (!was || was.answeredAt || was.error || !turn.answeredAt || turn.error) continue;
+      const elapsedMs = Date.parse(turn.answeredAt) - Date.parse(turn.askedAt);
+      if (Number.isFinite(elapsedMs) && elapsedMs >= 0) setElapsed(x => ({ ...x, [LEDGE_ID]: elapsedMs }));
+      setLedgePreview(turn.answer?.trim() || undefined);
+      sounds.onChange({ kind: 'finished', id: LEDGE_ID });
+      if (finishedBubble && !dnd) dispatch({ type: 'finished', id: LEDGE_ID });
+      if (ctl.state().mode !== 'chat') { setLedgeUnread(true); setLedgeSaySeed(turn.qid); }
+      setResidentSignal({ key: ++signalCounter.current, kind: 'happy' });
+    }
+  }, [chat]); // eslint-disable-line react-hooks/exhaustive-deps -- finishedBubble/dnd/sounds read the live values of this render
+  useEffect(() => { if (st.mode === 'chat') setLedgeUnread(false); }, [st.mode]);
+  useEffect(() => {
+    if (st.mode !== 'session' || !st.selectedId) return;
+    setFinishedUnread(x => { if (!(st.selectedId! in x)) return x; const { [st.selectedId!]: _gone, ...rest } = x; return rest; });
+  }, [st.mode, st.selectedId]);
+  useEffect(() => {
+    setFinishedUnread(x => {
+      let next = x;
+      for (const id of Object.keys(x)) {
+        const s = byId.get(id);
+        if (s && s.state === 'idle') continue;
+        if (next === x) next = { ...x };
+        delete next[id];
+      }
+      return next;
+    });
+  }, [sessions, byId]);
   const selected = st.selectedId ? byId.get(st.selectedId) ?? null : null;
   // The last open session stays mounted (inert) while the view slides out, so its content fades instead of vanishing
   // and focus left on it is detectably stranded (see useFocusRestore). A session removed by the daemon leaves the same
@@ -278,7 +331,16 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
     setLaunching(null); setLaunchFailure(lastError.message);
   }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held })), mode: st.mode, screenH, screenW, readerExpanded: st.documentExpanded, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH }, { handle: hs, panel: ps });
+  const sayCandidates: SayCandidate[] = [];
+  if (ledgeUnread) sayCandidates.push({ id: LEDGE_ID, kind: 'ledge', seed: ledgeSaySeed });
+  for (const s of sessions) {
+    const live = sayKindOf(s);
+    if (live) sayCandidates.push({ id: s.id, kind: live, seed: `${s.id}:${live}:${s.pending?.text ?? s.state}` });
+    else if (finishedUnread[s.id]) sayCandidates.push({ id: s.id, kind: 'finished', seed: finishedUnread[s.id]! });
+  }
+  const speaker = pickSpeaker(sayCandidates);
+  const sayText = speaker ? pickSay(t.say[speaker.kind], speaker.seed) : '';
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -305,7 +367,14 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const hovBot = bots.find(b => b.id === hoverId) ?? null;
   const hovSlot = geo.slots.find(s => s.id === hoverId);
   const panel = st.mode !== 'handle' && st.mode !== 'bubble';
-  const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch' || st.mode === 'chat';
+  const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch' || st.mode === 'chat' || st.mode === 'reader';
+  const openDocument = (ref: DocumentReference, origin: { kind: 'session'; sessionId: string } | { kind: 'chat' }) => { reader.open(ref, origin); dispatch({ type: 'documentOpen', origin }); };
+  const readerBack = () => reader.back();
+  const readerClose = () => { reader.close(); dispatch({ type: 'close' }); };
+  const activeReading = reader.state.current;
+  const documentState: DocumentViewState | null = activeReading?.loading ? { status: 'loading', path: activeReading.reference.path }
+    : activeReading?.error ? { status: 'error', path: activeReading.reference.path, code: activeReading.error }
+    : activeReading?.document ? { status: 'ready', document: activeReading.document } : null;
   const unreachable = status === 'unreachable';
   // A question needs the socket open: the client drops a send while it is still connecting, so the turn would hang.
   const chatOffline = status !== 'open' ? t.offline : null;
@@ -340,19 +409,26 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const coachTop = below + COACHMARK_H * ps <= geo.top + geo.h || above < geo.top ? below : above;
   // The native window is the bounding frame of what is visible: the surface plus the tooltip, the status line and the
   // coachmark when shown. Text extras are measured after layout (fixed fallbacks where layout gives nothing).
-  const tipRef = useRef<HTMLDivElement>(null); const statusRef = useRef<HTMLDivElement>(null);
-  const [sizes, setSizes] = useState({ tip: { w: 0, h: 0 }, status: { w: 0, h: 0 } });
+  const tipRef = useRef<HTMLDivElement>(null); const statusRef = useRef<HTMLDivElement>(null); const sayRef = useRef<HTMLButtonElement>(null);
+  const [sizes, setSizes] = useState({ tip: { w: 0, h: 0 }, status: { w: 0, h: 0 }, say: { w: 0, h: 0 } });
   useLayoutEffect(() => {
-    const tip = measure(tipRef.current), status = measure(statusRef.current);
-    setSizes(s => s.tip.w === tip.w && s.tip.h === tip.h && s.status.w === status.w && s.status.h === status.h ? s : { tip, status });
+    const tip = measure(tipRef.current), status = measure(statusRef.current), say = measure(sayRef.current);
+    setSizes(s => s.tip.w === tip.w && s.tip.h === tip.h && s.status.w === status.w && s.status.h === status.h && s.say.w === say.w && s.say.h === say.h ? s : { tip, status, say });
   });
   const tipShown = st.mode === 'handle' && hovBot !== null;
+  const sayShown = st.mode === 'handle' && speaker !== null;
   const extras: Box[] = [];
-  // The status line belongs to the handle (its scale); the tooltip and the coachmark read at the windows' size.
+  // The status line belongs to the handle (its scale); the tooltip, the unread say and the coachmark read at the windows' size.
   const statusLeft = Math.max(geo.w, SIZES.handleW * hs) + 8 * hs;
   // The tooltip sits beside the handle (whose width follows the handle size) but reads at the windows' size.
   const tipLeft = SIZES.handleW * hs + (TOOLTIP_BOX.left - SIZES.handleW) * ps;
+  const sayLeft = SIZES.handleW * hs + (UNREAD_SAY_BOX.left - SIZES.handleW) * ps;
+  const sayH = sizes.say.h || UNREAD_SAY_BOX.h * ps;
+  const saySlot = speaker && speaker.id !== LEDGE_ID ? geo.slots.find(s => s.id === speaker.id) : undefined;
+  const speakerTop = saySlot ? saySlot.center - saySlot.size / 2 : geo.top + 8 * hs;
+  const sayTop = speakerTop - sayH - 2 * ps;
   if (tipShown) { const h = sizes.tip.h || TOOLTIP_BOX.h * ps; extras.push({ left: tipLeft, top: (hovSlot?.center ?? geo.top) - h / 2, w: sizes.tip.w || TOOLTIP_BOX.w * ps, h }); }
+  if (sayShown) extras.push({ left: sayLeft, top: sayTop, w: sizes.say.w || UNREAD_SAY_BOX.w * ps, h: sizes.say.h || UNREAD_SAY_BOX.h * ps });
   if (unreachable) extras.push({ left: statusLeft, top: geo.top, w: sizes.status.w || STATUS_BOX.w * hs, h: sizes.status.h || STATUS_BOX.h * hs });
   if (coachShown) extras.push({ left: 44 * ps, top: coachTop, w: 300 * ps, h: COACHMARK_H * ps });
   // The fillets above and below the surface, where it leaves the screen edge.
@@ -392,7 +468,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
       if (!next || next === from) return;
       if (st.mode === 'session') openRow(next); else setFocusedId(next);
     },
-    onClose: () => dispatch({ type: detail ? 'back' : 'close' }),
+    onClose: () => st.mode === 'reader' ? readerBack() : dispatch({ type: detail ? 'back' : 'close' }),
     onAsk: () => surfaceRef.current?.querySelector<HTMLInputElement>('[data-ask-input]')?.focus(),
     onReplyFocus: () => {
       if (st.mode !== 'session' && st.mode !== 'list') return;
@@ -423,10 +499,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
         style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--notch)', color: 'var(--sidebar-foreground)', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
           transition: surfaceTransition }}>
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-          <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: 'homeClick' })} top={geo.top} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+          <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} top={geo.top} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} sayId={speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
-        <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
+        <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
           ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} failure={st.bubbleId ? asks.failures[st.bubbleId] : undefined} blocked={bubbleSession ? blockedFor(bubbleSession) : null} frozen={unreachable} reducedMotion={reducedMotion}
           onOpen={() => dispatch({ type: 'bubbleClick' })} onDismiss={() => dispatch({ type: 'close' })}
           onDecide={d => { if (st.bubbleId && !ctl.state().ack && decide(st.bubbleId, d)) dispatch({ type: 'decidedInBubble' }); }}
@@ -445,7 +521,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <ChatView contentRef={chatRef} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
               onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onOpenSession={openRow}
-              theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+              theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openDocument(ref, { kind: 'chat' })} />
           </div>
           <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <LaunchView key={launchOpen} contentRef={launchRef} visible={st.mode === 'launch'} enterDelay={enter} recents={recents} sessions={sessions} offline={unreachable ? t.offline : null} busy={!!launching} failure={launchFailure}
@@ -468,8 +544,9 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
               onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onDecide={d => decide(shown.id, d)} onReply={t => reply(shown.id, t)}
               onInterrupt={() => send({ type: 'session.interrupt', id: shown.id })} onKill={() => send({ type: 'session.kill', id: shown.id })}
               onDismiss={() => { if (!unreachable) send({ type: 'session.dismiss', id: shown.id }); }} dismissOff={unreachable}
-              onFocus={() => focusTab(shown.id)} onToggleReading={() => dispatch({ type: 'reading', on: !st.reading })} onRename={shown.state !== 'exited' ? topic => send({ type: 'session.rename', id: shown.id, topic }) : undefined} theme={theme} />}
+              onFocus={() => focusTab(shown.id)} onToggleReading={() => dispatch({ type: 'reading', on: !st.reading })} onRename={shown.state !== 'exited' ? topic => send({ type: 'session.rename', id: shown.id, topic }) : undefined} onDocument={ref => openDocument(ref, { kind: 'session', sessionId: shown.id })} theme={theme} />}
           </div>
+          {st.mode === 'reader' && activeReading && documentState && <DocumentView state={documentState} reading={activeReading} onReading={reader.setReading} originName={st.documentOrigin?.kind === 'session' ? byId.get(st.documentOrigin.sessionId)?.name ?? st.documentOrigin.sessionId : 'Ledge'} theme={theme} expanded={st.documentExpanded} onBack={readerBack} onClose={readerClose} onExpand={() => dispatch({ type: 'documentExpanded', on: !st.documentExpanded })} onReload={reader.reload} onDocument={reader.follow} />}
         </div>
       </div>
 
@@ -482,6 +559,13 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
       </div>
       <div data-zoom="tooltip" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Tooltip ref={tipRef} bot={st.mode === 'handle' ? hovBot : null} y={(hovSlot?.center ?? geo.top) / ps} left={tipLeft / ps} />
+      </div>
+      <div data-zoom="unread-say" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
+        <UnreadSay ref={sayRef} visible={sayShown} text={sayText} kind={speaker?.kind ?? 'ledge'} top={sayTop / ps} left={sayLeft / ps} onOpen={() => {
+          if (!speaker) return;
+          if (speaker.id === LEDGE_ID) dispatch({ type: 'chat' });
+          else dispatch({ type: 'botClick', id: speaker.id });
+        }} />
       </div>
       <div data-zoom="status" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
         {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: statusLeft / hs, top: geo.top / hs, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{t.unreachable}</div>}

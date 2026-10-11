@@ -119,4 +119,15 @@ describe('<Bubble>', () => {
   it('a finished bubble survives its session being removed from under it', () => {
     expect(() => render(<Bubble session={null} kind="finished" moreCount={0} visible={false} paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />)).not.toThrow();
   });
+  it('a Ledge finish (no session) speaks in its name, shows the answer, and offers OK and Open', () => {
+    const onOpen = vi.fn(); const onDismiss = vi.fn();
+    render(<Bubble session={null} kind="finished" preview="Deux bots travaillent." elapsedMs={80_000} moreCount={0} visible paused={false} onOpen={onOpen} onDismiss={onDismiss} onDecide={() => {}} onReply={() => {}} />);
+    expect(screen.getByText('Ledge finished')).toBeInTheDocument();
+    expect(screen.getByText('Deux bots travaillent.')).toBeInTheDocument();
+    expect(document.querySelector('svg.resident')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+    expect(onDismiss).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    expect(onOpen).toHaveBeenCalled();
+  });
 });

@@ -96,6 +96,20 @@ describe('server: origin check', () => {
 });
 
 describe('server', () => {
+  it('returns document content and errors only to the requesting socket without touching tmux', async () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'ledge-doc-')), 'plan.md');
+    writeFileSync(file, '# Plan\n');
+    const first = await connect({ port: srv.port }); await first.next('snapshot');
+    const other = await connect({ port: srv.port }); await other.next('snapshot');
+    first.send({ type: 'document.read', requestId: 'doc-1', path: file });
+    expect(await first.next('document.content')).toMatchObject({ requestId: 'doc-1', path: file, text: '# Plan\n' });
+    await expect(other.next('document.content', 100)).rejects.toThrow(/timeout/);
+    first.send({ type: 'document.read', requestId: 'doc-2', path: 'relative.md' });
+    expect(await first.next('document.error')).toMatchObject({ requestId: 'doc-2', code: 'ambiguous_path' });
+    await expect(other.next('document.error', 100)).rejects.toThrow(/timeout/);
+    expect(tmux.sent).toEqual([]);
+    await first.close(); await other.close();
+  });
   it('sends a snapshot on connect and broadcasts updates', async () => {
     store.upsert(mk('a'));
     const c = await connect({ port: srv.port });
