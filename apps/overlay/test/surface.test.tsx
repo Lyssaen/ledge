@@ -59,7 +59,7 @@ describe('<Surface>', () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     fireEvent.mouseEnter(surface());
     fireEvent.click(screen.getByRole('button', { name: /Otto working, open/ }));
-    expect(surface()).toHaveStyle({ width: '420px' });
+    expect(surface()).toHaveStyle({ width: '480px' });
     // The view closes from under the pointer: no mouseleave is ever delivered.
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(surface()).toHaveStyle({ width: '28px' });
@@ -101,7 +101,7 @@ describe('<Surface>', () => {
     await act(async () => { vi.advanceTimersByTime(180); });
     expect(surface()).toHaveStyle({ width: '380px' });
     fireEvent.click(screen.getByRole('button', { name: /speos-api/ }));
-    expect(surface()).toHaveStyle({ width: '420px' });
+    expect(surface()).toHaveStyle({ width: '480px' });
     expect(screen.getByText('Pim · speos-api')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Back to sessions' }));
     expect(surface()).toHaveStyle({ width: '380px' });
@@ -119,7 +119,7 @@ describe('<Surface>', () => {
     expect(list().getAttribute('data-delay')).toBe('120');
     expect(row().getAttribute('data-delay')).toBe('150');
     fireEvent.click(screen.getByRole('button', { name: /speos-api/ }));
-    expect(surface()).toHaveStyle({ width: '420px' });
+    expect(surface()).toHaveStyle({ width: '480px' });
     fireEvent.click(screen.getByRole('button', { name: 'Back to sessions' }));
     expect(surface()).toHaveStyle({ width: '380px' });
     // Back is a shrink (60 ms delay, 260 ms, slow start): the list appears once the surface has nearly settled,
@@ -183,7 +183,7 @@ describe('<Surface>', () => {
   it('a removed session that is open falls back to the list', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: /Otto working, open/ }));
-    expect(surface()).toHaveStyle({ width: '420px' });
+    expect(surface()).toHaveStyle({ width: '480px' });
     await act(async () => { mock.remove('a'); await sleep(50); });
     expect(surface()).toHaveStyle({ width: '380px' });
     // It leaves like a Back: still drawn while it fades, but inert, so nothing in it can be reached or clicked.
@@ -196,7 +196,7 @@ describe('<Surface>', () => {
     fireEvent.change(screen.getByPlaceholderText('Reply to Otto…'), { target: { value: 'keep going' } });
     const port = mock.port; await act(async () => { await mock.close(); await sleep(80); });
     expect(screen.getByText(/daemon unreachable/)).toBeInTheDocument();
-    expect(surface()).toHaveStyle({ width: '420px' });
+    expect(surface()).toHaveStyle({ width: '480px' });
     mock = await createMockDaemon({ port }); mock.sessions.set('a', fakeSession('a'));
     await act(async () => { vi.advanceTimersByTime(2500); await sleep(100); });
     expect((screen.getByPlaceholderText('Reply to Otto…') as HTMLInputElement).value).toBe('keep going');
