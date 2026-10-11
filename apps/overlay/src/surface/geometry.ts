@@ -1,6 +1,7 @@
 export const SIZES = { handleW: 28, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 72, footerH: 44, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420, launchH: 600, emptyH: 200 } as const;
-/** The surface's top + bottom border (border-box): added to a measured content height so nothing is clipped. */
-export const SURFACE_BORDER = 1;
+/** The surface's top + bottom border (border-box): added to a measured content height so nothing is clipped. None:
+ *  the notch is borderless so it merges with the screen edge. */
+export const SURFACE_BORDER = 0;
 export const SURFACE_CHROME_Y = 2 * SURFACE_BORDER;
 export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'settings' | 'help' | 'launch';
 /** The detail views that share the list's width and the DetailHeader: settings, help and the launch form. */

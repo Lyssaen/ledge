@@ -12,9 +12,11 @@
   --sidebar: oklch(0.985 0 0); --sidebar-foreground: oklch(0.145 0 0); --sidebar-primary: oklch(0.577 0.245 27.325);
   --sidebar-primary-foreground: oklch(0.971 0.013 17.38); --sidebar-accent: oklch(0.97 0 0); --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0); --sidebar-ring: oklch(0.708 0 0);
+  /* The notch itself: pure white (light) or pure black (dark), borderless, so it merges with the screen edge. */
+  --notch: #fff;
   --success: #059669; --warning: #b45309; --info: #2563eb; --danger-text: oklch(0.505 0.213 27.518);
   --status-success-soft: #ecfdf5; --status-warning-soft: #fffbeb; --status-info-soft: #eff6ff; --status-danger-soft: #fef2f2;
-  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.06);
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.25);
   --well: oklch(0.97 0 0);
   --edge-hot: rgba(0,0,0,.06);
 }
@@ -31,9 +33,10 @@
   --sidebar: oklch(0.205 0 0); --sidebar-foreground: oklch(0.985 0 0); --sidebar-primary: oklch(0.637 0.237 25.331);
   --sidebar-primary-foreground: oklch(0.971 0.013 17.38); --sidebar-accent: oklch(0.269 0 0); --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: #ffffff1a; --sidebar-ring: oklch(0.556 0 0);
+  --notch: #000;
   --success: #34d399; --warning: #fbbf24; --info: #60a5fa; --danger-text: oklch(0.704 0.191 22.216);
   --status-success-soft: #052e16; --status-warning-soft: #422006; --status-info-soft: #172554; --status-danger-soft: #450a0a;
-  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08);
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.7);
   --well: oklch(0.145 0 0);
   --edge-hot: rgba(255,255,255,.08);
 }

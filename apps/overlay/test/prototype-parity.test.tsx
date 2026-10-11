@@ -227,9 +227,9 @@ describe('prototype parity', () => {
     const ro = FakeResizeObserver.all.find(o => o.target === layer('bubble') && !o.disconnected)!;
     expect(ro).toBeDefined();
     act(() => ro.report(172));
-    // The surface is border-box with 1 px top and bottom borders: it holds the whole bubble, timer bar included.
+    // The surface is borderless (the notch merges with the screen edge): it holds the whole bubble, timer bar included.
     expect(surface()).toHaveStyle({ width: '336px', height: `${172 + SURFACE_CHROME_Y}px` });
-    expect(surface().style.border).toContain(`${SURFACE_CHROME_Y / 2}px solid`);
+    expect(surface().getAttribute('style')).not.toMatch(/border(-(top|right|bottom|left))?(-(width|style|color))?:/);
     expect(layer('bubble')).toHaveStyle({ width: '336px' });
     expect(within(layer('bubble')).getByText(new RegExp(long.slice(0, 20)))).not.toHaveStyle({ whiteSpace: 'nowrap' });
     expect(within(layer('bubble')).getByRole('button', { name: 'Approve' })).toBeInTheDocument();

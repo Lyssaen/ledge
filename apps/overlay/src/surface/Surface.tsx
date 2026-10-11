@@ -4,7 +4,7 @@ import type { Session } from '@ledge/protocol';
 import { useDaemon } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
 import { botState, poseFor } from '../bots/poseFor';
-import { scaledLayout, slotSizes, SIZES, SURFACE_BORDER, SURFACE_CHROME_Y, type Layout } from './geometry';
+import { scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
 import { Handle, type HandleBot } from './Handle';
@@ -369,7 +369,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           const row = (e.target as HTMLElement).closest?.('[data-row]') ? (e.target as HTMLElement).closest<HTMLElement>('[data-row-id]')?.dataset.rowId : undefined;
           if (row && kb && ctl.state().mode === 'list') setFocusedId(row);
         }} onBlur={onBlur}
-        style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--sidebar)', color: 'var(--sidebar-foreground)', border: `${SURFACE_BORDER}px solid var(--sidebar-border)`, borderLeft: 'none', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
+        style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--notch)', color: 'var(--sidebar-foreground)', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
           transition: surfaceTransition }}>
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
           <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
