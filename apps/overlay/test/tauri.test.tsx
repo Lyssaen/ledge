@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from './mockDaemon';
 import { frameOf, unionFrame, FRAME_PAD } from '../src/surface/frame';
+import { SHOULDER_R } from '../src/surface/Shoulders';
 
 // The native side, stubbed: `invoke` records commands, `listen` keeps the handler so a test can emit the edge event,
 // the global shortcut plugin keeps the Ctrl+Alt+L handler.
@@ -265,8 +266,9 @@ describe('<Surface> under Tauri', () => {
     await mount({ tauri: true });
     // Two quiet bots: the handle is 45 px tall at 518 on a 1080 px work area.
     expect(surface()).toHaveStyle({ top: '518px', width: '28px', height: '45px' });
-    await waitFor(() => expect(lastFrame()).toEqual({ top: 518 - FRAME_PAD.top, width: 28 + FRAME_PAD.right, height: 45 + FRAME_PAD.top + FRAME_PAD.bottom }));
-    await waitFor(() => expect(content()).toHaveStyle({ top: `-${518 - FRAME_PAD.top}px` }));
+    // The frame also holds the fillets joining the handle to the screen edge, above and below it.
+    await waitFor(() => expect(lastFrame()).toEqual({ top: 518 - SHOULDER_R - FRAME_PAD.top, width: 28 + FRAME_PAD.right, height: 45 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
+    await waitFor(() => expect(content()).toHaveStyle({ top: `-${518 - SHOULDER_R - FRAME_PAD.top}px` }));
     // No DOM hot zones: they would lie outside the window.
     expect(document.querySelectorAll('[data-hotzone]')).toHaveLength(0);
   });
@@ -283,7 +285,7 @@ describe('<Surface> under Tauri', () => {
       return new Promise<undefined>(r => pending.push(() => r(undefined)));
     });
     await mount({ tauri: true });
-    const handleTop = 518 - FRAME_PAD.top;
+    const handleTop = 518 - SHOULDER_R - FRAME_PAD.top;
     await waitFor(() => expect(seen.at(-1)).toEqual({ top: handleTop, offset: `-${handleTop}px` }));
     expect(content()).toHaveStyle({ top: `-${handleTop}px` }); // still unanswered
     await answer();
@@ -291,7 +293,7 @@ describe('<Surface> under Tauri', () => {
     // transition is painted. In the pass that opened the list the page still shows the handle's offset.
     await waitFor(() => expect(native.shortcut).not.toBeNull());
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
-    const listTop = parseFloat(surface().style.top) - FRAME_PAD.top;
+    const listTop = parseFloat(surface().style.top) - SHOULDER_R - FRAME_PAD.top;
     expect(listTop).toBeLessThan(handleTop);
     expect(content()).toHaveStyle({ top: `-${handleTop}px` });
     expect(seen.at(-1)!.top).toBe(handleTop);
@@ -311,8 +313,8 @@ describe('<Surface> under Tauri', () => {
     expect(surface()).toHaveStyle({ top: `${2 * 518}px`, width: '56px', height: '90px' });
     expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('2');
     expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1');
-    const top = 2 * 518 - FRAME_PAD.top;
-    await waitFor(() => expect(lastFrame()).toEqual({ top, width: 56 + FRAME_PAD.right, height: 90 + FRAME_PAD.top + FRAME_PAD.bottom }));
+    const top = 2 * 518 - SHOULDER_R - FRAME_PAD.top;
+    await waitFor(() => expect(lastFrame()).toEqual({ top, width: 56 + FRAME_PAD.right, height: 90 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
     expect(content()).toHaveStyle({ top: `-${top}px` });
     await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 80, h: 2 * (518 - 6 - 40) }, { top: 2 * (518 + 45 + 6), h: 2 * (1080 - 40 - (518 + 45 + 6)) }] }));
     // The windows keep their own scale: the list opens at its base 380 px, centered on the real screen.

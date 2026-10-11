@@ -28,6 +28,7 @@ import { transition, MOTION, ms, enterDelay } from '../motion';
 import { focusTerminal, openTerminal, onShortcut, onEdge, setHotZones, focusOverlay, releaseFocus, isTauri } from '../tauri/bridge';
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { frameOf, type Box } from './frame';
+import { Shoulders, shoulderR } from './Shoulders';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
 import type { ScaleTarget, UiScale } from '../scale';
 import type { MonitorInfo } from '../monitor';
@@ -311,6 +312,9 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   if (tipShown) { const h = sizes.tip.h || TOOLTIP_BOX.h * ps; extras.push({ left: tipLeft, top: (hovSlot?.center ?? geo.top) - h / 2, w: sizes.tip.w || TOOLTIP_BOX.w * ps, h }); }
   if (unreachable) extras.push({ left: statusLeft, top: geo.top, w: sizes.status.w || STATUS_BOX.w * hs, h: sizes.status.h || STATUS_BOX.h * hs });
   if (coachShown) extras.push({ left: 44 * ps, top: coachTop, w: 300 * ps, h: COACHMARK_H * ps });
+  // The fillets above and below the surface, where it leaves the screen edge.
+  const sr = shoulderR(geo.w);
+  if (sr > 0) extras.push({ left: 0, top: geo.top - sr, w: sr, h: geo.h + 2 * sr });
   const frame = frameOf(geo, extras, screenH);
   const offset = useNativeFrame(frame, parseFloat(ms(SETTLE_MS)));
   offsetRef.current = offset;
@@ -352,6 +356,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const enter = enterDelay(growing);
 
   const tauri = isTauri();
+  const surfaceTransition = ['top', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out`;
   const content = (
     <>
       {!tauri && geo.hotZones.map((z, i) => <div key={i} data-hotzone onMouseEnter={() => dispatch({ type: 'edgeEnter' })} onMouseLeave={() => dispatch({ type: 'edgeLeave' })} style={{ position: 'absolute', left: 0, top: z.top, width: 14 * hs, height: z.h, pointerEvents: st.mode === 'handle' && !unreachable ? 'auto' : 'none', background: st.hot ? 'var(--edge-hot)' : 'transparent', transition: transition([['background-color', 'hover']]) }} />)}
@@ -365,7 +370,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           if (row && kb && ctl.state().mode === 'list') setFocusedId(row);
         }} onBlur={onBlur}
         style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--sidebar)', color: 'var(--sidebar-foreground)', border: `${SURFACE_BORDER}px solid var(--sidebar-border)`, borderLeft: 'none', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
-          transition: ['top', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out` }}>
+          transition: surfaceTransition }}>
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
           <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
@@ -409,6 +414,9 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           </div>
         </div>
       </div>
+
+      {/* Drawn after the surface: each covers the surface's border row up to the end of its curve. */}
+      <Shoulders top={geo.top} h={geo.h} w={geo.w} opacity={unreachable ? 0.6 : 1} transition={surfaceTransition} />
 
       {/* Zoomed extras: a zoomed element's own offsets are zoomed too, so their real-px positions are divided back. */}
       <div data-zoom="coachmark" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
