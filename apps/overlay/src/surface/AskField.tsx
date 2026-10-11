@@ -4,7 +4,8 @@ import { Kbd } from '../ui/Kbd';
 import { useI18n } from '../i18n/lang';
 
 /**
- * "Ask Ledge…" at the foot of the list: Enter on a non-empty question sends it and clears the field (spec 2026-10-11 §5.5).
+ * "Ask Ledge…" above the sessions, matching the notch's mascot above the bots: Enter on a non-empty question sends it and
+ * clears the field (spec 2026-10-11 §5.5).
  * `onOpen` is the way in without asking: Enter on the empty field, or a click on the mascot, opens the day's conversation.
  */
 export function AskField({ onAsk, onOpen, onTyping, disabled = false, theme = 'dark', reducedMotion }: { onAsk: (text: string) => void; onOpen?: () => void; onTyping?: (on: boolean) => void; disabled?: boolean; theme?: 'dark' | 'light'; reducedMotion?: boolean }) {

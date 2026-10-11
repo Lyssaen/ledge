@@ -35,7 +35,7 @@ export const GROUP_H = SIZES.groupH;
 /** Height of a focused row carrying the inline Approve / Deny / Open actions. */
 export const EXPANDED_ROW_H = 100;
 
-/** Height of the ask field's slot above the footer: the 36 px field, 10 px of air above it (off the last row) and 10 px below. */
+/** Height of the ask field's slot above the sessions: the 36 px field, 10 px of air above it (off the header) and 10 px below. */
 export const ASK_H = 56;
 /** The air between the header and the launch notice, outside the notice's measured box. */
 export const NOTICE_GAP = 6;
@@ -54,8 +54,9 @@ export interface ListProps {
   /** The notice's box, measured by the surface so the panel grows by its height instead of scrolling the rows. */
   noticeRef?: Ref<HTMLDivElement>;
   /**
-   * The ask field above the footer (shown when `onAsk` is set); `onOpenChat` opens the conversation without asking (Enter on
-   * the empty field, the mascot); `onTyping` reports focus and typing, `askDisabled` greys it (daemon not connected).
+   * The ask field above the sessions (shown when `onAsk` is set), matching the notch's mascot-then-bots stack; `onOpenChat`
+   * opens the conversation without asking (Enter on the empty field, the mascot); `onTyping` reports focus and typing,
+   * `askDisabled` greys it (daemon not connected).
    */
   onAsk?: (text: string) => void; onOpenChat?: () => void; onTyping?: (on: boolean) => void; askDisabled?: boolean;
   /** Whether a session's decisions may be sent now (reachable daemon, not read-only, nothing in flight). */
@@ -127,6 +128,7 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
           {notice.action && <button type="button" onClick={notice.action.onClick} className="ledge-text-btn" style={{ border: 'none', background: 'transparent', padding: '2px 0', fontSize: 13, fontWeight: 500, color: 'var(--info)', cursor: 'pointer', whiteSpace: 'nowrap' }}>{notice.action.label} ↗</button>}
         </div>
       )}
+      {onAsk && <AskField onAsk={onAsk} onOpen={onOpenChat} onTyping={onTyping} disabled={askDisabled} theme={theme} reducedMotion={reducedMotion} />}
       <div data-scroll className="ledge-scroll" style={{ display: 'flex', flexDirection: 'column', padding: sessions.length ? '8px 0' : 0, flexGrow: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {sessions.length === 0 && (
           // The permanent Ledge resident also greets the empty list.
@@ -151,7 +153,6 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
           </div>
         )); })()}
       </div>
-      {onAsk && <AskField onAsk={onAsk} onOpen={onOpenChat} onTyping={onTyping} disabled={askDisabled} theme={theme} reducedMotion={reducedMotion} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: SIZES.footerH, flexShrink: 0, boxSizing: 'border-box', padding: '0 17px', borderTop: '1px solid var(--sidebar-border)' }}>
         <button type="button" data-dnd-footer aria-pressed={dnd} onClick={onToggleDnd} className="ledge-text-btn"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 0', border: 'none', background: 'transparent', fontSize: 13, lineHeight: '18px', cursor: 'pointer', color: dnd ? 'var(--sidebar-primary)' : 'var(--muted-foreground)', transition: transition([['color', 'hover']]) }}>
