@@ -48,8 +48,11 @@ export interface ListProps {
   onSettings?: () => void; onHelp?: () => void; onHoverRow?: (id: string | null) => void;
   /** Opens the "New session" form (the header's + and the empty state's button). */
   onLaunch?: () => void; notice?: ListNotice | null;
-  /** The ask field above the footer (shown when `onAsk` is set); `onTyping` reports focus and typing, `askDisabled` greys it (offline). */
-  onAsk?: (text: string) => void; onTyping?: (on: boolean) => void; askDisabled?: boolean;
+  /**
+   * The ask field above the footer (shown when `onAsk` is set); `onOpenChat` opens the conversation without asking (Enter on
+   * the empty field, the mascot); `onTyping` reports focus and typing, `askDisabled` greys it (daemon not connected).
+   */
+  onAsk?: (text: string) => void; onOpenChat?: () => void; onTyping?: (on: boolean) => void; askDisabled?: boolean;
   /** Whether a session's decisions may be sent now (reachable daemon, not read-only, nothing in flight). */
   canDecide?: (s: Session) => boolean;
   /** Removes an eligible row (see canDismiss); `offline` disables the button like every other send. */
@@ -57,7 +60,7 @@ export interface ListProps {
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number;
 }
 
-export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onTyping, askDisabled = false, notice = null, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
+export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onOpenChat, onTyping, askDisabled = false, notice = null, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
   const { t } = useI18n();
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
@@ -143,7 +146,7 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
           </div>
         )); })()}
       </div>
-      {onAsk && <AskField onAsk={onAsk} onTyping={onTyping} disabled={askDisabled} theme={theme} reducedMotion={reducedMotion} />}
+      {onAsk && <AskField onAsk={onAsk} onOpen={onOpenChat} onTyping={onTyping} disabled={askDisabled} theme={theme} reducedMotion={reducedMotion} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: SIZES.footerH, flexShrink: 0, boxSizing: 'border-box', padding: '0 17px', borderTop: '1px solid var(--sidebar-border)' }}>
         <button type="button" data-dnd-footer aria-pressed={dnd} onClick={onToggleDnd} className="ledge-text-btn"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 0', border: 'none', background: 'transparent', fontSize: 13, lineHeight: '18px', cursor: 'pointer', color: dnd ? 'var(--sidebar-primary)' : 'var(--muted-foreground)', transition: transition([['color', 'hover']]) }}>

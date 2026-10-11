@@ -19,6 +19,14 @@ describe('<AskField>', () => {
     fireEvent.change(input, { target: { value: ' Où en sont les autres ? ' } }); fireEvent.keyDown(input, { key: 'Enter' });
     expect(onAsk).toHaveBeenCalledWith('Où en sont les autres ?'); expect(input).toHaveValue('');
   });
+  it('Enter on an empty field and a click on the mascot open the chat without asking', () => {
+    const onAsk = vi.fn(), onOpen = vi.fn();
+    render(<AskField onAsk={onAsk} onOpen={onOpen} />);
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Ask Ledge' }), { key: 'Enter' });
+    expect(onOpen).toHaveBeenCalledTimes(1); expect(onAsk).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Open the conversation with Ledge' }));
+    expect(onOpen).toHaveBeenCalledTimes(2); expect(onAsk).not.toHaveBeenCalled();
+  });
 });
 
 describe('<ChatView>', () => {
@@ -71,5 +79,19 @@ describe('<ChatView>', () => {
     const turns: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [], answer: '[autre](ledge://other/1)', answeredAt: T0 }];
     render(<ChatView {...base} turns={turns} live={null} onOpenSession={onOpen} />);
     fireEvent.click(screen.getByRole('link', { name: 'autre' })); expect(onOpen).not.toHaveBeenCalled();
+  });
+  it('a ledge:// link nested in bold still opens its session', () => {
+    const onOpen = vi.fn();
+    const turns: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [], answer: '**voir [la session](ledge://session/a)**', answeredAt: T0 }];
+    render(<ChatView {...base} turns={turns} live={null} onOpenSession={onOpen} />);
+    fireEvent.click(screen.getByRole('link', { name: 'la session' })); expect(onOpen).toHaveBeenCalledWith('a');
+  });
+  it('the empty-state hint reads naturally for 0, 1 and several sessions', () => {
+    const { rerender } = render(<ChatView {...base} sessions={[]} turns={[]} live={null} />);
+    expect(screen.getByText('I see no session yet. I read, I touch nothing.')).toBeInTheDocument();
+    rerender(<ChatView {...base} sessions={sessions.slice(0, 1)} turns={[]} live={null} />);
+    expect(screen.getByText('I see 1 session, its terminal and its repository. I read, I touch nothing.')).toBeInTheDocument();
+    rerender(<ChatView {...base} turns={[]} live={null} />);
+    expect(screen.getByText('I see 2 sessions, the terminals and the repositories. I read, I touch nothing.')).toBeInTheDocument();
   });
 });

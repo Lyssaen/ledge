@@ -243,4 +243,15 @@ describe('final review fixes', () => {
     expect(bridge.focusTerminal).toHaveBeenCalledTimes(2);
     expect(rec.sent).toHaveLength(1);
   });
+
+  it('an exited session offers no rename (the daemon would ignore it); a live one does', () => {
+    snapshot([otto({ topic: 'Done work', state: 'exited' }), pim({ topic: 'Live work' })]);
+    mount();
+    shortcut(); press('1'); press('Enter');
+    expect(mode()).toBe('session');
+    expect(within(layer('session')).getByRole('button', { name: 'Done work' })).toBeDisabled();
+    press('Escape');
+    press('2'); press('Enter');
+    expect(within(layer('session')).getByRole('button', { name: 'Live work' })).toBeEnabled();
+  });
 });

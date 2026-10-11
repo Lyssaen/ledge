@@ -172,4 +172,9 @@ describe('<SessionView>', () => {
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Rename the session' }), { key: 'Escape' });
     expect(screen.getByRole('button', { name: 'T' })).toBeInTheDocument(); expect(onRename).not.toHaveBeenCalled(); expect(onClose).not.toHaveBeenCalled();
   });
+  it('the topic button keeps the focus ring: explicit resets, no all: unset', () => {
+    render(<SessionView {...base} session={fakeSession('a', { topic: 'T' })} onRename={() => {}} />);
+    const style = screen.getByRole('button', { name: 'T' }).getAttribute('style') ?? '';
+    expect(style).not.toMatch(/(^|;\s*)all:/); expect(style).toMatch(/border: 0/);
+  });
 });

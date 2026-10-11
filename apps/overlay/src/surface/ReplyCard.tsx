@@ -44,9 +44,9 @@ export function inline(text: string, depth = 0, onLink?: (url: string) => boolea
       out.push(<a key={key} href={url} onClick={e => { e.preventDefault(); openUrl(url); }} style={{ ...linkStyle, overflowWrap: 'anywhere' }}>{url}</a>);
       last = m.index + url.length; re.lastIndex = last; continue;
     }
-    else if (g.b1 ?? g.b2) out.push(<strong key={key} style={{ fontWeight: 600 }}>{inline((g.b1 ?? g.b2)!, depth + 1)}</strong>);
-    else if (g.s) out.push(<s key={key}>{inline(g.s, depth + 1)}</s>);
-    else out.push(<em key={key}>{inline((g.i1 ?? g.i2)!, depth + 1)}</em>);
+    else if (g.b1 ?? g.b2) out.push(<strong key={key} style={{ fontWeight: 600 }}>{inline((g.b1 ?? g.b2)!, depth + 1, onLink)}</strong>);
+    else if (g.s) out.push(<s key={key}>{inline(g.s, depth + 1, onLink)}</s>);
+    else out.push(<em key={key}>{inline((g.i1 ?? g.i2)!, depth + 1, onLink)}</em>);
     last = m.index + m[0].length;
   }
   if (last < text.length) out.push(text.slice(last));

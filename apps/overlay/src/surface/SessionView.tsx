@@ -241,8 +241,9 @@ function TopicLine({ session: s, t, now, onRename }: { session: Session; t: Mess
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1, minWidth: 0, paddingLeft: 4 }}>
       {editing === null
         ? <button type="button" data-topic disabled={!onRename} title={onRename ? t.session.rename : undefined} onClick={() => setEditing(s.topic ?? '')}
-            style={{ all: 'unset', display: 'block', cursor: onRename ? 'text' : 'default', fontSize: 14, lineHeight: '18px', fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: s.topic ? undefined : 'var(--muted-foreground)' }}>{shown}</button>
-        : <input autoFocus data-topic-input aria-label={t.session.rename} className="ledge-field" value={editing} placeholder={t.session.topicPlaceholder} onChange={e => setEditing(e.target.value)} onBlur={commit}
+            // Explicit resets, not `all: unset`, so the global :focus-visible ring still shows for keyboard users.
+            style={{ border: 0, background: 'transparent', padding: 0, margin: 0, font: 'inherit', color: 'inherit', textAlign: 'left', display: 'block', width: '100%', boxSizing: 'border-box', cursor: onRename ? 'text' : 'default', fontSize: 14, lineHeight: '18px', fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(s.topic ? {} : { color: 'var(--muted-foreground)' }) }}>{shown}</button>
+        : <input autoFocus data-topic-input aria-label={t.session.rename} className="ledge-field" maxLength={500} value={editing} placeholder={t.session.topicPlaceholder} onChange={e => setEditing(e.target.value)} onBlur={commit}
             onKeyDown={e => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') { e.stopPropagation(); setEditing(null); } }}
             style={{ height: 22, boxSizing: 'border-box', padding: '0 6px', fontSize: 14, fontWeight: 650, background: 'var(--well)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-sm)' }} />}
       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
