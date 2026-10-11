@@ -79,4 +79,10 @@ describe('geometry', () => {
     const b = scaledLayout({ ...input, mode: 'bubble', bubbleId: '1', bubbleH: 120 }, { handle: 2, panel: 1 });
     expect(b.top).toBe(Math.round(h2.slots[1]!.center - 38));
   });
+  it('adds a header height per group to the list', () => {
+    const bots = [{ id: 'a', pending: false }, { id: 'b', pending: false }];
+    const one = layout({ bots, mode: 'list', screenH: 1000, groups: 1 });
+    const two = layout({ bots, mode: 'list', screenH: 1000, groups: 2 });
+    expect(two.h - one.h).toBe(SIZES.groupH);
+  });
 });

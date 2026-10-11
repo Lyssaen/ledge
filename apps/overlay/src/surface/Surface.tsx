@@ -5,6 +5,7 @@ import { useDaemon } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
 import { botState, poseFor } from '../bots/poseFor';
 import type { ResidentGesture } from '../bots/ResidentMascot';
+import { groupSessions, headersBefore } from './groups';
 import { scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
@@ -262,7 +263,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
     setLaunching(null); setLaunchFailure(lastError.message);
   }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, reading: st.reading, groups: groupSessions(sessions).length, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -316,7 +317,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const coachShown = coach && kb && st.mode === 'list';
   const focusIndex = focused ? sessions.findIndex(s => s.id === focused.id) : -1;
   // In real px: the list's base offsets times the window scale.
-  const rowTop = geo.top + (SIZES.headerH + 8 + Math.max(0, focusIndex) * SIZES.rowH) * ps;
+  const rowTop = geo.top + (SIZES.headerH + 8 + headersBefore(groupSessions(sessions), focused?.id ?? null) * SIZES.groupH + Math.max(0, focusIndex) * SIZES.rowH) * ps;
   const rowBottom = focusIndex < 0 ? geo.top + SIZES.headerH * ps : rowTop + (focused && isYesNo(focused) ? EXPANDED_ROW_H : SIZES.rowH) * ps;
   const below = rowBottom + 8 * ps; const above = rowTop - (8 + COACHMARK_H) * ps;
   const coachTop = below + COACHMARK_H * ps <= geo.top + geo.h || above < geo.top ? below : above;

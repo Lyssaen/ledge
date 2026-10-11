@@ -1,4 +1,4 @@
-export const SIZES = { handleW: 28, residentH: 20, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 72, footerH: 44, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420, launchH: 600, emptyH: 200 } as const;
+export const SIZES = { handleW: 28, residentH: 20, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 72, footerH: 44, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420, launchH: 600, emptyH: 200, groupH: 28 } as const;
 /** The surface's top + bottom border (border-box): added to a measured content height so nothing is clipped. None:
  *  the notch is borderless so it merges with the screen edge. */
 export const SURFACE_BORDER = 0;
@@ -17,7 +17,7 @@ export function slotSizes(n: number): { big: number; small: number; gap: number 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of an expanded (focused) list row. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. */
-export interface LayoutInput { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number; detailH?: number; bubbleAnchor?: number }
+export interface LayoutInput { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; bubbleId?: string | null; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; bubbleAnchor?: number }
 
 /** `bubbleAnchor` is the y the bubble aligns to (its bot's center) when the handle is laid out apart; otherwise its slot. */
 export function layout(input: LayoutInput): Layout {
@@ -43,7 +43,7 @@ export function layout(input: LayoutInput): Layout {
     return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w: SIZES.listW, h, slots, handle, hotZones };
   }
   // An empty list shows the empty state (a bot, two lines, a button) instead of rows.
-  const rowsH = n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.listExtraH ?? 0);
+  const rowsH = n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.groups ?? 0) * SIZES.groupH + (input.listExtraH ?? 0);
   const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + rowsH + SIZES.footerH + SURFACE_CHROME_Y : (input.sessionH ?? 480));
   const top = clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h);
   const w = mode === 'list' ? SIZES.listW : (input.reading ? SIZES.readingW : SIZES.sessionW);
