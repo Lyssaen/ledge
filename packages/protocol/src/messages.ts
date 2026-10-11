@@ -62,8 +62,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.interrupt'), id: z.string() }),
   /** Removes a finished (exited) or read-only (hook_only) session from the list; refused for a live launcher session. */
   z.object({ type: z.literal('session.dismiss'), id: z.string() }),
-  /** The user names the session's topic from the overlay; an empty topic hands back to the automatic sources. */
-  z.object({ type: z.literal('session.rename'), id: z.string(), topic: z.string() }),
+  /** The user names the session's topic from the overlay (500 characters at most, the hook's prompt cap); an empty topic hands back to the automatic sources. */
+  z.object({ type: z.literal('session.rename'), id: z.string(), topic: z.string().max(500) }),
   z.object({ type: z.literal('session.register'), session: SessionSchema }),
   /** `agent` and `cwd` describe the session when the daemon does not know it yet (a hook from an agent started without ledge). */
   z.object({ type: z.literal('session.event'), id: z.string(), event: SessionEventSchema, agent: ToolSchema.optional(), cwd: z.string().optional() }),

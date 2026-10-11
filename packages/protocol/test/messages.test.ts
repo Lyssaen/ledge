@@ -30,6 +30,11 @@ describe('protocol', () => {
     expect(parseClientMessage({ type: 'session.rename', id: 'a', topic: 'Mon sujet' }).type).toBe('session.rename');
   });
 
+  it('caps a rename topic at 500 characters, like the hook caps a prompt', () => {
+    expect(parseClientMessage({ type: 'session.rename', id: 'a', topic: 'x'.repeat(500) }).type).toBe('session.rename');
+    expect(() => parseClientMessage({ type: 'session.rename', id: 'a', topic: 'x'.repeat(501) })).toThrow();
+  });
+
   it('rejects an unknown state', () => {
     expect(() => SessionSchema.parse({ ...session, state: 'sleeping' })).toThrow();
   });
