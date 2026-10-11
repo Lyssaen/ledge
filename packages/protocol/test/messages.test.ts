@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, ServerMessageSchema, SessionSchema, PROTOCOL_PORT, NAMES, pickName } from '../src/index.js';
+import { parseClientMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName } from '../src/index.js';
+
+const T0 = '2026-10-09T18:02:00.000Z';
 
 const session = {
   id: '7f3a', name: 'Otto', tool: 'claude', cwd: '/home/u/Workspace/harness-assistant',
@@ -15,6 +17,17 @@ describe('protocol', () => {
 
   it('accepts a full session', () => {
     expect(SessionSchema.parse(session)).toEqual(session);
+  });
+
+  it('accepts a session with topic and repository fields', () => {
+    const s = { ...session, topic: 'Hooks Codex', topicSource: 'pane', repo: 'harness-assistant', repoPath: '/w/harness-assistant', branch: 'worktree-codex', worktree: true };
+    expect(SessionSchema.parse(s).worktree).toBe(true);
+  });
+
+  it('accepts the new session events and the rename message', () => {
+    expect(SessionEventSchema.parse({ name: 'PaneTitle', at: T0, source: 'pane', text: 'add-readme' }).name).toBe('PaneTitle');
+    expect(SessionEventSchema.parse({ name: 'Renamed', at: T0, source: 'daemon', text: 'Mon sujet' }).name).toBe('Renamed');
+    expect(parseClientMessage({ type: 'session.rename', id: 'a', topic: 'Mon sujet' }).type).toBe('session.rename');
   });
 
   it('rejects an unknown state', () => {

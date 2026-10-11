@@ -34,13 +34,25 @@ export const HelperSchema = z.object({
 });
 export type Helper = z.infer<typeof HelperSchema>;
 
-export const SessionSchema = z.object({
+/** Where a session's topic came from: the user's own words win over the pane's conversation title, which wins over the first prompt. */
+export const TopicSourceSchema = z.enum(['user', 'pane', 'prompt']);
+export type TopicSource = z.infer<typeof TopicSourceSchema>;
+
+export const SessionSchema =z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   tool: ToolSchema,
   cwd: z.string(),
   project: z.string(),
   title: z.string(),
+  /** One line saying what the session is about (spec 2026-10-11 §3). */
+  topic: z.string().optional(),
+  topicSource: TopicSourceSchema.optional(),
+  /** The repository (its main worktree's folder name and absolute path), the checked-out branch, and whether `cwd` is a linked worktree (§4). */
+  repo: z.string().optional(),
+  repoPath: z.string().optional(),
+  branch: z.string().optional(),
+  worktree: z.boolean().optional(),
   tmuxSession: z.string().nullable(),
   state: SessionStateSchema,
   pending: PendingSchema.optional(),
