@@ -1,4 +1,5 @@
 import { spawn as nodeSpawn } from 'node:child_process';
+import { runJsonl } from './run.js';
 
 /** Who Ledge is when it answers (spec 2026-10-11 §5.4). */
 export const PERSONA = `Tu es Ledge, le compagnon qui veille sur les sessions d'agents (Claude Code, Codex, Cursor Agent) de l'utilisateur. Tu lis, tu ne touches à rien : pas de commande, pas d'écriture, jamais d'instruction envoyée à une session.
@@ -45,18 +46,5 @@ export interface RunHandle { done: Promise<{ code: number | null; stderr: string
 /** Spawns Claude Code and feeds every stream line to `onEvent`; `done` resolves with the exit code and the tail of stderr. */
 export function runClaude(o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawnImpl: typeof nodeSpawn = nodeSpawn): RunHandle {
   const [file = 'claude', ...pre] = o.bin ?? ['claude'];
-  const child = spawnImpl(file, [...pre, ...claudeArgs(o)], { cwd: o.cwd, env: o.env, stdio: ['pipe', 'pipe', 'pipe'] });
-  let buf = ''; let stderr = '';
-  const feed = (line: string) => { for (const e of parseLine(line)) onEvent(e); };
-  child.stdout!.setEncoding('utf8');
-  child.stdout!.on('data', (chunk: string) => { buf += chunk; let i; while ((i = buf.indexOf('\n')) >= 0) { feed(buf.slice(0, i)); buf = buf.slice(i + 1); } });
-  child.stderr!.setEncoding('utf8');
-  child.stderr!.on('data', (c: string) => { stderr = (stderr + c).slice(-2000); });
-  const done = new Promise<{ code: number | null; stderr: string }>(res => {
-    child.on('error', e => { stderr = `${stderr}${e.message}`.slice(-2000); res({ code: null, stderr }); });
-    child.on('close', code => { if (buf.trim()) feed(buf); res({ code, stderr }); });
-  });
-  child.stdin!.on('error', () => { /* the child exited before reading: close reports it */ });
-  child.stdin!.end(o.question);
-  return { done, kill: () => { child.kill('SIGTERM'); } };
+  return runJsonl(file, [...pre, ...claudeArgs(o)], { cwd: o.cwd, env: o.env, question: o.question }, parseLine, onEvent, spawnImpl);
 }

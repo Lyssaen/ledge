@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type Ref } from 'react';
 import type { FolderListing } from '../daemon/store';
 import { FolderBrowser, type FolderRequest } from './FolderBrowser';
 import { NAMES, pickName, type Recent, type Session, type Tool } from '@ledge/protocol';
+import { loadDefaultTool, TOOLS } from '../defaultTool';
 import { Bot } from '../bots/Bot';
 import { poseFor } from '../bots/poseFor';
 import { Button } from '../ui/Button';
@@ -16,7 +17,6 @@ import { useI18n } from '../i18n/lang';
 /** What the form sends: the daemon's `session.launch` fields, plus whether to open a terminal tab once it answers. */
 export interface LaunchRequest { tool: Tool; cwd: string; name?: string; prompt?: string; continue: boolean; openTab: boolean }
 
-const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor'];
 /** The actions row under the scrolling body (its border included), added to the measured body by the surface. */
 export const LAUNCH_FOOTER_H = 61;
 const OPEN_TAB_KEY = 'ledge.launch.openTab';
@@ -79,7 +79,7 @@ export function LaunchView(p: LaunchViewProps) {
   const live = p.sessions.filter(s => s.state !== 'exited');
   const taken = live.map(s => s.name);
   const [cwd, setCwd] = useState(() => p.recents[0]?.cwd ?? '');
-  const [tool, setTool] = useState<Tool>('claude');
+  const [tool, setTool] = useState<Tool>(loadDefaultTool);
   const [name, setName] = useState(() => pickName(taken));
   const [prompt, setPrompt] = useState('');
   const [resume, setResume] = useState(false);

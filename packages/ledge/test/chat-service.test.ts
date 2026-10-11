@@ -22,7 +22,7 @@ describe('chat service', () => {
     const out: ServerMessage[] = [];
     await chat.ask('q1', 'x', m => out.push(m));
     expect(out.at(-1)?.type).toBe('chat.done');
-    expect(JSON.parse(readFileSync(join(home, 'chat.json'), 'utf8'))).toEqual({ day: '2026-10-11', sessionId: '33333333-3333-4333-8333-333333333333' });
+    expect(JSON.parse(readFileSync(join(home, 'chat.json'), 'utf8'))).toEqual({ day: '2026-10-11', sessionId: '33333333-3333-4333-8333-333333333333', tool: 'claude' });
   });
   it('a new day forgets yesterday\'s turns and session', async () => {
     const home = mkdtempSync(join(tmpdir(), 'ledge-'));
@@ -153,5 +153,18 @@ describe('chat service', () => {
     for (let i = 0; i < 51; i++) await chat.ask(`q${i}`, 'x', () => {});
     expect(chat.history()).toHaveLength(50);
     expect(chat.history()[0]?.qid).toBe('q1');
+  });
+
+  it('runs Codex when asked, and a later Claude question starts a new session', async () => {
+    const args: string[][] = [];
+    const spawn = ((file: string, a: string[], o: object) => { args.push(a); return nodeSpawn(file, a, o as never); }) as unknown as typeof nodeSpawn;
+    const { chat, home } = setup({ spawn, env: async () => ({ ...process.env, FAKE_AGENT: 'codex' }) });
+    await chat.ask('q1', 'x', () => {}, 'codex');
+    expect(args[0]).toContain('exec');
+    expect(JSON.parse(readFileSync(join(home, 'chat.json'), 'utf8'))).toMatchObject({ tool: 'codex' });
+    await chat.ask('q2', 'y', () => {}, 'claude');
+    expect(args[1]).toContain('--session-id');
+    expect(args[1]).not.toContain('exec');
+    expect(JSON.parse(readFileSync(join(home, 'chat.json'), 'utf8'))).toMatchObject({ tool: 'claude' });
   });
 });

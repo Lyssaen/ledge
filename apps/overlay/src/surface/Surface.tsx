@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
-import type { Session } from '@ledge/protocol';
+import type { Session, Tool } from '@ledge/protocol';
+import { loadDefaultTool, saveDefaultTool } from '../defaultTool';
 import { useDaemon, daemonStore } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
 import { botState, poseFor } from '../bots/poseFor';
@@ -85,6 +86,8 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const reducedMotion = motionPrefs.reduced;
   const prefs = useSoundPrefs();
   const finishedBubble = prefs.finished === 'both' || prefs.finished === 'bubble';
+  const [defaultTool, setDefaultTool] = useState(loadDefaultTool);
+  const chooseDefaultTool = (tool: Tool) => { setDefaultTool(tool); saveDefaultTool(tool); };
   // Work time of the last finish per session, so the finished bubble can say "2m 40s of work".
   const [elapsed, setElapsed] = useState<Record<string, number>>({});
   const [ctl] = useState(() => createSurfaceController({ onState: s => setSt(s) }));
@@ -375,7 +378,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const ask = (text: string) => {
     const qid = `q-${Date.now().toString(36)}`;
     daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
-    send({ type: 'chat.ask', qid, text });
+    send({ type: 'chat.ask', qid, text, tool: defaultTool });
     if (ctl.state().mode !== 'chat') dispatch({ type: 'chat' });
   };
   useKeyboard({
@@ -452,6 +455,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SettingsView contentRef={settingsRef} onLang={onLang} visible={st.mode === 'settings'} enterDelay={enter} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} finished={prefs.finished} onFinished={prefs.setFinished} sounds={prefs.sounds} onSounds={prefs.setSounds} onTestSound={sounds.test} scales={scales} autoScales={autoScales} onScale={onScale}
               monitors={monitors} monitor={monitor} onMonitor={onMonitor} autostart={autostart} onAutostart={onAutostart}
+              defaultTool={defaultTool} onDefaultTool={chooseDefaultTool}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'help' ? 'auto' : 'none', transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>

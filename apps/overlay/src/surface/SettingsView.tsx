@@ -8,6 +8,9 @@ import { Button } from '../ui/Button';
 import { Tabs, tabIds } from '../ui/Tabs';
 import { CATEGORIES, FINISHED_VALUES, VOLUMES, type FinishedNotify, type SoundPrefs, type SoundPatch } from '../sounds/preferences';
 import { resolveMonitor, type MonitorInfo } from '../monitor';
+import { TOOLS } from '../defaultTool';
+import { toolName } from '../format';
+import type { Tool } from '@ledge/protocol';
 
 export interface SettingsViewProps {
   visible: boolean; theme: 'dark' | 'light'; dnd: boolean;
@@ -26,6 +29,8 @@ export interface SettingsViewProps {
   monitors?: MonitorInfo[]; monitor?: string | null; onMonitor?: (id: string | null) => void;
   /** Launch at Windows login (null or absent: not offered, the switch is not shown) and how to change it. */
   autostart?: boolean | null; onAutostart?: (on: boolean) => void;
+  /** The default harness (new sessions and the Ledge chat). */
+  defaultTool?: Tool; onDefaultTool?: (tool: Tool) => void;
   /** The body's natural height, measured by the surface to size itself. */
   contentRef?: Ref<HTMLDivElement>;
 }
@@ -108,6 +113,7 @@ export function SettingsView(p: SettingsViewProps) {
           <div role="tabpanel" id={panelId} aria-labelledby={tabId} style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
             {tab === 'display' && <>
               {p.autostart != null && p.onAutostart && <Row><Switch label={t.settings.autostart} hint={t.settings.autostartHint} checked={p.autostart} onChange={p.onAutostart} /></Row>}
+              <Row><Segmented<Tool> name="ledge-default-tool" label={t.settings.defaultTool} hint={t.settings.defaultToolHint} value={p.defaultTool ?? 'claude'} onChange={p.onDefaultTool} options={TOOLS.map(v => ({ value: v, label: toolName(v) }))} /></Row>
               <Row><Segmented name="ledge-lang" label={t.lang.label} hint={t.lang.hint} value={lang} onChange={p.onLang} options={LANGS.map(l => ({ value: l, label: t.lang[l] }))} /></Row>
               {monitors.length > 0 && (
                 <Row><Segmented name="ledge-monitor" label={t.settings.screen} hint={chosen ? t.settings.screenHint(chosen.width, chosen.height) : t.settings.screenHintNone} value={chosenValue}

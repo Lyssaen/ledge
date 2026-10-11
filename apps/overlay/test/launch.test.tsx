@@ -17,6 +17,18 @@ const mount = (extra: Partial<React.ComponentProps<typeof LaunchView>> = {}) => 
 beforeEach(() => { localStorage.clear(); });
 
 describe('<LaunchView>', () => {
+  it('opens on the stored default harness', () => {
+    localStorage.setItem('ledge.defaultTool', 'cursor');
+    const { onLaunch } = mount();
+    expect(screen.getByRole('radio', { name: 'Cursor Agent' })).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: /^Start/ }));
+    expect(onLaunch).toHaveBeenCalledWith(expect.objectContaining({ tool: 'cursor' }));
+  });
+  it('a stale stored harness falls back to Claude Code', () => {
+    localStorage.setItem('ledge.defaultTool', 'gemini');
+    mount();
+    expect(screen.getByRole('radio', { name: 'Claude Code' })).toBeChecked();
+  });
   it('starts on the most recent folder, Claude Code, a free name, the terminal tab on; Start sends the request', () => {
     const { onLaunch } = mount();
     expect(screen.getByLabelText('Folder')).toHaveValue('/w/api-gateway');

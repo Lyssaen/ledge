@@ -69,9 +69,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.event'), id: z.string(), event: SessionEventSchema, agent: ToolSchema.optional(), cwd: z.string().optional() }),
   z.object({ type: z.literal('session.unregister'), id: z.string(), exitCode: z.number().int().nullable() }),
   z.object({ type: z.literal('snapshot.request') }),
-  z.object({ type: z.literal('chat.ask'), qid: z.string().min(1), text: z.string().min(1) }),
+  z.object({ type: z.literal('chat.ask'), qid: z.string().min(1), text: z.string().min(1), tool: ToolSchema.optional() }),
   z.object({ type: z.literal('chat.cancel'), qid: z.string().min(1) }),
-  /** Starts a new conversation with Ledge: the day's turns are cleared and the next question opens a new Claude session. */
+  /** Starts a new conversation with Ledge: the day's turns are cleared and the next question opens a new harness session. */
   z.object({ type: z.literal('chat.reset') })
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;

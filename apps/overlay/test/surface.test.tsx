@@ -152,6 +152,17 @@ describe('<Surface>', () => {
     expect(screen.getByLabelText('Companion')).not.toHaveValue('Juno');
   });
 
+  it('an ask to Ledge names the stored default harness', async () => {
+    localStorage.setItem('ledge.defaultTool', 'codex');
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    await act(async () => { vi.advanceTimersByTime(180); });
+    const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
+    fireEvent.change(input, { target: { value: 'How are the others doing?' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(mock.received).toContainEqual({ type: 'chat.ask', qid: expect.any(String), text: 'How are the others doing?', tool: 'codex' }));
+  });
+
   it('a refused launch stays on the form with the reason; the next attempt clears it', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);

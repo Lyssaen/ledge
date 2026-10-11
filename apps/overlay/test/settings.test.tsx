@@ -20,6 +20,7 @@ describe('<SettingsView> tabs', () => {
     expect(screen.getByRole('tab', { name: 'Display' })).toHaveAttribute('aria-selected', 'true');
     const panel = screen.getByRole('tabpanel', { name: 'Display' });
     expect(panel).toHaveAttribute('id', 'ledge-settings-panel-display');
+    expect(screen.getByRole('group', { name: 'Default harness' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Handle size' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /theme/ })).toBeInTheDocument();
@@ -57,6 +58,15 @@ describe('<SettingsView> tabs', () => {
     localStorage.setItem('ledge.settings.tab', 'nope');
     view();
     expect(screen.getByRole('tab', { name: 'Display' })).toHaveAttribute('aria-selected', 'true');
+  });
+  it('the default harness is Claude Code, reports a choice, and a stored value is shown', () => {
+    const onDefaultTool = vi.fn();
+    view({ onDefaultTool });
+    fireEvent.click(screen.getByRole('radio', { name: 'Codex' }));
+    expect(onDefaultTool).toHaveBeenCalledWith('codex');
+    cleanup();
+    view({ defaultTool: 'cursor' });
+    expect(screen.getByRole('radio', { name: 'Cursor Agent' })).toBeChecked();
   });
 });
 
