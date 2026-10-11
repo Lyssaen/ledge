@@ -45,6 +45,33 @@ export function mergeCodexHooks(hooks: unknown, command = 'ledge hook codex'): {
   return mergeHooks(hooks, CODEX_EVENTS, command, 'hooks.json');
 }
 
+/** Cursor Agent 2026.10 hooks Ledge listens to. subagentStart/subagentStop never fire there; approvals come from the pane. */
+export const CURSOR_EVENTS = ['sessionStart', 'beforeSubmitPrompt', 'preToolUse', 'postToolUse', 'postToolUseFailure', 'stop',
+  'afterAgentResponse', 'sessionEnd'] as const;
+
+type CursorHookEntry = { command: string; timeout?: number };
+
+/** Adds `ledge hook cursor <event>` to `~/.cursor/hooks.json` (`{ version: 1, hooks: { event: [{ command }] } }`), keeping the rest. */
+export function mergeCursorHooks(config: unknown, command = 'ledge hook cursor'): { settings: object; changed: boolean } {
+  if (config === undefined) config = {};
+  if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('hooks.json root is not an object, not modified');
+  const base = config as Record<string, unknown>;
+  if (base.hooks !== undefined && (!base.hooks || typeof base.hooks !== 'object' || Array.isArray(base.hooks))) throw new Error('hooks.json "hooks" is not an object, not modified');
+  const hooks = { ...((base.hooks as Record<string, CursorHookEntry[]> | undefined) ?? {}) };
+  let changed = base.version === undefined;
+  for (const ev of CURSOR_EVENTS) {
+    if (hooks[ev] !== undefined && !Array.isArray(hooks[ev])) throw new Error(`hooks.json hooks.${ev} is not an array, not modified`);
+    const list = [...(hooks[ev] ?? [])];
+    const mine = `${command} ${ev}`;
+    if (!list.some(e => e?.command === mine)) {
+      list.push({ command: mine, timeout: 5 });
+      changed = true;
+    }
+    hooks[ev] = list;
+  }
+  return { settings: { version: 1, ...base, hooks }, changed };
+}
+
 /** Reads a JSON file (undefined when missing), merges, writes it back atomically if anything changed. */
 async function mergeJsonFile(path: string, merge: (current: unknown) => { settings: object; changed: boolean }, name: string): Promise<boolean> {
   let raw: string | null = null;
@@ -157,7 +184,8 @@ async function isDir(path: string): Promise<boolean> {
   try { return (await stat(path)).isDirectory(); } catch { return false; }
 }
 
-export async function runSetup(opts: { settingsPath?: string; codexDir?: string; service?: boolean } = {}): Promise<string[]> {
+/** `codexDir` and `cursorDir` are the agents' config folders: their hooks are wired only where the folder exists. */
+export async function runSetup(opts: { settingsPath?: string; codexDir?: string; cursorDir?: string; service?: boolean } = {}): Promise<string[]> {
   const out: string[] = [];
   await ensureLedgeDir();
   out.push('~/.ledge ready (tmux.conf written if missing)');
@@ -169,6 +197,10 @@ export async function runSetup(opts: { settingsPath?: string; codexDir?: string;
   else if (await mergeJsonFile(join(codexDir, 'hooks.json'), mergeCodexHooks, 'hooks.json')) {
     out.push(`Codex hooks added in ${join(codexDir, 'hooks.json')}; Codex asks to review them on its next start: trust them there or from Ledge`);
   } else out.push('Codex hooks already present');
+  const cursorDir = opts.cursorDir ?? join(homedir(), '.cursor');
+  if (!(await isDir(cursorDir))) out.push(`Cursor Agent not found (${cursorDir} missing), Cursor Agent hooks skipped`);
+  else if (await mergeJsonFile(join(cursorDir, 'hooks.json'), mergeCursorHooks, 'hooks.json')) out.push(`Cursor Agent hooks added in ${join(cursorDir, 'hooks.json')}`);
+  else out.push('Cursor Agent hooks already present');
   if (opts.service ?? true) {
     if (process.argv[1]?.endsWith('.ts')) out.push('systemd service skipped: run setup from the built CLI (pnpm --filter ledge build, then ledge setup)');
     else out.push(...await installService());

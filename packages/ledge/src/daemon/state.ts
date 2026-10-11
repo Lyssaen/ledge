@@ -2,6 +2,12 @@ import type { Session, SessionEvent, Pending, Helper, SessionState } from '@ledg
 
 export const HOOK_PRIORITY_MS = 2000;
 
+/**
+ * Claude Code's hooks report its prompts (permission, question, plan), so a pane match right after a hook may be
+ * stale or poorer. Cursor Agent's and Codex's never do: their prompts come from the pane alone, at once.
+ */
+const hooksReportPrompts = (s: Session) => s.tool === 'claude';
+
 export function isPending(s: Session): boolean {
   return s.state === 'waiting_permission' || s.state === 'waiting_input';
 }
@@ -162,7 +168,9 @@ export function reduce(s: Session, ev: SessionEvent): Session {
         const helpers = s.helpers.some(h => h.id === helperId) ? setHelper(s, helperId, { state: 'working' }) : s.helpers;
         return { ...s, state, helpers, pending: undefined, lastError: state === 'error' ? s.lastError : undefined, lastActivityAt: at };
       }
-      return { ...s, state: 'working', pending: undefined, lastError: undefined, lastActivityAt: at };
+      // Ledge's own keys start the next step as a hook would: the pane, still at rest until the agent redraws (and
+      // its prompt hook has run), gets the same grace instead of ending the turn it just started.
+      return { ...s, state: 'working', pending: undefined, lastError: undefined, lastHookAt: at, lastActivityAt: at };
     }
     case 'Stop': {
       // The turn's last message rides on the hook; a Stop without one keeps what the last Stop said.
@@ -171,6 +179,8 @@ export function reduce(s: Session, ev: SessionEvent): Session {
       return { ...s, state: 'idle', pending: undefined, lastReply, lastHookAt: at, lastActivityAt: at };
     }
     case 'StopFailure': {
+      // A failure reported after the turn already ended (Cursor Agent sends a stray one after an abort) changes nothing.
+      if (s.state === 'idle') return s;
       const lastError = ev.text || 'the turn stopped on an error';
       if (s.pending?.helperId) return underHelper(s, 'error', at, { lastError });
       return { ...s, state: 'error', pending: undefined, lastError, lastHookAt: at, lastActivityAt: at };
@@ -185,7 +195,7 @@ export function reduce(s: Session, ev: SessionEvent): Session {
     }
     case 'PanePrompt': {
       if (s.pending?.source === 'hook') return s;
-      if (lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
+      if (hooksReportPrompts(s) && lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
       const pending = mergePending(s.pending, pendingFor(ev)!);
       if (s.pending && samePending(s.pending, pending)) return s;
       const state = pending.kind === 'question' ? 'waiting_input' : 'waiting_permission';

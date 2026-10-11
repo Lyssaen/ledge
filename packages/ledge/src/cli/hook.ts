@@ -134,6 +134,59 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
   }
 }
 
+/** Cursor Agent's tool input, as Ledge shows it: the command, the file, or a short description. */
+function describeCursorTool(input: unknown): string {
+  const i = (input && typeof input === 'object' ? input : {}) as Payload;
+  return str(i.command) ?? str(i.file_path) ?? str(i.path) ?? str(i.description) ?? JSON.stringify(i).slice(0, 200);
+}
+
+/**
+ * Cursor Agent 2026.10 hooks (`~/.cursor/hooks.json`). They report the turn (prompt, tools, stop, reply) but never
+ * an approval: those come from the pane. A subagent's hooks carry its own conversation id as `session_id` and as
+ * `generation_id`, the main thread's carry the prompt's generation: untracked, they would make a phantom session.
+ * Tracked (`LEDGE_SESSION`), they are the parent at work, which is what they mean there.
+ */
+export function mapCursorHook(eventName: string, payload: unknown, at: string): MappedHook | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const p = payload as Payload;
+  const id = process.env.LEDGE_SESSION || str(p.session_id) || str(p.conversation_id);
+  if (!id) return null;
+  const roots = Array.isArray(p.workspace_roots) ? p.workspace_roots : [];
+  const cwd = str(roots[0]) || undefined;
+  const event = mapCursorEvent(eventName, p, at);
+  return event ? { id, event, agent: 'cursor', ...(cwd ? { cwd } : {}) } : null;
+}
+
+function mapCursorEvent(eventName: string, p: Payload, at: string): SessionEvent | null {
+  const launched = !!process.env.LEDGE_SESSION;
+  const sessionId = str(p.session_id) || str(p.conversation_id);
+  const generation = str(p.generation_id);
+  if (!launched && eventName !== 'sessionStart' && generation && generation === sessionId) return null;
+  const tool = str(p.tool_name);
+  const base = { at, source: 'hook' as const };
+  switch (eventName) {
+    case 'sessionStart': return { name: 'SessionStart', ...base };
+    case 'beforeSubmitPrompt': return { name: 'UserPromptSubmit', ...base };
+    case 'preToolUse': return { name: 'PreToolUse', ...base, tool, text: describeCursorTool(p.tool_input) };
+    case 'postToolUse': return { name: 'PostToolUse', ...base, tool };
+    case 'postToolUseFailure': return { name: 'PostToolUseFailure', ...base, tool, ...(p.is_interrupt === true ? { interrupt: true } : {}) };
+    case 'stop':
+      // Ctrl-C sends `aborted` then, some 60 ms later, a stray `error`: the reducer keeps a session at rest there.
+      if (str(p.status) === 'error') return { name: 'StopFailure', ...base };
+      return { name: 'Stop', ...base };
+    case 'afterAgentResponse': {
+      // The turn's text, sent once at its end, just before or just after `stop`: a Stop that carries the reply.
+      const text = lastReply({ last_assistant_message: p.text });
+      return { name: 'Stop', ...base, ...(text ? { text } : {}) };
+    }
+    case 'sessionEnd':
+      // Under the launcher the exit belongs to session.unregister (real exit code) and PaneGone.
+      if (launched) return null;
+      return { name: 'SessionEnd', ...base, exitCode: null };
+    default: return null;
+  }
+}
+
 /** Always resolves, always fast: a hook must never slow the agent down. */
 export async function runHook(eventName: string, stdin: string, opts: { port?: number; timeoutMs?: number; tool?: Tool } = {}): Promise<void> {
   const timeoutMs = opts.timeoutMs ?? 100;
@@ -142,8 +195,8 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
   const label = agent === 'claude' ? eventName : `${agent} ${eventName}`;
   try {
     const payload = JSON.parse(stdin || '{}');
-    const mapped = mapHook(agent, eventName, payload, new Date().toISOString());
-    if (!mapped) { log(`hook ${label} ignored: unknown event, malformed payload, non-terminal SessionEnd or subagent event without agent_id`); return; }
+    const mapped = agent === 'cursor' ? mapCursorHook(eventName, payload, new Date().toISOString()) : mapHook(agent, eventName, payload, new Date().toISOString());
+    if (!mapped) { log(`hook ${label} ignored: unknown event, malformed payload, non-terminal SessionEnd or subagent event without a session of its own`); return; }
     const client = await connect({ port: opts.port, timeoutMs });
     client.send({ type: 'session.event', id: mapped.id, event: mapped.event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}) });
     // close() resolves once the handshake completes, i.e. after the send is flushed; one shared deadline

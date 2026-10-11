@@ -110,9 +110,8 @@ describe('claude adapter: keys', () => {
   it('interrupt is Escape', () => {
     expect(claudeAdapter.interruptKeys()).toEqual(['Escape']);
   });
-  it('adapterFor returns the claude adapter and throws for others', () => {
+  it('adapterFor returns the claude adapter', () => {
     expect(adapterFor('claude')).toBe(claudeAdapter);
-    expect(() => adapterFor('cursor')).toThrow(/not implemented/);
   });
 });
 

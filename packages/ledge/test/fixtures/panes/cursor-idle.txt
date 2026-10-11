@@ -1,0 +1,40 @@
+
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+  │                                                                                                                  │
+  │  ⚠ Workspace Trust Required                                                                                      │
+  │                                                                                                                  │
+  │  Cursor Agent can execute code and access files in this directory.                                               │
+  │                                                                                                                  │
+  │  Do you trust the contents of this directory?                                                                    │
+  │                                                                                                                  │
+  │    /tmp/claude-1000/-home-paradow-Workspace-harness-assistant/a6132808-ea85-4b33-89da-c4ad83796de8/scratchpad/u  │
+  │    ntrusted                                                                                                      │
+  │                                                                                                                  │
+  │                                                                                                                  │
+  │    [a] Trust this workspace                                                                                      │
+  │    [q] Quit                                                                                                      │
+  │                                                                                                                  │
+  │  ⏳ Trusting workspace...                                                                                        │
+  │                                                                                                                  │
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+  Cursor Agent
+  v2026.10.01-e373342
+  Tip: Hit shift+tab to enable Plan Mode for large or complex changes.
+
+
+
+
+  → Plan, search, build anything
+
+
+  Grok 4.6 High Fast
+  /tmp/claude-1000/-home-paradow-Workspace-harness-assistant/a6132808-ea85-4b33-89da-c4ad83796de8/scratchpad/untrusted
+
+
+
+
+
+
+

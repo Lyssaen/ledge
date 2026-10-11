@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -282,6 +282,32 @@ describe('server', () => {
       expectRefused(null, { type: 'session.decide', id: 'a', decision: 'deny' }, perm));
     it('reply to a question whose dialog is not on screen injects nothing', () =>
       expectRefused('> ', { type: 'session.reply', id: 'a', text: '2' }, question));
+  });
+
+  describe('a plan step that waits for its screen (Cursor Agent deny)', () => {
+    const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
+    const pending = { kind: 'permission' as const, text: 'echo ledge-perm-probe', source: 'pane' as const };
+    async function deny(panes: string[]) {
+      tmux = fakeTmux({ 'ledge-a': panes }); await srv.close();
+      srv = await startServer({ store, tmux, port: 0, untilMs: 300, verify: { attempts: 2, intervalMs: 20 } });
+      store.upsert(mk('a', { tool: 'cursor', state: 'waiting_permission', pending }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.decide', id: 'a', decision: 'deny' });
+      return c;
+    }
+    it('sends Enter only once the skip field is on screen, then the prompt is gone', async () => {
+      const c = await deny([fx('cursor-permission'), fx('cursor-permission'), fx('cursor-skip-field'), fx('cursor-working')]);
+      await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
+      expect(tmux.sent).toEqual([['text', 'ledge-a', 'n'], ['keys', 'ledge-a', 'Enter']]);
+      c.close();
+    });
+    it('never sends Enter when the skip field does not come: the decision fails', async () => {
+      const c = await deny([fx('cursor-permission')]);
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it' });
+      expect(tmux.sent).toEqual([['text', 'ledge-a', 'n']]);
+      expect(store.get('a')?.state).toBe('error');
+      c.close();
+    });
   });
 
   it('a reply with no pending (your turn) is typed without a prompt check', async () => {

@@ -1,0 +1,5 @@
+Reading docs/permissions.md
+  The dialog says: Run this command?
+  → Run (once) (y)
+  Users should decline with n.
+Thinking…

@@ -43,7 +43,8 @@ describe('reduce: transition table', () => {
     table.push([ev('PostToolUse', { tool: 'Bash' }), s, terminal ? '=' : 'working']);
     table.push([ev('PostToolUseFailure', { tool: 'Bash' }), s, terminal ? '=' : 'working']);
     table.push([ev('PostToolUseFailure', { tool: 'Bash', interrupt: true }), s, terminal ? '=' : 'idle']);
-    table.push([ev('StopFailure', { text: 'rate_limit' }), s, terminal ? '=' : 'error']);
+    // A failure after the turn already ended (Cursor Agent's stray one after an abort) leaves the rest alone.
+    table.push([ev('StopFailure', { text: 'rate_limit' }), s, terminal || s === 'idle' ? '=' : 'error']);
     table.push([ev('SubagentStart', { helperId: 'a1', tool: 'Explore' }), s, '=']);
     table.push([ev('SubagentStop', { helperId: 'a1', tool: 'Explore' }), s, '=']);
     // Fired inside a subagent: the parent's state never moves, except a helper permission over no pending.
@@ -99,6 +100,23 @@ describe('reduce: pending rules', () => {
     const next = reduce(s, ev('PanePrompt', { source: 'pane', kind: 'permission', text: 'Do you want to proceed?', at: later(5000 + HOOK_PRIORITY_MS + 1) }));
     expect(next.state).toBe('waiting_permission');
     expect(next.pending?.source).toBe('pane');
+  });
+  it('a Cursor Agent pane prompt right after a hook is taken at once: its hooks never report approvals', () => {
+    const s = reduce(session('working', { tool: 'cursor' }), ev('PreToolUse', { tool: 'Shell', text: 'touch a', at: later(5000) }));
+    const next = reduce(s, ev('PanePrompt', { source: 'pane', kind: 'permission', text: 'touch a', at: later(5200) }));
+    expect(next).toMatchObject({ state: 'waiting_permission', pending: { kind: 'permission', text: 'touch a', source: 'pane' } });
+  });
+  it('Cursor Agent abort: Stop then the stray StopFailure leaves the session at rest, in either order the end is idle', () => {
+    const working = session('working', { tool: 'cursor' });
+    const aborted = reduce(working, ev('Stop', { at: later(5000) }));
+    expect(reduce(aborted, ev('StopFailure', { at: later(5066) }))).toBe(aborted);
+    const flipped = reduce(reduce(working, ev('StopFailure', { at: later(5066) })), ev('Stop', { at: later(5100) }));
+    expect(flipped.state).toBe('idle');
+  });
+  it('a reply sent from Ledge is not ended by the pane still at rest before the agent redraws', () => {
+    const decided = reduce(session('idle', { tool: 'cursor', lastHookAt: T0 }), ev('Decided', { source: 'daemon', at: later(5000) }));
+    expect(reduce(decided, ev('PaneIdle', { source: 'pane', at: later(5300) }))).toBe(decided);
+    expect(reduce(decided, ev('PaneIdle', { source: 'pane', at: later(5000 + HOOK_PRIORITY_MS + 1) })).state).toBe('idle');
   });
   it('SessionEnd clears pending and records exit', () => {
     const s = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));

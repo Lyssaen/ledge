@@ -1,0 +1,40 @@
+
+
+  Cursor Agent
+  v2026.10.01-e373342
+  Tip: Use /debug to instrument and debug complex problems.
+
+
+  Run exactly this one shell command, verbatim, nothing else: find "/tmp/ledge-cursor-sub/proj" \( -path
+  '*/.git/objects' -o -path '*/.git/objects/*' \) -prune -o -print 2>/dev/null | sort
+
+
+  I'll run that exact command now.
+
+  $ find "/tmp/ledge-cursor-sub/proj" \( -path '*/.git/objects' -o -path '*/.git/objects/*' \) -prune -o -print
+    2>/dev/null | sort Waiting for approval...
+
+
+ ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │ $  find "/tmp/ledge-cursor-sub/proj" \( -path '*/.git/objects' -o -path '*/.git/objects/*' \) -prune -o -print     │
+ │    2>/dev/null | sort in .                                                                                         │
+ └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+  → Tell the agent what to do instead (Enter to send, empty to skip, Esc to cancel)                     ctrl+c to stop
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

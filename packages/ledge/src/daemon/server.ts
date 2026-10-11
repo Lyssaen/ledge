@@ -15,7 +15,7 @@ import { spawnSession } from '../spawn.js';
 import { loginShellPath } from '../shell-path.js';
 import { log } from '../log.js';
 
-/** How each agent resumes the folder's last conversation. Claude Code's and Codex's are verified; Cursor Agent's is not. */
+/** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
 
 /** The agent's arguments for a `session.launch`: the resume flag, then the first instruction as the positional prompt. */
@@ -72,7 +72,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; launcher?: string[]; home?: string; agentPath?: () => Promise<string> }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentPath?: () => Promise<string> }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -108,12 +108,27 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast({ type: 'session.preview', id, lines });
   };
 
+  /** How long an `until` step waits for the screen the next keys are meant for, polled every UNTIL_POLL_MS. */
+  const UNTIL_MS = opts.untilMs ?? 1500;
+  const UNTIL_POLL_MS = 50;
+  /** Enough for a dialog's bottom or a long draft wrapped in the input line, with the status under it. */
+  const UNTIL_LINES = 30;
+
   async function runPlan(s: Session, plan: KeyPlan): Promise<void> {
     if (!s.tmuxSession) throw new Error('session has no terminal (started without ledge)');
     for (const step of plan) {
       if ('text' in step) await tmux.sendText(s.tmuxSession, step.text);
       else if ('waitMs' in step) await new Promise(r => setTimeout(r, step.waitMs));
-      else await tmux.sendKeys(s.tmuxSession, step.keys);
+      else if ('keys' in step) await tmux.sendKeys(s.tmuxSession, step.keys);
+      else {
+        const end = Date.now() + UNTIL_MS;
+        for (;;) {
+          const pane = await tmux.capture(s.tmuxSession, UNTIL_LINES);
+          if (pane !== null && step.until(pane)) break;
+          if (Date.now() >= end) throw new Error(NOT_TAKEN);
+          await new Promise(r => setTimeout(r, UNTIL_POLL_MS));
+        }
+      }
     }
   }
 

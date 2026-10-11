@@ -2,21 +2,25 @@
 const USAGE = `ledge <claude|codex|cursor> [--name <bot>] [-- agent args]   start an agent in a tracked session
 ledge attach <id>                                            put this terminal on a running session
 ledge daemon                                                 run the daemon in the foreground
-ledge hook [codex] <Event>                                   receive a hook (reads JSON on stdin)
+ledge hook [codex|cursor] <Event>                            receive a hook (reads JSON on stdin)
 ledge setup                                                  install hooks and ~/.ledge
 ledge status                                                 list sessions`;
 
-/** A hook must never fail the agent: everything is caught, the exit code is always 0. */
+/**
+ * A hook must never fail the agent: everything is caught, the exit code is always 0. Cursor Agent reads a JSON
+ * answer on stdout: `{}` lets the agent go on as it would have.
+ */
 async function hookMain(args: string[]): Promise<void> {
+  // `ledge hook <Event>` is Claude Code's; another agent names itself first: `ledge hook codex <Event>`.
+  const tool = args[0] === 'codex' || args[0] === 'cursor' ? args[0] : undefined;
+  const event = (tool ? args[1] : args[0]) ?? '';
   try {
-    // `ledge hook <Event>` is Claude Code's; another agent names itself first: `ledge hook codex <Event>`.
-    const tool = args[0] === 'codex' ? 'codex' : undefined;
-    const event = (tool ? args[1] : args[0]) ?? '';
     const chunks: Buffer[] = [];
     for await (const c of process.stdin) chunks.push(c as Buffer);
     const { runHook } = await import('./hook.js');
     await runHook(event, Buffer.concat(chunks).toString('utf8'), { tool });
   } catch { /* swallowed on purpose */ }
+  if (tool === 'cursor') process.stdout.write('{}\n');
 }
 
 async function main(argv: string[]): Promise<number> {

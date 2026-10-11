@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
-import { mapClaudeHook, mapHook, runHook, codexLedgeId, underCodexDaemon, REPLY_MAX } from '../src/cli/hook.js';
+import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, REPLY_MAX } from '../src/cli/hook.js';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import { connect } from '../src/client.js';
@@ -233,6 +233,66 @@ describe('runHook', () => {
   });
 });
 
+// Payloads as Cursor Agent 2026.10 sends them (trimmed of workspace_roots, user_email, model and token counts).
+const MAIN = { conversation_id: 'b617', session_id: 'b617', generation_id: '3885', hook_event_name: '' };
+const SUB = { conversation_id: 'b335', session_id: 'b335', generation_id: 'b335', hook_event_name: '' };
+const cursor = (name: string, extra: Record<string, unknown> = {}, ids = MAIN) => mapCursorHook(name, { ...ids, hook_event_name: name, ...extra }, at);
+
+describe('mapCursorHook', () => {
+  it('uses LEDGE_SESSION when set, else session_id; names the agent and the first workspace root', () => {
+    expect(cursor('beforeSubmitPrompt', { prompt: 'hi' })).toEqual({ id: 'b617', event: { name: 'UserPromptSubmit', at, source: 'hook' }, agent: 'cursor' });
+    expect(cursor('beforeSubmitPrompt', { workspace_roots: ['/w/demo'] })?.cwd).toBe('/w/demo');
+    process.env.LEDGE_SESSION = '7f3a';
+    expect(cursor('beforeSubmitPrompt')?.id).toBe('7f3a');
+  });
+  it('maps sessionStart (its generation is the conversation) to SessionStart', () => {
+    expect(cursor('sessionStart', {}, { ...MAIN, generation_id: 'b617' })?.event.name).toBe('SessionStart');
+  });
+  it('maps preToolUse Shell to the command and Write to the file', () => {
+    expect(cursor('preToolUse', { tool_name: 'Shell', tool_input: { command: 'touch probe-file', cwd: '', timeout: 30000 } })?.event)
+      .toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'Shell', text: 'touch probe-file' });
+    expect(cursor('preToolUse', { tool_name: 'Write', tool_input: { file_path: '/w/a.txt', content: '' } })?.event.text).toBe('/w/a.txt');
+  });
+  it('maps postToolUse and postToolUseFailure, with the interrupt flag', () => {
+    expect(cursor('postToolUse', { tool_name: 'Shell' })?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', tool: 'Shell' });
+    expect(cursor('postToolUseFailure', { tool_name: 'Read', failure_type: 'error', is_interrupt: false })?.event.interrupt).toBeUndefined();
+    expect(cursor('postToolUseFailure', { tool_name: 'Shell', is_interrupt: true })?.event.interrupt).toBe(true);
+  });
+  it('maps stop completed and aborted to Stop, error to StopFailure', () => {
+    expect(cursor('stop', { status: 'completed', loop_count: 0 })?.event.name).toBe('Stop');
+    expect(cursor('stop', { status: 'aborted' })?.event.name).toBe('Stop');
+    expect(cursor('stop', { status: 'error' })?.event.name).toBe('StopFailure');
+  });
+  it('maps afterAgentResponse to a Stop that carries the reply, capped', () => {
+    expect(cursor('afterAgentResponse', { text: '  done  ' })?.event).toEqual({ name: 'Stop', at, source: 'hook', text: 'done' });
+    expect(cursor('afterAgentResponse', { text: '' })?.event).toEqual({ name: 'Stop', at, source: 'hook' });
+    expect(cursor('afterAgentResponse', { text: 'x'.repeat(REPLY_MAX + 10) })?.event.text?.endsWith('[…]')).toBe(true);
+  });
+  it('maps sessionEnd only for an untracked session: under the launcher the exit is the launcher\'s', () => {
+    expect(cursor('sessionEnd', { reason: 'completed', final_status: 'completed' })?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', exitCode: null });
+    process.env.LEDGE_SESSION = '7f3a';
+    expect(cursor('sessionEnd', { reason: 'completed' })).toBeNull();
+  });
+  it('drops a subagent\'s events when untracked (no phantom session), keeps them as the parent at work when tracked', () => {
+    expect(cursor('preToolUse', { tool_name: 'Shell', tool_input: { command: 'find .' } }, SUB)).toBeNull();
+    process.env.LEDGE_SESSION = '7f3a';
+    expect(cursor('preToolUse', { tool_name: 'Shell', tool_input: { command: 'find .' } }, SUB)).toMatchObject({ id: '7f3a', event: { name: 'PreToolUse', text: 'find .' } });
+  });
+  it('returns null for an event Ledge does not listen to, or a malformed payload', () => {
+    expect(cursor('afterAgentThought', { text: 'thinking' })).toBeNull();
+    expect(mapCursorHook('stop', null, at)).toBeNull();
+    expect(mapCursorHook('stop', { status: 'completed' }, at)).toBeNull();
+  });
+  it('a first Cursor hook makes a read-only Cursor Agent session, not a Claude one', async () => {
+    const store = new Store();
+    const srv = await startServer({ store, tmux: {} as never, port: 0 });
+    await runHook('beforeSubmitPrompt', JSON.stringify({ ...MAIN, prompt: 'hi', workspace_roots: ['/w/demo'] }), { port: srv.port, tool: 'cursor' });
+    await new Promise(r => setTimeout(r, 50));
+    expect(store.get('b617')).toMatchObject({ tool: 'cursor', cwd: '/w/demo', project: 'demo', state: 'working', source: 'hook_only' });
+    await srv.close();
+  });
+});
+
 describe('SessionEnd against a live daemon', () => {
   it('a launcher session survives Claude SessionEnd and unregister records the real exit code', async () => {
     const store = new Store();
@@ -279,5 +339,10 @@ describe('ledge hook (CLI)', () => {
     const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'codex', 'Whatever'], { input: '{"session_id":"s"}', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
     expect(r.status).toBe(0);
     expect(readFileSync(join(home, 'daemon.log'), 'utf8')).toContain('hook codex Whatever ignored');
+  });
+  it('a Cursor hook always exits 0 and answers {} on stdout, which lets the agent go on', () => {
+    const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'cursor', 'preToolUse'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe('{}');
   });
 });
