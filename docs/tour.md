@@ -32,7 +32,7 @@ When an agent asks something, the bubble unfolds beside the handle for a few sec
 
 ## The list
 
-Resting the cursor on the screen edge, or pressing `Ctrl+Alt+L` from anywhere, opens the list. Rows are grouped by repository. Line 1 of a row is the topic (what the agent is working on), line 2 is the bot's name · branch · age, with the badge for the state on the right. Rename a bot from the session header. Asks come first, oldest on top with the red bar.
+Resting the cursor on the screen edge, or pressing `Ctrl+Alt+L` from anywhere, opens the list. Rows are grouped by repository. Line 1 of a row is the topic (what the agent is working on), line 2 is the bot's name · branch · age, with the badge for the state on the right. Rename the topic from the session header (an empty name hands back to the conversation title, then the first prompt). Asks come first, oldest on top with the red bar.
 
 <p>
   <img src="screens/list-dark.png" alt="The list of four sessions in dark theme" width="408">
@@ -45,7 +45,7 @@ It scales to a busy day: twelve sessions scroll inside the panel, with the count
 
 ## Asking Ledge
 
-Under the list, the "Demander à Ledge" field takes a question about your sessions, for example "Où en sont les autres ?". `/` focuses it from the list, `Enter` sends it. The chat view opens: first the steps (the terminals, replies and repositories Ledge reads), then the answer writing itself live, with its sources underneath and the bots' names as links that open their session. A second question resumes the same conversation, one per day. Ledge only reads: it never touches anything and never sends an instruction to a session.
+Above the sessions, matching the notch's mascot above the bots, the "Demander à Ledge" field takes a question about your sessions, for example "Où en sont les autres ?". `/` focuses it from the list, `Enter` sends it. `Enter` on the empty field, or a click on the field's mascot, opens today's conversation without asking. The chat view opens: first the steps (the terminals, replies and repositories Ledge reads), then the answer writing itself live, with its sources underneath and the bots' names as links that open their session. A second question resumes the same conversation, one per day. `+` in the chat header starts a new one. Settings › Display › "Harnais par défaut" chooses which tool answers (Claude Code, Codex or Cursor Agent); new sessions open on the same choice. Ledge only reads: it never touches anything and never sends an instruction to a session.
 
 ## Starting a session from Ledge
 
@@ -66,13 +66,13 @@ Opening a row shows the session. A permission request shows the command and wher
   <img src="screens/session-permission-light.png" alt="The same permission screen in light theme" width="448">
 </p>
 
-A question from the agent shows its options as cards. Pick one and send; free text is not supported yet for a question, Ledge says so and points you to the terminal.
+A question from the agent shows its options as cards. Pick one and send; free text is not supported yet for a question, Ledge says so and points you to the terminal. Several questions in one `AskUserQuestion` arrive one dialog at a time, then a review ("Ready to submit your answers?"): answering the first so the next appears is success, not a failed answer.
 
 <img src="screens/session-question-dark.png" alt="Session: which theme to use by default, three options, Envoyer la réponse" width="448">
 
 ## When the agent hands back to you
 
-When a turn ends, the agent's last message is read like a plan instead of being left in the terminal: a title, a lead, then its sections with their markers. What was done gets a green check per item, verifications read in monospace, an open question becomes a card with the options the agent proposed as chips, and what is left to do sits in a dashed box. A chip fills the reply field, `Enter` sends it; with several questions, each chip writes its own numbered line. The "Réponse complète, telle quelle" toggle shows the text as the agent wrote it, and the terminal preview folds underneath.
+When a turn ends, the agent's last message is read like a plan instead of being left in the terminal: a title, a lead, then its sections with their markers. What was done gets a green check per item, verifications read in monospace, an open question becomes a card with the options the agent proposed as chips, and what is left to do sits in a dashed box. Ordinary lists follow the markdown: a `-` list is bullets (`·`), a `1.` list is `1.` `2.` `3.`, not numbered cards. A chip fills the reply field, `Enter` sends it; with several questions, each chip writes its own numbered line. The "Réponse complète, telle quelle" toggle shows the text as the agent wrote it, and the terminal preview folds underneath. The session page is 480 px so the header actions keep their hit area; reading the raw reply widens it to 560 px.
 
 <img src="screens/session-reply-dark.png" alt="Session: Bix finished, the reply read like a plan: What I did with green checks, Verified, an open question with two chips, Left to do" width="448">
 
@@ -103,7 +103,7 @@ A session started with plain `claude`, without the launcher, is still visible th
 
 ## Settings
 
-Three tabs, the last one opened remembered. Display: language, the screen the handle sits on, the size of the handle and of the windows (auto or 100 to 200 percent), the theme (`Ctrl+Alt+T`) and reduced motion. Notifications: do-not-disturb and when a bot finishes (bubble and sound, bubble, sound, or handle only). Sounds: everything below.
+Three tabs, the last one opened remembered. Display: language, the default harness (new sessions and the Ledge chat), the screen the handle sits on, the size of the handle and of the windows (auto or 100 to 200 percent), the theme (`Ctrl+Alt+T`) and reduced motion. Notifications: do-not-disturb and when a bot finishes (bubble and sound, bubble, sound, or handle only). Sounds: everything below.
 
 <img src="screens/settings-dark.png" alt="Settings, Display tab: language, screen, handle size, window size, theme, reduced motion" width="408">
 

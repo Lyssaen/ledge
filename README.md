@@ -2,7 +2,7 @@
 
 # Ledge
 
-A living handle on the left edge of your Windows screen that follows every agentic session running in WSL2 (Claude Code, Codex, Cursor Agent), shows which ones are waiting for you, and lets you answer or approve without hunting for the right terminal tab.
+A living handle on the left edge of your Windows screen that follows every agentic session running in WSL2 (Claude Code, Codex, Cursor Agent), shows which ones are waiting for you, and lets you answer or approve without hunting for the right terminal tab. From the list you can also ask Ledge about the running sessions: it reads, it never types into a pane.
 
 Personal project. Windows host + WSL2 only.
 
@@ -18,6 +18,7 @@ Personal project. Windows host + WSL2 only.
 - [Architecture](#architecture)
 - [Components](#components)
 - [Session lifecycle](#session-lifecycle)
+- [Asking Ledge](#asking-ledge)
 - [Protocol](#protocol)
 - [Session model](#session-model)
 - [Files and settings](#files-and-settings)
@@ -29,10 +30,11 @@ Personal project. Windows host + WSL2 only.
 
 ## How it works
 
-1. You start an agent with `ledge claude` instead of `claude`. The launcher puts the agent in a tmux session on a dedicated tmux server, registers it with the daemon, renames the Windows Terminal tab after the bot (`Otto · my-project`) and attaches your terminal to it. Or you start one from the overlay's list (`+`): the daemon spawns the same tmux session itself and, if asked, the overlay opens a Windows Terminal tab on it (`ledge attach <id>`).
+1. You start an agent with `ledge claude` instead of `claude`. The launcher puts the agent in a tmux session on a dedicated tmux server, registers it with the daemon, renames the Windows Terminal tab after the bot (`Otto · <topic or project>`) and attaches your terminal to it. Or you start one from the overlay's list (`+`): the daemon spawns the same tmux session itself and, if asked, the overlay opens a Windows Terminal tab on it (`ledge attach <id>`). The launch form opens on the default harness from Settings.
 2. The agent's own hooks (installed once by `ledge setup`) call `ledge hook <Event>` (Codex: `ledge hook codex <Event>`, Cursor Agent: `ledge hook cursor <event>`) on every lifecycle event. Each call forwards one message to the daemon and exits in a few milliseconds.
 3. The daemon keeps the state of every session, polls each tmux pane once a second to detect prompts the hooks do not report and to build a terminal preview, and pushes every change over a local WebSocket.
 4. The Windows overlay shows one mascot per session in the handle, pops a bubble when a session waits for you, and sends your decision back. The daemon types it into the right pane and checks that the prompt went away.
+5. From the list, "Ask Ledge" sends a question to the daemon. The daemon writes a read-only context folder and runs the chosen harness headless (Claude Code, Codex or Cursor Agent). The overlay streams the steps and the answer. Ledge never types into a session from the chat.
 
 ## Architecture
 
@@ -49,7 +51,7 @@ flowchart LR
 
   subgraph wsl["WSL2"]
     direction TB
-    daemon["ledge daemon<br/>store + reducer, poller, WebSocket server<br/>127.0.0.1:47831"]
+    daemon["ledge daemon<br/>store + reducer, poller, chat, WebSocket server<br/>127.0.0.1:47831"]
     launcher["ledge claude<br/>(launcher)"]
     hook["ledge hook Event<br/>(one message, then exit)"]
     subgraph tmux["tmux server -L ledge"]
@@ -58,7 +60,7 @@ flowchart LR
     journal[("~/.ledge/sessions.json<br/>daemon.log · daemon.pid")]
   end
 
-  ov <-- "WebSocket: snapshot, session.updated,<br/>session.preview / reply, decide, kill…" --> daemon
+  ov <-- "WebSocket: snapshot, session.updated,<br/>session.preview / reply, decide, chat…" --> daemon
   launcher -- "session.register / unregister" --> daemon
   launcher -- "new-session, attach" --> pane
   wt -- "terminal attached to" --> pane
@@ -84,24 +86,27 @@ Zod schemas shared by everything else: the session model, the hook-derived `Sess
 
 ### `packages/ledge` (WSL, Node 22, TypeScript)
 
-One binary, `ledge`, with six modes. Source under `src/`:
+One binary, `ledge`, with seven commands. Source under `src/`:
 
 | Path | Role |
 | --- | --- |
 | `cli/index.ts` | Entry point and dispatch. The `hook` path is isolated so it can never throw or exit non-zero. |
 | `cli/launch.ts` | `ledge <claude\|codex\|cursor> [--name <bot>] [-- args]`: finds or spawns the daemon, picks an id and a name, creates the tmux session with `LEDGE_SESSION` and `LEDGE_NAME` in the agent's environment, registers, renames the tab, attaches, and reports the agent's exit code through `session.unregister`. |
-| `cli/hook.ts` | `ledge hook [codex\|cursor] <Event>`: maps a Claude Code, Codex or Cursor Agent hook payload (read on stdin) to a `SessionEvent` and sends it, with the agent and its folder for a session the daemon does not know yet. Subagent events carry `helperId`. |
+| `cli/hook.ts` | `ledge hook [codex\|cursor] <Event>`: maps a Claude Code, Codex or Cursor Agent hook payload (read on stdin) to a `SessionEvent` and sends it, with the agent and its folder for a session the daemon does not know yet. Subagent events carry `helperId`. An `AskUserQuestion` with several questions sends the first one's text and options; later questions and the review come from the pane. |
 | `cli/setup.ts` | `ledge setup`: creates `~/.ledge` and merges `ledge hook <Event>` entries into `~/.claude/settings.json` for the twelve Claude Code events, and `ledge hook codex <Event>` entries into `~/.codex/hooks.json` (or `$CODEX_HOME`) for the ten Codex events, and `ledge hook cursor <event>` entries into `~/.cursor/hooks.json` for eight Cursor Agent events, never overwriting what is there. |
+| `cli/uninstall.ts` | `ledge uninstall [--purge]`: removes only Ledge's hook entries, the systemd unit and the `~/.local/bin/ledge` link. `--purge` also deletes `~/.ledge`. |
 | `cli/status.ts` | `ledge status`: one line per session from a fresh snapshot. |
 | `cli/attach.ts` | `ledge attach <id>`: renames the tab after the session and puts this terminal on its pane. What the overlay runs in a new Windows Terminal tab for a session it started itself. |
 | `spawn.ts` | `spawnSession`: the tmux session that runs the agent (with `LEDGE_SESSION` and `LEDGE_NAME`) and the `starting` session record. Shared by the launcher and the daemon's `session.launch`. |
 | `daemon/index.ts` | `ledge daemon`: loads the journal, prunes sessions whose tmux session is gone, starts the server and the poller, writes `daemon.pid`, saves on SIGTERM/SIGINT. |
-| `daemon/store.ts` | In-memory session map with change listeners; applies events through the reducer and saves the journal 200 ms after the last change (atomic write). Also the twelve most recent folders, for the overlay's launch form. |
-| `daemon/state.ts` | The pure reducer `reduce(session, event)`: the whole state machine, including helper (subagent) routing and the hook-over-pane priority. |
-| `daemon/poller.ts` | Every 1 s captures each live pane (200 lines), hashes it to detect activity, broadcasts a 30-line preview when it changed, runs the adapter's prompt detection on the last 60 lines, and checks every 5 s that the tmux session still exists. Exited sessions are dropped after 10 min. |
-| `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect, broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent with the login shell's PATH (see `shell-path.ts`) and answers `session.launched`. |
+| `daemon/store.ts` | In-memory session map with change listeners; applies events through the reducer and saves the journal 200 ms after the last change (atomic write). Also the twelve most recent folders, for the overlay's launch form, and `patch` for repo/branch fields that skip the reducer. |
+| `daemon/state.ts` | The pure reducer `reduce(session, event)`: the whole state machine, including helper (subagent) routing, the hook-over-pane priority, the session topic (`PaneTitle`, `Renamed`, first `UserPromptSubmit`) and `lastReply` from a `Stop`. |
+| `daemon/git.ts` | One `git rev-parse` per session: repository name and path, checked-out branch, and whether `cwd` is a linked worktree. |
+| `daemon/poller.ts` | Every 1 s captures each live pane (200 lines), hashes it to detect activity, broadcasts a 30-line preview when it changed, runs the adapter's prompt detection on the last 60 lines, reads Claude Code's conversation title (`PaneTitle`), refreshes git fields on the life check (every 5 s), and drops exited sessions after 10 min. |
+| `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect (then `chat.history`), broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent with the login shell's PATH (see `shell-path.ts`) and answers `session.launched`. `session.rename` sets the topic. Chat commands go to `chat/`. |
 | `daemon/folders.ts` | `resolveFolder` (`~` expanded, absolute, existing) and the folder browser's `listFolder` and `createFolder`, which answer with a `folder.listing`. |
-| `adapters/` | One adapter per tool (`Adapter` in `types.ts`): prompt detection in the pane, `promptStillVisible`, key plans for accept/deny/reply/interrupt, and preview cleaning. Only `claude.ts` is implemented. |
+| `chat/` | Ask Ledge: `service.ts` keeps one conversation a day per harness (50 turns, 180 s cap), writes `~/.ledge/chat/context/`, and runs `claude.ts` (`claude -p --restricted`), `codex.ts` (`codex exec --sandbox read-only`) or `cursor.ts` (`cursor-agent -p --mode ask`). `LEDGE_CHAT=1` so Ledge's own hooks ignore the run; no API key is inherited. |
+| `adapters/` | One adapter per tool (`Adapter` in `types.ts`): prompt detection in the pane, `promptStillVisible`, key plans for accept/deny/reply/interrupt, and preview cleaning. `claude.ts`, `codex.ts` and `cursor.ts` are all implemented. Claude Code's adapter also answers a multi-question `AskUserQuestion` (one tab after another, then the review that has no footer). |
 | `tmux.ts` | Thin wrapper over the dedicated server `tmux -L ledge -f ~/.ledge/tmux.conf`. `newSession` runs the tmux client with the pane's PATH: tmux gives a detached session's pane the client's PATH, over `-e`. |
 | `shell-path.ts` | The PATH a login shell (`$SHELL -l`) starts with. Under systemd the daemon has the bare system PATH, where `claude` (`~/.local/bin`) does not resolve; an agent launched from the overlay gets the terminal's instead, or the daemon's (logged) when the shell fails. |
 | `client.ts`, `names.ts`, `paths.ts`, `log.ts` | WebSocket client for the CLI modes, the list of 64 bot names, `~/.ledge` paths (`LEDGE_HOME` overrides), the daemon log. |
@@ -112,11 +117,14 @@ The UI is plain web code under `src/`, developed and unit-tested in WSL; the Rus
 
 | Path | Role |
 | --- | --- |
-| `src/daemon/client.ts`, `store.ts` | Reconnecting WebSocket client (backoff 2 s to 30 s) and a `useSyncExternalStore` store: sessions by id, previews, status, last error, recent folders, the launcher command, the last `session.launched` and `folder.listing`. |
-| `src/surface/machine.ts`, `controller.ts` | The surface state machine: modes `handle`, `bubble`, `list`, `session`, `settings`, `help`, `launch`; timers (dwell 180 ms, leave 500 ms, bubble 4 s, hold 900 ms, unfold 540 ms); a queue of pending asks. Pure reducer with effects, tested without the DOM. |
+| `src/daemon/client.ts`, `store.ts` | Reconnecting WebSocket client (backoff 2 s to 30 s) and a `useSyncExternalStore` store: sessions by id, previews, status, last error, recent folders, the launcher command, the last `session.launched` and `folder.listing`, and the day's chat turns (plus the live stream). |
+| `src/surface/machine.ts`, `controller.ts` | The surface state machine: modes `handle`, `bubble`, `list`, `session`, `settings`, `help`, `launch`, `chat`; timers (dwell 180 ms, leave 500 ms, bubble 4 s, hold 900 ms, unfold 540 ms); a queue of pending asks. Pure reducer with effects, tested without the DOM. |
 | `src/surface/useDaemonAsks.ts` | Turns daemon updates into machine events and locks each decision until the daemon confirms it, fails it, or the connection drops. No timer ever resolves a decision. |
-| `src/surface/*.tsx` | Handle, Bubble, SessionList (with the empty state and the launch notice), SessionView (with the terminal preview), LaunchView (the "New session" form) and its FolderBrowser, SettingsView, HelpView, Tooltip. |
-| `src/surface/geometry.ts`, `frame.ts`, `scale.ts` | Layout of the slots, the native window frame and the edge bands, with the handle and window scale handled as a CSS zoom on their own layer. |
+| `src/surface/*.tsx` | Handle (resident mascot above a separator, then the session bots), Bubble, SessionList (grouped by repository, ask field above the rows), SessionView (permission, question, last reply, terminal preview), ChatView, AskField, LaunchView and its FolderBrowser, SettingsView, HelpView, Tooltip, ReplyCard. |
+| `src/surface/groups.ts`, `src/ui/BranchChip.tsx` | List grouping by `repoPath ?? cwd`, and the branch chip (dotted border on a linked worktree). |
+| `src/surface/geometry.ts`, `frame.ts`, `scale.ts` | Layout of the slots, the native window frame and the edge bands, with the handle and window scale handled as a CSS zoom on their own layer. The list is 380 px; a session and the chat are 480 px (560 px when reading the raw reply). |
+| `src/reply/parse.ts` | Turns the agent's last markdown message into a title, a lead, classified sections and questions with options. Ordinary lists keep the markdown's bullets or numbers; done / verified / question blocks stay cards. |
+| `src/defaultTool.ts` | The default harness (`ledge.defaultTool`): new sessions and the Ledge chat start on it. Claude Code when nothing valid is stored. |
 | `src/bots/` | The mascots: material, pose per state, halo in the state colour, breathing while waiting. |
 | `src/keyboard/` | Keyboard navigation (j/k, digits, y/n, Esc) and the first-use coachmark. |
 | `src/i18n/` | One typed catalogue, French (default) and English, same keys enforced by the type checker. |
@@ -179,6 +187,20 @@ Points worth knowing:
 - **Helpers (subagents).** Hook events that carry `agent_id` update the helper list on the parent session. A helper's permission request is shown on the parent only when nothing else is pending there, and the parent's underlying state is restored when it is answered.
 - **Restart.** The journal is reloaded when the daemon restarts; sessions whose tmux session no longer exists are pruned. The launcher opens a fresh connection to unregister, so a daemon restarted while the agent ran still learns about the exit.
 
+## Asking Ledge
+
+The list's "Ask Ledge" field sits above the sessions, matching the notch's mascot above the bots. `/` focuses it, `Enter` on a question sends it, `Enter` on the empty field (or a click on the field's mascot) opens today's conversation without asking. A `+` in the chat header starts a new conversation (`chat.reset`): the day's turns are cleared and the next question opens a fresh harness session.
+
+The overlay sends `chat.ask { qid, text, tool? }`. `tool` is the default harness from Settings (Claude Code, Codex or Cursor Agent). The daemon:
+
+1. writes `~/.ledge/chat/context/` (`sessions.md`, `pane-<id>.txt`, `reply-<id>.md`, `git-<id>.txt`) and adds each session's repository with `--add-dir`;
+2. runs one headless, read-only process: `claude -p --restricted` (tools `Read,Grep,Glob` only), `codex exec --sandbox read-only`, or `cursor-agent -p --mode ask`;
+3. streams `chat.step` (what it reads), `chat.delta` (the answer as it comes), then `chat.done` or `chat.error`.
+
+One question at a time (a second one gets `chat.error`). A turn that takes more than 180 s is stopped and reported as a timeout, with no retry. A failed resume of the day's session is retried once with a fresh id. The question goes on stdin, never in argv. `LEDGE_CHAT=1` so Ledge's own hooks ignore the run; an inherited `ANTHROPIC_API_KEY` is dropped so the CLI's own login is used. The context folder is deleted when the turn ends. `~/.ledge/chat.json` remembers the day's session id and which harness it belongs to.
+
+Bot names in the answer are links that open that session. Ledge never sends an instruction to a pane from the chat.
+
 ## Protocol
 
 JSON messages over one WebSocket, validated with the zod schemas in `packages/protocol` on both ends.
@@ -187,13 +209,18 @@ Daemon to clients:
 
 | Message | Meaning |
 | --- | --- |
-| `snapshot { sessions, recents?, launcher? }` | Sent on connect and on request. Followed by the remembered `session.preview` of each session. `recents`: the folders of past sessions (`{ cwd, project, lastAt }`, twelve at most, most recent first). `launcher`: the command that runs `ledge` inside WSL (`[node, cli]`), which the overlay extends with `attach <id>` to open a terminal tab. |
+| `snapshot { sessions, recents?, launcher? }` | Sent on connect and on request. Followed by the remembered `session.preview` of each session, then `chat.history`. `recents`: the folders of past sessions (`{ cwd, project, lastAt }`, twelve at most, most recent first). `launcher`: the command that runs `ledge` inside WSL (`[node, cli]`), which the overlay extends with `attach <id>` to open a terminal tab. |
 | `session.updated { session }` | Any change to a session. |
 | `session.removed { id }` | The session left the list (retired or dismissed). |
 | `session.preview { id, lines }` | The last 30 cleaned lines of the pane, sent only when they changed. |
 | `session.launched { id }` | To the requester of a `session.launch` only: the session exists (its `session.updated` was broadcast just before). |
 | `recents { recents }` | The recent folders changed. |
 | `folder.listing { path, parent, entries, error? }` | To the requester of a `folder.list` or `folder.create` only: the folder (resolved, `~` expanded), its parent (`null` at the root) and its subfolders by name, hidden ones left out. A refusal says why in `error`, never in an `error` message. |
+| `chat.step { qid, step }` | What Ledge is reading: `sessions`, `pane`, `reply`, `git` or `repo` (`id` / `name` / `path` when they apply). |
+| `chat.delta { qid, text }` | The next slice of the answer, as the harness writes it. |
+| `chat.done { qid, text, at }` | The finished answer. |
+| `chat.error { qid, message }` | The question could not be answered (busy, timeout, cancel, harness missing). |
+| `chat.history { turns }` | The day's turns (50 at most), after each snapshot and after each ask or reset. A turn still running has no `answer`. |
 | `error { message, id? }` | A rejected command. With `id`, the overlay shows it on that session; without one, a refused launch. |
 
 Clients to daemon:
@@ -204,7 +231,8 @@ Clients to daemon:
 | `session.event { id, event }` | hook | A hook-derived event. An unknown id creates a `hook_only` session. |
 | `session.unregister { id, exitCode }` | launcher | The agent ended. |
 | `session.decide { id, decision }` | overlay | `accept` or `deny` the pending request. Refused on `hook_only` sessions and when nothing is pending. |
-| `session.reply { id, text }` | overlay | Type text into the pane. On a question, only an option number is accepted today. |
+| `session.reply { id, text }` | overlay | Type text into the pane. On a question, only a single option number (`1`–`9`) is accepted: free text would pick the highlighted option. An `AskUserQuestion` with several questions is one number per dialog; the next question (or the review) coming up is success, not a refused answer. |
+| `session.rename { id, topic }` | overlay | Name the session's topic (500 characters at most, the hook's prompt cap). An empty topic hands back to the automatic sources (pane title, then first prompt). |
 | `session.interrupt { id }` | overlay | Send the adapter's interrupt keys (Esc for Claude Code). |
 | `session.kill { id }` | overlay | Kill the tmux session. |
 | `session.dismiss { id }` | overlay | Remove a finished or read-only session from the list. |
@@ -212,6 +240,9 @@ Clients to daemon:
 | `session.launch { tool, cwd, name?, prompt?, continue? }` | overlay | Start a session: `cwd` a WSL folder (`~` allowed, must exist), `name` a preferred bot name, `prompt` the first instruction, `continue` resumes the folder's last conversation. The daemon spawns the agent exactly like `ledge <tool>` would (minus the exit-code wrapper: the poller sees the pane end) and answers `session.launched`. |
 | `folder.list { path? }` | overlay | The launch form's folder browser: list a WSL folder's subfolders (home without `path`). |
 | `folder.create { parent, name }` | overlay | Make a folder named `name` (no `/`, not `.` or `..`) inside `parent`, then list it. |
+| `chat.ask { qid, text, tool? }` | overlay | Ask Ledge. `tool` is the overlay's default harness (`claude` when omitted). |
+| `chat.cancel { qid }` | overlay | Stop the running question. |
+| `chat.reset` | overlay | Clear the day's turns and start a new harness session on the next question. Refused while a question is running. |
 | `snapshot.request` | any | Ask for a fresh snapshot. |
 
 The server accepts connections with no `Origin` header (Node clients) or with the Tauri origins (`tauri://localhost`, `http://tauri.localhost`, the Vite dev server). Any other web page is refused.
@@ -220,11 +251,20 @@ The server accepts connections with no `Origin` header (Node clients) or with th
 
 ```
 id, name (bot's first name), tool: claude | codex | cursor, cwd, project, title, tmuxSession | null,
+topic?, topicSource?: user | pane | prompt,
+repo?, repoPath?, branch?, worktree?,
 state: starting | working | waiting_input | waiting_permission | idle | exited | error,
 pending?: { kind: question | permission | plan | diff, text, tool?, options?, source: hook | pane, helperId?, parentState? },
 helpers: [{ id, kind, task, state }],
+lastReply?: { text, at },
 startedAt, lastActivityAt, lastHookAt?, exitCode?, exitedAt?, lastError?, source: launcher | hook_only
 ```
+
+`title` is always `${name} · ${topic ?? project}` and is the Windows Terminal tab. `topic` is one line (80 characters after `cleanTopic` in `@ledge/protocol`). Sources, weakest first: the first `UserPromptSubmit` (`prompt`), Claude Code's conversation title in the pane (`pane`, a `PaneTitle` event), the user's rename (`user`, always wins). An empty rename hands back to the automatic sources. `PaneTitle` and `Renamed` do not bump `lastActivityAt`.
+
+`repo` / `repoPath` / `branch` / `worktree` come from `daemon/git.ts`, refreshed on first sight and on every life check. The list groups by `repoPath ?? cwd`. A linked worktree shows a dotted branch chip. Outside a repository the fields stay absent.
+
+`lastReply` is the agent's last message of a finished turn (`Stop`'s `last_assistant_message` for Claude Code and Codex, `afterAgentResponse` for Cursor Agent), kept until the next `UserPromptSubmit`. The overlay reads it like a plan when the session is `idle` or `exited` with nothing pending.
 
 | State | Means |
 | --- | --- |
@@ -236,7 +276,7 @@ startedAt, lastActivityAt, lastHookAt?, exitCode?, exitedAt?, lastError?, source
 | `error` | A turn stopped on an error, or an injected answer was not taken. The request is kept for a retry. |
 | `exited` | Terminal. Set by `session.unregister`, a terminal `SessionEnd`, or the pane disappearing. |
 
-Where a pending request comes from, for Claude Code: `PermissionRequest` gives `permission` (or `diff` for Edit/Write/MultiEdit), `PreToolUse` on `AskUserQuestion` gives `question` with its options, `PreToolUse` on `ExitPlanMode` gives `plan`, a permission `Notification` gives `permission`, and the pane detector gives `permission`, `question` or `plan` from the dialog footer (the workspace trust dialog included). A `PostToolUse` for the same tool, a `Stop`, a confirmed injection, or the pane at rest clears it.
+Where a pending request comes from, for Claude Code: `PermissionRequest` gives `permission` (or `diff` for Edit/Write/MultiEdit), `PreToolUse` on `AskUserQuestion` gives `question` with the first question's options (later questions and the "Ready to submit your answers?" review come from the pane), `PreToolUse` on `ExitPlanMode` gives `plan`, a permission `Notification` gives `permission`, and the pane detector gives `permission`, `question` or `plan` from the dialog footer (the workspace trust dialog included). A `PostToolUse` for the same tool, a `Stop`, a confirmed injection, or the pane at rest clears it. Answering question 1 of a multi-question dialog so that question 2 appears is success: the first prompt is gone.
 
 ## Files and settings
 
@@ -244,10 +284,12 @@ WSL side, under `~/.ledge` (or `$LEDGE_HOME`):
 
 | File | Content |
 | --- | --- |
-| `tmux.conf` | Config of the dedicated tmux server: status bar off, mouse on, 20 000 lines of history. Written if missing. |
+| `tmux.conf` | Config of the dedicated tmux server: status bar off, mouse on, 20 000 lines of history, `set-titles` so the Windows Terminal tab follows `${name} · ${topic ?? project}`. Written if missing; an existing file without `set-titles` receives those lines on the next init. |
 | `sessions.json` | The journal, saved 200 ms after each change and reloaded on restart. |
 | `daemon.log` | Dropped hooks, refused origins, failed injections, poll errors. |
 | `daemon.pid` | PID of the running daemon, removed on a clean stop. |
+| `chat.json` | The day's Ledge conversation: its date, harness session id and which tool it belongs to. A new day, a reset, or a change of harness starts a new one. |
+| `chat/context/` | Files the chat reads, rewritten before each question and deleted when it ends (`sessions.md`, `pane-*`, `reply-*`, `git-*`). |
 | `exit-<id>` | Transient: the agent's exit code, written by the launcher's wrapper and consumed by `ledge claude`. |
 
 `~/.config/systemd/user/ledge-daemon.service` runs the daemon with the real node binary (resolved through the fnm symlink) and the built CLI; rerun `ledge setup` after changing the node version or moving the repository, it rewrites the unit and restarts the service.
@@ -260,7 +302,7 @@ When `~/.cursor` exists, it appends one `ledge hook cursor <event>` hook (5 s ti
 
 The journal also keeps `recents`, the folders of the last twelve sessions, for the overlay's launch form.
 
-Windows side, the overlay keeps its preferences in the WebView's `localStorage`: `ledge.lang`, `ledge.theme`, `ledge.dnd`, `ledge.monitor`, `ledge.reducedMotion`, `ledge.handleScale`, `ledge.panelScale` and `ledge.coachmarks`.
+Windows side, the overlay keeps its preferences in the WebView's `localStorage`: `ledge.lang`, `ledge.theme`, `ledge.dnd`, `ledge.monitor`, `ledge.reducedMotion`, `ledge.handleScale`, `ledge.panelScale`, `ledge.coachmarks`, `ledge.defaultTool` (the harness for new sessions and the Ledge chat), `ledge.finished` (bubble / sound when a bot finishes) and `ledge.sounds`.
 
 ## Security and failure model
 
@@ -381,27 +423,30 @@ pnpm --filter overlay tauri dev     # Windows only
 Layout:
 
 ```
-packages/protocol/   zod schemas, PROTOCOL_PORT
-packages/ledge/      src/cli, src/daemon, src/adapters, test/ (fixtures/panes: captured dialogs)
+packages/protocol/   zod schemas, PROTOCOL_PORT, topic helpers, chat turns
+packages/ledge/      src/cli, src/daemon, src/adapters, src/chat, test/ (fixtures/panes: captured dialogs)
 apps/overlay/        src/ (React), src-tauri/ (Rust shell), e2e/ (Playwright)
-docs/                design spec, implementation plans, mockups, the approved prototype, and the tour with its captures
+docs/                design specs, implementation plans, mockups, the approved prototype, and the tour with its captures
 ```
 
 ## Design documents
 
 - Ideas from the two latest Claude Code sessions (features and bot motion): [next steps](docs/ideas/2026-10-11-next-steps.md).
 - Design spec: [docs/superpowers/specs/2026-10-09-ledge-design.md](docs/superpowers/specs/2026-10-09-ledge-design.md)
+- Session topics, repository grouping and the Ledge chat: [spec](docs/superpowers/specs/2026-10-11-sessions-identity-and-chat-design.md), [plan](docs/superpowers/plans/2026-10-11-sessions-identity-and-chat.md) and [mockup](docs/mockups/ledge-sessions-chat.html).
+- Last-reply lists as real markdown lists: [spec](docs/superpowers/specs/2026-10-11-session-reply-lists-design.md).
 - Starting a session from Ledge: [spec](docs/superpowers/specs/2026-10-10-launch-from-ledge-design.md) and [mockups](https://claude.ai/artifact/YBX4UV7Z2eBRNKAwNh3876)
 - Design canvas (mockups and playable prototype): https://claude.ai/artifact/57oDjsKdabQBmPgAXn15mc
 - Design system "Shadcn Red": https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV
 - Initial mascot exploration: [docs/mockups/mascots.html](docs/mockups/mascots.html), a historical comparison of three directions.
-- Mascot halo study: [docs/mockups/mascots-halo.html](docs/mockups/mascots-halo.html), three renderings compared in both themes; the validated choice (contour, normal intensity, every live state, badge colours, breathing while waiting) is implemented in `apps/overlay/src/bots`.
+- Mascot halo study: [docs/mockups/mascots-halo.html](docs/mockups/mascots-halo.html), three renderings compared in both themes; the validated choice (contour, normal intensity, every live state, badge colours, breathing while waiting) is implemented in `apps/overlay/src/bots`. Approved resident mascot and halo: [ledge-mascot.html](docs/mockups/ledge-mascot.html), [ledge-mascot-halo.html](docs/mockups/ledge-mascot-halo.html).
 - **Approved interactive design (revision 2):** [navigable prototype](docs/mockups/ledge-prototype.html) (keep its adjacent `prototype/` folder), or [standalone HTML](docs/mockups/ledge-prototype-standalone.html) requiring no server. Twelve scenarios, **Signal in dark mode / Galet in light mode**, with subdued motion and accessible keyboard navigation. Sessions and outcomes in the prototype are simulated.
-- Implementation plans: [WSL core](docs/superpowers/plans/2026-10-09-ledge-core-wsl.md), [overlay and mascots](docs/superpowers/plans/2026-10-09-ledge-overlay.md), [adapters and rich screens](docs/superpowers/plans/2026-10-09-ledge-adapters-and-screens.md).
+- Implementation plans: [WSL core](docs/superpowers/plans/2026-10-09-ledge-core-wsl.md), [overlay and mascots](docs/superpowers/plans/2026-10-09-ledge-overlay.md), [adapters and rich screens](docs/superpowers/plans/2026-10-09-ledge-adapters-and-screens.md), [hop, finished notices and sounds](docs/superpowers/plans/2026-10-10-ledge-hop-finished-sounds.md), [resident mascot](docs/superpowers/plans/2026-10-11-ledge-resident-mascot.md).
 
 ## Status and known limits
 
-- Claude Code, Codex and Cursor Agent have adapters.
+- Claude Code, Codex and Cursor Agent have adapters. The same three harnesses can answer Ask Ledge (Settings › Default harness); the launch form opens on that choice too.
+- An `AskUserQuestion` with several questions can be answered from Ledge, one dialog at a time, including the review screen.
 - Cursor Agent (verified on 2026.10.01): hooks give the turn (prompt, tools, `stop`) and the last reply (`afterAgentResponse`, rebuilt from the transcript so the turn's text blocks stay apart). They never report an approval, a question or a plan, so the pane gives them: the shell approval ("Run this command?", `y` runs once, `n` then an empty Enter skips), the workspace trust (`a` trusts, `q` quits), AskQuestion (an option number moves to it, ticks it with Space and goes on with Enter; Esc skips; a question that follows is a new prompt, not a failed answer) and Plan mode's "Ready to build?" (`b` builds locally, never in the cloud; refusing opens "Describe how to revise the plan", which reads as your turn: the next reply goes there). Keys that must not reach the agent in one read wait for the screen they are meant for (`until` steps). Ctrl-C interrupts (`stop` aborted, then a stray `error` that is ignored). Subagents fire no hook of their own kind: the parent's Task call names a helper, the subagent's hooks (its own `session_id`, but the parent's transcript in `CURSOR_TRANSCRIPT_PATH`) take it over, and the parent's next step ends it. Not covered: the "Other" free-text answer of a question, and the cloud build.
 - Codex (verified on 0.162): hooks give the state, approvals (`y` runs once, Esc refuses), `request_user_input` questions and the last reply; the pane gives the Plan mode approval ("Implement this plan?", which has no hook) and the startup hooks review. Codex may run hooks in a shared app-server daemon that keeps the environment of the `codex` that started it, so a launched session names itself to its hooks through `-c shell_environment_policy.set.LEDGE_CODEX_HOOK_SESSION=<id>`, and `LEDGE_CODEX_SESSION` in the environment is trusted only when no app-server runs the hook. Plan mode itself is switched in the terminal (Shift+Tab).
 - Free-text replies to a question are refused (the 2.x question dialog is a select; typed text would pick the highlighted option). Answer with an option number or in the terminal.

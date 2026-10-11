@@ -50,19 +50,26 @@ systemctl --user disable --now ledge-daemon.service   # back to on-demand start 
 
 ## Ask Ledge (chat)
 
-The overlay's ask field sends a question to the daemon, which answers it with one headless Claude Code run:
+The overlay's ask field sends a question to the daemon (`chat.ask`), which answers it with one headless, read-only run of the chosen harness (Settings › Default harness; Claude Code when omitted):
 
 ```sh
+# Claude Code (default)
 claude -p --restricted --tools Read,Grep,Glob --permission-mode dontAsk --output-format stream-json --verbose --include-partial-messages --max-turns 16 --append-system-prompt <persona> --add-dir <each session folder> --session-id <id>   # --resume <id> for the next questions of the day
+
+# Codex
+codex exec --sandbox read-only --json --skip-git-repo-check --ignore-user-config -C <context> -c 'sandbox_permissions=["disk-full-read-access"]' -   # exec resume <id> … for the next questions
+
+# Cursor Agent
+cursor-agent -p --mode ask --output-format stream-json --stream-partial-output --sandbox enabled --trust --workspace <context> --add-dir <each session folder>   # --resume <id> for the next questions
 ```
 
-The question goes on stdin, never in argv, and `LEDGE_CHAT=1` is set so Ledge's own hooks ignore the run. `--restricted` ignores the user, project and local settings, so none of your hooks run and no setting can widen the tools, while the CLI keeps its own authentication (your Claude subscription login, no API key needed). Only `Read`, `Grep` and `Glob` are allowed, and anything else is denied rather than asked.
+The question goes on stdin, never in argv, and `LEDGE_CHAT=1` is set so Ledge's own hooks ignore the run. An inherited `ANTHROPIC_API_KEY` is dropped so Claude Code keeps its own login. `--restricted` ignores the user, project and local settings, so none of your hooks run and no setting can widen the tools. Only `Read`, `Grep` and `Glob` are allowed on Claude Code, and anything else is denied rather than asked. Codex runs in a read-only sandbox; Cursor Agent runs in ask mode.
 
-- `~/.ledge/chat/context/` is the folder Claude runs in, rewritten before each question: `sessions.md` (every session, its state and its file names), `pane-<id>.txt` (last terminal lines), `reply-<id>.md` (last reply), `git-<id>.txt` (status, log and diff stat). A source that fails or is empty is just left out.
-- `~/.ledge/chat.json` holds the day's conversation (its date and session id); a new day starts a new conversation, and a question after a failed resume starts a new one too.
-- One question at a time; a turn that takes more than 180 s is stopped and the chat says it timed out (no retry).
+- `~/.ledge/chat/context/` is the folder the harness runs in, rewritten before each question: `sessions.md` (every session, its state and its file names), `pane-<id>.txt` (last terminal lines), `reply-<id>.md` (last reply), `git-<id>.txt` (status, log and diff stat). A source that fails or is empty is just left out. The folder is deleted when the turn ends.
+- `~/.ledge/chat.json` holds the day's conversation (its date, session id and which tool it belongs to); a new day, a `chat.reset`, or a change of harness starts a new conversation, and a question after a failed resume starts a new one too.
+- One question at a time; a turn that takes more than 180 s is stopped and the chat says it timed out (no retry). `chat.reset` is refused while a question is running.
 
-Session names and tab titles: Ledge sets `set-titles` in `~/.ledge/tmux.conf`. A tmux server that is already running re-reads `tmux.conf` only after it restarts, so `set-titles` applies to new tmux servers.
+Session names and tab titles: Ledge sets `set-titles` in `~/.ledge/tmux.conf`. A tmux server that is already running re-reads `tmux.conf` only after it restarts, so `set-titles` applies to new tmux servers. The tab string is `${name} · ${topic ?? project}`; `session.rename` from the overlay updates it.
 
 ## Tests
 
