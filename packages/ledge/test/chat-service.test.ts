@@ -44,6 +44,35 @@ describe('chat service', () => {
     return { chat, spawned, store, home };
   }
 
+  it('reset clears the turns, forgets the day file, and the next question starts a new session (--session-id, not --resume)', async () => {
+    const args: string[][] = [];
+    const spawn = ((file: string, a: string[], o: object) => { args.push(a); return nodeSpawn(file, a, o as never); }) as unknown as typeof nodeSpawn;
+    const { chat, home } = setup({ spawn, uuid: () => '55555555-5555-4555-8555-555555555555' });
+    await chat.ask('q1', 'x', () => {});
+    expect(args[0]).toContain('--resume');
+    const out: ServerMessage[] = [];
+    await chat.reset(m => out.push(m));
+    expect(out).toEqual([{ type: 'chat.history', turns: [] }]);
+    expect(chat.history()).toEqual([]);
+    expect(existsSync(join(home, 'chat.json'))).toBe(false);
+    await chat.ask('q2', 'y', () => {});
+    expect(args[1]).not.toContain('--resume');
+    expect(args[1]![args[1]!.indexOf('--session-id') + 1]).toBe('55555555-5555-4555-8555-555555555555');
+    expect(JSON.parse(readFileSync(join(home, 'chat.json'), 'utf8')).sessionId).toBe('55555555-5555-4555-8555-555555555555');
+    await chat.ask('q3', 'z', () => {});
+    expect(args[2]![args[2]!.indexOf('--resume') + 1]).toBe('55555555-5555-4555-8555-555555555555');
+  });
+
+  it('a reset while a question runs is ignored', async () => {
+    const { chat, spawned } = setup({ env: async () => ({ ...process.env, FAKE_CLAUDE_MODE: 'slow' }) });
+    const asked = chat.ask('q1', 'x', () => {});
+    while (spawned.length === 0) await new Promise(r => setTimeout(r, 10));
+    const out: ServerMessage[] = [];
+    await chat.reset(m => out.push(m));
+    expect(out).toEqual([]); expect(chat.history()).toHaveLength(1);
+    chat.cancel('q1'); await asked;
+  });
+
   it('a timeout kills the run, says so, and is not retried with a fresh session', async () => {
     const { chat, spawned } = setup({ timeoutMs: 300, env: async () => ({ ...process.env, FAKE_CLAUDE_MODE: 'slow' }) });
     const out: ServerMessage[] = [];

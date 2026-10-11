@@ -4,6 +4,7 @@ import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from './mockDaemon';
 import { frameOf, unionFrame, FRAME_PAD } from '../src/surface/frame';
 import { SHOULDER_R } from '../src/surface/Shoulders';
+import { LAUNCH_NOTICE_MS } from '../src/surface/Surface';
 
 // The native side, stubbed: `invoke` records commands, `listen` keeps the handler so a test can emit the edge event,
 // the global shortcut plugin keeps the Ctrl+Alt+L handler.
@@ -253,6 +254,12 @@ describe('<Surface> under Tauri', () => {
     await vi.waitFor(() => expect(calls('focus_terminal')).toHaveLength(2));
     await sleep(20);
     expect(calls('open_terminal')).toHaveLength(1);
+    // The notice adds its height to the list's (6 px of air + the box, 36 px when jsdom measures nothing) instead of making the rows scroll.
+    const height = () => parseFloat(el('[data-surface]').style.height);
+    const withNotice = height();
+    await act(async () => { vi.advanceTimersByTime(LAUNCH_NOTICE_MS + 10); });
+    expect(el('[data-notice]')).toBeNull();
+    expect(withNotice - height()).toBe(42);
   });
 
   it('in the browser the page is not offset and the DOM hot zones handle the edge', async () => {

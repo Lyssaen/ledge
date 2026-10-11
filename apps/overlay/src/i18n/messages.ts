@@ -148,7 +148,7 @@ const fr = {
   },
   chat: {
     title: 'Ledge', subtitle: (n: number, repos: number) => `Voit ${n} ${plural(n, 'session', 'sessions')} · ${repos} ${plural(repos, 'dépôt', 'dépôts')} · lecture seule`,
-    ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…', open: 'Ouvrir la conversation avec Ledge', send: 'Envoyer', stop: 'Arrêter', back: 'Retour aux sessions', close: 'Fermer',
+    ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…', open: 'Ouvrir la conversation avec Ledge', send: 'Envoyer', stop: 'Arrêter', reset: 'Nouvelle conversation', back: 'Retour aux sessions', close: 'Fermer',
     emptyTitle: 'Demandez-moi des nouvelles.',
     emptyHint: (n: number) => `${n === 0 ? 'Je ne vois aucune session pour l’instant.' : n === 1 ? 'Je vois 1 session, son terminal et son dépôt.' : `Je vois ${n} sessions, les terminaux et les dépôts.`} Je lis, je ne touche à rien.`,
     chips: ['Où en sont les autres ?', 'Qu’est-ce qui attend ma décision ?', 'Quelles branches peuvent être fusionnées ?'],
@@ -311,7 +311,7 @@ const en: Messages = {
   },
   chat: {
     title: 'Ledge', subtitle: (n: number, repos: number) => `Sees ${n} ${plural(n, 'session', 'sessions')} · ${repos} ${plural(repos, 'repository', 'repositories')} · read only`,
-    ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…', open: 'Open the conversation with Ledge', send: 'Send', stop: 'Stop', back: 'Back to sessions', close: 'Close',
+    ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…', open: 'Open the conversation with Ledge', send: 'Send', stop: 'Stop', reset: 'New conversation', back: 'Back to sessions', close: 'Close',
     emptyTitle: 'Ask me how things are going.',
     emptyHint: (n: number) => `${n === 0 ? 'I see no session yet.' : n === 1 ? 'I see 1 session, its terminal and its repository.' : `I see ${n} sessions, the terminals and the repositories.`} I read, I touch nothing.`,
     chips: ['How are the others doing?', 'What is waiting for my decision?', 'Which branches can be merged?'],

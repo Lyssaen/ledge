@@ -24,7 +24,7 @@ import { useSoundPrefs } from '../sounds/preferences';
 import { useSounds } from '../sounds/useSounds';
 import { createSilentPlayer, type SoundPlayer } from '../sounds/player';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
-import { SessionList, rowHint, EXPANDED_ROW_H, ASK_H, type ListNotice } from './SessionList';
+import { SessionList, rowHint, EXPANDED_ROW_H, ASK_H, NOTICE_GAP, type ListNotice } from './SessionList';
 import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
 import { useI18n, type Lang } from '../i18n/lang';
 import { transition, MOTION, ms, enterDelay } from '../motion';
@@ -245,6 +245,10 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const [notice, setNotice] = useState<ListNotice | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(noticeTimer.current), []);
+  // The notice sits between the header and the rows: the list grows by its height (it can wrap) rather than scrolling.
+  const noticeRef = useRef<HTMLDivElement>(null);
+  const noticeH = useMeasuredHeight(noticeRef, st.mode === 'list' && !!notice, ps);
+  const noticeExtraH = notice ? NOTICE_GAP + (noticeH || 36) : 0;
   /** The session's terminal tab: brought forward when it exists, else opened on the session (a daemon-launched one has none yet). */
   const openTab = (id: string) => {
     const s = byId.get(id); if (!s) return;
@@ -271,7 +275,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
     setLaunching(null); setLaunchFailure(lastError.message);
   }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0 }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted })), mode: st.mode, screenH, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH }, { handle: hs, panel: ps });
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -432,12 +436,12 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} numbered={kb} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               onDismiss={id => { if (!unreachable) send({ type: 'session.dismiss', id }); }} offline={unreachable}
-              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
+              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} noticeRef={noticeRef} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
               onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <ChatView contentRef={chatRef} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
-              onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onOpenSession={openRow}
+              onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onOpenSession={openRow}
               theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
           </div>
           <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>

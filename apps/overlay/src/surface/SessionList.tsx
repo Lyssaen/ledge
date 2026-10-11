@@ -1,4 +1,5 @@
 import type { Session } from '@ledge/protocol';
+import type { Ref } from 'react';
 import { Bot } from '../bots/Bot';
 import { ResidentMascot } from '../bots/ResidentMascot';
 import { botState, liveHelpers, poseFor } from '../bots/poseFor';
@@ -34,8 +35,10 @@ export const GROUP_H = SIZES.groupH;
 /** Height of a focused row carrying the inline Approve / Deny / Open actions. */
 export const EXPANDED_ROW_H = 100;
 
-/** Height of the ask field's slot above the footer: the 36 px field plus its 10 px bottom margin. */
-export const ASK_H = 46;
+/** Height of the ask field's slot above the footer: the 36 px field, 10 px of air above it (off the last row) and 10 px below. */
+export const ASK_H = 56;
+/** The air between the header and the launch notice, outside the notice's measured box. */
+export const NOTICE_GAP = 6;
 
 /** A line shown under the header for a few seconds (a session the overlay just started), with an optional action. */
 export interface ListNotice { text: string; action?: { label: string; onClick: () => void } }
@@ -48,6 +51,8 @@ export interface ListProps {
   onSettings?: () => void; onHelp?: () => void; onHoverRow?: (id: string | null) => void;
   /** Opens the "New session" form (the header's + and the empty state's button). */
   onLaunch?: () => void; notice?: ListNotice | null;
+  /** The notice's box, measured by the surface so the panel grows by its height instead of scrolling the rows. */
+  noticeRef?: Ref<HTMLDivElement>;
   /**
    * The ask field above the footer (shown when `onAsk` is set); `onOpenChat` opens the conversation without asking (Enter on
    * the empty field, the mascot); `onTyping` reports focus and typing, `askDisabled` greys it (daemon not connected).
@@ -60,7 +65,7 @@ export interface ListProps {
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number;
 }
 
-export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onOpenChat, onTyping, askDisabled = false, notice = null, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
+export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onOpenChat, onTyping, askDisabled = false, notice = null, noticeRef, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
   const { t } = useI18n();
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
@@ -116,7 +121,7 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
         <Button variant="ghost" size="icon" aria-label={t.list.collapse} title={t.list.collapse} onClick={onClose} style={{ color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.chevronLeft} /></Button>
       </div>
       {notice && (
-        <div role="status" data-notice style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 12px 0', padding: '8px 12px', boxSizing: 'border-box', borderRadius: 'var(--radius-lg)', background: 'var(--status-info-soft)', border: '1px solid color-mix(in srgb, var(--info) 25%, transparent)', fontSize: 13, lineHeight: '18px' }}>
+        <div ref={noticeRef} role="status" data-notice style={{ display: 'flex', alignItems: 'center', gap: 10, margin: `${NOTICE_GAP}px 12px 0`, padding: '8px 12px', boxSizing: 'border-box', borderRadius: 'var(--radius-lg)', background: 'var(--status-info-soft)', border: '1px solid color-mix(in srgb, var(--info) 25%, transparent)', fontSize: 13, lineHeight: '18px' }}>
           <span style={{ color: 'var(--info)', display: 'inline-flex', flexShrink: 0 }}><Icon size={16} {...ICONS.rocket} /></span>
           <span style={{ flexGrow: 1, minWidth: 0 }}>{notice.text}</span>
           {notice.action && <button type="button" onClick={notice.action.onClick} className="ledge-text-btn" style={{ border: 'none', background: 'transparent', padding: '2px 0', fontSize: 13, fontWeight: 500, color: 'var(--info)', cursor: 'pointer', whiteSpace: 'nowrap' }}>{notice.action.label} ↗</button>}

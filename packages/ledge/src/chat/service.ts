@@ -11,7 +11,7 @@ import { runClaude, type RunHandle } from './claude.js';
 import { log } from '../log.js';
 
 export type ChatMessage = Extract<ServerMessage, { type: 'chat.history' | 'chat.step' | 'chat.delta' | 'chat.done' | 'chat.error' }>;
-export interface Chat { ask(qid: string, text: string, emit: (m: ChatMessage) => void): Promise<void>; cancel(qid: string): void; history(): ChatTurn[] }
+export interface Chat { ask(qid: string, text: string, emit: (m: ChatMessage) => void): Promise<void>; cancel(qid: string): void; reset(emit: (m: ChatMessage) => void): Promise<void>; history(): ChatTurn[] }
 export interface ChatDeps {
   store: Store; tmux: Pick<Tmux, 'capture'>; home: string;
   /** The environment the chat process runs in (the login shell's PATH, like a launched agent). */
@@ -36,6 +36,8 @@ export function createChat(deps: ChatDeps): Chat {
   let turns: ChatTurn[] = []; let turnsDay = '';
   /** Set the moment a question is accepted. */
   let busy = false;
+  /** Set by a reset: the next question starts a new Claude session (`--session-id`) instead of resuming the day's. */
+  let freshNext = false;
   /** The running question, from its first line (so a Stop while the context is built counts); `handle` once Claude Code has spawned. */
   type Running = { qid: string; handle: RunHandle | null; cancelled: boolean };
   let current: Running | null = null;
@@ -47,11 +49,11 @@ export function createChat(deps: ChatDeps): Chat {
   /** Today's Claude session: resumed from the day file when it names today, else a fresh id written there (`fresh` forces one). */
   async function daySession(fresh: boolean): Promise<{ sessionId: string; resume: boolean }> {
     const day = today();
-    if (!fresh) {
+    if (!fresh && !freshNext) {
       try { const saved = JSON.parse(await readFile(dayFile, 'utf8')) as { day?: string; sessionId?: string }; if (saved.day === day && saved.sessionId) return { sessionId: saved.sessionId, resume: true }; } catch { /* none yet */ }
     }
     const sessionId = uuid();
-    await mkdir(dirname(dayFile), { recursive: true }); await writeFile(dayFile, JSON.stringify({ day, sessionId }));
+    await mkdir(dirname(dayFile), { recursive: true }); await writeFile(dayFile, JSON.stringify({ day, sessionId })); freshNext = false;
     return { sessionId, resume: false };
   }
 
@@ -93,6 +95,14 @@ export function createChat(deps: ChatDeps): Chat {
   return {
     history: () => turns,
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
+    async reset(emit) {
+      // The overlay only offers it between questions; a reset racing a question is dropped rather than orphaning its turn.
+      if (busy) { log('chat reset ignored: a question is running'); return; }
+      freshNext = true; turns = []; turnsDay = today();
+      emit({ type: 'chat.history', turns });
+      // Without a day file a restarted daemon also starts fresh.
+      await rm(dayFile, { force: true }).catch(e => log(`chat reset: day file not removed: ${(e as Error).message}`));
+    },
     async ask(qid, text, emit) {
       if (busy) return emit({ type: 'chat.error', qid, message: ONE_AT_A_TIME });
       busy = true;

@@ -13,7 +13,7 @@ export function AskField({ onAsk, onOpen, onTyping, disabled = false, theme = 'd
   const submit = () => { const q = text.trim(); if (!q) return onOpen?.(); onAsk(q); setText(''); onTyping?.(false); };
   const mascot = <ResidentMascot size={18} theme={theme} reducedMotion={reducedMotion} paused={disabled} />;
   return (
-    <div data-ask-field style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, margin: '0 12px 10px', padding: '0 10px', boxSizing: 'border-box', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', background: 'var(--well)', opacity: disabled ? 0.5 : 1 }}>
+    <div data-ask-field style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, margin: '10px 12px', padding: '0 10px', boxSizing: 'border-box', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', background: 'var(--well)', opacity: disabled ? 0.5 : 1 }}>
       {/* Out of the tab order: Enter on the empty field is the keyboard's way to the same place. */}
       {onOpen ? <button type="button" tabIndex={-1} aria-label={t.chat.open} title={t.chat.open} onClick={onOpen} style={{ display: 'inline-flex', border: 0, background: 'transparent', padding: 0, margin: 0, cursor: 'pointer' }}>{mascot}</button> : mascot}
       <input data-ask-input type="text" aria-label={t.chat.ask} placeholder={t.chat.askPlaceholder} value={text} disabled={disabled}

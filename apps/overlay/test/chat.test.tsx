@@ -7,7 +7,7 @@ import { fakeSession } from './mockDaemon';
 
 const T0 = '2026-10-11T10:00:00.000Z';
 const sessions = [fakeSession('a', { name: 'Nova', repoPath: '/w/ledge' }), fakeSession('b', { name: 'Pim', repoPath: '/w/other' })];
-const base = { sessions, visible: true, offline: null, onAsk: () => {}, onCancel: () => {}, onBack: () => {}, onClose: () => {}, onOpenSession: () => {} };
+const base = { sessions, visible: true, offline: null, onAsk: () => {}, onCancel: () => {}, onReset: () => {}, onBack: () => {}, onClose: () => {}, onOpenSession: () => {} };
 
 describe('<AskField>', () => {
   it('sends a non-empty question on Enter and reports typing', () => {
@@ -45,6 +45,16 @@ describe('<ChatView>', () => {
     expect(screen.getByText('Deux')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Stop' })); expect(onCancel).toHaveBeenCalledWith('q1');
     expect(screen.getByRole('textbox', { name: 'Ask Ledge' })).toBeDisabled();
+  });
+  it('offers a new conversation between questions only', () => {
+    const onReset = vi.fn();
+    const done: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [], answer: 'ok', answeredAt: T0 }];
+    const { rerender } = render(<ChatView {...base} turns={[]} live={null} onReset={onReset} />);
+    expect(screen.getByRole('button', { name: 'New conversation' })).toBeDisabled();
+    rerender(<ChatView {...base} turns={[{ qid: 'q1', question: 'x', askedAt: T0, steps: [] }]} live={null} onReset={onReset} />);
+    expect(screen.getByRole('button', { name: 'New conversation' })).toBeDisabled();
+    rerender(<ChatView {...base} turns={done} live={null} onReset={onReset} />);
+    fireEvent.click(screen.getByRole('button', { name: 'New conversation' })); expect(onReset).toHaveBeenCalledTimes(1);
   });
   it('renders the answer, links bot names to their session, and lists the sources', () => {
     const onOpen = vi.fn();

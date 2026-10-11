@@ -14,7 +14,7 @@ export interface ChatViewProps {
   turns: ChatTurn[]; live: { qid: string; text: string } | null; sessions: Session[]; visible: boolean; enterDelay?: number;
   /** Null when questions may be sent; otherwise why not (offline). */
   offline: string | null;
-  onAsk: (text: string) => void; onCancel: (qid: string) => void; onBack: () => void; onClose: () => void; onOpenSession: (id: string) => void;
+  onAsk: (text: string) => void; onCancel: (qid: string) => void; onReset: () => void; onBack: () => void; onClose: () => void; onOpenSession: (id: string) => void;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number; contentRef?: Ref<HTMLDivElement>;
 }
 
@@ -67,6 +67,8 @@ export function ChatView(p: ChatViewProps) {
           <span data-brand style={{ fontSize: 14, lineHeight: '18px', fontWeight: 650 }}>{t.chat.title}<span style={{ color: 'var(--sidebar-primary)' }}>.</span></span>
           <span style={{ fontSize: 11, lineHeight: '14px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.chat.subtitle(p.sessions.length, repos)}</span>
         </div>
+        {/* A new conversation forgets the day's turns and Claude session; offered between questions, once there is something to forget. */}
+        <Button variant="ghost" size="icon" aria-label={t.chat.reset} title={t.chat.reset} disabled={busy || !!p.offline || turns.length === 0} onClick={p.onReset}><Icon {...ICONS.plus} /></Button>
         <Button variant="ghost" size="icon" aria-label={t.chat.close} title={t.chat.close} onClick={p.onClose}><Icon {...ICONS.close} /></Button>
       </div>
       <div ref={thread} data-scroll className="ledge-scroll" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
@@ -99,7 +101,7 @@ export function ChatView(p: ChatViewProps) {
                         <span>{t.chat.ago(relativeTime(turn.answeredAt, p.now, t))}</span>
                       </div>
                     )}
-                    {running?.qid === turn.qid && <div><Button variant="outline" size="sm" onClick={() => p.onCancel(turn.qid)} style={{ height: 26, padding: '0 8px' }}>{t.chat.stop}</Button></div>}
+                    {running?.qid === turn.qid && <div><Button variant="ghost" size="sm" onClick={() => p.onCancel(turn.qid)} style={{ height: 22, padding: '0 6px', gap: 4, fontSize: 11.5, color: 'var(--muted-foreground)' }}><Icon size={10} {...ICONS.stop} />{t.chat.stop}</Button></div>}
                   </div>
                 </div>
               )}

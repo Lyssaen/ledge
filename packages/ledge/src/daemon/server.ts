@@ -283,6 +283,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast);
       case 'chat.cancel': return chat.cancel(msg.qid);
+      case 'chat.reset': return chat.reset(broadcast);
       case 'session.focus':
         return; // handled by the overlay plan via wt.exe; the daemon only acknowledges
     }
