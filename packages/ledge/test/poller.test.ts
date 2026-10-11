@@ -207,4 +207,13 @@ describe('poller rest detection', () => {
     expect(store.get('a')!.pending?.text).toBe('Trust this folder? /home/dev/demo');
     p.stop();
   });
+  it('refreshes repository fields on first sight and on the dead check, hook-only sessions included', async () => {
+    store.upsert(mk('a')); store.upsert(mk('h', { tmuxSession: null, source: 'hook_only', cwd: '/h' }));
+    const calls: string[] = [];
+    const p = startPoller({ store, tmux: fakeTmux({ 'ledge-a': 'x' }), intervalMs: 1_000_000, deadCheckMs: 1_000_000, now, gitInfo: async cwd => { calls.push(cwd); return { repo: 'r', repoPath: cwd, branch: 'main', worktree: false }; } });
+    await p.tick();
+    expect(calls.sort()).toEqual(['/h', mk('a').cwd].sort()); expect(store.get('h')?.branch).toBe('main');
+    await p.tick(); expect(calls).toHaveLength(2); // no dead check yet: no refresh
+    p.stop();
+  });
 });

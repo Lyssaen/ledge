@@ -4,6 +4,7 @@ import type { Store } from './store.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor as defaultAdapterFor, buildPreview, PREVIEW_CAPTURE_LINES } from '../adapters/index.js';
 import { log } from '../log.js';
+import { gitInfo as defaultGitInfo } from './git.js';
 
 export { PREVIEW_LINES } from '../adapters/index.js';
 /** Prompt detection reads more than the preview: a dialog with a long diff or many options is taller than 30 lines. */
@@ -15,9 +16,11 @@ export function startPoller(opts: {
   store: Store; tmux: Tmux; adapterFor?: typeof defaultAdapterFor;
   intervalMs?: number; deadCheckMs?: number; retireMs?: number; now?: () => string;
   broadcastPreview?: (id: string, lines: string[]) => void;
+  gitInfo?: typeof defaultGitInfo;
 }) {
   const { store, tmux } = opts;
   const adapterFor = opts.adapterFor ?? defaultAdapterFor;
+  const git = opts.gitInfo ?? defaultGitInfo;
   const now = opts.now ?? (() => new Date().toISOString());
   const deadCheckMs = opts.deadCheckMs ?? 5000;
   const retireMs = opts.retireMs ?? 10 * 60 * 1000;
@@ -29,7 +32,9 @@ export function startPoller(opts: {
   const titles = new Map<string, string>();
   /** Since when each pane has been at rest (the agent waiting for a prompt), as read on its last change. */
   const restSince = new Map<string, number>();
-  const forget = (id: string) => { hashes.delete(id); matches.delete(id); previews.delete(id); restSince.delete(id); titles.delete(id); };
+  /** Sessions whose repository has been read once; later refreshes ride the dead check. */
+  const gitSeen = new Set<string>();
+  const forget = (id: string) => { hashes.delete(id); matches.delete(id); previews.delete(id); restSince.delete(id); titles.delete(id); gitSeen.delete(id); };
   let lastDeadCheck = 0;
   let running = false;
 
@@ -53,6 +58,8 @@ export function startPoller(opts: {
       if (s.exitedAt && t - Date.parse(s.exitedAt) > retireMs) store.remove(s.id);
       return;
     }
+    // The repository can change under the agent (checkout, new worktree): first sight, then every dead check.
+    if ((deadCheck || !gitSeen.has(s.id)) && s.cwd) { gitSeen.add(s.id); const g = await git(s.cwd); if (g) store.patch(s.id, g); }
     if (!s.tmuxSession) return;
     if (deadCheck && !(await tmux.hasSession(s.tmuxSession))) {
       store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' });
