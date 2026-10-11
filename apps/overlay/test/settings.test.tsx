@@ -68,6 +68,33 @@ describe('<SettingsView> tabs', () => {
     view({ defaultTool: 'cursor' });
     expect(screen.getByRole('radio', { name: 'Cursor Agent' })).toBeChecked();
   });
+  it('offers a colour picker on Display and reports a choice', () => {
+    const onAccent = vi.fn();
+    view({ onAccent });
+    const picker = screen.getByLabelText('Ledge color');
+    expect(picker).toHaveAttribute('type', 'color');
+    fireEvent.change(picker, { target: { value: '#3366ff' } });
+    expect(onAccent).toHaveBeenCalledWith('#3366ff');
+  });
+  it('shows the stored colour and Coral restores the factory look', () => {
+    const onAccent = vi.fn();
+    view({ accent: '#3366ff', onAccent });
+    expect(screen.getByLabelText('Ledge color')).toHaveValue('#3366ff');
+    fireEvent.click(screen.getByRole('button', { name: 'Coral' }));
+    expect(onAccent).toHaveBeenCalledWith(null);
+  });
+  it('the hex field reports a valid colour and ignores garbage', () => {
+    const onAccent = vi.fn();
+    view({ onAccent });
+    const hex = screen.getByLabelText('Hex');
+    fireEvent.change(hex, { target: { value: '#AABBCC' } });
+    fireEvent.blur(hex);
+    expect(onAccent).toHaveBeenCalledWith('#aabbcc');
+    onAccent.mockClear();
+    fireEvent.change(hex, { target: { value: 'nope' } });
+    fireEvent.blur(hex);
+    expect(onAccent).not.toHaveBeenCalled();
+  });
 });
 
 describe('<SettingsView> notifications and sounds', () => {

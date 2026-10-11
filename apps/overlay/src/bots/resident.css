@@ -1,8 +1,9 @@
-.resident{display:block;overflow:visible;--resident-shell:#566365;--resident-foot:#313b3e;--resident-visor:#182224;--resident-eye:#ffc3a8;--resident-line:#91a2a272}
-.resident[data-theme="light"]{--resident-shell:#f5eee2;--resident-foot:#c8bda9;--resident-visor:#384340;--resident-eye:#ffceb5;--resident-line:#968875}
-/* A warm silhouette glow marks Ledge's permanent presence; the larger empty-state portrait also carries two rings. */
-.resident{--resident-glow:#ee9c87;--resident-glow-soft:#8bc7b6;filter:drop-shadow(0 0 2px color-mix(in srgb,var(--resident-glow) 68%,transparent)) drop-shadow(0 0 7px color-mix(in srgb,var(--resident-glow) 32%,transparent))}
-.resident[data-theme="light"]{--resident-glow:#bb6047;--resident-glow-soft:#538e79}
+.resident{display:block;overflow:visible;--resident-shell:#566365;--resident-foot:#313b3e;--resident-visor:#182224;--resident-eye:var(--ledge-eye,#ffc3a8);--resident-line:#91a2a272}
+.resident[data-theme="light"]{--resident-shell:#f5eee2;--resident-foot:#c8bda9;--resident-visor:#384340;--resident-eye:var(--ledge-eye,#ffceb5);--resident-line:#968875}
+/* A warm silhouette glow marks Ledge's permanent presence; the larger empty-state portrait also carries two rings.
+   --ledge-glow / --ledge-eye come from the colour setting; the hex fallbacks are the factory coral. */
+.resident{--resident-glow:var(--ledge-glow,#ee9c87);--resident-glow-soft:var(--ledge-glow-soft,#8bc7b6);filter:drop-shadow(0 0 2px color-mix(in srgb,var(--resident-glow) 68%,transparent)) drop-shadow(0 0 7px color-mix(in srgb,var(--resident-glow) 32%,transparent))}
+.resident[data-theme="light"]{--resident-glow:var(--ledge-glow,#bb6047);--resident-glow-soft:var(--ledge-glow-soft,#538e79)}
 .resident[data-large="true"]{filter:drop-shadow(0 0 4px color-mix(in srgb,var(--resident-glow) 65%,transparent)) drop-shadow(0 0 12px color-mix(in srgb,var(--resident-glow-soft) 38%,transparent))}
 .resident[data-dnd="true"],.resident[data-frozen="true"]{filter:none}
 .resident-light{filter:drop-shadow(0 0 3px var(--resident-glow))}
@@ -12,7 +13,7 @@
 .resident-halo-stage::before,.resident-halo-stage::after{content:"";position:absolute;border-radius:50%;pointer-events:none;transition:opacity .2s ease}
 .resident-halo-stage::before{width:72px;height:72px;border:1px solid color-mix(in srgb,var(--resident-glow) 35%,transparent);background:radial-gradient(circle,color-mix(in srgb,var(--resident-glow) 17%,transparent),color-mix(in srgb,var(--resident-glow-soft) 10%,transparent) 45%,transparent 72%);box-shadow:0 0 10px color-mix(in srgb,var(--resident-glow) 17%,transparent)}
 .resident-halo-stage::after{width:56px;height:56px;border:1px solid color-mix(in srgb,var(--resident-glow-soft) 45%,transparent);box-shadow:0 0 9px color-mix(in srgb,var(--resident-glow-soft) 19%,transparent)}
-.resident-halo-stage:has(.resident[data-theme="light"]){--resident-glow:#bb6047;--resident-glow-soft:#538e79}
+.resident-halo-stage:has(.resident[data-theme="light"]){--resident-glow:var(--ledge-glow,#bb6047);--resident-glow-soft:var(--ledge-glow-soft,#538e79)}
 .resident-halo-stage[data-dnd="true"]::before,.resident-halo-stage[data-frozen="true"]::before{opacity:.22}
 .resident-halo-stage[data-dnd="true"]::after,.resident-halo-stage[data-frozen="true"]::after{opacity:.35;box-shadow:none}
 .resident-body{transform-origin:48px 75px;animation:resident-breathe 5.5s ease-in-out infinite}

@@ -302,7 +302,7 @@ When `~/.cursor` exists, it appends one `ledge hook cursor <event>` hook (5 s ti
 
 The journal also keeps `recents`, the folders of the last twelve sessions, for the overlay's launch form.
 
-Windows side, the overlay keeps its preferences in the WebView's `localStorage`: `ledge.lang`, `ledge.theme`, `ledge.dnd`, `ledge.monitor`, `ledge.reducedMotion`, `ledge.handleScale`, `ledge.panelScale`, `ledge.coachmarks`, `ledge.defaultTool` (the harness for new sessions and the Ledge chat), `ledge.finished` (bubble / sound when a bot finishes) and `ledge.sounds`.
+Windows side, the overlay keeps its preferences in the WebView's `localStorage`: `ledge.lang`, `ledge.theme`, `ledge.accent` (the brand colour, `#rrggbb`; absent is the factory coral), `ledge.dnd`, `ledge.monitor`, `ledge.reducedMotion`, `ledge.handleScale`, `ledge.panelScale`, `ledge.coachmarks`, `ledge.defaultTool` (the harness for new sessions and the Ledge chat), `ledge.finished` (bubble / sound when a bot finishes) and `ledge.sounds`.
 
 ## Security and failure model
 

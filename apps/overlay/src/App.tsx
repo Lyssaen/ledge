@@ -8,6 +8,7 @@ import { autoScale, loadScale, migrateLegacyScale, resolveScale, saveScale, type
 import { loadMonitor, saveMonitor, type MonitorInfo } from './monitor';
 import { LangProvider, loadLang, messagesFor, saveLang, type Lang } from './i18n/lang';
 import { createWebAudioPlayer } from './sounds/player';
+import { applyAccent, loadAccent, saveAccent } from './accent';
 
 export function App() {
   // An isolated browser demo can point at a fake daemon without disturbing the live WSL daemon.
@@ -26,6 +27,7 @@ export function App() {
   const [lang, setLang] = useState<Lang>(loadLang);
   const [dnd, setDnd] = useState(() => { try { return localStorage.getItem('ledge.dnd') === '1'; } catch { return false; } });
   const [theme, setTheme] = useState<'dark' | 'light'>(() => { try { return (localStorage.getItem('ledge.theme') as 'dark' | 'light') || 'dark'; } catch { return 'dark'; } });
+  const [accent, setAccent] = useState<string | null>(loadAccent);
   const [player] = useState(() => createWebAudioPlayer());
   const tauri = isTauri();
   const handleScale = resolveScale(scales.handle, workH, 'handle');
@@ -44,6 +46,7 @@ export function App() {
   useEffect(() => { saveScale('handle', scales.handle); saveScale('panel', scales.panel); }, [scales]);
   useEffect(() => { saveLang(lang); document.documentElement.lang = lang; void setTrayLabels(messagesFor(lang).tray); }, [lang]);
   useEffect(() => { document.documentElement.dataset.theme = theme; try { localStorage.setItem('ledge.theme', theme); } catch { /* ignore */ } }, [theme]);
+  useEffect(() => { saveAccent(accent); applyAccent(accent, theme); }, [accent, theme]);
   useEffect(() => { try { localStorage.setItem('ledge.dnd', dnd ? '1' : '0'); } catch { /* ignore */ } }, [dnd]);
   useEffect(() => { const h = (e: KeyboardEvent) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 't') setTheme(t => (t === 'dark' ? 'light' : 'dark')); }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, []);
   return (
@@ -52,7 +55,8 @@ export function App() {
         onScale={(target, s) => setScales(x => ({ ...x, [target]: s }))} onLang={setLang}
         monitors={monitors} monitor={monitor} onMonitor={setMonitorChoice} onSettingsOpen={onSettingsOpen}
         autostart={autostart} onAutostart={onAutostart}
-        theme={theme} client={client} dnd={dnd} soundPlayer={player} onToggleDnd={() => setDnd(d => !d)} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />
+        theme={theme} client={client} dnd={dnd} soundPlayer={player} onToggleDnd={() => setDnd(d => !d)} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+        accent={accent} onAccent={setAccent} />
     </LangProvider>
   );
 }

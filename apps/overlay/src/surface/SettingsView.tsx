@@ -1,4 +1,5 @@
-import { useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useState, type ReactNode, type Ref } from 'react';
+import { DEFAULT_ACCENT, parseAccent } from '../accent';
 import { transition } from '../motion';
 import { DetailHeader } from './DetailHeader';
 import { UI_SCALES, percent, type ScaleTarget, type UiScale } from '../scale';
@@ -31,6 +32,8 @@ export interface SettingsViewProps {
   autostart?: boolean | null; onAutostart?: (on: boolean) => void;
   /** The default harness (new sessions and the Ledge chat). */
   defaultTool?: Tool; onDefaultTool?: (tool: Tool) => void;
+  /** The brand colour (null: factory coral) and how to change it (live). */
+  accent?: string | null; onAccent?: (hex: string | null) => void;
   /** The body's natural height, measured by the surface to size itself. */
   contentRef?: Ref<HTMLDivElement>;
 }
@@ -74,6 +77,35 @@ export function Segmented<T extends string | number>({ name, label, hint, value,
 
 const Row = ({ children }: { children: ReactNode }) => <div style={{ borderBottom: '1px solid var(--sidebar-border)' }}>{children}</div>;
 
+function AccentRow({ value, onChange }: { value: string | null; onChange?: (hex: string | null) => void }) {
+  const { t } = useI18n();
+  const shown = parseAccent(value) ?? DEFAULT_ACCENT;
+  const [draft, setDraft] = useState(shown);
+  useEffect(() => { setDraft(shown); }, [shown]);
+  const commit = (raw: string) => {
+    const parsed = parseAccent(raw);
+    if (parsed) onChange?.(parsed);
+    else setDraft(shown);
+  };
+  return (
+    <div style={{ padding: '12px 0' }}>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 600 }}>{t.settings.accent}</span>
+        <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.settings.accentHint}</span>
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, minWidth: 0 }}>
+        <input type="color" aria-label={t.settings.accent} value={shown} disabled={!onChange} onChange={e => onChange?.(e.target.value)}
+          style={{ width: 32, height: 28, padding: 0, border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', background: 'transparent', cursor: onChange ? 'pointer' : 'default' }} />
+        <input className="ledge-field mono" aria-label={t.settings.accentHex} value={draft} spellCheck={false} disabled={!onChange}
+          onChange={e => { setDraft(e.target.value); const parsed = parseAccent(e.target.value); if (parsed) onChange?.(parsed); }}
+          onBlur={() => commit(draft)}
+          style={{ width: 88, height: 28, boxSizing: 'border-box', padding: '0 8px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', fontSize: 12 }} />
+        <Button variant="ghost" size="sm" disabled={!onChange} onClick={() => onChange?.(null)}>{t.settings.accentReset}</Button>
+      </div>
+    </div>
+  );
+}
+
 /** The settings sections, one tab each; the last one opened is remembered. */
 export const SETTINGS_TABS = ['display', 'notifications', 'sounds'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
@@ -91,7 +123,7 @@ export function monitorOptions(monitors: MonitorInfo[], choice: string | null, t
   return opts;
 }
 
-/** Preferences inside the same surface; they are the app's own (language, size, theme, do not disturb, motion), not a local copy. */
+/** Preferences inside the same surface; they are the app's own (language, size, theme, colour, do not disturb, motion), not a local copy. */
 export function SettingsView(p: SettingsViewProps) {
   const enterDelay = p.enterDelay ?? 120;
   const { t, lang } = useI18n();
@@ -134,6 +166,7 @@ export function SettingsView(p: SettingsViewProps) {
                   <span className="mono" style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Ctrl Alt T</span>
                 </button>
               </Row>
+              <Row><AccentRow value={p.accent ?? null} onChange={p.onAccent} /></Row>
               <Switch label={t.settings.reduced} hint={t.settings.reducedHint} checked={p.reduced} onChange={p.onReduced} />
               {p.osReduced && !p.reduced && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', padding: '0 0 8px' }}>{t.settings.osReduced}</span>}
             </>}
