@@ -8,7 +8,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # 2.6 is the first release with `Monitor::work_area`.
-tauri = { version = "2.6", features = [] }
+# `tray-icon`: the notification-area icon (version, quit).
+tauri = { version = "2.6", features = ["tray-icon"] }
 tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

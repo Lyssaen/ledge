@@ -34,8 +34,9 @@ The installer needs no administrator rights: `installMode` is `currentUser` in `
 The Rust side has not been compiled yet. On the first build:
 
 1. `pnpm install`.
-2. `cd apps\overlay\src-tauri; cargo test`: all tests must pass (`matches_bot_title_or_terminal`, `frame_is_placed_on_the_work_area_in_physical_px`, `edge_needs_the_left_edge_and_a_band`, `a_rearm_never_enters_but_a_real_reentry_does`). Fix compile errors first and commit the generated `Cargo.lock`.
+2. `cd apps\overlay\src-tauri; cargo test`: all tests must pass (`the_tray_tells_a_dev_build_from_an_installed_one`, `matches_bot_title_or_terminal`, `frame_is_placed_on_the_work_area_in_physical_px`, `edge_needs_the_left_edge_and_a_band`, `a_rearm_never_enters_but_a_real_reentry_does`). Fix compile errors first and commit the generated `Cargo.lock`.
 3. `pnpm tauri dev` with the daemon running in WSL, then check:
+   - the Ledge icon is in the notification area (tray): its tooltip and the first, greyed line of its menu read `Ledge 0.1.0 (dev)` under `tauri dev` and `Ledge 0.1.0` once installed; `Quitter Ledge` (`Quit Ledge` in English, it follows Settings > Language live) closes the overlay;
    - borderless, transparent, no shadow, not in the taskbar, always on top; handle vertically centered on the left edge of the primary work area, nothing drawn twice or offset; also at 125% and 150% scaling and with the taskbar on the left;
    - hovering a bot shows the full tooltip, even for a long pending text;
    - cursor against the left edge above or below the handle opens the list after about 180 ms; leaving earlier does nothing; the edge does nothing while the list or a session is open, or the daemon is down;
@@ -70,6 +71,10 @@ The Rust side has not been compiled yet. On the first build:
 | Ctrl+Alt+T | toggle dark / light theme |
 
 Language, screen, theme, do not disturb, reduced motion and the two sizes are also in the list's Settings view, and are remembered in `localStorage` (`ledge.lang`, `ledge.monitor`, `ledge.theme`, `ledge.dnd`, `ledge.reducedMotion`, `ledge.handleScale`, `ledge.panelScale`).
+
+## Tray
+
+The overlay has no taskbar button, so the Windows notification area carries a Ledge icon (the app icon) to show that it runs. Its tooltip and the greyed first line of its menu give the version from `tauri.conf.json`, with `(dev)` on a debug build, so an installed Ledge and a `tauri dev` one running side by side can be told apart. The menu's `Quitter Ledge` / `Quit Ledge` exits the overlay (the daemon in WSL keeps running). The shell starts with the French label; the webview relabels it in its language (`set_tray_labels`) at start and on every language change.
 
 ## Screen
 

@@ -10,6 +10,7 @@
  *   focus_terminal { title }           bring the matching terminal window forward (true when found)
  *   open_terminal { title, command }   open a Windows Terminal tab running `command` in WSL (true once spawned)
  *   open_url { url }                   open a web URL in the default browser (the webview never navigates)
+ *   set_tray_labels { quit }           the tray menu's Quit item, in the overlay's language
  *   event `ledge://edge` { inside }    cursor entered / left the edge bands
  * Coordinates sent to the shell are logical px from the top of the chosen monitor's work area ("monitor px").
  * The page is never zoomed (each layer applies its own UI scale), so its CSS px are monitor px; `setFrame` and
@@ -124,6 +125,12 @@ export function openUrl(url: string): void {
   if (!/^https?:\/\//i.test(url)) return;
   if (inTauri()) { void invoke('open_url', { url }).catch(() => {}); return; }
   window.open(url, '_blank', 'noopener');
+}
+
+/** Relabels the tray menu in the overlay's language (the shell starts in French). */
+export async function setTrayLabels(quit: string): Promise<void> {
+  if (!inTauri()) return;
+  await invoke('set_tray_labels', { quit }).catch(() => {});
 }
 
 /** Whether Windows Terminal is the foreground window (the "only when the terminal is behind" sound rule). False outside Tauri. */

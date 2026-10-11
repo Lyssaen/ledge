@@ -178,6 +178,17 @@ describe('bridge', () => {
     await expect(b.listMonitors()).resolves.toEqual([]);
     await expect(b.setMonitor('x')).resolves.toBeUndefined();
   });
+
+  it('setTrayLabels sends the Quit label to the shell; in the browser and on a failure it is a no-op', async () => {
+    const browser = await loadBridge();
+    await browser.setTrayLabels('Quit Ledge');
+    expect(native.invoke).not.toHaveBeenCalled();
+    enterTauri(); const b = await loadBridge();
+    await b.setTrayLabels('Quitter Ledge');
+    expect(calls('set_tray_labels')).toEqual([{ quit: 'Quitter Ledge' }]);
+    native.invoke.mockImplementation(async () => { throw new Error('no shell'); });
+    await expect(b.setTrayLabels('Quit Ledge')).resolves.toBeUndefined();
+  });
 });
 
 describe('<Surface> under Tauri', () => {
