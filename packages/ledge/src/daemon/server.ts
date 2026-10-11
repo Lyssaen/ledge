@@ -13,6 +13,8 @@ import { spawnSession } from '../spawn.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
 import { loginShellPath } from '../shell-path.js';
 import { log } from '../log.js';
+import { createChat, type Chat } from '../chat/service.js';
+import { paths } from '../paths.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -61,12 +63,13 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentPath?: () => Promise<string> }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentPath?: () => Promise<string>; chat?: Chat; claudeBin?: string[] }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
   // Under systemd the daemon has the bare system PATH: a launched agent gets the login shell's, as a terminal would.
   const agentPath = opts.agentPath ?? (() => loginShellPath({ fallback: process.env.PATH ?? '' }));
+  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, env: async () => ({ ...process.env, PATH: await agentPath() }), bin: opts.claudeBin, now });
   const wss = new WebSocketServer({
     host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT,
     verifyClient: ({ req }: { req: IncomingMessage }) => {
@@ -96,6 +99,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const sendSnapshot = (ws: WebSocket) => {
     send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher });
     for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
+    send(ws, { type: 'chat.history', turns: chat.history() });
   };
   const preview = (id: string, lines: string[]) => {
     if (!store.get(id)) return;
@@ -277,6 +281,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.remove(msg.id);
         return;
       }
+      case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast);
+      case 'chat.cancel': return chat.cancel(msg.qid);
       case 'session.focus':
         return; // handled by the overlay plan via wt.exe; the daemon only acknowledges
     }

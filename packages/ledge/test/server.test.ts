@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
@@ -38,7 +39,7 @@ beforeEach(async () => {
   process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
   store = new Store();
   tmux = fakeTmux({ 'ledge-a': [PROMPT, PROMPT, 'Running…'] });
-  srv = await startServer({ store, tmux, port: 0, agentPath: async () => '/login/bin:/usr/bin' });
+  srv = await startServer({ store, tmux, port: 0, agentPath: async () => '/login/bin:/usr/bin', claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
 });
 afterEach(async () => { await srv.close(); });
 
@@ -429,24 +430,24 @@ describe('server', () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim' }));
       srv.preview('a', ['old']); srv.preview('a', ['● latest']);
       const r = await recorder(); await r.until(2);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'session.preview']);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'session.preview', 'chat.history']);
       expect(r.got[1]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
       r.ws.terminate();
     });
     it('a snapshot.request gets the previews again after the snapshot', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']);
       const r = await recorder(); await r.until(2);
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(4);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'session.preview', 'snapshot', 'session.preview']);
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(6);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'session.preview', 'chat.history', 'snapshot', 'session.preview', 'chat.history']);
       r.ws.terminate();
     });
     it('a removed session drops its preview; a preview for an unknown session is ignored', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']); srv.preview('ghost', ['boo']);
       store.remove('a');
       const r = await recorder(); await r.until(1); await new Promise(res => setTimeout(res, 50));
-      expect(r.got.map(m => m.type)).toEqual(['snapshot']);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'chat.history']);
       store.upsert(mk('a'));
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(3); await new Promise(res => setTimeout(res, 50));
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(5); await new Promise(res => setTimeout(res, 50));
       expect(r.got.filter(m => m.type === 'session.preview')).toEqual([]);
       r.ws.terminate();
     });
@@ -668,5 +669,29 @@ describe('server', () => {
     c.send({ type: 'snapshot.request' });
     await c.next('snapshot');
     c.close();
+  });
+});
+
+describe('chat', () => {
+  it('answers a question with steps, deltas and a result, then serves it in the history', async () => {
+    store.upsert(mk('a', { topic: 'Hooks' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    expect((await c.next('chat.history')).turns).toEqual([]);
+    c.send({ type: 'chat.ask', qid: 'q1', text: 'Où en sont les autres ?' });
+    const step = await c.next('chat.step'); expect(step.step).toEqual({ kind: 'sessions' });
+    expect((await c.next('chat.step')).step).toEqual({ kind: 'pane', id: 'a', name: 'Otto' });
+    expect((await c.next('chat.delta')).text).toBe('Deux ');
+    const done = await c.next('chat.done', 5000); expect(done.text).toContain('Question : Où en sont les autres ?');
+    await c.close();
+    const c2 = await connect({ port: srv.port }); await c2.next('snapshot');
+    const h = await c2.next('chat.history'); expect(h.turns).toHaveLength(1); expect(h.turns[0]).toMatchObject({ qid: 'q1', answer: done.text, steps: [{ kind: 'sessions' }, { kind: 'pane', id: 'a', name: 'Otto' }] });
+    await c2.close();
+  });
+  it('refuses a second question while one runs, and retries once with a fresh day session', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'chat.ask', qid: 'q1', text: 'a' }); c.send({ type: 'chat.ask', qid: 'q2', text: 'b' });
+    const err = await c.next('chat.error'); expect(err.qid).toBe('q2');
+    await c.next('chat.done', 5000);
+    await c.close();
   });
 });
