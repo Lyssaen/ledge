@@ -145,13 +145,13 @@ export function SessionView(p: SessionViewProps) {
   return (
     <div data-layer="session" data-delay={enterDelay} inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay : 0]]) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: SESSION_HEADER_H, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px 0 6px', borderBottom: rule }}>
-        <Button variant="ghost" size="icon" aria-label={t.detail.back} title={t.detail.back} data-initial-focus onClick={p.onBack} style={{ width: 30, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.chevronLeft} /></Button>
+        <Button variant="ghost" size="icon" aria-label={t.detail.back} title={t.detail.back} data-initial-focus onClick={p.onBack} style={{ width: 30, flexShrink: 0, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.chevronLeft} /></Button>
         <Bot seed={s.id} readOnly={readOnly} tool={s.tool} state={st} pose={poseFor(s.id, s.state)} size={32} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} askKey={pending?.text} />
         <TopicLine session={s} t={t} now={p.now} onRename={p.onRename} />
-        <Button variant="ghost" size="icon" aria-label={t.session.reading} title={t.session.reading} aria-pressed={p.reading} onClick={p.onToggleReading} style={{ width: 32, height: 32, color: p.reading ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)' }}><Icon {...ICONS.expand} /></Button>
-        <Button variant="ghost" size="icon" aria-label={t.session.focusTerminal} title={t.session.focusTerminal} onClick={p.onFocus} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.external} /></Button>
-        {p.onDismiss && canDismiss(s) && <Button variant="ghost" size="icon" data-dismiss aria-label={t.list.dismiss} title={t.list.dismiss} disabled={!!p.dismissOff} onClick={p.onDismiss} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.listRemove} /></Button>}
-        <Button variant="ghost" size="icon" aria-label={t.session.close} title={t.session.close} onClick={p.onClose} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.close} /></Button>
+        <Button variant="ghost" size="icon" aria-label={t.session.reading} title={t.session.reading} aria-pressed={p.reading} onClick={p.onToggleReading} style={{ width: 32, height: 32, flexShrink: 0, color: p.reading ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)' }}><Icon {...ICONS.expand} /></Button>
+        <Button variant="ghost" size="icon" aria-label={t.session.focusTerminal} title={t.session.focusTerminal} onClick={p.onFocus} style={{ width: 32, height: 32, flexShrink: 0, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.external} /></Button>
+        {p.onDismiss && canDismiss(s) && <Button variant="ghost" size="icon" data-dismiss aria-label={t.list.dismiss} title={t.list.dismiss} disabled={!!p.dismissOff} onClick={p.onDismiss} style={{ width: 32, height: 32, flexShrink: 0, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.listRemove} /></Button>}
+        <Button variant="ghost" size="icon" aria-label={t.session.close} title={t.session.close} onClick={p.onClose} style={{ width: 32, height: 32, flexShrink: 0, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.close} /></Button>
       </div>
 
       <div data-scroll className="ledge-scroll" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>

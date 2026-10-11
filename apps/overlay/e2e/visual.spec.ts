@@ -38,6 +38,10 @@ test('overview: brand with its red period, subtitle, header icons, rows with tin
   await expect(rows).toHaveCount(4);
   // Rows are 58 px and the badge sits at the row's right edge, a rounded rectangle without a dot.
   const r0 = await box(rows.nth(0)); expect(r0.height).toBe(58);
+  // Ask Ledge sits under the brand and above the sessions, matching the notch's mascot-then-bots stack.
+  const ask = await box(list.locator('[data-ask-field]'));
+  expect(ask.y).toBeGreaterThan((await box(brand)).y);
+  expect(ask.y + ask.height).toBeLessThan(r0.y);
   const badge = rows.nth(0).locator('[data-badge]');
   const b0 = await box(badge);
   expect(s.x + s.width - (b0.x + b0.width)).toBeLessThan(24);
@@ -58,7 +62,13 @@ test('permission: eyebrow and caps badge, big title, "Exécution dans" card with
   await fakeDaemon(page, overview());
   await ready(page, 4);
   await openSession(page, 'harness-assistant, Otto, ouvrir');
+  await expect.poll(async () => (await box(surface(page))).width).toBe(480);
   const view = layer(page, 'session');
+  for (const name of ['Mode lecture', 'Voir l’onglet du terminal', 'Fermer']) {
+    const b = await box(view.getByRole('button', { name }));
+    expect(b.width).toBeGreaterThanOrEqual(32);
+    expect(b.height).toBeGreaterThanOrEqual(32);
+  }
   const eyebrow = view.locator('[data-eyebrow]'); const title = view.getByRole('heading', { level: 2 });
   await expect(eyebrow).toHaveText('À vous de jouer');
   await expect(eyebrow).toHaveCSS('text-transform', 'uppercase');
@@ -151,6 +161,21 @@ test.describe('light theme', () => {
     expect(bg).toBe('rgb(255, 255, 255)');
     await expect(layer(page, 'list').getByText('Votre accord')).toBeVisible();
   });
+});
+
+test('ask field sits above the sessions, matching the notch', async ({ page }) => {
+  await fakeDaemon(page, overview());
+  await ready(page, 4);
+  await openList(page);
+  const list = layer(page, 'list');
+  const ask = list.locator('[data-ask-field]');
+  await expect(ask.getByRole('textbox', { name: 'Demander à Ledge' })).toBeVisible();
+  const a = await box(ask);
+  const r = await box(list.locator('[data-row]').first());
+  const b = await box(list.locator('[data-brand]'));
+  expect(a.y).toBeGreaterThan(b.y);
+  expect(a.y + a.height).toBeLessThan(r.y);
+  await ask.getByRole('textbox', { name: 'Demander à Ledge' }).fill('Où en sont les autres ?');
 });
 
 test('bubble: a new ask unfolds "Otto attend votre accord" with Refuser and Autoriser', async ({ page }) => {

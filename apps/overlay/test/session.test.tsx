@@ -92,6 +92,12 @@ describe('<SessionView>', () => {
     expect(screen.getByRole('button', { name: 'Focus terminal tab', hidden: true })).toBeInTheDocument();
     expect(container.querySelector('[data-layer="session"]')).toHaveAttribute('inert');
   });
+  it('header actions keep their 32 px hit area beside a long topic', () => {
+    render(<SessionView {...base} session={fakeSession('a', { topic: 'Hooks Codex approvals and the rest of a long title' })} />);
+    for (const name of ['Reading mode', 'Focus terminal tab', 'Close']) {
+      expect(screen.getByRole('button', { name })).toHaveStyle({ width: '32px', flexShrink: 0 });
+    }
+  });
   it('measures a sensible height', () => {
     // A fallback before the content is measured: an ask adds its card, reading mode a longer preview.
     const idle = { ...perm, state: 'working' as const, pending: undefined };

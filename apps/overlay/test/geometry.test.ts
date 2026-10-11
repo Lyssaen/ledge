@@ -50,7 +50,8 @@ describe('geometry', () => {
     const l = layout({ bots: [], mode: 'handle', screenH: 1080 });
     expect(l).toMatchObject({ w: 28, h: 36 });
   });
-  it('reading mode widens the session', () => {
+  it('reading mode widens the session past its 480 px page', () => {
+    expect(layout({ bots: bots(2), mode: 'session', screenH: 1080, sessionH: 500 }).w).toBe(480);
     expect(layout({ bots: bots(2), mode: 'session', screenH: 1080, sessionH: 500, reading: true }).w).toBe(SIZES.readingW);
   });
   it('an expanded focused row adds its extra height to the list, still clamped', () => {
