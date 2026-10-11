@@ -1,7 +1,5 @@
 import type { IncomingMessage } from 'node:http';
-import { stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { basename, isAbsolute, resolve } from 'node:path';
+import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
@@ -12,6 +10,7 @@ import { reduce } from './state.js';
 import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
 import { spawnSession } from '../spawn.js';
+import { createFolder, listFolder, resolveFolder } from './folders.js';
 import { loginShellPath } from '../shell-path.js';
 import { log } from '../log.js';
 
@@ -24,17 +23,7 @@ export function launchArgs(msg: { tool: Tool; prompt?: string; continue?: boolea
   return [...(msg.continue ? CONTINUE_ARGS[msg.tool] : []), ...(prompt ? [prompt] : [])];
 }
 
-/** A folder the overlay typed or picked: `~` expanded, absolute, and an existing directory. Throws the reason otherwise. */
-export async function resolveFolder(input: string, home = homedir()): Promise<string> {
-  const raw = input.trim();
-  const expanded = raw === '~' ? home : raw.startsWith('~/') ? resolve(home, raw.slice(2)) : raw;
-  if (!isAbsolute(expanded)) throw new Error(`not an absolute path: ${raw}`);
-  const path = resolve(expanded);
-  let s;
-  try { s = await stat(path); } catch { throw new Error(`no such folder: ${path}`); }
-  if (!s.isDirectory()) throw new Error(`not a folder: ${path}`);
-  return path;
-}
+export { resolveFolder };
 
 /**
  * Origins allowed to open a WebSocket: the Tauri overlay (packaged and dev server). A browser always
@@ -214,6 +203,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.touchRecent(session.cwd, session.project, session.startedAt);
         log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
         return send(ws, { type: 'session.launched', id: session.id });
+      }
+      case 'folder.list': return send(ws, await listFolder(msg.path, opts.home));
+      case 'folder.create': {
+        const listing = await createFolder(msg.parent, msg.name, opts.home);
+        if (!listing.error) log(`created folder ${listing.path}`);
+        return send(ws, listing);
       }
       case 'session.event': {
         const before = store.get(msg.id);

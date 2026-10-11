@@ -70,7 +70,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
-  const { sessions, byId, status, previews, lastError, recents, launcher, lastLaunched } = useDaemon();
+  const { sessions, byId, status, previews, lastError, recents, launcher, lastLaunched, lastListing } = useDaemon();
   const { t } = useI18n();
   // One app-level motion preference drives every bot in every layer.
   const motionPrefs = useMotionPreferences();
@@ -387,6 +387,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
           </div>
           <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <LaunchView key={launchOpen} contentRef={launchRef} visible={st.mode === 'launch'} enterDelay={enter} recents={recents} sessions={sessions} offline={unreachable ? t.offline : null} busy={!!launching} failure={launchFailure}
+              listing={lastListing} onFolders={m => send(m)}
               onLaunch={launch} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
           </div>
           <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>

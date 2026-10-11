@@ -45,10 +45,11 @@ It scales to a busy day: twelve sessions scroll inside the panel, with the count
 
 ## Starting a session from Ledge
 
-The `+` in the header (or the button of an empty list) opens "Nouvelle session": the folder (typed, or one of the recent ones, with who already works there), the tool, the companion's name (a die picks another), an optional first instruction, and two options: resume the folder's last conversation, open the terminal tab. Entrée starts it. The session appears in the list at once with the Démarrage badge, a line says so for a few seconds, and the terminal tab is one click away when it was not opened straight away.
+The `+` in the header (or the button of an empty list) opens "Nouvelle session": the folder (typed, or one of the recent ones, with who already works there), the tool, the companion's name (a die picks another), an optional first instruction, and two options: resume the folder's last conversation, open the terminal tab. The folder button next to the field browses the WSL folders: a breadcrumb back up, the subfolders one level at a time, "Nouveau dossier" to make one in place (a new project), "Choisir ce dossier" to fill the field; what was typed in the rest of the form stays. Entrée starts it. The session appears in the list at once with the Démarrage badge, a line says so for a few seconds, and the terminal tab is one click away when it was not opened straight away.
 
 <p>
   <img src="screens/launch-dark.png" alt="New session: folder with recents, tool, companion, first instruction, options" width="408">
+  <img src="screens/launch-browse-dark.png" alt="Choosing a folder: breadcrumb, subfolders, a new folder being named" width="408">
   <img src="screens/launch-empty-dark.png" alt="The empty list: nobody at work, a button to start a companion" width="408">
 </p>
 

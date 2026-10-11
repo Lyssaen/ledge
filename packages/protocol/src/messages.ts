@@ -32,6 +32,10 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** Answer to the requester of a `session.launch`: the session exists (its `session.updated` is broadcast as usual). */
   z.object({ type: z.literal('session.launched'), id: z.string() }),
   z.object({ type: z.literal('recents'), recents: z.array(RecentSchema) }),
+  /** Answer to the requester of a `folder.list` or `folder.create`: `path` resolved (`~` expanded), `parent` null at the
+   *  root, `entries` its subfolders by name (hidden ones left out). A failure keeps the asked path and says why in `error`,
+   *  never in an `error` message, which the launch form reads as a failed launch. */
+  z.object({ type: z.literal('folder.listing'), path: z.string(), parent: z.string().nullable(), entries: z.array(z.string()), error: z.string().optional() }),
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional() })
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
@@ -40,6 +44,10 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** The overlay starts a session: `cwd` is a WSL path (`~` allowed), `name` a preferred bot name (the daemon picks a
    *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation. */
   z.object({ type: z.literal('session.launch'), tool: ToolSchema, cwd: z.string().min(1), name: z.string().optional(), prompt: z.string().optional(), continue: z.boolean().optional() }),
+  /** The launch form's folder browser: list a folder's subfolders (home when no `path`), or make `name` inside `parent`
+   *  and list it. Both are answered with a `folder.listing`. */
+  z.object({ type: z.literal('folder.list'), path: z.string().optional() }),
+  z.object({ type: z.literal('folder.create'), parent: z.string().min(1), name: z.string().min(1) }),
   z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1) }),
   z.object({ type: z.literal('session.decide'), id: z.string(), decision: z.enum(['accept', 'deny']) }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),

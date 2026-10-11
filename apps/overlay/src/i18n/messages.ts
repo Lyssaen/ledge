@@ -52,7 +52,14 @@ const fr = {
     openTab: 'Ouvrir l’onglet du terminal', openTabHint: 'Sinon le compagnon tourne en arrière-plan, l’onglet reste à un clic depuis sa fiche.',
     cancel: 'Annuler', start: 'Démarrer', starting: 'Démarrage…',
     failed: (why: string) => `Impossible de démarrer : ${why}`,
-    needFolder: 'Indiquez un dossier pour démarrer.'
+    needFolder: 'Indiquez un dossier pour démarrer.',
+    browse: 'Parcourir les dossiers'
+  },
+  browse: {
+    title: 'Choisir un dossier', back: 'Retour au formulaire', path: 'Chemin du dossier', up: 'Dossier parent', open: (name: string) => `Ouvrir ${name}`,
+    empty: 'Aucun sous-dossier.', loading: 'Chargement…',
+    newFolder: 'Nouveau dossier', newFolderName: 'Nom du nouveau dossier', create: 'Créer', choose: 'Choisir ce dossier',
+    failed: (why: string) => `Impossible : ${why}`
   },
   detail: { back: 'Retour aux sessions', close: 'Fermer' },
   session: {
@@ -193,7 +200,14 @@ const en: Messages = {
     openTab: 'Open the terminal tab', openTabHint: 'Otherwise the companion runs in the background; the tab is one click away from its card.',
     cancel: 'Cancel', start: 'Start', starting: 'Starting…',
     failed: (why: string) => `Could not start: ${why}`,
-    needFolder: 'Give a folder to start in.'
+    needFolder: 'Give a folder to start in.',
+    browse: 'Browse folders'
+  },
+  browse: {
+    title: 'Choose a folder', back: 'Back to the form', path: 'Folder path', up: 'Parent folder', open: (name: string) => `Open ${name}`,
+    empty: 'No subfolders.', loading: 'Loading…',
+    newFolder: 'New folder', newFolderName: 'New folder name', create: 'Create', choose: 'Choose this folder',
+    failed: (why: string) => `Could not: ${why}`
   },
   detail: { back: 'Back to sessions', close: 'Close' },
   session: {
