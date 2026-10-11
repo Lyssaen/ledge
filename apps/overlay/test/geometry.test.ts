@@ -91,4 +91,10 @@ describe('geometry', () => {
     expect(l.slots[0]!.center).toBe(l.handle.top + 8 + SIZES.residentH + gap + SIZES.separatorH + gap + small / 2);
     expect(l.handle.h).toBe(16 + SIZES.residentH + gap + SIZES.separatorH + gap + small);
   });
+
+  it('sizes the chat like a session, by its measured height', () => {
+    const l = layout({ bots: [], mode: 'chat', screenH: 1000, detailH: 500 });
+    expect(l.w).toBe(SIZES.sessionW); expect(l.h).toBe(500);
+    expect(layout({ bots: [], mode: 'chat', screenH: 1000 }).h).toBe(SIZES.chatH);
+  });
 });

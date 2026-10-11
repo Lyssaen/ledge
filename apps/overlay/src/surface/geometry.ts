@@ -1,9 +1,9 @@
-export const SIZES = { handleW: 28, residentH: 20, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 72, footerH: 44, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420, launchH: 600, emptyH: 200, groupH: 28, separatorH: 1 } as const;
+export const SIZES = { handleW: 28, residentH: 20, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 420, readingW: 560, rowH: 58, headerH: 72, footerH: 44, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420, launchH: 600, chatH: 560, emptyH: 200, groupH: 28, separatorH: 1 } as const;
 /** The surface's top + bottom border (border-box): added to a measured content height so nothing is clipped. None:
  *  the notch is borderless so it merges with the screen edge. */
 export const SURFACE_BORDER = 0;
 export const SURFACE_CHROME_Y = 2 * SURFACE_BORDER;
-export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'settings' | 'help' | 'launch';
+export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'settings' | 'help' | 'launch' | 'chat';
 /** The detail views that share the list's width and the DetailHeader: settings, help and the launch form. */
 export const DETAIL_VIEWS: readonly Mode[] = ['settings', 'help', 'launch'];
 const DETAIL_FALLBACK_H: Record<'settings' | 'help' | 'launch', number> = { settings: SIZES.settingsH, help: SIZES.helpH, launch: SIZES.launchH };
@@ -38,6 +38,10 @@ export function layout(input: LayoutInput): Layout {
     const h = Math.min(maxH, input.bubbleH ?? SIZES.bubbleH);
     const top = clamp(Math.round((input.bubbleAnchor ?? slot?.center ?? centerY) - 38), SIZES.margin, screenH - SIZES.margin - h);
     return { top, w: SIZES.bubbleW, h, slots, handle, hotZones };
+  }
+  if (mode === 'chat') {
+    const h = Math.min(maxH, input.detailH ?? SIZES.chatH);
+    return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w: SIZES.sessionW, h, slots, handle, hotZones };
   }
   if (mode === 'settings' || mode === 'help' || mode === 'launch') {
     const h = Math.min(maxH, input.detailH ?? DETAIL_FALLBACK_H[mode]);

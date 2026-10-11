@@ -293,7 +293,7 @@ export function Surface({ screenH, theme, client, dnd, onToggleDnd, onToggleThem
   const hovBot = bots.find(b => b.id === hoverId) ?? null;
   const hovSlot = geo.slots.find(s => s.id === hoverId);
   const panel = st.mode !== 'handle' && st.mode !== 'bubble';
-  const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch';
+  const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch' || st.mode === 'chat';
   const unreachable = status === 'unreachable';
   const bubblePaused = st.hovering || st.focusWithin || st.hidden || st.ack !== null;
   const send = (m: Parameters<DaemonClient['send']>[0]) => client.send(m);

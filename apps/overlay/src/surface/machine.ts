@@ -35,7 +35,7 @@ export type SurfaceEvent =
   | { type: 'focusWithin'; on: boolean } | { type: 'visibility'; hidden: boolean }
   | { type: 'botClick'; id: string } | { type: 'rowClick'; id: string } | { type: 'homeClick' } | { type: 'bubbleClick' } | Elapsed<'bubbleElapsed'>
   | { type: 'decidedInBubble' } | Elapsed<'holdElapsed'> | { type: 'decisionFailed'; id: string }
-  | { type: 'back' } | { type: 'close' } | { type: 'shortcut' } | { type: 'settings' } | { type: 'help' } | { type: 'launch' }
+  | { type: 'back' } | { type: 'close' } | { type: 'shortcut' } | { type: 'settings' } | { type: 'help' } | { type: 'launch' } | { type: 'chat' }
   | { type: 'typing'; on: boolean } | { type: 'reading'; on: boolean } | { type: 'dnd'; on: boolean };
 
 /** Functional durations: independent of the `ms()` animation scaling. */
@@ -59,7 +59,7 @@ const held = (s: SurfaceState) => s.hovering || s.focusWithin || s.hidden;
 const toHandle = (s: SurfaceState): SurfaceState => ({ ...s, mode: 'handle', bubbleId: null, bubbleKind: 'ask', done: [], selectedId: null, openedBy: null, hot: false, reading: false, typing: false, ack: null, failed: null, unfoldDue: false });
 const open = (s: SurfaceState, id: string): Result => ({ state: { ...s, mode: 'session', selectedId: id, bubbleId: null, bubbleKind: 'ask', done: [], hot: false, ack: null, failed: null }, effects: cancelAll });
 /** Panels opened inside the same surface; Escape/back from a detail view returns to the list. */
-const detail = (m: Mode) => m === 'session' || m === 'settings' || m === 'help' || m === 'launch';
+const detail = (m: Mode) => m === 'session' || m === 'settings' || m === 'help' || m === 'launch' || m === 'chat';
 /** Shows the bubble for `id` with a fresh clock, paused straight away if something already holds it. */
 const showBubble = (s: SurfaceState, id: string, extra: Effect[] = [], kind: BubbleKind = 'ask'): Result => ({
   state: { ...s, mode: 'bubble', bubbleId: id, bubbleKind: kind, ack: null, failed: null },
@@ -75,7 +75,7 @@ const holdEffects = (before: SurfaceState, after: SurfaceState): Effect[] => {
   if (after.mode !== 'bubble' || after.ack || held(before) === held(after)) return [];
   return [{ type: held(after) ? 'pauseTimer' : 'resumeTimer', name: 'bubble' }];
 };
-const listMayFold = (s: SurfaceState) => (s.mode === 'list' || s.mode === 'settings' || s.mode === 'help' || s.mode === 'launch') && s.openedBy === 'mouse' && !s.typing && !s.focusWithin && !s.hovering;
+const listMayFold = (s: SurfaceState) => (s.mode === 'list' || s.mode === 'settings' || s.mode === 'help' || s.mode === 'launch' || s.mode === 'chat') && s.openedBy === 'mouse' && !s.typing && !s.focusWithin && !s.hovering;
 /** A daemon confirmation (askCleared or removal) for the acknowledged id. */
 const confirm = (s: SurfaceState, queue: string[]): Result => {
   const ack = { ...s.ack!, confirmed: true };
@@ -182,7 +182,7 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
       return { state: { ...s, ack: null, failed: e.id }, effects: [cancel('hold'), start('bubble'), ...(held(s) ? [{ type: 'pauseTimer', name: 'bubble' } as Effect] : [])] };
     }
     /* Settings, help and the launch form: detail views over the list (never from the handle or a bubble). */
-    case 'settings': case 'help': case 'launch': {
+    case 'settings': case 'help': case 'launch': case 'chat': {
       if (s.mode === 'handle' || s.mode === 'bubble' || s.mode === e.type) return same(s);
       return { state: { ...s, mode: e.type, selectedId: null, reading: false }, effects: [cancel('leave')] };
     }
