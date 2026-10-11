@@ -1,0 +1,13 @@
+#!/usr/bin/env node
+import { stdin, stdout, stderr, env, argv, exit } from 'node:process';
+let q = ''; stdin.setEncoding('utf8'); for await (const c of stdin) q += c;
+const say = o => stdout.write(JSON.stringify(o) + '\n');
+const sid = argv.includes('--session-id') ? argv[argv.indexOf('--session-id') + 1] : argv.includes('--resume') ? argv[argv.indexOf('--resume') + 1] : 'none';
+const mode = env.FAKE_CLAUDE_MODE ?? 'ok';
+if (mode === 'fail') { stderr.write('No conversation found with session ID: ' + sid + '\n'); exit(1); }
+say({ type: 'system', subtype: 'init', session_id: sid, cwd: process.cwd() });
+say({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: process.cwd() + '/sessions.md' } }] } });
+say({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't2', name: 'Read', input: { file_path: process.cwd() + '/pane-a.txt' } }] } });
+if (mode === 'slow') await new Promise(r => setTimeout(r, 5000));
+for (const t of ['Deux ', 'compagnons ', 'travaillent.']) say({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: t } } });
+say({ type: 'result', subtype: 'success', is_error: false, result: 'Deux compagnons travaillent. Question : ' + q.trim(), session_id: sid });
