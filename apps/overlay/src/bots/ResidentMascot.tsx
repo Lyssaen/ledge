@@ -74,7 +74,7 @@ export function ResidentMascot({ size, theme, paused = false, frozen = false, re
   }, [quiet, hovered]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const style = { '--resident-gx': gx ? `${gx.toFixed(2)}px` : '0px', '--resident-gy': gy ? `${gy.toFixed(2)}px` : '0px', '--resident-tilt': tilt ? `${tilt.toFixed(2)}deg` : '0deg' } as CSSProperties;
-  return <svg className="resident" width={size} height={size} viewBox={size <= 24 ? '12 8 72 76' : '0 0 96 96'} role="img" aria-label="Ledge" data-theme={theme} data-near={String(near)} data-frozen={String(frozen)} data-quiet={String(quiet)} data-gesture={gesture ?? undefined} style={style} onMouseEnter={() => { setHovered(true); play('happy'); }} onMouseLeave={() => setHovered(false)}>
+  return <svg className="resident" width={size} height={size} viewBox={size <= 24 ? '12 8 72 76' : '0 0 96 96'} role="img" aria-label="Ledge" data-theme={theme} data-large={String(size > 24)} data-near={String(near)} data-dnd={String(dnd)} data-frozen={String(frozen)} data-quiet={String(quiet)} data-gesture={gesture ?? undefined} style={style} onMouseEnter={() => { setHovered(true); play('happy'); }} onMouseLeave={() => setHovered(false)}>
     <g className="resident-body"><g className="resident-pose">
       <path className="resident-antenna" d="M48 23v-9" /><circle className="resident-light" cx="48" cy="12" r="3" />
       <rect className="resident-foot" x="30" y="74" width="12" height="8" rx="4" /><rect className="resident-foot" x="54" y="74" width="12" height="8" rx="4" />

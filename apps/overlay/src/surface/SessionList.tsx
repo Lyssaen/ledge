@@ -73,7 +73,9 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
         {sessions.length === 0 && (
           // The permanent Ledge resident also greets the empty list.
           <div data-empty style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6, height: SIZES.emptyH, boxSizing: 'border-box', padding: '18px 24px 16px', borderTop: '1px solid var(--sidebar-border)' }}>
-            <ResidentMascot size={44} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} dnd={dnd} />
+            <span className="resident-halo-stage" data-dnd={String(dnd)} data-frozen={String(frozen)}>
+              <ResidentMascot size={44} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} dnd={dnd} />
+            </span>
             <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 600, marginTop: 2 }}>{t.list.emptyTitle}</span>
             <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', maxWidth: 300 }}>{t.list.emptyHint} <code className="mono" style={{ fontSize: 11, padding: '1px 5px', borderRadius: 4, background: 'var(--well)', border: '1px solid var(--border)', color: 'var(--sidebar-foreground)' }}>ledge claude</code> {t.list.emptyHintAfter}</span>
             {onLaunch && <Button variant="primary" size="sm" data-launch-empty onClick={onLaunch} style={{ marginTop: 8 }}><Icon size={14} {...ICONS.plus} />{t.list.newSession}</Button>}
