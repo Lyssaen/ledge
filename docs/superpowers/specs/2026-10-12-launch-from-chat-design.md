@@ -28,7 +28,7 @@ Hors périmètre : relayer une instruction à une session existante (toujours V2
 
 ## 2. Le principe de lecture seule
 
-La spec du chat pose « Tu lis, tu ne touches à rien » et « Tu ne proposes jamais d'agir à la place de l'utilisateur ». Le harnais du chat reste lancé en lecture seule (`claude -p --restricted` avec `Read,Grep,Glob`, `codex exec --sandbox read-only`, `cursor-agent -p --mode ask`) : il n'obtient aucun outil nouveau. Ce qui change est seulement son droit d'**écrire une proposition** dans sa réponse. Le lancement passe par le `session.launch` existant, envoyé par l'overlay au clic. La seconde phrase du persona est remplacée par la règle de la section 4.
+La spec du chat pose « Tu lis, tu ne touches à rien » et « Tu ne proposes jamais d'agir à la place de l'utilisateur ». Le harnais du chat reste lancé en lecture seule (`claude -p --restricted` avec `Read,Grep,Glob`, `codex exec --sandbox read-only`, `cursor-agent -p --mode ask`) : il n'obtient aucun outil nouveau. Le persona autorise les commandes en lecture seule (Codex ne lit que par son shell, sous `--sandbox read-only`) ; la lecture seule est garantie par les drapeaux de chaque harnais, pas par le persona (commit 9f7e447). Ce qui change est seulement son droit d'**écrire une proposition** dans sa réponse. Le lancement passe par le `session.launch` existant, envoyé par l'overlay au clic. La seconde phrase du persona est remplacée par la règle de la section 4.
 
 ## 3. Le bloc de proposition
 
