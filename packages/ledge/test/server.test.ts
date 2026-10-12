@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
-import type { ChatProposal, Session } from '@ledge/protocol';
+import type { ChatProposal, ChatRelay, Session } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
@@ -593,6 +593,52 @@ describe('server', () => {
       c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'gone'), qid: 'q1' });
       const launched = await c.next('session.launched');
       expect(marks.at(-1)).toEqual(['launched', 'q1', launched.id]);
+      c.close(); await srv2.close();
+    });
+  });
+
+  describe('relay from a chat card', () => {
+    function relayChat(relay: ChatRelay) {
+      let r: ChatRelay | undefined = relay;
+      const chat: Chat = {
+        async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+        relay: qid => (qid === 'q1' ? r : undefined),
+        markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
+        queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r }] : [])
+      };
+      return { chat, current: () => r };
+    }
+
+    it('types the turn\'s own text into a free session and tells every client', async () => {
+      tmux = fakeTmux({ 'ledge-a': ['> '] });
+      const { chat, current } = relayChat({ id: 'a', name: 'Otto', tool: 'claude', text: 'Lance les tests' });
+      const srv2 = await startServer({ store, tmux, port: 0, chat });
+      store.upsert(mk('a', { state: 'idle' }));
+      const c = await connect({ port: srv2.port }); await c.next('snapshot'); await c.next('chat.history');
+      const other = await connect({ port: srv2.port }); await other.next('snapshot'); await other.next('chat.history');
+      c.send({ type: 'session.relay', qid: 'q1' });
+      await other.next('chat.history', 3000);
+      expect(tmux.sent).toEqual([['text', 'ledge-a', 'Lance les tests'], ['keys', 'ledge-a', 'Enter']]);
+      expect(current()).toMatchObject({ status: 'sent' });
+      c.close(); other.close(); await srv2.close();
+    });
+
+    it('queues for a busy session, then cancel; refusals reach the requester as errors', async () => {
+      const { chat, current } = relayChat({ id: 'a', name: 'Otto', tool: 'claude', text: 'x' });
+      const srv2 = await startServer({ store, tmux, port: 0, chat });
+      store.upsert(mk('a', { state: 'working' }));
+      const c = await connect({ port: srv2.port }); await c.next('snapshot'); await c.next('chat.history');
+      c.send({ type: 'session.relay', qid: 'q1' }); await c.next('chat.history');
+      expect(current()!.status).toBe('queued');
+      c.send({ type: 'session.relay', qid: 'q1' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'already queued' });
+      c.send({ type: 'session.relay.cancel', qid: 'q1' }); await c.next('chat.history');
+      expect(current()).not.toHaveProperty('status');
+      c.send({ type: 'session.relay.cancel', qid: 'q1' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'nothing queued' });
+      c.send({ type: 'session.relay', qid: 'q9' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown relay' });
+      expect(tmux.sent).toEqual([]);
       c.close(); await srv2.close();
     });
   });
