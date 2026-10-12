@@ -6,7 +6,11 @@ import { log } from '../log.js';
 export interface Relay { request(qid: string): Promise<void>; cancel(qid: string): void; close(): void }
 export interface RelayDeps {
   chat: Pick<Chat, 'relay' | 'markRelay' | 'queuedRelays'>; store: Pick<Store, 'get' | 'onChange'>;
-  /** session.reply's path: null once typed and taken, the refusal otherwise; rejects when the injection fails. */
+  /**
+   * session.reply's path: null once typed and taken, the refusal otherwise; rejects when the injection fails.
+   * The queue relies on this: once it resolves null, the session has already left idle (the server's verified injection applies
+   * Decided -> working), which keeps a second queued card from following in the same free moment.
+   */
   replyTo: (id: string, text: string) => Promise<string | null>;
   broadcast: (m: ChatMessage) => void; now?: () => string;
 }
@@ -35,6 +39,19 @@ export function createRelay(d: RelayDeps): Relay {
     } finally { typing.delete(r.id); sending.delete(qid); }
   }
 
+  /** Delivers the session's oldest queued card when it is free and nothing is being typed into it. */
+  function kick(id: string): void {
+    const q = d.chat.queuedRelays().find(x => x.relay.id === id);
+    if (!q || typing.has(id) || !free(d.store.get(id))) return;
+    void deliverAndKick(q.qid, q.relay).catch(e => log(`relay ${q.qid} failed: ${(e as Error).message}`));
+  }
+  /** After a refused delivery the session is still free: the next queued card must not wait for an unrelated store change. */
+  async function deliverAndKick(qid: string, r: ChatRelay): Promise<string | null> {
+    const refused = await deliver(qid, r);
+    if (refused) kick(r.id);
+    return refused;
+  }
+
   const unsubscribe = d.store.onChange(c => {
     if (c.type === 'recents') return;
     const id = c.type === 'updated' ? c.session.id : c.id;
@@ -42,7 +59,7 @@ export function createRelay(d: RelayDeps): Relay {
     if (queued.length === 0) return;
     const s = c.type === 'updated' ? c.session : undefined;
     if (!s || s.state === 'exited') { for (const q of queued) d.chat.markRelay(q.qid, { error: stopped(q.relay.name) }, d.broadcast); return; }
-    if (free(s) && !typing.has(id)) void deliver(queued[0]!.qid, queued[0]!.relay);
+    if (free(s) && !typing.has(id)) kick(id);
   });
 
   return {
@@ -53,10 +70,14 @@ export function createRelay(d: RelayDeps): Relay {
       if (r.status === 'queued') throw new Error('already queued');
       const s = d.store.get(r.id);
       if (!s || s.state === 'exited') { const m = stopped(r.name); d.chat.markRelay(qid, { error: m }, d.broadcast); throw new Error(m); }
-      if (free(s) && !typing.has(r.id)) { const refused = await deliver(qid, r); if (refused) throw new Error(refused); return; }
+      if (free(s) && !typing.has(r.id)) {
+        if (d.chat.queuedRelays().some(q => q.relay.id === r.id)) { d.chat.markRelay(qid, { status: 'queued' }, d.broadcast); kick(r.id); return; }
+        const refused = await deliverAndKick(qid, r); if (refused) throw new Error(refused); return;
+      }
       d.chat.markRelay(qid, { status: 'queued' }, d.broadcast);
     },
     cancel(qid) {
+      if (sending.has(qid)) throw new Error('already sent');
       if (d.chat.relay(qid)?.status !== 'queued') throw new Error('nothing queued');
       d.chat.markRelay(qid, {}, d.broadcast);
     },

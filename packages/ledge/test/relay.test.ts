@@ -133,4 +133,68 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     await expect(relay.request('q9')).rejects.toThrow('unknown relay');
     relay.close();
   });
+
+  it('cancel refuses a card being typed, which ends sent', async () => {
+    store.upsert(mk('s1'));
+    const c = fakeChat({ q1: otto('a') });
+    let release!: () => void; answer = () => new Promise(r => { release = () => r(null); });
+    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    await relay.request('q1');
+    store.upsert(mk('s1', { state: 'idle' })); await flush();
+    expect(() => relay.cancel('q1')).toThrow('already sent');
+    release(); await flush();
+    expect(c.map.get('q1')!.status).toBe('sent');
+    relay.close();
+  });
+
+  it('a throw while marking the sent card is logged, not unhandled', async () => {
+    store.upsert(mk('s1'));
+    const c = fakeChat({ q1: otto('a') });
+    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    await relay.request('q1');
+    const orig = c.chat.markRelay; c.chat.markRelay = () => { throw new Error('boom'); };
+    const seen: unknown[] = []; const h = (e: unknown) => seen.push(e); process.on('unhandledRejection', h);
+    store.upsert(mk('s1', { state: 'idle' })); await flush(); await flush();
+    process.off('unhandledRejection', h); c.chat.markRelay = orig;
+    expect(seen).toEqual([]);
+    relay.close();
+  });
+
+  it('a request on a free session with older cards queued queues itself and delivers the oldest', async () => {
+    store.upsert(mk('s1'));
+    const c = fakeChat({ q1: otto('first'), q2: otto('second') });
+    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    await relay.request('q1');
+    store.upsert(mk('s1', { state: 'idle' })); await flush(); // q1 typed, session left idle below
+    typed.length = 0; c.map.set('q1', { ...otto('first'), status: 'queued' });
+    await relay.request('q2');
+    expect(typed).toEqual([['s1', 'first']]);
+    expect(c.map.get('q2')!.status).toBe('queued');
+    relay.close();
+  });
+
+  it('a request while another card for the session is being typed is queued, not typed', async () => {
+    store.upsert(mk('s1', { state: 'idle' }));
+    const c = fakeChat({ q1: otto('a'), q2: otto('b') });
+    let release!: () => void; answer = () => new Promise(r => { release = () => r(null); });
+    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const first = relay.request('q1');
+    await relay.request('q2');
+    expect(typed).toEqual([['s1', 'a']]);
+    expect(c.map.get('q2')!.status).toBe('queued');
+    release(); await first; relay.close();
+  });
+
+  it('after a refused delivery, the next queued card goes at once if the session is still free', async () => {
+    store.upsert(mk('s1'));
+    const c = fakeChat({ q1: otto('first'), q2: otto('second') });
+    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    await relay.request('q1'); await relay.request('q2');
+    answer = async (_id, t) => (t === 'first' ? 'refused' : null);
+    store.upsert(mk('s1', { state: 'idle' })); await flush(); await flush();
+    expect(typed).toEqual([['s1', 'first'], ['s1', 'second']]);
+    expect(c.map.get('q1')).toEqual({ ...otto('first'), error: 'refused' });
+    expect(c.map.get('q2')!.status).toBe('sent');
+    relay.close();
+  });
 });
