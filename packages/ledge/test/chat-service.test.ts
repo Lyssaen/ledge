@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
@@ -166,5 +166,58 @@ describe('chat service', () => {
     expect(args[1]).toContain('--session-id');
     expect(args[1]).not.toContain('exec');
     expect(JSON.parse(readFileSync(join(home, 'chat.json'), 'utf8'))).toMatchObject({ tool: 'claude' });
+  });
+
+  const fence = (json: string) => 'Je te propose cette session.\n\n```ledge-session\n' + json + '\n```';
+
+  it('gives Ledge the recent folders in folders.md', async () => {
+    const { chat, store } = setup({ env: async () => ({ ...process.env, FAKE_CLAUDE_MODE: 'folders' }) });
+    store.touchRecent('/w/ledge', 'ledge', '2026-10-11T09:00:00.000Z');
+    await chat.ask('q1', 'x', () => {});
+    expect(chat.history()[0]!.answer).toContain('- ledge: /w/ledge');
+  });
+
+  it('a valid block becomes the turn proposal, joined to chat.done, and leaves the text', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'proj-'));
+    const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fence(`{"cwd": "${dir}/", "prompt": " Corrige le build "}`) }) });
+    const out: ServerMessage[] = [];
+    await chat.ask('q1', 'ouvre une session pour corriger le build', m => out.push(m));
+    const proposal = { cwd: dir, project: basename(dir), tool: 'claude', prompt: 'Corrige le build' };
+    expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je te propose cette session.', at: expect.any(String), proposal });
+    expect(chat.history()[0]).toMatchObject({ answer: 'Je te propose cette session.', proposal });
+    expect(chat.proposal('q1')).toEqual(proposal);
+  });
+
+  it('a ~ path resolves against the user home, a blank prompt means an empty session', async () => {
+    const userHome = mkdtempSync(join(tmpdir(), 'home-')); mkdirSync(join(userHome, 'ledge'));
+    const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: fence('{"cwd": "~/ledge/", "prompt": "   "}') }) });
+    await chat.ask('q1', 'x', () => {});
+    expect(chat.proposal('q1')).toEqual({ cwd: join(userHome, 'ledge'), project: 'ledge', tool: 'claude' });
+  });
+
+  it('no card for a missing folder, a file, or a bad block; the text is shown without the block', async () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'f-')), 'a.txt'); writeFileSync(file, 'x');
+    for (const json of ['{"cwd": "/nope/ledge-missing"}', `{"cwd": "${file}"}`, '{"cwd":', '{"prompt": "x"}']) {
+      const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fence(json) }) });
+      const out: ServerMessage[] = [];
+      await chat.ask('q1', 'x', m => out.push(m));
+      const done = out.find(m => m.type === 'chat.done');
+      expect(done).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je te propose cette session.', at: expect.any(String) });
+      expect(chat.proposal('q1')).toBeUndefined();
+    }
+  });
+
+  it('markLaunched and markFailed update the proposal and tell every client', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'proj-'));
+    const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fence(`{"cwd": "${dir}"}`) }) });
+    await chat.ask('q1', 'x', () => {});
+    const out: ServerMessage[] = [];
+    chat.markFailed('q1', 'no such folder: /w', m => out.push(m));
+    expect(out.at(-1)).toMatchObject({ type: 'chat.history', turns: [{ qid: 'q1', proposal: { cwd: dir, error: 'no such folder: /w' } }] });
+    chat.markLaunched('q1', 'n1', m => out.push(m));
+    expect(chat.proposal('q1')).toEqual({ cwd: dir, project: basename(dir), tool: 'claude', launchedId: 'n1' });
+    expect(out).toHaveLength(2);
+    chat.markLaunched('nope', 'n2', m => out.push(m)); chat.markFailed('nope', 'x', m => out.push(m));
+    expect(out).toHaveLength(2);
   });
 });
