@@ -379,8 +379,22 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     const s = byId.get(id); if (!s) return;
     void focusTerminal(s.title).then(found => { if (!found && launcher && s.tmuxSession) return openTerminal(s.title, [...launcher, 'attach', id]); return found; });
   };
+  // A chat card's relay (spec 2026-10-12 relay §6): the turn's qid while the daemon answers. The card's own state (queued, sent, failed)
+  // comes back with chat.history; a refusal comes back as an id-less error, so a relay and a launch are never in flight together.
+  const [relaying, setRelaying] = useState<string | null>(null);
+  const relayState = (qid: string | null) => { const r = qid ? chat.find(x => x.qid === qid)?.relay : undefined; return r ? `${r.status ?? ''}|${r.sentAt ?? ''}|${r.error ?? ''}` : 'gone'; };
+  const relayFrom = useRef('');
+  const relayCard = (type: 'session.relay' | 'session.relay.cancel', qid: string) => {
+    if (relaying || launching || chatLaunching || status === 'unreachable' || !chat.find(x => x.qid === qid)?.relay) return;
+    relayFrom.current = relayState(qid); setRelaying(qid);
+    send({ type, qid });
+  };
+  const relayingNow = relayState(relaying);
+  useEffect(() => { if (relaying && relayingNow !== relayFrom.current) setRelaying(null); }, [relaying, relayingNow]);
+  useEffect(() => { if (relaying && lastError && !lastError.id) setRelaying(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (status === 'unreachable' && relaying) setRelaying(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   const launch = (req: LaunchRequest) => {
-    if (launching || chatLaunching || status === 'unreachable') return;
+    if (launching || chatLaunching || relaying || status === 'unreachable') return;
     setLaunchFailure(null); setLaunching({ openTab: req.openTab });
     send({ type: 'session.launch', tool: req.tool, cwd: req.cwd, name: req.name, prompt: req.prompt, continue: req.continue });
   };
@@ -402,7 +416,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   const launchProposal = (qid: string) => {
     const p = chat.find(x => x.qid === qid)?.proposal;
-    if (!p || p.launchedId || launching || chatLaunching || status === 'unreachable') return;
+    if (!p || p.launchedId || launching || chatLaunching || relaying || status === 'unreachable') return;
     launchedFrom.current = p; setChatLaunching(qid);
     send({ type: 'session.launch', tool: p.tool, cwd: p.cwd, ...(p.prompt ? { prompt: p.prompt } : {}), qid });
   };
@@ -616,6 +630,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
             <ChatView contentRef={chatRef} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
               onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onOpenSession={openRow}
               launchingQid={chatLaunching} onLaunchProposal={launchProposal} onTerminal={focusTab}
+              relayingQid={relaying} onRelay={qid => relayCard('session.relay', qid)} onRelayCancel={qid => relayCard('session.relay.cancel', qid)}
               theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openDocument(ref, { kind: 'chat' })} />
           </div>
           <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
