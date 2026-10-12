@@ -5,7 +5,8 @@ ledge daemon                                                 run the daemon in t
 ledge hook [codex|cursor] <Event>                            receive a hook (reads JSON on stdin)
 ledge setup                                                  install hooks and ~/.ledge
 ledge uninstall [--purge]                                    remove hooks, service and link (--purge: ~/.ledge too)
-ledge status                                                 list sessions`;
+ledge status                                                 list sessions
+ledge --version                                              print the installed version`;
 
 /**
  * A hook must never fail the agent: everything is caught, the exit code is always 0. Cursor Agent reads a JSON
@@ -28,6 +29,7 @@ async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   switch (cmd) {
     case 'daemon': { const { startDaemon } = await import('../daemon/index.js'); await startDaemon(); await new Promise(() => {}); return 0; }
+    case '--version': case 'version': { const { LEDGE_VERSION } = await import('../version.js'); console.log(LEDGE_VERSION); return 0; }
     case 'setup': { const { runSetup } = await import('./setup.js'); for (const l of await runSetup()) console.log(l); return 0; }
     case 'uninstall': { const { runUninstall } = await import('./uninstall.js'); const r = await runUninstall({ purge: rest.includes('--purge') }); for (const l of r.lines) console.log(l); return r.ok ? 0 : 1; }
     case 'status': { const { printStatus } = await import('./status.js'); console.log(await printStatus()); return 0; }

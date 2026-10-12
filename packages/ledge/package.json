@@ -5,7 +5,7 @@
   "bin": { "ledge": "./dist/cli/index.js" },
   "scripts": {
     "dev": "tsx src/cli/index.ts",
-    "build": "tsup src/cli/index.ts --format esm --target node22 --out-dir dist/cli --clean",
+    "build": "tsup",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
