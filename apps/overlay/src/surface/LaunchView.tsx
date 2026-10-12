@@ -39,9 +39,10 @@ const hint: React.CSSProperties = { fontSize: 12, lineHeight: '16px', color: 'va
 const field: React.CSSProperties = { height: 36, boxSizing: 'border-box', padding: '0 12px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', fontSize: 13, fontFamily: 'inherit', width: '100%' };
 const Row = ({ children }: { children: React.ReactNode }) => <div style={{ display: 'flex', flexDirection: 'column', padding: '12px 0', borderBottom: '1px solid var(--sidebar-border)' }}>{children}</div>;
 
-function Switch({ id, label: text, hint: why, checked, onChange }: { id: string; label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
+/** `last`: the body's last row, whose bottom border would double the actions row's top one. */
+function Switch({ id, label: text, hint: why, checked, onChange, last }: { id: string; label: string; hint: string; checked: boolean; onChange: (on: boolean) => void; last?: boolean }) {
   return (
-    <label className="dnd-switch" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', cursor: 'pointer', borderBottom: '1px solid var(--sidebar-border)' }}>
+    <label className="dnd-switch" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', cursor: 'pointer', borderBottom: last ? undefined : '1px solid var(--sidebar-border)' }}>
       <span style={{ display: 'flex', flexDirection: 'column', gap: 3, flexGrow: 1 }}>
         <span style={label}>{text}</span>
         <span style={hint}>{why}</span>
@@ -145,14 +146,17 @@ export function LaunchView(p: LaunchViewProps) {
               </div>
             </Row>
             <Row>
-              <label htmlFor="ledge-launch-prompt" style={label}>{t.launch.prompt} <span style={{ fontWeight: 400, color: 'var(--muted-foreground)' }}>· {t.launch.optional}</span></label>
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <label htmlFor="ledge-launch-prompt" style={label}>{t.launch.prompt} <span style={{ fontWeight: 400, color: 'var(--muted-foreground)' }}>· {t.launch.optional}</span></label>
+                <span data-launch-prompt-key title={t.launch.promptKey} aria-hidden="true"><Kbd>I</Kbd></span>
+              </span>
               <span style={{ ...hint, marginTop: 3 }}>{t.launch.promptHint(shownName)}</span>
-              <textarea id="ledge-launch-prompt" data-launch-prompt className="ledge-field" rows={3} value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={t.launch.promptPlaceholder(shownName)}
+              <textarea id="ledge-launch-prompt" data-launch-prompt aria-keyshortcuts="I" className="ledge-field" rows={3} value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={t.launch.promptPlaceholder(shownName)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
                 style={{ ...field, height: 72, padding: '8px 12px', lineHeight: '18px', resize: 'none', marginTop: 8 }} />
             </Row>
             <Switch id="resume" label={t.launch.resume} hint={t.launch.resumeHint} checked={resume} onChange={setResume} />
-            <Switch id="openTab" label={t.launch.openTab} hint={t.launch.openTabHint} checked={openTab} onChange={on => { setOpenTab(on); saveOpenTab(on); }} />
+            <Switch id="openTab" label={t.launch.openTab} hint={t.launch.openTabHint} checked={openTab} onChange={on => { setOpenTab(on); saveOpenTab(on); }} last />
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 17px 14px', borderTop: '1px solid var(--sidebar-border)', flexShrink: 0 }}>

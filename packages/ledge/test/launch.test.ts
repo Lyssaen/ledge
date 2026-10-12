@@ -110,7 +110,7 @@ describe('launch', () => {
   let n = 0; let socket: string; let tmux: Tmux;
   let store: Store; let srv: ServerHandle;
   beforeEach(async () => {
-    socket = `ledge-launch-${process.pid}-${Date.now()}-${n++}`; tmux = realTmux(socket);
+    socket = `ledge-launch-${process.pid}-${Date.now()}-${n++}`; tmux = realTmux(socket, { scope: async () => false });
     store = new Store(); srv = await startServer({ store, tmux, port: 0 });
   });
   afterEach(async () => { await srv.close(); await killTestServer(socket); vi.restoreAllMocks(); });
@@ -175,7 +175,7 @@ describe('launch', () => {
     expect(code).toBe(0);
     const name = only().tmuxSession!;
     // The user re-attaches by hand (the launcher's own hint), then the agent exits.
-    const manual = await ptyAttach(realTmux(socket).attachArgs(name), attachEnv(process.env));
+    const manual = await ptyAttach(realTmux(socket, { scope: async () => false }).attachArgs(name), attachEnv(process.env));
     expect(manual).toBe(0);
     expect(await tmux.hasSession(name)).toBe(false);
   });

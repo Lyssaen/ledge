@@ -1,5 +1,7 @@
 import { test, expect, surface, layer, expectMode, ready } from './fixtures';
 import { fakeDaemon, session } from './daemon';
+import { hoverHandle } from './scenarios';
+import { islandWidth } from '../src/surface/geometry';
 
 const team = () => [session('a'), session('b', { name: 'Pim', project: 'speos-api' }), session('c', { name: 'Ada', state: 'waiting_permission', pending: { kind: 'permission', text: 'Run pnpm test', source: 'hook' } })];
 const box = async (l: import('@playwright/test').Locator) => (await l.boundingBox())!;
@@ -14,13 +16,13 @@ test.describe('4K work area', () => {
     await ready(page, 3);
     await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '2');
     await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(56, 0);
+    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(3) * 2, 0);
     const bots = layer(page, 'handle').locator('button:not([data-resident])');
-    await expect.poll(async () => (await box(bots.nth(0))).width).toBeCloseTo(24, 0); // a quiet bot: 12 x 2
-    await expect.poll(async () => (await box(bots.nth(2))).width).toBeCloseTo(40, 0); // an ask: 20 x 2
-    // Still vertically centered on the real screen.
+    await expect.poll(async () => (await box(bots.nth(0))).width).toBeCloseTo(44, 0); // a companion: 22 x 2
+    await expect.poll(async () => (await box(bots.nth(2))).width).toBeCloseTo(44, 0);
+    // Still on the top edge, centred on the real screen.
     const s = await box(surface(page));
-    expect(Math.abs(s.y + s.height / 2 - 1080)).toBeLessThan(4);
+    expect(s.y).toBe(0); expect(Math.abs(s.x + s.width / 2 - 1920)).toBeLessThan(4);
     // The list opens at its base 380 px.
     await page.keyboard.press('Control+Alt+L');
     await expectMode(page, 'list');
@@ -28,25 +30,13 @@ test.describe('4K work area', () => {
     await expect.poll(async () => (await box(layer(page, 'list').locator('[data-row]').first())).height).toBeCloseTo(58, 0);
   });
 
-  test('the handle tooltip reads at the windows size, beside the 2x handle', async ({ page }) => {
-    await fakeDaemon(page, [session('a'), session('b', { name: 'Pim', project: 'speos-api' })]);
-    await ready(page, 2);
-    await layer(page, 'handle').locator('button:not([data-resident])').nth(1).hover();
-    const tip = page.getByRole('tooltip');
-    await expect(tip).toHaveCSS('opacity', '1');
-    const t = await box(tip);
-    expect(t.height).toBeLessThan(40); // 30 px at 100 %, not 60 px at the handle's 200 %
-    expect(t.x).toBeGreaterThanOrEqual(56); // clear of the 56 px handle
-    expect(t.x).toBeLessThan(80);
-  });
-
-  test('edge hover works on the 2x handle bands; the list stays open under a resting pointer when it changes shape', async ({ page }) => {
+  test('hover works on the 2x handle; the list stays open under a resting pointer when it changes shape', async ({ page }) => {
     const d = await fakeDaemon(page, team());
     await ready(page, 3);
-    await page.mouse.move(3, 200, { steps: 2 });
+    await hoverHandle(page);
     await expectMode(page, 'list');
     await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(380, 0);
-    await page.mouse.move(300, 1080, { steps: 4 });
+    await page.mouse.move(1920, 200, { steps: 4 });
     // A new session grows the list without any pointer event; the sticky hover check must still see the pointer inside,
     // or the mouse-opened list would fold after the 500 ms leave delay.
     d.upsert(session('d', { name: 'Zed' }));
@@ -61,10 +51,10 @@ test.describe('4K work area', () => {
     await storeScales(page, { panel: '1.5' });
     const d = await fakeDaemon(page, [session('a'), session('b', { name: 'Pim' })]);
     await ready(page, 2);
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(56, 0); // the handle keeps its Auto 200 %
+    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(2) * 2, 0); // the island keeps its Auto 200 %
     d.upsert(session('b', { name: 'Pim', state: 'waiting_permission', pending: { kind: 'permission', text: 'Run pnpm test', source: 'hook' } }));
     await expectMode(page, 'bubble');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(336 * 1.5, 0);
+    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(440 * 1.5, 0);
     const content = await box(layer(page, 'bubble'));
     await expect.poll(async () => Math.abs((await box(surface(page))).height - content.height)).toBeLessThanOrEqual(2 * 1.5 + 2);
     // The bubble's actions take real clicks under the zoom.
@@ -72,7 +62,7 @@ test.describe('4K work area', () => {
     await expect(layer(page, 'bubble')).toHaveAttribute('data-ack', 'pending');
   });
 
-  test('Settings: handle Auto (200%) and windows Auto (100%); each size changes on its own, live, and is remembered', async ({ page }) => {
+  test('Settings: island Auto (200%) and windows Auto (100%); each size changes on its own, live, and is remembered', async ({ page }) => {
     await fakeDaemon(page, team());
     await ready(page, 3);
     await page.keyboard.press('Control+Alt+L');
@@ -80,7 +70,7 @@ test.describe('4K work area', () => {
     await layer(page, 'list').getByRole('button', { name: 'Settings' }).click();
     await expectMode(page, 'settings');
     const settings = layer(page, 'settings');
-    const handle = settings.getByRole('group', { name: 'Handle size' }); const windows = settings.getByRole('group', { name: 'Window size' });
+    const handle = settings.getByRole('group', { name: 'Island size' }); const windows = settings.getByRole('group', { name: 'Window size' });
     await expect(handle.getByRole('radio', { name: 'Auto (200%)' })).toBeChecked();
     await expect(windows.getByRole('radio', { name: 'Auto (100%)' })).toBeChecked();
     // Handle to 150 %: the opened settings keep their size.
@@ -97,7 +87,7 @@ test.describe('4K work area', () => {
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expectMode(page, 'handle');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(42, 0); // 28 x 1.5
+    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(3) * 1.5, 0);
     // Windows to 125 % from the list: the list grows, the handle does not.
     await page.keyboard.press('Control+Alt+L');
     await layer(page, 'list').getByRole('button', { name: 'Settings' }).click();
@@ -105,7 +95,7 @@ test.describe('4K work area', () => {
     await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(380 * 1.25, 0);
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(42, 0);
+    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(3) * 1.5, 0);
     expect(await page.evaluate(() => [localStorage.getItem('ledge.handleScale'), localStorage.getItem('ledge.panelScale')])).toEqual(['1.5', '1.25']);
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '1.5');
@@ -127,6 +117,6 @@ test('at 1920x1080 both Autos stay at 100%', async ({ page }) => {
   await ready(page, 3);
   await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '1');
   await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1');
-  await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(28, 0);
-  await expect.poll(async () => (await box(layer(page, 'handle').locator('button:not([data-resident])').nth(0))).width).toBeCloseTo(12, 0);
+  await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(3), 0);
+  await expect.poll(async () => (await box(layer(page, 'handle').locator('button:not([data-resident])').nth(0))).width).toBeCloseTo(22, 0);
 });

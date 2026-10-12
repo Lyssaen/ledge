@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ledge Island</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a studio page. Header, a short intro, then the playground: a scenario rail on the left and a scaled
+   1200×760 desktop on the right whose top edge is the screen's top edge. The island hangs from that edge.
+   Notes on what the island changes sit under the playground. Dark first (Signal), Galet in light. */
+:root {
+  color-scheme: dark;
+  --bg: oklch(0.145 0 0); --surface: oklch(0.205 0 0); --fg: oklch(0.985 0 0); --muted: oklch(0.708 0 0);
+  --border: #ffffff1a; --well: oklch(0.145 0 0);
+  --red: oklch(0.637 0.237 25.331); --red-deep: oklch(0.444 0.177 26.899);
+  --success: #34d399; --warning: #fbbf24; --info: #60a5fa;
+  --soft-success: #052e16; --soft-warning: #422006; --soft-info: #172554; --soft-danger: #450a0a;
+  /* The island: pure black, borderless, so it merges with the screen edge, like the handle did. */
+  --notch: #000; --notch-fg: oklch(0.985 0 0); --notch-muted: oklch(0.72 0 0); --notch-card: oklch(0.205 0 0);
+  --notch-line: #ffffff1a; --notch-input: #ffffff26;
+  --desktop: oklch(0.23 0.005 260); --desktop-win: oklch(0.19 0.004 260); --desktop-text: oklch(0.6 0 0);
+  --shadow-island: 0 24px 48px -16px rgba(0,0,0,.75), 0 2px 8px rgba(0,0,0,.4);
+  --grow: cubic-bezier(.2,.8,.2,1);
+  --font: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --bot-shell-top: #34434b; --bot-shell-bottom: #273238; --bot-shell-line: #859397; --bot-visor: #172124;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: oklch(1 0 0); --surface: oklch(0.985 0 0); --fg: oklch(0.145 0 0); --muted: oklch(0.556 0 0);
+    --border: oklch(0.922 0 0); --well: oklch(0.97 0 0);
+    --red: oklch(0.505 0.213 27.518); --red-deep: oklch(0.444 0.177 26.899);
+    --success: #059669; --warning: #b45309; --info: #2563eb;
+    --soft-success: #ecfdf5; --soft-warning: #fffbeb; --soft-info: #eff6ff; --soft-danger: #fef2f2;
+    --notch: #fff; --notch-fg: oklch(0.145 0 0); --notch-muted: oklch(0.556 0 0); --notch-card: oklch(0.97 0 0);
+    --notch-line: oklch(0.922 0 0); --notch-input: oklch(0.922 0 0);
+    --desktop: oklch(0.93 0.004 260); --desktop-win: oklch(0.975 0.002 260); --desktop-text: oklch(0.55 0 0);
+    --shadow-island: 0 24px 48px -16px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.08);
+    --bot-shell-top: #f0eee6; --bot-shell-bottom: #b7b7b0; --bot-shell-line: #ffffff99; --bot-visor: #22292b;
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: oklch(1 0 0); --surface: oklch(0.985 0 0); --fg: oklch(0.145 0 0); --muted: oklch(0.556 0 0);
+  --border: oklch(0.922 0 0); --well: oklch(0.97 0 0);
+  --red: oklch(0.505 0.213 27.518); --red-deep: oklch(0.444 0.177 26.899);
+  --success: #059669; --warning: #b45309; --info: #2563eb;
+  --soft-success: #ecfdf5; --soft-warning: #fffbeb; --soft-info: #eff6ff; --soft-danger: #fef2f2;
+  --notch: #fff; --notch-fg: oklch(0.145 0 0); --notch-muted: oklch(0.556 0 0); --notch-card: oklch(0.97 0 0);
+  --notch-line: oklch(0.922 0 0); --notch-input: oklch(0.922 0 0);
+  --desktop: oklch(0.93 0.004 260); --desktop-win: oklch(0.975 0.002 260); --desktop-text: oklch(0.55 0 0);
+  --shadow-island: 0 24px 48px -16px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.08);
+  --bot-shell-top: #f0eee6; --bot-shell-bottom: #b7b7b0; --bot-shell-line: #ffffff99; --bot-visor: #22292b;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+h1, h2, h3, p { margin: 0; }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.mono, code, kbd { font-family: var(--mono); }
+.muted { color: var(--muted); }
+:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+.page { max-width: 1480px; margin: 0 auto; padding-block: 0 48px; padding-inline: clamp(16px, 3vw, 40px); }
+.studio-header { height: 64px; display: flex; align-items: center; gap: 18px; border-bottom: 1px solid var(--border); }
+.brand { font-size: 22px; font-weight: 600; letter-spacing: -.8px; display: flex; align-items: center; gap: 2px; }
+.brand span { color: var(--red); }
+.studio-header .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; margin-left: auto; white-space: nowrap; }
+.quiet { background: transparent; border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; font-size: 12px; }
+.quiet:hover { background: var(--surface); }
+.intro { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end; margin: 34px 0 24px; }
+.intro h1 { font-size: clamp(26px, 3.4vw, 36px); font-weight: 600; letter-spacing: -1.4px; line-height: 1.1; text-wrap: balance; margin-bottom: 10px; }
+.intro p { color: var(--muted); max-width: 62ch; }
+.intro-side { text-align: right; font-size: 12px; color: var(--muted); line-height: 1.7; }
+.intro-side strong { color: var(--fg); font-weight: 500; }
+
+.playground { display: grid; grid-template-columns: 250px minmax(0, 1fr); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--surface); }
+.rail { border-right: 1px solid var(--border); padding: 12px 10px; display: flex; flex-direction: column; gap: 10px; }
+.rail-group > span { display: block; font-size: 11px; color: var(--muted); padding: 0 8px 3px; }
+.rail-group { display: flex; flex-direction: column; gap: 1px; }
+#rail { display: flex; flex-direction: column; gap: 8px; }
+.sc { display: flex; align-items: center; gap: 8px; text-align: left; font-size: 12.5px; padding: 4px 8px; border: 1px solid transparent; border-radius: 7px; background: transparent; }
+.sc i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; opacity: .55; }
+.sc i[data-c="red"] { background: var(--red); opacity: 1; } .sc i[data-c="warn"] { background: var(--warning); opacity: 1; }
+.sc i[data-c="info"] { background: var(--info); opacity: 1; } .sc i[data-c="ok"] { background: var(--success); opacity: 1; }
+.sc:hover { background: var(--well); }
+.sc[aria-pressed="true"] { background: var(--well); border-color: var(--border); }
+.rail-settings { margin-top: auto; border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; font-size: 12px; color: var(--muted); }
+.rail-settings label { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 0 4px; }
+.rail-settings input { margin: 0; accent-color: var(--red); }
+
+.preview { min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+.toolbar { height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.toolbar b { font-weight: 500; color: var(--fg); }
+.toolbar .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--success); margin-right: 8px; vertical-align: 1px; }
+
+/* The desktop: a fixed 1200×760 stage scaled to the column. Its top is the top of the screen. */
+.stage-wrap { position: relative; width: 100%; aspect-ratio: 1200 / 760; overflow: hidden; background: var(--desktop); }
+.stage { position: absolute; left: 0; top: 0; width: 1200px; height: 760px; transform-origin: 0 0; transform: scale(var(--k, 1)); }
+.win { position: absolute; inset: 0; background: var(--desktop-win); color: var(--desktop-text); font-size: 12px; }
+.win-title { height: 36px; display: flex; align-items: center; padding: 0 14px; gap: 14px; border-bottom: 1px solid var(--border); position: relative; }
+.win-title .center { position: absolute; left: 0; right: 0; text-align: center; font-size: 12px; opacity: .8; pointer-events: none; }
+.win-title .dots { letter-spacing: 3px; font-size: 9px; opacity: .6; margin-left: auto; }
+.win-tabs { height: 36px; display: flex; align-items: stretch; border-bottom: 1px solid var(--border); font-size: 11px; }
+.win-tabs span { padding: 0 16px; display: flex; align-items: center; border-right: 1px solid var(--border); }
+.win-tabs span.on { color: var(--fg); background: var(--desktop); }
+.win-body { position: absolute; top: 72px; bottom: 26px; left: 0; right: 0; display: grid; grid-template-columns: 220px 1fr; }
+.win-tree { border-right: 1px solid var(--border); padding: 18px 0; font-size: 11.5px; line-height: 2.4; }
+.win-tree p { padding: 0 16px; white-space: nowrap; }
+.win-tree p.on { background: var(--desktop); color: var(--fg); }
+.win-code { padding: 22px 26px; font: 12px/1.9 var(--mono); white-space: pre; overflow: hidden; }
+.win-code em { font-style: normal; opacity: .4; margin-right: 18px; }
+.win-code b { font-weight: 400; color: #b995c7; } .win-code u { text-decoration: none; color: #9fb886; }
+.win-status { position: absolute; bottom: 0; left: 0; right: 0; height: 26px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-size: 11px; }
+.hover-zone { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 520px; height: 10px; }
+.desk-note { position: absolute; right: 18px; bottom: 36px; font-size: 11px; color: var(--desktop-text); display: flex; align-items: center; gap: 6px; }
+.desk-note i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+/* The island. Flush with the top edge, centred, rounded only below, no border, black or white. */
+.island { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: max-content; max-width: 1100px; max-height: 690px;
+  --r: 22px; --fillet: 12px; }
+.island-box { background: var(--notch); color: var(--notch-fg); border-radius: 0 0 var(--r) var(--r); box-shadow: var(--shadow-island);
+  overflow: hidden; width: 100%; height: 100%; max-height: 690px; display: flex; flex-direction: column; }
+/* The counter-curve: a concave fillet on each side where the island meets the top edge, so it reads as cut into the screen
+   rather than stuck onto it. A square the colour of the notch with a transparent quarter circle taken out of its outer bottom corner. */
+.island::before, .island::after { content: ''; position: absolute; top: 0; width: var(--fillet); height: var(--fillet); pointer-events: none; }
+.island::before { right: 100%; background: radial-gradient(circle at 0 100%, transparent calc(var(--fillet) - .5px), var(--notch) var(--fillet)); }
+.island::after { left: 100%; background: radial-gradient(circle at 100% 100%, transparent calc(var(--fillet) - .5px), var(--notch) var(--fillet)); }
+.island[data-mode="rest"], .island[data-mode="busy"], .island[data-mode="dnd"] { --r: 19px; }
+.island[data-mode="sliver"] { --r: 6px; --fillet: 6px; }
+.view { display: flex; flex-direction: column; min-height: 0; animation: view-in 220ms var(--grow) 60ms both; }
+@keyframes view-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.island.measuring .view { animation: none; }
+
+/* Compact: Ledge's mascot, a thin divider, then the bots in a row. */
+.compact { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px 0 12px; }
+.compact .sep { width: 1px; height: 16px; background: var(--notch-line); margin: 0 2px; }
+.bw { display: inline-flex; align-items: center; justify-content: center; position: relative; line-height: 0; }
+.bw.hop { animation: hop var(--hop, 4s) ease-in-out infinite; }
+@keyframes hop { 0%, 4%, 100% { transform: translateY(0); } 2% { transform: translateY(-2px); } }
+.bw[data-halo="waiting_permission"] .bot { filter: drop-shadow(0 0 4px #f2b09c); }
+.bw[data-halo="waiting_input"] .bot { filter: drop-shadow(0 0 4px #f6d487); }
+.bw[data-halo="working"] .bot { filter: drop-shadow(0 0 3px #90c7f266); }
+.bw[data-halo="idle"] .bot { filter: drop-shadow(0 0 3px #a9dfc766); }
+.bw.breathe .bot { animation: breathe-halo 3.2s ease-in-out infinite; }
+@keyframes breathe-halo { 50% { transform: scale(1.08); } }
+.compact .more { font: 11px var(--mono); color: var(--notch-muted); border: 1px solid var(--notch-line); border-radius: 10px; padding: 1px 7px; margin-left: 2px; }
+.compact .moon { color: var(--notch-muted); font-size: 13px; margin-left: 2px; }
+.compact.dimmed .bw .bot { filter: none; opacity: .7; }
+.sliver { height: 10px; display: flex; align-items: center; gap: 6px; padding: 0 14px; }
+.sliver i { width: 6px; height: 4px; border-radius: 2px; }
+
+/* Island typography and controls */
+.view h2 { font-size: 17px; font-weight: 600; letter-spacing: -.3px; line-height: 1.35; text-wrap: balance; }
+.view p { font-size: 12.5px; line-height: 1.6; color: var(--notch-muted); }
+.eyebrow { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--notch-muted); }
+.btn { border: 1px solid var(--notch-line); background: transparent; border-radius: 8px; padding: 7px 13px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.btn:hover { background: var(--notch-card); }
+.btn.primary { background: var(--red); color: #fff; border-color: transparent; }
+.btn.primary:hover { background: var(--red-deep); }
+.btn.sm { padding: 5px 10px; font-size: 11.5px; }
+.btn kbd { font-size: 10px; margin-left: 6px; opacity: .7; border: 1px solid #ffffff55; border-radius: 4px; padding: 0 4px; }
+.ib { width: 30px; height: 30px; border: 0; background: transparent; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; color: var(--notch-fg); flex-shrink: 0; }
+.ib:hover { background: var(--notch-card); }
+.ib.boxed { border: 1px solid var(--notch-line); }
+kbd.k { font-size: 10.5px; color: var(--notch-muted); border: 1px solid var(--notch-line); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+.badge { font-size: 11px; line-height: 1.5; border-radius: 6px; padding: 2px 8px; white-space: nowrap; color: var(--info); background: var(--soft-info); }
+.badge[data-s="waiting_permission"], .badge[data-s="error"] { color: var(--red); background: var(--soft-danger); }
+.badge[data-s="waiting_input"] { color: var(--warning); background: var(--soft-warning); }
+.badge[data-s="idle"] { color: var(--success); background: var(--soft-success); }
+.badge[data-s="starting"] { color: var(--info); background: var(--soft-info); }
+.badge[data-s="exited"] { color: var(--notch-muted); background: var(--notch-card); }
+.well { background: var(--notch-card); border: 1px solid var(--notch-line); border-radius: 9px; }
+.code { font: 12px/1.6 var(--mono); background: var(--well); border: 1px solid var(--notch-line); border-radius: 7px; padding: 9px 12px; overflow-wrap: anywhere; }
+.field { display: flex; align-items: center; gap: 8px; border: 1px solid var(--notch-input); border-radius: 9px; padding: 7px 10px; font-size: 12.5px; color: var(--notch-muted); background: transparent; min-width: 0; }
+.field.filled { color: var(--notch-fg); }
+.field .ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seg { display: flex; background: var(--notch-card); border-radius: 9px; padding: 3px; gap: 2px; }
+.seg span { flex: 1; text-align: center; font-size: 12px; padding: 6px 4px; border-radius: 7px; color: var(--notch-muted); }
+.seg span.on { background: var(--notch); color: var(--notch-fg); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.switch { width: 34px; height: 20px; border-radius: 10px; background: var(--notch-input); position: relative; flex-shrink: 0; }
+.switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--notch-fg); transition: left 150ms; }
+.switch.on { background: var(--red); } .switch.on::after { left: 17px; background: #fff; }
+
+/* Ask (the bubble, now the island itself) */
+.ask { width: 440px; padding: 12px 14px 0; }
+.ask-main { display: flex; align-items: center; gap: 12px; }
+.ask-main .copy { flex: 1; min-width: 0; }
+.ask-main strong { display: block; font-size: 13.5px; font-weight: 600; }
+.ask-main .cmd { display: block; font: 12px/1.5 var(--mono); color: var(--notch-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ask-main .next { font-size: 11px; color: var(--notch-muted); white-space: nowrap; align-self: flex-start; display: flex; align-items: center; gap: 4px; }
+.ask-actions { display: flex; justify-content: flex-end; gap: 8px; margin: 12px 0 12px; }
+.timer { height: 2px; background: var(--notch-line); }
+.timer i { display: block; height: 100%; width: 62%; background: var(--red); }
+.ask.notice .timer i { background: var(--success); width: 40%; }
+.ask .meta { font-size: 11px; color: var(--notch-muted); margin-top: 2px; }
+
+/* Panels (list, session, chat, launch, settings, help, reader) */
+.panel { width: 440px; display: flex; flex-direction: column; min-height: 0; }
+.panel.session { width: 480px; } .panel.wide { width: 800px; } .panel.narrow { width: 420px; }
+.ph-head { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px; }
+.ph-head.lined { border-bottom: 1px solid var(--notch-line); }
+.ph-head .brand-l { font-size: 17px; font-weight: 600; letter-spacing: -.5px; }
+.ph-head .brand-l span { color: var(--red); }
+.ph-head .sub { font-size: 11.5px; color: var(--notch-muted); margin-top: 1px; }
+.ph-head .grow { flex: 1; min-width: 0; }
+.ph-head .title { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-body { overflow: auto; min-height: 0; scrollbar-width: thin; }
+.ph-foot { border-top: 1px solid var(--notch-line); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--notch-muted); }
+.ph-foot .kbds { display: flex; gap: 5px; }
+
+.askfield { margin: 0 14px 8px; }
+.askfield .k { margin-left: auto; }
+.group-h { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px 4px; font-size: 12px; }
+.group-h b { font-weight: 600; } .group-h .mono { font-size: 11px; color: var(--notch-muted); margin-left: 8px; }
+.group-h span:last-child { font-size: 11px; color: var(--notch-muted); }
+.row { display: flex; align-items: center; gap: 11px; padding: 8px 14px; height: 56px; position: relative; cursor: pointer; }
+.row:hover, .row.sel { background: var(--notch-card); }
+.row.sel::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--red); }
+.row.sel[data-s="waiting_input"]::before { background: var(--warning); }
+.row .copy { flex: 1; min-width: 0; }
+.row strong { display: block; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row small { display: block; font-size: 11.5px; color: var(--notch-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row small .br { font-family: var(--mono); font-size: 10.5px; }
+.row .inline-act { display: flex; gap: 6px; }
+.empty { padding: 26px 24px 28px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.empty strong { font-size: 15px; }
+.empty code { font-size: 12px; background: var(--well); border: 1px solid var(--notch-line); border-radius: 6px; padding: 6px 12px; }
+
+.sc-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.sc-top { display: flex; justify-content: space-between; align-items: center; }
+.card { padding: 13px 14px; display: flex; flex-direction: column; gap: 10px; }
+.card h3 { font-size: 13px; font-weight: 600; }
+.card .acts { display: flex; justify-content: flex-end; gap: 8px; }
+.check { display: flex; gap: 7px; align-items: center; font-size: 12px; color: var(--notch-muted); }
+.check i { width: 14px; height: 14px; border: 1px solid var(--notch-input); border-radius: 4px; }
+.note { font-size: 11.5px; color: var(--notch-muted); line-height: 1.55; }
+.disc { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--notch-muted); padding: 9px 12px; background: var(--notch-card); border-radius: 8px; }
+.disc .mono { font-size: 11px; }
+.reply { border-top: 1px solid var(--notch-line); padding: 10px 14px 10px; display: flex; flex-direction: column; gap: 4px; }
+.reply .line { display: flex; align-items: center; gap: 8px; }
+.reply .ph { flex: 1; font-size: 12.5px; color: var(--notch-muted); }
+.reply .send { width: 30px; height: 30px; border-radius: 8px; background: var(--red-deep); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+.reply .hint { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--notch-muted); }
+.reply .hint .stop { color: var(--red); }
+.opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--notch-line); border-radius: 8px; cursor: pointer; }
+.opt.on { border-color: var(--warning); background: color-mix(in srgb, var(--warning) 7%, transparent); }
+.opt .n { font: 11px/18px var(--mono); width: 18px; height: 18px; text-align: center; border: 1px solid var(--notch-line); border-radius: 4px; color: var(--notch-muted); flex-shrink: 0; }
+.opt strong { display: block; font-size: 12.5px; font-weight: 600; }
+.opt small { display: block; font-size: 11.5px; color: var(--notch-muted); margin-top: 2px; }
+.opt .rec { color: var(--warning); font-size: 10.5px; margin-left: 6px; }
+.sect { font-size: 10.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--notch-muted); margin-top: 4px; }
+.done { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; font-size: 12.5px; }
+.done i { width: 18px; height: 18px; border-radius: 50%; background: var(--success); color: #052e16; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; margin-top: 1px; }
+.done code { font-size: 11px; background: var(--well); border-radius: 4px; padding: 1px 5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 11.5px; padding: 4px 9px; border: 1px solid var(--notch-line); border-radius: 14px; background: transparent; }
+.chip:hover { background: var(--notch-card); }
+.todo { border: 1px dashed var(--notch-input); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; line-height: 1.6; }
+.toggle-line { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--notch-muted); }
+.term { font: 11.5px/1.7 var(--mono); color: var(--notch-muted); background: var(--well); border: 1px solid var(--notch-line); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 190px; overflow: hidden; }
+.term .cur { color: var(--notch-fg); }
+.helpers { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 0 10px; padding-left: 12px; border-left: 1px solid var(--notch-line); }
+.helper { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.helper small { color: var(--notch-muted); font-size: 11px; margin-left: auto; white-space: nowrap; }
+.workbar { height: 3px; background: var(--notch-card); border-radius: 3px; overflow: hidden; }
+.workbar i { display: block; height: 100%; width: 30%; background: var(--info); border-radius: 3px; animation: work 2.4s ease-in-out infinite; }
+@keyframes work { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+.ro { border: 1px dashed var(--notch-input); border-radius: 8px; padding: 12px; font-size: 12.5px; line-height: 1.6; color: var(--notch-muted); }
+.ro code { font-size: 11.5px; color: var(--notch-fg); }
+
+.steps { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--notch-muted); }
+.steps div { display: flex; gap: 8px; align-items: center; }
+.steps .ok { color: var(--success); }
+.steps .spin { width: 10px; height: 10px; border: 1.5px solid var(--notch-line); border-top-color: var(--info); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.answer { font-size: 13px; line-height: 1.65; }
+.answer .bot-link { color: var(--notch-fg); font-weight: 600; text-decoration: underline; text-decoration-color: var(--notch-line); text-underline-offset: 3px; }
+.answer .caret { display: inline-block; width: 7px; height: 14px; background: var(--red); vertical-align: -2px; margin-left: 2px; animation: caret 1s steps(2) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
+.sources { font-size: 11px; color: var(--notch-muted); display: flex; gap: 10px; flex-wrap: wrap; }
+
+.form { display: flex; flex-direction: column; gap: 14px; padding: 4px 16px 14px; }
+.f label { display: block; font-size: 13px; font-weight: 600; }
+.f .help { font-size: 11.5px; color: var(--notch-muted); margin: 1px 0 7px; }
+.f .inline { display: flex; gap: 8px; align-items: center; }
+.f .inline .field { flex: 1; }
+.recents { margin-top: 6px; display: flex; flex-direction: column; }
+.recents > span { font-size: 10.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--notch-muted); padding: 2px 0 4px; }
+.rc { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-radius: 6px; font-size: 12.5px; }
+.rc.on { background: var(--notch-card); }
+.rc small { display: block; font: 10.5px var(--mono); color: var(--notch-muted); }
+.rc em { font-style: normal; color: var(--notch-muted); font-size: 11.5px; }
+.ta { border: 1px solid var(--notch-input); border-radius: 9px; padding: 9px 10px; min-height: 58px; font-size: 12.5px; color: var(--notch-muted); }
+.sw-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.sw-line label { font-size: 13px; font-weight: 600; display: block; }
+.sw-line .help { margin: 0; }
+.crumbs { display: flex; gap: 6px; align-items: center; font: 12px var(--mono); color: var(--notch-muted); padding: 6px 16px 8px; }
+.crumbs b { color: var(--notch-fg); font-weight: 500; }
+.dir { display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 12.5px; cursor: pointer; }
+.dir:hover { background: var(--notch-card); }
+.dir .ico { width: 16px; color: var(--notch-muted); } .dir em { font-style: normal; color: var(--notch-muted); font-size: 11.5px; margin-left: auto; }
+.dir.new { gap: 8px; } .dir.new .field { flex: 1; padding: 5px 9px; }
+
+.settabs { margin: 0 14px 10px; }
+.set { padding: 0 16px; display: flex; flex-direction: column; }
+.set .f { padding: 11px 0; border-bottom: 1px solid var(--notch-line); }
+.set .f:last-child { border-bottom: 0; }
+.set .f .help { margin-bottom: 8px; }
+.set .seg span { font-size: 11.5px; }
+.set .sw-line { padding: 12px 0; border-bottom: 1px solid var(--notch-line); }
+.set .sw-line:last-child { border-bottom: 0; }
+.set .sw-line .help { font-size: 11.5px; color: var(--notch-muted); margin-top: 2px; }
+.newtag { font-size: 10px; color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 40%, transparent); border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: 2px; font-weight: 500; }
+.help dl { margin: 0; padding: 4px 16px 10px; display: grid; grid-template-columns: 1fr auto; gap: 9px 12px; align-items: center; font-size: 12.5px; }
+.help dd { margin: 0; display: flex; gap: 4px; justify-content: flex-end; }
+.help p { padding: 0 16px 14px; font-size: 11.5px; }
+
+.reader { display: grid; grid-template-columns: 170px 1fr; min-height: 0; }
+.toc { border-right: 1px solid var(--notch-line); padding: 14px 10px; font-size: 12px; }
+.toc > span { display: block; font-size: 10.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--notch-muted); padding: 0 6px 8px; }
+.toc a { display: block; padding: 5px 8px; border-radius: 6px; color: var(--notch-muted); text-decoration: none; }
+.toc a.on { color: var(--notch-fg); background: var(--notch-card); }
+.toc .cited { margin-top: 14px; padding: 10px 8px 0; border-top: 1px solid var(--notch-line); font-size: 11px; color: var(--notch-muted); line-height: 1.5; }
+.doc { padding: 18px 26px 22px; overflow: auto; font-size: 13.5px; line-height: 1.7; max-width: 62ch; }
+.doc h2 { font-size: 22px; font-weight: 600; letter-spacing: -.6px; margin-bottom: 4px; }
+.doc .lead { color: var(--notch-muted); margin-bottom: 14px; }
+.doc h3 { font-size: 15px; font-weight: 600; margin: 16px 0 4px; }
+.doc p { color: var(--notch-fg); font-size: 13px; }
+.doc blockquote { margin: 10px 0; padding: 8px 12px; border-left: 2px solid var(--red); background: var(--notch-card); font-size: 12.5px; }
+.doc code { font-size: 11.5px; background: var(--notch-card); padding: 1px 5px; border-radius: 4px; }
+.doc ul { margin: 6px 0; padding-left: 18px; font-size: 13px; }
+
+/* Things drawn beside the island on the desktop (coachmark, status line). */
+.aside { position: absolute; left: 50%; transform: translateX(-50%); background: var(--notch); color: var(--notch-fg); border-radius: 10px; box-shadow: var(--shadow-island); padding: 9px 12px; font-size: 12px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.aside .k { color: var(--notch-fg); }
+.aside.coach { border: 1px solid var(--notch-line); }
+.aside.coach b { font-weight: 600; }
+
+.status { display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px 16px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); line-height: 1.55; }
+.status .mark { color: var(--red); font-size: 18px; line-height: 1; }
+.status b { color: var(--fg); font-weight: 600; }
+.status .delta { color: var(--fg); }
+
+.notes { margin-top: 34px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 28px 32px; }
+.notes article { border-top: 1px solid var(--border); padding-top: 14px; }
+.notes h2 { font-size: 15px; font-weight: 600; letter-spacing: -.2px; margin-bottom: 6px; }
+.notes p, .notes li { font-size: 13px; color: var(--muted); line-height: 1.7; }
+.notes ul { margin: 4px 0 0; padding-left: 18px; }
+.notes b { color: var(--fg); font-weight: 500; }
+.notes .ok { color: var(--success); }
+.studio-footer { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 20px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+
+/* Mascots: SVG factory and sheet from docs/mockups/prototype, inlined so the page stands alone. */
+.bot{display:block;flex-shrink:0;--eye:#b8e3dc;--shell-top:var(--bot-shell-top);--shell-bottom:var(--bot-shell-bottom);--shell-line:var(--bot-shell-line);--visor:var(--bot-visor);overflow:visible}.bot .body{transform-origin:48px 72px;animation:breathe var(--breath,5.4s) ease-in-out infinite;animation-delay:var(--phase,0s)}.bot .pose{transform-origin:48px 59px;transition:transform 300ms var(--grow)}.bot .gaze{transition:transform 450ms var(--grow);transform:translate(var(--gx,0px),var(--gy,0px))}.bot .eye-blink{transform-origin:48px 48px}.bot .eye-open,.bot .eye-happy,.bot .eye-error,.bot .eye-sleep{transition:opacity 260ms var(--grow),transform 260ms var(--grow);transform-origin:48px 49px}.bot .eye-happy,.bot .eye-error,.bot .eye-sleep{opacity:0}.bot .eye-open{fill:var(--eye)}.bot .eye-happy,.bot .eye-error,.bot .eye-sleep{stroke:var(--eye);stroke-width:3.4;stroke-linecap:round;fill:none}.bot .visor{fill:var(--visor);stroke:#0005;stroke-width:1}.bot .shell{stroke:var(--shell-line);stroke-width:.8}.bot .shine{fill:none;stroke:#fff7;stroke-width:1.25;stroke-linecap:round}.bot .arm{fill:var(--shell-bottom);stroke:var(--shell-line);stroke-width:.7;transform-origin:75px 66px;transition:transform 300ms var(--grow),opacity 180ms;opacity:0}.bot .antenna{stroke:var(--shell-bottom);stroke-width:2;stroke-linecap:round}.bot .antenna-light{fill:var(--eye);transition:fill 150ms}.bot .ground{fill:#000;opacity:.16}.bot .feet{fill:var(--shell-bottom)}.bot .reflection{fill:#fff;opacity:.035}.bot[data-state="working"]{--eye:#90c7f2}.bot[data-state="starting"]{--eye:#90c7f2}.bot[data-state="waiting_permission"]{--eye:#f2b09c}.bot[data-state="waiting_permission"] .pose{transform:rotate(-4deg) translateY(-1px)}.bot[data-state="waiting_permission"] .arm{opacity:1;transform:rotate(-22deg) translateY(-5px)}.bot[data-state="waiting_input"]{--eye:#f6d487}.bot[data-state="waiting_input"] .pose{transform:rotate(5deg)}.bot[data-state="waiting_input"] .eye-open{transform:scaleY(1.2)}.bot[data-state="idle"]{--eye:#a9dfc7}.bot[data-state="idle"] .eye-open,.bot[data-state="exited"] .eye-open,.bot[data-state="error"] .eye-open{opacity:0}.bot[data-state="idle"] .eye-happy{opacity:1}.bot[data-state="exited"] .eye-sleep{opacity:1}.bot[data-state="exited"]{--eye:#a3aaa9;opacity:.55}.bot[data-state="exited"] .body{animation:none}.bot[data-state="error"]{--eye:#ffab9f}.bot[data-state="error"] .eye-error{opacity:1}.bot[data-state="error"] .pose{transform:rotate(-7deg) translateY(2px)}.bot[data-state="error"] .body{animation:none}.bot[data-readonly="true"] .shell{stroke-dasharray:3 3;stroke:#adb3b2;stroke-width:1.3}.bot[data-readonly="true"]{opacity:.6}.bot[data-readonly="true"] .body{animation:none}.bot[data-small="true"] .arm,.bot[data-small="true"] .feet,.bot[data-small="true"] .shine,.bot[data-small="true"] .ground,.bot[data-small="true"] .antenna,.bot[data-small="true"] .antenna-light{display:none}.bot[data-small="true"] .eye-open{transform:scale(1.1)}.bot[data-small="true"] .body{animation:none}
+@keyframes breathe{0%,100%{transform:translateY(0) rotate(-.3deg) scaleY(1)}50%{transform:translateY(-.7px) rotate(.3deg) scaleY(1.014)}}
+/* Ledge's own mascot: grey eyes, the peach antenna light, never a session state. */
+.bot.resident{--eye:#b9c0bf}.bot.resident .antenna-light{fill:#f2b09c}.bot.resident[data-small="true"] .antenna-light{display:block}
+.bot.resident[data-small="true"] .antenna{display:block}
+[data-reduced="true"] .bw.hop { animation: none; } [data-reduced="true"] .bw.hop .antenna-light { animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+[data-reduced="true"] .bw.breathe .bot, [data-reduced="true"] .bot .body, [data-reduced="true"] .workbar i, [data-reduced="true"] .answer .caret { animation: none; }
+
+@media (max-width: 900px) {
+  .playground { grid-template-columns: 1fr; }
+  .rail { border-right: 0; border-bottom: 1px solid var(--border); }
+  .rail-group { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .rail-group > span { grid-column: 1 / -1; }
+  .rail-settings { flex-direction: row; flex-wrap: wrap; gap: 14px; }
+  .intro { grid-template-columns: 1fr; } .intro-side { text-align: left; }
+}
+@media (max-width: 520px) {
+  .studio-header .hide-sm { display: none; }
+  .sc { font-size: 12px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="studio-header">
+    <span class="brand">Ledge<span>.</span></span>
+    <span class="hide-sm muted" style="font-size:12px">L’atelier des maquettes</span>
+    <span class="tag">Étude 04 · L’île</span>
+    <button id="theme" class="quiet" type="button">◐ <span>Mode clair</span></button>
+  </header>
+
+  <section class="intro">
+    <div>
+      <h1>La poignée quitte le bord gauche et devient une île en haut de l’écran.</h1>
+      <p>Même compagnons, mêmes demandes, mêmes raccourcis. Tout ce qui s’ouvrait vers la droite s’ouvre maintenant vers le bas, depuis une pastille posée sur le bord supérieur, au centre. Choisissez un scénario à gauche, cliquez dans l’île pour la parcourir.</p>
+    </div>
+    <div class="intro-side"><strong>Le bureau est à l’échelle 1200 × 760.</strong><br>Les sessions sont simulées, rien n’est exécuté.<br>Signal en sombre, Galet en clair.</div>
+  </section>
+
+  <div class="playground">
+    <aside class="rail" aria-label="Scénarios">
+      <div id="rail"></div>
+      <div class="rail-settings">
+        <label><span>Mouvements réduits</span><input id="reduced" type="checkbox"></label>
+        <label><span>Repasser par l’île au repos</span><input id="autorest" type="checkbox" checked></label>
+      </div>
+    </aside>
+    <section class="preview" aria-label="Maquette">
+      <div class="toolbar"><span><span class="dot"></span><b id="sc-title">Au repos</b></span><span id="sc-kind">Île compacte</span></div>
+      <div class="stage-wrap" id="wrap">
+        <div class="stage" id="stage">
+          <div class="win" aria-hidden="true">
+            <div class="win-title"><span>⌄ harness-assistant</span><span class="center">Bot.tsx — harness-assistant — Visual Studio Code</span><span class="dots">● ● ●</span></div>
+            <div class="win-tabs"><span class="on">Bot.tsx</span><span>Surface.tsx</span><span>frame.ts</span><span>tour.md</span></div>
+            <div class="win-body">
+              <div class="win-tree"><p>⌄ apps</p><p>　⌄ overlay</p><p>　　⌄ src</p><p>　　　⌄ bots</p><p class="on">　　　　Bot.tsx</p><p>　　　　poseFor.ts</p><p>　　　⌄ surface</p><p>　　　　Surface.tsx</p><p>　　　　frame.ts</p><p>　⌄ docs</p><p>　　tour.md</p></div>
+              <div class="win-code"><em>01</em><b>import</b> { Bot } <b>from</b> <u>'./bots'</u>;
+<em>02</em>
+<em>03</em><b>export function</b> Session() {
+<em>04</em>  <b>return</b> &lt;Bot tool=<u>"claude"</u> state=<u>"working"</u> name=<u>"Otto"</u> /&gt;;
+<em>05</em>}
+<em>06</em>
+<em>07</em><b>// L’île occupe le centre du bord supérieur,</b>
+<em>08</em><b>// là où se tient le titre de la fenêtre.</b></div>
+            </div>
+            <div class="win-status"><span>⑂ main</span><span>TypeScript React · UTF-8</span></div>
+          </div>
+          <div class="hover-zone" aria-hidden="true"></div>
+          <div class="island" id="island" data-mode="rest"><div class="island-box" id="box"></div></div>
+          <div id="asides"></div>
+          <div class="desk-note"><i></i>Simulation locale · aucune commande exécutée</div>
+        </div>
+      </div>
+      <div class="status"><span class="mark">↳</span><div><span id="sc-desc"></span> <span class="delta" id="sc-delta"></span></div></div>
+    </section>
+  </div>
+
+  <section class="notes" aria-label="Ce qui change">
+    <article><h2>L’ancrage</h2><p>L’île est collée au bord supérieur, centrée, sans bordure, noire ou blanche selon le thème. Au repos elle mesure 38 px de haut. Un contre-arrondi de 12 px de chaque côté la raccorde au bord : elle est découpée dans l’écran, pas posée dessus. Tout s’ouvre vers le bas et s’élargit autour de l’axe central : la bulle, la liste, une session, le lecteur. La fenêtre native suit la boîte englobante, comme aujourd’hui avec <code>frameOf</code>, avec une ombre qui tombe vers le bas.</p></article>
+    <article><h2>La bulle n’est plus une fenêtre à côté</h2><p>Une demande fait grandir l’île elle-même : le compagnon passe à 40 px, la commande s’écrit à côté, Refuser et Autoriser prennent la ligne du dessous. Le compte à rebours est le trait rouge en bas de l’île. « +1 autre » reste à droite. Un tour terminé fait la même chose en vert, six secondes.</p></article>
+    <article><h2>Survol, clic, clavier</h2><p>Poser le curseur sur l’île ouvre la liste ; le quitter la replie, sauf quand on tape dans un champ. <kbd>Ctrl Alt L</kbd>, <kbd>J</kbd> <kbd>K</kbd>, <kbd>Y</kbd> <kbd>N</kbd>, <kbd>Alt ←</kbd> <kbd>Alt →</kbd>, <kbd>Échap</kbd> ne changent pas. Le coachmark des trois premières ouvertures clavier se pose sous l’île.</p></article>
+    <article><h2>Le haut de l’écran n’est pas vide</h2><p>C’est là que vivent les titres de fenêtres et les onglets des navigateurs. Trois réponses dans la maquette : un <b>mode discret</b> qui réduit l’île à un trait de 10 px tant qu’une fenêtre maximisée est dessous, une <b>position réglable</b> (centre, décalée à gauche ou à droite) dans Réglages, et une île compacte qui ne dépasse jamais 6 mascottes avant de compter « +n ».</p></article>
+    <article><h2>Ce qui ne change pas</h2><ul><li>La liste groupée par dépôt, les demandes en premier, le badge d’état.</li><li>La session à 480 px, 560 px pour la réponse brute, 800 px pour le lecteur.</li><li>Demander à Ledge, Nouvelle session, le dossier parcouru, l’aide, les réglages.</li><li>Le daemon, le protocole, les sons.</li></ul></article>
+    <article><h2>À trancher avant de coder</h2><ul><li>Le « hover » sur 10 px de bord supérieur : zone trop fine ou juste ? Ici elle fait la largeur de l’île plus 40 px de chaque côté.</li><li>Écran avec barre des tâches en haut : l’île se pose dessous ou dessus ?</li><li>Plusieurs écrans : l’île suit l’écran choisi dans Réglages, comme la poignée.</li></ul></article>
+  </section>
+
+  <footer class="studio-footer"><span>Maquette locale · sessions simulées · aucune commande exécutée.</span><span>docs/mockups/ledge-island.html · reprend les mascottes de l’étude 01.</span></footer>
+</div>
+
+<script>
+/* SVG factory reused from the approved visual direction study (docs/mockups/prototype/mascot-svg.js). */
+const LedgeMascotSVG = (() => {
+  let uid = 0;
+  const tools = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' };
+  const labels = { starting: 'Démarrage', working: 'Au travail', waiting_permission: 'Votre accord', waiting_input: 'Une question', idle: 'Disponible', error: 'Erreur', exited: 'Terminée' };
+  const hash = s => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  return function (tool, state, size, seed, cls = '') {
+    const id = ++uid, h = hash(seed || tool), small = size <= 20;
+    const shell = tool === 'codex' ? '<ellipse class="shell" cx="48" cy="49" rx="32" ry="31" fill="url(#shell-' + id + ')"/>'
+      : tool === 'cursor' ? '<path class="shell" d="M23 77 Q14 78 17 66 L30 22 Q33 12 42 20 L79 54 Q88 63 77 67 L58 71 46 83 Q40 88 36 80 L32 73Z" fill="url(#shell-' + id + ')"/>'
+      : '<rect class="shell" x="15" y="22" width="66" height="56" rx="20" fill="url(#shell-' + id + ')"/>';
+    return '<svg class="bot ' + cls + '" role="img" aria-label="' + tools[tool] + ' · ' + labels[state] + '" width="' + size + '" height="' + size + '" viewBox="' + (small ? '12 16 72 68' : '0 0 96 96') + '" data-tool="' + tool + '" data-state="' + state + '" data-small="' + small + '" style="--phase:-' + (h % 43) / 10 + 's;--breath:' + (4.8 + h % 17 / 10) + 's"><defs><linearGradient id="shell-' + id + '" x1=".2" y1="0" x2=".75" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="var(--shell-top)"/><stop offset="1" stop-color="var(--shell-bottom)"/></linearGradient></defs><ellipse class="ground" cx="48" cy="88" rx="25" ry="3"/><g class="body"><g class="pose"><g class="antenna-group"><path class="antenna" d="M49 22V14"/><circle class="antenna-light" cx="49" cy="12" r="3"/></g><g class="feet"><rect x="29" y="75" width="13" height="8" rx="4"/><rect x="54" y="75" width="13" height="8" rx="4"/></g>' + shell + '<path class="shine" d="' + (tool === 'codex' ? 'M25 32Q35 19 51 22' : tool === 'cursor' ? 'M27 41 34 24Q35 23 37 25' : 'M25 36Q27 28 38 28H59') + '"/><rect class="visor" x="25" y="35" width="47" height="29" rx="13"/><path class="reflection" d="M39 37H60Q68 37 69 44H28Q29 37 39 37"/><g class="gaze"><g class="eye-blink"><g class="eye-open"><rect x="36" y="43" width="6" height="12" rx="3"/><rect x="55" y="43" width="6" height="12" rx="3"/></g><path class="eye-happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51"/><path class="eye-error" d="m35 45 8 3m11 0 8-3M38 54h2m16 0h2"/><path class="eye-sleep" d="M35 50q4 3 8 0m11 0q4 3 8 0"/></g></g><ellipse class="arm" cx="79" cy="63" rx="5" ry="8"/></g></g></svg>';
+  };
+})();
+
+const TOOL = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' };
+const STATE = { starting: 'Démarrage', working: 'Au travail', waiting_permission: 'Votre accord', waiting_input: 'Une question', idle: 'Disponible', error: 'Erreur', exited: 'Terminée' };
+const S = [
+  { id: 'otto', name: 'Otto', tool: 'claude', state: 'waiting_permission', repo: 'harness-assistant', branch: 'main', topic: 'Mascotte permanente et tray', age: '18 min' },
+  { id: 'nova', name: 'Nova', tool: 'codex', state: 'waiting_input', repo: 'harness-assistant', branch: 'worktree-codex', topic: 'Hooks Codex et approbations', age: '12 min' },
+  { id: 'pim', name: 'Pim', tool: 'cursor', state: 'working', repo: 'landing-page', branch: 'main', topic: 'Plans Cursor et sous-agents', age: '8 min' },
+  { id: 'bix', name: 'Bix', tool: 'claude', state: 'idle', repo: 'documentation', branch: 'folder-browser', topic: 'Lecteur Markdown, relecture', age: '2 min' },
+];
+const TEAM = S.concat([
+  { id: 'lu', name: 'Lu', tool: 'claude', state: 'working', repo: 'harness-assistant', branch: 'tokens-v5', topic: 'Tokens de mouvement v5', age: '25 min' },
+  { id: 'taz', name: 'Taz', tool: 'codex', state: 'waiting_permission', repo: 'api-gateway', branch: 'main', topic: 'Rate limiting par tenant', age: '31 min' },
+  { id: 'mim', name: 'Mim', tool: 'cursor', state: 'idle', repo: 'api-gateway', branch: 'openapi', topic: 'Schéma OpenAPI des webhooks', age: '40 min' },
+  { id: 'kai', name: 'Kai', tool: 'claude', state: 'working', repo: 'speos-portal', branch: 'main', topic: 'Migration MUI vers flowbite', age: '1 h' },
+  { id: 'zed', name: 'Zed', tool: 'claude', state: 'exited', repo: 'speos-portal', branch: 'login', topic: 'Page de connexion', age: '2 h' },
+  { id: 'ivo', name: 'Ivo', tool: 'codex', state: 'working', repo: 'ledge', branch: 'island', topic: 'Île en haut de l’écran', age: '4 min' },
+  { id: 'ola', name: 'Ola', tool: 'cursor', state: 'starting', repo: 'ledge', branch: 'main', topic: '', age: '10 s' },
+  { id: 'rem', name: 'Rem', tool: 'claude', state: 'waiting_input', repo: 'documentation', branch: 'main', topic: 'Relire le README', age: '6 min' },
+]);
+const byId = id => TEAM.find(s => s.id === id);
+
+/* Building blocks */
+const bot = (s, size, extra = '') => `<span class="bw ${extra}" data-halo="${s.state}">${LedgeMascotSVG(s.tool, s.state, size, s.name)}</span>`;
+const resident = size => `<span class="bw">${LedgeMascotSVG('claude', 'working', size, 'Ledge', 'resident')}</span>`;
+const badge = s => `<span class="badge" data-s="${s}">${STATE[s]}</span>`;
+const kbd = k => `<kbd class="k">${k}</kbd>`;
+const compactBots = (list, dimmed) => list.map(s => bot(s, 22, s.state === 'working' || s.state === 'starting' ? 'hop' : (s.state === 'waiting_permission' || s.state === 'waiting_input') && !dimmed ? 'breathe' : '')).join('');
+
+function compact(list, { dimmed = false, extra = '' } = {}) {
+  const shown = list.slice(0, 6), rest = list.length - shown.length;
+  return `<div class="view"><div class="compact ${dimmed ? 'dimmed' : ''}" data-act="open">${resident(22)}<span class="sep"></span>${compactBots(shown, dimmed)}${rest > 0 ? `<span class="more">+${rest}</span>` : ''}${extra}</div></div>`;
+}
+
+function head(opts) {
+  const left = opts.back ? `<button class="ib" data-act="${opts.back}" aria-label="Retour">‹</button>` : '';
+  const right = (opts.actions || []).map(a => `<button class="ib ${a.boxed ? 'boxed' : ''}" data-act="${a.act}" aria-label="${a.label}">${a.glyph}</button>`).join('');
+  return `<div class="ph-head ${opts.lined ? 'lined' : ''}">${left}${opts.avatar || ''}<div class="grow">${opts.brand ? `<div class="brand-l">Ledge<span>.</span></div>` : `<div class="title">${opts.title}</div>`}${opts.sub ? `<div class="sub">${opts.sub}</div>` : ''}</div>${right}</div>`;
+}
+const closeBtn = { act: 'rest', label: 'Replier Ledge', glyph: '×' };
+const askField = (text, filled) => `<div class="field askfield ${filled ? 'filled' : ''}" data-act="chat">${resident(18)}<span class="ph">${text}</span>${kbd('/')}</div>`;
+
+function listRows(list, selected) {
+  const groups = [];
+  list.forEach(s => { let g = groups.find(x => x.repo === s.repo); if (!g) { g = { repo: s.repo, items: [] }; groups.push(g); } g.items.push(s); });
+  const rank = { waiting_permission: 0, waiting_input: 1, starting: 2, working: 3, idle: 4, error: 5, exited: 6 };
+  groups.sort((a, b) => Math.min(...a.items.map(s => rank[s.state])) - Math.min(...b.items.map(s => rank[s.state])));
+  return groups.map(g => `<div class="group-h"><span><b>${g.repo}</b><span class="mono">~/Workspace/${g.repo}</span></span><span>${g.items.length} bot${g.items.length > 1 ? 's' : ''}</span></div>` +
+    g.items.sort((a, b) => rank[a.state] - rank[b.state]).map(s => {
+      const sel = s.id === selected;
+      const act = sel && s.state === 'waiting_permission' ? `<span class="inline-act"><button class="btn sm" data-act="session-permission">Refuser${kbd('N')}</button><button class="btn sm primary" data-act="session-permission">Autoriser${kbd('Y')}</button></span>` : badge(s.state);
+      return `<div class="row ${sel ? 'sel' : ''}" data-s="${s.state}" data-act="session-${s.id}">${bot(s, 30)}<div class="copy"><strong>${s.topic || 'Sans sujet encore'}</strong><small>${s.name} · <span class="br">⑂ ${s.branch}</span> · ${TOOL[s.tool]} · ${s.age}</small></div>${act}</div>`;
+    }).join('')).join('');
+}
+
+function list(items, { selected, askText = 'Demander à Ledge… où en sont les autres ?', footer = true } = {}) {
+  const asks = items.filter(s => s.state === 'waiting_permission' || s.state === 'waiting_input').length;
+  return `<div class="view panel">${head({ brand: true, sub: `${items.length} sessions · ${asks} demande${asks > 1 ? 's' : ''} pour vous`, actions: [{ act: 'launch', label: 'Nouvelle session', glyph: '+', boxed: true }, { act: 'dnd', label: 'Ne pas déranger', glyph: '◔' }, { act: 'settings', label: 'Réglages', glyph: '⚙' }, closeBtn] })}
+    ${askField(askText)}<div class="ph-body">${listRows(items, selected)}</div>
+    ${footer ? `<div class="ph-foot"><span data-act="dnd">◔ Ne pas déranger</span><span class="kbds">${kbd('Ctrl Alt L')}<span data-act="help">${kbd('?')}</span></span></div>` : ''}</div>`;
+}
+
+function sessionHead(s, extra = []) {
+  return head({ back: 'list', avatar: bot(s, 32), title: `${s.name} · ${s.repo}`, sub: `${TOOL[s.tool]} · ⑂ ${s.branch} · ${s.age}`, lined: true, actions: extra.concat([{ act: 'reader', label: 'Agrandir', glyph: '⤢' }, { act: 'noop', label: 'Ouvrir le terminal', glyph: '↗' }, closeBtn]) });
+}
+const replyBox = (hint, stop = true) => `<div class="reply"><div class="line"><span class="ph">Une instruction pour votre compagnon…</span><span class="send">↑</span></div><div class="hint"><span>${hint}</span>${stop ? '<span class="stop">Arrêter la session</span>' : ''}</div></div>`;
+const terminalDisc = `<div class="disc" data-act="session-working">› Aperçu du terminal <span class="mono">· 30 dernières lignes · lecture seule</span></div>`;
+
+function sessionPermission() {
+  const s = byId('otto');
+  return `<div class="view panel session">${sessionHead(s)}<div class="ph-body"><div class="sc-body">
+    <div class="sc-top"><span class="eyebrow">À vous de jouer</span>${badge('waiting_permission')}</div>
+    <h2>Otto souhaite lancer une commande.</h2>
+    <div class="well card"><h3>Exécution dans harness-assistant</h3><div class="code">pnpm test --filter overlay</div><label class="check"><i></i>Toujours pour cette session</label>
+      <div class="acts"><button class="btn" data-act="list">Refuser</button><button class="btn primary" data-act="finished">Autoriser${kbd('Y')}</button></div></div>
+    <p class="note">La décision concerne cette commande uniquement : « Toujours » n’est pas encore pris en charge.</p>
+    ${terminalDisc}</div></div>${replyBox('Autorisez ou refusez la commande avant de répondre')}</div>`;
+}
+
+function sessionQuestion() {
+  const s = byId('nova');
+  return `<div class="view panel session">${sessionHead(s)}<div class="ph-body"><div class="sc-body">
+    <div class="sc-top"><span class="eyebrow">À vous de jouer</span>${badge('waiting_input')}</div>
+    <h2>Nova a une question.</h2>
+    <p>Garder la temporisation de 60 s pour les sous-agents seulement, ou l’étendre à l’agent principal ?</p>
+    <div class="opt on"><span class="n">1</span><div><strong>Sous-agents seulement<span class="rec">recommandé</span></strong><small>Le principal garde son prompt immédiat.</small></div></div>
+    <div class="opt"><span class="n">2</span><div><strong>Tous les agents</strong><small>Une seule règle, plus simple à expliquer.</small></div></div>
+    <div class="opt"><span class="n">3</span><div><strong>Ne pas attendre</strong><small>Retirer la temporisation.</small></div></div>
+    <div class="card" style="padding:0"><div class="acts"><button class="btn primary" data-act="finished">Envoyer la réponse${kbd('↵')}</button></div></div>
+    <p class="note">Réponse libre : pas encore prise en charge pour une question à choix. Pour écrire autre chose, passez par le terminal ↗.</p>
+    ${terminalDisc}</div></div>${replyBox('Choisissez une option, puis envoyez')}</div>`;
+}
+
+function sessionReply() {
+  const s = byId('bix');
+  return `<div class="view panel session">${sessionHead(s)}<div class="ph-body"><div class="sc-body">
+    <div class="sc-top"><span class="eyebrow">À vous de jouer</span>${badge('idle')}</div>
+    <h2>Lecteur Markdown relu, trois corrections, une question.</h2>
+    <p>Bix a terminé il y a 39 s · 3 points faits · 1 question</p>
+    <p>Les liens relatifs s’ouvrent dans le lecteur, le bouton Reload relit vraiment le fichier. Il reste un choix sur la largeur par défaut.</p>
+    <div class="sect">Ce que j’ai fait · 3</div>
+    <div class="well done"><i>✓</i><span>Liens relatifs résolus depuis le dossier du document <code>DocumentView.tsx</code></span></div>
+    <div class="well done"><i>✓</i><span>Reload relit le fichier au lieu de rejouer le cache <code>documents/load.ts</code></span></div>
+    <div class="well done"><i>✓</i><span>Table des matières repliable mémorisée par document</span></div>
+    <div class="sect">Vérifié · 1</div>
+    <div class="well done"><i>✓</i><span class="mono" style="font-size:11.5px">pnpm test --filter overlay : 112 passed, 4.8s</span></div>
+    <div class="sect">Question ouverte</div>
+    <div class="well card"><h3>Largeur par défaut du lecteur ?</h3><div class="chips"><button class="chip">560 px, comme la réponse brute</button><button class="chip">800 px dès l’ouverture</button></div></div>
+    <div class="sect">Reste à faire</div>
+    <div class="todo">Vérifier le rendu Windows en 150 % et 200 %.</div>
+    <div class="toggle-line"><span>Réponse complète, telle quelle</span><span class="switch"></span></div>
+    ${terminalDisc}</div></div>${replyBox('Une puce remplit le champ, Entrée envoie')}</div>`;
+}
+
+function sessionWorking() {
+  const s = byId('pim');
+  return `<div class="view panel session">${sessionHead(s)}<div class="ph-body"><div class="sc-body">
+    <div class="sc-top"><span class="eyebrow">En cours</span>${badge('working')}</div>
+    <h2>Pim travaille depuis 8 min.</h2>
+    <div class="workbar"><i></i></div>
+    <div class="helpers"><div class="helper">${bot({ tool: 'cursor', state: 'working', name: 'h1' }, 18)}<span>Cherche les usages de <span class="mono">FRAME_PAD</span></span><small>general-purpose · au travail</small></div><div class="helper">${bot({ tool: 'cursor', state: 'working', name: 'h2' }, 18)}<span>Lit les specs du lecteur</span><small>Explore · au travail</small></div></div>
+    <div class="term">❯ pnpm test --filter overlay
+ ✓ test/frame.test.ts (14)
+ ✓ test/scale.test.ts (9)
+ ✓ test/tauri.test.tsx (21)
+ ● e2e/scale.spec.ts · running…
+<span class="cur">Searching for FRAME_PAD in apps/overlay/src… 3 files</span></div>
+    <div class="card" style="padding:0"><div class="acts"><button class="btn sm" data-act="noop">Interrompre le tour</button><button class="btn sm" data-act="noop">Arrêter</button><button class="btn sm" data-act="noop">Ouvrir le terminal ↗</button></div></div>
+    </div></div>${replyBox('Pim travaille : votre instruction partira à son prochain tour')}</div>`;
+}
+
+function sessionReadonly() {
+  const s = { ...byId('otto'), state: 'working' };
+  return `<div class="view panel session">${sessionHead(s)}<div class="ph-body"><div class="sc-body">
+    <div class="sc-top"><span class="eyebrow">Visible, lecture seule</span>${badge('working')}</div>
+    <h2>Otto a été lancé sans le lanceur Ledge.</h2>
+    <div class="ro">Ses hooks le rendent visible : état, sujet, dernières réponses. Sans tmux dédié, Ledge ne peut ni répondre ni taper pour vous. Relancez-le avec <code>ledge claude</code> dans ce dossier pour tout faire d’ici.</div>
+    ${terminalDisc}</div></div></div>`;
+}
+
+function chat() {
+  return `<div class="view panel">${head({ back: 'list', avatar: resident(30), title: 'Ledge', sub: 'Voit 4 sessions · 3 dépôts · lecture seule', lined: true, actions: [{ act: 'chat', label: 'Nouvelle conversation', glyph: '+', boxed: true }, closeBtn] })}
+    <div class="ph-body"><div class="sc-body">
+    <div class="disc" style="color:var(--notch-fg)">Où en sont les autres ?</div>
+    <div class="steps"><div><span class="ok">✓</span>Terminaux d’Otto, Nova, Pim, Bix</div><div><span class="ok">✓</span>Dernières réponses des quatre</div><div><span class="spin"></span>git dans harness-assistant, landing-page, documentation</div></div>
+    <div class="answer">Deux compagnons attendent quelque chose de vous. <a class="bot-link" data-act="session-otto">Otto</a> veut lancer les tests de l’overlay depuis 4 min. <a class="bot-link" data-act="session-nova">Nova</a> hésite sur la temporisation des sous-agents. <a class="bot-link" data-act="session-pim">Pim</a> est sur les plans Cursor, six fichiers touchés, rien de commité. <a class="bot-link" data-act="session-bix">Bix</a> a fini la relecture du lecteur<span class="caret"></span></div>
+    <div class="sources">Sources · terminaux d’Otto, Nova, Pim, Bix · 4 réponses · git dans 3 dossiers · il y a 10 s</div>
+    <div class="chips"><button class="chip">Qu’a changé Pim sur landing-page ?</button><button class="chip">Quelles branches peuvent être fusionnées ?</button></div>
+    </div></div>
+    <div class="reply"><div class="line">${resident(18)}<span class="ph">Une autre question sur vos sessions…</span><span class="send">↑</span></div><div class="hint"><span>Une conversation par jour, + pour en ouvrir une nouvelle</span><span>Claude Code · Réglages</span></div></div></div>`;
+}
+
+function launch() {
+  return `<div class="view panel narrow">${head({ back: 'list', title: 'Nouvelle session', lined: true, actions: [closeBtn] })}<div class="ph-body"><div class="form">
+    <div class="f"><label>Dossier</label><div class="help">Le projet dans lequel le compagnon travaille.</div><div class="inline"><div class="field filled"><span class="ph mono" style="font-size:12px">/home/joffrey/Workspace/api-gateway</span></div><button class="ib boxed" data-act="browse" aria-label="Parcourir">▭</button></div>
+      <div class="recents"><span>Récents</span><div class="rc on"><div>api-gateway<small>/home/joffrey/Workspace/api-gateway</small></div><span>✓</span></div><div class="rc"><div>harness-assistant <em>· Otto et Nova y travaillent</em><small>/home/joffrey/Workspace/harness-assistant</small></div></div></div></div>
+    <div class="f"><label>Outil</label><div class="help">Chacun est suivi par ses hooks ; ses demandes se règlent depuis Ledge.</div><div class="seg"><span class="on">Claude Code</span><span>Codex</span><span>Cursor Agent</span></div></div>
+    <div class="f"><label>Compagnon</label><div class="help">Son nom donne le titre de l’onglet : Juno · api-gateway.</div><div class="inline">${bot({ tool: 'claude', state: 'starting', name: 'Juno' }, 30)}<div class="field filled"><span class="ph">Juno</span></div><button class="ib boxed" aria-label="Un autre nom">⚄</button></div></div>
+    <div class="f"><label>Première instruction <span class="muted" style="font-weight:400">· facultatif</span></label><div class="ta">Que doit faire Juno en premier ?</div></div>
+    <div class="sw-line"><div><label>Reprendre la dernière conversation</label><div class="help">Démarre avec --continue dans ce dossier.</div></div><span class="switch"></span></div>
+    <div class="sw-line"><div><label>Ouvrir l’onglet du terminal</label><div class="help">Sinon l’onglet reste à un clic depuis sa fiche.</div></div><span class="switch on"></span></div>
+    </div></div><div class="ph-foot"><button class="btn" data-act="list">Annuler</button><button class="btn primary" data-act="list-starting">Démarrer${kbd('↵')}</button></div></div>`;
+}
+
+function browse() {
+  return `<div class="view panel narrow">${head({ back: 'launch', title: 'Choisir un dossier', lined: true, actions: [closeBtn] })}
+    <div class="crumbs"><span>~</span>›<span>Workspace</span>›<b>api-gateway</b></div>
+    <div class="ph-body">
+    <div class="dir"><span class="ico">▭</span>src</div><div class="dir"><span class="ico">▭</span>docs</div><div class="dir"><span class="ico">▭</span>infra<em>Mim y travaille</em></div><div class="dir"><span class="ico">▭</span>scripts</div>
+    <div class="dir new"><span class="ico">＋</span><div class="field filled"><span class="ph">webhooks-service</span></div><button class="btn sm">Créer</button></div>
+    </div><div class="ph-foot"><span>Ce qui est tapé dans le formulaire reste.</span><button class="btn primary" data-act="launch">Choisir ce dossier</button></div></div>`;
+}
+
+function emptyList() {
+  return `<div class="view panel">${head({ brand: true, sub: 'Personne au travail', actions: [{ act: 'launch', label: 'Nouvelle session', glyph: '+', boxed: true }, { act: 'settings', label: 'Réglages', glyph: '⚙' }, closeBtn] })}
+    <div class="empty">${resident(56)}<strong>Un peu de calme.</strong><p>Lancez un compagnon depuis un terminal, ou d’ici.</p><button class="btn primary" data-act="launch">Démarrer un compagnon</button><code>ledge claude</code></div>
+    <div class="ph-foot"><span>◔ Ne pas déranger</span><span class="kbds">${kbd('Ctrl Alt N')}</span></div></div>`;
+}
+
+function reader() {
+  return `<div class="view panel wide">${head({ back: 'session-bix', avatar: '<span style="font-size:18px">▤</span>', title: '2026-10-11-markdown-reader-design.md', sub: 'documentation / docs / superpowers / specs · cité par Bix', lined: true, actions: [{ act: 'noop', label: 'Relire le fichier', glyph: '↻' }, { act: 'noop', label: 'Agrandir', glyph: '⤢' }, closeBtn] })}
+    <div style="display:flex;gap:8px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--notch-line)"><div class="seg" style="width:180px"><span class="on">Lecture</span><span>Markdown</span></div><span class="note" style="margin-left:auto">Lecture seule · 1 MiB max</span></div>
+    <div class="reader ph-body"><div class="toc"><span>Dans ce document</span><a class="on">Intention</a><a>Parcours de lecture</a><a>Étapes du plan</a><a>Vérification</a><div class="cited">Cité par Bix<br>documentation</div></div>
+    <div class="doc"><h2>Un lecteur pour les documents des agents.</h2><div class="lead">Consulter les fichiers Markdown cités dans une session, sans interrompre le fil de la conversation.</div>
+    <h3>Intention</h3><p>Quand Bix partage un plan, le fichier devient un document que l’on peut ouvrir et parcourir directement dans Ledge, depuis l’île.</p>
+    <blockquote><b>Le principe</b><br>Un clic pour lire. Un retour immédiat à la session pour poser une question ou donner son accord.</blockquote>
+    <h3>Parcours de lecture</h3><p>La référence <code>docs/superpowers/plans/…</code> apparaît dans la réponse. Son ouverture élargit l’île à 800 px ; Escape revient à Bix, la réponse et le brouillon sont toujours là.</p>
+    <ul><li>Les liens vers un autre fichier local s’ouvrent dans le lecteur.</li><li>Retour parcourt ces documents avant de rendre la conversation.</li></ul></div></div>
+    <div class="ph-foot"><span data-act="session-bix">← Revenir à Bix · Début du document</span><span class="kbds">${kbd('Esc')}<span>fermer</span></span></div></div>`;
+}
+
+function help() {
+  const rows = [['Ouvrir la liste', ['Ctrl Alt L']], ['Nouvelle session', ['Ctrl Alt N']], ['Choisir une session', ['J', 'K', '1–9']], ['Session précédente / suivante', ['Alt ←', 'Alt →']], ['Ouvrir la sélection', ['Entrée']], ['Autoriser / refuser', ['Y', 'N']], ['Choisir une option', ['1', '2', '3']], ['Demander à Ledge', ['/']], ['Changer de thème', ['Ctrl Alt T']], ['Retour, puis replier', ['Échap']], ['Cette aide', ['?']]];
+  return `<div class="view panel narrow help">${head({ back: 'list', title: 'Au bout des doigts.', lined: true, actions: [closeBtn] })}<div class="ph-body"><dl>${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1].map(kbd).join('')}</dd>`).join('')}</dl><p class="note">Tab conserve la navigation entre les contrôles. Les raccourcis globaux marchent depuis n’importe quelle fenêtre.</p></div></div>`;
+}
+
+function settings() {
+  return `<div class="view panel narrow">${head({ back: 'list', title: 'Votre Ledge', lined: true, actions: [closeBtn] })}
+    <div class="seg settabs" style="margin-top:10px"><span class="on">Affichage</span><span>Notifications</span><span>Sons</span></div>
+    <div class="ph-body"><div class="set">
+    <div class="f"><label>Langue</label><div class="help">La langue de Ledge.</div><div class="seg"><span class="on">Français</span><span>English</span></div></div>
+    <div class="f"><label>Harnais par défaut</label><div class="help">Nouvelles sessions et chat Ledge.</div><div class="seg"><span class="on">Claude Code</span><span>Codex</span><span>Cursor Agent</span></div></div>
+    <div class="f"><label>Écran</label><div class="help">L’île se pose au bord supérieur de cet écran (1600 × 1000).</div><div class="seg"><span class="on">Principal</span><span>Écran 2</span></div></div>
+    <div class="f"><label>Position de l’île<span class="newtag">nouveau</span></label><div class="help">Pour laisser le titre de la fenêtre ou les onglets du navigateur libres.</div><div class="seg"><span>Décalée à gauche</span><span class="on">Centre</span><span>Décalée à droite</span></div></div>
+    <div class="sw-line"><div><label>Mode discret sous une fenêtre<span class="newtag">nouveau</span></label><div class="help">Un trait de 10 px tant qu’une fenêtre maximisée est dessous.</div></div><span class="switch on"></span></div>
+    <div class="f"><label>Taille de l’île</label><div class="help">L’île et ses compagnons au bord de l’écran.</div><div class="seg"><span class="on">Auto (100 %)</span><span>100 %</span><span>125 %</span><span>150 %</span><span>200 %</span></div></div>
+    <div class="f"><label>Taille des fenêtres</label><div class="help">Bulle, liste, session, réglages et aide.</div><div class="seg"><span class="on">Auto (100 %)</span><span>100 %</span><span>125 %</span><span>150 %</span><span>200 %</span></div></div>
+    <div class="sw-line"><div><label>Thème sombre · Signal</label><div class="help">Changer le thème et la matière des mascottes</div></div>${kbd('Ctrl Alt T')}</div>
+    <div class="sw-line"><div><label>Mouvements réduits</label><div class="help">Les états restent lisibles sans animation.</div></div><span class="switch"></span></div>
+    </div></div></div>`;
+}
+
+function ask() {
+  const s = byId('otto');
+  return `<div class="view"><div class="ask"><div class="ask-main">${bot(s, 40, 'breathe')}<div class="copy" data-act="session-permission"><strong>Otto attend votre accord</strong><span class="cmd">pnpm test --filter overlay · harness-assistant</span></div><span class="next" data-act="session-question">+1 autre ›</span></div>
+    <div class="ask-actions"><button class="btn" data-act="rest">Refuser</button><button class="btn primary" data-act="finished">✓ Autoriser</button></div></div><div class="timer"><i></i></div></div>`;
+}
+function finished() {
+  const s = { ...byId('otto'), state: 'idle' };
+  return `<div class="view"><div class="ask notice" style="width:400px"><div class="ask-main">${bot(s, 40)}<div class="copy" data-act="session-reply"><strong>Otto a terminé</strong><span class="meta">2 min 40 s de travail · harness-assistant</span></div></div>
+    <div class="ask-actions"><button class="btn" data-act="rest">OK</button><button class="btn primary" data-act="session-reply">Ouvrir</button></div></div><div class="timer"><i></i></div></div>`;
+}
+function sliver(list) {
+  return `<div class="view"><div class="sliver" data-act="open">${list.slice(0, 6).map(s => `<i style="background:${{ waiting_permission: '#f2b09c', waiting_input: '#f6d487', working: '#90c7f2', starting: '#90c7f2', idle: '#a9dfc7', exited: '#a3aaa9', error: '#ffab9f' }[s.state]}"></i>`).join('')}</div></div>`;
+}
+
+/* Scenarios: what the rail lists, what the island shows, what the status line says. */
+const SC = [
+  { g: 'Présence', id: 'rest', title: 'Au repos', kind: 'Île compacte · 38 px', c: 'ok', mode: 'rest', render: () => compact(S), desc: 'La mascotte de Ledge à gauche, un trait, puis un compagnon par session, de gauche à droite. Chacun porte la couleur de son état ; ceux qui attendent respirent, celui qui travaille saute de 2 px.', delta: 'Avant : une colonne au bord gauche. Après : une rangée sous le bord supérieur, centrée.' },
+  { g: 'Présence', id: 'busy', title: 'Journée chargée', kind: 'Île compacte · 12 sessions', c: 'ok', mode: 'busy', render: () => compact(TEAM), desc: 'Au-delà de six mascottes l’île compte « +n ». Les demandes passent devant pour rester visibles.', delta: 'L’île ne s’élargit jamais au-delà de 300 px au repos.' },
+  { g: 'Présence', id: 'sliver', title: 'Mode discret', kind: 'Trait de 10 px', c: 'ok', mode: 'sliver', render: () => sliver(S), desc: 'Une fenêtre maximisée occupe le haut de l’écran : l’île se réduit à un trait, un point par session, la couleur de l’état conservée. Un survol la redéploie.', delta: 'Nouveau. Répond à la collision avec les titres de fenêtres et les onglets de navigateur.' },
+  { g: 'Présence', id: 'dnd', title: 'Ne pas déranger', kind: 'Île compacte', c: 'ok', mode: 'dnd', render: () => compact(S, { dimmed: true, extra: '<span class="moon">◔</span>' }), desc: 'Les demandes restent dans l’île, sans bulle ni son. Les halos s’éteignent, la lune marque l’état.', delta: 'Identique à la poignée : Réglages › Notifications, ou le bouton ◔ de la liste.' },
+  { g: 'Demandes', id: 'ask', title: 'Une demande', kind: 'L’île s’étire · 440 px', c: 'red', mode: 'ask', render: ask, desc: 'Otto attend un accord : l’île grandit, le compagnon passe à 40 px, la commande et le dossier s’écrivent à côté, Refuser et Autoriser dessous. « +1 autre » dit qu’une question suit. Le trait rouge en bas est le compte à rebours ; survoler garde ouvert.', delta: 'La bulle n’est plus une fenêtre à côté de la poignée : c’est l’île elle-même.' },
+  { g: 'Demandes', id: 'finished', title: 'Tour terminé', kind: 'Avis · 6 s', c: 'ok', mode: 'finished', render: finished, desc: 'Quand un tour se termine, le même geste en vert : Otto a terminé, le temps de travail, le dépôt, OK et Ouvrir. Une demande passe toujours avant un avis.', delta: 'Réglages › « Quand un bot termine » choisit bulle, son, les deux ou l’île seule.' },
+  { g: 'Liste', id: 'list', title: 'La liste', kind: 'Panneau · 440 px', c: 'info', mode: 'list', render: () => list(S), desc: 'Survoler l’île ou Ctrl+Alt+L. Le champ Demander à Ledge au-dessus des sessions, les lignes groupées par dépôt, les demandes en premier avec la barre de couleur, le badge d’état à droite.', delta: 'Le panneau descend depuis l’île ; la poignée s’ouvrait vers la droite.' },
+  { g: 'Liste', id: 'keyboard', title: 'Ouverte au clavier', kind: 'Panneau · coachmark', c: 'info', mode: 'list', render: () => list(S, { selected: 'otto' }), asides: [{ cls: 'coach', top: 'island', html: `<b>Ouvert au clavier.</b> ${kbd('J')} ${kbd('K')} pour choisir, ${kbd('Y')} ${kbd('N')} pour décider, ${kbd('?')} pour tout voir` }], desc: 'Ctrl+Alt+L ouvre sur la plus ancienne demande, avec Autoriser et Refuser en ligne. Le coachmark des trois premières ouvertures se pose sous le panneau.', delta: 'Même clavier. Le coachmark est sous l’île au lieu d’être à sa droite.' },
+  { g: 'Liste', id: 'team', title: 'Douze sessions', kind: 'Panneau · défilement', c: 'info', mode: 'list', render: () => list(TEAM), desc: 'Le panneau garde 660 px de haut au plus ; les sessions défilent dedans, le nombre de demandes reste dans le sous-titre.', delta: 'Hauteur bornée par l’écran moins la marge du bas, comme avant.' },
+  { g: 'Liste', id: 'empty', title: 'Liste vide', kind: 'Panneau', c: 'info', mode: 'list', render: emptyList, desc: 'Personne au travail : la mascotte de Ledge, un bouton pour démarrer un compagnon, la commande à taper.', delta: 'Inchangé.' },
+  { g: 'Session', id: 'session-permission', title: 'Votre accord', kind: 'Session · 480 px', c: 'red', mode: 'session', render: sessionPermission, desc: 'La commande et où elle s’exécute, Refuser et Autoriser (N et Y). Le daemon tape la réponse dans le terminal et ne confirme qu’une fois le prompt parti. L’aperçu du terminal est replié dessous ; le champ du bas attend votre tour.', delta: 'Inchangé dans son contenu ; ancré sous l’île.' },
+  { g: 'Session', id: 'session-question', title: 'Une question', kind: 'Session · 480 px', c: 'warn', mode: 'session', render: sessionQuestion, desc: 'Les options en cartes, les chiffres pour choisir, Envoyer la réponse. Plusieurs questions arrivent une à une, puis la relecture. La réponse libre n’est pas prise en charge : Ledge le dit et renvoie au terminal.', delta: 'Inchangé.' },
+  { g: 'Session', id: 'session-reply', title: 'Réponse lue comme un plan', kind: 'Session · 480 px', c: 'ok', mode: 'session', render: sessionReply, desc: 'Le dernier message du Stop hook, lu comme un plan : titre, chapeau, ce qui est fait en vert, le vérifié en mono, la question ouverte avec ses puces, le reste à faire en pointillé. Une puce remplit le champ.', delta: 'La réponse brute élargit à 560 px, vers les deux côtés de l’axe.' },
+  { g: 'Session', id: 'session-working', title: 'Au travail', kind: 'Session · aperçu terminal', c: 'info', mode: 'session', render: sessionWorking, desc: 'Les trente dernières lignes, tenues sur la dernière. Les sous-agents sous le titre avec leur tâche et leur état. Interrompre le tour, arrêter, ouvrir l’onglet.', delta: 'Inchangé.' },
+  { g: 'Session', id: 'session-readonly', title: 'Lecture seule', kind: 'Session · sans lanceur', c: 'info', mode: 'session', render: sessionReadonly, desc: 'Une session lancée avec claude tout court reste visible par ses hooks, sans champ de réponse.', delta: 'Inchangé.' },
+  { g: 'Outils', id: 'chat', title: 'Demander à Ledge', kind: 'Conversation · 440 px', c: 'ok', mode: 'list', render: chat, desc: 'Les étapes d’abord (terminaux, réponses, dépôts lus), puis la réponse qui s’écrit, ses sources dessous, les prénoms en liens vers la session. Une conversation par jour, + pour en ouvrir une autre.', delta: 'Le champ est sous l’en-tête de la liste, l’île au-dessus des compagnons comme la mascotte résidente au-dessus des bots.' },
+  { g: 'Outils', id: 'launch', title: 'Nouvelle session', kind: 'Formulaire · 420 px', c: 'ok', mode: 'launch', render: launch, desc: 'Dossier avec les récents et qui y travaille, outil, compagnon et son dé, première instruction, reprendre la conversation, ouvrir l’onglet. Entrée démarre ; la session apparaît avec le badge Démarrage.', delta: 'Ctrl+Alt+N depuis n’importe où, comme avant.' },
+  { g: 'Outils', id: 'browse', title: 'Choisir un dossier', kind: 'Parcours WSL', c: 'ok', mode: 'launch', render: browse, desc: 'Un fil d’Ariane pour remonter, les sous-dossiers un niveau à la fois, Nouveau dossier en place, Choisir ce dossier remplit le champ sans perdre le reste du formulaire.', delta: 'Inchangé.' },
+  { g: 'Outils', id: 'reader', title: 'Lecteur Markdown', kind: 'Document · 800 px', c: 'ok', mode: 'reader', render: reader, desc: 'Un .md cité s’ouvre dans l’île à 800 px : sommaire repliable, vue rendue ou source, liens locaux lus dans le lecteur, Retour qui remonte les documents avant de rendre la session.', delta: 'La plus large des vues ; elle s’étend de 400 px de chaque côté de l’axe.' },
+  { g: 'Réglages', id: 'help', title: 'Raccourcis', kind: 'Aide · 420 px', c: 'ok', mode: 'launch', render: help, desc: 'Toute la liste, ouverte par ? à tout moment.', delta: 'Inchangé.' },
+  { g: 'Réglages', id: 'settings', title: 'Réglages', kind: 'Trois onglets', c: 'ok', mode: 'launch', render: settings, desc: 'Affichage, Notifications, Sons. L’onglet Affichage gagne la position de l’île et le mode discret ; « Taille de la poignée » devient « Taille de l’île ».', delta: 'Deux réglages nouveaux, tout le reste identique.' },
+];
+const byAct = { rest: 'rest', open: 'list', list: 'list', 'list-starting': 'list', launch: 'launch', browse: 'browse', chat: 'chat', settings: 'settings', help: 'help', reader: 'reader', finished: 'finished', 'session-otto': 'session-permission', 'session-nova': 'session-question', 'session-pim': 'session-working', 'session-bix': 'session-reply', 'session-permission': 'session-permission', 'session-question': 'session-question', 'session-working': 'session-working', 'session-reply': 'session-reply', 'session-readonly': 'session-readonly', dnd: 'dnd', 'session-lu': 'session-working', 'session-taz': 'session-permission', 'session-mim': 'session-reply', 'session-kai': 'session-working', 'session-zed': 'session-readonly', 'session-ivo': 'session-working', 'session-ola': 'session-working', 'session-rem': 'session-question' };
+
+const island = document.getElementById('island'), box = document.getElementById('box'), stage = document.getElementById('stage'), wrap = document.getElementById('wrap'), asides = document.getElementById('asides');
+const rail = document.getElementById('rail'), root = document.documentElement;
+let current = null, k = 1;
+
+function fit() { k = Math.min(1, wrap.clientWidth / 1200); stage.style.setProperty('--k', k); }
+new ResizeObserver(fit).observe(wrap); fit();
+
+function show(id, { animate = true } = {}) {
+  const sc = SC.find(s => s.id === id); if (!sc) return;
+  const reduced = root.dataset.reduced === 'true' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const before = island.getBoundingClientRect();
+  island.classList.add('measuring');
+  island.dataset.mode = sc.mode; box.innerHTML = sc.render();
+  const after = island.getBoundingClientRect();
+  island.classList.remove('measuring');
+  if (animate && current && !reduced && (before.width !== after.width || before.height !== after.height)) {
+    island.animate([{ width: before.width / k + 'px', height: before.height / k + 'px' }, { width: after.width / k + 'px', height: after.height / k + 'px' }], { duration: 340, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  }
+  asides.innerHTML = '';
+  (sc.asides || []).forEach(a => { const el = document.createElement('div'); el.className = 'aside ' + a.cls; el.innerHTML = a.html; el.style.top = (after.height / k + 12) + 'px'; asides.appendChild(el); });
+  current = id;
+  document.getElementById('sc-title').textContent = sc.title; document.getElementById('sc-kind').textContent = sc.kind;
+  document.getElementById('sc-desc').textContent = sc.desc; document.getElementById('sc-delta').textContent = sc.delta;
+  rail.querySelectorAll('.sc').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === id)));
+  try { localStorage.setItem('ledge-island-sc', id); } catch (e) {}
+}
+
+/* Rail */
+let g = '';
+rail.innerHTML = SC.map(s => (s.g !== g ? ((g = s.g), `</div><div class="rail-group"><span>${s.g}</span>`) : '') + `<button class="sc" type="button" data-id="${s.id}" aria-pressed="false"><i data-c="${s.c}"></i>${s.title}</button>`).join('').replace(/^<\/div>/, '') + '</div>';
+rail.addEventListener('click', e => { const b = e.target.closest('.sc'); if (b) show(b.dataset.id); });
+
+/* Clicks inside the island follow data-act; "rest" first when the toggle asks for it, so each transition starts from the compact island. */
+box.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]'); if (!t) return;
+  const act = t.dataset.act; if (act === 'noop') return;
+  const target = byAct[act]; if (!target) return;
+  if (document.getElementById('autorest').checked && (act === 'finished' || act === 'list-starting' || act === 'rest')) { show('rest'); if (target !== 'rest') setTimeout(() => show(target), 420); return; }
+  show(target);
+});
+
+document.getElementById('theme').addEventListener('click', e => {
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : !matchMedia('(prefers-color-scheme: light)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+  e.currentTarget.querySelector('span').textContent = dark ? 'Mode sombre' : 'Mode clair';
+});
+document.getElementById('reduced').addEventListener('change', e => { root.dataset.reduced = String(e.target.checked); show(current, { animate: false }); });
+
+let first = 'rest';
+try { const saved = localStorage.getItem('ledge-island-sc'); if (saved && SC.some(s => s.id === saved)) first = saved; } catch (e) {}
+show(first, { animate: false });
+</script>
+</body>
+</html>

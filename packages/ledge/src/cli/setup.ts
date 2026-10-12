@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, rename, realpath, rm, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename, realpath, rm, stat, lstat, readlink, symlink, unlink } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { homedir, userInfo } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -184,6 +184,17 @@ export async function isDir(path: string): Promise<boolean> {
   try { return (await stat(path)).isDirectory(); } catch { return false; }
 }
 
+/** `~/.local/bin/ledge` from the README's clone install: once npm installed Ledge, it must follow, or hooks run the clone. */
+export async function relinkBin(opts: { link: string; target: string }): Promise<string | null> {
+  const st = await lstat(opts.link).catch(() => null);
+  if (!st?.isSymbolicLink()) return null;
+  const current = await readlink(opts.link);
+  if (current === opts.target || !current.endsWith('/dist/cli/index.js')) return null;
+  await unlink(opts.link);
+  await symlink(opts.target, opts.link);
+  return `${opts.link} now points to ${opts.target} (was ${current})`;
+}
+
 /** `codexDir` and `cursorDir` are the agents' config folders: their hooks are wired only where the folder exists. */
 export async function runSetup(opts: { settingsPath?: string; codexDir?: string; cursorDir?: string; service?: boolean } = {}): Promise<string[]> {
   const out: string[] = [];
@@ -201,8 +212,13 @@ export async function runSetup(opts: { settingsPath?: string; codexDir?: string;
   if (!(await isDir(cursorDir))) out.push(`Cursor Agent not found (${cursorDir} missing), Cursor Agent hooks skipped`);
   else if (await mergeJsonFile(join(cursorDir, 'hooks.json'), mergeCursorHooks, 'hooks.json')) out.push(`Cursor Agent hooks added in ${join(cursorDir, 'hooks.json')}`);
   else out.push('Cursor Agent hooks already present');
+  // Like the service below, this edits the machine outside the agents' config: tests that pass `service: false` skip it.
+  if ((opts.service ?? true) && !process.argv[1]?.endsWith('.ts')) {
+    const line = await relinkBin({ link: join(homedir(), '.local', 'bin', 'ledge'), target: await realpath(process.argv[1]!) });
+    if (line) out.push(line);
+  }
   if (opts.service ?? true) {
-    if (process.argv[1]?.endsWith('.ts')) out.push('systemd service skipped: run setup from the built CLI (pnpm --filter ledge build, then ledge setup)');
+    if (process.argv[1]?.endsWith('.ts')) out.push('systemd service skipped: run setup from the built CLI (pnpm --filter @paradow/ledge build, then ledge setup)');
     else out.push(...await installService());
   }
   return out;

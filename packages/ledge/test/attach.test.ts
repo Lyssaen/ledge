@@ -19,7 +19,7 @@ describe('ledge attach', () => {
   let socket: string; let tmux: Tmux; let store: Store; let srv: ServerHandle; let n = 0;
   beforeEach(async () => {
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
-    socket = `ledge-attach-${process.pid}-${Date.now()}-${n++}`; tmux = realTmux(socket);
+    socket = `ledge-attach-${process.pid}-${Date.now()}-${n++}`; tmux = realTmux(socket, { scope: async () => false });
     store = new Store(); srv = await startServer({ store, tmux, port: 0 });
   });
   afterEach(async () => { await srv.close(); await killTestServer(socket); vi.restoreAllMocks(); });

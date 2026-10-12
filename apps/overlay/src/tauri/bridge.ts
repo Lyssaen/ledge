@@ -1,8 +1,9 @@
 /**
  * Everything the web app asks of the native shell goes through here. In a plain browser (dev, tests) every call is a
  * no-op or a DOM fallback; under Tauri it talks to the commands and events in `src-tauri/src/main.rs`:
- *   set_frame { top, width, height }   window to (0, top) on the chosen monitor's work area, sized width x height
- *   set_hot_zones { zones: Band[] }    edge bands the native cursor poller watches (empty: none)
+ *   set_frame { left, top, width, height }   window to (left, top) on the chosen monitor's work area, sized width x height
+ *   set_hot_zone { left, width }       the island's x range (logical px): the cursor poller watches the top band around it
+ *   set_outside_watch { on }           arm (or disarm) the native watch for a mouse press outside the window
  *   list_monitors                      every monitor (logical sizes, work-area height, which one is the primary)
  *   set_monitor { id | null }          the Screen setting: the overlay moves to that monitor at once (null: primary)
  *   focus_overlay                      remember the foreground window, then show and focus the overlay window
@@ -13,12 +14,13 @@
  *   set_tray_labels { open, newSession, dnd, quit }  translated tray menu items
  *   get_autostart                      whether Ledge launches at login (null: not offered, a `tauri dev` build)
  *   set_autostart { on }               turn launch at login on or off; returns the state Windows now reports
- *   event `ledge://edge` { inside }    cursor entered / left the edge bands
- *   event `ledge://cursor-near` { x, y } | null    cursor near the notch, in logical work-area coordinates
+ *   event `ledge://outside-click`      a mouse button went down outside the window while the watch was armed
+ *   event `ledge://cursor-near` { x, y } | null    cursor in the top band around the island, in logical work-area coordinates
+ *   event `ledge://foreground` { covered }   a maximised or full-screen window took (or left) the foreground on the island's monitor
  *   event `ledge://tray` { action }    tray menu action
  * Coordinates sent to the shell are logical px from the top of the chosen monitor's work area ("monitor px").
- * The page is never zoomed (each layer applies its own UI scale), so its CSS px are monitor px; `setFrame` and
- * `setHotZones` still take an optional `zoom` (one CSS px = `zoom` monitor px) and round frames outward here. The shell
+ * The page is never zoomed (each layer applies its own UI scale), so its CSS px are monitor px; `setFrame` still
+ * takes an optional `zoom` (one CSS px = `zoom` monitor px) and round frames outward here. The shell
  * itself never knows about any zoom.
  */
 import { resolveMonitor, type MonitorInfo } from '../monitor';
@@ -27,11 +29,11 @@ import { listen } from '@tauri-apps/api/event';
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const inTauri = isTauri;
 
-export interface Frame { top: number; w: number; h: number }
-export interface Band { top: number; h: number }
-export const EDGE_EVENT = 'ledge://edge';
+export interface Frame { left: number; top: number; w: number; h: number }
+export const OUTSIDE_CLICK_EVENT = 'ledge://outside-click';
 export const CURSOR_NEAR_EVENT = 'ledge://cursor-near';
 export const TRAY_EVENT = 'ledge://tray';
+export const FOREGROUND_EVENT = 'ledge://foreground';
 
 /** The work-area height, in logical (monitor) px, of the monitor the Screen setting `choice` resolves to (`null`: the
  *  primary): the height the surface lays itself out in. */
@@ -83,8 +85,8 @@ const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T
 /** A frame in CSS px to monitor px under `zoom`: the edges are rounded outward so the window always holds the drawing. */
 export function toMonitorFrame(f: Frame, zoom = 1): Frame {
   if (zoom === 1) return f;
-  const top = Math.floor(f.top * zoom);
-  return { top, w: Math.ceil(f.w * zoom), h: Math.max(1, Math.ceil((f.top + f.h) * zoom) - top) };
+  const left = Math.floor(f.left * zoom), top = Math.floor(f.top * zoom);
+  return { left, top, w: Math.max(1, Math.ceil((f.left + f.w) * zoom) - left), h: Math.max(1, Math.ceil((f.top + f.h) * zoom) - top) };
 }
 
 // Frames are sent one after the other: async commands may otherwise land out of order and leave the
@@ -96,22 +98,31 @@ let frameChain: Promise<unknown> = Promise.resolve();
 export function setFrame(f: Frame, zoom = 1): Promise<boolean> {
   if (!inTauri()) return Promise.resolve(false);
   const m = toMonitorFrame(f, zoom);
-  const key = `${m.top}:${m.w}:${m.h}`;
+  const key = `${m.left}:${m.top}:${m.w}:${m.h}`;
   if (key === lastFrame) return frameChain.then(() => lastFrame === key);
   lastFrame = key;
-  const run = frameChain.then(() => invoke('set_frame', { top: m.top, width: m.w, height: m.h })).then(() => true, () => { if (lastFrame === key) lastFrame = ''; return false; });
+  const run = frameChain.then(() => invoke('set_frame', { left: m.left, top: m.top, width: m.w, height: m.h })).then(() => true, () => { if (lastFrame === key) lastFrame = ''; return false; });
   frameChain = run;
   return run;
 }
 
-let lastZones = '';
-/** Reports the edge bands (CSS px, under the UI `zoom`) that should open the surface; an empty list disarms the
- *  native poller. */
-export function setHotZones(zones: Band[], zoom = 1): void {
+let lastHot = '';
+/** The island's x range in logical px: the shell's cursor poller watches the 10 px band along the top edge around it. */
+export function setHotZone(left: number, width: number): void {
   if (!inTauri()) return;
-  const bands = zones.map(z => ({ top: z.top * zoom, h: z.h * zoom }));
-  const key = JSON.stringify(bands); if (key === lastZones) return; lastZones = key;
-  invoke('set_hot_zones', { zones: bands }).catch(() => { if (lastZones === key) lastZones = ''; });
+  const key = `${left}:${width}`;
+  if (key === lastHot) return;
+  lastHot = key;
+  invoke('set_hot_zone', { left, width }).catch(() => { if (lastHot === key) lastHot = ''; });
+}
+
+let lastWatch: boolean | null = null;
+/** Arms the native watch for a press outside the window while a panel shows. The window never takes focus on a
+ *  mouse open, so a click elsewhere gives it no blur to react to. */
+export function setOutsideWatch(on: boolean): void {
+  if (!inTauri() || on === lastWatch) return;
+  lastWatch = on;
+  invoke('set_outside_watch', { on }).catch(() => { if (lastWatch === on) lastWatch = null; });
 }
 
 /** Gives the overlay OS focus so single-letter keys reach it. Only for keyboard opens: asks never steal focus. */
@@ -171,23 +182,40 @@ export async function foregroundIsTerminal(): Promise<boolean> {
   return invoke<boolean>('foreground_is_terminal').catch(() => false);
 }
 
-/** Native edge hover. In the browser it never fires: the DOM hot zones handle the edge there. */
-export function onEdge(fn: (inside: boolean) => void): () => void {
+/** A press outside the window while the watch is armed. In the browser it never fires: the surface listens to the
+ *  document's own pointer presses there. */
+export function onOutsideClick(fn: () => void): () => void {
   if (!inTauri()) return () => {};
   let off = () => {}; let disposed = false;
-  void listen<{ inside: boolean }>(EDGE_EVENT, e => { if (!disposed) fn(e.payload.inside); }).then(un => {
+  void listen(OUTSIDE_CLICK_EVENT, () => { if (!disposed) fn(); }).then(un => {
     off = un;
     if (disposed) un();
   }).catch(() => {});
   return () => { disposed = true; off(); };
 }
 
-/** The native window is only as wide as the notch, so the shell reports cursor movement just outside it.
- *  Null means the cursor left the nearby region. Browser previews use document pointer events instead. */
+/** The native window is only as wide as the island, so the shell reports cursor movement in the band along the top
+ *  edge around it. Null means the cursor left that region. Browser previews use document pointer events instead. */
 export function onCursorProximity(fn: (point: { x: number; y: number } | null) => void): () => void {
   if (!inTauri()) return () => {};
   let off = () => {}; let disposed = false;
   void listen<{ x: number; y: number } | null>(CURSOR_NEAR_EVENT, e => { if (!disposed) fn(e.payload); }).then(un => {
+    off = un;
+    if (disposed) un();
+  }).catch(() => {});
+  return () => { disposed = true; off(); };
+}
+
+/** Whether a maximised or full-screen window holds the foreground on the island's monitor (the discreet strip). In the
+ *  browser, a `ledge:foreground` CustomEvent on `window` (dev previews and e2e) stands in for the shell. */
+export function onForegroundCovered(fn: (covered: boolean) => void): () => void {
+  if (!inTauri()) {
+    const h = (e: Event) => fn(!!(e as CustomEvent<{ covered: boolean }>).detail?.covered);
+    window.addEventListener('ledge:foreground', h);
+    return () => window.removeEventListener('ledge:foreground', h);
+  }
+  let off = () => {}; let disposed = false;
+  void listen<{ covered: boolean }>(FOREGROUND_EVENT, e => { if (!disposed) fn(e.payload.covered); }).then(un => {
     off = un;
     if (disposed) un();
   }).catch(() => {});
@@ -205,13 +233,22 @@ export function onTrayAction(fn: (action: TrayAction) => void): () => void {
   return () => { disposed = true; off(); };
 }
 
-export function onShortcut(fn: () => void): () => void {
-  if (!inTauri()) { const h = (e: KeyboardEvent) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'l') fn(); }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }
+let shortcutPlugin: Promise<typeof import('@tauri-apps/plugin-global-shortcut')> | null = null;
+/** Ctrl+Alt+<key>: a global shortcut under Tauri, a window key binding in the browser. */
+function globalShortcut(key: string, fn: () => void): () => void {
+  if (!inTauri()) { const h = (e: KeyboardEvent) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === key) fn(); }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }
+  const accel = `Ctrl+Alt+${key.toUpperCase()}`;
   let off = () => {}; let disposed = false;
-  import('@tauri-apps/plugin-global-shortcut').then(async ({ register, unregister }) => {
-    await register('Ctrl+Alt+L', e => { if (e.state === 'Pressed') fn(); });
-    off = () => { unregister('Ctrl+Alt+L').catch(() => {}); };
+  shortcutPlugin ??= import('@tauri-apps/plugin-global-shortcut');
+  shortcutPlugin.then(async ({ register, unregister }) => {
+    await register(accel, e => { if (e.state === 'Pressed') fn(); });
+    off = () => { unregister(accel).catch(() => {}); };
     if (disposed) off();
   }).catch(() => {});
   return () => { disposed = true; off(); };
 }
+
+/** Ctrl+Alt+L: open or fold the list from the keyboard. */
+export const onShortcut = (fn: () => void) => globalShortcut('l', fn);
+/** Ctrl+Alt+N: open or fold the new-session form from the keyboard. */
+export const onNewSessionShortcut = (fn: () => void) => globalShortcut('n', fn);

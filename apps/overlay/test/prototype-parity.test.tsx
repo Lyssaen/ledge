@@ -1,3 +1,4 @@
+import { islandWidth } from '../src/surface/geometry';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, within, renderHook } from '@testing-library/react';
 import { useRef, useState } from 'react';
@@ -25,6 +26,8 @@ const update = (s: Session) => act(() => { daemonStore.apply({ type: 'session.up
 const tick = (n: number) => act(() => { vi.advanceTimersByTime(n); });
 const press = (key: string, extra: KeyboardEventInit = {}) => act(() => { fireEvent.keyDown(document.activeElement ?? window, { key, ...extra }); });
 const shortcut = () => press('l', { ctrlKey: true, altKey: true });
+/** Keyboard focus on the n-th listed row (1-based), with K to the top then J down. */
+const toRow = (n: number) => { for (let i = 0; i < 9; i++) press('k'); for (let i = 1; i < n; i++) press('j'); };
 const surface = () => document.querySelector('[data-surface]') as HTMLElement;
 const layer = (name: string) => document.querySelector(`[data-layer="${name}"]`) as HTMLElement;
 const mode = () => surface().getAttribute('data-mode');
@@ -49,7 +52,7 @@ class FakeResizeObserver {
   observe(el: Element) { this.target = el; this.disconnected = false; }
   unobserve() {}
   disconnect() { this.disconnected = true; }
-  report(h: number) { this.cb([{ target: this.target!, borderBoxSize: [{ blockSize: h, inlineSize: 336 }], contentRect: { height: h } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver); }
+  report(h: number) { this.cb([{ target: this.target!, borderBoxSize: [{ blockSize: h, inlineSize: 440 }], contentRect: { height: h } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver); }
 }
 
 let rec: ReturnType<typeof stubClient>;
@@ -136,7 +139,7 @@ describe('prototype parity', () => {
     // Manually open B from the keyboard: Ctrl+Alt+L over the bubble opens the list.
     shortcut();
     expect(mode()).toBe('list');
-    press('2'); press('Enter');
+    toRow(2); press('Enter');
     expect(mode()).toBe('session');
     expect(document.activeElement).toHaveAccessibleName('Back to sessions');
     const reply = screen.getByPlaceholderText('Reply to Pim…') as HTMLInputElement;
@@ -203,19 +206,21 @@ describe('prototype parity', () => {
     vi.stubGlobal('ResizeObserver', FakeResizeObserver); FakeResizeObserver.all = [];
     snapshot([]);
     const { unmount } = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    expect(surface()).toHaveStyle({ width: '28px', height: '36px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(0)}px`, height: '38px' });
     unmount();
 
     const team = Array.from({ length: 12 }, (_, i) => fakeSession(`s${String(i).padStart(2, '0')}`, { name: `Bot${i}`, ...(i % 4 === 1 ? asks(`cmd ${i}`) : {}) }));
     snapshot(team);
     const big = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd onToggleDnd={() => {}} />);
+    // Six companions at most, the asks first, then a "+6" pill for the rest; the island stays inside the 1024 px viewport.
     const buttons = within(layer('handle')).getAllByRole('button', { name: /open$/ }).filter(b => !b.hasAttribute('data-resident'));
-    expect(buttons).toHaveLength(12);
-    expect(buttons.filter(b => b.style.width === '18px')).toHaveLength(3);
-    expect(buttons.filter(b => b.style.width === '11px')).toHaveLength(9);
-    for (const b of buttons.filter(x => /needs your approval/.test(x.getAttribute('aria-label')!))) expect(b).toHaveStyle({ width: '18px' });
-    const top = parseFloat(surface().style.top), h = parseFloat(surface().style.height);
-    expect(top).toBeGreaterThanOrEqual(40); expect(top + h).toBeLessThanOrEqual(1040);
+    expect(buttons).toHaveLength(6);
+    for (const b of buttons) expect(b).toHaveStyle({ width: '22px' });
+    expect(buttons.slice(0, 3).every(b => /needs your approval/.test(b.getAttribute('aria-label')!))).toBe(true);
+    expect(layer('handle').querySelector('[data-overflow]')).toHaveTextContent('+6');
+    const left = parseFloat(surface().style.left), w = parseFloat(surface().style.width);
+    expect(surface()).toHaveStyle({ top: '0px', height: '38px' });
+    expect(left).toBeGreaterThanOrEqual(0); expect(left + w).toBeLessThanOrEqual(1024);
     big.unmount();
 
     daemonStore.reset();
@@ -228,9 +233,9 @@ describe('prototype parity', () => {
     expect(ro).toBeDefined();
     act(() => ro.report(172));
     // The surface is borderless (the notch merges with the screen edge): it holds the whole bubble, timer bar included.
-    expect(surface()).toHaveStyle({ width: '336px', height: `${172 + SURFACE_CHROME_Y}px` });
+    expect(surface()).toHaveStyle({ width: '440px', height: `${172 + SURFACE_CHROME_Y}px` });
     expect(surface().getAttribute('style')).not.toMatch(/border(-(top|right|bottom|left))?(-(width|style|color))?:/);
-    expect(layer('bubble')).toHaveStyle({ width: '336px' });
+    expect(layer('bubble')).toHaveStyle({ width: '440px' });
     expect(within(layer('bubble')).getByText(new RegExp(long.slice(0, 20)))).not.toHaveStyle({ whiteSpace: 'nowrap' });
     expect(within(layer('bubble')).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
   });
@@ -247,7 +252,7 @@ describe('prototype parity', () => {
     // Every inactive layer is inert, so nothing in it can take focus.
     for (const name of ['handle', 'bubble', 'settings', 'help']) expect(layer(name)).toHaveAttribute('inert');
     expect(layer('list')).not.toHaveAttribute('inert');
-    press('1'); press('Enter');
+    toRow(1); press('Enter');
     expect(mode()).toBe('session');
     const reply = screen.getByPlaceholderText('Reply to Otto…');
     act(() => reply.focus());
@@ -256,7 +261,7 @@ describe('prototype parity', () => {
     expect(rec.sent.some(m => m.type === 'session.decide')).toBe(false);
     press('Escape'); // leaves the field's ownership to Escape: back to the list
     expect(mode()).toBe('list');
-    press('2'); press('Enter');
+    toRow(2); press('Enter');
     const radio = screen.getByRole('radio', { name: 'Rebase' });
     act(() => radio.focus());
     for (const k of ['j', 'k', 'y', 'n']) fireEvent.keyDown(radio, { key: k });
@@ -302,7 +307,7 @@ describe('prototype parity', () => {
     // reachable (it is the fallback), but `o` sends nothing to the unreachable daemon.
     act(() => daemonStore.setStatus('unreachable'));
     shortcut();
-    press('2');
+    toRow(2);
     press('y'); press('n'); press('o');
     press('Enter');
     expect(mode()).toBe('session');
@@ -320,7 +325,7 @@ describe('prototype parity', () => {
     // Read-only (started without Ledge): the same, while the daemon is reachable.
     snapshot([otto(), pim(asks('git push')), lu({ ...asks('rm -rf /tmp/x'), source: 'hook_only' })]);
     press('Escape');
-    press('3'); press('y'); press('n');
+    toRow(3); press('y'); press('n');
     press('Enter');
     expect(screen.getByText('Lu · docs')).toBeInTheDocument();
     expect(within(layer('session')).getByRole('button', { name: 'Approve' })).toBeDisabled();
@@ -464,7 +469,7 @@ describe('carried items', () => {
   it('a mouse open moves focus into the session; Escape steps back to the list then closes, never leaving focus in an inert layer', () => {
     snapshot([otto(), pim()]);
     render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelector('[data-hotzone]')!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     tick(180);
     const row = within(layer('list')).getByRole('button', { name: /speos-api, Pim, open/ });
     act(() => row.focus());
@@ -501,7 +506,7 @@ describe('carried items', () => {
     expect(mode()).toBe('list');
     fireEvent.click(within(list).getByRole('button', { name: 'Keyboard shortcuts' }));
     expect(mode()).toBe('help');
-    expect(within(layer('help')).getByText('Next ask')).toBeInTheDocument();
+    expect(within(layer('help')).getByText('Previous or next session')).toBeInTheDocument();
     fireEvent.click(within(layer('help')).getByRole('button', { name: 'Close' }));
     expect(mode()).toBe('handle');
     expect(inInert()).toBe(false);

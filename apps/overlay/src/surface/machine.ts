@@ -15,8 +15,10 @@ export interface SurfaceState {
   done: string[];
   hot: boolean; reading: boolean; typing: boolean;
   documentOrigin: DocumentOrigin | null; documentExpanded: boolean;
-  /** Facts about the surface that hold the bubble clock (and guard the list's leave timer). */
+  /** Facts about the surface that hold the bubble clock (hovering also guards the leave timer). */
   hovering: boolean; focusWithin: boolean; hidden: boolean;
+  /** A text field inside the surface holds the focus: a mouse-opened panel stays open when the pointer leaves. */
+  editing: boolean;
   ack: Ack | null;
   /** The bubble id whose decision ended in a terminal error: recovery is unlocked, no success is shown. */
   failed: string | null;
@@ -33,12 +35,12 @@ export type Effect =
 type Elapsed<T extends string> = { type: T; rev?: number };
 export type SurfaceEvent =
   | { type: 'ask'; id: string } | { type: 'finished'; id: string } | { type: 'askCleared'; id: string } | { type: 'askReplaced'; id: string } | { type: 'removed'; id: string; remaining: string[] }
-  | { type: 'edgeEnter' } | { type: 'edgeLeave' } | Elapsed<'dwellElapsed'> | Elapsed<'unfoldElapsed'>
+  | { type: 'handleEnter' } | { type: 'handleLeave' } | Elapsed<'dwellElapsed'> | Elapsed<'unfoldElapsed'>
   | { type: 'surfaceEnter' } | { type: 'surfaceLeave' } | Elapsed<'leaveElapsed'>
-  | { type: 'focusWithin'; on: boolean } | { type: 'visibility'; hidden: boolean }
+  | { type: 'focusWithin'; on: boolean } | { type: 'editing'; on: boolean } | { type: 'visibility'; hidden: boolean } | { type: 'outsideClick' }
   | { type: 'botClick'; id: string } | { type: 'rowClick'; id: string } | { type: 'homeClick' } | { type: 'bubbleClick' } | Elapsed<'bubbleElapsed'>
   | { type: 'decidedInBubble' } | Elapsed<'holdElapsed'> | { type: 'decisionFailed'; id: string }
-  | { type: 'back' } | { type: 'close' } | { type: 'shortcut' } | { type: 'settings' } | { type: 'help' } | { type: 'launch' } | { type: 'chat' }
+  | { type: 'back' } | { type: 'close' } | { type: 'shortcut' } | { type: 'newSession' } | { type: 'settings' } | { type: 'help' } | { type: 'launch' } | { type: 'chat' }
   | { type: 'documentOpen'; origin: DocumentOrigin } | { type: 'documentExpanded'; on: boolean }
   | { type: 'typing'; on: boolean } | { type: 'reading'; on: boolean } | { type: 'dnd'; on: boolean };
 
@@ -51,7 +53,7 @@ export const ELAPSED: Record<TimerName, 'dwellElapsed' | 'leaveElapsed' | 'bubbl
 
 export const initialSurface = (): SurfaceState => ({
   mode: 'handle', selectedId: null, bubbleId: null, queue: [], openedBy: null, bubbleKind: 'ask', done: [], hot: false, reading: false, typing: false, documentOrigin: null, documentExpanded: false,
-  hovering: false, focusWithin: false, hidden: false, ack: null, failed: null, unfoldDue: false, rev: 0
+  hovering: false, focusWithin: false, hidden: false, editing: false, ack: null, failed: null, unfoldDue: false, rev: 0
 });
 
 type Result = { state: SurfaceState; effects: Effect[] };
@@ -79,7 +81,9 @@ const holdEffects = (before: SurfaceState, after: SurfaceState): Effect[] => {
   if (after.mode !== 'bubble' || after.ack || held(before) === held(after)) return [];
   return [{ type: held(after) ? 'pauseTimer' : 'resumeTimer', name: 'bubble' }];
 };
-const listMayFold = (s: SurfaceState) => (s.mode === 'list' || s.mode === 'settings' || s.mode === 'help' || s.mode === 'launch') && s.openedBy === 'mouse' && !s.typing && !s.focusWithin && !s.hovering;
+/** A panel opened by hovering the handle folds once the pointer leaves it, unless a field is being filled. A document
+ *  being read stays: it is opened on purpose and often read from a distance. */
+const listMayFold = (s: SurfaceState) => s.mode !== 'handle' && s.mode !== 'bubble' && s.mode !== 'reader' && s.openedBy === 'mouse' && !s.typing && !s.editing && !s.hovering;
 /** A daemon confirmation (askCleared or removal) for the acknowledged id. */
 const confirm = (s: SurfaceState, queue: string[]): Result => {
   const ack = { ...s.ack!, confirmed: true };
@@ -139,16 +143,17 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
       if (s.mode === 'bubble' && s.bubbleId === e.id) return advance({ ...s, queue, done });
       return same({ ...s, queue, done });
     }
-    case 'edgeEnter': return s.mode === 'handle' && !s.hot ? { state: { ...s, hot: true }, effects: [start('dwell'), cancel('unfold')] } : same(s);
-    case 'edgeLeave': {
+    case 'handleEnter': return s.mode === 'handle' && !s.hot ? { state: { ...s, hot: true }, effects: [start('dwell'), cancel('unfold')] } : same(s);
+    case 'handleLeave': {
       // An ask deferred by the edge brush unfolds once the pointer leaves the edge.
       const rearm = s.mode === 'handle' && s.unfoldDue && (s.queue.length > 0 || s.done.length > 0);
       return { state: { ...s, hot: false }, effects: [cancel('dwell'), ...(rearm ? [start('unfold')] : [])] };
     }
     case 'dwellElapsed': return s.mode === 'handle' && s.hot ? { state: { ...s, mode: 'list', openedBy: 'mouse', hot: false, unfoldDue: false }, effects: [cancel('unfold')] } : same(s);
+    // Over the handle, entering the surface is also entering the handle: the dwell it started keeps running.
     case 'surfaceEnter': {
-      const next = { ...s, hovering: true, hot: false };
-      return { state: next, effects: [cancel('leave'), cancel('dwell'), ...holdEffects(s, next)] };
+      const next = { ...s, hovering: true };
+      return { state: next, effects: [cancel('leave'), ...holdEffects(s, next)] };
     }
     case 'surfaceLeave': {
       const next = { ...s, hovering: false };
@@ -156,15 +161,20 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
     }
     case 'focusWithin': {
       const next = { ...s, focusWithin: e.on };
-      const leave = e.on ? [cancel('leave')] : listMayFold(next) ? [start('leave')] : [];
-      return { state: next, effects: [...holdEffects(s, next), ...leave] };
+      return { state: next, effects: holdEffects(s, next) };
+    }
+    case 'editing': {
+      const next = { ...s, editing: e.on };
+      return { state: next, effects: e.on ? [cancel('leave')] : listMayFold(next) ? [start('leave')] : [] };
     }
     case 'visibility': {
       const next = { ...s, hidden: e.hidden };
       return { state: next, effects: holdEffects(s, next) };
     }
     case 'leaveElapsed': return listMayFold(s) ? { state: toHandle(s), effects: [] } : same(s);
-    case 'botClick': case 'rowClick': return open(s, e.id);
+    // A bot clicked on the bare handle is a mouse open: its session folds on leave like a hover-opened list.
+    case 'botClick': return open(s.mode === 'handle' ? { ...s, openedBy: 'mouse' } : s, e.id);
+    case 'rowClick': return open(s, e.id);
     case 'homeClick': return s.mode === 'handle' ? { state: { ...s, mode: 'list', openedBy: 'mouse', hot: false, unfoldDue: false }, effects: cancelAll } : same(s);
     case 'bubbleClick':
       if (s.bubbleId === LEDGE_ID) return { state: { ...s, mode: 'chat', selectedId: null, bubbleId: null, bubbleKind: 'ask', done: [], hot: false, ack: null, failed: null }, effects: cancelAll };
@@ -211,6 +221,14 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
       return detail(s.mode) ? { state: { ...s, mode: 'list', selectedId: null, reading: false }, effects: [] } : same(s);
     }
     case 'close': return { state: toHandle(s), effects: cancelAll };
+    /* A press outside the window folds an open panel; the handle and a bubble are left alone. */
+    case 'outsideClick': return s.mode === 'handle' || s.mode === 'bubble' ? same(s) : { state: toHandle(s), effects: cancelAll };
+    /* Ctrl+Alt+N opens the launch form from anywhere (over a bubble the ask stays queued), and folds it when it shows. */
+    case 'newSession': {
+      if (s.mode === 'launch') return { state: toHandle(s), effects: cancelAll };
+      const quiet = s.mode === 'handle' || s.mode === 'bubble';
+      return { state: { ...s, mode: 'launch', openedBy: 'keyboard', selectedId: null, reading: false, documentOrigin: null, documentExpanded: false, hot: false, bubbleId: null, bubbleKind: 'ask', done: quiet ? [] : s.done, ack: null, failed: null, unfoldDue: false }, effects: cancelAll };
+    }
     /* Ctrl+Alt+L opens the list from the handle or over a bubble (the ask stays queued), and closes any open panel. */
     case 'shortcut': return s.mode === 'handle' || s.mode === 'bubble'
       ? { state: { ...s, mode: 'list', openedBy: 'keyboard', hot: false, bubbleId: null, bubbleKind: 'ask', done: [], ack: null, failed: null, unfoldDue: false }, effects: cancelAll }

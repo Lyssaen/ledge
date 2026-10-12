@@ -202,3 +202,12 @@ describe('projectOf and rollName', () => {
     expect(rollName(NAMES.slice(0, 63), NAMES[63]!, () => 0.5)).toBe('Otto-2');
   });
 });
+
+describe('<LaunchView> rows', () => {
+  it('the last option draws no bottom border: the actions row below brings its own', () => {
+    mount();
+    const rows = screen.getAllByRole('switch').map(s => s.closest('label')!);
+    expect(rows[0]).toHaveStyle({ borderBottom: '1px solid var(--sidebar-border)' });
+    expect(rows[rows.length - 1]).not.toHaveStyle({ borderBottom: '1px solid var(--sidebar-border)' });
+  });
+});

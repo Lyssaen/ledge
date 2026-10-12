@@ -1,32 +1,34 @@
 import type { CSSProperties } from 'react';
 
-/** The radius of the concave fillets joining the surface to the screen edge (the surface's own --radius-xl). */
-export const SHOULDER_R = 14;
-/** The fillet radius for a surface of width `w`: never wider than half of it (the bare 6 px strip gets small ones). */
+/** The radius of the concave fillets joining the island to the top screen edge (spec 2026-10-12 §3). */
+export const SHOULDER_R = 12;
+/** The discreet strip's smaller fillets. */
+export const STRIP_SHOULDER_R = 6;
 /** How far each fillet reaches into the surface, in the notch colour. */
 const OVERLAP = 1;
-export const shoulderR =(w: number) => Math.min(SHOULDER_R, Math.floor(w / 2));
+/** The fillet radius for a surface of width `w`: never wider than half of it. */
+export const shoulderR = (w: number, strip = false) => Math.min(strip ? STRIP_SHOULDER_R : SHOULDER_R, Math.floor(w / 2));
 
-/** The two concave fillets above and below the surface, where it leaves the screen edge: the notch flows out of the
- *  edge instead of starting at a right angle. Filled with the notch colour and borderless like the surface, they
- *  follow its top and height with the same transition. */
-export function Shoulders({ top, h, w, transition, opacity }: { top: number; h: number; w: number; transition: string; opacity: number }) {
-  const r = shoulderR(w);
+/** The two concave fillets either side of the island where it leaves the top screen edge: the notch flows out of the
+ *  edge instead of starting at a right angle. Filled with the notch colour and borderless like the surface, they follow
+ *  its left and width with the same transition. */
+export function Shoulders({ left, w, strip = false, transition, opacity }: { left: number; w: number; strip?: boolean; transition: string; opacity: number }) {
+  const r = shoulderR(w, strip);
   if (r <= 0) return null;
-  // From the screen edge (tangent to it) to the surface's top edge (tangent to it), then down OVERLAP px into the
-  // surface and back along the corner. Meeting the surface on a shared edge would leave a seam at a fractional display
-  // scale (150 %): both edges land mid-pixel, each covers half the row and the desktop shows through.
-  const fill = `M0,0 A${r},${r} 0 0 0 ${r},${r} L${r},${r + OVERLAP} L0,${r + OVERLAP} Z`;
-  const box: CSSProperties = { position: 'absolute', left: 0, width: r, height: r + OVERLAP, pointerEvents: 'none', opacity };
+  // Along the screen edge (tangent to it) OVERLAP px into the island, down the island's edge (tangent to it) to the
+  // fillet's foot, then back to the corner along the arc. Meeting the island on a shared edge would leave a seam at a
+  // fractional display scale (150 %): both edges land mid-pixel, each covers half the column and the desktop shows through.
+  const fill = `M0,0 H${r + OVERLAP} V${r} H${r} A${r},${r} 0 0 0 0,0 Z`;
+  const box: CSSProperties = { position: 'absolute', top: 0, width: r + OVERLAP, height: r, pointerEvents: 'none', opacity };
   const svg = (flip: boolean) => (
-    <svg width={r} height={r + OVERLAP} viewBox={`0 0 ${r} ${r + OVERLAP}`} style={{ display: 'block', transform: flip ? 'scaleY(-1)' : undefined }}>
+    <svg width={r + OVERLAP} height={r} viewBox={`0 0 ${r + OVERLAP} ${r}`} style={{ display: 'block', transform: flip ? 'scaleX(-1)' : undefined }}>
       <path d={fill} fill="var(--notch)" />
     </svg>
   );
   return (
     <>
-      <div data-shoulder="top" aria-hidden style={{ ...box, top: top - r, transition }}>{svg(false)}</div>
-      <div data-shoulder="bottom" aria-hidden style={{ ...box, top: top + h - OVERLAP, transition }}>{svg(true)}</div>
+      <div data-shoulder="left" aria-hidden style={{ ...box, left: left - r, transition }}>{svg(false)}</div>
+      <div data-shoulder="right" aria-hidden style={{ ...box, left: left + w - OVERLAP, transition }}>{svg(true)}</div>
     </>
   );
 }

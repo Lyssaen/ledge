@@ -1,5 +1,5 @@
 /**
- * The Screen setting: which monitor's left edge carries the handle. `null` means the primary monitor, whichever it is
+ * The Screen setting: which monitor's top edge carries the island. `null` means the primary monitor, whichever it is
  * after a reconfiguration; otherwise the id the shell reports for a monitor (`list_monitors`). A chosen monitor that is
  * not plugged in falls back to the primary in the shell until it comes back; the setting itself is kept.
  */

@@ -1,5 +1,5 @@
 import type { Session } from '@ledge/protocol';
-import type { Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { Bot } from '../bots/Bot';
 import { ResidentMascot } from '../bots/ResidentMascot';
 import { botState, liveHelpers, poseFor } from '../bots/poseFor';
@@ -44,7 +44,7 @@ export const NOTICE_GAP = 6;
 export interface ListNotice { text: string; action?: { label: string; onClick: () => void } }
 
 export interface ListProps {
-  sessions: Session[]; visible: boolean; numbered: boolean; selectedId: string | null; focusedId?: string | null; dnd: boolean;
+  sessions: Session[]; visible: boolean; selectedId: string | null; focusedId?: string | null; dnd: boolean;
   /** When the layer's fade-in starts, in ms (see `enterDelay` in motion); the rows cascade from there. */
   enterDelay?: number;
   onToggleDnd: () => void; onOpen: (id: string) => void; onDecide?: (id: string, d: 'accept' | 'deny') => void; onClose: () => void;
@@ -53,6 +53,8 @@ export interface ListProps {
   onLaunch?: () => void; notice?: ListNotice | null;
   /** The notice's box, measured by the surface so the panel grows by its height instead of scrolling the rows. */
   noticeRef?: Ref<HTMLDivElement>;
+  /** The update card under the notice, its measured box, and the pip on the settings gear (an update is pending); `gearLabel` is the gear's accessible name. */
+  update?: ReactNode; updateRef?: Ref<HTMLDivElement>; gearPip?: boolean; gearLabel?: string;
   /**
    * The ask field above the sessions (shown when `onAsk` is set), matching the notch's mascot-then-bots stack; `onOpenChat`
    * opens the conversation without asking (Enter on the empty field, the mascot); `onTyping` reports focus and typing,
@@ -66,7 +68,7 @@ export interface ListProps {
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number;
 }
 
-export function SessionList({ sessions, visible, numbered, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onOpenChat, onTyping, askDisabled = false, notice = null, noticeRef, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
+export function SessionList({ sessions, visible, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onOpenChat, onTyping, askDisabled = false, notice = null, noticeRef, update, updateRef, gearPip = false, gearLabel, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
   const { t } = useI18n();
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
@@ -79,9 +81,8 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
     return (
       <div key={s.id} data-row-id={s.id} className="ledge-row" style={{ position: 'relative', flexShrink: 0, height: actions ? EXPANDED_ROW_H : SIZES.rowH, boxSizing: 'border-box', overflow: 'hidden', backgroundColor: bg, outline: focused ? '2px solid var(--ring)' : 'none', outlineOffset: -2, transition: transition([['height', 'grow', 0], ['background-color', 'hover']]) }}>
       <button type="button" data-row aria-label={t.list.row(s.project, s.name)} title={t.list.rowTitle(toolName(s.tool), s.cwd)} aria-current={selectedId === s.id ? 'true' : undefined} data-delay={delay} onClick={() => onOpen(s.id)} onMouseEnter={() => onHoverRow?.(s.id)} onMouseLeave={() => onHoverRow?.(null)}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, height: SIZES.rowH, boxSizing: 'border-box', padding: `0 17px 0 ${numbered ? 8 : 15}px`, border: 'none', borderLeftWidth: 2, borderLeftStyle: 'solid', borderLeftColor: hi ? 'var(--sidebar-primary)' : 'transparent', backgroundColor: bg, textAlign: 'left', color: 'var(--sidebar-foreground)', cursor: 'pointer', width: '100%', opacity: visible ? 1 : 0, transform: `translateX(${visible ? 0 : -10}px)`,
+        style={{ display: 'flex', alignItems: 'center', gap: 12, height: SIZES.rowH, boxSizing: 'border-box', padding: '0 17px 0 15px', border: 'none', borderLeftWidth: 2, borderLeftStyle: 'solid', borderLeftColor: hi ? 'var(--sidebar-primary)' : 'transparent', backgroundColor: bg, textAlign: 'left', color: 'var(--sidebar-foreground)', cursor: 'pointer', width: '100%', opacity: visible ? 1 : 0, transform: `translateX(${visible ? 0 : -10}px)`,
           transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? delay : 0], ['transform', visible ? 'grow' : 'fadeOut', visible ? delay : 0], ['background-color', 'hover'], ['border-color', 'hover']]) }}>
-        {numbered && i < 9 && <Kbd accent={hi}>{i + 1}</Kbd>}
         <Bot seed={s.id} readOnly={readOnly} tool={s.tool} state={st} pose={poseFor(s.id, s.state)} size={32} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} />
         <span style={{ display: 'flex', flexDirection: 'column', gap: 3, flexGrow: 1, minWidth: 0 }}>
           <span data-topic style={{ fontSize: 14, lineHeight: '18px', fontWeight: s.topic ? 600 : 500, color: s.topic ? undefined : 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.topic ?? t.list.noTopic}</span>
@@ -100,7 +101,7 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
           onClick={() => onDismiss(s.id)} style={{ position: 'absolute', right: 12, top: (SIZES.rowH - 28) / 2, width: 28, height: 28, padding: 0, color: 'var(--sidebar-foreground)' }}><Icon size={14} {...ICONS.listRemove} /></Button>
       )}
       {actions && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: EXPANDED_ROW_H - SIZES.rowH, boxSizing: 'border-box', padding: `0 17px 4px ${numbered ? 40 : 59}px` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: EXPANDED_ROW_H - SIZES.rowH, boxSizing: 'border-box', padding: '0 17px 4px 59px' }}>
           <Button variant="primary" size="sm" disabled={!canDecide(s)} onClick={() => onDecide?.(s.id, 'accept')} style={{ height: 28, padding: '0 8px' }}>{t.list.approve} <Kbd accent>Y</Kbd></Button>
           <Button variant="outline" size="sm" disabled={!canDecide(s)} onClick={() => onDecide?.(s.id, 'deny')} style={{ height: 28, padding: '0 8px' }}>{t.list.deny} <Kbd>N</Kbd></Button>
           <Button variant="ghost" size="sm" onClick={() => onOpen(s.id)} style={{ height: 28, padding: '0 8px' }}>{t.list.openRow} <Kbd>↵</Kbd></Button>
@@ -118,7 +119,10 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
         </div>
         {onLaunch && <Button variant="outline" size="icon" data-launch aria-label={t.list.newSession} title={t.list.newSession} onClick={onLaunch} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon size={16} {...ICONS.plus} /></Button>}
         <Button variant="ghost" size="icon" aria-label={t.list.dnd} title={t.list.dnd} aria-pressed={dnd} onClick={onToggleDnd} style={{ color: dnd ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)' }}><Icon size={18} {...ICONS.dnd} /></Button>
-        <Button variant="ghost" size="icon" aria-label={t.list.settings} title={t.list.settings} onClick={onSettings} style={{ color: 'var(--sidebar-foreground)' }}><Icon size={18} {...ICONS.gear} /></Button>
+        <Button variant="ghost" size="icon" aria-label={gearLabel ?? t.list.settings} title={gearLabel ?? t.list.settings} onClick={onSettings} style={{ position: 'relative', color: 'var(--sidebar-foreground)' }}>
+          <Icon size={18} {...ICONS.gear} />
+          {gearPip && <span data-gear-pip aria-hidden="true" style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: 9999, background: 'var(--sidebar-primary)', border: '2px solid var(--sidebar)' }} />}
+        </Button>
         <Button variant="ghost" size="icon" aria-label={t.list.collapse} title={t.list.collapse} onClick={onClose} style={{ color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.chevronLeft} /></Button>
       </div>
       {notice && (
@@ -128,6 +132,7 @@ export function SessionList({ sessions, visible, numbered, selectedId, focusedId
           {notice.action && <button type="button" onClick={notice.action.onClick} className="ledge-text-btn" style={{ border: 'none', background: 'transparent', padding: '2px 0', fontSize: 13, fontWeight: 500, color: 'var(--info)', cursor: 'pointer', whiteSpace: 'nowrap' }}>{notice.action.label} ↗</button>}
         </div>
       )}
+      {update && <div ref={updateRef} data-update>{update}</div>}
       {onAsk && <AskField onAsk={onAsk} onOpen={onOpenChat} onTyping={onTyping} disabled={askDisabled} theme={theme} reducedMotion={reducedMotion} />}
       <div data-scroll className="ledge-scroll" style={{ display: 'flex', flexDirection: 'column', padding: sessions.length ? '8px 0' : 0, flexGrow: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {sessions.length === 0 && (

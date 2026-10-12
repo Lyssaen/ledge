@@ -150,3 +150,23 @@ describe('protocol: browsing folders from the launch form', () => {
     expect(ServerMessageSchema.parse(failed)).toEqual(failed);
   });
 });
+
+describe('update messages', () => {
+  it('keeps a snapshot without daemon info valid (older daemons)', () => {
+    expect(parseServerMessage({ type: 'snapshot', sessions: [] })).toEqual({ type: 'snapshot', sessions: [] });
+  });
+  it('carries the daemon version, how it was installed and the manual command', () => {
+    const m = parseServerMessage({ type: 'snapshot', sessions: [], daemon: { version: '0.3.0', install: 'git', systemd: true, manual: 'cd ~/x && git pull' } });
+    expect(m).toMatchObject({ daemon: { version: '0.3.0', install: 'git', systemd: true } });
+  });
+  it('parses progress and failures', () => {
+    expect(parseServerMessage({ type: 'update.progress', version: '0.3.0', step: 'restarting' })).toMatchObject({ step: 'restarting' });
+    expect(parseServerMessage({ type: 'update.failed', version: '0.3.0', reason: 'npm-failed', detail: 'EACCES', command: 'npm i -g @paradow/ledge@0.3.0' })).toMatchObject({ reason: 'npm-failed' });
+    expect(() => parseServerMessage({ type: 'update.failed', version: '0.3.0', reason: 'nope' })).toThrow();
+  });
+  it('accepts update.daemon only with a plain semver', () => {
+    expect(parseClientMessage({ type: 'update.daemon', version: '0.3.0' })).toEqual({ type: 'update.daemon', version: '0.3.0' });
+    expect(() => parseClientMessage({ type: 'update.daemon', version: 'latest' })).toThrow();
+    expect(() => parseClientMessage({ type: 'update.daemon', version: '0.3.0; rm -rf ~' })).toThrow();
+  });
+});

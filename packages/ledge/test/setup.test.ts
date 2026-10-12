@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, symlinkSync, readlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mergeClaudeHooks, mergeCodexHooks, mergeCursorHooks, runSetup, CLAUDE_EVENTS, CODEX_EVENTS, CURSOR_EVENTS, systemdUnit, installService, SERVICE } from '../src/cli/setup.js';
+import { mergeClaudeHooks, mergeCodexHooks, mergeCursorHooks, runSetup, CLAUDE_EVENTS, CODEX_EVENTS, CURSOR_EVENTS, systemdUnit, installService, SERVICE, relinkBin } from '../src/cli/setup.js';
 
 describe('mergeClaudeHooks', () => {
   it('appends a ledge entry to every event, keeping foreign hooks', () => {
@@ -267,5 +267,25 @@ describe('systemd service', () => {
     const d = tmp(); const unitDir = join(d, 'systemd');
     const f = fakeRun({ 'systemctl --user daemon-reload': { code: 1 } });
     await expect(installService({ unitDir, node: '/n', script: '/s.js', run: f.run })).rejects.toThrow('systemd user session unavailable');
+  });
+});
+
+describe('relinkBin', () => {
+  const dir = () => mkdtempSync(join(tmpdir(), 'ledge-bin-'));
+  it('points a link to an older Ledge CLI at the running one', async () => {
+    const d = dir(); const old = join(d, 'clone/packages/ledge/dist/cli/index.js'); const now = join(d, 'npm/node_modules/@paradow/ledge/dist/cli/index.js');
+    mkdirSync(join(old, '..'), { recursive: true }); mkdirSync(join(now, '..'), { recursive: true }); writeFileSync(old, ''); writeFileSync(now, '');
+    symlinkSync(old, join(d, 'ledge'));
+    expect(await relinkBin({ link: join(d, 'ledge'), target: now })).toMatch(/now points to/);
+    expect(readlinkSync(join(d, 'ledge'))).toBe(now);
+  });
+  it('leaves an up-to-date link, a missing link and a foreign file alone', async () => {
+    const d = dir(); const now = join(d, 'cli/dist/cli/index.js'); mkdirSync(join(now, '..'), { recursive: true }); writeFileSync(now, '');
+    symlinkSync(now, join(d, 'ledge'));
+    expect(await relinkBin({ link: join(d, 'ledge'), target: now })).toBeNull();
+    expect(await relinkBin({ link: join(d, 'absent'), target: now })).toBeNull();
+    expect(existsSync(join(d, 'absent'))).toBe(false);
+    writeFileSync(join(d, 'mine'), '#!/bin/sh\n');
+    expect(await relinkBin({ link: join(d, 'mine'), target: now })).toBeNull();
   });
 });

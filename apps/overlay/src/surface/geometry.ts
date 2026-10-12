@@ -1,84 +1,88 @@
-export const SIZES = { handleW: 28, residentH: 20, bubbleW: 336, bubbleH: 128, listW: 380, sessionW: 480, readingW: 560, readerW: 560, readerExpandedW: 800, readerH: 760, rowH: 58, headerH: 72, footerH: 44, margin: 40, stripW: 6, stripH: 60, settingsH: 360, helpH: 420, launchH: 600, chatH: 560, emptyH: 200, groupH: 28, separatorH: 1 } as const;
+export const SIZES = { bubbleW: 440, bubbleH: 128, listW: 380, sessionW: 480, readingW: 560, readerW: 560, readerExpandedW: 800, readerH: 760, rowH: 58, headerH: 72, footerH: 44, margin: 40, settingsH: 360, helpH: 420, launchH: 600, chatH: 560, emptyH: 200, groupH: 28, separatorH: 1 } as const;
+/** The compact island, a row along the top edge (spec 2026-10-12 §3): margins, the Ledge mascot, the separator, the
+ *  companions, the "+n" pill past six, the DND moon; and the discreet strip with one dot per session. */
+export const ISLAND = { h: 38, padL: 12, padR: 14, resident: 22, sepGap: 8, companion: 22, gap: 8, max: 6, pill: 30, moon: 12, stripH: 10, stripPad: 10, dotW: 6, dotH: 4, dotGap: 4 } as const;
 /** The surface's top + bottom border (border-box): added to a measured content height so nothing is clipped. None:
  *  the notch is borderless so it merges with the screen edge. */
 export const SURFACE_BORDER = 0;
 export const SURFACE_CHROME_Y = 2 * SURFACE_BORDER;
 export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'settings' | 'help' | 'launch' | 'chat' | 'reader';
-/** The resident's finished-chat notice: not a session id; the bubble sits at the mascot. */
+/** Where the island's axis sits on the top edge: the centre, or a quarter of the width from the left or the right. */
+export type IslandPosition = 'center' | 'left' | 'right';
+/** The resident's finished-chat notice: not a session id. */
 export const LEDGE_ID = 'ledge';
 /** The detail views that share the list's width and the DetailHeader: settings, help and the launch form. */
 export const DETAIL_VIEWS: readonly Mode[] = ['settings', 'help', 'launch'];
 const DETAIL_FALLBACK_H: Record<'settings' | 'help' | 'launch', number> = { settings: SIZES.settingsH, help: SIZES.helpH, launch: SIZES.launchH };
+/** A companion's place in the island: `center` is its x on screen (real px). */
 export interface Slot { id: string; size: number; center: number }
-export interface Layout { top: number; w: number; h: number; slots: Slot[]; handle: { top: number; h: number }; hotZones: Array<{ top: number; h: number }> }
+export interface Layout { left: number; top: number; w: number; h: number; slots: Slot[]; handle: { left: number; w: number; h: number } }
 
-export function slotSizes(n: number): { big: number; small: number; gap: number } {
-  return n > 5 ? { big: 18, small: 11, gap: 3 } : { big: 20, small: 12, gap: 5 };
+/** The island shows asks first, then the others in list order (stable). */
+export function islandOrder<T extends { pending: boolean }>(bots: T[]): T[] {
+  return [...bots.filter(b => b.pending), ...bots.filter(b => !b.pending)];
 }
+
+/** The compact island's width for `n` sessions: six companions at most, then the "+n" pill; the DND moon when on. */
+export function islandWidth(n: number, dnd = false): number {
+  const moon = dnd ? ISLAND.gap + ISLAND.moon : 0;
+  if (n === 0) return ISLAND.padL + ISLAND.resident + moon + ISLAND.padR;
+  const shown = Math.min(n, ISLAND.max);
+  return ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap + shown * ISLAND.companion + (shown - 1) * ISLAND.gap + (n > ISLAND.max ? ISLAND.gap + ISLAND.pill : 0) + moon + ISLAND.padR;
+}
+
+/** The discreet strip's width: one dot per session (six at most), never narrower than the bare island. */
+export function stripWidth(n: number): number {
+  const shown = Math.min(n, ISLAND.max);
+  return Math.max(islandWidth(0), 2 * ISLAND.stripPad + shown * ISLAND.dotW + Math.max(0, shown - 1) * ISLAND.dotGap);
+}
+
+export const islandAxis = (screenW: number, position: IslandPosition = 'center'): number =>
+  position === 'left' ? screenW / 4 : position === 'right' ? (3 * screenW) / 4 : screenW / 2;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-/** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of an expanded (focused) list row. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. */
-export interface LayoutInput { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; screenW?: number; readerExpanded?: boolean; bubbleId?: string | null; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; bubbleAnchor?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
+/** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of an expanded (focused) list row. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
+export interface LayoutInput { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
 
-/** `bubbleAnchor` is the y the bubble aligns to (its bot's center) when the handle is laid out apart; otherwise its slot. */
+/** Everything hangs from the top edge of the work area, centred on the island's axis; `left` is clamped into the screen. */
 export function layout(input: LayoutInput): Layout {
-  const { bots, mode, screenH } = input;
-  const n = bots.length; const { big, small, gap } = slotSizes(n);
-  const centerY = screenH / 2;
-  const maxH = screenH - 2 * SIZES.margin;
-  const sep = n ? 2 * gap + SIZES.separatorH : 0;
-  const handleH = 16 + SIZES.residentH + sep + bots.reduce((a, b) => a + (b.pending ? big : small), 0) + Math.max(0, n - 1) * gap;
-  const handleTop = Math.round(centerY - handleH / 2);
-  const slots: Slot[] = []; let y = handleTop + 8 + SIZES.residentH + sep;
-  for (const b of bots) { const size = b.pending ? big : small; slots.push({ id: b.id, size, center: y + size / 2 }); y += size + gap; }
-  const hotZones = [{ top: SIZES.margin, h: Math.max(0, handleTop - 6 - SIZES.margin) }, { top: handleTop + handleH + 6, h: Math.max(0, screenH - SIZES.margin - (handleTop + handleH + 6)) }];
-  const handle = { top: handleTop, h: handleH };
-  if (mode === 'handle') return { top: handleTop, w: SIZES.handleW, h: handleH, slots, handle, hotZones };
-  if (mode === 'bubble') {
-    const resident = handleTop + 8 + SIZES.residentH / 2;
-    const slot = input.bubbleId === LEDGE_ID ? { center: resident } : slots.find(s => s.id === input.bubbleId) ?? slots[0];
-    const h = Math.min(maxH, input.bubbleH ?? SIZES.bubbleH);
-    const top = clamp(Math.round((input.bubbleAnchor ?? slot?.center ?? centerY) - 38), SIZES.margin, screenH - SIZES.margin - h);
-    return { top, w: SIZES.bubbleW, h, slots, handle, hotZones };
-  }
-  if (mode === 'reader') {
-    const h = Math.min(maxH, SIZES.readerH);
-    // The native frame adds a small right shadow outside this width.
-    const w = Math.min(input.readerExpanded ? SIZES.readerExpandedW : SIZES.readerW, Math.max(0, (input.screenW ?? Infinity) - 24));
-    return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w, h, slots, handle, hotZones };
-  }
-  if (mode === 'chat') {
-    const h = Math.min(maxH, input.detailH ?? SIZES.chatH);
-    return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w: SIZES.sessionW, h, slots, handle, hotZones };
-  }
-  if (mode === 'settings' || mode === 'help' || mode === 'launch') {
-    const h = Math.min(maxH, input.detailH ?? DETAIL_FALLBACK_H[mode]);
-    return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w: SIZES.listW, h, slots, handle, hotZones };
-  }
+  const { bots, mode, screenH, screenW } = input;
+  const n = bots.length;
+  const maxH = screenH - SIZES.margin;
+  const axis = islandAxis(screenW, input.position);
+  const place = (w: number) => clamp(Math.round(axis - w / 2), 0, Math.max(0, screenW - w));
+  const strip = mode === 'handle' && !!input.strip;
+  const handleW = strip ? stripWidth(n) : islandWidth(n, input.dnd);
+  const handle = { left: place(handleW), w: handleW, h: strip ? ISLAND.stripH : ISLAND.h };
+  const slots: Slot[] = [];
+  let x = handle.left + ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap;
+  for (const b of islandOrder(bots).slice(0, ISLAND.max)) { slots.push({ id: b.id, size: ISLAND.companion, center: x + ISLAND.companion / 2 }); x += ISLAND.companion + ISLAND.gap; }
+  const view = (w: number, h: number): Layout => ({ left: place(w), top: 0, w, h: Math.min(maxH, h), slots, handle });
+  if (mode === 'handle') return { left: handle.left, top: 0, w: handleW, h: handle.h, slots, handle };
+  if (mode === 'bubble') return view(SIZES.bubbleW, input.bubbleH ?? SIZES.bubbleH);
+  // The native frame adds a small shadow outside this width.
+  if (mode === 'reader') return view(Math.min(input.readerExpanded ? SIZES.readerExpandedW : SIZES.readerW, Math.max(0, screenW - 24)), SIZES.readerH);
+  if (mode === 'chat') return view(SIZES.sessionW, input.detailH ?? SIZES.chatH);
+  if (mode === 'settings' || mode === 'help' || mode === 'launch') return view(SIZES.listW, input.detailH ?? DETAIL_FALLBACK_H[mode]);
   // An empty list shows the empty state (a bot, two lines, a button) instead of rows.
   const rowsH = n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.groups ?? 0) * SIZES.groupH + (input.listExtraH ?? 0);
-  const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + rowsH + (input.askH ?? 0) + SIZES.footerH + SURFACE_CHROME_Y : (input.sessionH ?? 480));
-  const top = clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h);
-  const w = mode === 'list' ? SIZES.listW : (input.reading ? SIZES.readingW : SIZES.sessionW);
-  return { top, w, h, slots, handle, hotZones };
+  if (mode === 'list') return view(SIZES.listW, SIZES.headerH + rowsH + (input.askH ?? 0) + SIZES.footerH + SURFACE_CHROME_Y);
+  return view(input.reading ? SIZES.readingW : SIZES.sessionW, input.sessionH ?? 480);
 }
 
 /**
- * The layout under the two UI scales, in real (logical) px. The handle (its slots, bands and the handle-mode surface)
- * is laid out in a screen of `screenH / handle` units and multiplied by `handle`; the opened views in a screen of
- * `screenH / panel` units multiplied by `panel`. Heights in the input (measured or not) are base content heights plus the surface's border (`SURFACE_CHROME_Y`).
+ * The layout under the two UI scales, in real (logical) px. The island (its slots and the handle-mode surface) is
+ * laid out in a screen of `screenW / handle` x `screenH / handle` units and multiplied by `handle`; the opened views
+ * in a screen divided by `panel`, multiplied by `panel`. Heights in the input are base content heights plus `SURFACE_CHROME_Y`.
  */
 export function scaledLayout(input: LayoutInput, scales: { handle: number; panel: number }): Layout {
   const hs = scales.handle, ps = scales.panel;
-  const hl = layout({ ...input, mode: 'handle', screenH: input.screenH / hs });
+  const hl = layout({ ...input, mode: 'handle', screenH: input.screenH / hs, screenW: input.screenW / hs });
   const slots = hl.slots.map(s => ({ id: s.id, size: s.size * hs, center: s.center * hs }));
-  const handle = { top: hl.handle.top * hs, h: hl.handle.h * hs };
-  const hotZones = hl.hotZones.map(z => ({ top: z.top * hs, h: z.h * hs }));
-  if (input.mode === 'handle') return { top: hl.top * hs, w: hl.w * hs, h: hl.h * hs, slots, handle, hotZones };
-  const resident = input.mode === 'bubble' && input.bubbleId === LEDGE_ID ? handle.top + 8 * hs + SIZES.residentH / 2 * hs : undefined;
-  const anchor = input.mode === 'bubble' ? (resident ?? (slots.find(s => s.id === input.bubbleId) ?? slots[0])?.center) : undefined;
-  const pl = layout({ ...input, screenH: input.screenH / ps, screenW: input.screenW === undefined ? undefined : input.screenW / ps, bubbleAnchor: anchor === undefined ? undefined : anchor / ps });
+  const handle = { left: hl.handle.left * hs, w: hl.handle.w * hs, h: hl.handle.h * hs };
+  if (input.mode === 'handle') return { left: hl.left * hs, top: 0, w: hl.w * hs, h: hl.h * hs, slots, handle };
+  const pl = layout({ ...input, screenH: input.screenH / ps, screenW: input.screenW / ps });
   // The surface's border is 1 real px whatever the scale: only the content inside it is zoomed.
-  return { top: pl.top * ps, w: pl.w * ps, h: (pl.h - SURFACE_CHROME_Y) * ps + SURFACE_CHROME_Y, slots, handle, hotZones };
+  return { left: pl.left * ps, top: 0, w: pl.w * ps, h: (pl.h - SURFACE_CHROME_Y) * ps + SURFACE_CHROME_Y, slots, handle };
 }

@@ -7,12 +7,11 @@ import type { DaemonClient } from '../daemon/client';
 import { botState, poseFor } from '../bots/poseFor';
 import type { ResidentGesture } from '../bots/ResidentMascot';
 import { displayOrder, groupSessions, headersBefore } from './groups';
-import { LEDGE_ID, scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y, type Layout } from './geometry';
+import { ISLAND, LEDGE_ID, scaledLayout, SIZES, SURFACE_CHROME_Y, type IslandPosition, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
 import { Handle, type HandleBot } from './Handle';
-import { Tooltip } from './Tooltip';
-import { UnreadSay, UNREAD_SAY_BOX } from './UnreadSay';
+import { UnreadSay, UNREAD_SAY_BOX, SAY_TAIL_X } from './UnreadSay';
 import { pickSay, pickSpeaker, sayKindOf, SAY_LINGER_MS, type SayCandidate } from './say';
 import { Bubble, type BubbleAck } from './Bubble';
 import { SettingsView } from './SettingsView';
@@ -27,12 +26,16 @@ import { useSoundPrefs } from '../sounds/preferences';
 import { useSounds } from '../sounds/useSounds';
 import { createSilentPlayer, type SoundPlayer } from '../sounds/player';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
-import { SessionList, rowHint, EXPANDED_ROW_H, ASK_H, NOTICE_GAP, type ListNotice } from './SessionList';
+import { SessionList, EXPANDED_ROW_H, ASK_H, NOTICE_GAP, type ListNotice } from './SessionList';
 import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
 import { useI18n, type Lang } from '../i18n/lang';
 import { transition, MOTION, ms, enterDelay } from '../motion';
-import { focusTerminal, openTerminal, onShortcut, onEdge, onCursorProximity, onTrayAction, setHotZones, focusOverlay, releaseFocus, isTauri } from '../tauri/bridge';
+import { focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, onTrayAction, focusOverlay, releaseFocus, isTauri, onForegroundCovered, setHotZone, openUrl } from '../tauri/bridge';
 import { useNativeFrame } from '../tauri/useNativeFrame';
+import { useDelayed } from './useDelayed';
+import { UpdateCard } from '../update/UpdateCard';
+import { targetOf } from '../update/machine';
+import type { UpdateController } from '../update/useUpdate';
 import { frameOf, type Box } from './frame';
 import { Shoulders, shoulderR } from './Shoulders';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
@@ -44,13 +47,18 @@ import type { MonitorInfo } from '../monitor';
 import { Coachmark, countCoachmarkOpen, COACHMARK_H } from '../keyboard/Coachmark';
 
 /** Fallback extents of the extras beside the surface, before (or without) a layout measurement. */
-export const TOOLTIP_BOX = { left: 36, w: 324, h: 30 } as const;
 export const STATUS_BOX = { w: 190, h: 20 } as const;
 /** The native frame waits out the surface's size transition before it shrinks (shrink delay + duration). */
 const SETTLE_MS = Math.max(MOTION.grow.ms, MOTION.shrink.delayMs + MOTION.shrink.ms);
 /** A drawn box in real px (its zoom included); 0 where layout gives nothing (jsdom). */
 const measure = (el: HTMLElement | null) => { const r = el?.getBoundingClientRect(); return { w: r?.width ?? 0, h: r?.height ?? 0 }; };
-const inside = (p: { x: number; y: number } | null, g: Layout) => p !== null && p.x >= 0 && p.x < g.w && p.y >= g.top && p.y < g.top + g.h;
+/** The hot band along the top edge: 10 px deep, 40 px past the island either side (spec 2026-10-12 §4). */
+export const HOT_BAND_H = 10;
+export const HOT_BAND_OVERHANG = 40;
+/** The discreet strip comes back this long after the island folds. */
+const STRIP_BACK_MS = 500;
+const inside = (p: { x: number; y: number } | null, g: Layout) => p !== null && p.x >= g.left && p.x < g.left + g.w && p.y >= 0 && p.y < g.h;
+const inBand = (p: { x: number; y: number } | null, g: Layout) => p !== null && p.y >= 0 && p.y <= HOT_BAND_H && p.x >= g.handle.left - HOT_BAND_OVERHANG && p.x < g.handle.left + g.handle.w + HOT_BAND_OVERHANG && !inside(p, g);
 /** One shared empty preview, so a session without one keeps a stable value across renders. */
 const NO_LINES: string[] = [];
 /** How long the "X is starting in Y" line stays under the list header. */
@@ -60,8 +68,11 @@ export const LAUNCH_NOTICE_MS = 6000;
 export interface SurfaceProps {
   /** The work-area height in logical px (the page itself is never zoomed). */
   screenH: number; theme: 'dark' | 'light'; client: DaemonClient; dnd: boolean; onToggleDnd: () => void; onToggleTheme?: () => void;
+  /** The work-area width in logical px: the island is centred on its axis within it. */
   screenW?: number;
-  /** The applied scales: the handle's (its layer, slots and edge bands) and the opened views' (bubble, list, session,
+  /** The island's axis and the discreet strip (Settings, spec 2026-10-12 §5). */
+  islandPosition?: IslandPosition; onIslandPosition?: (p: IslandPosition) => void; discreet?: boolean; onDiscreet?: (on: boolean) => void;
+  /** The applied scales: the handle's (its layer and slots) and the opened views' (bubble, list, session,
    *  settings, help, coachmark). Each is a CSS `zoom` on its own layer, with the geometry multiplied to match. */
   handleScale?: number; panelScale?: number;
   /** The two size settings, the values Auto resolves to, and how to change them (Settings). */
@@ -77,9 +88,14 @@ export interface SurfaceProps {
   accent?: string | null; onAccent?: (hex: string | null) => void;
   /** Plays the sound cues (one Web Audio player per app); a silent player when absent. */
   soundPlayer?: SoundPlayer;
+  /** The auto-update (App owns it): the card in the list, the pip on the island and on the gear. */
+  update?: UpdateController;
 }
 
-export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, accent = null, onAccent, soundPlayer }: SurfaceProps) {
+/** A text field or editable content: focus there means someone is filling it in. Radios, buttons and rows are not. */
+const isEditable = (el: Element | null) => !!el && ((el.tagName === 'INPUT' && !['radio', 'checkbox', 'button', 'submit'].includes((el as HTMLInputElement).type)) || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable);
+
+export function Surface({ screenH, screenW = window.innerWidth, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, accent = null, onAccent, soundPlayer, islandPosition = 'center', onIslandPosition, discreet = true, onDiscreet, update }: SurfaceProps) {
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
@@ -116,7 +132,12 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   const surfaceRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const [residentPointer, setResidentPointer] = useState<{ x: number; y: number } | null>(null);
-  const offsetRef = useRef(0);
+  /** The pointer while it is in the top band beside the island (null elsewhere); it arms the dwell like the island does. */
+  const [bandPointer, setBandPointer] = useState<{ x: number; y: number } | null>(null);
+  /** A maximised window in the foreground covers the island's spot (the shell says so). */
+  const [covered, setCovered] = useState(false);
+  const offsetRef = useRef({ left: 0, top: 0 });
+  const geoRef = useRef<Layout>(null!);
   useEffect(() => () => ctl.dispose(), [ctl]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [coach, setCoach] = useState(false);
@@ -130,9 +151,41 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
     if ((was === 'handle' || was === 'bubble') && ctl.state().mode === 'list') void focusOverlay();
   }), [ctl, dispatch]);
 
-  // The native window only covers what it draws, so in Tauri the shell watches the edge bands and reports crossings.
-  useEffect(() => onEdge(on => dispatch({ type: on ? 'edgeEnter' : 'edgeLeave' })), [dispatch]);
-  useEffect(() => onCursorProximity(point => setResidentPointer(ctl.state().mode === 'handle' ? point : null)), [ctl]);
+  // Ctrl+Alt+N opens the new-session form from anywhere, with focus so its field takes keys at once; again folds it.
+  useEffect(() => onNewSessionShortcut(() => {
+    const was = ctl.state().mode;
+    dispatch({ type: 'newSession' });
+    if (ctl.state().mode === 'launch' && (was === 'handle' || was === 'bubble')) void focusOverlay();
+  }), [ctl, dispatch]);
+
+  // A press outside an open panel folds it back to the handle. The overlay window never takes focus on a mouse open,
+  // so under Tauri the shell watches the mouse buttons; in the browser the document's own presses tell.
+  // Focus stays with whatever was clicked: no hand-back over it.
+  const foldedOutside = useRef(false);
+  const outsideClick = () => {
+    const m = ctl.state().mode; if (m === 'handle' || m === 'bubble') return;
+    foldedOutside.current = true;
+    dispatch({ type: 'outsideClick' });
+  };
+  const outsideRef = useRef(outsideClick); outsideRef.current = outsideClick;
+  useEffect(() => onOutsideClick(() => outsideRef.current()), []);
+  useEffect(() => {
+    if (isTauri()) return;
+    const press = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (t && (surfaceRef.current?.contains(t) || t.closest?.('[data-zoom]'))) return;
+      outsideRef.current();
+    };
+    document.addEventListener('pointerdown', press);
+    return () => document.removeEventListener('pointerdown', press);
+  }, []);
+  // The native poller covers the screen beyond the webview: the gaze and the top band both read it.
+  useEffect(() => onCursorProximity(point => {
+    if (point) pointer.current = point;
+    setBandPointer(inBand(point, geoRef.current) ? point : null);
+    setResidentPointer(ctl.state().mode === 'handle' ? point : null);
+  }), [ctl]);
+  useEffect(() => onForegroundCovered(setCovered), []);
   useEffect(() => onTrayAction(action => {
     if (action === 'dnd') { onToggleDnd(); return; }
     dispatch({ type: 'close' });
@@ -170,9 +223,10 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   useEffect(() => {
     // In page coordinates: under Tauri the window (and so the viewport) starts at the frame's top.
     const track = (e: PointerEvent | MouseEvent) => {
-      pointer.current = { x: e.clientX, y: e.clientY + offsetRef.current };
-      // The native poller covers the screen beyond the tiny webview; browser previews use document events.
-      if (!isTauri()) setResidentPointer(e.clientX <= 170 ? pointer.current : null);
+      pointer.current = { x: e.clientX + offsetRef.current.left, y: e.clientY + offsetRef.current.top };
+      setBandPointer(inBand(pointer.current, geoRef.current) ? pointer.current : null);
+      // The native poller covers the screen beyond the webview; browser previews use document events for the gaze too.
+      if (!isTauri()) setResidentPointer(pointer.current);
     };
     document.addEventListener('pointermove', track); document.addEventListener('mousemove', track);
     return () => { document.removeEventListener('pointermove', track); document.removeEventListener('mousemove', track); };
@@ -185,7 +239,8 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   useEffect(() => {
     const was = prevView.current; prevView.current = { mode: st.mode, selectedId: st.selectedId, openedBy: st.openedBy };
     if (was.mode === st.mode) return;
-    if (st.mode === 'handle' && was.mode !== 'bubble' && was.openedBy === 'keyboard') void releaseFocus();
+    const outside = foldedOutside.current; foldedOutside.current = false;
+    if (st.mode === 'handle' && was.mode !== 'bubble' && was.openedBy === 'keyboard' && !outside) void releaseFocus();
     if (st.mode === 'list' && (was.mode === 'handle' || was.mode === 'bubble') && st.openedBy === 'keyboard') {
       setFocusedId(sessions.find(isPending)?.id ?? sessions[0]?.id ?? null);
       setCoach(countCoachmarkOpen());
@@ -223,7 +278,7 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
 
   // The finishing bot is big from the moment its notice is due until the bubble folds.
   const liftedId = st.queue.length === 0 && st.done.length > 0 && (st.unfoldDue || (st.mode === 'bubble' && st.bubbleKind === 'finished')) ? st.done[0] : null;
-  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, held: !!finishedUnread[s.id], readOnly: s.source === 'hook_only', tip: isPending(s) ? `${t.handleLabel[botState(s)]} · ${s.pending?.text ?? ''}` : (s.topic ? `${s.topic} · ${rowHint(s, t)}` : rowHint(s, t)) })), [sessions, t, liftedId, finishedUnread]);
+  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, held: !!finishedUnread[s.id], readOnly: s.source === 'hook_only' })), [sessions, liftedId, finishedUnread]);
   const previousResident = useRef({ ids: new Set(sessions.map(s => s.id)), pending: new Set(sessions.filter(isPending).map(s => s.id)) });
   const signalCounter = useRef(0);
   const [residentSignal, setResidentSignal] = useState<{ key: number; kind: ResidentGesture }>();
@@ -295,21 +350,22 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   const settingsOpen = st.mode === 'settings';
   useEffect(() => { if (settingsOpen) onSettingsOpen?.(); }, [settingsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const helpH = useMeasuredHeight(helpRef, st.mode === 'help', ps);
-  const launchRef = useRef<HTMLDivElement>(null);
-  const launchH = useMeasuredHeight(launchRef, st.mode === 'launch', ps);
-  // The launch form's footer (the actions) sits under the measured, scrolling body.
-  const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : st.mode === 'launch' && launchH ? launchH + LAUNCH_FOOTER_H : 0;
-  // The chat sizes itself to its thread: header + measured content + the composer (+ the suggestion chips while empty).
-  const chatRef = useRef<HTMLDivElement>(null);
-  const chatH = useMeasuredHeight(chatRef, st.mode === 'chat', ps);
-  const chatBody = st.mode === 'chat' && chatH ? CHAT_HEADER_H + chatH + 60 + (chat.length === 0 ? 44 : 0) + SURFACE_CHROME_Y : undefined;
-
   // Starting a session from the form: one request at a time; the daemon answers `session.launched` (back to the list,
   // a notice for a few seconds, the terminal tab when asked) or an `error` without id (shown in the form). The form is
   // remounted on each open, so a submitted form never shows its old values again.
   const [launchOpen, setLaunchOpen] = useState(0);
   const launchMode = st.mode === 'launch';
   useEffect(() => { if (launchMode) setLaunchOpen(n => n + 1); }, [launchMode]);
+  // Measured on the remounted form (`launchOpen`), not on the one it replaced: a form opened from the handle is first
+  // laid out at the island's width, and only the live element reports the height at the settled width.
+  const launchRef = useRef<HTMLDivElement>(null);
+  const launchH = useMeasuredHeight(launchRef, launchMode, ps, launchOpen);
+  // The launch form's footer (the actions) sits under the measured, scrolling body.
+  const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : launchMode && launchH ? launchH + LAUNCH_FOOTER_H : 0;
+  // The chat sizes itself to its thread: header + measured content + the composer (+ the suggestion chips while empty).
+  const chatRef = useRef<HTMLDivElement>(null);
+  const chatH = useMeasuredHeight(chatRef, st.mode === 'chat', ps);
+  const chatBody = st.mode === 'chat' && chatH ? CHAT_HEADER_H + chatH + 60 + (chat.length === 0 ? 44 : 0) + SURFACE_CHROME_Y : undefined;
   const [launching, setLaunching] = useState<{ openTab: boolean } | null>(null);
   const [launchFailure, setLaunchFailure] = useState<string | null>(null);
   const [notice, setNotice] = useState<ListNotice | null>(null);
@@ -319,6 +375,23 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   const noticeRef = useRef<HTMLDivElement>(null);
   const noticeH = useMeasuredHeight(noticeRef, st.mode === 'list' && !!notice, ps);
   const noticeExtraH = notice ? NOTICE_GAP + (noticeH || 36) : 0;
+  // The update card sits under the notice and is measured the same way.
+  const updateCard = update && update.card.kind !== 'hidden' ? update.card : null;
+  const updateRef = useRef<HTMLDivElement>(null);
+  const updateH = useMeasuredHeight(updateRef, st.mode === 'list' && !!updateCard, ps);
+  // The measured box is the wrapper, which carries the card's top margin already.
+  const updateExtraH = updateCard ? updateH || NOTICE_GAP + 120 : 0;
+  // The « up to date » pip only stays six seconds.
+  const [okGone, setOkGone] = useState(false);
+  const okPip = update?.pip === 'ok';
+  useEffect(() => {
+    if (!okPip) { setOkGone(false); return; }
+    const timer = setTimeout(() => setOkGone(true), 6000);
+    return () => clearTimeout(timer);
+  }, [okPip]);
+  const updatePip = okPip && okGone ? null : update?.pip ?? null;
+  const updateVersion = update ? targetOf(update.state) ?? '' : '';
+  const gearLabel = update?.gear ? `${t.list.settings}, ${t.update.pip.new(updateVersion)}` : undefined;
   /** The session's terminal tab: brought forward when it exists, else opened on the session (a daemon-launched one has none yet). */
   const openTab = (id: string) => {
     const s = byId.get(id); if (!s) return;
@@ -345,7 +418,6 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
     setLaunching(null); setLaunchFailure(lastError.message);
   }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held })), mode: st.mode, screenH, screenW, readerExpanded: st.documentExpanded, bubbleId: st.bubbleId, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH }, { handle: hs, panel: ps });
   const sayCandidates: SayCandidate[] = [];
   if (ledgeUnread) sayCandidates.push({ id: LEDGE_ID, kind: 'ledge', seed: ledgeSaySeed });
   for (const s of sessions) {
@@ -366,6 +438,13 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
     return () => clearTimeout(timer);
   }, [sayOnHandle, speakerKey, sayExpired]);
   const sayShown = sayOnHandle && speakerKey !== sayExpired;
+  // The strip shows under a covering window once the island has been folded and left alone for 500 ms; a say
+  // still hanging under its speaker keeps the island compact, the strip has no companion to hang it from.
+  const strip = useDelayed(discreet && covered && st.mode === 'handle' && !st.hot && !st.hovering && bandPointer === null && !sayShown, STRIP_BACK_MS);
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held })), mode: st.mode, screenH, screenW, position: islandPosition, strip, dnd, readerExpanded: st.documentExpanded, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH }, { handle: hs, panel: ps });
+  geoRef.current = geo;
+  // The shell watches the top band over the island's span (its depth and overhang are the shell's own constants).
+  useEffect(() => { setHotZone(Math.round(geo.handle.left), Math.round(geo.handle.w)); }, [geo.handle.left, geo.handle.w]);
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -383,14 +462,30 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
       const a = document.activeElement;
       if (!a || !surfaceRef.current?.contains(a) || a.closest('[inert]')) dispatch({ type: 'focusWithin', on: false });
     }
-  }, [st.mode, geo.top, geo.w, geo.h, ctl, dispatch]);
+  }, [st.mode, geo.left, geo.w, geo.h, ctl, dispatch]);
 
-  const onBlur = (e: FocusEvent) => { if (!surfaceRef.current?.contains(e.relatedTarget as Node | null)) dispatch({ type: 'focusWithin', on: false }); };
-  const onMouseMove = () => { if (!ctl.state().hovering) dispatch({ type: 'surfaceEnter' }); };
+  const onBlur = (e: FocusEvent) => {
+    if (!surfaceRef.current?.contains(e.relatedTarget as Node | null)) dispatch({ type: 'focusWithin', on: false });
+    if (ctl.state().editing && !isEditable(e.relatedTarget as Element | null)) dispatch({ type: 'editing', on: false });
+  };
+  // Hovering the bare handle opens the list after the dwell, unless the daemon is out of reach.
+  const handleArmed = () => ctl.state().mode === 'handle' && !unreachable;
+  const onMouseEnter = () => { dispatch({ type: 'surfaceEnter' }); if (handleArmed()) dispatch({ type: 'handleEnter' }); };
+  const onMouseLeave = () => { dispatch({ type: 'surfaceLeave' }); if (ctl.state().hot) dispatch({ type: 'handleLeave' }); };
+  const onMouseMove = () => {
+    if (!ctl.state().hovering) dispatch({ type: 'surfaceEnter' });
+    if (handleArmed() && !ctl.state().hot) dispatch({ type: 'handleEnter' });
+  };
+  // The band along the top edge arms the dwell like the island itself; leaving it (and the island) disarms it. A panel
+  // the band opened, left without ever being entered, folds like one the pointer left.
+  useEffect(() => {
+    if (bandPointer && handleArmed() && !ctl.state().hot) dispatch({ type: 'handleEnter' });
+    if (bandPointer || inside(pointer.current, geoRef.current)) return;
+    const s = ctl.state();
+    if (s.hot) dispatch({ type: 'handleLeave' });
+    if (s.mode !== 'handle' && s.openedBy === 'mouse' && !s.hovering) dispatch({ type: 'surfaceLeave' });
+  }, [bandPointer]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { big } = slotSizes(bots.length);
-  const hovBot = bots.find(b => b.id === hoverId) ?? null;
-  const hovSlot = geo.slots.find(s => s.id === hoverId);
   const panel = st.mode !== 'handle' && st.mode !== 'bubble';
   const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch' || st.mode === 'chat' || st.mode === 'reader';
   const openDocument = (ref: DocumentReference, origin: { kind: 'session'; sessionId: string } | { kind: 'chat' }) => { documentSourceFocus.current = document.activeElement as HTMLElement; reader.open(ref, origin); dispatch({ type: 'documentOpen', origin }); };
@@ -423,48 +518,35 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
     send({ type: 'session.reply', id, text }); sounds.user('accept'); setDrafts(x => ({ ...x, [id]: '' })); dispatch({ type: 'typing', on: false });
   };
   const bubbleAck: BubbleAck = st.ack ? (st.ack.confirmed ? 'confirmed' : 'pending') : st.failed && st.failed === st.bubbleId ? 'failed' : null;
-  // The coachmark sits 8 px under the focused row; when that would leave the frame it flips above the row, and when
-  // neither fits (a short list) it stays below and the native frame reported to the shell extends to hold it.
+  // The coachmark sits 8 px under the panel, centred on it, clamped into the work area; the native frame extends to hold it.
   const coachShown = coach && kb && st.mode === 'list';
-  const focusIndex = focused ? sessions.findIndex(s => s.id === focused.id) : -1;
-  // In real px: the list's base offsets times the window scale.
-  const rowTop = geo.top + (SIZES.headerH + 8 + headersBefore(groups, focused?.id ?? null) * SIZES.groupH + Math.max(0, focusIndex) * SIZES.rowH) * ps;
-  const rowBottom = focusIndex < 0 ? geo.top + SIZES.headerH * ps : rowTop + (focused && isYesNo(focused) ? EXPANDED_ROW_H : SIZES.rowH) * ps;
-  const below = rowBottom + 8 * ps; const above = rowTop - (8 + COACHMARK_H) * ps;
-  const coachTop = below + COACHMARK_H * ps <= geo.top + geo.h || above < geo.top ? below : above;
-  // The native window is the bounding frame of what is visible: the surface plus the tooltip, the status line and the
-  // coachmark when shown. Text extras are measured after layout (fixed fallbacks where layout gives nothing).
-  const tipRef = useRef<HTMLDivElement>(null); const statusRef = useRef<HTMLDivElement>(null); const sayRef = useRef<HTMLButtonElement>(null);
-  const [sizes, setSizes] = useState({ tip: { w: 0, h: 0 }, status: { w: 0, h: 0 }, say: { w: 0, h: 0 } });
+  const coachLeft = geo.left + geo.w / 2 - 150 * ps;
+  const coachTop = Math.min(geo.h + 8 * ps, Math.max(0, screenH - (COACHMARK_H + 8) * ps));
+  // The native window is the bounding frame of what is visible: the surface plus the status line, the unread say and
+  // the coachmark when shown. Text extras are measured after layout (fixed fallbacks where layout gives nothing).
+  const statusRef = useRef<HTMLDivElement>(null); const sayRef = useRef<HTMLButtonElement>(null);
+  const [sizes, setSizes] = useState({ status: { w: 0, h: 0 }, say: { w: 0, h: 0 } });
   useLayoutEffect(() => {
-    const tip = measure(tipRef.current), status = measure(statusRef.current), say = measure(sayRef.current);
-    setSizes(s => s.tip.w === tip.w && s.tip.h === tip.h && s.status.w === status.w && s.status.h === status.h && s.say.w === say.w && s.say.h === say.h ? s : { tip, status, say });
+    const status = measure(statusRef.current), say = measure(sayRef.current);
+    setSizes(s => s.status.w === status.w && s.status.h === status.h && s.say.w === say.w && s.say.h === say.h ? s : { status, say });
   });
-  const tipShown = st.mode === 'handle' && hovBot !== null;
   const extras: Box[] = [];
-  // The status line belongs to the handle (its scale); the tooltip, the unread say and the coachmark read at the windows' size.
-  const statusLeft = Math.max(geo.w, SIZES.handleW * hs) + 8 * hs;
-  // The tooltip sits beside the handle (whose width follows the handle size) but reads at the windows' size.
-  const tipLeft = SIZES.handleW * hs + (TOOLTIP_BOX.left - SIZES.handleW) * ps;
-  const sayLeft = SIZES.handleW * hs + (UNREAD_SAY_BOX.left - SIZES.handleW) * ps;
-  const sayH = sizes.say.h || UNREAD_SAY_BOX.h * ps;
+  // The status line hangs centred under the island (its scale); the unread say hangs under its speaker, the coachmark under the panel, both at the windows' size.
+  const statusW = sizes.status.w || STATUS_BOX.w * hs, statusH = sizes.status.h || STATUS_BOX.h * hs;
+  const statusLeft = geo.left + geo.w / 2 - statusW / 2, statusTop = geo.h + 6 * hs;
   const saySlot = speaker && speaker.id !== LEDGE_ID ? geo.slots.find(s => s.id === speaker.id) : undefined;
-  const speakerTop = saySlot ? saySlot.center - saySlot.size / 2 : geo.top + 8 * hs;
-  const sayTop = speakerTop - sayH - 2 * ps;
-  if (tipShown) { const h = sizes.tip.h || TOOLTIP_BOX.h * ps; extras.push({ left: tipLeft, top: (hovSlot?.center ?? geo.top) - h / 2, w: sizes.tip.w || TOOLTIP_BOX.w * ps, h }); }
+  const speakerX = saySlot ? saySlot.center : geo.left + (ISLAND.padL + ISLAND.resident / 2) * hs;
+  const sayLeft = speakerX - SAY_TAIL_X * ps, sayTop = geo.h + 4 * ps;
   if (sayShown) extras.push({ left: sayLeft, top: sayTop, w: sizes.say.w || UNREAD_SAY_BOX.w * ps, h: sizes.say.h || UNREAD_SAY_BOX.h * ps });
-  if (unreachable) extras.push({ left: statusLeft, top: geo.top, w: sizes.status.w || STATUS_BOX.w * hs, h: sizes.status.h || STATUS_BOX.h * hs });
-  if (coachShown) extras.push({ left: 44 * ps, top: coachTop, w: 300 * ps, h: COACHMARK_H * ps });
-  // The fillets above and below the surface, where it leaves the screen edge.
-  const sr = shoulderR(geo.w);
-  if (sr > 0) extras.push({ left: 0, top: geo.top - sr, w: sr, h: geo.h + 2 * sr });
-  const frame = frameOf(geo, extras, screenH);
+  if (unreachable) extras.push({ left: statusLeft, top: statusTop, w: statusW, h: statusH });
+  if (coachShown) extras.push({ left: coachLeft, top: coachTop, w: 300 * ps, h: COACHMARK_H * ps });
+  // The fillets either side of the surface, where it leaves the top edge.
+  const sr = shoulderR(geo.w, strip);
+  if (sr > 0) extras.push({ left: geo.left - sr, top: 0, w: geo.w + 2 * sr, h: sr });
+  const frame = frameOf(geo, extras, { w: screenW, h: screenH });
   const offset = useNativeFrame(frame, parseFloat(ms(SETTLE_MS)));
   offsetRef.current = offset;
-  // Armed only while the bare handle shows and the daemon is reachable, exactly like the DOM zones' pointer-events.
-  const zonesArmed = st.mode === 'handle' && !unreachable;
-  const zonesKey = zonesArmed ? geo.hotZones.map(z => `${z.top}:${z.h}`).join(',') : '';
-  useEffect(() => { setHotZones(zonesArmed ? geo.hotZones : []); }, [zonesKey]); // the bands are captured through `zonesKey`
+  useEffect(() => { setOutsideWatch(panel); }, [panel]);
   // The terminal tab is the fallback for read-only and offline sessions too: only the daemon message needs the daemon.
   const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); openTab(id); };
   const chooseOption = (n: number) => {
@@ -484,16 +566,9 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   useKeyboard({
     enabled: panel, mode: st.mode, sessions, focusedId: st.mode === 'session' ? st.selectedId : st.mode === 'list' ? focused?.id ?? null : null,
     onFocus: setFocusedId, onOpen: openRow, onDecide: decide,
-    onNextAsk: () => {
-      const pend = sessions.filter(isPending).map(s => s.id);
-      const from = st.mode === 'session' ? st.selectedId : focused?.id ?? null;
-      const ids = sessions.map(s => s.id); const at = from ? ids.indexOf(from) : -1;
-      const next = [...ids.slice(at + 1), ...ids.slice(0, at + 1)].find(id => pend.includes(id));
-      if (!next || next === from) return;
-      if (st.mode === 'session') openRow(next); else setFocusedId(next);
-    },
     onClose: () => st.mode === 'reader' ? readerBack() : dispatch({ type: detail ? 'back' : 'close' }),
     onAsk: () => surfaceRef.current?.querySelector<HTMLInputElement>('[data-ask-input]')?.focus(),
+    onInstruction: () => surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="launch"] [data-launch-prompt]')?.focus(),
     onReplyFocus: () => {
       if (st.mode !== 'session' && st.mode !== 'list') return;
       if (st.mode === 'session') { surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="session"] [data-reply]')?.focus(); return; }
@@ -507,23 +582,25 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   const enter = enterDelay(growing);
 
   const tauri = isTauri();
-  const surfaceTransition = ['top', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out`;
+  const radius = strip ? 6 : st.mode === 'handle' ? 19 : 22;
+  const surfaceTransition = ['left', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out`;
   const content = (
     <>
-      {!tauri && geo.hotZones.map((z, i) => <div key={i} data-hotzone onMouseEnter={() => dispatch({ type: 'edgeEnter' })} onMouseLeave={() => dispatch({ type: 'edgeLeave' })} style={{ position: 'absolute', left: 0, top: z.top, width: 14 * hs, height: z.h, pointerEvents: st.mode === 'handle' && !unreachable ? 'auto' : 'none', background: st.hot ? 'var(--edge-hot)' : 'transparent', transition: transition([['background-color', 'hover']]) }} />)}
-
-      <div ref={surfaceRef} data-surface data-mode={st.mode}
-        onMouseEnter={() => dispatch({ type: 'surfaceEnter' })} onMouseLeave={() => dispatch({ type: 'surfaceLeave' })} onMouseMove={onMouseMove}
+      <div ref={surfaceRef} data-surface data-mode={st.mode} data-strip={strip || undefined}
+        onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove}
         onFocus={e => {
           if (!ctl.state().focusWithin) dispatch({ type: 'focusWithin', on: true });
+          // A field being filled keeps a mouse-opened panel open when the pointer leaves; a button or a row does not.
+          const editing = isEditable(e.target as Element);
+          if (editing !== ctl.state().editing) dispatch({ type: 'editing', on: editing });
           // Native Tab onto another row moves the keyboard focus with it.
           const row = (e.target as HTMLElement).closest?.('[data-row]') ? (e.target as HTMLElement).closest<HTMLElement>('[data-row-id]')?.dataset.rowId : undefined;
           if (row && kb && ctl.state().mode === 'list') setFocusedId(row);
         }} onBlur={onBlur}
-        style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--notch)', color: 'var(--sidebar-foreground)', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
+        style={{ position: 'absolute', left: geo.left, top: 0, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--notch)', color: 'var(--sidebar-foreground)', borderRadius: `0px 0px ${radius}px ${radius}px`, opacity: unreachable ? 0.6 : 1, willChange: 'left, width, height',
           transition: surfaceTransition }}>
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-          <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} top={geo.top} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} sayId={sayShown && speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+          <Handle updatePip={updatePip} updateVersion={updateVersion} bots={bots} slots={geo.slots} visible={st.mode === 'handle'} strip={strip} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} sayId={sayShown && speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
@@ -537,9 +614,10 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
         </div>
         <div data-panel style={{ position: 'absolute', inset: 0, zoom: ps, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} numbered={kb} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
+            <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               onDismiss={id => { if (!unreachable) send({ type: 'session.dismiss', id }); }} offline={unreachable}
-              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} noticeRef={noticeRef} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
+              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} noticeRef={noticeRef} gearPip={!!update?.gear} gearLabel={gearLabel} updateRef={updateRef}
+              update={updateCard ? <UpdateCard view={updateCard} sessions={sessions.length} offline={unreachable} theme={theme} onUpdate={update!.start} onLater={update!.later} onRetry={update!.retry} onAck={update!.ackUpdated} onNotes={() => openUrl('https://github.com/Paradow-dev/ledge/releases/latest')} /> : null} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
               onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
@@ -556,6 +634,8 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
             <SettingsView contentRef={settingsRef} onLang={onLang} visible={st.mode === 'settings'} enterDelay={enter} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} finished={prefs.finished} onFinished={prefs.setFinished} sounds={prefs.sounds} onSounds={prefs.setSounds} onTestSound={sounds.test} scales={scales} autoScales={autoScales} onScale={onScale}
               monitors={monitors} monitor={monitor} onMonitor={onMonitor} autostart={autostart} onAutostart={onAutostart}
               defaultTool={defaultTool} onDefaultTool={chooseDefaultTool} accent={accent} onAccent={onAccent}
+              islandPosition={islandPosition} onIslandPosition={onIslandPosition} discreet={discreet} onDiscreet={onDiscreet}
+              about={update ? { app: update.state.app, daemon: update.state.daemon, latest: update.state.latest?.version ?? null, auto: update.auto, checkedAt: update.state.checkedAt, onAuto: update.setAuto, onCheck: update.checkNow } : undefined}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'help' ? 'auto' : 'none', transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
@@ -575,14 +655,11 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
       </div>
 
       {/* Drawn after the surface: each overlaps its edge by a pixel, so no seam shows where they meet. */}
-      <Shoulders top={geo.top} h={geo.h} w={geo.w} opacity={unreachable ? 0.6 : 1} transition={surfaceTransition} />
+      <Shoulders left={geo.left} w={geo.w} strip={strip} opacity={unreachable ? 0.6 : 1} transition={surfaceTransition} />
 
       {/* Zoomed extras: a zoomed element's own offsets are zoomed too, so their real-px positions are divided back. */}
       <div data-zoom="coachmark" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
-        <Coachmark visible={coachShown} top={coachTop / ps} onDismiss={() => { setCoach(false); if (focusedRowId) surfaceRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusedRowId)}"] [data-row]`)?.focus(); }} />
-      </div>
-      <div data-zoom="tooltip" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
-        <Tooltip ref={tipRef} bot={st.mode === 'handle' ? hovBot : null} y={(hovSlot?.center ?? geo.top) / ps} left={tipLeft / ps} />
+        <Coachmark visible={coachShown} top={coachTop / ps} left={coachLeft / ps} onDismiss={() => { setCoach(false); if (focusedRowId) surfaceRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusedRowId)}"] [data-row]`)?.focus(); }} />
       </div>
       <div data-zoom="unread-say" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <UnreadSay ref={sayRef} visible={sayShown} text={sayText} kind={speaker?.kind ?? 'ledge'} top={sayTop / ps} left={sayLeft / ps} onOpen={() => {
@@ -592,10 +669,10 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
         }} />
       </div>
       <div data-zoom="status" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-        {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: statusLeft / hs, top: geo.top / hs, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{t.unreachable}</div>}
+        {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: statusLeft / hs, top: statusTop / hs, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{t.unreachable}</div>}
       </div>
     </>
   );
   // Under Tauri the page is shifted so page y = screen y - frame top; the browser renders at page coordinates as is.
-  return tauri ? <div data-frame-content style={{ position: 'absolute', left: 0, top: -offset, width: '100%' }}>{content}</div> : content;
+  return tauri ? <div data-frame-content style={{ position: 'absolute', left: -offset.left, top: -offset.top, width: '100%' }}>{content}</div> : content;
 }

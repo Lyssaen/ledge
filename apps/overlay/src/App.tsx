@@ -3,12 +3,14 @@ import { PROTOCOL_PORT } from '@ledge/protocol';
 import { createDaemonClient } from './daemon/client';
 import { attachClient } from './daemon/store';
 import { Surface } from './surface/Surface';
+import { useUpdate } from './update/useUpdate';
 import { getAutostart, isTauri, listMonitors, screenHeight, screenWidth, setAutostart, setMonitor, setTrayLabels } from './tauri/bridge';
 import { autoScale, loadScale, migrateLegacyScale, resolveScale, saveScale, type ScaleTarget, type UiScale } from './scale';
 import { loadMonitor, saveMonitor, type MonitorInfo } from './monitor';
 import { LangProvider, loadLang, messagesFor, saveLang, type Lang } from './i18n/lang';
 import { createWebAudioPlayer } from './sounds/player';
 import { applyAccent, loadAccent, saveAccent } from './accent';
+import { loadIslandPosition, saveIslandPosition, loadDiscreet, saveDiscreet, type IslandPosition } from './island';
 
 export function App() {
   // An isolated browser demo can point at a fake daemon without disturbing the live WSL daemon.
@@ -25,6 +27,10 @@ export function App() {
   // can also be changed from the Task Manager. null: not offered (browser, `tauri dev`).
   const [autostart, setAutostartState] = useState<boolean | null>(null);
   const [lang, setLang] = useState<Lang>(loadLang);
+  const [islandPosition, setIslandPosition] = useState<IslandPosition>(loadIslandPosition);
+  const [discreet, setDiscreet] = useState(loadDiscreet);
+  useEffect(() => { saveIslandPosition(islandPosition); }, [islandPosition]);
+  useEffect(() => { saveDiscreet(discreet); }, [discreet]);
   const [dnd, setDnd] = useState(() => { try { return localStorage.getItem('ledge.dnd') === '1'; } catch { return false; } });
   const [theme, setTheme] = useState<'dark' | 'light'>(() => { try { return (localStorage.getItem('ledge.theme') as 'dark' | 'light') || 'dark'; } catch { return 'dark'; } });
   const [accent, setAccent] = useState<string | null>(loadAccent);
@@ -32,6 +38,7 @@ export function App() {
   const tauri = isTauri();
   const handleScale = resolveScale(scales.handle, workH, 'handle');
   const panelScale = resolveScale(scales.panel, workH, 'panel');
+  const update = useUpdate(client);
   useEffect(() => { const off = attachClient(client); client.connect(); return () => { off(); client.close(); }; }, [client]);
   const refreshMonitors = () => { listMonitors().then(setMonitors).catch(() => {}); };
   useEffect(refreshMonitors, []);
@@ -51,12 +58,12 @@ export function App() {
   useEffect(() => { const h = (e: KeyboardEvent) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 't') setTheme(t => (t === 'dark' ? 'light' : 'dark')); }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, []);
   return (
     <LangProvider lang={lang}>
-      <Surface screenH={workH} screenW={workW} handleScale={handleScale} panelScale={panelScale} scales={scales} autoScales={{ handle: autoScale(workH, 'handle'), panel: autoScale(workH, 'panel') }}
+      <Surface update={update} screenH={workH} screenW={workW} handleScale={handleScale} panelScale={panelScale} scales={scales} autoScales={{ handle: autoScale(workH, 'handle'), panel: autoScale(workH, 'panel') }}
         onScale={(target, s) => setScales(x => ({ ...x, [target]: s }))} onLang={setLang}
         monitors={monitors} monitor={monitor} onMonitor={setMonitorChoice} onSettingsOpen={onSettingsOpen}
         autostart={autostart} onAutostart={onAutostart}
         theme={theme} client={client} dnd={dnd} soundPlayer={player} onToggleDnd={() => setDnd(d => !d)} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
-        accent={accent} onAccent={setAccent} />
+        accent={accent} onAccent={setAccent} islandPosition={islandPosition} onIslandPosition={setIslandPosition} discreet={discreet} onDiscreet={setDiscreet} />
     </LangProvider>
   );
 }

@@ -8,9 +8,18 @@
 :root[data-theme="light"] [data-surface], :root[data-theme="light"] [data-coachmark] { color-scheme: light; }
 html, body, #root { margin: 0; height: 100%; background: transparent; }
 body { font-family: 'Geist', system-ui, sans-serif; color: var(--sidebar-foreground); font-size: 14px; line-height: 20px; overflow: hidden; }
+/* The page never scrolls: a fixed, clipping root adds nothing to the document's scrollable overflow, so a control taking
+   focus while the native window is still at the island's height (a keyboard open grows it after the first paint) scrolls
+   only its own list, never the page out of the window's top. A hidden body alone still scrolls programmatically. */
+#root { position: fixed; inset: 0; overflow: clip; }
 .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
 button, input { font-family: inherit; }
 /* The bubble countdown drains from the controller's remainder (--ledge-from) to empty. */
+/* The update card's running step, and the island's busy pip. */
+@keyframes ledge-spin { to { transform: rotate(360deg) } }
+@keyframes ledge-pulse { 50% { opacity: .35 } }
+.ledge-spin { animation: ledge-spin .9s linear infinite }
+@media (prefers-reduced-motion: reduce) { .ledge-spin { animation: none } }
 @keyframes ledge-drain { from { width: var(--ledge-from, 100%) } to { width: 0% } }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .dnd-switch:has(input:focus-visible) .dnd-track, .ledge-seg:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }

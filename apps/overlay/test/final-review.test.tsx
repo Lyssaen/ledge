@@ -25,6 +25,8 @@ const daemonError = (id: string, message: string) => act(() => { daemonStore.app
 const tick = (n: number) => act(() => { vi.advanceTimersByTime(n); });
 const press = (key: string, extra: KeyboardEventInit = {}) => act(() => { fireEvent.keyDown(document.activeElement ?? window, { key, ...extra }); });
 const shortcut = () => press('l', { ctrlKey: true, altKey: true });
+/** Keyboard focus on the n-th listed row (1-based), with K to the top then J down. */
+const toRow = (n: number) => { for (let i = 0; i < 9; i++) press('k'); for (let i = 1; i < n; i++) press('j'); };
 const surface = () => document.querySelector('[data-surface]') as HTMLElement;
 const layer = (name: string) => document.querySelector(`[data-layer="${name}"]`) as HTMLElement;
 const mode = () => surface().getAttribute('data-mode');
@@ -86,7 +88,7 @@ describe('final review fixes', () => {
     snapshot([otto(), pim()]);
     mount();
     // Mouse: edge dwell, then collapse.
-    fireEvent.mouseEnter(document.querySelector('[data-hotzone]')!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     tick(180);
     expect(mode()).toBe('list');
     fireEvent.click(within(layer('list')).getByRole('button', { name: 'Collapse' }));
@@ -100,7 +102,7 @@ describe('final review fixes', () => {
     expect(mode()).toBe('handle');
     expect(bridge.releaseFocus).toHaveBeenCalledTimes(1);
     // Keyboard into a session, then closed from there; and Ctrl+Alt+L again to close.
-    shortcut(); press('1'); press('Enter');
+    shortcut(); toRow(1); press('Enter');
     expect(mode()).toBe('session');
     fireEvent.click(within(layer('session')).getByRole('button', { name: 'Close' }));
     expect(bridge.releaseFocus).toHaveBeenCalledTimes(2);
@@ -214,12 +216,12 @@ describe('final review fixes', () => {
     expect(within(layer('bubble')).getByText('Pim needs your approval')).toBeInTheDocument();
   });
 
-  it('9. brushing the edge right after an ask does not lose the bubble', () => {
+  it('9. brushing the handle right after an ask does not lose the bubble', () => {
     snapshot([otto()]);
     mount();
     update(otto(asks('rm -rf dist')));
     tick(300);
-    const zone = document.querySelector('[data-hotzone]')!;
+    const zone = document.querySelector('[data-surface]')!;
     fireEvent.mouseEnter(zone);
     tick(100);
     fireEvent.mouseLeave(zone);
@@ -247,11 +249,11 @@ describe('final review fixes', () => {
   it('an exited session offers no rename (the daemon would ignore it); a live one does', () => {
     snapshot([otto({ topic: 'Done work', state: 'exited' }), pim({ topic: 'Live work' })]);
     mount();
-    shortcut(); press('1'); press('Enter');
+    shortcut(); toRow(1); press('Enter');
     expect(mode()).toBe('session');
     expect(within(layer('session')).getByRole('button', { name: 'Done work' })).toBeDisabled();
     press('Escape');
-    press('2'); press('Enter');
+    toRow(2); press('Enter');
     expect(within(layer('session')).getByRole('button', { name: 'Live work' })).toBeEnabled();
   });
 });

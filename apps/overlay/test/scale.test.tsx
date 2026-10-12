@@ -52,7 +52,7 @@ describe('UI scales', () => {
   it('Settings shows the two sizes as radio groups; Auto shows the value it resolves to; each changes on its own', () => {
     const onScale = vi.fn();
     render(<SettingsView visible theme="dark" dnd={false} reduced={false} osReduced={false} onToggleDnd={() => {}} onReduced={() => {}} onBack={() => {}} onClose={() => {}} {...soundProps} scales={{ handle: 'auto', panel: 'auto' }} autoScales={{ handle: 2, panel: 1 }} onScale={onScale} />);
-    const handle = screen.getByRole('group', { name: 'Handle size' }); const win = screen.getByRole('group', { name: 'Window size' });
+    const handle = screen.getByRole('group', { name: 'Island size' }); const win = screen.getByRole('group', { name: 'Window size' });
     expect(within(handle).getByRole('radio', { name: 'Auto (200%)' })).toBeChecked();
     expect(within(win).getByRole('radio', { name: 'Auto (100%)' })).toBeChecked();
     for (const n of ['100%', '125%', '150%', '200%']) expect(within(handle).getByRole('radio', { name: n })).not.toBeChecked();
@@ -64,7 +64,7 @@ describe('UI scales', () => {
 
   it('the French labels', () => {
     render(<LangProvider lang="fr"><SettingsView visible theme="dark" dnd={false} reduced={false} osReduced={false} onToggleDnd={() => {}} onReduced={() => {}} onBack={() => {}} onClose={() => {}} {...soundProps} scales={{ handle: 'auto', panel: 2 }} autoScales={{ handle: 2, panel: 1 }} onScale={() => {}} /></LangProvider>);
-    expect(within(screen.getByRole('group', { name: 'Taille de la poignée' })).getByRole('radio', { name: 'Auto (200%)' })).toBeChecked();
+    expect(within(screen.getByRole('group', { name: 'Taille de l’île' })).getByRole('radio', { name: 'Auto (200%)' })).toBeChecked();
     expect(within(screen.getByRole('group', { name: 'Taille des fenêtres' })).getByRole('radio', { name: '200%' })).toBeChecked();
   });
 });
@@ -88,8 +88,8 @@ describe('App UI scales (browser)', () => {
       expect(document.documentElement.dataset.panelScale).toBe('1');
       expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('2');
       expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1');
-      // The 36 px mascot notch at 2x remains centered in the real 2160 px.
-      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: `${2160 / 2 - 36}px`, height: '72px' });
+      // The 38 px island at 2x hangs from the top edge, 76 px high.
+      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: '0px', height: '76px' });
       expect(localStorage.getItem('ledge.handleScale')).toBe('auto');
       expect(localStorage.getItem('ledge.panelScale')).toBe('auto');
       unmount();
@@ -98,7 +98,7 @@ describe('App UI scales (browser)', () => {
       expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('1.5');
       expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1.25');
       act(() => { Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1200 }); window.dispatchEvent(new Event('resize')); });
-      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: `${1200 / 2 - 27}px` });
+      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: '0px', height: '57px' });
     } finally {
       Object.defineProperty(window, 'innerHeight', { configurable: true, value: h });
     }

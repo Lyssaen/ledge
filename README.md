@@ -2,7 +2,7 @@
 
 # Ledge
 
-A living handle on the left edge of your Windows screen that follows every agentic session running in WSL2 (Claude Code, Codex, Cursor Agent), shows which ones are waiting for you, and lets you answer or approve without hunting for the right terminal tab. From the list you can also ask Ledge about the running sessions: it reads, it never types into a pane.
+A living island on the top edge of your Windows screen, centred like a dynamic island, that follows every agentic session running in WSL2 (Claude Code, Codex, Cursor Agent), shows which ones are waiting for you, and lets you answer or approve without hunting for the right terminal tab. From the list you can also ask Ledge about the running sessions: it reads, it never types into a pane.
 
 Personal project. Windows host + WSL2 only.
 
@@ -33,7 +33,7 @@ Personal project. Windows host + WSL2 only.
 1. You start an agent with `ledge claude` instead of `claude`. The launcher puts the agent in a tmux session on a dedicated tmux server, registers it with the daemon, renames the Windows Terminal tab after the bot (`Otto · <topic or project>`) and attaches your terminal to it. Or you start one from the overlay's list (`+`): the daemon spawns the same tmux session itself and, if asked, the overlay opens a Windows Terminal tab on it (`ledge attach <id>`). The launch form opens on the default harness from Settings.
 2. The agent's own hooks (installed once by `ledge setup`) call `ledge hook <Event>` (Codex: `ledge hook codex <Event>`, Cursor Agent: `ledge hook cursor <event>`) on every lifecycle event. Each call forwards one message to the daemon and exits in a few milliseconds.
 3. The daemon keeps the state of every session, polls each tmux pane once a second to detect prompts the hooks do not report and to build a terminal preview, and pushes every change over a local WebSocket.
-4. The Windows overlay shows one mascot per session in the handle, pops a bubble when a session waits for you, and sends your decision back. The daemon types it into the right pane and checks that the prompt went away.
+4. The Windows overlay shows one mascot per session in the island, stretches it into a bubble when a session waits for you, and sends your decision back. The daemon types it into the right pane and checks that the prompt went away.
 5. From the list, "Ask Ledge" sends a question to the daemon. The daemon writes a read-only context folder and runs the chosen harness headless (Claude Code, Codex or Cursor Agent). The overlay streams the steps and the answer. Ledge never types into a session from the chat.
 
 ## Architecture
@@ -44,7 +44,7 @@ Approach: a Tauri overlay on Windows and a Node daemon in WSL2, with one WebSock
 flowchart LR
   subgraph win["Windows host"]
     direction TB
-    ov["Ledge overlay (Tauri 2)<br/>React UI in a WebView2 window<br/>Rust shell: edge poller, frame, focus, monitors, Ctrl+Alt+L"]
+    ov["Ledge overlay (Tauri 2)<br/>React UI in a WebView2 window<br/>Rust shell: cursor poller, outside clicks, frame, focus, monitors, Ctrl+Alt+L / N"]
     wt["Windows Terminal tab<br/><i>Otto · my-project</i>"]
     ov -. "focus_terminal (Win32, by tab title)" .-> wt
   end
@@ -103,12 +103,13 @@ One binary, `ledge`, with seven commands. Source under `src/`:
 | `daemon/state.ts` | The pure reducer `reduce(session, event)`: the whole state machine, including helper (subagent) routing, the hook-over-pane priority, the session topic (`PaneTitle`, `Renamed`, first `UserPromptSubmit`) and `lastReply` from a `Stop`. |
 | `daemon/git.ts` | One `git rev-parse` per session: repository name and path, checked-out branch, and whether `cwd` is a linked worktree. |
 | `daemon/poller.ts` | Every 1 s captures each live pane (200 lines), hashes it to detect activity, broadcasts a 30-line preview when it changed, runs the adapter's prompt detection on the last 60 lines, reads Claude Code's conversation title (`PaneTitle`), refreshes git fields on the life check (every 5 s), and drops exited sessions after 10 min. |
-| `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect (then `chat.history`), broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent with the login shell's PATH (see `shell-path.ts`) and answers `session.launched`. `session.rename` sets the topic. Chat commands go to `chat/`. |
+| `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect (then `chat.history`), broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent with the login shell's environment (see `shell-path.ts`) and answers `session.launched`. `session.rename` sets the topic. Chat commands go to `chat/`. |
 | `daemon/folders.ts` | `resolveFolder` (`~` expanded, absolute, existing) and the folder browser's `listFolder` and `createFolder`, which answer with a `folder.listing`. |
 | `chat/` | Ask Ledge: `service.ts` keeps one conversation a day per harness (50 turns, 180 s cap), writes `~/.ledge/chat/context/`, and runs `claude.ts` (`claude -p --restricted`), `codex.ts` (`codex exec --sandbox read-only`) or `cursor.ts` (`cursor-agent -p --mode ask`). `LEDGE_CHAT=1` so Ledge's own hooks ignore the run; no API key is inherited. |
 | `adapters/` | One adapter per tool (`Adapter` in `types.ts`): prompt detection in the pane, `promptStillVisible`, key plans for accept/deny/reply/interrupt, and preview cleaning. `claude.ts`, `codex.ts` and `cursor.ts` are all implemented. Claude Code's adapter also answers a multi-question `AskUserQuestion` (one tab after another, then the review that has no footer). |
 | `tmux.ts` | Thin wrapper over the dedicated server `tmux -L ledge -f ~/.ledge/tmux.conf`. `newSession` runs the tmux client with the pane's PATH: tmux gives a detached session's pane the client's PATH, over `-e`. |
-| `shell-path.ts` | The PATH a login shell (`$SHELL -l`) starts with. Under systemd the daemon has the bare system PATH, where `claude` (`~/.local/bin`) does not resolve; an agent launched from the overlay gets the terminal's instead, or the daemon's (logged) when the shell fails. |
+| `shell-path.ts` | The environment a login shell (`$SHELL -l`) starts with. Under systemd the daemon has the bare system environment: `claude` (`~/.local/bin`) does not resolve and no proxy variable is set; an agent launched from the overlay (or Ask Ledge) gets the terminal's on top of the daemon's, or the daemon's alone (logged) when the shell fails. |
+| `update/` | The daemon's half of the auto-update: `self.ts` (version, install kind `npm`/`git`/`unknown`, systemd or not, sent in the snapshot), `guard.ts` (refuses when a restart would close live sessions) and `run-update.ts` (`update.daemon`: `npm i -g @paradow/ledge@<version>`, then restarts the service, reporting `update.progress` or `update.failed`). |
 | `client.ts`, `names.ts`, `paths.ts`, `log.ts` | WebSocket client for the CLI modes, the list of 64 bot names, `~/.ledge` paths (`LEDGE_HOME` overrides), the daemon log. |
 
 ### `apps/overlay` (Windows, Tauri 2 + React 19 + Tailwind 4)
@@ -118,18 +119,19 @@ The UI is plain web code under `src/`, developed and unit-tested in WSL; the Rus
 | Path | Role |
 | --- | --- |
 | `src/daemon/client.ts`, `store.ts` | Reconnecting WebSocket client (backoff 2 s to 30 s) and a `useSyncExternalStore` store: sessions by id, previews, status, last error, recent folders, the launcher command, the last `session.launched` and `folder.listing`, and the day's chat turns (plus the live stream). |
-| `src/surface/machine.ts`, `controller.ts` | The surface state machine: modes `handle`, `bubble`, `list`, `session`, `settings`, `help`, `launch`, `chat`; timers (dwell 180 ms, leave 500 ms, bubble 4 s, hold 900 ms, unfold 540 ms); a queue of pending asks. Pure reducer with effects, tested without the DOM. |
+| `src/surface/machine.ts`, `controller.ts` | The surface state machine: modes `handle` (the island at rest, compact or as the discreet strip), `bubble`, `list`, `session`, `settings`, `help`, `launch`, `chat`; timers (dwell 180 ms, leave 500 ms, bubble 4 s, hold 900 ms, unfold 540 ms); a queue of pending asks. Pure reducer with effects, tested without the DOM. |
 | `src/surface/useDaemonAsks.ts` | Turns daemon updates into machine events and locks each decision until the daemon confirms it, fails it, or the connection drops. No timer ever resolves a decision. |
-| `src/surface/*.tsx` | Handle (resident mascot above a separator, then the session bots), Bubble, SessionList (grouped by repository, ask field above the rows), SessionView (permission, question, last reply, terminal preview), ChatView, AskField, LaunchView and its FolderBrowser, SettingsView, HelpView, Tooltip, ReplyCard. |
+| `src/surface/*.tsx` | Handle (the island: resident mascot, a separator, then the session bots in a row, six at most then a "+n" pill; a 10 px strip with one dot per session under a maximised window), Shoulders (the concave fillets on each side of the island), Bubble (the island stretched to 440 px), SessionList (grouped by repository, ask field above the rows), SessionView (permission, question, last reply, terminal preview), ChatView, AskField, LaunchView and its FolderBrowser, SettingsView, HelpView, ReplyCard. |
 | `src/surface/groups.ts`, `src/ui/BranchChip.tsx` | List grouping by `repoPath ?? cwd`, and the branch chip (dotted border on a linked worktree). |
-| `src/surface/geometry.ts`, `frame.ts`, `scale.ts` | Layout of the slots, the native window frame and the edge bands, with the handle and window scale handled as a CSS zoom on their own layer. The list is 380 px; a session and the chat are 480 px (560 px when reading the raw reply). |
+| `src/surface/geometry.ts`, `frame.ts`, `scale.ts` | Layout of the island (a 38 px row of 22 px slots, centred on the top edge of the chosen screen or a quarter of the way in) and of the native window frame (`left`, `top`, width, height), with the island and window scale handled as a CSS zoom on their own layer. Every view keeps its top on the screen edge and grows downwards: the list is 380 px; a session and the chat are 480 px (560 px when reading the raw reply). |
 | `src/reply/parse.ts` | Turns the agent's last markdown message into a title, a lead, classified sections and questions with options. Ordinary lists keep the markdown's bullets or numbers; done / verified / question blocks stay cards. |
 | `src/defaultTool.ts` | The default harness (`ledge.defaultTool`): new sessions and the Ledge chat start on it. Claude Code when nothing valid is stored. |
 | `src/bots/` | The mascots: material, pose per state, halo in the state colour, breathing while waiting. |
-| `src/keyboard/` | Keyboard navigation (j/k, digits, y/n, Esc) and the first-use coachmark. |
+| `src/keyboard/` | Keyboard navigation (j/k, Alt ←/→ to the previous or next session, y/n, digits for a question's options, Esc) and the first-use coachmark. |
+| `src/update/` | The overlay's half of the auto-update: `machine.ts` (the pure update state machine, daemon first then app), `useUpdate.ts` (checks at startup and every 6 hours, drives the daemon and Tauri's updater), `bridge.ts` (the updater plugin, a no-op in a browser), `UpdateCard.tsx` (the card in the list), `prefs.ts`. The About tab of the settings shows both versions. |
 | `src/i18n/` | One typed catalogue, French (default) and English, same keys enforced by the type checker. |
-| `src/tauri/bridge.ts` | The only file that calls `invoke`: `set_frame`, `set_hot_zones`, `focus_overlay`, `release_focus`, `focus_terminal`, `open_terminal`, `list_monitors`, `set_monitor`, plus the `ledge://edge` event and the `Ctrl+Alt+L` global shortcut. Everything degrades to no-ops in a browser. |
-| `src-tauri/src/main.rs` | The Rust shell: a borderless, transparent, always-on-top window outside the taskbar; a thread that polls the cursor every 50 ms against the hot bands on the chosen monitor's left edge and emits enter/leave; window placement in physical pixels on the monitor's work area; focus hand-back to the previously active window; `focus_terminal` finds the Windows Terminal window whose title matches the bot's tab (Win32 `EnumWindows`); `open_terminal` opens a Windows Terminal tab running `ledge attach <id>` in WSL (`wt.exe -w 0 new-tab`). |
+| `src/tauri/bridge.ts` | The only file that calls `invoke`: `set_frame`, `set_outside_watch`, `focus_overlay`, `release_focus`, `focus_terminal`, `open_terminal`, `list_monitors`, `set_monitor`, plus the `ledge://outside-click` event and the `Ctrl+Alt+L` and `Ctrl+Alt+N` global shortcuts. Everything degrades to no-ops in a browser. |
+| `src-tauri/src/main.rs` | The Rust shell: a borderless, transparent, always-on-top window outside the taskbar; a thread that polls the cursor every 50 ms, reports it in the hot band along the top edge (10 px high, the island plus 40 px on each side) for the hover and the mascot's gaze, tells the page when a maximised or full-screen window holds the foreground on the island's monitor (the discreet strip) and, while a panel shows, emits a press of the mouse outside the window (`GetAsyncKeyState`); window placement at `(left, top)` in physical pixels against the top edge of the monitor's work area; focus hand-back to the previously active window; `focus_terminal` finds the Windows Terminal window whose title matches the bot's tab (Win32 `EnumWindows`); `open_terminal` opens a Windows Terminal tab running `ledge attach <id>` in WSL (`wt.exe -w 0 new-tab`). |
 
 The overlay never talks to tmux or to the agent. Its only two outputs are WebSocket commands to the daemon and the native commands above.
 
@@ -189,7 +191,7 @@ Points worth knowing:
 
 ## Asking Ledge
 
-The list's "Ask Ledge" field sits above the sessions, matching the notch's mascot above the bots. `/` focuses it, `Enter` on a question sends it, `Enter` on the empty field (or a click on the field's mascot) opens today's conversation without asking. A `+` in the chat header starts a new conversation (`chat.reset`): the day's turns are cleared and the next question opens a fresh harness session.
+The list's "Ask Ledge" field sits above the sessions, matching the island's mascot ahead of the bots. `/` focuses it, `Enter` on a question sends it, `Enter` on the empty field (or a click on the field's mascot) opens today's conversation without asking. A `+` in the chat header starts a new conversation (`chat.reset`): the day's turns are cleared and the next question opens a fresh harness session.
 
 The overlay sends `chat.ask { qid, text, tool? }`. `tool` is the default harness from Settings (Claude Code, Codex or Cursor Agent). The daemon:
 
@@ -302,7 +304,7 @@ When `~/.cursor` exists, it appends one `ledge hook cursor <event>` hook (5 s ti
 
 The journal also keeps `recents`, the folders of the last twelve sessions, for the overlay's launch form.
 
-Windows side, the overlay keeps its preferences in the WebView's `localStorage`: `ledge.lang`, `ledge.theme`, `ledge.accent` (the brand colour, `#rrggbb`; absent is the factory coral), `ledge.dnd`, `ledge.monitor`, `ledge.reducedMotion`, `ledge.handleScale`, `ledge.panelScale`, `ledge.coachmarks`, `ledge.defaultTool` (the harness for new sessions and the Ledge chat), `ledge.finished` (bubble / sound when a bot finishes) and `ledge.sounds`.
+Windows side, the overlay keeps its preferences in the WebView's `localStorage`: `ledge.lang`, `ledge.theme`, `ledge.accent` (the brand colour, `#rrggbb`; absent is the factory coral), `ledge.dnd`, `ledge.monitor`, `ledge.islandPosition` (the island's axis on the top edge: `center`, `left` or `right`, a quarter of the way in; default `center`), `ledge.discreet` (`'1'` or `'0'`, the strip under a maximised window; default `'1'`), `ledge.reducedMotion`, `ledge.handleScale` (the island size; the key keeps its historical name), `ledge.panelScale`, `ledge.coachmarks`, `ledge.defaultTool` (the harness for new sessions and the Ledge chat), `ledge.finished` (bubble / sound when a bot finishes) and `ledge.sounds`.
 
 ## Security and failure model
 
@@ -310,7 +312,10 @@ Windows side, the overlay keeps its preferences in the WebView's `localStorage`:
 - A hook never blocks or fails the agent: 100 ms budget, every error swallowed and logged.
 - An answer is typed only if the prompt is on screen, and reported as taken only if the prompt then disappears. Nothing is retried automatically; the session goes to `error` and the overlay offers a retry.
 - A decision is locked in the overlay until the daemon confirms, rejects, or the connection drops, so a double click never sends two answers.
-- The overlay survives the daemon: it shows "daemon unreachable, retrying" beside the handle and reconnects with backoff.
+- The overlay survives the daemon: it shows "daemon unreachable, retrying" under the island and reconnects with backoff.
+- The Windows app updates itself through Tauri's updater. Each release is signed with a minisign key, and the app checks the signature against the public key it ships with before installing anything. Releases are fetched from GitHub over HTTPS.
+- Update order is fixed: the daemon first, the app second. The overlay asks the daemon to run `npm i -g`, then restart the service, and compares the sessions before and after. The app is only installed if every session came back. If one is missing, or if the restart would close live sessions, nothing else changes and the card says why.
+- The daemon refuses to update itself when it runs from a git clone or without systemd, and shows the manual command instead.
 
 ## How to install?
 
@@ -328,15 +333,10 @@ Get pnpm with `corepack enable` on either side if it is missing.
 ### 1. Install the CLI and the daemon in WSL
 
 ```sh
-git clone https://github.com/Paradow-dev/ledge.git ~/Workspace/ledge
-cd ~/Workspace/ledge
-pnpm install
-pnpm --filter ledge build
-chmod +x packages/ledge/dist/cli/index.js
-mkdir -p ~/.local/bin
-ln -sf "$PWD/packages/ledge/dist/cli/index.js" ~/.local/bin/ledge   # ~/.local/bin must be on the PATH Claude Code uses for hooks
-ledge setup
+npm i -g @paradow/ledge && ledge setup
 ```
+
+Use the `npm` of the Node 22+ that will run the daemon. With nvm, that is the version active when you run the command: `ledge setup` writes that Node into the systemd unit. To work from a clone instead, see [Development](#development).
 
 `ledge setup` prints what it did. It writes `~/.ledge`, adds Ledge's hooks to Claude Code (`~/.claude/settings.json`), and to Codex (`~/.codex/hooks.json`) and Cursor Agent (`~/.cursor/hooks.json`) when their folders exist. It keeps whatever hooks you already have. Codex asks you to review the new hooks at its next start: trust them there or from Ledge.
 
@@ -349,7 +349,7 @@ ledge status
 
 ### 2. Get the Windows installer
 
-Download `Ledge_0.1.0_x64-setup.exe` from the [latest release](https://github.com/Paradow-dev/ledge/releases/latest). The release notes give its SHA-256.
+Download `Ledge_<version>_x64-setup.exe` from the [latest release](https://github.com/Paradow-dev/ledge/releases/latest). The release notes give its SHA-256.
 
 Or build it yourself. Clone the repository a second time, on the Windows disk, in PowerShell. Do not build from the `\\wsl$` path: `node_modules` must be the Windows one.
 
@@ -361,17 +361,17 @@ cd apps\overlay
 pnpm tauri build
 ```
 
-The installer lands in `apps\overlay\src-tauri\target\release\bundle\nsis\Ledge_0.1.0_x64-setup.exe`.
+The installer lands in `apps\overlay\src-tauri\target\release\bundle\nsis\Ledge_<version>_x64-setup.exe`.
 
 ### 3. Install Ledge on Windows
 
-Run `Ledge_0.1.0_x64-setup.exe`. It installs for your user only, under `%LOCALAPPDATA%`, with no administrator prompt. The installer is not code-signed, so SmartScreen may warn the first time: More info, then Run anyway. At the end, Ledge starts:
+Run `Ledge_<version>_x64-setup.exe`. It installs for your user only, under `%LOCALAPPDATA%`, with no administrator prompt. The installer is not code-signed, so SmartScreen may warn the first time: More info, then Run anyway. At the end, Ledge starts:
 
 - the Ledge mascot appears in the notification area, next to the clock;
-- the handle appears on the left edge of your primary screen, with the mascot on top;
+- the island appears at the top centre of your primary screen, a 38 px pill cut into the edge with the Ledge mascot on its left;
 - Ledge now starts with Windows. Settings > Display > `Lancer au démarrage` turns that off.
 
-If the handle says the daemon is unreachable, go back to step 1 and check the service in WSL.
+If the island says the daemon is unreachable, go back to step 1 and check the service in WSL.
 
 ### 4. Start your first session
 
@@ -381,18 +381,23 @@ In any WSL terminal, start your agent through Ledge:
 ledge claude          # or: ledge codex, ledge cursor
 ```
 
-The Windows Terminal tab takes the bot's name and a new mascot joins the handle. You can also start a session from the overlay itself: open the list with `Ctrl+Alt+L` and press `+`. The [tour](docs/tour.md) shows every screen.
+The Windows Terminal tab takes the bot's name and a new mascot joins the island. You can also start a session from the overlay itself: open the list with `Ctrl+Alt+L` and press `+`, or press `Ctrl+Alt+N`. The [tour](docs/tour.md) shows every screen.
 
 The overlay speaks French by default. Settings > Langue switches it to English.
 
 ### Update
 
+Ledge checks for a new release at startup, then every 6 hours (Settings > À propos turns this off). It never updates without your click. When a release is out, a dot appears on the island's mascot and a card appears at the top of the list: click "Mettre à jour". Ledge updates the WSL daemon first, waits for your sessions to come back, then downloads and installs the Windows app, which restarts. Your sessions keep running. See the [tour](docs/tour.md#updating).
+
+To update by hand:
+
 ```sh
-cd ~/Workspace/ledge && git pull && pnpm install && pnpm --filter ledge build
-systemctl --user restart ledge-daemon.service    # the daemon runs the built CLI
+npm i -g @paradow/ledge@latest && systemctl --user restart ledge-daemon
 ```
 
-Then on Windows, quit Ledge from its tray menu and run the newer installer over the old one, downloaded from the releases or rebuilt in your Windows clone.
+Then on Windows, quit Ledge from its tray menu and run the newer installer over the old one, downloaded from the releases. A daemon that runs from a git clone is never touched by the button: the card shows the command to run, and `git pull && pnpm install && pnpm --filter @paradow/ledge build` followed by the restart does the same job.
+
+A tmux server started before the scoped-service version lives inside the daemon's service, so a restart would close its sessions. Ledge refuses to restart then, and says so. Close those sessions or restart WSL once; later sessions are safe.
 
 ### Uninstall
 
@@ -411,7 +416,18 @@ More details: the WSL side in [packages/ledge/README.md](packages/ledge/README.m
 ## Development
 
 ```sh
+git clone https://github.com/Paradow-dev/ledge.git ~/Workspace/ledge && cd ~/Workspace/ledge
 pnpm install
+pnpm --filter @paradow/ledge build
+chmod +x packages/ledge/dist/cli/index.js
+mkdir -p ~/.local/bin
+ln -sf "$PWD/packages/ledge/dist/cli/index.js" ~/.local/bin/ledge   # ~/.local/bin must be on the PATH Claude Code uses for hooks
+ledge setup                         # a clone install: the update button leaves it alone
+```
+
+Then:
+
+```sh
 pnpm -r typecheck
 pnpm -r test                        # protocol, ledge (unit + tmux + end-to-end, needs tmux, no AI), overlay (vitest + jsdom)
 pnpm --filter overlay dev           # the UI alone on http://localhost:1420, against a daemon running in WSL
@@ -441,6 +457,7 @@ docs/                design specs, implementation plans, mockups, the approved p
 - Design system "Shadcn Red": https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV
 - Initial mascot exploration: [docs/mockups/mascots.html](docs/mockups/mascots.html), a historical comparison of three directions.
 - Mascot halo study: [docs/mockups/mascots-halo.html](docs/mockups/mascots-halo.html), three renderings compared in both themes; the validated choice (contour, normal intensity, every live state, badge colours, breathing while waiting) is implemented in `apps/overlay/src/bots`. Approved resident mascot and halo: [ledge-mascot.html](docs/mockups/ledge-mascot.html), [ledge-mascot-halo.html](docs/mockups/ledge-mascot-halo.html).
+- The island, **implemented on 2026-10-12**: [spec](docs/superpowers/specs/2026-10-12-island-design.md), [implementation plan](docs/superpowers/plans/2026-10-12-island.md) and [mockup](docs/mockups/ledge-island.html). The handle left the left edge for the top centre of the screen, like a dynamic island, with concave fillets where it meets the edge; the bubble is the island stretched to 440 px; every view hangs down from it. Two settings came with it (island position, discreet mode under a maximised window). Twenty-one simulated scenarios on the mockup cover every screen.
 - **Approved interactive design (revision 2):** [navigable prototype](docs/mockups/ledge-prototype.html) (keep its adjacent `prototype/` folder), or [standalone HTML](docs/mockups/ledge-prototype-standalone.html) requiring no server. Twelve scenarios, **Signal in dark mode / Galet in light mode**, with subdued motion and accessible keyboard navigation. Sessions and outcomes in the prototype are simulated.
 - Implementation plans: [WSL core](docs/superpowers/plans/2026-10-09-ledge-core-wsl.md), [overlay and mascots](docs/superpowers/plans/2026-10-09-ledge-overlay.md), [adapters and rich screens](docs/superpowers/plans/2026-10-09-ledge-adapters-and-screens.md), [hop, finished notices and sounds](docs/superpowers/plans/2026-10-10-ledge-hop-finished-sounds.md), [resident mascot](docs/superpowers/plans/2026-10-11-ledge-resident-mascot.md).
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { SettingsView } from '../src/surface/SettingsView';
 import { LangProvider } from '../src/i18n/lang';
 import { DEFAULT_SOUNDS, type SoundPatch } from '../src/sounds/preferences';
@@ -22,7 +22,7 @@ describe('<SettingsView> tabs', () => {
     expect(panel).toHaveAttribute('id', 'ledge-settings-panel-display');
     expect(screen.getByRole('group', { name: 'Default harness' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Handle size' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Island size' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /theme/ })).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Reduced motion' })).toBeInTheDocument();
     expect(screen.queryByRole('switch', { name: 'Do not disturb' })).toBeNull();
@@ -35,6 +35,18 @@ describe('<SettingsView> tabs', () => {
     expect(screen.getByRole('switch', { name: 'Sounds' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Test' })).toBeInTheDocument();
     expect(screen.queryByRole('switch', { name: 'Do not disturb' })).toBeNull();
+  });
+  it('offers the island position and the discreet switch, applied live', () => {
+    const onIslandPosition = vi.fn(), onDiscreet = vi.fn();
+    view({ islandPosition: 'center', onIslandPosition, discreet: true, onDiscreet });
+    const group = screen.getByRole('group', { name: 'Island position' });
+    expect(within(group).getByRole('radio', { name: 'Centre' })).toBeChecked();
+    fireEvent.click(within(group).getByRole('radio', { name: 'Left' }));
+    expect(onIslandPosition).toHaveBeenCalledWith('left');
+    const sw = screen.getByRole('switch', { name: 'Discreet under a window' });
+    expect(sw).toBeChecked();
+    fireEvent.click(sw);
+    expect(onDiscreet).toHaveBeenCalledWith(false);
   });
   it('offers launch at startup only when the shell does, and reports a flip', () => {
     view();
@@ -103,7 +115,7 @@ describe('<SettingsView> notifications and sounds', () => {
     const { onFinished } = view();
     tab('Notifications');
     expect(screen.getByRole('radio', { name: 'Bubble and sound' })).toBeChecked();
-    fireEvent.click(screen.getByRole('radio', { name: 'Handle only' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Island only' }));
     expect(onFinished).toHaveBeenCalledWith('none');
   });
   it('the Sounds switch, the volume, the categories and the terminal rule each send one patch', () => {
@@ -125,5 +137,39 @@ describe('<SettingsView> notifications and sounds', () => {
     tab('Sounds');
     expect(screen.getByTestId('sound-sections')).toHaveStyle({ opacity: '0.5' });
     expect(screen.getByRole('radio', { name: 'Loud' })).not.toBeDisabled();
+  });
+});
+
+describe('<SettingsView> About tab', () => {
+  beforeEach(() => localStorage.clear());
+  const about = (extra = {}) => ({ app: '0.2.2', daemon: { version: '0.3.0', install: 'npm' as const, systemd: true }, latest: '0.3.0', auto: true, checkedAt: Date.now() - 12 * 60_000, onAuto: () => {}, onCheck: () => {}, ...extra });
+  it('has no About tab without about props', () => {
+    view();
+    expect(screen.queryByRole('tab', { name: 'About' })).toBeNull();
+  });
+  it('falls back to Display when About is stored but unavailable', () => {
+    localStorage.setItem('ledge.settings.tab', 'about');
+    view();
+    expect(screen.getByRole('tab', { name: 'Display' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument();
+  });
+  it('shows both versions, flags a mismatch and checks on demand', () => {
+    localStorage.setItem('ledge.settings.tab', 'about');
+    const onCheck = vi.fn(), onAuto = vi.fn();
+    view({ about: about({ onCheck, onAuto }) });
+    expect(screen.getByText('0.2.2')).toBeTruthy();
+    expect(screen.getByText('0.3.0 · npm')).toBeTruthy();
+    expect(screen.getByText('The two halves are not on the same version.')).toBeTruthy();
+    expect(screen.getByText('Checked 12m ago')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    expect(onCheck).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('switch', { name: 'Check for updates' }));
+    expect(onAuto).toHaveBeenCalledWith(false);
+  });
+  it('shows the calm hint when both halves match, and a never-checked state', () => {
+    localStorage.setItem('ledge.settings.tab', 'about');
+    view({ about: about({ app: '0.3.0', checkedAt: null }) });
+    expect(screen.getByText('Both halves of Ledge must run the same version.')).toBeTruthy();
+    expect(screen.getByText('Never checked')).toBeTruthy();
   });
 });

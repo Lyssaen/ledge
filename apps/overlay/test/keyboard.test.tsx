@@ -19,32 +19,40 @@ const sessions = [
 ];
 const press = (key: string, extra: KeyboardEventInit = {}) => fireEvent.keyDown(window, { key, ...extra });
 const noop = () => {};
-const handlers = () => ({ onFocus: vi.fn(), onOpen: vi.fn(), onDecide: vi.fn(), onNextAsk: vi.fn(), onClose: vi.fn(), onReplyFocus: vi.fn(), onToggleDnd: vi.fn(), onHelp: vi.fn() });
+const handlers = () => ({ onFocus: vi.fn(), onOpen: vi.fn(), onDecide: vi.fn(), onClose: vi.fn(), onReplyFocus: vi.fn(), onToggleDnd: vi.fn(), onHelp: vi.fn() });
 
 describe('useKeyboard', () => {
-  it('moves with j/k and digits, opens with Enter, decides with y/n on a permission only', () => {
+  it('moves with j/k, opens with Enter, decides with y/n on a permission only', () => {
     const h = handlers();
     const { rerender } = renderHook(({ focusedId }) => useKeyboard({ enabled: true, mode: 'list', sessions, focusedId, ...h }), { initialProps: { focusedId: null as string | null } });
     press('j'); expect(h.onFocus).toHaveBeenLastCalledWith('a');
     rerender({ focusedId: 'a' }); press('j'); expect(h.onFocus).toHaveBeenLastCalledWith('b');
     rerender({ focusedId: 'b' }); press('k'); expect(h.onFocus).toHaveBeenLastCalledWith('a');
-    press('3'); expect(h.onFocus).toHaveBeenLastCalledWith('c');
     rerender({ focusedId: 'a' }); press('y'); expect(h.onDecide).toHaveBeenCalledWith('a', 'accept');
     press('n'); expect(h.onDecide).toHaveBeenCalledWith('a', 'deny');
     rerender({ focusedId: 'b' }); press('y'); expect(h.onOpen).toHaveBeenCalledWith('b');
     press('Enter'); expect(h.onOpen).toHaveBeenLastCalledWith('b');
-    press('Tab'); expect(h.onNextAsk).not.toHaveBeenCalled();
-    press('ArrowRight', { altKey: true }); expect(h.onNextAsk).toHaveBeenCalled();
+    press('Tab'); expect(h.onFocus).toHaveBeenCalledTimes(3);
     press('Escape'); expect(h.onClose).toHaveBeenCalled();
     press('?'); expect(h.onHelp).toHaveBeenCalled();
     press('d'); expect(h.onToggleDnd).toHaveBeenCalled();
   });
+  it('i focuses the first instruction in the new-session form only, and types as usual once there', () => {
+    const onInstruction = vi.fn();
+    const { rerender } = renderHook(({ mode }) => useKeyboard({ enabled: true, mode, sessions, focusedId: null, ...handlers(), onInstruction }), { initialProps: { mode: 'list' as 'list' | 'launch' } });
+    press('i'); expect(onInstruction).not.toHaveBeenCalled();
+    rerender({ mode: 'launch' });
+    expect(fireEvent.keyDown(window, { key: 'i' })).toBe(false); expect(onInstruction).toHaveBeenCalledTimes(1);
+    const area = document.createElement('textarea'); document.body.appendChild(area); area.focus();
+    fireEvent.keyDown(area, { key: 'i' }); expect(onInstruction).toHaveBeenCalledTimes(1);
+    area.remove();
+  });
   it('does nothing while disabled or while typing in an input', () => {
     const onFocus = vi.fn();
-    renderHook(() => useKeyboard({ enabled: false, mode: 'list', sessions, focusedId: null, onFocus, onOpen: noop, onDecide: noop, onNextAsk: noop, onClose: noop, onReplyFocus: noop, onToggleDnd: noop, onHelp: noop }));
+    renderHook(() => useKeyboard({ enabled: false, mode: 'list', sessions, focusedId: null, onFocus, onOpen: noop, onDecide: noop, onClose: noop, onReplyFocus: noop, onToggleDnd: noop, onHelp: noop }));
     press('j'); expect(onFocus).not.toHaveBeenCalled();
     const onFocus2 = vi.fn();
-    renderHook(() => useKeyboard({ enabled: true, mode: 'list', sessions, focusedId: null, onFocus: onFocus2, onOpen: noop, onDecide: noop, onNextAsk: noop, onClose: noop, onReplyFocus: noop, onToggleDnd: noop, onHelp: noop }));
+    renderHook(() => useKeyboard({ enabled: true, mode: 'list', sessions, focusedId: null, onFocus: onFocus2, onOpen: noop, onDecide: noop, onClose: noop, onReplyFocus: noop, onToggleDnd: noop, onHelp: noop }));
     const input = document.createElement('input'); document.body.appendChild(input); input.focus();
     fireEvent.keyDown(input, { key: 'j' }); expect(onFocus2).not.toHaveBeenCalled();
     input.remove();
@@ -71,7 +79,41 @@ describe('useKeyboard', () => {
     expect(fireEvent.keyDown(btn, { key: 'Enter' })).toBe(true); expect(h.onOpen).not.toHaveBeenCalled();
     btn.remove();
   });
-  it('in a session view only decide, reply, next ask, dnd, help and Escape apply', () => {
+  it('digits no longer move the focus in the list', () => {
+    const h = handlers();
+    renderHook(() => useKeyboard({ enabled: true, mode: 'list', sessions, focusedId: 'a', ...h }));
+    for (const k of ['1', '2', '3']) expect(fireEvent.keyDown(window, { key: k })).toBe(true);
+    expect(h.onFocus).not.toHaveBeenCalled(); expect(h.onOpen).not.toHaveBeenCalled();
+  });
+  it('Alt+ArrowRight and Alt+ArrowLeft focus the next and previous row, wrapping, asks or not', () => {
+    const h = handlers();
+    const { rerender } = renderHook(({ focusedId }) => useKeyboard({ enabled: true, mode: 'list', sessions, focusedId, ...h }), { initialProps: { focusedId: null as string | null } });
+    press('ArrowRight', { altKey: true }); expect(h.onFocus).toHaveBeenLastCalledWith('a');
+    press('ArrowLeft', { altKey: true }); expect(h.onFocus).toHaveBeenLastCalledWith('c');
+    rerender({ focusedId: 'b' });
+    press('ArrowRight', { altKey: true }); expect(h.onFocus).toHaveBeenLastCalledWith('c');
+    press('ArrowLeft', { altKey: true }); expect(h.onFocus).toHaveBeenLastCalledWith('a');
+    rerender({ focusedId: 'c' });
+    press('ArrowRight', { altKey: true }); expect(h.onFocus).toHaveBeenLastCalledWith('a');
+    expect(h.onOpen).not.toHaveBeenCalled();
+  });
+  it('in a session, Alt+ArrowRight and Alt+ArrowLeft open the next and previous session, even while typing', () => {
+    const h = handlers();
+    renderHook(() => useKeyboard({ enabled: true, mode: 'session', sessions, focusedId: 'a', ...h }));
+    press('ArrowRight', { altKey: true }); expect(h.onOpen).toHaveBeenLastCalledWith('b');
+    press('ArrowLeft', { altKey: true }); expect(h.onOpen).toHaveBeenLastCalledWith('c');
+    const area = document.createElement('textarea'); document.body.appendChild(area); area.focus();
+    fireEvent.keyDown(area, { key: 'ArrowRight', altKey: true }); expect(h.onOpen).toHaveBeenCalledTimes(3);
+    area.remove();
+    expect(h.onFocus).not.toHaveBeenCalled();
+  });
+  it('a lone session has no neighbour to move to', () => {
+    const h = handlers();
+    renderHook(() => useKeyboard({ enabled: true, mode: 'session', sessions: [sessions[0]!], focusedId: 'a', ...h }));
+    press('ArrowRight', { altKey: true }); press('ArrowLeft', { altKey: true });
+    expect(h.onOpen).not.toHaveBeenCalled();
+  });
+  it('in a session view only decide, reply, neighbours, dnd, help and Escape apply', () => {
     const h = handlers();
     renderHook(() => useKeyboard({ enabled: true, mode: 'session', sessions, focusedId: 'a', ...h }));
     press('j'); press('2'); press('Enter');
@@ -113,7 +155,7 @@ describe('useKeyboard, spec section 5 additions', () => {
 describe('<SessionList> focused row', () => {
   it('a focused yes/no row grows to 100 px with real Approve, Deny and Open buttons inside the scroll container', () => {
     const onDecide = vi.fn(), onOpen = vi.fn();
-    render(<SessionList sessions={sessions} visible numbered selectedId={null} focusedId="a" dnd={false} onToggleDnd={noop} onOpen={onOpen} onDecide={onDecide} onClose={noop} />);
+    render(<SessionList sessions={sessions} visible selectedId={null} focusedId="a" dnd={false} onToggleDnd={noop} onOpen={onOpen} onDecide={onDecide} onClose={noop} />);
     const row = document.querySelector('[data-row-id="a"]') as HTMLElement;
     expect(row).toHaveStyle({ height: '100px' });
     expect(row.closest('[data-scroll]')).not.toBeNull();
@@ -122,7 +164,7 @@ describe('<SessionList> focused row', () => {
     fireEvent.click(within(row).getByRole('button', { name: /^Open/ })); expect(onOpen).toHaveBeenCalledWith('a');
   });
   it('a focused question or idle row keeps 58 px with no inline actions', () => {
-    render(<SessionList sessions={sessions} visible numbered selectedId={null} focusedId="b" dnd={false} onToggleDnd={noop} onOpen={noop} onDecide={noop} onClose={noop} />);
+    render(<SessionList sessions={sessions} visible selectedId={null} focusedId="b" dnd={false} onToggleDnd={noop} onOpen={noop} onDecide={noop} onClose={noop} />);
     const row = document.querySelector('[data-row-id="b"]') as HTMLElement;
     expect(row).toHaveStyle({ height: '58px' });
     expect(within(row).queryByRole('button', { name: /Approve/ })).toBeNull();
@@ -144,11 +186,11 @@ describe('<Surface> keyboard first', () => {
   });
   afterEach(async () => { detach(); client.close(); await mock.close(); });
 
-  it('the shortcut opens a numbered list focused on the oldest ask; y approves it and Escape closes', async () => {
+  it('the shortcut opens the list focused on the oldest ask, without row numbers; y approves it and Escape closes', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     act(() => shortcut());
     expect(surface()).toHaveAttribute('data-mode', 'list');
-    expect(within(document.querySelector('[data-row-id="a"]') as HTMLElement).getByText('1')).toBeInTheDocument();
+    expect(within(document.querySelector('[data-row-id="a"]') as HTMLElement).queryByText('1')).toBeNull();
     expect(document.querySelector('[data-row-id="a"]')).toHaveStyle({ height: '100px' });
     act(() => press('y'));
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.decide', id: 'a', decision: 'accept' }));
@@ -169,13 +211,37 @@ describe('<Surface> keyboard first', () => {
     expect(surface()).toHaveAttribute('data-mode', 'handle');
   });
 
-  it('Alt+ArrowRight focuses the next pending row, wrapping', () => {
+  it('Alt+ArrowRight and Alt+ArrowLeft move to the next and previous row, an ask or not', () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     act(() => shortcut());
     act(() => press('ArrowRight', { altKey: true }));
     expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Pim/));
     act(() => press('ArrowRight', { altKey: true }));
-    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Otto/));
+    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Lu/));
+    act(() => press('ArrowLeft', { altKey: true }));
+    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Pim/));
+  });
+
+  it('in an open session, Alt+ArrowLeft opens the previous session and Alt+ArrowRight the next one', () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    const session = () => document.querySelector('[data-layer="session"]') as HTMLElement;
+    act(() => shortcut());
+    act(() => press('Enter'));
+    expect(surface()).toHaveAttribute('data-mode', 'session');
+    expect(within(session()).getByText(/^Otto · /)).toBeInTheDocument();
+    act(() => press('ArrowLeft', { altKey: true }));
+    expect(surface()).toHaveAttribute('data-mode', 'session');
+    expect(within(session()).getByText(/^Lu · /)).toBeInTheDocument();
+    act(() => press('ArrowRight', { altKey: true }));
+    expect(within(session()).getByText(/^Otto · /)).toBeInTheDocument();
+  });
+
+  it('Ctrl+Alt+N opens the launch form from the handle and folds it again', () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => press('n', { ctrlKey: true, altKey: true }));
+    expect(surface()).toHaveAttribute('data-mode', 'launch');
+    act(() => press('n', { ctrlKey: true, altKey: true }));
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
   });
 
   it('r opens the focused row and puts the cursor in the reply field; letters then type', () => {
@@ -233,7 +299,7 @@ describe('<Surface> keyboard first', () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     await act(async () => { mock.upsert({ ...sessions[1]!, pending: { kind: 'question', text: 'Which?', source: 'hook', options: ['Rebase', 'Merge'] } }); await sleep(50); });
     act(() => shortcut());
-    act(() => press('2')); act(() => press('Enter'));
+    act(() => press('j')); act(() => press('Enter'));
     expect(surface()).toHaveAttribute('data-mode', 'session');
     act(() => press('2'));
     const merge = screen.getByRole('radio', { name: 'Merge' });
@@ -247,15 +313,16 @@ describe('<Surface> keyboard first', () => {
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.reply', id: 'b', text: '1' }));
   });
 
-  it('the coachmark flips above a row near the bottom so it stays inside the frame', () => {
+  it('the coachmark hangs 8 px under the panel, centred on it, and the native frame extends to hold it', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     act(() => shortcut());
     act(() => press('3'));
     const card = screen.getByRole('dialog', { name: 'Keyboard' });
-    const top = parseFloat(card.style.top), h = parseFloat(card.style.height);
-    const sTop = parseFloat(surface().style.top), sH = parseFloat(surface().style.height);
-    expect(top).toBeGreaterThanOrEqual(sTop);
-    expect(top + h).toBeLessThanOrEqual(sTop + sH);
+    const top = parseFloat(card.style.top), h = parseFloat(card.style.height), left = parseFloat(card.style.left);
+    const sLeft = parseFloat(surface().style.left), sW = parseFloat(surface().style.width), sH = parseFloat(surface().style.height);
+    expect(top).toBe(sH + 8);
+    expect(left).toBe(sLeft + sW / 2 - 150);
+    await waitFor(() => { const frame = vi.mocked(setFrame).mock.lastCall![0]; expect(frame.top + frame.h).toBeGreaterThanOrEqual(top + h); });
   });
 
   it('when the list is too short for the coachmark either way, the native frame extends to hold it', async () => {
@@ -307,7 +374,7 @@ describe('<Surface> keyboard first', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-      const zone = document.querySelector('[data-hotzone]') as HTMLElement;
+      const zone = document.querySelector('[data-surface]') as HTMLElement;
       fireEvent.mouseEnter(zone);
       await act(async () => { vi.advanceTimersByTime(180); });
       expect(surface()).toHaveAttribute('data-mode', 'list');
@@ -319,7 +386,7 @@ describe('<Surface> keyboard first', () => {
 });
 
 describe('<Surface> keyboard with interleaved repositories', () => {
-  it('digit 2 focuses the second displayed row', async () => {
+  it('Alt+ArrowRight follows the displayed order', async () => {
     daemonStore.reset(); const mock = await createMockDaemon();
     const at = (id: string, name: string, repo: string) => fakeSession(id, { name, repo, repoPath: `/w/${repo}`, cwd: `/w/${repo}` });
     for (const s of [at('a', 'Aa', 'x'), at('c', 'Cc', 'y'), at('b', 'Bb', 'x')]) mock.sessions.set(s.id, s);
@@ -327,7 +394,7 @@ describe('<Surface> keyboard with interleaved repositories', () => {
     await new Promise(r => setTimeout(r, 100));
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     act(() => press('l', { ctrlKey: true, altKey: true }));
-    act(() => press('2'));
+    act(() => press('ArrowRight', { altKey: true }));
     expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Bb/));
     detach(); client.close(); await mock.close();
   });

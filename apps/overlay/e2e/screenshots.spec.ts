@@ -31,7 +31,7 @@ async function desktop(page: Page, theme: 'dark' | 'light') {
     : 'html { background: radial-gradient(120% 90% at 70% 10%, #e9edf3 0%, #d9dee6 55%, #c9d0da 100%) !important; }' });
 }
 
-/** The surface and whatever floats beside it (tooltip, coachmark), with a margin. */
+/** The surface and whatever floats beside it (the coachmark), with a margin. */
 async function shoot(page: Page, name: string, extra: string[] = [], minWidth = 120) {
   await page.waitForTimeout(700); // let the motion settle
   const boxes = [await surface(page).boundingBox()];
@@ -89,7 +89,7 @@ test('ledge finished bubble', async ({ page }) => {
 
 for (const theme of ['dark', 'light'] as const) {
   test.describe(theme, () => {
-    test('handle and tooltip', async ({ page }) => {
+    test('handle', async ({ page }) => {
       await desktop(page, theme);
       await fakeDaemon(page, overview());
       await ready(page, 4);
@@ -98,10 +98,6 @@ for (const theme of ['dark', 'light'] as const) {
       await expectMode(page, 'bubble');
       await expect(surface(page)).toHaveAttribute('data-mode', 'handle', { timeout: 10_000 });
       await shoot(page, `handle-${theme}`, [], 240);
-      const bot = layer(page, 'handle').locator('button:not([data-resident])').first();
-      await bot.hover();
-      await page.waitForTimeout(400);
-      await shoot(page, `handle-tooltip-${theme}`, ['[role="tooltip"]']);
     });
 
     test('bubble', async ({ page }) => {
@@ -188,7 +184,7 @@ for (const theme of ['dark', 'light'] as const) {
         await shoot(page, `session-readonly-${theme}`);
       });
 
-      test('keyboard: numbered list and coachmark', async ({ page }) => {
+      test('keyboard: the list and coachmark', async ({ page }) => {
         await desktop(page, theme);
         await fakeDaemon(page, overview());
         await ready(page, 4);
@@ -269,3 +265,44 @@ for (const theme of ['dark', 'light'] as const) {
     }
   });
 }
+
+// The update flow, dark only: the card in its three states, then the About tab. The browser has no updater, so the
+// release comes from the dev-only window.__LEDGE_FAKE_UPDATE__ hook.
+test.describe('update', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { __LEDGE_FAKE_UPDATE__: unknown }).__LEDGE_FAKE_UPDATE__ = {
+        version: '0.3.0', notes: '- Réponses depuis le chat\n- Île plus réactive\n- Mise à jour en un clic',
+        downloadAndInstall: async () => { await new Promise(() => {}); }
+      };
+    });
+  });
+  const daemon = { version: '0.2.2', install: 'npm' as const, systemd: true };
+
+  test('the card: available, running, failed', async ({ page }) => {
+    await desktop(page, 'dark');
+    const d = await fakeDaemon(page, overview(), { daemon });
+    await ready(page, 4);
+    await openList(page);
+    await expect(layer(page, 'list').locator('[data-update-card="available"]')).toBeVisible();
+    await shoot(page, 'update-available-dark');
+    await layer(page, 'list').getByRole('button', { name: 'Mettre à jour' }).click();
+    await expect(layer(page, 'list').locator('[data-update-card="running"]')).toBeVisible();
+    await shoot(page, 'update-running-dark');
+    d.send({ type: 'update.failed', version: '0.3.0', reason: 'sessions-at-risk' });
+    await expect(layer(page, 'list').locator('[data-update-card="failed"]')).toBeVisible();
+    await shoot(page, 'update-failed-dark');
+  });
+
+  test('settings, About tab', async ({ page }) => {
+    await desktop(page, 'dark');
+    await fakeDaemon(page, overview(), { daemon });
+    await ready(page, 4);
+    await openList(page);
+    await layer(page, 'list').getByRole('button', { name: 'Réglages' }).click();
+    await expectMode(page, 'settings');
+    await restInside(page);
+    await layer(page, 'settings').getByRole('tab', { name: 'À propos' }).click();
+    await shoot(page, 'settings-about-dark');
+  });
+});

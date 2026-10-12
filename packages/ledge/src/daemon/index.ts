@@ -5,6 +5,8 @@ import { startPoller } from './poller.js';
 import { realTmux, type Tmux } from '../tmux.js';
 import { ensureLedgeDir, paths } from '../paths.js';
 import { log } from '../log.js';
+import { daemonInfo } from '../update/self.js';
+import { createDaemonUpdater, realUpdaterDeps } from '../update/run-update.js';
 
 export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string } = {}): Promise<{ stop(): Promise<void>; port: number }> {
   await ensureLedgeDir();
@@ -17,7 +19,9 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   if (live) for (const s of store.all()) {
     if (s.tmuxSession && !live.has(s.tmuxSession)) store.remove(s.id);
   }
-  const server = await startServer({ store, tmux, port: opts.port });
+  const daemon = await daemonInfo();
+  const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save() }));
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater });
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
   await writeFile(paths().pid, String(process.pid));
   log(`daemon started on ${server.port} with ${store.all().length} sessions`);

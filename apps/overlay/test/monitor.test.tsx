@@ -45,7 +45,7 @@ describe('the Screen setting', () => {
     const group = screen.getByRole('group', { name: 'Screen' });
     expect(within(group).getByRole('radio', { name: 'Primary' })).toBeChecked();
     expect(within(group).getByRole('radio', { name: 'Screen 2' })).not.toBeChecked();
-    expect(group.textContent).toContain('The handle sits on the left edge of this screen (1920\u00a0×\u00a01080).');
+    expect(group.textContent).toContain('The island sits at the top of this screen (1920\u00a0×\u00a01080).');
     fireEvent.click(within(group).getByRole('radio', { name: 'Screen 2' }));
     expect(onMonitor).toHaveBeenLastCalledWith(side.id);
     rerender(<SettingsView {...base} monitors={[main, side]} monitor={side.id} onMonitor={onMonitor} />);
@@ -74,6 +74,6 @@ describe('the Screen setting', () => {
     const group = screen.getByRole('group', { name: 'Écran' });
     expect(within(group).getByRole('radio', { name: 'Principal' })).not.toBeChecked();
     expect(within(group).getByRole('radio', { name: 'Écran 2' })).toBeChecked();
-    expect(group.textContent).toContain('La poignée se pose au bord gauche de cet écran (2560\u00a0×\u00a01440).');
+    expect(group.textContent).toContain('L’île se pose en haut de cet écran (2560\u00a0×\u00a01440).');
   });
 });

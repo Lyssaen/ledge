@@ -7,6 +7,7 @@ import { attachClient, daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
 import { DEFAULT_SOUNDS, resetSoundPrefsForTests } from '../src/sounds/preferences';
 import { MESSAGES } from '../src/i18n/messages';
+import { islandWidth } from '../src/surface/geometry';
 
 let mock: Awaited<ReturnType<typeof createMockDaemon>>; let client: ReturnType<typeof createDaemonClient>; let detach: () => void;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -27,33 +28,34 @@ const pimAsks = () => pim({ state: 'waiting_permission', pending: { kind: 'permi
 describe('<Surface>', () => {
   it('starts as the handle sized to the team', () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
     expect(screen.getAllByRole('button', { name: /open$/ })).toHaveLength(3);
   });
 
   it('an ask grows the bot, unfolds the bubble at its slot, approve sends the decision, then it folds back', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(pimAsks()); await sleep(50); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
+    expect(screen.getByRole('button', { name: /Pim needs your approval, open/ }).querySelector('[data-sprite]')).toHaveStyle({ transform: 'scale(1.25)' });
     await act(async () => { vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveStyle({ width: '336px', height: '128px' });
+    expect(surface()).toHaveStyle({ width: '440px', height: '128px' });
     expect(screen.getByText('Pim needs your approval')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.decide', id: 'b', decision: 'accept' }));
     await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); vi.advanceTimersByTime(900); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
   });
 
   it('after approve the bubble does not fold on the 900 ms timer alone, without the daemon confirmation', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(pimAsks()); await sleep(50); vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveStyle({ width: '336px' });
+    expect(surface()).toHaveStyle({ width: '440px' });
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.decide', id: 'b', decision: 'accept' }));
     await act(async () => { vi.advanceTimersByTime(900); await sleep(50); });
-    expect(surface()).toHaveStyle({ width: '336px' });
+    expect(surface()).toHaveStyle({ width: '440px' });
     await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
   });
 
   it('a pointer left over a surface that shrank away does not hold the next bubble open', async () => {
@@ -63,12 +65,12 @@ describe('<Surface>', () => {
     expect(surface()).toHaveStyle({ width: '480px' });
     // The view closes from under the pointer: no mouseleave is ever delivered.
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
     await act(async () => { mock.upsert(pimAsks()); await sleep(50); vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveStyle({ width: '336px' });
+    expect(surface()).toHaveStyle({ width: '440px' });
     expect(document.querySelector('[data-timer]')).toHaveAttribute('data-paused', 'false');
     await act(async () => { vi.advanceTimersByTime(4000); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
   });
 
   it('hover, focus within and a hidden document pause the bubble', async () => {
@@ -78,7 +80,7 @@ describe('<Surface>', () => {
     fireEvent.mouseEnter(surface());
     expect(timer()).toHaveAttribute('data-paused', 'true');
     await act(async () => { vi.advanceTimersByTime(5000); });
-    expect(surface()).toHaveStyle({ width: '336px' });
+    expect(surface()).toHaveStyle({ width: '440px' });
     fireEvent.mouseLeave(surface());
     expect(timer()).toHaveAttribute('data-paused', 'false');
     act(() => { screen.getByRole('button', { name: 'Approve' }).focus(); });
@@ -93,12 +95,12 @@ describe('<Surface>', () => {
     expect(timer()).toHaveAttribute('data-paused', 'false');
     hidden.mockRestore();
     await act(async () => { vi.advanceTimersByTime(4000); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
   });
 
-  it('edge hover opens the list, clicking a row opens the session, back and close shrink', async () => {
+  it('hovering the handle opens the list, clicking a row opens the session, back and close shrink', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     await act(async () => { vi.advanceTimersByTime(180); });
     expect(surface()).toHaveStyle({ width: '380px' });
     fireEvent.click(screen.getByRole('button', { name: /speos-api/ }));
@@ -107,12 +109,12 @@ describe('<Surface>', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to sessions' }));
     expect(surface()).toHaveStyle({ width: '380px' });
     fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
   });
 
   it('back from a session: the list waits for the shrink to nearly settle before it fades in', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     await act(async () => { vi.advanceTimersByTime(180); });
     const list = () => document.querySelector('[data-layer="list"]') as HTMLElement;
     const row = () => document.querySelector('[data-layer="list"] [data-row]') as HTMLElement;
@@ -133,7 +135,7 @@ describe('<Surface>', () => {
     mock.extras.recents = [{ cwd: '/w/api-gateway', project: 'api-gateway', lastAt: '2026-10-10T09:00:00.000Z' }];
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { client.connect(); await sleep(100); }); // a fresh snapshot carries the recents
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     await act(async () => { vi.advanceTimersByTime(180); });
     fireEvent.click(screen.getByRole('button', { name: 'New session' }));
     expect(surface()).toHaveAttribute('data-mode', 'launch');
@@ -156,7 +158,7 @@ describe('<Surface>', () => {
   it('an ask to Ledge names the stored default harness', async () => {
     localStorage.setItem('ledge.defaultTool', 'codex');
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     await act(async () => { vi.advanceTimersByTime(180); });
     const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
     fireEvent.change(input, { target: { value: 'How are the others doing?' } });
@@ -166,7 +168,7 @@ describe('<Surface>', () => {
 
   it('a refused launch stays on the form with the reason; the next attempt clears it', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     await act(async () => { vi.advanceTimersByTime(180); });
     fireEvent.click(screen.getByRole('button', { name: 'New session' }));
     fireEvent.change(screen.getByLabelText('Folder'), { target: { value: '/w/nope' } });
@@ -209,16 +211,17 @@ describe('<Surface>', () => {
       mock.upsert(fakeSession('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } })); mock.upsert(pimAsks());
       await sleep(50); vi.advanceTimersByTime(540);
     });
-    expect(surface()).toHaveStyle({ width: '336px' });
+    expect(surface()).toHaveStyle({ width: '440px' });
     expect(screen.getByText('+1 more')).toBeInTheDocument();
     rerender(<Surface screenH={1080} theme="dark" client={client} dnd onToggleDnd={() => {}} />);
     await act(async () => { vi.advanceTimersByTime(100); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2, true)}px` });
     await act(async () => { vi.advanceTimersByTime(5000); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2, true)}px` });
     expect(surface()).toHaveAttribute('data-mode', 'handle');
-    expect(screen.getByRole('button', { name: /Otto has a question, open/ })).toHaveStyle({ width: '20px' });
-    expect(screen.getByRole('button', { name: /Pim needs your approval, open/ })).toHaveStyle({ width: '20px' });
+    expect(screen.getByRole('button', { name: /Otto has a question, open/ })).toHaveStyle({ width: '22px' });
+    expect(screen.getByRole('button', { name: /Otto has a question, open/ }).querySelector('[data-sprite]')).toHaveStyle({ transform: 'scale(1.25)' });
+    expect(screen.getByRole('button', { name: /Pim needs your approval, open/ })).toHaveStyle({ width: '22px' });
     // Turning dnd off does not re-bubble asks that are already pending.
     rerender(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { vi.advanceTimersByTime(1000); });
@@ -228,21 +231,60 @@ describe('<Surface>', () => {
   it('dnd suppresses the bubble but the bot still grows', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(fakeSession('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } })); await sleep(50); vi.advanceTimersByTime(600); });
-    expect(surface()).toHaveStyle({ width: '28px' });
-    expect(screen.getByRole('button', { name: /Otto has a question, open/ })).toHaveStyle({ width: '20px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2, true)}px` });
+    expect(screen.getByRole('button', { name: /Otto has a question, open/ })).toHaveStyle({ width: '22px' });
+    expect(screen.getByRole('button', { name: /Otto has a question, open/ }).querySelector('[data-sprite]')).toHaveStyle({ transform: 'scale(1.25)' });
   });
 
-  it('the chat stays open when the pointer leaves', async () => {
+  it('a hover-opened chat folds when the pointer leaves, but not while its field is being filled', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(surface());
     await act(async () => { vi.advanceTimersByTime(180); });
     fireEvent.click(screen.getByRole('button', { name: 'Open the conversation with Ledge' }));
     expect(surface()).toHaveAttribute('data-mode', 'chat');
-    // The composer takes focus on open; leaving the overlay drops hover and focus, like clicking the terminal.
-    fireEvent.blur(screen.getByRole('textbox', { name: 'Ask Ledge' }));
+    act(() => screen.getByRole('textbox', { name: 'Ask Ledge' }).focus());
     fireEvent.mouseLeave(surface());
     await act(async () => { vi.advanceTimersByTime(800); });
     expect(surface()).toHaveAttribute('data-mode', 'chat');
+    act(() => screen.getByRole('button', { name: 'Back to sessions' }).focus());
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+  });
+
+  it('hovering the handle opens the list only after the dwell; no edge band exists any more', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    expect(document.querySelectorAll('[data-hotzone]')).toHaveLength(0);
+    fireEvent.mouseEnter(surface());
+    await act(async () => { vi.advanceTimersByTime(100); });
+    fireEvent.mouseLeave(surface());
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    fireEvent.mouseEnter(surface());
+    await act(async () => { vi.advanceTimersByTime(180); });
+    expect(surface()).toHaveAttribute('data-mode', 'list');
+  });
+
+  it('a hover-opened session folds back to the handle when the pointer leaves, even with a button focused', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    fireEvent.mouseEnter(surface());
+    await act(async () => { vi.advanceTimersByTime(180); });
+    fireEvent.click(screen.getByRole('button', { name: /speos-api/ }));
+    expect(surface()).toHaveAttribute('data-mode', 'session');
+    act(() => screen.getByRole('button', { name: 'Back to sessions' }).focus());
+    fireEvent.mouseLeave(surface());
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+  });
+
+  it('a press outside an open panel folds it back to the handle; a press inside does not', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(surface()).toHaveAttribute('data-mode', 'list');
+    fireEvent.pointerDown(screen.getByRole('textbox', { name: 'Ask Ledge' }));
+    expect(surface()).toHaveAttribute('data-mode', 'list');
+    fireEvent.pointerDown(document.body);
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
   });
 
   it('Ledge finishing an answer unfolds a finished bubble; Open goes to the chat', async () => {
@@ -253,9 +295,9 @@ describe('<Surface>', () => {
       daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'Deux bots travaillent.', at: '2026-10-11T10:01:20.000Z' });
       await sleep(50);
     });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
     await act(async () => { vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveStyle({ width: '336px' });
+    expect(surface()).toHaveStyle({ width: '440px' });
     const bubble = document.querySelector('[data-layer="bubble"]') as HTMLElement;
     expect(bubble).toHaveTextContent('Ledge finished');
     expect(bubble).toHaveTextContent('Deux bots travaillent.');
@@ -304,7 +346,7 @@ describe('<Surface>', () => {
     expect(say()).toHaveStyle({ opacity: '0' });
     expect(surface()).toHaveAttribute('data-mode', 'handle');
     // The finish is still unread: the bot stays up and opens its session.
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
     fireEvent.click(screen.getByRole('button', { name: 'Pim available, open' }));
     expect(surface()).toHaveAttribute('data-mode', 'session');
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
@@ -324,14 +366,14 @@ describe('<Surface>', () => {
   it('a bot that finishes its task (working → idle) unfolds a finished bubble that folds after 6 s', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
     await act(async () => { vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveStyle({ width: '336px' });
+    expect(surface()).toHaveStyle({ width: '440px' });
     expect(screen.getByText('Pim finished')).toBeInTheDocument();
     await act(async () => { vi.advanceTimersByTime(5900); });
-    expect(surface()).toHaveStyle({ width: '336px' });
+    expect(surface()).toHaveStyle({ width: '440px' });
     await act(async () => { vi.advanceTimersByTime(200); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
     const say = document.querySelector('[data-unread-say]') as HTMLElement;
     expect(say).toHaveAttribute('data-say-kind', 'finished');
     expect(MESSAGES.en.say.finished).toContain(say.textContent);
@@ -367,14 +409,14 @@ describe('<Surface>', () => {
     localStorage.setItem('ledge.finished', 'none'); resetSoundPrefsForTests();
     const { rerender } = render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
     localStorage.setItem('ledge.finished', 'both'); resetSoundPrefsForTests();
     rerender(<Surface screenH={1080} theme="dark" client={client} dnd onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); mock.upsert(pim({ state: 'idle' })); await sleep(50); vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2, true)}px` });
     rerender(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(pim({ state: 'idle', lastActivityAt: '2026-10-09T18:09:00.000Z' })); await sleep(50); vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveStyle({ width: '28px' });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
   });
 
   describe('sounds', () => {
@@ -426,7 +468,98 @@ describe('<Surface>', () => {
       rerender(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} soundPlayer={p as never} />);
       await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); vi.advanceTimersByTime(2000); mock.upsert(pim({ state: 'idle' })); await sleep(50); vi.advanceTimersByTime(540); });
       await waitFor(() => expect(p.played).toEqual([['finished', 1]]));
-      expect(surface()).toHaveStyle({ width: '28px' });
+      expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
     });
+  });
+});
+
+describe('<Surface> island', () => {
+  const mount = (props: Partial<Parameters<typeof Surface>[0]> = {}) => render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} {...props} />);
+  const cover = (covered: boolean) => act(() => { window.dispatchEvent(new CustomEvent('ledge:foreground', { detail: { covered } })); });
+
+  it('the island hangs from the top edge, centred on the viewport, 38 px high; the list keeps 380 px under it', async () => {
+    mount();
+    expect(surface()).toHaveStyle({ top: '0px', height: '38px', width: `${islandWidth(2)}px`, left: `${Math.round(window.innerWidth / 2 - islandWidth(2) / 2)}px` });
+    expect(surface().style.borderRadius).toBe('0px 0px 19px 19px');
+    fireEvent.mouseEnter(surface());
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(surface()).toHaveStyle({ top: '0px', width: '380px', left: `${Math.round(window.innerWidth / 2 - 190)}px` });
+    expect(surface().style.borderRadius).toBe('0px 0px 22px 22px');
+  });
+
+  it('the top band either side of the island opens the list after the dwell; the top edge far away opens nothing', async () => {
+    mount();
+    const g = { left: parseFloat(surface().style.left), w: parseFloat(surface().style.width) };
+    fireEvent.mouseMove(document, { clientX: 3, clientY: 3 });
+    await act(async () => { vi.advanceTimersByTime(400); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    fireEvent.mouseMove(document, { clientX: g.left - 20, clientY: 4 });
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(surface()).toHaveAttribute('data-mode', 'list');
+  });
+
+  it('discreet: the island stays compact while a say hangs under it; the strip comes once the say has faded', async () => {
+    mount();
+    await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); vi.advanceTimersByTime(540); });
+    await act(async () => { vi.advanceTimersByTime(6100); });
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
+    const say = document.querySelector('[data-unread-say]') as HTMLElement;
+    expect(say).toHaveAttribute('data-say-kind', 'finished');
+    expect(say).toHaveStyle({ opacity: '1' });
+    cover(true);
+    await act(async () => { vi.advanceTimersByTime(600); });
+    expect(surface()).not.toHaveAttribute('data-strip');
+    expect(surface()).toHaveStyle({ height: '38px' });
+    await act(async () => { vi.advanceTimersByTime(4500); });
+    expect(say).toHaveStyle({ opacity: '0' });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    await act(async () => { vi.advanceTimersByTime(600); });
+    expect(surface()).toHaveAttribute('data-strip');
+  });
+
+  it('discreet: a covering window shrinks the island to the strip 500 ms after the fold; hovering the band redeploys it', async () => {
+    mount();
+    cover(true);
+    expect(surface()).not.toHaveAttribute('data-strip');
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(surface()).toHaveAttribute('data-strip');
+    expect(surface()).toHaveStyle({ height: '10px' });
+    expect(surface().style.borderRadius).toBe('0px 0px 6px 6px');
+    expect(document.querySelector('[data-layer="handle"][data-strip] [data-dot]')).not.toBeNull();
+    const left = parseFloat(surface().style.left);
+    fireEvent.mouseMove(document, { clientX: left - 10, clientY: 4 });
+    expect(surface()).not.toHaveAttribute('data-strip');
+    expect(surface()).toHaveStyle({ height: '38px' });
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(surface()).toHaveAttribute('data-mode', 'list');
+    cover(false);
+    fireEvent.mouseMove(document, { clientX: 900, clientY: 600 });
+    await act(async () => { vi.advanceTimersByTime(600); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    expect(surface()).not.toHaveAttribute('data-strip');
+  });
+
+  it('discreet off: a covering window changes nothing', async () => {
+    mount({ discreet: false });
+    cover(true);
+    await act(async () => { vi.advanceTimersByTime(600); });
+    expect(surface()).not.toHaveAttribute('data-strip');
+    expect(surface()).toHaveStyle({ height: '38px' });
+  });
+
+  it('a bubble while the strip shows: the island stretches to 440 px, the strip waits', async () => {
+    mount();
+    cover(true);
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(surface()).toHaveAttribute('data-strip');
+    await act(async () => { mock.upsert(pimAsks()); await sleep(50); vi.advanceTimersByTime(540); });
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    expect(surface()).toHaveStyle({ width: '440px', top: '0px' });
+    expect(surface()).not.toHaveAttribute('data-strip');
+  });
+
+  it('the island sits at a quarter of the screen when the position says left', () => {
+    mount({ islandPosition: 'left' });
+    expect(surface()).toHaveStyle({ left: `${Math.round(window.innerWidth / 4 - islandWidth(2) / 2)}px` });
   });
 });

@@ -1,7 +1,7 @@
 {
   "name": "overlay",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,12 +9,15 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
+    "version:set": "node scripts/set-version.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
     "@ledge/protocol": "workspace:*",
     "@tauri-apps/api": "^2.6.0",
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.13.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "10.1.0",

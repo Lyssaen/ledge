@@ -17,7 +17,8 @@ export function afterPaint(fn: () => void, maxMs = 50): () => void {
 /**
  * Keeps the native window on `frame`. Growing applies as soon as the frame that starts the transition is painted;
  * shrinking first holds the union of the old and new frames for `settleMs` (the surface's size transition) and one
- * more painted frame, so the animation is never clipped. Returns the page offset: page y = screen y - frame top.
+ * more painted frame, so the animation is never clipped. Returns the page offset: page x = screen x - frame left,
+ * page y = screen y - frame top.
  *
  * The offset is committed together with the request to move the window, never after the shell's answer: the stale
  * frame the compositor keeps while the window moves then lands exactly where the moved window shows it. The commit
@@ -29,24 +30,31 @@ export function afterPaint(fn: () => void, maxMs = 50): () => void {
  * change several times within one pass (a fallback size, then the measured one) go out once, as the last one.
  *
  * Always 0 in the browser. `frame` is in CSS px; under the UI `zoom` the window is placed at whole monitor px rounded
- * outward, and the offset is that monitor top back in CSS px, so the drawing lands exactly where it would without the zoom.
+ * outward, and the offset is that monitor corner back in CSS px, so the drawing lands exactly where it would without the zoom.
  */
-export function useNativeFrame(frame: Frame, settleMs: number, zoom = 1): number {
-  const [offset, setOffset] = useState(0);
+export interface PageOffset { left: number; top: number }
+const NO_OFFSET: PageOffset = { left: 0, top: 0 };
+
+export function useNativeFrame(frame: Frame, settleMs: number, zoom = 1): PageOffset {
+  const [offset, setOffset] = useState<PageOffset>(NO_OFFSET);
   /** The frame the shell holds (or was last asked for). */
   const applied = useRef<Frame | null>(null);
   /** The frame the page wants, from the latest render. */
   const wanted = useRef({ frame, zoom });
   const cancelCommit = useRef<() => void>(() => {});
   const settle = useRef<{ timer?: ReturnType<typeof setTimeout>; cancel?: () => void }>({});
-  const key = `${frame.top}:${frame.w}:${frame.h}@${zoom}`;
+  const key = `${frame.left}:${frame.top}:${frame.w}:${frame.h}@${zoom}`;
   useLayoutEffect(() => {
     wanted.current = { frame, zoom };
     const clearSettle = () => { clearTimeout(settle.current.timer); settle.current.cancel?.(); settle.current = {}; };
     // In a layout effect the state update re-renders synchronously before paint; from a task it is flushed.
     const apply = (f: Frame, z: number, inRender: boolean) => {
       applied.current = f;
-      if (isTauri()) { const top = toMonitorFrame(f, z).top / z; if (inRender) setOffset(top); else flushSync(() => setOffset(top)); }
+      if (isTauri()) {
+        const m = toMonitorFrame(f, z); const next = { left: m.left / z, top: m.top / z };
+        const set = () => setOffset(o => (o.left === next.left && o.top === next.top ? o : next));
+        if (inRender) set(); else flushSync(set);
+      }
       void setFrame(f, z);
     };
     const commit = () => {

@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
@@ -11,11 +11,12 @@ import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
 import { spawnSession } from '../spawn.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
-import { loginShellPath } from '../shell-path.js';
+import { loginShellEnv } from '../shell-path.js';
 import { log } from '../log.js';
 import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
 import { readDocument } from './documents.js';
+import type { createDaemonUpdater } from '../update/run-update.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -64,13 +65,14 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentPath?: () => Promise<string>; chat?: Chat; claudeBin?: string[] }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater> }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
-  // Under systemd the daemon has the bare system PATH: a launched agent gets the login shell's, as a terminal would.
-  const agentPath = opts.agentPath ?? (() => loginShellPath({ fallback: process.env.PATH ?? '' }));
-  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, env: async () => ({ ...process.env, PATH: await agentPath() }), bin: opts.claudeBin, now });
+  // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
+  // the login shell's on top of it, as a terminal would.
+  const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
+  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, env: agentEnv, bin: opts.claudeBin, now });
   const wss = new WebSocketServer({
     host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT,
     verifyClient: ({ req }: { req: IncomingMessage }) => {
@@ -98,7 +100,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher });
+    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: opts.daemon } : {}) });
     for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
     send(ws, { type: 'chat.history', turns: chat.history() });
   };
@@ -213,7 +215,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
         const cwd = await resolveFolder(msg.cwd, opts.home);
         const live = store.all();
-        const env = { ...process.env, PATH: await agentPath() };
+        const env = await agentEnv();
         const session = await spawnSession({ tool: msg.tool, args: launchArgs(msg), name: msg.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
         store.upsert(session);
         store.touchRecent(session.cwd, session.project, session.startedAt);
@@ -287,6 +289,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.remove(msg.id);
         return;
       }
+      // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
+      // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
+      case 'update.daemon':
+        if (!opts.updater) return send(ws, { type: 'update.failed', version: msg.version, reason: 'no-systemd' });
+        return opts.updater.update(msg.version, broadcast, m => send(ws, m));
       case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast, msg.tool);
       case 'chat.cancel': return chat.cancel(msg.qid);
       case 'chat.reset': return chat.reset(broadcast);

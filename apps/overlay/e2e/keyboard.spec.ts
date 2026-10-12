@@ -1,4 +1,4 @@
-import { test, expect, layer, expectMode, received, ready } from './fixtures';
+import { test, expect, layer, surface, expectMode, received, ready } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 
 const sessions = () => [
@@ -8,13 +8,13 @@ const sessions = () => [
 ];
 const row = (page: import('@playwright/test').Page, id: string) => page.locator(`[data-row-id="${id}"] [data-row]`);
 
-test('Ctrl+Alt+L opens a numbered list on the oldest ask; J/K move, Y approves, Enter opens', async ({ page }) => {
+test('Ctrl+Alt+L opens the list on the oldest ask; J/K move, Y approves, Enter opens', async ({ page }) => {
   const d = await fakeDaemon(page, sessions());
   await ready(page, 3);
   await page.keyboard.press('Control+Alt+L');
   await expectMode(page, 'list');
-  // Numbered rows: each row starts with its digit.
-  for (const [i, id] of ['a', 'b', 'c'].entries()) await expect(row(page, id).locator('.mono').first()).toHaveText(String(i + 1));
+  // No row numbers any more: digits are kept for a question's options.
+  for (const id of ['a', 'b', 'c']) await expect(row(page, id).locator('kbd')).toHaveCount(0);
   await expect(row(page, 'b')).toBeFocused(); // the oldest ask
   await expect(page.locator('[data-coachmark]')).toBeVisible();
   await page.keyboard.press('j');
@@ -36,6 +36,35 @@ test('Ctrl+Alt+L opens a numbered list on the oldest ask; J/K move, Y approves, 
   await expectMode(page, 'handle');
 });
 
+test('Alt+Arrow moves to the previous or next session, an ask or not; Ctrl+Alt+N opens the launch form, I goes to its first instruction', async ({ page }) => {
+  await fakeDaemon(page, sessions());
+  await ready(page, 3);
+  await page.keyboard.press('Control+Alt+L');
+  await expect(row(page, 'b')).toBeFocused();
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect(row(page, 'c')).toBeFocused();
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect(row(page, 'a')).toBeFocused();
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(row(page, 'c')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expectMode(page, 'session');
+  await expect(layer(page, 'session')).toContainText('Ada');
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expectMode(page, 'session');
+  await expect(layer(page, 'session')).toContainText('Pim');
+  await page.keyboard.press('Control+Alt+L');
+  await expectMode(page, 'handle');
+  await page.keyboard.press('Control+Alt+N');
+  await expectMode(page, 'launch');
+  await page.keyboard.press('i');
+  const instruction = layer(page, 'launch').locator('[data-launch-prompt]');
+  await expect(instruction).toBeFocused();
+  await expect(instruction).toHaveValue('');
+  await page.keyboard.press('Control+Alt+N');
+  await expectMode(page, 'handle');
+});
+
 test('Settings opens from the header and Help from ?; Escape returns to the list', async ({ page }) => {
   await fakeDaemon(page, sessions());
   await ready(page, 3);
@@ -45,7 +74,7 @@ test('Settings opens from the header and Help from ?; Escape returns to the list
   await expect(page.locator('[data-coachmark]')).toHaveAttribute('aria-hidden', 'true');
   await layer(page, 'list').getByRole('button', { name: 'Settings' }).click();
   await expectMode(page, 'settings');
-  await expect(layer(page, 'settings').getByRole('group', { name: 'Handle size' })).toBeVisible();
+  await expect(layer(page, 'settings').getByRole('group', { name: 'Island size' })).toBeVisible();
   await expect(layer(page, 'settings').getByRole('group', { name: 'Window size' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expectMode(page, 'list');
@@ -82,4 +111,16 @@ test('Ctrl+Alt+T switches the theme', async ({ page }) => {
   await expect(html).toHaveAttribute('data-theme', 'light');
   await page.keyboard.press('Control+Alt+T');
   await expect(html).toHaveAttribute('data-theme', 'dark');
+});
+
+test('a keyboard open while the window is still handle-sized never scrolls the page: the list hangs from the top edge', async ({ page }) => {
+  // Under Tauri the native window grows after the first paint of the open: the row takes focus while the viewport is still the island's 38 px.
+  await page.setViewportSize({ width: 1920, height: 38 });
+  await fakeDaemon(page, sessions());
+  await ready(page, 3);
+  await page.keyboard.press('Control+Alt+L');
+  await expectMode(page, 'list');
+  await expect(row(page, 'b')).toBeFocused();
+  expect(await page.evaluate(() => document.scrollingElement!.scrollTop)).toBe(0);
+  expect(await surface(page).evaluate(el => el.getBoundingClientRect().top)).toBe(0);
 });

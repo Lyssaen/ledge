@@ -7,11 +7,13 @@ export interface KeyboardOptions {
   onFocus: (id: string | null) => void; onOpen: (id: string) => void; onDecide: (id: string, d: 'accept' | 'deny') => void;
   /** `/`: focus the ask field (list only). */
   onAsk?: () => void;
-  onNextAsk: () => void; onClose: () => void; onReplyFocus: () => void; onToggleDnd: () => void; onHelp: () => void;
+  onClose: () => void; onReplyFocus: () => void; onToggleDnd: () => void; onHelp: () => void;
   /** `o`: open the terminal tab of the focused row (list) or of the open session. */
   onTerminal?: (id: string) => void;
   /** 1 to 9 in a session whose ask is a question: choose option N. */
   onChooseOption?: (n: number) => void;
+  /** `i` in the new-session form: focus its first instruction. */
+  onInstruction?: () => void;
 }
 
 const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
@@ -36,22 +38,27 @@ export function useKeyboard(o: KeyboardOptions) {
       const c = latest.current;
       const k = e.key;
       if (c.mode === 'reader') { if (k === 'Escape' && !e.ctrlKey && !e.metaKey && !e.altKey) { c.onClose(); e.preventDefault(); } return; }
-      const nextAsk = e.altKey && k === 'ArrowRight' && !e.ctrlKey && !e.metaKey;
-      if (!nextAsk && (e.ctrlKey || e.metaKey || e.altKey)) return;
+      const step = e.altKey && !e.ctrlKey && !e.metaKey ? (k === 'ArrowRight' ? 1 : k === 'ArrowLeft' ? -1 : 0) : 0;
+      if (!step && (e.ctrlKey || e.metaKey || e.altKey)) return;
       const active = document.activeElement;
       const list = c.mode === 'list';
       const focused = c.sessions.find(s => s.id === c.focusedId);
       const digit = /^[1-9]$/.test(k);
       const option = !list && digit && !!focused && isPending(focused) && focused.pending?.kind === 'question';
-      // Typing or choosing swallows every command but Escape and Alt+ArrowRight. A focused option radio also lets the
-      // digits through, so 1 to 9 keep choosing from it; its arrow keys stay native.
-      if (choosing(active) && k !== 'Escape' && !nextAsk && !(option && isRadio(active))) return;
+      // Typing or choosing swallows every command but Escape and Alt+ArrowLeft/Right. A focused option radio also lets
+      // the digits through, so 1 to 9 keep choosing from it; its arrow keys stay native.
+      if (choosing(active) && k !== 'Escape' && !step && !(option && isRadio(active))) return;
       const ids = c.sessions.map(s => s.id);
       const i = c.focusedId ? ids.indexOf(c.focusedId) : -1;
-      if (nextAsk) c.onNextAsk();
+      if (step) {
+        // The previous or next session in display order, wrapping, an ask or not: focused in the list, opened from a session.
+        const n = ids.length;
+        const id = i < 0 ? ids[step > 0 ? 0 : n - 1] : ids[(i + step + n) % n];
+        if (!id || id === c.focusedId) return;
+        if (list) c.onFocus(id); else c.onOpen(id);
+      }
       else if (list && (k === 'j' || k === 'ArrowDown')) { if (ids.length) c.onFocus(ids[Math.min(ids.length - 1, i + 1)]!); }
       else if (list && (k === 'k' || k === 'ArrowUp')) { if (ids.length) c.onFocus(ids[Math.max(0, i - 1)]!); }
-      else if (list && digit) { const id = ids[Number(k) - 1]; if (id) c.onFocus(id); }
       else if (option) c.onChooseOption?.(Number(k));
       else if (list && k === 'Enter') { if (ownsEnter(active)) return; if (focused) c.onOpen(focused.id); }
       else if (k === 'y' || k === 'n') { if (focused && isPending(focused)) { if (isYesNo(focused) || (c.mode === 'session' && needsReview(focused))) c.onDecide(focused.id, k === 'y' ? 'accept' : 'deny'); else c.onOpen(focused.id); } }
@@ -60,6 +67,7 @@ export function useKeyboard(o: KeyboardOptions) {
       else if (k === 'd') c.onToggleDnd();
       else if (k === 'Escape') c.onClose();
       else if (list && k === '/') c.onAsk?.();
+      else if (c.mode === 'launch' && k === 'i') c.onInstruction?.();
       else if (k === '?') c.onHelp();
       else return;
       e.preventDefault();

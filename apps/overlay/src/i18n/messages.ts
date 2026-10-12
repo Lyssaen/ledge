@@ -17,7 +17,7 @@ const fr = {
   /** The bot's accessible state, read after the tool name. */
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
   botReadOnly: 'Lecture seule',
-  resident: { name: 'Ledge', offline: 'Ledge · connexion perdue', tip: (n: number) => n === 0 ? 'Aucune session · cliquer pour ouvrir' : `${n} session${n > 1 ? 's' : ''} · cliquer pour ouvrir`, unread: 'a répondu', unreadTip: 'Ledge a répondu · cliquer pour ouvrir' },
+  resident: { name: 'Ledge', offline: 'Ledge · connexion perdue', tip: (n: number) => n === 0 ? 'Aucune session · cliquer pour ouvrir' : `${n} session${n > 1 ? 's' : ''} · cliquer pour ouvrir`, unread: 'a répondu', unreadTip: 'Ledge a répondu · cliquer pour ouvrir', strip: (n: number) => n === 0 ? 'Ledge, aucune session, ouvrir' : `Ledge, ${n} session${n > 1 ? 's' : ''}, ouvrir`, more: (n: number) => `${n} autre${n > 1 ? 's' : ''} session${n > 1 ? 's' : ''}, ouvrir la liste` },
   say: {
     ledge: ['Hey ! Je t’ai répondu !', 'C’est prêt, jette un œil.', 'Voilà ce que j’en pense.', 'Je t’attendais là-dessus.'],
     finished: ['J’ai fini !', 'Mission accomplie.', 'C’est tout bon de mon côté.', 'Je te laisse relire.'],
@@ -31,7 +31,6 @@ const fr = {
   /** The handle's bot buttons: "<Name> <label>, open". */
   handleLabel: { starting: 'démarre', idle: 'disponible', approval: 'attend votre accord', question: 'a une question', working: 'au travail', done: 'terminée', error: 'en erreur', readonly: 'en lecture seule' } as Record<BotState, string>,
   open: 'ouvrir',
-  clickToOpen: 'cliquer pour ouvrir',
   hint: { startedWithoutLedge: 'lancée sans Ledge', exited: (code: string) => `terminée (code ${code})`, error: 'erreur', available: 'disponible', running: 'au travail', helpersRunning: (n: number) => `disponible · ${n} sous-agent${n > 1 ? 's' : ''} au travail` },
   offline: 'Hors connexion : reconnexion au daemon',
   readOnlyBlocked: 'Lecture seule : lancée sans Ledge, répondez dans son terminal',
@@ -56,7 +55,7 @@ const fr = {
     pick: (project: string, cwd: string) => `Choisir ${project} (${cwd})`,
     tool: 'Outil', toolHint: 'Chacun est suivi par ses hooks ; ses demandes se règlent depuis Ledge.',
     bot: 'Compagnon', botHint: (title: string) => `Son nom donne le titre de l’onglet : ${title}.`, anotherName: 'Un autre nom', botPlaceholder: 'Au choix de Ledge',
-    prompt: 'Première instruction', optional: 'facultatif',
+    prompt: 'Première instruction', optional: 'facultatif', promptKey: 'Touche I pour y aller',
     promptHint: (name: string) => `Envoyée dès que ${name} est prêt. Sinon il attend votre tour dans son terminal.`,
     promptPlaceholder: (name: string) => `Que doit faire ${name} en premier ?`,
     resume: 'Reprendre la dernière conversation', resumeHint: 'Démarre avec --continue dans ce dossier.',
@@ -139,16 +138,23 @@ const fr = {
     answer: (opt: string) => `Répondre : ${opt}`, firstOption: 'première option'
   },
   settings: {
-    title: 'Votre Ledge', tabs: 'Sections des réglages', tabDisplay: 'Affichage', tabNotifications: 'Notifications', tabSounds: 'Sons', handleSize: 'Taille de la poignée', handleSizeHint: 'La poignée et ses compagnons au bord de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
-    screen: 'Écran', screenHint: (w: number, h: number) => `La poignée se pose au bord gauche de cet écran (${w}\u00a0×\u00a0${h}).`, screenHintNone: 'La poignée se pose au bord gauche de l’écran principal.',
+    title: 'Votre Ledge', tabs: 'Sections des réglages', tabDisplay: 'Affichage', tabNotifications: 'Notifications', tabSounds: 'Sons', tabAbout: 'À propos', islandSize: 'Taille de l’île', islandSizeHint: 'L’île et ses compagnons en haut de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
+    screen: 'Écran', screenHint: (w: number, h: number) => `L’île se pose en haut de cet écran (${w}\u00a0×\u00a0${h}).`, screenHintNone: 'L’île se pose en haut de l’écran principal.',
+    islandPosition: 'Position de l’île', islandPositionHint: 'Au centre du bord supérieur, ou décalée au quart de l’écran pour laisser libres les titres et les onglets.', islandPositions: { center: 'Centre', left: 'À gauche', right: 'À droite' },
+    discreet: 'Mode discret sous une fenêtre', discreetHint: 'Un simple trait quand une fenêtre maximisée occupe l’écran ; un survol la redéploie.',
     screenPrimary: 'Principal', screenNth: (n: number) => `Écran ${n}`, screenMissing: 'Débranché',
     defaultTool: 'Harnais par défaut', defaultToolHint: 'Les nouvelles sessions et le chat Ledge. À changer si un quota est saturé.',
     autostart: 'Lancer au démarrage', autostartHint: 'Ledge s’ouvre avec votre session Windows.',
-    dnd: 'Ne pas déranger', dndHint: 'Les demandes restent dans la poignée.',
+    dnd: 'Ne pas déranger', dndHint: 'Les demandes restent dans l’île.',
     reduced: 'Mouvements réduits', reducedHint: 'Les états restent lisibles sans animation.',
+    versions: 'Versions', versionsHint: 'Les deux moitiés de Ledge doivent avoir la même version.',
+    versionsMismatch: 'Les deux moitiés n’ont pas la même version.', versionApp: 'Application Windows', versionDaemon: 'Daemon WSL', versionLatest: 'Dernière version',
+    installKind: { npm: 'npm', git: 'clone git', unknown: 'inconnu' }, unknownVersion: '—',
+    autoUpdate: 'Rechercher les mises à jour', autoUpdateHint: 'Au démarrage, puis toutes les 6 heures. Ledge ne met jamais à jour sans votre clic.',
+    checked: (ago: string) => `Vérifié il y a ${ago}`, neverChecked: 'Jamais vérifié', checkedHint: 'Sur les releases GitHub de Paradow-dev/ledge.', checkNow: 'Vérifier',
     osReduced: 'Votre système demande des mouvements réduits ; Ledge continue de le respecter.',
-    finished: 'Quand un bot ou Ledge a terminé', finishedHint: 'Une bulle de 6 s, un son, les deux, ou seulement la poignée.',
-    finishedBoth: 'Bulle et son', finishedBubble: 'Bulle', finishedSound: 'Son', finishedNone: 'Poignée seule',
+    finished: 'Quand un bot ou Ledge a terminé', finishedHint: 'Une bulle de 6 s, un son, les deux, ou seulement l’île.',
+    finishedBoth: 'Bulle et son', finishedBubble: 'Bulle', finishedSound: 'Son', finishedNone: 'Île seule',
     sounds: 'Sons', soundsHint: 'Des tons courts et doux pour ce qui vous attend. Jamais en Ne pas déranger.',
     volume: 'Volume', volumeHint: 'Test joue le signal de question.', volumeQuiet: 'Bas', volumeNormal: 'Normal', volumeLoud: 'Fort', test: 'Test',
     playWhen: 'Jouer un son quand',
@@ -174,14 +180,37 @@ const fr = {
   },
   help: {
     title: 'Au bout des doigts.',
-    keys: [['Ouvrir la liste', ['Ctrl Alt L']], ['Choisir une session', ['J', 'K', '1–9']], ['Ouvrir la sélection', ['Entrée']], ['Autoriser / refuser', ['Y', 'N']],
-      ['Demande suivante', ['Alt →']], ['Répondre', ['R']], ['Ouvrir l’onglet du terminal', ['O']], ['Ne pas déranger', ['D']], ['Retour, puis replier', ['Échap']]] as Array<[string, string[]]>,
+    keys: [['Ouvrir la liste', ['Ctrl Alt L']], ['Choisir une session', ['J', 'K']], ['Ouvrir la sélection', ['Entrée']], ['Autoriser / refuser', ['Y', 'N']],
+      ['Session précédente / suivante', ['Alt ←', 'Alt →']], ['Nouvelle session', ['Ctrl Alt N']], ['Aller à la première instruction', ['I']], ['Répondre', ['R']], ['Ouvrir l’onglet du terminal', ['O']], ['Ne pas déranger', ['D']], ['Retour, puis replier', ['Échap']]] as Array<[string, string[]]>,
     tab: 'Tab conserve la navigation entre les contrôles.'
   },
   coach: {
     label: 'Clavier', title: 'Naviguer au clavier', ok: 'Compris',
-    upDown: 'monter et descendre', nextAsk: 'demande suivante', jump: 'aller à', decide: 'décider', close: 'fermer', esc: 'Échap',
+    upDown: 'monter et descendre', prevNext: 'session précédente / suivante', decide: 'décider', close: 'fermer', esc: 'Échap',
     note: 'Affiché aux trois premières ouvertures au clavier'
+  },
+  update: {
+    available: (v: string) => `Ledge ${v} est disponible`, current: (v: string) => `Vous avez la ${v}`, badgeNew: 'Nouveau',
+    update: 'Mettre à jour', later: 'Plus tard', notes: 'Notes complètes', retry: 'Réessayer', ok: 'OK', copy: 'Copier', copied: 'Copié', log: 'Journal du daemon',
+    keepRunning: (n: number) => n === 0 ? 'Ledge se ferme environ 20 s pour se mettre à jour.' : `Vos ${n} session${n > 1 ? 's' : ''} continue${n > 1 ? 'nt' : ''}. Ledge se ferme environ 20 s pour se mettre à jour.`,
+    running: (v: string) => `Mise à jour vers ${v}`, dontClose: 'Ne fermez pas Ledge', badgeRunning: 'En cours',
+    steps: { daemon: 'Daemon WSL mis à jour', restart: 'Daemon redémarré, sessions retrouvées', download: 'Téléchargement de l’application', install: 'Installation et redémarrage' },
+    updated: (v: string) => `Ledge ${v} est installé`, badgeUpdated: 'À jour',
+    manualTitle: 'Votre daemon tourne depuis un clone git', manualHint: 'Ledge ne touche pas à un clone. Mettez le daemon à jour dans WSL :', manualApp: 'Mettre à jour l’application', manualWait: (v: string) => `Le bouton s’active dès que le daemon annonce ${v}.`, badgeManual: 'Manuel',
+    failedBadge: 'Échec',
+    failed: {
+      'git-install': 'Votre daemon tourne depuis un clone git : mettez-le à jour vous-même.',
+      'no-systemd': 'Le daemon ne tourne pas comme service : il ne peut pas se relancer seul.',
+      'sessions-at-risk': 'Vos sessions tournent dans le service du daemon : un redémarrage les fermerait. Fermez-les, ou redémarrez WSL, puis réessayez.',
+      'npm-failed': 'Le daemon n’a pas pu se mettre à jour. Rien n’a changé.',
+      'busy': 'Une mise à jour est déjà en cours.',
+      'daemon-timeout': 'Le daemon ne répond plus.',
+      'sessions-lost': 'Toutes vos sessions ne sont pas revenues. L’application n’a pas été mise à jour.',
+      'download': 'L’application n’a pas pu être téléchargée. Elle n’a pas changé.'
+    },
+    timeoutCommand: 'systemctl --user status ledge-daemon',
+    missing: (names: string[]) => `Manquantes : ${names.join(', ')}`,
+    pip: { new: (v: string) => `Ledge ${v} est prêt`, busy: 'Mise à jour en cours…', bad: 'La mise à jour a échoué', ok: 'Ledge est à jour' }
   },
   shortcut: 'Ctrl Alt L'
 };
@@ -195,7 +224,7 @@ const en: Messages = {
   state: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },
   botReadOnly: 'Read-only',
-  resident: { name: 'Ledge', offline: 'Ledge · connection lost', tip: (n: number) => n === 0 ? 'No sessions · click to open' : `${n} session${n > 1 ? 's' : ''} · click to open`, unread: 'replied', unreadTip: 'Ledge replied · click to open' },
+  resident: { name: 'Ledge', offline: 'Ledge · connection lost', tip: (n: number) => n === 0 ? 'No sessions · click to open' : `${n} session${n > 1 ? 's' : ''} · click to open`, unread: 'replied', unreadTip: 'Ledge replied · click to open', strip: (n: number) => n === 0 ? 'Ledge, no sessions, open' : `Ledge, ${n} session${n > 1 ? 's' : ''}, open`, more: (n: number) => `${n} more session${n > 1 ? 's' : ''}, open the list` },
   say: {
     ledge: ['Hey! I answered you!', "It's ready, take a look.", "Here's what I think.", "I've been waiting on this."],
     finished: ["I'm done!", 'Mission accomplished.', 'All good on my side.', "I'll let you review."],
@@ -208,7 +237,6 @@ const en: Messages = {
   botNotLive: 'Not live',
   handleLabel: { starting: 'starting', idle: 'available', approval: 'needs your approval', question: 'has a question', working: 'working', done: 'done', error: 'error', readonly: 'read only' },
   open: 'open',
-  clickToOpen: 'click to open',
   hint: { startedWithoutLedge: 'started without ledge', exited: (code: string) => `exited ${code}`, error: 'error', available: 'available', running: 'running', helpersRunning: (n: number) => `available · ${n} subagent${n > 1 ? 's' : ''} working` },
   offline: 'Offline: reconnecting to the daemon',
   readOnlyBlocked: 'Read only: started without Ledge, answer in its terminal',
@@ -233,7 +261,7 @@ const en: Messages = {
     pick: (project: string, cwd: string) => `Choose ${project} (${cwd})`,
     tool: 'Tool', toolHint: 'Each is tracked through its hooks; its asks are answered from Ledge.',
     bot: 'Companion', botHint: (title: string) => `Its name titles the terminal tab: ${title}.`, anotherName: 'Another name', botPlaceholder: 'Ledge picks one',
-    prompt: 'First instruction', optional: 'optional',
+    prompt: 'First instruction', optional: 'optional', promptKey: 'Press I to get here',
     promptHint: (name: string) => `Sent as soon as ${name} is ready. Otherwise it waits for your turn in its terminal.`,
     promptPlaceholder: (name: string) => `What should ${name} do first?`,
     resume: 'Resume the last conversation', resumeHint: 'Starts with --continue in this folder.',
@@ -315,16 +343,23 @@ const en: Messages = {
     answer: (opt: string) => `Answer: ${opt}`, firstOption: 'first option'
   },
   settings: {
-    title: 'Your Ledge', tabs: 'Settings sections', tabDisplay: 'Display', tabNotifications: 'Notifications', tabSounds: 'Sounds', handleSize: 'Handle size', handleSizeHint: 'The handle and its companions on the screen edge.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
-    screen: 'Screen', screenHint: (w: number, h: number) => `The handle sits on the left edge of this screen (${w}\u00a0×\u00a0${h}).`, screenHintNone: 'The handle sits on the left edge of the primary screen.',
+    title: 'Your Ledge', tabs: 'Settings sections', tabDisplay: 'Display', tabNotifications: 'Notifications', tabSounds: 'Sounds', tabAbout: 'About', islandSize: 'Island size', islandSizeHint: 'The island and its companions at the top of the screen.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
+    screen: 'Screen', screenHint: (w: number, h: number) => `The island sits at the top of this screen (${w}\u00a0×\u00a0${h}).`, screenHintNone: 'The island sits at the top of the primary screen.',
+    islandPosition: 'Island position', islandPositionHint: 'Centred on the top edge, or a quarter of the way in to keep window titles and tabs clear.', islandPositions: { center: 'Centre', left: 'Left', right: 'Right' },
+    discreet: 'Discreet under a window', discreetHint: 'A thin strip while a maximised window fills the screen; hovering brings the island back.',
     screenPrimary: 'Primary', screenNth: (n: number) => `Screen ${n}`, screenMissing: 'Unplugged',
     defaultTool: 'Default harness', defaultToolHint: 'New sessions and the Ledge chat. Change it when a quota runs out.',
     autostart: 'Launch at startup', autostartHint: 'Ledge opens when you sign in to Windows.',
-    dnd: 'Do not disturb', dndHint: 'New asks stay in the handle.',
+    dnd: 'Do not disturb', dndHint: 'New asks stay in the island.',
     reduced: 'Reduced motion', reducedHint: 'States stay readable without animation.',
+    versions: 'Versions', versionsHint: 'Both halves of Ledge must run the same version.',
+    versionsMismatch: 'The two halves are not on the same version.', versionApp: 'Windows app', versionDaemon: 'WSL daemon', versionLatest: 'Latest version',
+    installKind: { npm: 'npm', git: 'clone', unknown: 'unknown' }, unknownVersion: '—',
+    autoUpdate: 'Check for updates', autoUpdateHint: 'At startup, then every 6 hours. Ledge never updates without your click.',
+    checked: (ago: string) => `Checked ${ago} ago`, neverChecked: 'Never checked', checkedHint: 'On the GitHub releases of Paradow-dev/ledge.', checkNow: 'Check',
     osReduced: 'Your system asks for reduced motion; Ledge keeps respecting it.',
-    finished: 'When a bot or Ledge finishes', finishedHint: 'A 6 s bubble, a sound, both, or the handle only.',
-    finishedBoth: 'Bubble and sound', finishedBubble: 'Bubble', finishedSound: 'Sound', finishedNone: 'Handle only',
+    finished: 'When a bot or Ledge finishes', finishedHint: 'A 6 s bubble, a sound, both, or the island only.',
+    finishedBoth: 'Bubble and sound', finishedBubble: 'Bubble', finishedSound: 'Sound', finishedNone: 'Island only',
     sounds: 'Sounds', soundsHint: 'Short, soft tones for what needs you. Never while Do not disturb is on.',
     volume: 'Volume', volumeHint: 'Test plays the question cue.', volumeQuiet: 'Quiet', volumeNormal: 'Normal', volumeLoud: 'Loud', test: 'Test',
     playWhen: 'Play a sound when',
@@ -350,14 +385,37 @@ const en: Messages = {
   },
   help: {
     title: 'Keyboard',
-    keys: [['Open the list', ['Ctrl Alt L']], ['Choose a session', ['J', 'K', '1–9']], ['Open the selection', ['Enter']], ['Approve or deny', ['Y', 'N']],
-      ['Next ask', ['Alt →']], ['Reply', ['R']], ['Open the terminal tab', ['O']], ['Do not disturb', ['D']], ['Back, then collapse', ['Esc']]],
+    keys: [['Open the list', ['Ctrl Alt L']], ['Choose a session', ['J', 'K']], ['Open the selection', ['Enter']], ['Approve or deny', ['Y', 'N']],
+      ['Previous or next session', ['Alt ←', 'Alt →']], ['New session', ['Ctrl Alt N']], ['Go to the first instruction', ['I']], ['Reply', ['R']], ['Open the terminal tab', ['O']], ['Do not disturb', ['D']], ['Back, then collapse', ['Esc']]],
     tab: 'Tab keeps moving between the controls.'
   },
   coach: {
     label: 'Keyboard', title: 'Move with the keyboard', ok: 'Got it',
-    upDown: 'up and down', nextAsk: 'next ask', jump: 'jump', decide: 'decide', close: 'close', esc: 'Esc',
+    upDown: 'up and down', prevNext: 'previous / next session', decide: 'decide', close: 'close', esc: 'Esc',
     note: 'Shown on the first three keyboard opens'
+  },
+  update: {
+    available: (v: string) => `Ledge ${v} is available`, current: (v: string) => `You have ${v}`, badgeNew: 'New',
+    update: 'Update', later: 'Later', notes: 'Full notes', retry: 'Retry', ok: 'OK', copy: 'Copy', copied: 'Copied', log: 'Daemon log',
+    keepRunning: (n: number) => n === 0 ? 'Ledge closes for about 20 s to update.' : `Your ${n} session${n > 1 ? 's' : ''} keep${n > 1 ? '' : 's'} running. Ledge closes for about 20 s to update.`,
+    running: (v: string) => `Updating to ${v}`, dontClose: 'Do not close Ledge', badgeRunning: 'Running',
+    steps: { daemon: 'WSL daemon updated', restart: 'Daemon restarted, sessions found again', download: 'Downloading the app', install: 'Installing and restarting' },
+    updated: (v: string) => `Ledge ${v} is installed`, badgeUpdated: 'Up to date',
+    manualTitle: 'Your daemon runs from a git clone', manualHint: 'Ledge does not touch a clone. Update the daemon in WSL:', manualApp: 'Update the app', manualWait: (v: string) => `The button turns on once the daemon reports ${v}.`, badgeManual: 'Manual',
+    failedBadge: 'Failed',
+    failed: {
+      'git-install': 'Your daemon runs from a git clone: update it yourself.',
+      'no-systemd': 'The daemon does not run as a service: it cannot restart itself.',
+      'sessions-at-risk': 'Your sessions run inside the daemon service: a restart would close them. Close them, or restart WSL, then retry.',
+      'npm-failed': 'The daemon could not update. Nothing changed.',
+      'busy': 'An update is already running.',
+      'daemon-timeout': 'The daemon is not answering.',
+      'sessions-lost': 'Not all your sessions came back. The app was not updated.',
+      'download': 'The app could not be downloaded. It did not change.'
+    },
+    timeoutCommand: 'systemctl --user status ledge-daemon',
+    missing: (names: string[]) => `Missing: ${names.join(', ')}`,
+    pip: { new: (v: string) => `Ledge ${v} is ready`, busy: 'Update in progress…', bad: 'The update failed', ok: 'Ledge is up to date' }
   },
   shortcut: 'Ctrl Alt L'
 };
