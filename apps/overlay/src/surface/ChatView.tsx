@@ -8,6 +8,7 @@ import { transition } from '../motion';
 import { useI18n, type Messages } from '../i18n/lang';
 import { inline } from './ReplyCard';
 import { LaunchCard } from './LaunchCard';
+import { RelayCard } from './RelayCard';
 import { groupSessions } from './groups';
 import type { DocumentReference } from '../documents/references';
 
@@ -20,6 +21,8 @@ export interface ChatViewProps {
   onDocument?: (ref: DocumentReference) => void;
   /** The chat card being launched (its turn's qid) and the card's actions (spec 2026-10-12 §6). */
   launchingQid?: string | null; onLaunchProposal?: (qid: string) => void; onTerminal?: (id: string) => void;
+  /** The relay card's turn being sent (its qid) and its actions. */
+  relayingQid?: string | null; onRelay?: (qid: string) => void; onRelayCancel?: (qid: string) => void;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number; contentRef?: Ref<HTMLDivElement>;
 }
 
@@ -103,7 +106,11 @@ export function ChatView(p: ChatViewProps) {
                       const text = turn.answer || (turn.answeredAt === undefined && live?.qid === turn.qid ? hideProposal(live.text) : '');
                       return text && <Answer text={text} sessions={p.sessions} onOpen={p.onOpenSession} onDocument={p.onDocument} />;
                     })()}
-                    {turn.answeredAt !== undefined && turn.proposal && (
+                    {turn.answeredAt !== undefined && turn.relay ? (
+                      <RelayCard relay={turn.relay} session={p.sessions.find(s => s.id === turn.relay!.id)} busy={p.relayingQid === turn.qid}
+                        disabled={!!p.offline || (!!p.relayingQid && p.relayingQid !== turn.qid)} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
+                        onSend={() => p.onRelay?.(turn.qid)} onCancel={() => p.onRelayCancel?.(turn.qid)} onOpenSession={p.onOpenSession} />
+                    ) : turn.answeredAt !== undefined && turn.proposal && (
                       <LaunchCard proposal={turn.proposal} session={p.sessions.find(s => s.id === turn.proposal!.launchedId)} busy={p.launchingQid === turn.qid}
                         disabled={!!p.offline || (!!p.launchingQid && p.launchingQid !== turn.qid)}
                         onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />

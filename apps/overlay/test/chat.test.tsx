@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import type { ChatTurn } from '@ledge/protocol';
+import type { ChatRelay, ChatTurn } from '@ledge/protocol';
 import { ChatView } from '../src/surface/ChatView';
 import { AskField } from '../src/surface/AskField';
 import { fakeSession } from './mockDaemon';
@@ -146,5 +146,78 @@ describe('<ChatView>', () => {
     expect(screen.getByText('I see 1 session, its terminal and its repository. I read, I touch nothing.')).toBeInTheDocument();
     rerender(<ChatView {...base} turns={[]} live={null} />);
     expect(screen.getByText('I see 2 sessions, the terminals and the repositories. I read, I touch nothing.')).toBeInTheDocument();
+  });
+});
+
+describe('the relay card', () => {
+  const relay: ChatRelay = { id: 'a', name: 'Otto', tool: 'claude', text: 'Run the overlay tests' };
+  const withRelay = (r: ChatRelay): ChatTurn[] => [{ qid: 'q1', question: 'tell Otto to run the tests', askedAt: T0, steps: [], answer: 'I will pass it on to **Otto**.', answeredAt: T0, relay: r }];
+  const otto = fakeSession('a', { name: 'Otto', project: 'ledge', branch: 'feat/x', state: 'idle' });
+  const card = () => screen.getByRole('region', { name: 'Instruction to send' });
+
+  it('proposed: the session with its state, the exact instruction, and Send', () => {
+    const onRelay = vi.fn();
+    render(<ChatView {...base} sessions={[otto]} turns={withRelay(relay)} live={null} onRelay={onRelay} />);
+    expect(card()).toHaveTextContent('Otto');
+    expect(card()).toHaveTextContent('Claude Code · ledge');
+    expect(card()).toHaveTextContent('feat/x');
+    expect(card()).toHaveTextContent('your turn');
+    expect(card()).toHaveTextContent('Run the overlay tests');
+    expect(card()).toHaveTextContent('or rephrase your request');
+    fireEvent.click(within(card()).getByRole('button', { name: /Send/ }));
+    expect(onRelay).toHaveBeenCalledWith('q1');
+    expect(screen.queryByRole('region', { name: 'Proposed session' })).toBeNull();
+  });
+
+  it.each([
+    ['working', 'working'], ['waiting_permission', 'waiting for you'], ['waiting_input', 'waiting for you'], ['exited', 'stopped']
+  ] as const)('the pill follows the session: %s', (state, label) => {
+    render(<ChatView {...base} sessions={[{ ...otto, state }]} turns={withRelay(relay)} live={null} />);
+    expect(card()).toHaveTextContent(label);
+  });
+
+  it("a session gone from the snapshot keeps the relay's name and reads stopped", () => {
+    render(<ChatView {...base} sessions={[]} turns={withRelay(relay)} live={null} />);
+    expect(card()).toHaveTextContent('Otto');
+    expect(card()).toHaveTextContent('stopped');
+  });
+
+  it('queued: Otto is working, it will go when he is done, with Cancel', () => {
+    const onRelayCancel = vi.fn();
+    render(<ChatView {...base} sessions={[{ ...otto, state: 'working' }]} turns={withRelay({ ...relay, status: 'queued' })} live={null} onRelayCancel={onRelayCancel} />);
+    expect(card()).toHaveTextContent("Otto is working; I'll send it as soon as it's done");
+    expect(within(card()).queryByRole('button', { name: /Send/ })).toBeNull();
+    fireEvent.click(within(card()).getByRole('button', { name: 'Cancel' }));
+    expect(onRelayCancel).toHaveBeenCalledWith('q1');
+  });
+
+  it('sent: the companion, Sent to Otto with the time, the name opens the session', () => {
+    const onOpenSession = vi.fn();
+    render(<ChatView {...base} sessions={[otto]} turns={withRelay({ ...relay, status: 'sent', sentAt: '2026-10-12T14:32:00.000Z' })} live={null} onOpenSession={onOpenSession} />);
+    expect(card()).toHaveTextContent(/Sent to Otto · \d{2}:\d{2}/);
+    expect(within(card()).queryByRole('button')).toBeNull();
+    fireEvent.click(within(card()).getByRole('link', { name: 'Otto' }));
+    expect(onOpenSession).toHaveBeenCalledWith('a');
+  });
+
+  it('failed: the reason in an alert, and Retry', () => {
+    const onRelay = vi.fn();
+    render(<ChatView {...base} sessions={[]} turns={withRelay({ ...relay, error: 'Otto stopped before it got the instruction' })} live={null} onRelay={onRelay} />);
+    expect(within(card()).getByRole('alert')).toHaveTextContent('Could not send: Otto stopped before it got the instruction');
+    fireEvent.click(within(card()).getByRole('button', { name: 'Retry' }));
+    expect(onRelay).toHaveBeenCalledWith('q1');
+  });
+
+  it('busy or offline: the buttons are disabled', () => {
+    const { rerender } = render(<ChatView {...base} sessions={[otto]} turns={withRelay(relay)} live={null} relayingQid="q1" />);
+    expect(within(card()).getByRole('button', { name: /Sending…/ })).toBeDisabled();
+    rerender(<ChatView {...base} sessions={[otto]} turns={withRelay(relay)} live={null} offline="Ledge is unreachable" />);
+    expect(within(card()).getByRole('button', { name: /Send/ })).toBeDisabled();
+  });
+
+  it('a relay block being streamed is held back', () => {
+    render(<ChatView {...base} sessions={[otto]} turns={[{ qid: 'q1', question: 'x', askedAt: T0, steps: [] }]} live={{ qid: 'q1', text: 'I will pass it on.\n```ledge-relay\n{"session": "a", "te' }} />);
+    expect(screen.getByText('I will pass it on.')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('ledge-relay');
   });
 });
