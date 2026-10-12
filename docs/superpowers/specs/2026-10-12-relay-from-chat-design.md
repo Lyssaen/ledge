@@ -2,6 +2,8 @@
 
 Date : 2026-10-12 · Projet personnel, hors story Jira · Auteur : Guillaume Charlier avec Claude Code
 
+Maquette validée : https://claude.ai/artifact/GfaiductZvfK728iQ6noeo, copie locale [docs/mockups/ledge-relay-from-chat.html](../../mockups/ledge-relay-from-chat.html). Cinq états du chat en sombre : proposition, session ambiguë, en attente, envoyée, échec.
+
 S'appuie sur la [spec du lancement depuis le chat](2026-10-12-launch-from-chat-design.md) (le bloc, la carte, la confirmation par clic), sur celle [des sessions et du chat](2026-10-11-sessions-identity-and-chat-design.md) (section 5, le persona ; « relayer un message à un bot » y était en V2) et sur `session.reply` (la réponse depuis l'overlay). Tout ce que cette spec ne mentionne pas reste tel que ces specs le décrivent.
 
 ## 1. Objectif
@@ -71,12 +73,16 @@ Les champs ajoutés aux messages existants sont facultatifs : un overlay ou un d
 
 ## 6. Overlay
 
-- **`RelayCard.tsx`** (nouveau), rendue sous la réponse dans `ChatView`, avant les sources, à la place de `LaunchCard` (un tour n'a qu'une carte). Quatre états :
-  - **proposée** : le compagnon et « Envoyer à **Otto** », l'instruction en citation, pied « [➤ Envoyer] ou reformule ta demande » ;
-  - **en attente** (`queued`) : « **Otto** travaille, j'enverrai dès qu'il aura fini » (ou « attend ta réponse » quand une demande est en cours), bouton [Annuler] ;
-  - **envoyée** (`sent`) : « Envoyé à **Otto** · 14:32 », le nom étant le lien `ledge://session/<id>` existant ;
-  - **échec** (`error`) : le message du daemon dans une bande `role="alert"`, pied « [Réessayer] ou reformule ta demande ».
-- L'état de la session vient du snapshot que l'overlay a déjà ; la carte ne lit rien d'autre.
+- **`RelayCard.tsx`** (nouveau), rendue sous la réponse dans `ChatView`, avant les sources, à la place de `LaunchCard` (un tour n'a qu'une carte). Deux lignes, comme la maquette :
+  - **Session** : le compagnon de la session, son prénom en gras, « harnais · dépôt `branche` » en dessous, et une pastille d'état à droite (« à toi », « travaille », « attend ta réponse », « arrêtée ») ; quand la session n'est plus dans le snapshot, le prénom du relais et la pastille « arrêtée » ;
+  - **Instruction** : le texte exact, en citation.
+
+  Puis un pied selon l'état :
+  - **proposée** : « [➤ Envoyer] ou reformule ta demande » ;
+  - **en attente** (`queued`) : un point pulsé (fixe en mouvement réduit), « **Otto** travaille, j'enverrai dès qu'il aura fini », bouton [Annuler] ;
+  - **envoyée** (`sent`) : le compagnon, « Envoyé à **Otto** · 14:32 », le nom étant le lien `ledge://session/<id>` existant ;
+  - **échec** (`error`) : le message du daemon dans une bande `role="alert"` au-dessus du pied « [Réessayer] ou reformule ta demande ».
+- L'état, le dépôt et la branche de la session viennent du snapshot que l'overlay a déjà ; la carte ne lit rien d'autre.
 - **`Surface.tsx`** : Envoyer et Réessayer envoient `session.relay { qid }`, Annuler `session.relay.cancel { qid }`. On reste dans le chat. Les boutons sont désactivés pendant l'aller-retour et quand le daemon est injoignable.
 - Textes FR/EN dans `i18n/messages.ts`. L'aide mentionne qu'on peut demander au chat de relayer une instruction.
 
@@ -99,6 +105,6 @@ Les champs ajoutés aux messages existants sont facultatifs : un overlay ou un d
 - `service` : relais valide joint à `chat.done` et au tour ; session inconnue, `hook_only` ou quittée rejetée ; `markRelay` émet `chat.history` ; `sessions.md` marque les sessions en lecture seule.
 - `relay.ts` : envoi immédiat sur session libre ; mise en file sur session occupée puis envoi à la libération ; deux relais en file pour une même session partent un par un, le plus ancien d'abord ; annulation ; échec à la sortie et au retrait ; refus d'un second envoi ; échec de `replyTo` reporté sur la carte.
 - `server` : `session.reply` inchangé après l'extraction de `replyTo` ; `session.relay` et `session.relay.cancel` câblés.
-- Overlay : `RelayCard` dans ses quatre états ; la surface envoie le bon message et reste dans le chat ; `hideProposal` masque un bloc relais en cours.
+- Overlay : `RelayCard` dans ses quatre états, la pastille selon l'état de la session et une session absente du snapshot ; la surface envoie le bon message et reste dans le chat ; `hideProposal` masque un bloc relais en cours.
 - Playwright : un tour avec relais vers une session occupée, en attente, puis envoyé quand elle devient libre ; un échec puis Réessayer.
 - Vérification manuelle avec les trois harnais (Claude Code, Codex, Cursor Agent) : une demande explicite à une session sûre produit une carte, une demande ambiguë produit une question, une question ordinaire n'en produit jamais.
