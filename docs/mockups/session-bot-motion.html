@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ledge · Les petits gestes</title>
+  <link rel="stylesheet" href="prototype/mascot.css">
+  <link rel="stylesheet" href="prototype/session-bot-motion.css">
+</head>
+<body>
+<main>
+  <header><a class="brand" href="mascots.html"><i></i>ledge<span>atelier de mouvement</span></a><button id="theme" aria-pressed="false">Thème clair</button></header>
+  <section class="intro"><div><p class="eyebrow">ÉTUDE  /  12 OCTOBRE 2026</p><h1>Les petits gestes<br>font la différence.</h1><p>Un même langage pour suivre vos sessions.<br>Une façon de bouger propre à chaque compagnon.</p></div><div class="brief"><span class="pill">Proposition à valider</span><p>Anticiper. Réagir. Revenir au calme.</p><small>Une étude issue des <a href="../ideas/2026-10-11-next-steps.md#animations-de-claude-codex-et-cursor">pistes du 11 octobre</a>.<br>Les états et les silhouettes restent ceux de Ledge.</small></div></section>
+  <section class="lab" aria-label="Atelier interactif">
+    <div class="toolbar"><span class="eyebrow">01 / ESSAYER UN ÉTAT</span><div><button id="replay">↻ Rejouer le geste</button><button id="sequence" aria-pressed="false">▷ Lire le scénario</button></div></div>
+    <div class="states" aria-label="États simulés"></div>
+    <div class="cast" id="cast"></div>
+    <div class="explanation" aria-live="polite"><strong id="state-title"></strong><p id="state-note"></p></div>
+    <div class="controls"><label><input id="signature" type="checkbox" checked> Signature par outil</label><label><input id="reduced" type="checkbox"> Mouvements réduits</label><label><input id="paused" type="checkbox"> Pause</label><span>Survolez un bot, puis cliquez dessus.</span></div>
+  </section>
+  <section class="lower"><div class="context"><p class="eyebrow">02 / À TAILLE RÉELLE</p><h2>Discrets, même à plusieurs.</h2><div class="desktop"><div class="notch" id="notch" aria-label="Poignée à 12 pixels"></div><div class="session-list"><div class="list-head">Sessions <span>3 compagnons</span></div><div id="rows"></div><div class="list-foot">Maquette locale · données simulées</div></div></div><p class="caption">Poignée : 12 px · Liste : 32 px. À 20 px et moins, seul le saut de travail reste animé.</p></div><div class="intent"><p class="eyebrow">03 / LA CHORÉGRAPHIE</p><h2>Un geste, puis de l’espace.</h2><ol><li><span>01</span><div><strong>Une intention lisible</strong><p>Le corps prépare le mouvement. Le regard suit, légèrement décalé.</p></div></li><li><span>02</span><div><strong>Trois personnalités</strong><p>Claude incline la tête à l’arrivée. Codex roule légèrement. Cursor pointe au sommet.</p></div></li><li><span>03</span><div><strong>Un retour au calme</strong><p>Pas de tremblement en erreur. L’accord attendu reste posé. Une session terminée s’immobilise.</p></div></li></ol><p class="footnote">L’ombre au sol est visible ici pour juger le saut. Sa combinaison avec le halo actuel reste à valider.</p></div></section>
+  <footer><span>Ledge / Étude de mouvement des bots de session</span><span>Agrandissements d’inspection : 144 px · Aucun service connecté</span></footer>
+</main>
+<script src="prototype/mascot-svg.js"></script>
+<script src="prototype/session-bot-motion.js"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@ import { MOTION, ms } from '../motion';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { materialFor } from './material';
 import { seedHash, type BotState } from './poseFor';
-import { useBotMotion, useBotNod, BOT_MOTION } from './useBotMotion';
+import { useBotMotion, useBotNod, BOT_MOTION, useBotVisibility } from './useBotMotion';
 import { useI18n } from '../i18n/lang';
 
 export interface BotProps {
@@ -12,7 +12,7 @@ export interface BotProps {
   state: BotState;
   pose: 1 | 2 | 3;
   size: number;
-  /** The size the bot is drawn at on screen when a parent scales it; used only for the hop height. Defaults to `size`. */
+  /** The size the bot is drawn at on screen when a parent scales it; gates microgestures and sets hop height. Defaults to `size`. */
   shownSize?: number;
   theme: 'dark' | 'light';
   /** Stable session ID, or `parent.id + ':' + helper.id` for a helper; never the display name. */
@@ -90,8 +90,11 @@ export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly 
   const hopUnits = (hopPx / shown) * (simplified ? 72 : 96);
   const hopCycle = 3600 + (h % 9) * 100;
 
-  useBotMotion(ref, { seed, state, askKey, enabled: !reduced && !simplified && !readOnly && !frozen && !paused });
-  useBotNod(ref, nodKey, !reduced && !readOnly && !frozen && !paused);
+  const detailed = !simplified && shown > 20;
+  const motionEnabled = !reduced && !readOnly && state !== 'readonly' && !frozen && !paused;
+  useBotVisibility(ref);
+  useBotMotion(ref, { seed, state, askKey, nodKey, enabled: motionEnabled && detailed });
+  useBotNod(ref, nodKey, motionEnabled && detailed, state, askKey);
 
   const style = {
     '--bot-size': `${size}px`,
@@ -109,7 +112,12 @@ export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly 
     '--bot-gaze-ms': ms(450),
     '--bot-blink-ms': ms(BOT_MOTION.blinkMs),
     '--bot-ask-ms': ms(BOT_MOTION.askMs),
-    '--bot-nod-ms': ms(BOT_MOTION.nodMs)
+    '--bot-nod-ms': ms(BOT_MOTION.nodMs),
+    '--bot-question-ms': ms(650),
+    '--bot-arrival-ms': ms(BOT_MOTION.transitionMs),
+    '--bot-entry-hop-ms': ms(BOT_MOTION.hopMs),
+    '--bot-touch-ms': ms(BOT_MOTION.touchMs),
+    '--bot-idle-ms': ms(BOT_MOTION.idleMs)
   } as CSSProperties;
 
   const label = `${TOOL_NAMES[tool]} · ${t.botLabel[state]}${readOnly && state !== 'readonly' ? ` · ${t.botReadOnly}` : ''}${frozen ? ` · ${t.botNotLive}` : ''}`;
@@ -129,6 +137,7 @@ export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly 
       data-pose={pose}
       data-material={materialFor(theme)}
       data-simplified={String(simplified)}
+      data-detailed={String(detailed)}
       data-readonly={String(readOnly || state === 'readonly')}
       data-halo={String(halo)}
       data-frozen={String(frozen)}
@@ -145,34 +154,40 @@ export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly 
       </defs>
       <ellipse className="ground" cx="48" cy="88" rx="25" ry="3" />
       <g className="hop">
-      <g className="body">
-        <g className="pose">
-          <g className="antenna-group">
-            <path className="antenna" d="M49 22V14" />
-            <circle className="antenna-light" cx="49" cy="12" r="3" />
-          </g>
-          <g className="feet">
-            <rect x="29" y="75" width="13" height="8" rx="4" />
-            <rect x="54" y="75" width="13" height="8" rx="4" />
-          </g>
-          <Shell tool={tool} fill={`url(#${gradientId})`} />
-          <path className="shine" d={SHINE[tool]} />
-          <rect className="visor" x="25" y="35" width="47" height="29" rx="13" />
-          <path className="reflection" d="M39 37H60Q68 37 69 44H28Q29 37 39 37" />
-          <g className="gaze">
-            <g className="eye-blink">
-              <g className="eye-open">
-                <rect x="36" y="43" width="6" height="12" rx="3" />
-                <rect x="55" y="43" width="6" height="12" rx="3" />
+        <g className="body">
+          <g className="arrival">
+            <g className="signature">
+              <g className="touch">
+                <g className="pose">
+                  <g className="antenna-group">
+                    <path className="antenna" d="M49 22V14" />
+                    <circle className="antenna-light" cx="49" cy="12" r="3" />
+                  </g>
+                  <g className="feet">
+                    <rect x="29" y="75" width="13" height="8" rx="4" />
+                    <rect x="54" y="75" width="13" height="8" rx="4" />
+                  </g>
+                  <Shell tool={tool} fill={`url(#${gradientId})`} />
+                  <path className="shine" d={SHINE[tool]} />
+                  <rect className="visor" x="25" y="35" width="47" height="29" rx="13" />
+                  <path className="reflection" d="M39 37H60Q68 37 69 44H28Q29 37 39 37" />
+                  <g className="gaze">
+                    <g className="eye-blink">
+                      <g className="eye-open">
+                        <rect x="36" y="43" width="6" height="12" rx="3" />
+                        <rect x="55" y="43" width="6" height="12" rx="3" />
+                      </g>
+                      <path className="eye-happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51" />
+                      <path className="eye-error" d="m35 45 8 3m11 0 8-3M38 54h2m16 0h2" />
+                      <path className="eye-sleep" d="M35 50q4 3 8 0m11 0q4 3 8 0" />
+                    </g>
+                  </g>
+                  <ellipse className="arm" cx="79" cy="63" rx="5" ry="8" />
+                </g>
               </g>
-              <path className="eye-happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51" />
-              <path className="eye-error" d="m35 45 8 3m11 0 8-3M38 54h2m16 0h2" />
-              <path className="eye-sleep" d="M35 50q4 3 8 0m11 0q4 3 8 0" />
             </g>
           </g>
-          <ellipse className="arm" cx="79" cy="63" rx="5" ry="8" />
         </g>
-      </g>
       </g>
     </svg>
   );

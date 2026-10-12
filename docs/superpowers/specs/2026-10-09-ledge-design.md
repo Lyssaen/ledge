@@ -238,13 +238,27 @@ Chaque session vivante porte un halo lumineux dans la couleur de son état, la m
 
 Le halo d'un bot qui attend respire : 5 s, `ease-in-out`, intensité seule (de 100 % à 70 %), décalée par bot comme sa respiration. Ce n'est pas une pulsation de badge ; les badges restent immobiles. Les mouvements réduits, la couche inactive, la vue en pause et la connexion perdue figent ou suppriment cette respiration comme les autres boucles.
 
+### Transitions et réactions des bots de session (12 octobre 2026)
+
+L’évolution approuvée dans [la maquette de mouvement](../../mockups/session-bot-motion.html) est intégrée aux composants réels `Bot.tsx`, `useBotMotion.ts` et `bots.css`. Les silhouettes, matières, palettes, tailles et libellés restent ceux ci-dessus. Les groupes de transition, signature et clic restent montés dans le SVG ; un geste ne modifie jamais l’état métier.
+
+- À l’entrée en `working`, anticipation écrasée puis saut de 480 ms. En `question`, la tête réagit sur 500 ms puis le regard suit, avec 195 ms de décalage dans une séquence de 650 ms. En `idle`, petit rebond de 500 ms. En `done`, fermeture des paupières en deux temps et relâchement sur 500 ms, puis immobilité. En `error`, recul de 3 unités SVG sur 500 ms, puis expression préoccupée immobile.
+- En `approval`, la main intervient une fois, après 180 ms, sur 850 ms, puis conserve une posture calme. Une nouvelle identité de demande (`askKey`) autorise un nouveau geste ; ni thème ni renommage ne le rejouent. Un acquiescement de décision (`nodKey`) annule la main encore en attente, pour éviter deux gestes concurrents.
+- Chaque saut détaillé porte une signature discrète : Claude incline de 5° à l’atterrissage ; Codex roule de −4° à 5° ; Cursor pointe de 7° au sommet. L’antenne accompagne doucement le saut (±3°) et reçoit une lueur de 2 unités SVG. Saut, signature et antenne partagent période et phase.
+- Le survol du SVG déplace le regard de ±2 unités SVG au maximum dans chaque axe, puis le recentre à la sortie. Un clic joue un écrasement/étirement de 360 ms sur une couche indépendante ; il continue à sélectionner ou ouvrir la session. Les états `done`, `error` et `readonly` ne réagissent pas. Le geste `hello` reste réservé à Ledge, la mascotte résidente.
+- En `idle`, regard latéral occasionnel sur 1,7 s et étirement un geste sur quatre ; en `question`, inclinaison de −2° sur 1,7 s. Première échéance entre 3,5 et 7,5 s, puis intervalles de 5,5 à 9 s déterministes à partir de la graine. Aucun de ces gestes en `approval` ; le survol prend la priorité sur le regard ambiant.
+- À 20 px ou moins, seul le saut de travail reste animé : aucune signature, antenne animée, réaction au pointeur, respiration, clignement, inclinaison ou respiration du halo. La taille affichée `shownSize` compte aussi lorsque le parent réduit un SVG dessiné plus grand ; le recadrage et les détails visibles continuent de dépendre de la taille de dessin `size`.
+- Chaque changement d’état annule les gestes précédents et leurs timers. Mouvement réduit, lecture seule, pause, connexion perdue, document masqué et ancêtre `inert` suppriment ou suspendent les mouvements ; les gestes transitoires périmés sont annulés et ne se rejouent pas à la reprise. Les échéances ambiantes manquées sont sautées. Timers, listeners et observateurs sont libérés au démontage.
+
+Le halo conserve exactement son dessin et son masquage de l’ombre au sol. L’ombre ne reçoit une synchronisation avec le saut que si elle est effectivement visible (`data-halo="false"`, dessin détaillé) ; cela ne la rend pas visible sous le halo des sessions actives.
+
 ### Identité, échelle et rythme
 
 #### Le saut de travail (planche 20)
 
 Un bot en état `working` fait un petit saut toutes les 3,6 à 4,4 s (période `3600 + (hash % 9) × 100` ms, déphasée par bot comme sa respiration), pour montrer qu'un travail est en cours même quand le pane est silencieux. Décision du 2026-10-10 : le rythme est régulier, pas lié à la sortie du pane.
 
-- Le saut dure 480 ms, sur le groupe `.hop` qui enveloppe `.body` (origine 48 × 83) : anticipation écrasée à 14 % (`scale(1.06,.92)`), apogée à 44 % (`translateY(−H)` et `scale(.96,1.06)`), atterrissage à 70 % (`scale(1.05,.95)`), retour à 100 %. L'ombre au sol se contracte à l'apogée (`scale(.72)`, opacité 0,07). Les segments utilisent `ease-in`, `cubic-bezier(.2,.7,.3,1)`, `cubic-bezier(.6,0,.9,.4)` puis `ease-out`.
+- Le saut d’entrée dure 480 ms ; la boucle conserve sa fenêtre de mouvement de 13,3 % de la période (environ 480 à 585 ms), sur le groupe `.hop` qui enveloppe `.body` (origine 48 × 83) : anticipation écrasée à 14 % (`scale(1.06,.92)`), apogée à 44 % (`translateY(−H)` et `scale(.96,1.06)`), atterrissage à 70 % (`scale(1.05,.95)`), retour à 100 %. L'ombre au sol, lorsqu’elle est visible, se contracte à l'apogée (`scaleX(.72)`, opacité 0,07). Les segments utilisent `ease-in`, `cubic-bezier(.2,.7,.3,1)`, `cubic-bezier(.6,0,.9,.4)` puis `ease-out`.
 - Hauteur H en px écran : `clamp(2, taille × 0,12, 7)`, donc 2 px dans la poignée à 12 px, 3,8 px sur une ligne à 32 px, 5,8 px dans la bulle à 48 px ; convertie en unités SVG par `H / taille × 96`.
 - Le saut est le seul mouvement ambiant conservé à 20 px et moins : c'est le signal de la poignée. Clignement et regard restent coupés sous 20 px.
 - Il ne s'applique qu'à `working` ; `starting`, `approval`, `question`, `idle`, `error`, `done`, `readonly` ne sautent jamais. Lecture seule, connexion perdue, couche inerte, fenêtre masquée et vue en pause le gèlent comme les autres boucles.
@@ -253,10 +267,10 @@ Un bot en état `working` fait un petit saut toutes les 3,6 à 4,4 s (période `
 
 
 - Identité stable : clé React, graine de mouvement et décalage dérivent de `session.id` ; pour un helper, de `parent.id + ':' + helper.id`. Un renommage ou un changement de thème ne synchronise pas les bots.
-- Trois variantes sobres d’inclinaison et de phase par état ; pas trois animations d’accessoires complexes. Respiration entre 4,8 et 6,4 s, amplitude verticale maximale de 0,7 unité dans le repère SVG 96×96, rotation de ±0,3° et étirement vertical maximal de 1,4 %.
+- Trois variantes sobres d’inclinaison par état ; une phase stable par session et les signatures de saut ci-dessus. Respiration entre 4,8 et 6,4 s, amplitude verticale maximale de 0,7 unité dans le repère SVG 96×96, rotation de ±0,3° et étirement vertical maximal de 1,4 %.
 - Clignement de 180 ms, intervalle déterministe de 3,4 à 6,7 s propre à chaque bot. Le regard de travail change toutes les 2,4 à 4,5 s, avec une transition de 450 ms. La main intervient une seule fois lors d’une nouvelle demande, après le regard ; geste de 850 ms.
 - Tailles : 12/20 px dans la poignée (11/18 px au-delà de cinq sessions), 16 px dans les onglets, 20 px pour les helpers, 32 px dans les lignes et en-têtes, 48 px dans la bulle. À 20 px ou moins, recadrer le SVG sur la tête, supprimer main, pieds, ombre et antenne, et arrêter les mouvements ambiants. Les grandes tailles de l’atelier ne sont que des agrandissements d’inspection.
-- Un composant `Bot` reçoit `tool`, `state`, `pose`, `size`, `theme`, `seed`, `readOnly`, `frozen` et `reducedMotion`. Les groupes coque, posture, regard, yeux et accessoires restent montés pendant une transition d’état. Les identifiants des gradients sont uniques par instance.
+- Un composant `Bot` reçoit `tool`, `state`, `pose`, `size`, `theme`, `seed`, `readOnly`, `frozen`, `reducedMotion`, `paused`, `shownSize`, `askKey` et `nodKey`. Les groupes coque, posture, regard, yeux, accessoires, transition, signature et clic restent montés pendant une transition d’état. Les identifiants des gradients sont uniques par instance.
 
 ## 7. Vocabulaire de mouvement
 
@@ -269,7 +283,7 @@ Trois courbes pour les transitions de l’interface (section Motion du design sy
 
 Règles : survol et couleurs en 150 ms ; entrées en fondu de 180 ms après que la forme s'est presque posée (140 à 200 ms de retard), sorties en 100 ms avant que la forme bouge ; séquence plutôt que simultanéité ; toute apparition, disparition, redimension ou changement d'état est animé ; pas de rebond sur les surfaces, badges ou panneaux ; une variable d'environnement ramène toutes les durées à zéro pour les tests.
 
-Les microgestes organiques utilisent `ease-in-out` pour la respiration et le clignement ; la matière change en 240 ms. Les yeux se fondent en 260 ms et la posture revient en place en 300 ms avec `grow`. Un acquiescement dure 650 ms et confirme la réception d’une décision, jamais la réussite de la tâche. Le délai de 900 ms de la séquence de décision reste une durée de présentation, pas une source de vérité métier.
+Les microgestes organiques utilisent `ease-in-out` pour la respiration et le clignement ; la matière change en 240 ms. Les yeux se fondent en 260 ms et la posture revient en place en 300 ms avec `grow`. Les transitions des bots sont interruptibles (480–650 ms selon le geste), le clic dure 360 ms et les gestes rares de repos 1,7 s. Un acquiescement dure 650 ms et confirme la réception d’une décision, jamais la réussite de la tâche. Le délai de 900 ms de la séquence de décision reste une durée de présentation, pas une source de vérité métier.
 
 `prefers-reduced-motion: reduce`, le réglage « Mouvements réduits » ou `VITE_LEDGE_MOTION=0` suppriment mouvements ambiants, interpolations et gestes. Les demandes, leurs libellés et les règles de temporisation restent fonctionnels ; un réglage local ne force pas le mouvement contre la préférence du système. Suspendre les boucles quand la fenêtre est masquée, la couche inactive ou la connexion perdue ; libérer les timers et observateurs au démontage. Les décomptes fonctionnels (bulle, reconnexion, retraite) ne sont pas mis à zéro par la suppression des animations.
 
