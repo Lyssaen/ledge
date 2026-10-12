@@ -184,6 +184,29 @@ const fr = {
     upDown: 'monter et descendre', prevNext: 'session précédente / suivante', decide: 'décider', close: 'fermer', esc: 'Échap',
     note: 'Affiché aux trois premières ouvertures au clavier'
   },
+  update: {
+    available: (v: string) => `Ledge ${v} est disponible`, current: (v: string) => `Vous avez la ${v}`, badgeNew: 'Nouveau',
+    update: 'Mettre à jour', later: 'Plus tard', notes: 'Notes complètes', retry: 'Réessayer', ok: 'OK', copy: 'Copier', copied: 'Copié', log: 'Journal du daemon',
+    keepRunning: (n: number) => n === 0 ? 'Ledge se ferme environ 20 s pour se mettre à jour.' : `Vos ${n} session${n > 1 ? 's' : ''} continue${n > 1 ? 'nt' : ''}. Ledge se ferme environ 20 s pour se mettre à jour.`,
+    running: (v: string) => `Mise à jour vers ${v}`, dontClose: 'Ne fermez pas Ledge', badgeRunning: 'En cours',
+    steps: { daemon: 'Daemon WSL mis à jour', restart: 'Daemon redémarré, sessions retrouvées', download: 'Téléchargement de l’application', install: 'Installation et redémarrage' },
+    updated: (v: string) => `Ledge ${v} est installé`, badgeUpdated: 'À jour',
+    manualTitle: 'Votre daemon tourne depuis un clone git', manualHint: 'Ledge ne touche pas à un clone. Mettez le daemon à jour dans WSL :', manualApp: 'Mettre à jour l’application', manualWait: (v: string) => `Le bouton s’active dès que le daemon annonce ${v}.`, badgeManual: 'Manuel',
+    failedBadge: 'Échec',
+    failed: {
+      'git-install': 'Votre daemon tourne depuis un clone git : mettez-le à jour vous-même.',
+      'no-systemd': 'Le daemon ne tourne pas comme service : il ne peut pas se relancer seul.',
+      'sessions-at-risk': 'Vos sessions tournent dans le service du daemon : un redémarrage les fermerait. Fermez-les, ou redémarrez WSL, puis réessayez.',
+      'npm-failed': 'Le daemon n’a pas pu se mettre à jour. Rien n’a changé.',
+      'busy': 'Une mise à jour est déjà en cours.',
+      'daemon-timeout': 'Le daemon ne répond plus.',
+      'sessions-lost': 'Toutes vos sessions ne sont pas revenues. L’application n’a pas été mise à jour.',
+      'download': 'L’application n’a pas pu être téléchargée. Elle n’a pas changé.'
+    },
+    timeoutCommand: 'systemctl --user status ledge-daemon',
+    missing: (names: string[]) => `Manquantes : ${names.join(', ')}`,
+    pip: { new: (v: string) => `Ledge ${v} est prêt`, busy: 'Mise à jour en cours…', bad: 'La mise à jour a échoué', ok: 'Ledge est à jour' }
+  },
   shortcut: 'Ctrl Alt L'
 };
 
@@ -360,6 +383,29 @@ const en: Messages = {
     label: 'Keyboard', title: 'Move with the keyboard', ok: 'Got it',
     upDown: 'up and down', prevNext: 'previous / next session', decide: 'decide', close: 'close', esc: 'Esc',
     note: 'Shown on the first three keyboard opens'
+  },
+  update: {
+    available: (v: string) => `Ledge ${v} is available`, current: (v: string) => `You have ${v}`, badgeNew: 'New',
+    update: 'Update', later: 'Later', notes: 'Full notes', retry: 'Retry', ok: 'OK', copy: 'Copy', copied: 'Copied', log: 'Daemon log',
+    keepRunning: (n: number) => n === 0 ? 'Ledge closes for about 20 s to update.' : `Your ${n} session${n > 1 ? 's' : ''} keep${n > 1 ? '' : 's'} running. Ledge closes for about 20 s to update.`,
+    running: (v: string) => `Updating to ${v}`, dontClose: 'Do not close Ledge', badgeRunning: 'Running',
+    steps: { daemon: 'WSL daemon updated', restart: 'Daemon restarted, sessions found again', download: 'Downloading the app', install: 'Installing and restarting' },
+    updated: (v: string) => `Ledge ${v} is installed`, badgeUpdated: 'Up to date',
+    manualTitle: 'Your daemon runs from a git clone', manualHint: 'Ledge does not touch a clone. Update the daemon in WSL:', manualApp: 'Update the app', manualWait: (v: string) => `The button turns on once the daemon reports ${v}.`, badgeManual: 'Manual',
+    failedBadge: 'Failed',
+    failed: {
+      'git-install': 'Your daemon runs from a git clone: update it yourself.',
+      'no-systemd': 'The daemon does not run as a service: it cannot restart itself.',
+      'sessions-at-risk': 'Your sessions run inside the daemon service: a restart would close them. Close them, or restart WSL, then retry.',
+      'npm-failed': 'The daemon could not update. Nothing changed.',
+      'busy': 'An update is already running.',
+      'daemon-timeout': 'The daemon is not answering.',
+      'sessions-lost': 'Not all your sessions came back. The app was not updated.',
+      'download': 'The app could not be downloaded. It did not change.'
+    },
+    timeoutCommand: 'systemctl --user status ledge-daemon',
+    missing: (names: string[]) => `Missing: ${names.join(', ')}`,
+    pip: { new: (v: string) => `Ledge ${v} is ready`, busy: 'Update in progress…', bad: 'The update failed', ok: 'Ledge is up to date' }
   },
   shortcut: 'Ctrl Alt L'
 };

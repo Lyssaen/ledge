@@ -97,6 +97,19 @@ describe('<SessionList> launching', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Juno is starting in api-gateway.');
     fireEvent.click(screen.getByRole('button', { name: /Open the terminal/ })); expect(onClick).toHaveBeenCalled();
   });
+  it('the update card sits between the header and the ask field, and the gear carries a pip and its label', () => {
+    render(<SessionList sessions={sessions} visible selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} onAsk={() => {}} update={<div>card</div>} gearPip gearLabel="Settings, Ledge 0.3.0 is ready" />);
+    const layer = document.querySelector('[data-layer="list"]')!;
+    expect(layer.querySelector('[data-update]')).toHaveTextContent('card');
+    expect(layer.querySelector('[data-brand]')!.compareDocumentPosition(layer.querySelector('[data-update]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(layer.querySelector('[data-update]')!.compareDocumentPosition(layer.querySelector('[data-ask-field]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const gear = screen.getByRole('button', { name: 'Settings, Ledge 0.3.0 is ready' });
+    expect(gear.querySelector('[data-gear-pip]')).not.toBeNull();
+  });
+  it('no gear pip without an update', () => {
+    render(<SessionList sessions={sessions} visible selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
+    expect(document.querySelector('[data-gear-pip]')).toBeNull();
+  });
 });
 
 describe('rowHint', () => {

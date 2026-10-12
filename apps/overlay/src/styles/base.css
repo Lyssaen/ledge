@@ -15,6 +15,11 @@ body { font-family: 'Geist', system-ui, sans-serif; color: var(--sidebar-foregro
 .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
 button, input { font-family: inherit; }
 /* The bubble countdown drains from the controller's remainder (--ledge-from) to empty. */
+/* The update card's running step, and the island's busy pip. */
+@keyframes ledge-spin { to { transform: rotate(360deg) } }
+@keyframes ledge-pulse { 50% { opacity: .35 } }
+.ledge-spin { animation: ledge-spin .9s linear infinite }
+@media (prefers-reduced-motion: reduce) { .ledge-spin { animation: none } }
 @keyframes ledge-drain { from { width: var(--ledge-from, 100%) } to { width: 0% } }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .dnd-switch:has(input:focus-visible) .dnd-track, .ledge-seg:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }

@@ -30,9 +30,12 @@ import { SessionList, EXPANDED_ROW_H, ASK_H, NOTICE_GAP, type ListNotice } from 
 import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
 import { useI18n, type Lang } from '../i18n/lang';
 import { transition, MOTION, ms, enterDelay } from '../motion';
-import { focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, onTrayAction, focusOverlay, releaseFocus, isTauri, onForegroundCovered, setHotZone } from '../tauri/bridge';
+import { focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, onTrayAction, focusOverlay, releaseFocus, isTauri, onForegroundCovered, setHotZone, openUrl } from '../tauri/bridge';
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { useDelayed } from './useDelayed';
+import { UpdateCard } from '../update/UpdateCard';
+import { targetOf } from '../update/machine';
+import type { UpdateController } from '../update/useUpdate';
 import { frameOf, type Box } from './frame';
 import { Shoulders, shoulderR } from './Shoulders';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
@@ -85,12 +88,14 @@ export interface SurfaceProps {
   accent?: string | null; onAccent?: (hex: string | null) => void;
   /** Plays the sound cues (one Web Audio player per app); a silent player when absent. */
   soundPlayer?: SoundPlayer;
+  /** The auto-update (App owns it): the card in the list, the pip on the island and on the gear. */
+  update?: UpdateController;
 }
 
 /** A text field or editable content: focus there means someone is filling it in. Radios, buttons and rows are not. */
 const isEditable = (el: Element | null) => !!el && ((el.tagName === 'INPUT' && !['radio', 'checkbox', 'button', 'submit'].includes((el as HTMLInputElement).type)) || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable);
 
-export function Surface({ screenH, screenW = window.innerWidth, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, accent = null, onAccent, soundPlayer, islandPosition = 'center', onIslandPosition, discreet = true, onDiscreet }: SurfaceProps) {
+export function Surface({ screenH, screenW = window.innerWidth, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, accent = null, onAccent, soundPlayer, islandPosition = 'center', onIslandPosition, discreet = true, onDiscreet, update }: SurfaceProps) {
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
@@ -370,6 +375,22 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const noticeRef = useRef<HTMLDivElement>(null);
   const noticeH = useMeasuredHeight(noticeRef, st.mode === 'list' && !!notice, ps);
   const noticeExtraH = notice ? NOTICE_GAP + (noticeH || 36) : 0;
+  // The update card sits under the notice and is measured the same way.
+  const updateCard = update && update.card.kind !== 'hidden' ? update.card : null;
+  const updateRef = useRef<HTMLDivElement>(null);
+  const updateH = useMeasuredHeight(updateRef, st.mode === 'list' && !!updateCard, ps);
+  const updateExtraH = updateCard ? NOTICE_GAP + (updateH || 120) : 0;
+  // The « up to date » pip only stays six seconds.
+  const [okGone, setOkGone] = useState(false);
+  const okPip = update?.pip === 'ok';
+  useEffect(() => {
+    if (!okPip) { setOkGone(false); return; }
+    const timer = setTimeout(() => setOkGone(true), 6000);
+    return () => clearTimeout(timer);
+  }, [okPip]);
+  const updatePip = okPip && okGone ? null : update?.pip ?? null;
+  const updateVersion = update ? targetOf(update.state) ?? '' : '';
+  const gearLabel = update?.gear ? `${t.list.settings}, ${t.update.pip.new(updateVersion)}` : undefined;
   /** The session's terminal tab: brought forward when it exists, else opened on the session (a daemon-launched one has none yet). */
   const openTab = (id: string) => {
     const s = byId.get(id); if (!s) return;
@@ -408,7 +429,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // The strip shows under a covering window once the island has been folded and left alone for 500 ms; an unread say
   // hanging under its speaker keeps the island compact, the strip has no companion to hang it from.
   const strip = useDelayed(discreet && covered && st.mode === 'handle' && !st.hot && !st.hovering && bandPointer === null && speaker === null, STRIP_BACK_MS);
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held })), mode: st.mode, screenH, screenW, position: islandPosition, strip, dnd, readerExpanded: st.documentExpanded, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held })), mode: st.mode, screenH, screenW, position: islandPosition, strip, dnd, readerExpanded: st.documentExpanded, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH }, { handle: hs, panel: ps });
   geoRef.current = geo;
   // The shell watches the top band over the island's span (its depth and overhang are the shell's own constants).
   useEffect(() => { setHotZone(Math.round(geo.handle.left), Math.round(geo.handle.w)); }, [geo.handle.left, geo.handle.w]);
@@ -568,7 +589,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
         style={{ position: 'absolute', left: geo.left, top: 0, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--notch)', color: 'var(--sidebar-foreground)', borderRadius: `0px 0px ${radius}px ${radius}px`, opacity: unreachable ? 0.6 : 1, willChange: 'left, width, height',
           transition: surfaceTransition }}>
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-          <Handle bots={bots} slots={geo.slots} visible={st.mode === 'handle'} strip={strip} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} sayId={speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+          <Handle updatePip={updatePip} updateVersion={updateVersion} bots={bots} slots={geo.slots} visible={st.mode === 'handle'} strip={strip} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} sayId={speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
@@ -584,7 +605,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               onDismiss={id => { if (!unreachable) send({ type: 'session.dismiss', id }); }} offline={unreachable}
-              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} noticeRef={noticeRef} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
+              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} noticeRef={noticeRef} gearPip={!!update?.gear} gearLabel={gearLabel} updateRef={updateRef}
+              update={updateCard ? <UpdateCard view={updateCard} sessions={sessions.length} onUpdate={update!.start} onLater={update!.later} onRetry={update!.retry} onAck={update!.ackUpdated} onNotes={() => openUrl('https://github.com/Paradow-dev/ledge/releases/latest')} /> : null} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
               onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
