@@ -1,6 +1,8 @@
 /** The comic balloon's situation. Urgency is the array order: an approval outranks a finished notice. */
 export type SayKind = 'approval' | 'question' | 'diff' | 'plan' | 'error' | 'ledge' | 'finished';
 export const SAY_PRIORITY: readonly SayKind[] = ['approval', 'question', 'diff', 'plan', 'error', 'ledge', 'finished'];
+/** How long a balloon stays on the handle once seen; the situation itself (unread, pending) outlives it. */
+export const SAY_LINGER_MS = 5000;
 
 export interface SayCandidate { id: string; kind: SayKind; seed: string }
 
