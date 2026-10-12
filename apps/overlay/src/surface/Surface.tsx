@@ -136,7 +136,6 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const [bandPointer, setBandPointer] = useState<{ x: number; y: number } | null>(null);
   /** A maximised window in the foreground covers the island's spot (the shell says so). */
   const [covered, setCovered] = useState(false);
-  const offsetRef = useRef({ left: 0, top: 0 });
   const geoRef = useRef<Layout>(null!);
   useEffect(() => () => ctl.dispose(), [ctl]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -221,9 +220,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
 
   // The last known pointer position, to tell whether the surface shrank out from under it.
   useEffect(() => {
-    // In page coordinates: under Tauri the window (and so the viewport) starts at the frame's top.
+    // Page coordinates are work-area coordinates in both worlds: the native window covers the work area.
     const track = (e: PointerEvent | MouseEvent) => {
-      pointer.current = { x: e.clientX + offsetRef.current.left, y: e.clientY + offsetRef.current.top };
+      pointer.current = { x: e.clientX, y: e.clientY };
       setBandPointer(inBand(pointer.current, geoRef.current) ? pointer.current : null);
       // The native poller covers the screen beyond the webview; browser previews use document events for the gaze too.
       if (!isTauri()) setResidentPointer(pointer.current);
@@ -544,8 +543,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const sr = shoulderR(geo.w, strip);
   if (sr > 0) extras.push({ left: geo.left - sr, top: 0, w: geo.w + 2 * sr, h: sr });
   const frame = frameOf(geo, extras, { w: screenW, h: screenH });
-  const offset = useNativeFrame(frame, parseFloat(ms(SETTLE_MS)));
-  offsetRef.current = offset;
+  useNativeFrame(frame, parseFloat(ms(SETTLE_MS)));
   useEffect(() => { setOutsideWatch(panel); }, [panel]);
   // The terminal tab is the fallback for read-only and offline sessions too: only the daemon message needs the daemon.
   const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); openTab(id); };
@@ -581,7 +579,6 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // The entering view follows the shape once it has nearly settled: later on a shrink (back from a session) than on a grow.
   const enter = enterDelay(growing);
 
-  const tauri = isTauri();
   const radius = strip ? 6 : st.mode === 'handle' ? 19 : 22;
   const surfaceTransition = ['left', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out`;
   const content = (
@@ -673,6 +670,6 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       </div>
     </>
   );
-  // Under Tauri the page is shifted so page y = screen y - frame top; the browser renders at page coordinates as is.
-  return tauri ? <div data-frame-content style={{ position: 'absolute', left: -offset.left, top: -offset.top, width: '100%' }}>{content}</div> : content;
+  // Under Tauri the window covers the work area, so the page draws in work-area coordinates, like the browser preview.
+  return content;
 }

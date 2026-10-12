@@ -105,6 +105,12 @@ An installed Ledge starts with Windows: `tauri-plugin-autostart` writes a `Ledge
 
 The handle sits on the left edge of one screen: the primary by default, or the one chosen in Settings > Screen. The shell lists the monitors (`list_monitors`) and moves the window to the chosen one (`set_monitor`); frames are then in that screen's work-area coordinates. The choice is a monitor name (`\\.\DISPLAY2` on Windows); a chosen screen that is unplugged falls back to the primary until it comes back, without losing the setting.
 
+### The native window never moves
+
+The native window covers the whole work area of that screen and is placed once (`set_frame` places it again only when the work area changes, for instance after a Screen change). What follows the island is the window's *region* (`SetWindowRgn`): the bounding rectangle of everything the page draws, reported by `set_frame` on every change of shape, grown at once and shrunk only after the size transition has settled (`useNativeFrame`). Outside the region the window does not exist for hit-testing, so clicks reach the windows beneath; inside, the page handles them. The page draws in work-area coordinates and needs no offset. A press "outside" (`press_outside`) is one that misses that rectangle, not the window.
+
+Why: moving or resizing the window while the surface animates was the blink between two shapes. `SetWindowPos` moved the window, wry resized the WebView2 controller on `WM_SIZE` (asynchronously for its child HWND), and the page was presented at its new offset: nothing ties those to the same compositor frame, so any frame where one had happened without the other showed the content displaced or clipped. Changing a region displaces nothing, so the race cannot occur.
+
 ## Language
 
 The overlay speaks French (the default) and English. Settings > Langue / Language switches it live and remembers it (`ledge.lang`). Every visible string, aria-labels and tooltips included, comes from one typed catalogue, `src/i18n/messages.ts`: `fr` and `en` have the same keys (the build fails otherwise), plurals are explicit, and relative times read "2 min" in French and "2m" in English. The French copy follows the approved mockup. Messages relayed from the daemon or the terminal are shown as they come. The unit tests and most e2e specs run in English (`setFallbackLang('en')` in `test/setup.ts`, the `lang` fixture option in `e2e/fixtures.ts`); the French ones opt in.
