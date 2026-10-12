@@ -39,7 +39,7 @@ beforeEach(async () => {
   process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
   store = new Store();
   tmux = fakeTmux({ 'ledge-a': [PROMPT, PROMPT, 'Running…'] });
-  srv = await startServer({ store, tmux, port: 0, agentPath: async () => '/login/bin:/usr/bin', claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
+  srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env, PATH: '/login/bin:/usr/bin', HTTPS_PROXY: 'http://proxy:8080' }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
 });
 afterEach(async () => { await srv.close(); });
 
@@ -546,7 +546,7 @@ describe('server', () => {
       expect(tmux.created).toHaveLength(1);
       expect(tmux.created[0]).toMatchObject({ name: `ledge-${launched.id}`, cwd: join(home(), 'api-gateway'), command: ['claude', '--continue', 'run the tests'] });
       // The daemon runs with systemd's bare PATH: the agent gets the login shell's instead, so `claude` resolves as in a terminal.
-      expect(tmux.created[0]!.env).toMatchObject({ LEDGE_SESSION: launched.id, LEDGE_NAME: 'Juno', PATH: '/login/bin:/usr/bin' });
+      expect(tmux.created[0]!.env).toMatchObject({ LEDGE_SESSION: launched.id, LEDGE_NAME: 'Juno', PATH: '/login/bin:/usr/bin', HTTPS_PROXY: 'http://proxy:8080' });
       expect((await other.next('session.updated')).session.id).toBe(launched.id);
       // The other client never gets the launched reply; both learn the new recent folder.
       await expect(other.next('session.launched', 100)).rejects.toThrow(/timeout/);
