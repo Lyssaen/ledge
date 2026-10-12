@@ -139,3 +139,31 @@ describe('<SettingsView> notifications and sounds', () => {
     expect(screen.getByRole('radio', { name: 'Loud' })).not.toBeDisabled();
   });
 });
+
+describe('<SettingsView> About tab', () => {
+  beforeEach(() => localStorage.clear());
+  const about = (extra = {}) => ({ app: '0.2.2', daemon: { version: '0.3.0', install: 'npm' as const, systemd: true }, latest: '0.3.0', auto: true, checkedAt: Date.now() - 12 * 60_000, onAuto: () => {}, onCheck: () => {}, ...extra });
+  it('has no About tab without about props', () => {
+    view();
+    expect(screen.queryByRole('tab', { name: 'About' })).toBeNull();
+  });
+  it('shows both versions, flags a mismatch and checks on demand', () => {
+    localStorage.setItem('ledge.settings.tab', 'about');
+    const onCheck = vi.fn(), onAuto = vi.fn();
+    view({ about: about({ onCheck, onAuto }) });
+    expect(screen.getByText('0.2.2')).toBeTruthy();
+    expect(screen.getByText('0.3.0 · npm')).toBeTruthy();
+    expect(screen.getByText('The two halves are not on the same version.')).toBeTruthy();
+    expect(screen.getByText('Checked 12m ago')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    expect(onCheck).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('switch', { name: 'Check for updates' }));
+    expect(onAuto).toHaveBeenCalledWith(false);
+  });
+  it('shows the calm hint when both halves match, and a never-checked state', () => {
+    localStorage.setItem('ledge.settings.tab', 'about');
+    view({ about: about({ app: '0.3.0', checkedAt: null }) });
+    expect(screen.getByText('Both halves of Ledge must run the same version.')).toBeTruthy();
+    expect(screen.getByText('Never checked')).toBeTruthy();
+  });
+});

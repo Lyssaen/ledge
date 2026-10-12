@@ -624,6 +624,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               monitors={monitors} monitor={monitor} onMonitor={onMonitor} autostart={autostart} onAutostart={onAutostart}
               defaultTool={defaultTool} onDefaultTool={chooseDefaultTool} accent={accent} onAccent={onAccent}
               islandPosition={islandPosition} onIslandPosition={onIslandPosition} discreet={discreet} onDiscreet={onDiscreet}
+              about={update ? { app: update.state.app, daemon: update.state.daemon, latest: update.state.latest?.version ?? null, auto: update.auto, checkedAt: update.state.checkedAt, onAuto: update.setAuto, onCheck: update.checkNow } : undefined}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'help' ? 'auto' : 'none', transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
