@@ -12,11 +12,6 @@ test('tool signatures share the hop phase, entry signatures follow anticipation,
   const bots = [session('a', { tool: 'claude' }), session('b', { tool: 'codex', name: 'Nova' }), session('c', { tool: 'cursor', name: 'Pim' })];
   const daemon = await fakeDaemon(page, bots);
   await ready(page, 3);
-  const small = layer(page, 'handle').locator('.bot').first();
-  await expect(small).toHaveAttribute('data-detailed', 'false');
-  await expect(small.locator('.body')).toHaveCSS('animation-name', 'none');
-  await expect(small.locator('.signature')).toHaveCSS('animation-name', 'none');
-  await expect(small.locator('.hop')).toHaveCSS('animation-name', 'bot-hop');
   await openList(page);
   await restInside(page);
   const list = layer(page, 'list');
@@ -62,13 +57,19 @@ test('tool signatures share the hop phase, entry signatures follow anticipation,
 });
 
 test('small waiting bots are still; OS reduced motion stops full bots and selection still works', async ({ page }) => {
-  await fakeDaemon(page, [session('a', perm)]);
+  await fakeDaemon(page, [session('a', { ...perm, helpers: [{ id: 'h1', kind: 'review', task: 'Review changes', state: 'waiting_permission' }] })]);
   await ready(page, 1);
-  const small = layer(page, 'handle').locator('.bot');
-  await expect(small).toHaveAttribute('data-detailed', 'false');
-  await expect(small).toHaveCSS('animation-name', 'none');
   await openList(page);
   await restInside(page);
+  await layer(page, 'list').locator('.bot').click();
+  await expectMode(page, 'session');
+  const small = layer(page, 'session').locator('.bot[data-simplified="true"]');
+  await expect(small).toHaveAttribute('width', '20');
+  await expect(small).toHaveAttribute('data-detailed', 'false');
+  await expect(small).toHaveCSS('animation-name', 'none');
+  await expect(small.locator('.signature')).toHaveCSS('animation-name', 'none');
+  await page.keyboard.press('Escape');
+  await expectMode(page, 'list');
   const bot = layer(page, 'list').locator('.bot');
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(bot).toHaveAttribute('data-reduced', 'true');
