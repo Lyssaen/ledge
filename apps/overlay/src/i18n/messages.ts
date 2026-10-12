@@ -182,7 +182,8 @@ const fr = {
     title: 'Au bout des doigts.',
     keys: [['Ouvrir la liste', ['Ctrl Alt L']], ['Choisir une session', ['J', 'K']], ['Ouvrir la sélection', ['Entrée']], ['Autoriser / refuser', ['Y', 'N']],
       ['Session précédente / suivante', ['Alt ←', 'Alt →']], ['Nouvelle session', ['Ctrl Alt N']], ['Aller à la première instruction', ['I']], ['Répondre', ['R']], ['Ouvrir l’onglet du terminal', ['O']], ['Ne pas déranger', ['D']], ['Retour, puis replier', ['Échap']]] as Array<[string, string[]]>,
-    tab: 'Tab conserve la navigation entre les contrôles.'
+    tab: 'Tab conserve la navigation entre les contrôles.',
+    chat: 'Au chat, « ouvre une session dans ledge pour corriger le build » propose une carte : le clic sur Lancer démarre la session.'
   },
   coach: {
     label: 'Clavier', title: 'Naviguer au clavier', ok: 'Compris',
@@ -364,7 +365,8 @@ const en: Messages = {
     title: 'Keyboard',
     keys: [['Open the list', ['Ctrl Alt L']], ['Choose a session', ['J', 'K']], ['Open the selection', ['Enter']], ['Approve or deny', ['Y', 'N']],
       ['Previous or next session', ['Alt ←', 'Alt →']], ['New session', ['Ctrl Alt N']], ['Go to the first instruction', ['I']], ['Reply', ['R']], ['Open the terminal tab', ['O']], ['Do not disturb', ['D']], ['Back, then collapse', ['Esc']]],
-    tab: 'Tab keeps moving between the controls.'
+    tab: 'Tab keeps moving between the controls.',
+    chat: 'Ask the chat "open a session in ledge to fix the build": it proposes a card, and Start the session starts it.'
   },
   coach: {
     label: 'Keyboard', title: 'Move with the keyboard', ok: 'Got it',

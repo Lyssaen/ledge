@@ -18,6 +18,7 @@ import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
 import { LaunchView, LAUNCH_FOOTER_H, type LaunchRequest } from './LaunchView';
 import { ChatView, CHAT_HEADER_H } from './ChatView';
+import { loadOpenTab } from './openTabPreference';
 import { DETAIL_HEADER_H } from './DetailHeader';
 import { useMeasuredHeight } from './useMeasuredHeight';
 import { useDaemonAsks, isPending } from './useDaemonAsks';
@@ -363,6 +364,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const chatBody = st.mode === 'chat' && chatH ? CHAT_HEADER_H + chatH + 60 + (chat.length === 0 ? 44 : 0) + SURFACE_CHROME_Y : undefined;
   const [launching, setLaunching] = useState<{ openTab: boolean } | null>(null);
   const [launchFailure, setLaunchFailure] = useState<string | null>(null);
+  // A chat card's launch (spec 2026-10-12 §6): the turn's qid while the daemon answers. The card's own state
+  // (launched, failed) comes back with chat.history; the chat stays open.
+  const [chatLaunching, setChatLaunching] = useState<string | null>(null);
   const [notice, setNotice] = useState<ListNotice | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(noticeTimer.current), []);
@@ -376,7 +380,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     void focusTerminal(s.title).then(found => { if (!found && launcher && s.tmuxSession) return openTerminal(s.title, [...launcher, 'attach', id]); return found; });
   };
   const launch = (req: LaunchRequest) => {
-    if (launching || status === 'unreachable') return;
+    if (launching || chatLaunching || status === 'unreachable') return;
     setLaunchFailure(null); setLaunching({ openTab: req.openTab });
     send({ type: 'session.launch', tool: req.tool, cwd: req.cwd, name: req.name, prompt: req.prompt, continue: req.continue });
   };
@@ -396,6 +400,19 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     setLaunching(null); setLaunchFailure(lastError.message);
   }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+  const launchProposal = (qid: string) => {
+    const p = chat.find(x => x.qid === qid)?.proposal;
+    if (!p || p.launchedId || launching || chatLaunching || status === 'unreachable') return;
+    setChatLaunching(qid);
+    send({ type: 'session.launch', tool: p.tool, cwd: p.cwd, ...(p.prompt ? { prompt: p.prompt } : {}), qid });
+  };
+  useEffect(() => {
+    if (!lastLaunched || !chatLaunching) return;
+    setChatLaunching(null);
+    if (loadOpenTab()) openTab(lastLaunched.id);
+  }, [lastLaunched?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (chatLaunching && lastError && !lastError.id) setChatLaunching(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (status === 'unreachable' && chatLaunching) setChatLaunching(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   const sayCandidates: SayCandidate[] = [];
   if (ledgeUnread) sayCandidates.push({ id: LEDGE_ID, kind: 'ledge', seed: ledgeSaySeed });
   for (const s of sessions) {
@@ -590,6 +607,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <ChatView contentRef={chatRef} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
               onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onOpenSession={openRow}
+              launchingQid={chatLaunching} onLaunchProposal={launchProposal} onTerminal={focusTab}
               theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openDocument(ref, { kind: 'chat' })} />
           </div>
           <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
