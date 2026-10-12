@@ -8,13 +8,13 @@ const sessions = () => [
 ];
 const row = (page: import('@playwright/test').Page, id: string) => page.locator(`[data-row-id="${id}"] [data-row]`);
 
-test('Ctrl+Alt+L opens a numbered list on the oldest ask; J/K move, Y approves, Enter opens', async ({ page }) => {
+test('Ctrl+Alt+L opens the list on the oldest ask; J/K move, Y approves, Enter opens', async ({ page }) => {
   const d = await fakeDaemon(page, sessions());
   await ready(page, 3);
   await page.keyboard.press('Control+Alt+L');
   await expectMode(page, 'list');
-  // Numbered rows: each row starts with its digit.
-  for (const [i, id] of ['a', 'b', 'c'].entries()) await expect(row(page, id).locator('.mono').first()).toHaveText(String(i + 1));
+  // No row numbers any more: digits are kept for a question's options.
+  for (const id of ['a', 'b', 'c']) await expect(row(page, id).locator('kbd')).toHaveCount(0);
   await expect(row(page, 'b')).toBeFocused(); // the oldest ask
   await expect(page.locator('[data-coachmark]')).toBeVisible();
   await page.keyboard.press('j');
@@ -33,6 +33,31 @@ test('Ctrl+Alt+L opens a numbered list on the oldest ask; J/K move, Y approves, 
   await expectMode(page, 'list');
   await expect(row(page, 'c')).toBeFocused();
   await page.keyboard.press('Control+Alt+L');
+  await expectMode(page, 'handle');
+});
+
+test('Alt+Arrow moves to the previous or next session, an ask or not; Ctrl+Alt+N opens the launch form', async ({ page }) => {
+  await fakeDaemon(page, sessions());
+  await ready(page, 3);
+  await page.keyboard.press('Control+Alt+L');
+  await expect(row(page, 'b')).toBeFocused();
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect(row(page, 'c')).toBeFocused();
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect(row(page, 'a')).toBeFocused();
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(row(page, 'c')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expectMode(page, 'session');
+  await expect(layer(page, 'session')).toContainText('Ada');
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expectMode(page, 'session');
+  await expect(layer(page, 'session')).toContainText('Pim');
+  await page.keyboard.press('Control+Alt+L');
+  await expectMode(page, 'handle');
+  await page.keyboard.press('Control+Alt+N');
+  await expectMode(page, 'launch');
+  await page.keyboard.press('Control+Alt+N');
   await expectMode(page, 'handle');
 });
 

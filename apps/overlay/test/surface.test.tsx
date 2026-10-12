@@ -96,9 +96,9 @@ describe('<Surface>', () => {
     expect(surface()).toHaveStyle({ width: '28px' });
   });
 
-  it('edge hover opens the list, clicking a row opens the session, back and close shrink', async () => {
+  it('hovering the handle opens the list, clicking a row opens the session, back and close shrink', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     await act(async () => { vi.advanceTimersByTime(180); });
     expect(surface()).toHaveStyle({ width: '380px' });
     fireEvent.click(screen.getByRole('button', { name: /speos-api/ }));
@@ -112,7 +112,7 @@ describe('<Surface>', () => {
 
   it('back from a session: the list waits for the shrink to nearly settle before it fades in', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     await act(async () => { vi.advanceTimersByTime(180); });
     const list = () => document.querySelector('[data-layer="list"]') as HTMLElement;
     const row = () => document.querySelector('[data-layer="list"] [data-row]') as HTMLElement;
@@ -133,7 +133,7 @@ describe('<Surface>', () => {
     mock.extras.recents = [{ cwd: '/w/api-gateway', project: 'api-gateway', lastAt: '2026-10-10T09:00:00.000Z' }];
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { client.connect(); await sleep(100); }); // a fresh snapshot carries the recents
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     await act(async () => { vi.advanceTimersByTime(180); });
     fireEvent.click(screen.getByRole('button', { name: 'New session' }));
     expect(surface()).toHaveAttribute('data-mode', 'launch');
@@ -156,7 +156,7 @@ describe('<Surface>', () => {
   it('an ask to Ledge names the stored default harness', async () => {
     localStorage.setItem('ledge.defaultTool', 'codex');
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     await act(async () => { vi.advanceTimersByTime(180); });
     const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
     fireEvent.change(input, { target: { value: 'How are the others doing?' } });
@@ -166,7 +166,7 @@ describe('<Surface>', () => {
 
   it('a refused launch stays on the form with the reason; the next attempt clears it', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     await act(async () => { vi.advanceTimersByTime(180); });
     fireEvent.click(screen.getByRole('button', { name: 'New session' }));
     fireEvent.change(screen.getByLabelText('Folder'), { target: { value: '/w/nope' } });
@@ -232,17 +232,55 @@ describe('<Surface>', () => {
     expect(screen.getByRole('button', { name: /Otto has a question, open/ })).toHaveStyle({ width: '20px' });
   });
 
-  it('the chat stays open when the pointer leaves', async () => {
+  it('a hover-opened chat folds when the pointer leaves, but not while its field is being filled', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelectorAll('[data-hotzone]')[0]!);
+    fireEvent.mouseEnter(surface());
     await act(async () => { vi.advanceTimersByTime(180); });
     fireEvent.click(screen.getByRole('button', { name: 'Open the conversation with Ledge' }));
     expect(surface()).toHaveAttribute('data-mode', 'chat');
-    // The composer takes focus on open; leaving the overlay drops hover and focus, like clicking the terminal.
-    fireEvent.blur(screen.getByRole('textbox', { name: 'Ask Ledge' }));
+    act(() => screen.getByRole('textbox', { name: 'Ask Ledge' }).focus());
     fireEvent.mouseLeave(surface());
     await act(async () => { vi.advanceTimersByTime(800); });
     expect(surface()).toHaveAttribute('data-mode', 'chat');
+    act(() => screen.getByRole('button', { name: 'Back to sessions' }).focus());
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+  });
+
+  it('hovering the handle opens the list only after the dwell; no edge band exists any more', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    expect(document.querySelectorAll('[data-hotzone]')).toHaveLength(0);
+    fireEvent.mouseEnter(surface());
+    await act(async () => { vi.advanceTimersByTime(100); });
+    fireEvent.mouseLeave(surface());
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    fireEvent.mouseEnter(surface());
+    await act(async () => { vi.advanceTimersByTime(180); });
+    expect(surface()).toHaveAttribute('data-mode', 'list');
+  });
+
+  it('a hover-opened session folds back to the handle when the pointer leaves, even with a button focused', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    fireEvent.mouseEnter(surface());
+    await act(async () => { vi.advanceTimersByTime(180); });
+    fireEvent.click(screen.getByRole('button', { name: /speos-api/ }));
+    expect(surface()).toHaveAttribute('data-mode', 'session');
+    act(() => screen.getByRole('button', { name: 'Back to sessions' }).focus());
+    fireEvent.mouseLeave(surface());
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+  });
+
+  it('a press outside an open panel folds it back to the handle; a press inside does not', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(surface()).toHaveAttribute('data-mode', 'list');
+    fireEvent.pointerDown(screen.getByRole('textbox', { name: 'Ask Ledge' }));
+    expect(surface()).toHaveAttribute('data-mode', 'list');
+    fireEvent.pointerDown(document.body);
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
   });
 
   it('Ledge finishing an answer unfolds a finished bubble; Open goes to the chat', async () => {

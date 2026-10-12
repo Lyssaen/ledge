@@ -174,13 +174,13 @@ const fr = {
   },
   help: {
     title: 'Au bout des doigts.',
-    keys: [['Ouvrir la liste', ['Ctrl Alt L']], ['Choisir une session', ['J', 'K', '1–9']], ['Ouvrir la sélection', ['Entrée']], ['Autoriser / refuser', ['Y', 'N']],
-      ['Demande suivante', ['Alt →']], ['Répondre', ['R']], ['Ouvrir l’onglet du terminal', ['O']], ['Ne pas déranger', ['D']], ['Retour, puis replier', ['Échap']]] as Array<[string, string[]]>,
+    keys: [['Ouvrir la liste', ['Ctrl Alt L']], ['Choisir une session', ['J', 'K']], ['Ouvrir la sélection', ['Entrée']], ['Autoriser / refuser', ['Y', 'N']],
+      ['Session précédente / suivante', ['Alt ←', 'Alt →']], ['Nouvelle session', ['Ctrl Alt N']], ['Répondre', ['R']], ['Ouvrir l’onglet du terminal', ['O']], ['Ne pas déranger', ['D']], ['Retour, puis replier', ['Échap']]] as Array<[string, string[]]>,
     tab: 'Tab conserve la navigation entre les contrôles.'
   },
   coach: {
     label: 'Clavier', title: 'Naviguer au clavier', ok: 'Compris',
-    upDown: 'monter et descendre', nextAsk: 'demande suivante', jump: 'aller à', decide: 'décider', close: 'fermer', esc: 'Échap',
+    upDown: 'monter et descendre', prevNext: 'session précédente / suivante', decide: 'décider', close: 'fermer', esc: 'Échap',
     note: 'Affiché aux trois premières ouvertures au clavier'
   },
   shortcut: 'Ctrl Alt L'
@@ -350,13 +350,13 @@ const en: Messages = {
   },
   help: {
     title: 'Keyboard',
-    keys: [['Open the list', ['Ctrl Alt L']], ['Choose a session', ['J', 'K', '1–9']], ['Open the selection', ['Enter']], ['Approve or deny', ['Y', 'N']],
-      ['Next ask', ['Alt →']], ['Reply', ['R']], ['Open the terminal tab', ['O']], ['Do not disturb', ['D']], ['Back, then collapse', ['Esc']]],
+    keys: [['Open the list', ['Ctrl Alt L']], ['Choose a session', ['J', 'K']], ['Open the selection', ['Enter']], ['Approve or deny', ['Y', 'N']],
+      ['Previous or next session', ['Alt ←', 'Alt →']], ['New session', ['Ctrl Alt N']], ['Reply', ['R']], ['Open the terminal tab', ['O']], ['Do not disturb', ['D']], ['Back, then collapse', ['Esc']]],
     tab: 'Tab keeps moving between the controls.'
   },
   coach: {
     label: 'Keyboard', title: 'Move with the keyboard', ok: 'Got it',
-    upDown: 'up and down', nextAsk: 'next ask', jump: 'jump', decide: 'decide', close: 'close', esc: 'Esc',
+    upDown: 'up and down', prevNext: 'previous / next session', decide: 'decide', close: 'close', esc: 'Esc',
     note: 'Shown on the first three keyboard opens'
   },
   shortcut: 'Ctrl Alt L'

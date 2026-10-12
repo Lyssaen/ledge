@@ -1,35 +1,25 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow, Wry};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
-/// Emitted on every enter/leave transition of the cursor over the edge hot zones; payload `{ "inside": bool }`.
-pub const EDGE_EVENT: &str = "ledge://edge";
+/// Emitted when a mouse button goes down outside the overlay window while the outside watch is armed; no payload.
+pub const OUTSIDE_CLICK_EVENT: &str = "ledge://outside-click";
 /// Cursor positions near the notch, including while outside the webview. `null` ends the proximity gesture.
 pub const CURSOR_NEAR_EVENT: &str = "ledge://cursor-near";
-const EDGE_POLL: Duration = Duration::from_millis(50);
+const CURSOR_POLL: Duration = Duration::from_millis(50);
 /// Re-read the chosen monitor every 40 polls (2 s): resolution, scale or taskbar changes are picked up.
 const MONITOR_REFRESH_TICKS: u32 = 40;
-/// How close (logical px) to the monitor's left edge the cursor must be to count as "on the edge".
-const EDGE_PX: f64 = 2.0;
-
-/// A band of the left screen edge, in logical px from the top of the chosen monitor's work area
-/// (the same coordinate space as `set_frame`'s `top`).
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
-pub struct Band {
-    pub top: f64,
-    pub h: f64,
-}
-
-/// The bands the webview last reported (empty while the surface is not the bare handle) and a generation bumped on
-/// every report, so the poller knows the zones were (re)armed.
+/// Whether a press outside the window folds the open panel: armed by the webview while a panel shows. The window never
+/// takes focus on a mouse open, so a click elsewhere gives the webview no blur to react to.
 #[derive(Default)]
-struct HotZones(Mutex<(Vec<Band>, u64)>);
+struct OutsideWatch(AtomicBool);
 
 /// The window that was in the foreground when a keyboard open took focus (a raw HWND), handed back by `release_focus`.
 #[derive(Default)]
@@ -78,17 +68,11 @@ pub fn tray_title(version: &str, debug: bool) -> String {
 }
 
 #[derive(Clone, Serialize)]
-struct EdgePayload {
-    inside: bool,
-}
-
-#[derive(Clone, Serialize)]
 struct CursorPayload { x: f64, y: f64 }
 
-/// The chosen monitor in physical px: its left edge, its work area and its scale factor.
+/// The chosen monitor in physical px: its work area and its scale factor.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Area {
-    pub edge_x: i32,
     pub x: i32,
     pub y: i32,
     pub scale: f64,
@@ -96,7 +80,7 @@ pub struct Area {
 
 fn area_of(m: &tauri::window::Monitor) -> Area {
     let wa = m.work_area();
-    Area { edge_x: m.position().x, x: wa.position.x, y: wa.position.y, scale: m.scale_factor() }
+    Area { x: wa.position.x, y: wa.position.y, scale: m.scale_factor() }
 }
 
 /// A monitor's stable id: its name (`\\.\DISPLAY1` on Windows), or its index when the OS gives none.
@@ -130,7 +114,7 @@ fn chosen_of(screen: &Screen) -> Option<String> {
 }
 
 fn target_area(app: &AppHandle, screen: &Screen) -> Area {
-    target_monitor(app, chosen_of(screen).as_deref()).map(|m| area_of(&m)).unwrap_or(Area { edge_x: 0, x: 0, y: 0, scale: 1.0 })
+    target_monitor(app, chosen_of(screen).as_deref()).map(|m| area_of(&m)).unwrap_or(Area { x: 0, y: 0, scale: 1.0 })
 }
 
 /// Physical position and size of a frame given in logical px relative to the work area's top-left corner.
@@ -144,24 +128,13 @@ pub fn frame_rect(area: Area, top: i32, width: u32, height: u32) -> (i32, i32, u
     )
 }
 
-/// True when the physical cursor `(x, y)` sits on the primary monitor's left edge inside one of `zones`.
-pub fn edge_inside(cursor: (i32, i32), area: Area, zones: &[Band]) -> bool {
-    let dx = (cursor.0 - area.edge_x) as f64;
-    if dx < 0.0 || dx > EDGE_PX * area.scale {
-        return false;
-    }
-    let y = (cursor.1 - area.y) as f64 / area.scale;
-    zones.iter().any(|b| b.h > 0.0 && y >= b.top && y < b.top + b.h)
-}
-
-/// One edge-poll step. `prev` is the last state reported (or taken as baseline), `now` the cursor's state against the
-/// current zones, `rearmed` whether the zones were reported again since the previous step. Returns the new state and
-/// the event to emit, if any. A re-arm never produces an enter: a cursor resting on the edge when the list closes
-/// becomes the baseline, and only a real leave then re-entry opens it again. Leaves always go out.
-pub fn edge_step(prev: bool, now: bool, rearmed: bool) -> (bool, Option<bool>) {
-    if now == prev { return (now, None); }
-    if now && rearmed { return (true, None); }
-    (now, Some(now))
+/// True when a mouse button has just gone down (`now_down` after `!prev_down`) with the physical cursor outside the
+/// window rectangle `(x, y, width, height)`. A press inside, or a button held since before, never counts.
+pub fn press_outside(prev_down: bool, now_down: bool, cursor: (i32, i32), rect: (i32, i32, u32, u32)) -> bool {
+    if !now_down || prev_down { return false; }
+    let (x, y, w, h) = rect;
+    let inside = cursor.0 >= x && cursor.0 < x + w as i32 && cursor.1 >= y && cursor.1 < y + h as i32;
+    !inside
 }
 
 /// Moves and resizes the window to `(0, top)` on the chosen monitor's work area, `width` x `height` (logical px),
@@ -217,13 +190,10 @@ fn place_window(window: &WebviewWindow, x: i32, y: i32, w: u32, h: u32) -> Resul
     window.set_size(tauri::PhysicalSize::new(w, h)).map_err(|e| e.to_string())
 }
 
-/// Replaces the edge bands the cursor poller watches.
+/// Arms (or disarms) the watch for a mouse press outside the window.
 #[tauri::command]
-fn set_hot_zones(zones: Vec<Band>, state: tauri::State<'_, HotZones>) {
-    if let Ok(mut z) = state.0.lock() {
-        z.0 = zones;
-        z.1 = z.1.wrapping_add(1);
-    }
+fn set_outside_watch(on: bool, state: tauri::State<'_, OutsideWatch>) {
+    state.0.store(on, Ordering::Relaxed);
 }
 
 /// Shows and focuses the overlay so single-letter keys reach the webview (keyboard opens only). The window that had the
@@ -434,18 +404,36 @@ fn cursor_position() -> Option<(i32, i32)> {
 #[cfg(not(windows))]
 fn cursor_position() -> Option<(i32, i32)> { None }
 
-/// Polls the cursor every 50 ms and emits `EDGE_EVENT` on enter/leave transitions only.
-/// The window covers only what it draws, so the edge bands above and below the handle are outside it.
-fn spawn_edge_poller(app: tauri::AppHandle) {
+/// Whether the left or the right mouse button is down right now, wherever the cursor is.
+#[cfg(windows)]
+fn mouse_down() -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
+    let down = |vk: i32| (unsafe { GetAsyncKeyState(vk) } as u16 & 0x8000) != 0;
+    down(VK_LBUTTON.0 as i32) || down(VK_RBUTTON.0 as i32)
+}
+
+#[cfg(not(windows))]
+fn mouse_down() -> bool { false }
+
+/// The overlay window's outer rectangle in physical px.
+fn window_rect(app: &AppHandle) -> Option<(i32, i32, u32, u32)> {
+    let w = app.get_webview_window("main")?;
+    let p = w.outer_position().ok()?;
+    let s = w.outer_size().ok()?;
+    Some((p.x, p.y, s.width, s.height))
+}
+
+/// Polls the cursor every 50 ms: reports it near the notch (the mascot's gaze) and, while the outside watch is armed,
+/// emits `OUTSIDE_CLICK_EVENT` on a mouse press outside the window, which covers only what it draws.
+fn spawn_cursor_poller(app: tauri::AppHandle) {
     std::thread::spawn(move || {
-        let mut inside = false;
         let mut cursor_near = false;
-        let mut seen_gen: u64 = 0;
+        let mut was_down = false;
         let mut seen_screen: u64 = 0;
         let mut area: Option<Area> = None;
         let mut tick: u32 = 0;
         loop {
-            std::thread::sleep(EDGE_POLL);
+            std::thread::sleep(CURSOR_POLL);
             let (chosen, screen_gen) = match app.state::<Screen>().0.lock() { Ok(s) => (s.chosen.clone(), s.gen), Err(_) => continue };
             if tick % MONITOR_REFRESH_TICKS == 0 || screen_gen != seen_screen {
                 seen_screen = screen_gen;
@@ -462,14 +450,13 @@ fn spawn_edge_poller(app: tauri::AppHandle) {
                 let _ = app.emit::<Option<CursorPayload>>(CURSOR_NEAR_EVENT, None);
             }
             cursor_near = near;
-            let (zones, gen) = match app.state::<HotZones>().0.lock() { Ok(z) => z.clone(), Err(_) => continue };
-            let rearmed = gen != seen_gen;
-            seen_gen = gen;
-            let (next, emit) = edge_step(inside, edge_inside(c, a, &zones), rearmed);
-            inside = next;
-            if let Some(inside) = emit {
-                let _ = app.emit(EDGE_EVENT, EdgePayload { inside });
+            let down = mouse_down();
+            if app.state::<OutsideWatch>().0.load(Ordering::Relaxed) {
+                if let Some(rect) = window_rect(&app) {
+                    if press_outside(was_down, down, c, rect) { let _ = app.emit(OUTSIDE_CLICK_EVENT, ()); }
+                }
             }
+            was_down = down;
         }
     });
 }
@@ -478,15 +465,15 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
-        .manage(HotZones::default())
+        .manage(OutsideWatch::default())
         .manage(PrevForeground::default())
         .manage(Screen::default())
-        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zones, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor, set_tray_labels, get_autostart, set_autostart])
+        .invoke_handler(tauri::generate_handler![set_frame, set_outside_watch, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor, set_tray_labels, get_autostart, set_autostart])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") { let _ = w.set_always_on_top(true); }
             build_tray(app)?;
             default_autostart(app);
-            spawn_edge_poller(app.handle().clone());
+            spawn_cursor_poller(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -495,7 +482,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{autostart_by_default, choose, edge_inside, edge_step, frame_rect, terminal_args, title_matches, tray_title, Area, Band};
+    use super::{autostart_by_default, choose, frame_rect, press_outside, terminal_args, title_matches, tray_title, Area};
 
     #[test] fn a_terminal_tab_runs_the_launcher_command_in_wsl() {
         let cmd: Vec<String> = ["/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"].iter().map(|s| s.to_string()).collect();
@@ -527,34 +514,23 @@ mod tests {
         assert!(!title_matches("Visual Studio Code", "Pim · speos-api"));
     }
 
-    const AREA: Area = Area { edge_x: 0, x: 0, y: 0, scale: 1.5 };
+    const AREA: Area = Area { x: 0, y: 0, scale: 1.5 };
 
     #[test] fn frame_is_placed_on_the_work_area_in_physical_px() {
         assert_eq!(frame_rect(AREA, 100, 380, 400), (0, 150, 570, 600));
-        let left_taskbar = Area { edge_x: 0, x: 72, y: 0, scale: 1.0 };
+        let left_taskbar = Area { x: 72, y: 0, scale: 1.0 };
         assert_eq!(frame_rect(left_taskbar, 40, 28, 60), (72, 40, 28, 60));
     }
 
-    #[test] fn edge_needs_the_left_edge_and_a_band() {
-        let zones = [Band { top: 40.0, h: 100.0 }, Band { top: 300.0, h: 0.0 }];
-        assert!(edge_inside((0, 90), AREA, &zones)); // y = 60 logical
-        assert!(edge_inside((3, 90), AREA, &zones)); // 3 physical px = 2 logical px at 1.5
-        assert!(!edge_inside((4, 90), AREA, &zones));
-        assert!(!edge_inside((0, 30), AREA, &zones)); // y = 20, above the band
-        assert!(!edge_inside((0, 450), AREA, &zones)); // empty band
-        assert!(!edge_inside((-1, 90), AREA, &zones)); // a monitor to the left
-        assert!(!edge_inside((0, 90), AREA, &[]));
-    }
-
-    #[test] fn a_rearm_never_enters_but_a_real_reentry_does() {
-        // Cursor resting on the edge while the list closes and the zones come back: baseline, no event.
-        assert_eq!(edge_step(false, true, true), (true, None));
-        // It stays there: nothing.
-        assert_eq!(edge_step(true, true, false), (true, None));
-        // It leaves, then comes back: leave, then enter.
-        assert_eq!(edge_step(true, false, false), (false, Some(false)));
-        assert_eq!(edge_step(false, true, false), (true, Some(true)));
-        // Zones disarmed (list opened) while inside: the leave still goes out.
-        assert_eq!(edge_step(true, false, true), (false, Some(false)));
+    #[test] fn only_a_fresh_press_outside_the_window_counts() {
+        let rect = (0, 500, 380, 400); // x 0..380, y 500..900
+        assert!(press_outside(false, true, (600, 700), rect)); // to the right
+        assert!(press_outside(false, true, (100, 300), rect)); // above
+        assert!(press_outside(false, true, (100, 900), rect)); // just below (the bottom edge is exclusive)
+        assert!(!press_outside(false, true, (100, 700), rect)); // inside
+        assert!(!press_outside(false, true, (0, 500), rect)); // the top-left corner is inside
+        assert!(!press_outside(true, true, (600, 700), rect)); // held since before: not a new press
+        assert!(!press_outside(false, false, (600, 700), rect)); // no button down
+        assert!(!press_outside(true, false, (600, 700), rect)); // a release
     }
 }

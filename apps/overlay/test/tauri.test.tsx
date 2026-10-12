@@ -6,13 +6,14 @@ import { frameOf, unionFrame, FRAME_PAD } from '../src/surface/frame';
 import { SHOULDER_R } from '../src/surface/Shoulders';
 import { LAUNCH_NOTICE_MS } from '../src/surface/Surface';
 
-// The native side, stubbed: `invoke` records commands, `listen` keeps the handler so a test can emit the edge event,
-// the global shortcut plugin keeps the Ctrl+Alt+L handler.
+// The native side, stubbed: `invoke` records commands, `listen` keeps the handler so a test can emit a shell event,
+// the global shortcut plugin keeps each handler by its accelerator (`shortcut` is Ctrl+Alt+L's).
 const native = vi.hoisted(() => ({
   invoke: vi.fn(async (_cmd: string, _args?: unknown): Promise<unknown> => undefined),
   listeners: new Map<string, (e: { payload: unknown }) => void>(),
   unlisten: vi.fn(),
   shortcut: null as null | ((e: { state: string }) => void),
+  shortcuts: new Map<string, (e: { state: string }) => void>(),
   monitor: null as null | { scaleFactor: number; size: { height: number; width: number }; workArea: { size: { height: number; width: number } } }
 }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: native.invoke }));
@@ -21,8 +22,8 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 vi.mock('@tauri-apps/api/window', () => ({ primaryMonitor: vi.fn(async () => native.monitor) }));
 vi.mock('@tauri-apps/plugin-global-shortcut', () => ({
-  register: vi.fn(async (_k: string, cb: (e: { state: string }) => void) => { native.shortcut = cb; }),
-  unregister: vi.fn(async () => { native.shortcut = null; })
+  register: vi.fn(async (k: string, cb: (e: { state: string }) => void) => { native.shortcuts.set(k, cb); if (k === 'Ctrl+Alt+L') native.shortcut = cb; }),
+  unregister: vi.fn(async (k: string) => { native.shortcuts.delete(k); if (k === 'Ctrl+Alt+L') native.shortcut = null; })
 }));
 
 const enterTauri = () => { (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}; };
@@ -31,7 +32,7 @@ const calls = (cmd: string) => native.invoke.mock.calls.filter(c => c[0] === cmd
 // Fresh module state (the bridge's dedupe keys) for every test.
 const loadBridge = async () => { vi.resetModules(); return import('../src/tauri/bridge'); };
 
-beforeEach(() => { native.invoke.mockClear(); native.invoke.mockImplementation(async () => undefined); native.listeners.clear(); native.unlisten.mockClear(); native.shortcut = null; });
+beforeEach(() => { native.invoke.mockClear(); native.invoke.mockImplementation(async () => undefined); native.listeners.clear(); native.unlisten.mockClear(); native.shortcut = null; native.shortcuts.clear(); });
 afterEach(() => { leaveTauri(); vi.unstubAllEnvs(); });
 
 describe('frameOf', () => {
@@ -60,10 +61,10 @@ describe('bridge', () => {
   it('in the browser nothing reaches the shell', async () => {
     const b = await loadBridge();
     await expect(b.setFrame({ top: 1, w: 2, h: 3 })).resolves.toBe(false);
-    b.setHotZones([{ top: 40, h: 100 }]); await b.focusOverlay(); await b.releaseFocus();
+    b.setOutsideWatch(true); await b.focusOverlay(); await b.releaseFocus();
     await expect(b.focusTerminal('Otto')).resolves.toBe(false);
     await expect(b.openTerminal('Otto', ['node', 'cli', 'attach', 'a'])).resolves.toBe(false);
-    const fn = vi.fn(); b.onEdge(fn)();
+    const fn = vi.fn(); b.onOutsideClick(fn)();
     await Promise.resolve();
     expect(native.invoke).not.toHaveBeenCalled();
     expect(native.listeners.size).toBe(0);
@@ -94,13 +95,13 @@ describe('bridge', () => {
     expect(calls('set_frame')).toHaveLength(2);
   });
 
-  it('hot zones, overlay focus and terminal focus are commands', async () => {
+  it('the outside-click watch, overlay focus and terminal focus are commands', async () => {
     enterTauri(); const b = await loadBridge();
-    b.setHotZones([{ top: 40, h: 100 }]); b.setHotZones([{ top: 40, h: 100 }]); b.setHotZones([]);
+    b.setOutsideWatch(true); b.setOutsideWatch(true); b.setOutsideWatch(false);
     await b.focusOverlay(); await b.releaseFocus();
     native.invoke.mockImplementationOnce(async () => true);
     await expect(b.focusTerminal('Otto · harness-assistant')).resolves.toBe(true);
-    await vi.waitFor(() => expect(calls('set_hot_zones')).toEqual([{ zones: [{ top: 40, h: 100 }] }, { zones: [] }]));
+    await vi.waitFor(() => expect(calls('set_outside_watch')).toEqual([{ on: true }, { on: false }]));
     expect(calls('focus_overlay')).toEqual([undefined]);
     expect(calls('release_focus')).toEqual([undefined]);
     expect(calls('focus_terminal')).toEqual([{ title: 'Otto · harness-assistant' }]);
@@ -117,18 +118,34 @@ describe('bridge', () => {
     await expect(b.focusTerminal('x')).resolves.toBe(false);
   });
 
-  it('onEdge forwards the inside flag of ledge://edge and unlistens on dispose', async () => {
+  it('onOutsideClick forwards ledge://outside-click and unlistens on dispose', async () => {
     enterTauri(); const b = await loadBridge();
-    const fn = vi.fn(); const off = b.onEdge(fn);
-    await vi.waitFor(() => expect(native.listeners.has('ledge://edge')).toBe(true));
-    native.listeners.get('ledge://edge')!({ payload: { inside: true } });
-    native.listeners.get('ledge://edge')!({ payload: { inside: false } });
-    expect(fn.mock.calls).toEqual([[true], [false]]);
+    const fn = vi.fn(); const off = b.onOutsideClick(fn);
+    await vi.waitFor(() => expect(native.listeners.has('ledge://outside-click')).toBe(true));
+    native.listeners.get('ledge://outside-click')!({ payload: null });
+    expect(fn).toHaveBeenCalledOnce();
     off();
     expect(native.unlisten).toHaveBeenCalledTimes(1);
   });
 
-  it('a zoomed frame is rounded outward to whole monitor px; bands are scaled; frames go out in order', async () => {
+  it('Ctrl+Alt+L and Ctrl+Alt+N are global shortcuts under Tauri and window keys in the browser', async () => {
+    const browser = await loadBridge();
+    const list = vi.fn(); const launch = vi.fn();
+    const offL = browser.onShortcut(list); const offN = browser.onNewSessionShortcut(launch);
+    fireEvent.keyDown(window, { key: 'n', ctrlKey: true, altKey: true });
+    fireEvent.keyDown(window, { key: 'l', ctrlKey: true, altKey: true });
+    expect(launch).toHaveBeenCalledOnce(); expect(list).toHaveBeenCalledOnce();
+    offL(); offN();
+    enterTauri(); const b = await loadBridge();
+    const n = vi.fn(); const off = b.onNewSessionShortcut(n);
+    await vi.waitFor(() => expect(native.shortcuts.has('Ctrl+Alt+N')).toBe(true));
+    native.shortcuts.get('Ctrl+Alt+N')!({ state: 'Released' }); native.shortcuts.get('Ctrl+Alt+N')!({ state: 'Pressed' });
+    expect(n).toHaveBeenCalledOnce();
+    off();
+    await vi.waitFor(() => expect(native.shortcuts.has('Ctrl+Alt+N')).toBe(false));
+  });
+
+  it('a zoomed frame is rounded outward to whole monitor px; frames go out in order', async () => {
     enterTauri(); const b = await loadBridge();
     expect(b.toMonitorFrame({ top: 101, w: 45, h: 77 }, 1)).toEqual({ top: 101, w: 45, h: 77 });
     // 101 * 1.25 = 126.25 -> 126; (101 + 77) * 1.25 = 222.5 -> 223; 45 * 1.25 = 56.25 -> 57.
@@ -140,8 +157,6 @@ describe('bridge', () => {
     await b.setFrame({ top: 100, w: 44, h: 80 }, 1.5); // unchanged: not sent twice
     expect(calls('set_frame')).toEqual([{ top: 200, width: 88, height: 160 }, { top: 150, width: 66, height: 120 }]);
     expect(order).toEqual(['set_frame', 'set_frame']);
-    b.setHotZones([{ top: 40, h: 100 }], 1.5);
-    await vi.waitFor(() => expect(calls('set_hot_zones')).toEqual([{ zones: [{ top: 60, h: 150 }] }]));
   });
 
   it('screenHeight is the primary work area in logical px', async () => {
@@ -216,7 +231,6 @@ describe('<Surface> under Tauri', () => {
   const surface = () => document.querySelector('[data-surface]') as HTMLElement;
   const content = () => document.querySelector('[data-frame-content]') as HTMLElement | null;
   const lastFrame = () => calls('set_frame').at(-1) as { top: number; width: number; height: number };
-  const edge = (inside: boolean) => act(async () => { native.listeners.get('ledge://edge')!({ payload: { inside } }); });
 
   async function mount(opts: { tauri: boolean; handleScale?: number; panelScale?: number; screenH?: number; launcher?: string[]; onToggleDnd?: () => void }) {
     if (opts.tauri) enterTauri();
@@ -264,10 +278,9 @@ describe('<Surface> under Tauri', () => {
     expect(withNotice - height()).toBe(42);
   });
 
-  it('in the browser the page is not offset and the DOM hot zones handle the edge', async () => {
+  it('in the browser the page is not offset and nothing goes to a shell', async () => {
     await mount({ tauri: false });
     expect(content()).toBeNull();
-    expect(document.querySelectorAll('[data-hotzone]')).toHaveLength(2);
     expect(native.invoke).not.toHaveBeenCalled();
   });
 
@@ -278,8 +291,6 @@ describe('<Surface> under Tauri', () => {
     // The frame also holds the fillets joining the handle to the screen edge, above and below it.
     await waitFor(() => expect(lastFrame()).toEqual({ top: 502 - SHOULDER_R - FRAME_PAD.top, width: 28 + FRAME_PAD.right, height: 76 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
     await waitFor(() => expect(content()).toHaveStyle({ top: `-${502 - SHOULDER_R - FRAME_PAD.top}px` }));
-    // No DOM hot zones: they would lie outside the window.
-    expect(document.querySelectorAll('[data-hotzone]')).toHaveLength(0);
   });
 
   it('the page offset is committed with the set_frame request, after the painted frame that starts the transition, never after the shell answers', async () => {
@@ -316,7 +327,7 @@ describe('<Surface> under Tauri', () => {
     await waitFor(() => expect(seen.at(-1)).toEqual({ top: handleTop, offset: `-${handleTop}px` }));
   });
 
-  it('a handle at 2x on a 4K work area: the surface, the frame and the bands are the 1080p ones doubled', async () => {
+  it('a handle at 2x on a 4K work area: the surface and the frame are the 1080p ones doubled', async () => {
     // A 4K work area (2160 logical px), handle 200 %: the handle lays out in 1080 units and is drawn at 2x.
     await mount({ tauri: true, screenH: 2160, handleScale: 2, panelScale: 1 });
     expect(surface()).toHaveStyle({ top: `${2 * 502}px`, width: '56px', height: '152px' });
@@ -325,7 +336,6 @@ describe('<Surface> under Tauri', () => {
     const top = 2 * 502 - SHOULDER_R - FRAME_PAD.top;
     await waitFor(() => expect(lastFrame()).toEqual({ top, width: 56 + FRAME_PAD.right, height: 152 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
     expect(content()).toHaveStyle({ top: `-${top}px` });
-    await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 80, h: 2 * (502 - 6 - 40) }, { top: 2 * (502 + 76 + 6), h: 2 * (1080 - 40 - (502 + 76 + 6)) }] }));
     // The windows keep their own scale: the list opens at its base 380 px, centered on the real screen.
     await waitFor(() => expect(native.shortcut).not.toBeNull());
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
@@ -361,7 +371,6 @@ describe('<Surface> under Tauri', () => {
     const tray = native.listeners.get('ledge://tray')!;
     await act(async () => tray({ payload: { action: 'open' } }));
     await waitFor(() => expect(surface()).toHaveAttribute('data-mode', 'list'));
-    expect(document.querySelector('[data-row-id="a"]')).toHaveTextContent('1');
     await act(async () => tray({ payload: { action: 'new' } }));
     await waitFor(() => expect(surface()).toHaveAttribute('data-mode', 'launch'));
     await act(async () => tray({ payload: { action: 'dnd' } }));
@@ -369,18 +378,41 @@ describe('<Surface> under Tauri', () => {
     expect(calls('focus_overlay').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('the shell edge event drives edgeEnter/edgeLeave, and the hot zones are armed only on the bare handle', async () => {
+  it('hovering the handle opens the list without taking focus; the outside-click watch is armed only while a panel shows', async () => {
     await mount({ tauri: true });
-    await waitFor(() => expect(native.listeners.has('ledge://edge')).toBe(true));
-    await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [{ top: 40, h: 502 - 6 - 40 }, { top: 502 + 76 + 6, h: 1080 - 40 - (502 + 76 + 6) }] }));
-    await edge(true); await edge(false);
-    await act(async () => { vi.advanceTimersByTime(200); });
-    expect(surface()).toHaveAttribute('data-mode', 'handle'); // left before the 180 ms dwell
-    await edge(true);
+    await waitFor(() => expect(native.listeners.has('ledge://outside-click')).toBe(true));
+    await waitFor(() => expect(calls('set_outside_watch').at(-1)).toEqual({ on: false }));
+    fireEvent.mouseEnter(surface());
     await act(async () => { vi.advanceTimersByTime(180); });
     expect(surface()).toHaveAttribute('data-mode', 'list');
-    await waitFor(() => expect(calls('set_hot_zones').at(-1)).toEqual({ zones: [] }));
+    await waitFor(() => expect(calls('set_outside_watch').at(-1)).toEqual({ on: true }));
     expect(calls('focus_overlay')).toHaveLength(0); // a hover open never takes focus
+    await act(async () => { native.listeners.get('ledge://outside-click')!({ payload: null }); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    await waitFor(() => expect(calls('set_outside_watch').at(-1)).toEqual({ on: false }));
+    expect(calls('set_hot_zones')).toHaveLength(0);
+  });
+
+  it('a press outside a keyboard-opened panel folds it without handing focus back over the window just clicked', async () => {
+    await mount({ tauri: true });
+    await waitFor(() => expect(native.shortcut).not.toBeNull());
+    await act(async () => { native.shortcut!({ state: 'Pressed' }); });
+    await waitFor(() => expect(calls('focus_overlay')).toHaveLength(1));
+    await act(async () => { native.listeners.get('ledge://outside-click')!({ payload: null }); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    await act(async () => { await sleep(20); });
+    expect(calls('release_focus')).toHaveLength(0);
+  });
+
+  it('Ctrl+Alt+N opens the launch form with focus from anywhere, and a second press folds it', async () => {
+    await mount({ tauri: true });
+    await waitFor(() => expect(native.shortcuts.has('Ctrl+Alt+N')).toBe(true));
+    await act(async () => { native.shortcuts.get('Ctrl+Alt+N')!({ state: 'Pressed' }); });
+    expect(surface()).toHaveAttribute('data-mode', 'launch');
+    await waitFor(() => expect(calls('focus_overlay')).toHaveLength(1));
+    await act(async () => { native.shortcuts.get('Ctrl+Alt+N')!({ state: 'Pressed' }); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    await waitFor(() => expect(calls('release_focus')).toHaveLength(1));
   });
 
   it('a shortcut open focuses the overlay and its close releases it; asks do neither', async () => {

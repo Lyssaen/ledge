@@ -27,7 +27,7 @@ export function Coachmark({ visible, top, onDismiss }: { visible: boolean; top: 
         <Button variant="secondary" size="sm" onClick={onDismiss} style={{ flexShrink: 0, whiteSpace: 'nowrap', height: 28, padding: '0 10px' }}>{t.coach.ok}</Button>
       </div>
       <span style={{ fontSize: 12, lineHeight: '18px', color: 'var(--muted-foreground)', display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'center' }}>
-        <span><Kbd>J</Kbd> <Kbd>K</Kbd> {t.coach.upDown}</span><span><Kbd>Alt →</Kbd> {t.coach.nextAsk}</span><span><Kbd>1</Kbd>…<Kbd>9</Kbd> {t.coach.jump}</span><span><Kbd>Y</Kbd> <Kbd>N</Kbd> {t.coach.decide}</span><span><Kbd>{t.coach.esc}</Kbd> {t.coach.close}</span>
+        <span><Kbd>J</Kbd> <Kbd>K</Kbd> {t.coach.upDown}</span><span><Kbd>Alt ←</Kbd> <Kbd>Alt →</Kbd> {t.coach.prevNext}</span><span><Kbd>Y</Kbd> <Kbd>N</Kbd> {t.coach.decide}</span><span><Kbd>{t.coach.esc}</Kbd> {t.coach.close}</span>
       </span>
       <span style={{ fontSize: 11, lineHeight: '16px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.coach.note}</span>
     </div>

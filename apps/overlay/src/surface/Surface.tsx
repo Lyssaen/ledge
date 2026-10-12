@@ -31,7 +31,7 @@ import { SessionList, rowHint, EXPANDED_ROW_H, ASK_H, NOTICE_GAP, type ListNotic
 import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
 import { useI18n, type Lang } from '../i18n/lang';
 import { transition, MOTION, ms, enterDelay } from '../motion';
-import { focusTerminal, openTerminal, onShortcut, onEdge, onCursorProximity, onTrayAction, setHotZones, focusOverlay, releaseFocus, isTauri } from '../tauri/bridge';
+import { focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, onTrayAction, focusOverlay, releaseFocus, isTauri } from '../tauri/bridge';
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { frameOf, type Box } from './frame';
 import { Shoulders, shoulderR } from './Shoulders';
@@ -78,6 +78,9 @@ export interface SurfaceProps {
   /** Plays the sound cues (one Web Audio player per app); a silent player when absent. */
   soundPlayer?: SoundPlayer;
 }
+
+/** A text field or editable content: focus there means someone is filling it in. Radios, buttons and rows are not. */
+const isEditable = (el: Element | null) => !!el && ((el.tagName === 'INPUT' && !['radio', 'checkbox', 'button', 'submit'].includes((el as HTMLInputElement).type)) || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable);
 
 export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, accent = null, onAccent, soundPlayer }: SurfaceProps) {
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
@@ -130,8 +133,34 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
     if ((was === 'handle' || was === 'bubble') && ctl.state().mode === 'list') void focusOverlay();
   }), [ctl, dispatch]);
 
-  // The native window only covers what it draws, so in Tauri the shell watches the edge bands and reports crossings.
-  useEffect(() => onEdge(on => dispatch({ type: on ? 'edgeEnter' : 'edgeLeave' })), [dispatch]);
+  // Ctrl+Alt+N opens the new-session form from anywhere, with focus so its field takes keys at once; again folds it.
+  useEffect(() => onNewSessionShortcut(() => {
+    const was = ctl.state().mode;
+    dispatch({ type: 'newSession' });
+    if (ctl.state().mode === 'launch' && (was === 'handle' || was === 'bubble')) void focusOverlay();
+  }), [ctl, dispatch]);
+
+  // A press outside an open panel folds it back to the handle. The overlay window never takes focus on a mouse open,
+  // so under Tauri the shell watches the mouse buttons; in the browser the document's own presses tell.
+  // Focus stays with whatever was clicked: no hand-back over it.
+  const foldedOutside = useRef(false);
+  const outsideClick = () => {
+    const m = ctl.state().mode; if (m === 'handle' || m === 'bubble') return;
+    foldedOutside.current = true;
+    dispatch({ type: 'outsideClick' });
+  };
+  const outsideRef = useRef(outsideClick); outsideRef.current = outsideClick;
+  useEffect(() => onOutsideClick(() => outsideRef.current()), []);
+  useEffect(() => {
+    if (isTauri()) return;
+    const press = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (t && (surfaceRef.current?.contains(t) || t.closest?.('[data-zoom]'))) return;
+      outsideRef.current();
+    };
+    document.addEventListener('pointerdown', press);
+    return () => document.removeEventListener('pointerdown', press);
+  }, []);
   useEffect(() => onCursorProximity(point => setResidentPointer(ctl.state().mode === 'handle' ? point : null)), [ctl]);
   useEffect(() => onTrayAction(action => {
     if (action === 'dnd') { onToggleDnd(); return; }
@@ -185,7 +214,8 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   useEffect(() => {
     const was = prevView.current; prevView.current = { mode: st.mode, selectedId: st.selectedId, openedBy: st.openedBy };
     if (was.mode === st.mode) return;
-    if (st.mode === 'handle' && was.mode !== 'bubble' && was.openedBy === 'keyboard') void releaseFocus();
+    const outside = foldedOutside.current; foldedOutside.current = false;
+    if (st.mode === 'handle' && was.mode !== 'bubble' && was.openedBy === 'keyboard' && !outside) void releaseFocus();
     if (st.mode === 'list' && (was.mode === 'handle' || was.mode === 'bubble') && st.openedBy === 'keyboard') {
       setFocusedId(sessions.find(isPending)?.id ?? sessions[0]?.id ?? null);
       setCoach(countCoachmarkOpen());
@@ -374,8 +404,18 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
     }
   }, [st.mode, geo.top, geo.w, geo.h, ctl, dispatch]);
 
-  const onBlur = (e: FocusEvent) => { if (!surfaceRef.current?.contains(e.relatedTarget as Node | null)) dispatch({ type: 'focusWithin', on: false }); };
-  const onMouseMove = () => { if (!ctl.state().hovering) dispatch({ type: 'surfaceEnter' }); };
+  const onBlur = (e: FocusEvent) => {
+    if (!surfaceRef.current?.contains(e.relatedTarget as Node | null)) dispatch({ type: 'focusWithin', on: false });
+    if (ctl.state().editing && !isEditable(e.relatedTarget as Element | null)) dispatch({ type: 'editing', on: false });
+  };
+  // Hovering the bare handle opens the list after the dwell, unless the daemon is out of reach.
+  const handleArmed = () => ctl.state().mode === 'handle' && !unreachable;
+  const onMouseEnter = () => { dispatch({ type: 'surfaceEnter' }); if (handleArmed()) dispatch({ type: 'handleEnter' }); };
+  const onMouseLeave = () => { dispatch({ type: 'surfaceLeave' }); if (ctl.state().hot) dispatch({ type: 'handleLeave' }); };
+  const onMouseMove = () => {
+    if (!ctl.state().hovering) dispatch({ type: 'surfaceEnter' });
+    if (handleArmed() && !ctl.state().hot) dispatch({ type: 'handleEnter' });
+  };
 
   const { big } = slotSizes(bots.length);
   const hovBot = bots.find(b => b.id === hoverId) ?? null;
@@ -451,10 +491,7 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   const frame = frameOf(geo, extras, screenH);
   const offset = useNativeFrame(frame, parseFloat(ms(SETTLE_MS)));
   offsetRef.current = offset;
-  // Armed only while the bare handle shows and the daemon is reachable, exactly like the DOM zones' pointer-events.
-  const zonesArmed = st.mode === 'handle' && !unreachable;
-  const zonesKey = zonesArmed ? geo.hotZones.map(z => `${z.top}:${z.h}`).join(',') : '';
-  useEffect(() => { setHotZones(zonesArmed ? geo.hotZones : []); }, [zonesKey]); // the bands are captured through `zonesKey`
+  useEffect(() => { setOutsideWatch(panel); }, [panel]);
   // The terminal tab is the fallback for read-only and offline sessions too: only the daemon message needs the daemon.
   const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); openTab(id); };
   const chooseOption = (n: number) => {
@@ -474,14 +511,6 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   useKeyboard({
     enabled: panel, mode: st.mode, sessions, focusedId: st.mode === 'session' ? st.selectedId : st.mode === 'list' ? focused?.id ?? null : null,
     onFocus: setFocusedId, onOpen: openRow, onDecide: decide,
-    onNextAsk: () => {
-      const pend = sessions.filter(isPending).map(s => s.id);
-      const from = st.mode === 'session' ? st.selectedId : focused?.id ?? null;
-      const ids = sessions.map(s => s.id); const at = from ? ids.indexOf(from) : -1;
-      const next = [...ids.slice(at + 1), ...ids.slice(0, at + 1)].find(id => pend.includes(id));
-      if (!next || next === from) return;
-      if (st.mode === 'session') openRow(next); else setFocusedId(next);
-    },
     onClose: () => st.mode === 'reader' ? readerBack() : dispatch({ type: detail ? 'back' : 'close' }),
     onAsk: () => surfaceRef.current?.querySelector<HTMLInputElement>('[data-ask-input]')?.focus(),
     onReplyFocus: () => {
@@ -500,12 +529,13 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   const surfaceTransition = ['top', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out`;
   const content = (
     <>
-      {!tauri && geo.hotZones.map((z, i) => <div key={i} data-hotzone onMouseEnter={() => dispatch({ type: 'edgeEnter' })} onMouseLeave={() => dispatch({ type: 'edgeLeave' })} style={{ position: 'absolute', left: 0, top: z.top, width: 14 * hs, height: z.h, pointerEvents: st.mode === 'handle' && !unreachable ? 'auto' : 'none', background: st.hot ? 'var(--edge-hot)' : 'transparent', transition: transition([['background-color', 'hover']]) }} />)}
-
       <div ref={surfaceRef} data-surface data-mode={st.mode}
-        onMouseEnter={() => dispatch({ type: 'surfaceEnter' })} onMouseLeave={() => dispatch({ type: 'surfaceLeave' })} onMouseMove={onMouseMove}
+        onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove}
         onFocus={e => {
           if (!ctl.state().focusWithin) dispatch({ type: 'focusWithin', on: true });
+          // A field being filled keeps a mouse-opened panel open when the pointer leaves; a button or a row does not.
+          const editing = isEditable(e.target as Element);
+          if (editing !== ctl.state().editing) dispatch({ type: 'editing', on: editing });
           // Native Tab onto another row moves the keyboard focus with it.
           const row = (e.target as HTMLElement).closest?.('[data-row]') ? (e.target as HTMLElement).closest<HTMLElement>('[data-row-id]')?.dataset.rowId : undefined;
           if (row && kb && ctl.state().mode === 'list') setFocusedId(row);
@@ -527,7 +557,7 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
         </div>
         <div data-panel style={{ position: 'absolute', inset: 0, zoom: ps, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} numbered={kb} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
+            <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               onDismiss={id => { if (!unreachable) send({ type: 'session.dismiss', id }); }} offline={unreachable}
               onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} noticeRef={noticeRef} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
               onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />

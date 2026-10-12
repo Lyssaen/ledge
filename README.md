@@ -44,7 +44,7 @@ Approach: a Tauri overlay on Windows and a Node daemon in WSL2, with one WebSock
 flowchart LR
   subgraph win["Windows host"]
     direction TB
-    ov["Ledge overlay (Tauri 2)<br/>React UI in a WebView2 window<br/>Rust shell: edge poller, frame, focus, monitors, Ctrl+Alt+L"]
+    ov["Ledge overlay (Tauri 2)<br/>React UI in a WebView2 window<br/>Rust shell: cursor poller, outside clicks, frame, focus, monitors, Ctrl+Alt+L / N"]
     wt["Windows Terminal tab<br/><i>Otto · my-project</i>"]
     ov -. "focus_terminal (Win32, by tab title)" .-> wt
   end
@@ -122,14 +122,14 @@ The UI is plain web code under `src/`, developed and unit-tested in WSL; the Rus
 | `src/surface/useDaemonAsks.ts` | Turns daemon updates into machine events and locks each decision until the daemon confirms it, fails it, or the connection drops. No timer ever resolves a decision. |
 | `src/surface/*.tsx` | Handle (resident mascot above a separator, then the session bots), Bubble, SessionList (grouped by repository, ask field above the rows), SessionView (permission, question, last reply, terminal preview), ChatView, AskField, LaunchView and its FolderBrowser, SettingsView, HelpView, Tooltip, ReplyCard. |
 | `src/surface/groups.ts`, `src/ui/BranchChip.tsx` | List grouping by `repoPath ?? cwd`, and the branch chip (dotted border on a linked worktree). |
-| `src/surface/geometry.ts`, `frame.ts`, `scale.ts` | Layout of the slots, the native window frame and the edge bands, with the handle and window scale handled as a CSS zoom on their own layer. The list is 380 px; a session and the chat are 480 px (560 px when reading the raw reply). |
+| `src/surface/geometry.ts`, `frame.ts`, `scale.ts` | Layout of the slots and the native window frame, with the handle and window scale handled as a CSS zoom on their own layer. The list is 380 px; a session and the chat are 480 px (560 px when reading the raw reply). |
 | `src/reply/parse.ts` | Turns the agent's last markdown message into a title, a lead, classified sections and questions with options. Ordinary lists keep the markdown's bullets or numbers; done / verified / question blocks stay cards. |
 | `src/defaultTool.ts` | The default harness (`ledge.defaultTool`): new sessions and the Ledge chat start on it. Claude Code when nothing valid is stored. |
 | `src/bots/` | The mascots: material, pose per state, halo in the state colour, breathing while waiting. |
-| `src/keyboard/` | Keyboard navigation (j/k, digits, y/n, Esc) and the first-use coachmark. |
+| `src/keyboard/` | Keyboard navigation (j/k, Alt ←/→ to the previous or next session, y/n, digits for a question's options, Esc) and the first-use coachmark. |
 | `src/i18n/` | One typed catalogue, French (default) and English, same keys enforced by the type checker. |
-| `src/tauri/bridge.ts` | The only file that calls `invoke`: `set_frame`, `set_hot_zones`, `focus_overlay`, `release_focus`, `focus_terminal`, `open_terminal`, `list_monitors`, `set_monitor`, plus the `ledge://edge` event and the `Ctrl+Alt+L` global shortcut. Everything degrades to no-ops in a browser. |
-| `src-tauri/src/main.rs` | The Rust shell: a borderless, transparent, always-on-top window outside the taskbar; a thread that polls the cursor every 50 ms against the hot bands on the chosen monitor's left edge and emits enter/leave; window placement in physical pixels on the monitor's work area; focus hand-back to the previously active window; `focus_terminal` finds the Windows Terminal window whose title matches the bot's tab (Win32 `EnumWindows`); `open_terminal` opens a Windows Terminal tab running `ledge attach <id>` in WSL (`wt.exe -w 0 new-tab`). |
+| `src/tauri/bridge.ts` | The only file that calls `invoke`: `set_frame`, `set_outside_watch`, `focus_overlay`, `release_focus`, `focus_terminal`, `open_terminal`, `list_monitors`, `set_monitor`, plus the `ledge://outside-click` event and the `Ctrl+Alt+L` and `Ctrl+Alt+N` global shortcuts. Everything degrades to no-ops in a browser. |
+| `src-tauri/src/main.rs` | The Rust shell: a borderless, transparent, always-on-top window outside the taskbar; a thread that polls the cursor every 50 ms, reports it near the notch for the mascot's gaze and, while a panel shows, emits a press of the mouse outside the window (`GetAsyncKeyState`); window placement in physical pixels on the monitor's work area; focus hand-back to the previously active window; `focus_terminal` finds the Windows Terminal window whose title matches the bot's tab (Win32 `EnumWindows`); `open_terminal` opens a Windows Terminal tab running `ledge attach <id>` in WSL (`wt.exe -w 0 new-tab`). |
 
 The overlay never talks to tmux or to the agent. Its only two outputs are WebSocket commands to the daemon and the native commands above.
 
@@ -381,7 +381,7 @@ In any WSL terminal, start your agent through Ledge:
 ledge claude          # or: ledge codex, ledge cursor
 ```
 
-The Windows Terminal tab takes the bot's name and a new mascot joins the handle. You can also start a session from the overlay itself: open the list with `Ctrl+Alt+L` and press `+`. The [tour](docs/tour.md) shows every screen.
+The Windows Terminal tab takes the bot's name and a new mascot joins the handle. You can also start a session from the overlay itself: open the list with `Ctrl+Alt+L` and press `+`, or press `Ctrl+Alt+N`. The [tour](docs/tour.md) shows every screen.
 
 The overlay speaks French by default. Settings > Langue switches it to English.
 

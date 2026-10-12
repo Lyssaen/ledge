@@ -10,7 +10,7 @@ export const LEDGE_ID = 'ledge';
 export const DETAIL_VIEWS: readonly Mode[] = ['settings', 'help', 'launch'];
 const DETAIL_FALLBACK_H: Record<'settings' | 'help' | 'launch', number> = { settings: SIZES.settingsH, help: SIZES.helpH, launch: SIZES.launchH };
 export interface Slot { id: string; size: number; center: number }
-export interface Layout { top: number; w: number; h: number; slots: Slot[]; handle: { top: number; h: number }; hotZones: Array<{ top: number; h: number }> }
+export interface Layout { top: number; w: number; h: number; slots: Slot[]; handle: { top: number; h: number } }
 
 export function slotSizes(n: number): { big: number; small: number; gap: number } {
   return n > 5 ? { big: 18, small: 11, gap: 3 } : { big: 20, small: 12, gap: 5 };
@@ -32,36 +32,35 @@ export function layout(input: LayoutInput): Layout {
   const handleTop = Math.round(centerY - handleH / 2);
   const slots: Slot[] = []; let y = handleTop + 8 + SIZES.residentH + sep;
   for (const b of bots) { const size = b.pending ? big : small; slots.push({ id: b.id, size, center: y + size / 2 }); y += size + gap; }
-  const hotZones = [{ top: SIZES.margin, h: Math.max(0, handleTop - 6 - SIZES.margin) }, { top: handleTop + handleH + 6, h: Math.max(0, screenH - SIZES.margin - (handleTop + handleH + 6)) }];
   const handle = { top: handleTop, h: handleH };
-  if (mode === 'handle') return { top: handleTop, w: SIZES.handleW, h: handleH, slots, handle, hotZones };
+  if (mode === 'handle') return { top: handleTop, w: SIZES.handleW, h: handleH, slots, handle };
   if (mode === 'bubble') {
     const resident = handleTop + 8 + SIZES.residentH / 2;
     const slot = input.bubbleId === LEDGE_ID ? { center: resident } : slots.find(s => s.id === input.bubbleId) ?? slots[0];
     const h = Math.min(maxH, input.bubbleH ?? SIZES.bubbleH);
     const top = clamp(Math.round((input.bubbleAnchor ?? slot?.center ?? centerY) - 38), SIZES.margin, screenH - SIZES.margin - h);
-    return { top, w: SIZES.bubbleW, h, slots, handle, hotZones };
+    return { top, w: SIZES.bubbleW, h, slots, handle };
   }
   if (mode === 'reader') {
     const h = Math.min(maxH, SIZES.readerH);
     // The native frame adds a small right shadow outside this width.
     const w = Math.min(input.readerExpanded ? SIZES.readerExpandedW : SIZES.readerW, Math.max(0, (input.screenW ?? Infinity) - 24));
-    return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w, h, slots, handle, hotZones };
+    return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w, h, slots, handle };
   }
   if (mode === 'chat') {
     const h = Math.min(maxH, input.detailH ?? SIZES.chatH);
-    return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w: SIZES.sessionW, h, slots, handle, hotZones };
+    return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w: SIZES.sessionW, h, slots, handle };
   }
   if (mode === 'settings' || mode === 'help' || mode === 'launch') {
     const h = Math.min(maxH, input.detailH ?? DETAIL_FALLBACK_H[mode]);
-    return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w: SIZES.listW, h, slots, handle, hotZones };
+    return { top: clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h), w: SIZES.listW, h, slots, handle };
   }
   // An empty list shows the empty state (a bot, two lines, a button) instead of rows.
   const rowsH = n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.groups ?? 0) * SIZES.groupH + (input.listExtraH ?? 0);
   const h = Math.min(maxH, mode === 'list' ? SIZES.headerH + rowsH + (input.askH ?? 0) + SIZES.footerH + SURFACE_CHROME_Y : (input.sessionH ?? 480));
   const top = clamp(Math.round(centerY - h / 2), SIZES.margin, screenH - SIZES.margin - h);
   const w = mode === 'list' ? SIZES.listW : (input.reading ? SIZES.readingW : SIZES.sessionW);
-  return { top, w, h, slots, handle, hotZones };
+  return { top, w, h, slots, handle };
 }
 
 /**
@@ -74,11 +73,10 @@ export function scaledLayout(input: LayoutInput, scales: { handle: number; panel
   const hl = layout({ ...input, mode: 'handle', screenH: input.screenH / hs });
   const slots = hl.slots.map(s => ({ id: s.id, size: s.size * hs, center: s.center * hs }));
   const handle = { top: hl.handle.top * hs, h: hl.handle.h * hs };
-  const hotZones = hl.hotZones.map(z => ({ top: z.top * hs, h: z.h * hs }));
-  if (input.mode === 'handle') return { top: hl.top * hs, w: hl.w * hs, h: hl.h * hs, slots, handle, hotZones };
+  if (input.mode === 'handle') return { top: hl.top * hs, w: hl.w * hs, h: hl.h * hs, slots, handle };
   const resident = input.mode === 'bubble' && input.bubbleId === LEDGE_ID ? handle.top + 8 * hs + SIZES.residentH / 2 * hs : undefined;
   const anchor = input.mode === 'bubble' ? (resident ?? (slots.find(s => s.id === input.bubbleId) ?? slots[0])?.center) : undefined;
   const pl = layout({ ...input, screenH: input.screenH / ps, screenW: input.screenW === undefined ? undefined : input.screenW / ps, bubbleAnchor: anchor === undefined ? undefined : anchor / ps });
   // The surface's border is 1 real px whatever the scale: only the content inside it is zoomed.
-  return { top: pl.top * ps, w: pl.w * ps, h: (pl.h - SURFACE_CHROME_Y) * ps + SURFACE_CHROME_Y, slots, handle, hotZones };
+  return { top: pl.top * ps, w: pl.w * ps, h: (pl.h - SURFACE_CHROME_Y) * ps + SURFACE_CHROME_Y, slots, handle };
 }

@@ -32,7 +32,7 @@ When an agent asks something, the bubble unfolds beside the handle for a few sec
 
 ## The list
 
-Resting the cursor on the screen edge, or pressing `Ctrl+Alt+L` from anywhere, opens the list. Rows are grouped by repository. Line 1 of a row is the topic (what the agent is working on), line 2 is the bot's name · branch · age, with the badge for the state on the right. Rename the topic from the session header (an empty name hands back to the conversation title, then the first prompt). Asks come first, oldest on top with the red bar.
+Resting the cursor on the handle, or pressing `Ctrl+Alt+L` from anywhere, opens the list. A list opened by hovering folds back when the cursor leaves it, unless you are typing in one of its fields; a click anywhere outside an open panel folds it too. Rows are grouped by repository. Line 1 of a row is the topic (what the agent is working on), line 2 is the bot's name · branch · age, with the badge for the state on the right. Rename the topic from the session header (an empty name hands back to the conversation title, then the first prompt). Asks come first, oldest on top with the red bar.
 
 <p>
   <img src="screens/list-dark.png" alt="The list of four sessions in dark theme" width="408">
@@ -100,10 +100,10 @@ A session started with plain `claude`, without the launcher, is still visible th
 
 ## Keyboard first
 
-`Ctrl+Alt+L` opens the list on the oldest ask with the rows numbered. `J` and `K` move, a digit jumps, `Y` and `N` decide, `Enter` opens, `Escape` goes back then folds. The first three keyboard opens show a coachmark; `?` opens the full list of shortcuts at any time.
+`Ctrl+Alt+L` opens the list on the oldest ask. `J` and `K` move, `Alt ←` and `Alt →` go to the previous or next session (from an open session too), `Y` and `N` decide, digits choose a question's option, `Enter` opens, `Escape` goes back then folds. `Ctrl+Alt+N` opens the new-session form from anywhere. The first three keyboard opens show a coachmark; `?` opens the full list of shortcuts at any time.
 
 <p>
-  <img src="screens/keyboard-dark.png" alt="The list opened from the keyboard: numbered rows, inline Autoriser and Refuser, the coachmark" width="408">
+  <img src="screens/keyboard-dark.png" alt="The list opened from the keyboard: inline Autoriser and Refuser, the coachmark" width="408">
   <img src="screens/help-dark.png" alt="Help: every keyboard shortcut" width="408">
 </p>
 

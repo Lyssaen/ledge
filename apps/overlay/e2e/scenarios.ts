@@ -50,10 +50,15 @@ export const overview = (): Session[] => [
 export const team = (): Session[] => ['Otto', 'Nova', 'Pim', 'Bix', 'Lu', 'Milo', 'Ada', 'Nox', 'Pip', 'Sol', 'Mina', 'Tao'].map((name, i) =>
   session(`t${i}`, { name, tool: (['claude', 'codex', 'cursor'] as const)[i % 3], project: ['harness-assistant', 'design-system', 'landing-page'][i % 3]!, startedAt: ago(12 - i), ...(i === 1 || i === 7 || i === 10 ? perm : i % 3 === 0 ? { state: 'idle' as const } : {}) }));
 
-/** Opens the list with the real mouse on the edge band above the handle, then rests the pointer inside the surface. */
+/** Hovers the handle with the real mouse. The list opens after the dwell. */
+export async function hoverHandle(page: Page) {
+  const h = (await surface(page).boundingBox())!;
+  await page.mouse.move(200, h.y + h.height / 2);
+  await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2, { steps: 3 });
+}
+/** Opens the list by hovering the handle with the real mouse, then rests the pointer inside the surface. */
 export async function openList(page: Page) {
-  await page.mouse.move(200, 60);
-  await page.mouse.move(3, 60, { steps: 3 });
+  await hoverHandle(page);
   await expectMode(page, 'list');
   await restInside(page);
 }

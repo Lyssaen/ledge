@@ -13,7 +13,7 @@ const sessions = [
 
 describe('<SessionList>', () => {
   it('shows counts, rows with badges, and highlights the oldest ask', () => {
-    render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
+    render(<SessionList sessions={sessions} visible selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
     expect(screen.getByText('4 sessions · 1 waiting for you')).toBeInTheDocument();
     const rows = screen.getAllByRole('button', { name: /open/ });
     expect(rows).toHaveLength(4);
@@ -31,14 +31,14 @@ describe('<SessionList>', () => {
     expect(within(rows[2]!).getByText('Read only')).toBeInTheDocument();
     expect(within(rows[3]!).getByText('Done')).toBeInTheDocument();
   });
-  it('numbers rows when opened from the keyboard', () => {
-    render(<SessionList sessions={sessions} visible numbered selectedId="b" dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
-    expect(screen.getByText('2')).toBeInTheDocument();
+  it('marks the selected row as current, with no row numbers', () => {
+    render(<SessionList sessions={sessions} visible selectedId="b" dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
+    expect(screen.queryByText('2')).toBeNull();
     expect(screen.getByRole('button', { name: /speos-api/ })).toHaveAttribute('aria-current', 'true');
   });
   it('clicks open a row, toggle dnd and collapse', () => {
     const onOpen = vi.fn(), onToggleDnd = vi.fn(), onClose = vi.fn();
-    render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd onToggleDnd={onToggleDnd} onOpen={onOpen} onClose={onClose} />);
+    render(<SessionList sessions={sessions} visible selectedId={null} dnd onToggleDnd={onToggleDnd} onOpen={onOpen} onClose={onClose} />);
     fireEvent.click(screen.getByRole('button', { name: /speos-api/ })); expect(onOpen).toHaveBeenCalledWith('b');
     // Do not disturb is both the header icon and the footer text toggle, as in the mockup.
     const dnd = screen.getAllByRole('button', { name: 'Do not disturb' });
@@ -48,14 +48,14 @@ describe('<SessionList>', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Collapse' })); expect(onClose).toHaveBeenCalled();
   });
   it('rows cascade with increasing delays', () => {
-    render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
+    render(<SessionList sessions={sessions} visible selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
     const rows = screen.getAllByRole('button', { name: /open/ });
     expect(rows[0]!.style.transition).toContain('0ms');
     expect(rows[0]!.getAttribute('data-delay')).toBe('150');
     expect(rows[3]!.getAttribute('data-delay')).toBe('222');
   });
   it('the cascade follows the layer\'s own entry delay', () => {
-    render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} enterDelay={280} />);
+    render(<SessionList sessions={sessions} visible selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} enterDelay={280} />);
     const rows = screen.getAllByRole('button', { name: /open/ });
     expect(rows[0]!.getAttribute('data-delay')).toBe('310');
     expect(rows[3]!.getAttribute('data-delay')).toBe('382');
@@ -63,23 +63,22 @@ describe('<SessionList>', () => {
 });
 
 describe('<SessionList> grouping', () => {
-  it('numbers rows in display order when repositories interleave', () => {
+  it('lists rows in display order when repositories interleave', () => {
     const x = (id: string) => fakeSession(id, { name: id.toUpperCase(), repo: 'X', repoPath: '/w/x', cwd: '/w/x' });
     const mixed = [x('a'), fakeSession('c', { name: 'C', repo: 'Y', repoPath: '/w/y', cwd: '/w/y' }), x('b')];
-    render(<SessionList sessions={displayOrder(mixed)} visible numbered selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
+    render(<SessionList sessions={displayOrder(mixed)} visible selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
     const rows = screen.getAllByRole('button', { name: /open/ });
     expect(rows.map(r => r.parentElement!.getAttribute('data-row-id'))).toEqual(['a', 'b', 'c']);
-    rows.forEach((r, i) => expect(within(r).getByText(String(i + 1))).toBeInTheDocument());
   });
 });
 
 describe('<SessionList> launching', () => {
   it('the header + opens the form; an empty list shows the empty state with its own button', () => {
     const onLaunch = vi.fn();
-    const { rerender } = render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} onLaunch={onLaunch} />);
+    const { rerender } = render(<SessionList sessions={sessions} visible selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} onLaunch={onLaunch} />);
     fireEvent.click(screen.getByRole('button', { name: 'New session' })); expect(onLaunch).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-empty]')).toBeNull();
-    rerender(<SessionList sessions={[]} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} onLaunch={onLaunch} />);
+    rerender(<SessionList sessions={[]} visible selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} onLaunch={onLaunch} />);
     expect(screen.getByText('No sessions')).toBeInTheDocument();
     expect(screen.getByText('Nobody at work.')).toBeInTheDocument();
     expect(screen.getByText('ledge claude')).toBeInTheDocument();
@@ -88,13 +87,13 @@ describe('<SessionList> launching', () => {
     fireEvent.click(buttons[1]!); expect(onLaunch).toHaveBeenCalledTimes(2);
   });
   it('without onLaunch neither button exists', () => {
-    render(<SessionList sessions={[]} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
+    render(<SessionList sessions={[]} visible selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} />);
     expect(screen.queryByRole('button', { name: 'New session' })).toBeNull();
     expect(document.querySelector('[data-empty]')).not.toBeNull();
   });
   it('a notice shows under the header with its action', () => {
     const onClick = vi.fn();
-    render(<SessionList sessions={sessions} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} notice={{ text: 'Juno is starting in api-gateway.', action: { label: 'Open the terminal', onClick } }} />);
+    render(<SessionList sessions={sessions} visible selectedId={null} dnd={false} onToggleDnd={() => {}} onOpen={() => {}} onClose={() => {}} notice={{ text: 'Juno is starting in api-gateway.', action: { label: 'Open the terminal', onClick } }} />);
     expect(screen.getByRole('status')).toHaveTextContent('Juno is starting in api-gateway.');
     fireEvent.click(screen.getByRole('button', { name: /Open the terminal/ })); expect(onClick).toHaveBeenCalled();
   });
@@ -117,7 +116,7 @@ describe('rowHint', () => {
     expect(rowHint(fakeSession('w', { state: 'working', helpers: [h('a', 'working')] }))).toBe('running');
   });
   describe('remove from list', () => {
-    const props = { visible: true, numbered: false, selectedId: null, dnd: false, onToggleDnd: () => {}, onClose: () => {} };
+    const props = { visible: true, selectedId: null, dnd: false, onToggleDnd: () => {}, onClose: () => {} };
     it('only finished and read-only rows carry the button; it dismisses without opening the row', () => {
       const onOpen = vi.fn(); const onDismiss = vi.fn();
       render(<SessionList {...props} sessions={sessions} onOpen={onOpen} onDismiss={onDismiss} />);
@@ -140,7 +139,7 @@ describe('rowHint', () => {
   });
   it('places the ask field above the sessions, matching the notch', () => {
     const onAsk = vi.fn();
-    const props = { visible: true, numbered: false, selectedId: null, dnd: false, onToggleDnd: () => {}, onOpen: () => {}, onClose: () => {}, onAsk };
+    const props = { visible: true, selectedId: null, dnd: false, onToggleDnd: () => {}, onOpen: () => {}, onClose: () => {}, onAsk };
     const { rerender } = render(<SessionList sessions={sessions} {...props} />);
     const order = () => {
       const layer = document.querySelector('[data-layer="list"]')!;

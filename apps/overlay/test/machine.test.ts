@@ -56,24 +56,34 @@ describe('surface machine', () => {
     expect(run([{ type: 'visibility', hidden: false }], hidden.s).effects).toContain('resumeTimer:bubble');
   });
   it('edge dwell opens the list by mouse; leaving closes it after the leave timer', () => {
-    const { s, effects } = run([{ type: 'edgeEnter' }, { type: 'dwellElapsed' }]);
+    const { s, effects } = run([{ type: 'handleEnter' }, { type: 'dwellElapsed' }]);
     expect(effects).toContain('startTimer:dwell'); expect(s.mode).toBe('list'); expect(s.openedBy).toBe('mouse');
     const r = run([{ type: 'surfaceLeave' }, { type: 'leaveElapsed' }], s);
     expect(r.s.mode).toBe('handle');
   });
-  it('the leave timer rechecks typing and focus before folding the list', () => {
-    const list = run([{ type: 'edgeEnter' }, { type: 'dwellElapsed' }, { type: 'surfaceEnter' }, { type: 'surfaceLeave' }]).s;
-    expect(run([{ type: 'focusWithin', on: true }, { type: 'leaveElapsed' }], list).s.mode).toBe('list');
+  it('the leave timer rechecks typing and an edited field before folding the list', () => {
+    const list = run([{ type: 'handleEnter' }, { type: 'dwellElapsed' }, { type: 'surfaceEnter' }, { type: 'surfaceLeave' }]).s;
+    expect(run([{ type: 'editing', on: true }, { type: 'leaveElapsed' }], list).s.mode).toBe('list');
     expect(run([{ type: 'typing', on: true }, { type: 'leaveElapsed' }], list).s.mode).toBe('list');
     expect(run([{ type: 'surfaceEnter' }, { type: 'leaveElapsed' }], list).s.mode).toBe('list');
-    expect(run([{ type: 'focusWithin', on: true }, { type: 'surfaceLeave' }], list).effects).not.toContain('startTimer:leave');
+    expect(run([{ type: 'editing', on: true }, { type: 'surfaceLeave' }], list).effects).not.toContain('startTimer:leave');
+  });
+  it('focus on a button or a row no longer keeps a mouse-opened list open', () => {
+    const list = run([{ type: 'handleEnter' }, { type: 'dwellElapsed' }, { type: 'surfaceEnter' }, { type: 'focusWithin', on: true }]).s;
+    expect(run([{ type: 'surfaceLeave' }], list).effects).toContain('startTimer:leave');
+    expect(run([{ type: 'surfaceLeave' }, { type: 'leaveElapsed' }], list).s.mode).toBe('handle');
+  });
+  it('leaving an edited field while the pointer is out arms the leave timer', () => {
+    const list = run([{ type: 'handleEnter' }, { type: 'dwellElapsed' }, { type: 'editing', on: true }, { type: 'surfaceLeave' }]).s;
+    expect(run([{ type: 'editing', on: false }], list).effects).toContain('startTimer:leave');
+    expect(run([{ type: 'editing', on: true }], run([{ type: 'surfaceLeave' }], list).s).effects).toContain('cancelTimer:leave');
   });
   it('an ask during the dwell does not open a bubble over the list', () => {
-    const { s, effects } = run([{ type: 'edgeEnter' }, { type: 'ask', id: 'a' }, { type: 'dwellElapsed' }, { type: 'unfoldElapsed' as never }]);
+    const { s, effects } = run([{ type: 'handleEnter' }, { type: 'ask', id: 'a' }, { type: 'dwellElapsed' }, { type: 'unfoldElapsed' as never }]);
     expect(s.mode).toBe('list'); expect(effects.filter(e => e === 'cancelTimer:unfold').length).toBeGreaterThan(0);
   });
   it('typing keeps the list open when the mouse leaves', () => {
-    const { s, effects } = run([{ type: 'edgeEnter' }, { type: 'dwellElapsed' }, { type: 'typing', on: true }, { type: 'surfaceLeave' }]);
+    const { s, effects } = run([{ type: 'handleEnter' }, { type: 'dwellElapsed' }, { type: 'typing', on: true }, { type: 'surfaceLeave' }]);
     expect(s.mode).toBe('list'); expect(effects).not.toContain('startTimer:leave');
   });
   it('clicking a bot, a row or the bubble opens the session on that bot', () => {
@@ -186,7 +196,7 @@ describe('controller timers', () => {
     expect(c.state().mode).toBe('bubble');
     expect(timers.at(-1)!.ms).toBe(4000); timers.at(-1)!.fn();
     expect(c.state().mode).toBe('handle');
-    c.dispatch({ type: 'edgeEnter' }); expect(timers.at(-1)!.ms).toBe(180);
+    c.dispatch({ type: 'handleEnter' }); expect(timers.at(-1)!.ms).toBe(180);
     c.dispose();
   });
   it('the functional timings do not follow the animation scaling', () => {
@@ -301,15 +311,15 @@ describe('surface machine: decision failure and detail views', () => {
     expect(run([{ type: 'settings' }], form).s.mode).toBe('settings');
     expect(run([{ type: 'launch' }]).s.mode).toBe('handle');
     expect(run([{ type: 'launch' }], bubble()).s.mode).toBe('bubble');
-    // Mouse-opened: folds on leave unless focus (a field being filled) is inside.
-    const byMouse = run([{ type: 'edgeEnter' }, { type: 'dwellElapsed' as never }, { type: 'surfaceEnter' }, { type: 'launch' }]).s;
+    // Mouse-opened: folds on leave unless a field being filled holds the focus.
+    const byMouse = run([{ type: 'handleEnter' }, { type: 'dwellElapsed' as never }, { type: 'surfaceEnter' }, { type: 'launch' }]).s;
     expect(run([{ type: 'surfaceLeave' }], byMouse).effects).toContain('startTimer:leave');
-    expect(run([{ type: 'focusWithin', on: true }, { type: 'surfaceLeave' }], byMouse).effects).not.toContain('startTimer:leave');
+    expect(run([{ type: 'editing', on: true }, { type: 'surfaceLeave' }], byMouse).effects).not.toContain('startTimer:leave');
   });
-  it('a mouse-opened settings view folds on leave like the list, unless focus is inside', () => {
-    const open = run([{ type: 'edgeEnter' }, { type: 'dwellElapsed' as never }, { type: 'surfaceEnter' }, { type: 'settings' }]).s;
+  it('a mouse-opened settings view folds on leave like the list, unless a field is edited', () => {
+    const open = run([{ type: 'handleEnter' }, { type: 'dwellElapsed' as never }, { type: 'surfaceEnter' }, { type: 'settings' }]).s;
     expect(run([{ type: 'surfaceLeave' }], open).effects).toContain('startTimer:leave');
-    expect(run([{ type: 'focusWithin', on: true }, { type: 'surfaceLeave' }], open).effects).not.toContain('startTimer:leave');
+    expect(run([{ type: 'editing', on: true }, { type: 'surfaceLeave' }], open).effects).not.toContain('startTimer:leave');
   });
   it('a request replaced during the acknowledgement confirms it and the new request bubbles unlocked', () => {
     const held = run([{ type: 'decidedInBubble' }, { type: 'holdElapsed' }], bubble()).s;
@@ -340,17 +350,83 @@ describe('surface machine: decision failure and detail views', () => {
     expect(run([{ type: 'removed', id: 'a', remaining: [] }], bubble()).s.mode).toBe('handle');
   });
   it('an edge brush right after an ask defers the bubble, leaving the edge re-arms it', () => {
-    const brushed = run([{ type: 'ask', id: 'a' }, { type: 'edgeEnter' }]);
+    const brushed = run([{ type: 'ask', id: 'a' }, { type: 'handleEnter' }]);
     expect(brushed.effects).toContain('cancelTimer:unfold');
-    const left = run([{ type: 'edgeLeave' }], brushed.s);
+    const left = run([{ type: 'handleLeave' }], brushed.s);
     expect(left.effects).toContain('startTimer:unfold');
     expect(run([{ type: 'unfoldElapsed' as never }], left.s).s).toMatchObject({ mode: 'bubble', bubbleId: 'a' });
     // An ask during the dwell, then a leave before it opens the list: same.
-    const during = run([{ type: 'edgeEnter' }, { type: 'ask', id: 'a' }, { type: 'edgeLeave' }]);
+    const during = run([{ type: 'handleEnter' }, { type: 'ask', id: 'a' }, { type: 'handleLeave' }]);
     expect(during.effects.at(-1)).toBe('startTimer:unfold');
     // A bubble that already timed out does not come back on an edge brush.
     const timedOut = run([{ type: 'bubbleElapsed' }], bubble()).s;
-    expect(run([{ type: 'edgeEnter' }, { type: 'edgeLeave' }], timedOut).effects).not.toContain('startTimer:unfold');
+    expect(run([{ type: 'handleEnter' }, { type: 'handleLeave' }], timedOut).effects).not.toContain('startTimer:unfold');
+  });
+
+  describe('hover on the handle', () => {
+    const hovered = () => run([{ type: 'handleEnter' }, { type: 'dwellElapsed' }, { type: 'surfaceEnter' }]).s;
+    it('the pointer entering the surface over the handle keeps the dwell running', () => {
+      const { s, effects } = run([{ type: 'surfaceEnter' }, { type: 'handleEnter' }, { type: 'surfaceEnter' }, { type: 'dwellElapsed' }]);
+      expect(effects).not.toContain('cancelTimer:dwell');
+      expect(s).toMatchObject({ mode: 'list', openedBy: 'mouse' });
+    });
+    it('a session opened from a hover-opened list folds when the pointer leaves', () => {
+      const session = run([{ type: 'rowClick', id: 'a' }], hovered()).s;
+      expect(session.openedBy).toBe('mouse');
+      const r = run([{ type: 'surfaceLeave' }], session);
+      expect(r.effects).toContain('startTimer:leave');
+      expect(run([{ type: 'leaveElapsed' }], r.s).s.mode).toBe('handle');
+    });
+    it('the chat opened from a hover-opened list folds when the pointer leaves', () => {
+      const r = run([{ type: 'chat' }, { type: 'surfaceLeave' }, { type: 'leaveElapsed' }], hovered());
+      expect(r.effects).toContain('startTimer:leave'); expect(r.s.mode).toBe('handle');
+    });
+    it('a bot clicked on the handle opens its session as a mouse open', () => {
+      const r = run([{ type: 'botClick', id: 'a' }, { type: 'surfaceLeave' }, { type: 'leaveElapsed' }]);
+      expect(r.effects).toContain('startTimer:leave'); expect(r.s.mode).toBe('handle');
+    });
+    it('a document being read never folds on leave', () => {
+      const reader = run([{ type: 'rowClick', id: 'a' }, { type: 'documentOpen', origin: { kind: 'session', sessionId: 'a' } }], hovered()).s;
+      const r = run([{ type: 'surfaceLeave' }, { type: 'leaveElapsed' }], reader);
+      expect(r.effects).not.toContain('startTimer:leave'); expect(r.s.mode).toBe('reader');
+    });
+    it('a keyboard-opened session never folds on leave', () => {
+      const r = run([{ type: 'shortcut' }, { type: 'rowClick', id: 'a' }, { type: 'surfaceEnter' }, { type: 'surfaceLeave' }]);
+      expect(r.effects).not.toContain('startTimer:leave');
+    });
+  });
+
+  describe('outside click', () => {
+    it('folds any open panel back to the handle', () => {
+      const open = run([{ type: 'shortcut' }]).s;
+      for (const s of [open, run([{ type: 'rowClick', id: 'a' }], open).s, run([{ type: 'settings' }], open).s, run([{ type: 'chat' }], open).s,
+        run([{ type: 'rowClick', id: 'a' }, { type: 'documentOpen', origin: { kind: 'session', sessionId: 'a' } }], open).s]) {
+        const r = run([{ type: 'outsideClick' }], s);
+        expect(r.s.mode).toBe('handle'); expect(r.effects).toContain('cancelTimer:leave');
+      }
+    });
+    it('leaves the handle and a bubble alone', () => {
+      const handle = initialSurface(); expect(run([{ type: 'outsideClick' }], handle).s).toBe(handle);
+      const b = bubble(); expect(run([{ type: 'outsideClick' }], b).s).toBe(b);
+    });
+  });
+
+  describe('new session shortcut', () => {
+    it('opens the launch form from the handle as a keyboard open', () => {
+      const r = run([{ type: 'newSession' }]);
+      expect(r.s).toMatchObject({ mode: 'launch', openedBy: 'keyboard' }); expect(r.effects).toContain('cancelTimer:unfold');
+    });
+    it('over a bubble, the ask stays queued', () => {
+      expect(run([{ type: 'newSession' }], bubble()).s).toMatchObject({ mode: 'launch', openedBy: 'keyboard', bubbleId: null, ack: null, queue: ['a'] });
+    });
+    it('from any other view it opens the form, and on the form it folds back to the handle', () => {
+      const session = run([{ type: 'shortcut' }, { type: 'rowClick', id: 'a' }]).s;
+      const form = run([{ type: 'newSession' }], session).s;
+      expect(form).toMatchObject({ mode: 'launch', selectedId: null, openedBy: 'keyboard' });
+      expect(run([{ type: 'newSession' }], form).s.mode).toBe('handle');
+      const reader = run([{ type: 'documentOpen', origin: { kind: 'session', sessionId: 'a' } }, { type: 'newSession' }], session).s;
+      expect(reader).toMatchObject({ mode: 'launch', documentOrigin: null });
+    });
   });
 
   describe('finished bubble', () => {
@@ -394,13 +470,13 @@ describe('surface machine: decision failure and detail views', () => {
     });
     it('a finish while an ask waits in the handle, or while the list or a session is open, only shows in the handle', () => {
       expect(run([{ type: 'ask', id: 'b' }, { type: 'finished', id: 'a' }]).s.done).toEqual([]);
-      expect(run([{ type: 'edgeEnter' }, { type: 'dwellElapsed' }, { type: 'finished', id: 'a' }]).s.done).toEqual([]);
+      expect(run([{ type: 'handleEnter' }, { type: 'dwellElapsed' }, { type: 'finished', id: 'a' }]).s.done).toEqual([]);
       expect(run([{ type: 'botClick', id: 'b' }, { type: 'finished', id: 'a' }]).s.done).toEqual([]);
     });
     it('a finish during an edge dwell waits, and unfolds once the pointer leaves the edge', () => {
-      const r = run([{ type: 'edgeEnter' }, { type: 'finished', id: 'a' }]);
+      const r = run([{ type: 'handleEnter' }, { type: 'finished', id: 'a' }]);
       expect(r.s.done).toEqual(['a']); expect(r.s.unfoldDue).toBe(true); expect(r.effects.filter(e => e === 'startTimer:unfold')).toHaveLength(0);
-      expect(run([{ type: 'edgeLeave' }], r.s).effects).toContain('startTimer:unfold');
+      expect(run([{ type: 'handleLeave' }], r.s).effects).toContain('startTimer:unfold');
     });
     it('hover pauses the 6 s clock, OK (close) and Open leave it, DND drops it, removal advances it', () => {
       const up = run([{ type: 'finished', id: 'a' }, unfold]).s;
@@ -419,11 +495,11 @@ describe('surface machine: decision failure and detail views', () => {
     r = transition(r.state, { type: 'back' }); expect(r.state.mode).toBe('list');
     expect(transition(initialSurface(), { type: 'chat' }).state.mode).toBe('chat');
   });
-  it('the chat stays open when the pointer leaves, like a session', () => {
+  it('a mouse-opened chat folds when the pointer leaves, like the list, unless its field is edited', () => {
     const chat = transition({ ...initialSurface(), mode: 'chat', openedBy: 'mouse', hovering: true }, { type: 'surfaceLeave' });
-    expect(chat.state.mode).toBe('chat');
-    expect(chat.effects.filter(e => e.type === 'startTimer' && e.name === 'leave')).toHaveLength(0);
-    expect(run([{ type: 'leaveElapsed' }], chat.state).s.mode).toBe('chat');
+    expect(chat.effects.filter(e => e.type === 'startTimer' && e.name === 'leave')).toHaveLength(1);
+    expect(run([{ type: 'leaveElapsed' }], chat.state).s.mode).toBe('handle');
+    expect(run([{ type: 'editing', on: true }, { type: 'leaveElapsed' }], chat.state).s.mode).toBe('chat');
     const list = transition({ ...initialSurface(), mode: 'list', openedBy: 'mouse', hovering: true }, { type: 'surfaceLeave' });
     expect(list.effects.some(e => e.type === 'startTimer' && e.name === 'leave')).toBe(true);
   });

@@ -2,7 +2,7 @@
  * Everything the web app asks of the native shell goes through here. In a plain browser (dev, tests) every call is a
  * no-op or a DOM fallback; under Tauri it talks to the commands and events in `src-tauri/src/main.rs`:
  *   set_frame { top, width, height }   window to (0, top) on the chosen monitor's work area, sized width x height
- *   set_hot_zones { zones: Band[] }    edge bands the native cursor poller watches (empty: none)
+ *   set_outside_watch { on }           arm (or disarm) the native watch for a mouse press outside the window
  *   list_monitors                      every monitor (logical sizes, work-area height, which one is the primary)
  *   set_monitor { id | null }          the Screen setting: the overlay moves to that monitor at once (null: primary)
  *   focus_overlay                      remember the foreground window, then show and focus the overlay window
@@ -13,12 +13,12 @@
  *   set_tray_labels { open, newSession, dnd, quit }  translated tray menu items
  *   get_autostart                      whether Ledge launches at login (null: not offered, a `tauri dev` build)
  *   set_autostart { on }               turn launch at login on or off; returns the state Windows now reports
- *   event `ledge://edge` { inside }    cursor entered / left the edge bands
+ *   event `ledge://outside-click`      a mouse button went down outside the window while the watch was armed
  *   event `ledge://cursor-near` { x, y } | null    cursor near the notch, in logical work-area coordinates
  *   event `ledge://tray` { action }    tray menu action
  * Coordinates sent to the shell are logical px from the top of the chosen monitor's work area ("monitor px").
- * The page is never zoomed (each layer applies its own UI scale), so its CSS px are monitor px; `setFrame` and
- * `setHotZones` still take an optional `zoom` (one CSS px = `zoom` monitor px) and round frames outward here. The shell
+ * The page is never zoomed (each layer applies its own UI scale), so its CSS px are monitor px; `setFrame` still
+ * takes an optional `zoom` (one CSS px = `zoom` monitor px) and round frames outward here. The shell
  * itself never knows about any zoom.
  */
 import { resolveMonitor, type MonitorInfo } from '../monitor';
@@ -28,8 +28,7 @@ export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS
 const inTauri = isTauri;
 
 export interface Frame { top: number; w: number; h: number }
-export interface Band { top: number; h: number }
-export const EDGE_EVENT = 'ledge://edge';
+export const OUTSIDE_CLICK_EVENT = 'ledge://outside-click';
 export const CURSOR_NEAR_EVENT = 'ledge://cursor-near';
 export const TRAY_EVENT = 'ledge://tray';
 
@@ -104,14 +103,13 @@ export function setFrame(f: Frame, zoom = 1): Promise<boolean> {
   return run;
 }
 
-let lastZones = '';
-/** Reports the edge bands (CSS px, under the UI `zoom`) that should open the surface; an empty list disarms the
- *  native poller. */
-export function setHotZones(zones: Band[], zoom = 1): void {
-  if (!inTauri()) return;
-  const bands = zones.map(z => ({ top: z.top * zoom, h: z.h * zoom }));
-  const key = JSON.stringify(bands); if (key === lastZones) return; lastZones = key;
-  invoke('set_hot_zones', { zones: bands }).catch(() => { if (lastZones === key) lastZones = ''; });
+let lastWatch: boolean | null = null;
+/** Arms the native watch for a press outside the window while a panel shows. The window never takes focus on a
+ *  mouse open, so a click elsewhere gives it no blur to react to. */
+export function setOutsideWatch(on: boolean): void {
+  if (!inTauri() || on === lastWatch) return;
+  lastWatch = on;
+  invoke('set_outside_watch', { on }).catch(() => { if (lastWatch === on) lastWatch = null; });
 }
 
 /** Gives the overlay OS focus so single-letter keys reach it. Only for keyboard opens: asks never steal focus. */
@@ -171,11 +169,12 @@ export async function foregroundIsTerminal(): Promise<boolean> {
   return invoke<boolean>('foreground_is_terminal').catch(() => false);
 }
 
-/** Native edge hover. In the browser it never fires: the DOM hot zones handle the edge there. */
-export function onEdge(fn: (inside: boolean) => void): () => void {
+/** A press outside the window while the watch is armed. In the browser it never fires: the surface listens to the
+ *  document's own pointer presses there. */
+export function onOutsideClick(fn: () => void): () => void {
   if (!inTauri()) return () => {};
   let off = () => {}; let disposed = false;
-  void listen<{ inside: boolean }>(EDGE_EVENT, e => { if (!disposed) fn(e.payload.inside); }).then(un => {
+  void listen(OUTSIDE_CLICK_EVENT, () => { if (!disposed) fn(); }).then(un => {
     off = un;
     if (disposed) un();
   }).catch(() => {});
@@ -205,13 +204,22 @@ export function onTrayAction(fn: (action: TrayAction) => void): () => void {
   return () => { disposed = true; off(); };
 }
 
-export function onShortcut(fn: () => void): () => void {
-  if (!inTauri()) { const h = (e: KeyboardEvent) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'l') fn(); }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }
+let shortcutPlugin: Promise<typeof import('@tauri-apps/plugin-global-shortcut')> | null = null;
+/** Ctrl+Alt+<key>: a global shortcut under Tauri, a window key binding in the browser. */
+function globalShortcut(key: string, fn: () => void): () => void {
+  if (!inTauri()) { const h = (e: KeyboardEvent) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === key) fn(); }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }
+  const accel = `Ctrl+Alt+${key.toUpperCase()}`;
   let off = () => {}; let disposed = false;
-  import('@tauri-apps/plugin-global-shortcut').then(async ({ register, unregister }) => {
-    await register('Ctrl+Alt+L', e => { if (e.state === 'Pressed') fn(); });
-    off = () => { unregister('Ctrl+Alt+L').catch(() => {}); };
+  shortcutPlugin ??= import('@tauri-apps/plugin-global-shortcut');
+  shortcutPlugin.then(async ({ register, unregister }) => {
+    await register(accel, e => { if (e.state === 'Pressed') fn(); });
+    off = () => { unregister(accel).catch(() => {}); };
     if (disposed) off();
   }).catch(() => {});
   return () => { disposed = true; off(); };
 }
+
+/** Ctrl+Alt+L: open or fold the list from the keyboard. */
+export const onShortcut = (fn: () => void) => globalShortcut('l', fn);
+/** Ctrl+Alt+N: open or fold the new-session form from the keyboard. */
+export const onNewSessionShortcut = (fn: () => void) => globalShortcut('n', fn);

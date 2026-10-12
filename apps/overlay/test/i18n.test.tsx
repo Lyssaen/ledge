@@ -49,7 +49,7 @@ describe('message catalogue', () => {
 
 describe('French labels', () => {
   it('the list reads the mockup copy, aria-labels included', () => {
-    render(<LangProvider lang="fr"><SessionList sessions={list} visible numbered={false} selectedId={null} dnd={false} onToggleDnd={noop} onOpen={noop} onClose={noop} now={T} /></LangProvider>);
+    render(<LangProvider lang="fr"><SessionList sessions={list} visible selectedId={null} dnd={false} onToggleDnd={noop} onOpen={noop} onClose={noop} now={T} /></LangProvider>);
     expect(screen.getByText('2 sessions · 1 demande pour vous')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Ne pas déranger' })).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Réglages' })).toBeInTheDocument();

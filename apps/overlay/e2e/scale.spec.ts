@@ -1,5 +1,6 @@
 import { test, expect, surface, layer, expectMode, ready } from './fixtures';
 import { fakeDaemon, session } from './daemon';
+import { hoverHandle } from './scenarios';
 
 const team = () => [session('a'), session('b', { name: 'Pim', project: 'speos-api' }), session('c', { name: 'Ada', state: 'waiting_permission', pending: { kind: 'permission', text: 'Run pnpm test', source: 'hook' } })];
 const box = async (l: import('@playwright/test').Locator) => (await l.boundingBox())!;
@@ -40,10 +41,10 @@ test.describe('4K work area', () => {
     expect(t.x).toBeLessThan(80);
   });
 
-  test('edge hover works on the 2x handle bands; the list stays open under a resting pointer when it changes shape', async ({ page }) => {
+  test('hover works on the 2x handle; the list stays open under a resting pointer when it changes shape', async ({ page }) => {
     const d = await fakeDaemon(page, team());
     await ready(page, 3);
-    await page.mouse.move(3, 200, { steps: 2 });
+    await hoverHandle(page);
     await expectMode(page, 'list');
     await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(380, 0);
     await page.mouse.move(300, 1080, { steps: 4 });
