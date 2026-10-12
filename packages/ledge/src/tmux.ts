@@ -18,10 +18,11 @@ export interface Tmux {
   attachArgs(name: string): string[];
 }
 
-export function runFile(file: string, args: string[], env?: NodeJS.ProcessEnv): Promise<{ code: number; stdout: string; stderr: string }> {
+export function runFile(file: string, args: string[], env?: NodeJS.ProcessEnv, opts?: { timeoutMs?: number }): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise(resolve => {
-    execFile(file, args, { maxBuffer: 4 * 1024 * 1024, env }, (err, stdout, stderr) => {
-      const code = err && typeof (err as NodeJS.ErrnoException & { code?: number }).code === 'number' ? (err as unknown as { code: number }).code : err ? 1 : 0;
+    execFile(file, args, { maxBuffer: 4 * 1024 * 1024, env, ...(opts?.timeoutMs ? { timeout: opts.timeoutMs, killSignal: 'SIGTERM' as const } : {}) }, (err, stdout, stderr) => {
+      // A killed-on-timeout child reports 124, as timeout(1) does.
+      const code = err && opts?.timeoutMs && (err as { killed?: boolean }).killed ? 124 : err && typeof (err as NodeJS.ErrnoException & { code?: number }).code === 'number' ? (err as unknown as { code: number }).code : err ? 1 : 0;
       resolve({ code, stdout: String(stdout), stderr: String(stderr) });
     });
   });

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { DaemonInfo, ServerMessage } from '@ledge/protocol';
-import { createDaemonUpdater, npmCommand, lastLines, type UpdaterDeps } from '../src/update/run-update.js';
+import { createDaemonUpdater, npmCommand, npmEnv, lastLines, type UpdaterDeps } from '../src/update/run-update.js';
 
 const NPM_INFO: DaemonInfo = { version: '0.2.2', install: 'npm', systemd: true };
 function deps(over: Partial<UpdaterDeps> = {}): UpdaterDeps & { calls: string[] } {
@@ -21,6 +21,14 @@ describe('npmCommand', () => {
   });
 });
 
+describe('npmEnv', () => {
+  it('puts the daemon node dir first in PATH and keeps the other variables', () => {
+    const env = npmEnv('/n/v26/bin/node', { PATH: '/usr/bin:/bin', HTTPS_PROXY: 'http://p:1' });
+    expect(env.PATH).toBe('/n/v26/bin:/usr/bin:/bin');
+    expect(env.HTTPS_PROXY).toBe('http://p:1');
+  });
+});
+
 describe('lastLines', () => {
   it('keeps the end of npm output, without blank lines', () => {
     expect(lastLines('a\n\nnpm ERR! code EACCES\nnpm ERR! path /usr/local/lib/node_modules\n\n', 2)).toBe('npm ERR! code EACCES\nnpm ERR! path /usr/local/lib/node_modules');
@@ -33,6 +41,12 @@ describe('createDaemonUpdater', () => {
     await createDaemonUpdater(d).update('0.3.0', send);
     expect(sent).toEqual([{ type: 'update.progress', version: '0.3.0', step: 'installing' }, { type: 'update.progress', version: '0.3.0', step: 'restarting' }]);
     expect(d.calls).toEqual(['npm /home/u/.local/share/nvm/v26.7.0/bin/npm i -g @paradow/ledge@0.3.0', 'save', 'restart']);
+  });
+  it('stays busy once the restart is requested', async () => {
+    const u = createDaemonUpdater(deps()); const b = collect();
+    await u.update('0.3.0', collect().send);
+    await u.update('0.3.0', b.send);
+    expect(b.sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'busy' }]);
   });
   it('refuses a clone and gives its command, touching nothing', async () => {
     const d = deps({ info: () => ({ version: '0.2.2', install: 'git', systemd: true, manual: 'cd /c && git pull' }) }); const { sent, send } = collect();
@@ -60,7 +74,7 @@ describe('createDaemonUpdater', () => {
   });
   it('answers busy while an update runs', async () => {
     let release!: () => void;
-    const d = deps({ npm: () => new Promise(r => { release = () => r({ code: 0, output: '' }); }) });
+    const d = deps({ npm: () => new Promise(r => { release = () => r({ code: 1, output: 'x' }); }) });
     const u = createDaemonUpdater(d); const a = collect(); const b = collect();
     const first = u.update('0.3.0', a.send);
     await vi.waitFor(() => expect(u.running()).toBe(true));
