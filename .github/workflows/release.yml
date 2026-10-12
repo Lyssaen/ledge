@@ -7,12 +7,58 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Builds everything without publishing: checks the Rust (no toolchain on the dev machine) before a real tag.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp, e.g. 0.3.0 (nothing is published)'
+        required: true
 
 permissions:
   contents: write
+  id-token: write
+
+env:
+  PUBLISH: ${{ github.event_name == 'push' }}
+  VERSION_TAG: ${{ github.event_name == 'push' && github.ref_name || format('v{0}', inputs.version) }}
 
 jobs:
+  # The daemon goes to npm first: the installer's notes and the island's update both point at that version.
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - run: sudo apt-get install -y tmux
+      - run: pnpm install --frozen-lockfile
+      - name: Stamp the version from the tag
+        run: node apps/overlay/scripts/set-version.mjs "$VERSION_TAG"
+      - run: pnpm --filter @ledge/protocol test
+      - run: pnpm --filter @paradow/ledge test
+      - run: pnpm --filter @paradow/ledge build
+      # Without NPM_TOKEN (after the switch to Trusted Publishing) NODE_AUTH_TOKEN is empty and npm uses OIDC.
+      - name: Publish to npm
+        if: env.PUBLISH == 'true'
+        working-directory: packages/ledge
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          v="${VERSION_TAG#v}"
+          # A re-run of the same tag must not fail on a version npm already has.
+          if npm view "@paradow/ledge@$v" version >/dev/null 2>&1; then echo "@paradow/ledge@$v already published"; exit 0; fi
+          npm publish --access public --provenance
+      - name: Check the package without publishing
+        if: env.PUBLISH != 'true'
+        working-directory: packages/ledge
+        run: npm pack --dry-run
+
   windows-installer:
+    needs: npm
     runs-on: windows-latest
     defaults:
       run:
@@ -34,20 +80,24 @@ jobs:
       # The tag is the version: written into the Tauri config (tray line, exe file version, installer name), the crate
       # and the package before anything is built, so the release never ships the version left in the repository.
       - name: Stamp the version from the tag
-        run: node scripts/set-version.mjs $env:GITHUB_REF_NAME
+        run: node scripts/set-version.mjs $env:VERSION_TAG
         working-directory: apps/overlay
       - name: Typecheck the overlay
         run: pnpm --filter overlay typecheck
       - name: Build the installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build
         working-directory: apps/overlay
       - name: Rust tests
         run: cargo test
         working-directory: apps/overlay/src-tauri
       - name: Publish
+        if: env.PUBLISH == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.VERSION_TAG }}
         run: |
           $version = $env:TAG -replace '^v', ''
           $exe = Get-ChildItem "apps/overlay/src-tauri/target/release/bundle/nsis/*_$($version)_*-setup.exe" | Select-Object -First 1
@@ -61,19 +111,34 @@ jobs:
           $install = @'
 
           **Install**
-          1. The WSL side (`ledge` CLI and daemon) should already be on `main`.
+          1. In WSL: `npm i -g @paradow/ledge@__VERSION__` (or let Ledge do it: the island offers the update).
           2. Quit Ledge from the tray, then run `__EXE__` over the previous install.
 
           The installer is not code-signed: Windows SmartScreen may warn on first launch ("More info" > "Run anyway").
 
           SHA-256: `__SHA__`
           '@
-          $notes = $body + ($install -replace '__EXE__', $exe.Name -replace '__SHA__', $sha)
+          $notes = $body + ($install -replace '__VERSION__', $version -replace '__EXE__', $exe.Name -replace '__SHA__', $sha)
           Set-Content -Path notes.md -Value $notes -Encoding utf8
+          $sig = "$($exe.FullName).sig"
+          if (-not (Test-Path $sig)) { throw "No updater signature next to $($exe.Name)" }
+          # The updater manifest carries the tag's own notes, without the install block.
+          Set-Content -Path release-notes.md -Value $body -Encoding utf8
+          node apps/overlay/scripts/latest-json.mjs $env:TAG $exe.FullName release-notes.md | Set-Content -Path latest.json -Encoding utf8
           gh release view $env:TAG *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $env:TAG $exe.FullName --clobber
+            gh release upload $env:TAG $exe.FullName latest.json --clobber
             gh release edit $env:TAG --title $title --notes-file notes.md
           } else {
-            gh release create $env:TAG $exe.FullName --title $title --notes-file notes.md
+            gh release create $env:TAG $exe.FullName latest.json --title $title --notes-file notes.md
           }
+      - name: Show the updater manifest
+        if: env.PUBLISH != 'true'
+        run: |
+          $version = $env:VERSION_TAG -replace '^v', ''
+          $exe = Get-ChildItem "apps/overlay/src-tauri/target/release/bundle/nsis/*_$($version)_*-setup.exe" | Select-Object -First 1
+          if (-not $exe) { throw "No installer for $version under bundle/nsis" }
+          if (-not (Test-Path "$($exe.FullName).sig")) { throw "No updater signature next to $($exe.Name)" }
+          Set-Content -Path release-notes.md -Value "Dry run for $env:VERSION_TAG" -Encoding utf8
+          node apps/overlay/scripts/latest-json.mjs $env:VERSION_TAG $exe.FullName release-notes.md | Set-Content -Path latest.json -Encoding utf8
+          Get-Content latest.json
