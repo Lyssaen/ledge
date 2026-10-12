@@ -30,6 +30,49 @@ describe('<AskField>', () => {
 });
 
 describe('<ChatView>', () => {
+  const proposal = { cwd: '/home/u/ledge', project: 'ledge', tool: 'claude' as const, prompt: 'Fix the overlay build' };
+  const answered = (p: ChatTurn['proposal']): ChatTurn[] => [{ qid: 'q1', question: 'open a session in ledge', askedAt: T0, steps: [], answer: 'Here is the session I would start.', answeredAt: T0, proposal: p }];
+  it('shows a proposal card under the answer; Launch names the turn', () => {
+    const onLaunchProposal = vi.fn();
+    render(<ChatView {...base} turns={answered(proposal)} live={null} onLaunchProposal={onLaunchProposal} />);
+    const card = screen.getByRole('region', { name: 'Proposed session' });
+    expect(card).toHaveTextContent('ledge'); expect(card).toHaveTextContent('/home/u/ledge');
+    expect(card).toHaveTextContent('Claude Code · default'); expect(card).toHaveTextContent('Fix the overlay build');
+    fireEvent.click(within(card).getByRole('button', { name: /Start the session/ }));
+    expect(onLaunchProposal).toHaveBeenCalledWith('q1');
+  });
+  it('a card without instruction says so; Launch is disabled while launching or offline', () => {
+    const { rerender } = render(<ChatView {...base} turns={answered({ ...proposal, prompt: undefined })} live={null} launchingQid="q1" />);
+    const card = () => screen.getByRole('region', { name: 'Proposed session' });
+    expect(card()).toHaveTextContent('None, empty session');
+    expect(within(card()).getByRole('button', { name: /Starting…/ })).toBeDisabled();
+    rerender(<ChatView {...base} turns={answered(proposal)} live={null} offline="Ledge is unreachable" />);
+    expect(within(card()).getByRole('button', { name: /Start the session/ })).toBeDisabled();
+  });
+  it('a launched card names the companion as a link and offers its terminal', () => {
+    const onOpenSession = vi.fn(), onTerminal = vi.fn();
+    render(<ChatView {...base} turns={answered({ ...proposal, launchedId: 'a' })} live={null} onOpenSession={onOpenSession} onTerminal={onTerminal} />);
+    const card = screen.getByRole('region', { name: 'Proposed session' });
+    expect(card).toHaveTextContent('Nova has started');
+    expect(within(card).queryByRole('button', { name: /Start the session/ })).toBeNull();
+    fireEvent.click(within(card).getByRole('link', { name: 'Nova' })); expect(onOpenSession).toHaveBeenCalledWith('a');
+    fireEvent.click(within(card).getByRole('button', { name: 'Terminal' })); expect(onTerminal).toHaveBeenCalledWith('a');
+  });
+  it('a failed card shows the reason and offers a retry', () => {
+    const onLaunchProposal = vi.fn();
+    render(<ChatView {...base} turns={answered({ ...proposal, error: 'no such folder: /home/u/ledge' })} live={null} onLaunchProposal={onLaunchProposal} />);
+    const card = screen.getByRole('region', { name: 'Proposed session' });
+    expect(within(card).getByRole('alert')).toHaveTextContent('Could not start: no such folder: /home/u/ledge');
+    fireEvent.click(within(card).getByRole('button', { name: 'Retry' })); expect(onLaunchProposal).toHaveBeenCalledWith('q1');
+  });
+  it('never shows the proposal block while the answer streams', () => {
+    const turns: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [{ kind: 'sessions' }] }];
+    const { rerender } = render(<ChatView {...base} turns={turns} live={{ qid: 'q1', text: 'I would start it.\n``' }} />);
+    expect(screen.queryByText(/``/)).toBeNull();
+    rerender(<ChatView {...base} turns={turns} live={{ qid: 'q1', text: 'I would start it.\n```ledge-session\n{"cwd": "/home' }} />);
+    expect(screen.getByText('I would start it.')).toBeInTheDocument();
+    expect(screen.queryByText(/cwd/)).toBeNull(); expect(screen.queryByText(/ledge-session/)).toBeNull();
+  });
   it('shows the suggestions when empty, and asks one on click', () => {
     const onAsk = vi.fn();
     render(<ChatView {...base} turns={[]} live={null} onAsk={onAsk} />);

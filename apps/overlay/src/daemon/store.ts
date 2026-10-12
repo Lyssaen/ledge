@@ -37,7 +37,7 @@ export const daemonStore = {
     if (m.type === 'chat.step' || m.type === 'chat.delta' || m.type === 'chat.done' || m.type === 'chat.error') {
       const chat = state.chat.map(t => t.qid !== m.qid ? t
         : m.type === 'chat.step' ? { ...t, steps: [...t.steps, m.step] }
-        : m.type === 'chat.done' ? { ...t, answer: m.text, answeredAt: m.at }
+        : m.type === 'chat.done' ? { ...t, answer: m.text, answeredAt: m.at, ...(m.proposal ? { proposal: m.proposal } : {}) }
         : m.type === 'chat.error' ? { ...t, error: m.message } : t);
       const chatLive = m.type === 'chat.delta' ? { qid: m.qid, text: (state.chatLive?.qid === m.qid ? state.chatLive.text : '') + m.text } : m.type === 'chat.step' ? state.chatLive : null;
       state = { ...state, chat, chatLive }; emit(); return;

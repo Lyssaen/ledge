@@ -171,7 +171,12 @@ const fr = {
     source: { sessions: 'les sessions', pane: (name: string) => `le terminal de ${name}`, reply: (name: string) => `la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'aucune lecture', ago: (when: string) => `il y a ${when}`,
     error: (why: string) => `Ledge n’a pas pu répondre : ${why}`,
-    stopped: 'Arrêté.'
+    stopped: 'Arrêté.',
+    card: {
+      label: 'Session proposée', folder: 'Dossier', tool: 'Harnais', byDefault: (tool: string) => `${tool} · par défaut`, prompt: 'Instruction', noPrompt: 'Aucune, session vide',
+      launch: 'Lancer la session', launching: 'Lancement…', retry: 'Réessayer', orRephrase: 'ou reformule ta demande', orFolder: 'ou donne-moi un autre dossier',
+      failed: (why: string) => `Échec du lancement : ${why}`, started: 'a démarré', startedUnknown: 'Session démarrée', terminal: 'Terminal'
+    },
   },
   help: {
     title: 'Au bout des doigts.',
@@ -348,7 +353,12 @@ const en: Messages = {
     source: { sessions: 'the sessions', pane: (name: string) => `${name}'s terminal`, reply: (name: string) => `${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'nothing read', ago: (when: string) => `${when} ago`,
     error: (why: string) => `Ledge could not answer: ${why}`,
-    stopped: 'Stopped.'
+    stopped: 'Stopped.',
+    card: {
+      label: 'Proposed session', folder: 'Folder', tool: 'Harness', byDefault: (tool: string) => `${tool} · default`, prompt: 'Instruction', noPrompt: 'None, empty session',
+      launch: 'Start the session', launching: 'Starting…', retry: 'Retry', orRephrase: 'or rephrase your request', orFolder: 'or give me another folder',
+      failed: (why: string) => `Could not start: ${why}`, started: 'has started', startedUnknown: 'Session started', terminal: 'Terminal'
+    },
   },
   help: {
     title: 'Keyboard',

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type Ref } from 'react';
-import type { ChatStep, ChatTurn, Session } from '@ledge/protocol';
+import { hideProposal, type ChatStep, type ChatTurn, type Session } from '@ledge/protocol';
 import { ResidentMascot } from '../bots/ResidentMascot';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
@@ -7,6 +7,7 @@ import { relativeTime } from '../format';
 import { transition } from '../motion';
 import { useI18n, type Messages } from '../i18n/lang';
 import { inline } from './ReplyCard';
+import { LaunchCard } from './LaunchCard';
 import { groupSessions } from './groups';
 import type { DocumentReference } from '../documents/references';
 
@@ -17,6 +18,8 @@ export interface ChatViewProps {
   offline: string | null;
   onAsk: (text: string) => void; onCancel: (qid: string) => void; onReset: () => void; onBack: () => void; onClose: () => void; onOpenSession: (id: string) => void;
   onDocument?: (ref: DocumentReference) => void;
+  /** The chat card being launched (its turn's qid) and the card's actions (spec 2026-10-12 §6). */
+  launchingQid?: string | null; onLaunchProposal?: (qid: string) => void; onTerminal?: (id: string) => void;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number; contentRef?: Ref<HTMLDivElement>;
 }
 
@@ -95,7 +98,16 @@ export function ChatView(p: ChatViewProps) {
                         {turn.steps.map((s, i) => <span key={i} style={{ display: 'flex', gap: 4, color: i === turn.steps.length - 1 ? 'var(--sidebar-foreground)' : undefined }}>{i < turn.steps.length - 1 && <span aria-hidden>✓</span>}<span>{stepLabel(s, t)}</span></span>)}
                       </div>
                     )}
-                    {(turn.answer || (turn.answeredAt === undefined && live?.qid === turn.qid && live.text)) && <Answer text={turn.answer || live!.text} sessions={p.sessions} onOpen={p.onOpenSession} onDocument={p.onDocument} />}
+                    {(() => {
+                      // While it streams, a proposal block (closed or not) is held back: the card shows it once the turn is done.
+                      const text = turn.answer || (turn.answeredAt === undefined && live?.qid === turn.qid ? hideProposal(live.text) : '');
+                      return text && <Answer text={text} sessions={p.sessions} onOpen={p.onOpenSession} onDocument={p.onDocument} />;
+                    })()}
+                    {turn.answeredAt !== undefined && turn.proposal && (
+                      <LaunchCard proposal={turn.proposal} session={p.sessions.find(s => s.id === turn.proposal!.launchedId)} busy={p.launchingQid === turn.qid}
+                        disabled={!!p.offline || (!!p.launchingQid && p.launchingQid !== turn.qid)}
+                        onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
+                    )}
                     {turn.answeredAt !== undefined && (
                       <div data-sources style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', paddingTop: 6, borderTop: '1px solid var(--sidebar-border)', fontSize: 11, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
                         <span style={{ fontWeight: 500 }}>{t.chat.sources}</span>

@@ -107,6 +107,14 @@ describe('daemon client + store', () => {
     expect(client.status()).toBe('connecting');
   });
 
+  it('keeps the proposal a chat.done carries', () => {
+    daemonStore.reset();
+    daemonStore.beginTurn({ qid: 'q1', question: 'x', askedAt: T0, steps: [] });
+    const proposal = { cwd: '/w/ledge', project: 'ledge', tool: 'claude' as const };
+    daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, proposal });
+    expect(daemonStore.getState().chat[0]).toMatchObject({ answer: 'ok', proposal });
+  });
+
   it('keeps the chat turns and the live answer', () => {
     daemonStore.reset();
     daemonStore.apply({ type: 'chat.history', turns: [{ qid: 'q0', question: 'hier', askedAt: T0, steps: [], answer: 'ok', answeredAt: T0 }] });

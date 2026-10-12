@@ -13,15 +13,13 @@ import { toolName } from '../format';
 import { DetailHeader } from './DetailHeader';
 import { Segmented } from './SettingsView';
 import { useI18n } from '../i18n/lang';
+import { loadOpenTab, saveOpenTab } from './openTabPreference';
 
 /** What the form sends: the daemon's `session.launch` fields, plus whether to open a terminal tab once it answers. */
 export interface LaunchRequest { tool: Tool; cwd: string; name?: string; prompt?: string; continue: boolean; openTab: boolean }
 
 /** The actions row under the scrolling body (its border included), added to the measured body by the surface. */
 export const LAUNCH_FOOTER_H = 61;
-const OPEN_TAB_KEY = 'ledge.launch.openTab';
-const loadOpenTab = () => { try { return localStorage.getItem(OPEN_TAB_KEY) !== '0'; } catch { return true; } };
-const saveOpenTab = (on: boolean) => { try { localStorage.setItem(OPEN_TAB_KEY, on ? '1' : '0'); } catch { /* in-memory only */ } };
 
 /** The folder's last path segment, as the daemon will name the project. */
 export const projectOf = (cwd: string) => cwd.trim().replace(/\/+$/, '').split('/').pop() || cwd.trim();
