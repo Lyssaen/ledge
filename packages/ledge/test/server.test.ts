@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
-import type { Session } from '@ledge/protocol';
+import type { ChatProposal, Session } from '@ledge/protocol';
+import type { Chat } from '../src/chat/service.js';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
 import { startServer, ALLOWED_ORIGINS, launchArgs, resolveFolder } from '../src/daemon/server.js';
@@ -529,6 +530,69 @@ describe('server', () => {
       expect(await c.next('error')).toEqual({ type: 'error', id: 'nope', message: 'unknown session' });
       await expect(c.next('session.removed', 100)).rejects.toThrow(/timeout/);
       c.close();
+    });
+  });
+
+  describe('launch from a chat card', () => {
+    const home = () => process.env.LEDGE_HOME!;
+    /** A chat holding one proposal for `q1`; the marks are recorded and broadcast as a history, like the real one. */
+    function stubChat(initial: ChatProposal | undefined) {
+      let proposal = initial; const marks: string[][] = [];
+      const chat: Chat = {
+        async ask() {}, cancel() {}, async reset() {}, history: () => [],
+        proposal: qid => (qid === 'q1' ? proposal : undefined),
+        markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
+        markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); }
+      };
+      return { chat, marks };
+    }
+    const start = (chat: Chat) => startServer({ store, tmux, port: 0, home: home(), chat, agentEnv: async () => ({ ...process.env, PATH: '/login/bin:/usr/bin' }) });
+
+    it('launches the proposal\'s own fields, marks the turn for everyone, and refuses a second launch, even a simultaneous one', async () => {
+      mkdirSync(join(home(), 'ledge'));
+      const { chat, marks } = stubChat({ cwd: join(home(), 'ledge'), project: 'ledge', tool: 'claude', prompt: 'Corrige le build' });
+      const srv2 = await start(chat);
+      const c = await connect({ port: srv2.port }); await c.next('snapshot'); await c.next('chat.history');
+      const other = await connect({ port: srv2.port }); await other.next('snapshot'); await other.next('chat.history');
+      // The message's fields are ignored: only the qid names the card.
+      c.send({ type: 'session.launch', tool: 'codex', cwd: '/elsewhere', prompt: 'autre chose', qid: 'q1' });
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'ledge'), qid: 'q1' });
+      const launched = await c.next('session.launched');
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'already launched' });
+      expect(tmux.created).toHaveLength(1);
+      expect(tmux.created[0]!.cwd).toBe(join(home(), 'ledge'));
+      expect(JSON.stringify(tmux.created[0]!.command)).toContain('Corrige le build');
+      expect(JSON.stringify(tmux.created[0]!.command)).not.toContain('autre chose');
+      expect(store.get(launched.id)).toMatchObject({ tool: 'claude', project: 'ledge', source: 'launcher' });
+      expect(marks).toEqual([['launched', 'q1', launched.id]]);
+      await other.next('chat.history');
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'ledge'), qid: 'q1' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'already launched' });
+      expect(tmux.created).toHaveLength(1);
+      c.close(); other.close(); await srv2.close();
+    });
+
+    it('refuses an unknown proposal without spawning', async () => {
+      const srv2 = await start(stubChat(undefined).chat);
+      const c = await connect({ port: srv2.port }); await c.next('snapshot');
+      c.send({ type: 'session.launch', tool: 'claude', cwd: '/w', qid: 'q1' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown proposal' });
+      expect(tmux.created).toHaveLength(0);
+      c.close(); await srv2.close();
+    });
+
+    it('marks a failed launch, then lets the card retry', async () => {
+      const { chat, marks } = stubChat({ cwd: join(home(), 'gone'), project: 'gone', tool: 'claude' });
+      const srv2 = await start(chat);
+      const c = await connect({ port: srv2.port }); await c.next('snapshot');
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'gone'), qid: 'q1' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: `no such folder: ${join(home(), 'gone')}` });
+      expect(marks).toEqual([['failed', 'q1', `no such folder: ${join(home(), 'gone')}`]]);
+      mkdirSync(join(home(), 'gone'));
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'gone'), qid: 'q1' });
+      const launched = await c.next('session.launched');
+      expect(marks.at(-1)).toEqual(['launched', 'q1', launched.id]);
+      c.close(); await srv2.close();
     });
   });
 

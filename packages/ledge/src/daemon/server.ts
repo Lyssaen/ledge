@@ -181,6 +181,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const NOT_TAKEN = 'the terminal did not take it';
   const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
 
+  /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
+  const chatLaunches = new Set<string>();
+  /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
+  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean }): Promise<Session> {
+    const cwd = await resolveFolder(req.cwd, opts.home);
+    const live = store.all();
+    const env = await agentEnv();
+    const session = await spawnSession({ tool: req.tool, args: launchArgs(req), name: req.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+    store.upsert(session);
+    store.touchRecent(session.cwd, session.project, session.startedAt);
+    log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
+    return session;
+  }
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case 'document.read': {
@@ -212,14 +225,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.launch': {
         // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
-        const cwd = await resolveFolder(msg.cwd, opts.home);
-        const live = store.all();
-        const env = await agentEnv();
-        const session = await spawnSession({ tool: msg.tool, args: launchArgs(msg), name: msg.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
-        store.upsert(session);
-        store.touchRecent(session.cwd, session.project, session.startedAt);
-        log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
-        return send(ws, { type: 'session.launched', id: session.id });
+        if (msg.qid === undefined) return send(ws, { type: 'session.launched', id: (await launch(msg)).id });
+        // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's.
+        const qid = msg.qid; const p = chat.proposal(qid);
+        if (!p) return send(ws, { type: 'error', message: 'unknown proposal' });
+        if (p.launchedId || chatLaunches.has(qid)) return send(ws, { type: 'error', message: 'already launched' });
+        chatLaunches.add(qid);
+        try {
+          const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt });
+          send(ws, { type: 'session.launched', id: session.id });
+          chat.markLaunched(qid, session.id, broadcast);
+        } catch (e) { chat.markFailed(qid, (e as Error).message, broadcast); throw e; }
+        finally { chatLaunches.delete(qid); }
+        return;
       }
       case 'folder.list': return send(ws, await listFolder(msg.path, opts.home));
       case 'folder.create': {
