@@ -2,8 +2,10 @@ import { useLayoutEffect, useState, type RefObject } from 'react';
 
 /** Observes the border-box height of `ref` while `active`; 0 until a measurement exists (callers fall back to a default).
  *  The observer is disconnected when inactive and on unmount. `cssZoom` is a CSS `zoom` on an ancestor (the browser
- *  UI scale): the client rect is zoomed, the observer's box and the layout are not, so the rect is divided by it. */
-export function useMeasuredHeight(ref: RefObject<HTMLElement | null>, active: boolean, cssZoom = 1): number {
+ *  UI scale): the client rect is zoomed, the observer's box and the layout are not, so the rect is divided by it.
+ *  `instance` changes when the caller remounts the element under the same ref (a keyed view): the observer moves to
+ *  the new element instead of staying on the detached one. */
+export function useMeasuredHeight(ref: RefObject<HTMLElement | null>, active: boolean, cssZoom = 1, instance: unknown = undefined): number {
   const [h, setH] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -18,6 +20,6 @@ export function useMeasuredHeight(ref: RefObject<HTMLElement | null>, active: bo
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ref, active, cssZoom]);
+  }, [ref, active, cssZoom, instance]);
   return h;
 }

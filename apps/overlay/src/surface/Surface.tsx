@@ -345,21 +345,22 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const settingsOpen = st.mode === 'settings';
   useEffect(() => { if (settingsOpen) onSettingsOpen?.(); }, [settingsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const helpH = useMeasuredHeight(helpRef, st.mode === 'help', ps);
-  const launchRef = useRef<HTMLDivElement>(null);
-  const launchH = useMeasuredHeight(launchRef, st.mode === 'launch', ps);
-  // The launch form's footer (the actions) sits under the measured, scrolling body.
-  const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : st.mode === 'launch' && launchH ? launchH + LAUNCH_FOOTER_H : 0;
-  // The chat sizes itself to its thread: header + measured content + the composer (+ the suggestion chips while empty).
-  const chatRef = useRef<HTMLDivElement>(null);
-  const chatH = useMeasuredHeight(chatRef, st.mode === 'chat', ps);
-  const chatBody = st.mode === 'chat' && chatH ? CHAT_HEADER_H + chatH + 60 + (chat.length === 0 ? 44 : 0) + SURFACE_CHROME_Y : undefined;
-
   // Starting a session from the form: one request at a time; the daemon answers `session.launched` (back to the list,
   // a notice for a few seconds, the terminal tab when asked) or an `error` without id (shown in the form). The form is
   // remounted on each open, so a submitted form never shows its old values again.
   const [launchOpen, setLaunchOpen] = useState(0);
   const launchMode = st.mode === 'launch';
   useEffect(() => { if (launchMode) setLaunchOpen(n => n + 1); }, [launchMode]);
+  // Measured on the remounted form (`launchOpen`), not on the one it replaced: a form opened from the handle is first
+  // laid out at the island's width, and only the live element reports the height at the settled width.
+  const launchRef = useRef<HTMLDivElement>(null);
+  const launchH = useMeasuredHeight(launchRef, launchMode, ps, launchOpen);
+  // The launch form's footer (the actions) sits under the measured, scrolling body.
+  const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : launchMode && launchH ? launchH + LAUNCH_FOOTER_H : 0;
+  // The chat sizes itself to its thread: header + measured content + the composer (+ the suggestion chips while empty).
+  const chatRef = useRef<HTMLDivElement>(null);
+  const chatH = useMeasuredHeight(chatRef, st.mode === 'chat', ps);
+  const chatBody = st.mode === 'chat' && chatH ? CHAT_HEADER_H + chatH + 60 + (chat.length === 0 ? 44 : 0) + SURFACE_CHROME_Y : undefined;
   const [launching, setLaunching] = useState<{ openTab: boolean } | null>(null);
   const [launchFailure, setLaunchFailure] = useState<string | null>(null);
   const [notice, setNotice] = useState<ListNotice | null>(null);

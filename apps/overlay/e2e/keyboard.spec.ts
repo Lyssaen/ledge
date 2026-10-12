@@ -1,4 +1,4 @@
-import { test, expect, layer, expectMode, received, ready } from './fixtures';
+import { test, expect, layer, surface, expectMode, received, ready } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 
 const sessions = () => [
@@ -107,4 +107,16 @@ test('Ctrl+Alt+T switches the theme', async ({ page }) => {
   await expect(html).toHaveAttribute('data-theme', 'light');
   await page.keyboard.press('Control+Alt+T');
   await expect(html).toHaveAttribute('data-theme', 'dark');
+});
+
+test('a keyboard open while the window is still handle-sized never scrolls the page: the list hangs from the top edge', async ({ page }) => {
+  // Under Tauri the native window grows after the first paint of the open: the row takes focus while the viewport is still the island's 38 px.
+  await page.setViewportSize({ width: 1920, height: 38 });
+  await fakeDaemon(page, sessions());
+  await ready(page, 3);
+  await page.keyboard.press('Control+Alt+L');
+  await expectMode(page, 'list');
+  await expect(row(page, 'b')).toBeFocused();
+  expect(await page.evaluate(() => document.scrollingElement!.scrollTop)).toBe(0);
+  expect(await surface(page).evaluate(el => el.getBoundingClientRect().top)).toBe(0);
 });

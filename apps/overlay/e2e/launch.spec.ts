@@ -1,4 +1,4 @@
-import { test, expect, layer, expectMode, ready, received } from './fixtures';
+import { test, expect, layer, surface, expectMode, ready, received } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 import { openList, restInside } from './scenarios';
 
@@ -94,4 +94,27 @@ test('an empty list shows the empty state, whose button opens the form', async (
   await expect(list.getByText('Nobody at work.')).toBeVisible();
   await list.locator('[data-launch-empty]').click();
   await expectMode(page, 'launch');
+});
+
+test('Ctrl+Alt+N from the handle sizes the form to its content, the same as the + from the list', async ({ page }) => {
+  await fakeDaemon(page, [session('otto')], { recents });
+  await ready(page, 1);
+  const height = () => surface(page).evaluate(el => el.getBoundingClientRect().height);
+  // From the settled handle: the form is measured while the surface is still island-wide, and must follow its final width.
+  await page.keyboard.press('Control+Alt+N');
+  await expectMode(page, 'launch');
+  await page.waitForTimeout(800);
+  const viaShortcut = await height();
+  await page.keyboard.press('Control+Alt+N');
+  await expectMode(page, 'handle');
+  await expect.poll(height).toBe(38);
+  // The reference: the form opened from the list, which already has the form's width.
+  await page.keyboard.press('Control+Alt+L');
+  await expectMode(page, 'list');
+  await layer(page, 'list').locator('[data-launch]').click();
+  await expectMode(page, 'launch');
+  await page.waitForTimeout(800);
+  const viaButton = await height();
+  expect(viaButton).toBeGreaterThan(300);
+  expect(viaShortcut).toBe(viaButton);
 });
