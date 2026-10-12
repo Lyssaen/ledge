@@ -40,7 +40,9 @@ export const initialUpdate = (dismissed: string | null, checkedAt: number | null
 const newer = (a: string | null | undefined, b: string | null | undefined) => (!a ? b ?? null : !b ? a : compareVersions(a, b) >= 0 ? a : b);
 /** The version both halves should run: the newest of the release and the daemon, when one half is behind it. */
 export function targetOf(s: UpdateState): string | null {
-  const t = newer(s.latest?.version, s.daemon?.version);
+  // An unknown daemon (absent from the snapshot, so older than the auto-update) gets no update at all: spec §5.
+  if (!s.daemon) return null;
+  const t = newer(s.latest?.version, s.daemon.version);
   if (!t) return null;
   const behind = (v: string | null | undefined) => !!v && compareVersions(v, t) < 0;
   return behind(s.app) || behind(s.daemon?.version) ? t : null;
@@ -60,7 +62,8 @@ export function reduceUpdate(s: UpdateState, e: UpdateEvent): UpdateState {
   switch (e.type) {
     case 'app': return { ...s, app: e.version, justUpdated: e.updatedFrom && e.version && e.updatedFrom !== e.version ? e.version : null };
     case 'checked': return { ...s, latest: e.latest, checkedAt: e.at };
-    case 'removed': return s.before ? { ...s, before: { ...s.before, ids: s.before.ids.filter(id => id !== e.id) } } : s;
+    // A session closed before the restart is not lost; one closed during or after it is still missing.
+    case 'removed': return s.before && s.phase.kind === 'daemon' && s.phase.step !== 'restarting' ? { ...s, before: { ...s.before, ids: s.before.ids.filter(id => id !== e.id) } } : s;
     case 'snapshot': {
       const next = { ...s, daemon: e.daemon };
       if ((s.phase.kind === 'waiting' || s.phase.kind === 'daemon') && s.target && e.daemon && compareVersions(e.daemon.version, s.target) >= 0) return afterDaemon(next, e.ids);
@@ -77,11 +80,11 @@ export function reduceUpdate(s: UpdateState, e: UpdateEvent): UpdateState {
     case 'progress': return s.phase.kind === 'daemon' ? { ...s, phase: { kind: 'daemon', step: e.step } } : s;
     case 'failed': return s.phase.kind === 'daemon' ? { ...s, phase: { kind: 'failed', reason: e.reason, detail: e.detail, command: e.command } } : s;
     case 'disconnected': return s.phase.kind === 'daemon' ? { ...s, phase: { kind: 'waiting' } } : s;
-    case 'timeout': return s.phase.kind === 'waiting' || s.phase.kind === 'daemon' ? { ...s, phase: { kind: 'failed', reason: 'daemon-timeout' } } : s;
+    case 'timeout': return s.phase.kind === 'waiting' ? { ...s, phase: { kind: 'failed', reason: 'daemon-timeout' } } : s;
     case 'download': return s.phase.kind === 'downloading' ? { ...s, phase: { kind: 'downloading', done: e.done, total: e.total } } : s;
     case 'downloaded': return s.phase.kind === 'downloading' ? { ...s, phase: { kind: 'installing' } } : s;
     case 'download-failed': return s.phase.kind === 'downloading' || s.phase.kind === 'installing' ? { ...s, phase: { kind: 'failed', reason: 'download' } } : s;
-    case 'dismiss': return { ...s, dismissed: targetOf(s) };
+    case 'dismiss': { const t = targetOf(s); return t ? { ...s, dismissed: t } : s; }
     case 'ack-updated': return { ...s, justUpdated: null };
     case 'retry': return s.phase.kind === 'failed' ? { ...s, phase: { kind: 'idle' }, target: null, before: null } : s;
   }

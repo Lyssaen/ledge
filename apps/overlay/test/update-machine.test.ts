@@ -87,4 +87,30 @@ describe('update machine', () => {
     const idle = run([base[0]!, { type: 'snapshot', daemon: NPM, ids: [] }, { type: 'checked', at: 1, latest: null }]);
     expect(run([START, { type: 'progress', step: 'installing' }], idle).phase).toEqual({ kind: 'idle' });
   });
+  it('an unknown daemon (absent from the snapshot) shows nothing and refuses a start: the app is never updated alone', () => {
+    const s = run([base[0]!, { type: 'snapshot', daemon: null, ids: ['a'] }, { type: 'checked', at: 1, latest: { version: '0.3.0', notes: '' } }]);
+    expect(cardView(s)).toEqual({ kind: 'hidden' }); expect(gearPip(s)).toBe(false);
+    const started = run([START], s);
+    expect(started.phase).toEqual({ kind: 'idle' }); expect(started.target).toBeNull();
+    expect(cardView(started)).toEqual({ kind: 'hidden' });
+  });
+  it('a session removed once the daemon restarts is not forgiven: its absence is still sessions-lost', () => {
+    let s = run([...base, START, { type: 'progress', step: 'restarting' }, { type: 'disconnected' }]);
+    expect(s.phase.kind).toBe('waiting');
+    s = run([{ type: 'removed', id: 'b' }, { type: 'snapshot', daemon: { ...NPM, version: '0.3.0' }, ids: ['a'] }], s);
+    expect(s.phase).toEqual({ kind: 'failed', reason: 'sessions-lost', missing: ['Nova'] });
+  });
+  it('a timeout while the daemon has not yet restarted is ignored; it counts only once waiting', () => {
+    let s = run([...base, START, { type: 'timeout' }]);
+    expect(s.phase).toEqual({ kind: 'daemon', step: 'sent' });
+    s = run([{ type: 'disconnected' }, { type: 'timeout' }], s);
+    expect(s.phase).toMatchObject({ kind: 'failed', reason: 'daemon-timeout' });
+  });
+  it('a dismissal with no target does not erase an earlier one', () => {
+    const dismissed = run([...base, { type: 'dismiss' }]);
+    expect(dismissed.dismissed).toBe('0.3.0');
+    const cleared = run([{ type: 'checked', at: 2, latest: null }, { type: 'dismiss' }], dismissed);
+    expect(targetOf(cleared)).toBeNull();
+    expect(cleared.dismissed).toBe('0.3.0');
+  });
 });
