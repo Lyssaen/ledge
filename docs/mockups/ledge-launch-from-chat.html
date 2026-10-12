@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Lancer une session depuis le chat</title>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#fb2c36}a:hover{color:#ff6467}
+.panel{width:440px;height:640px;box-sizing:border-box;background:#171717;color:#fafafa;border-radius:0 0 20px 20px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 40px -12px rgba(0,0,0,.45);font-size:13px;line-height:19px}
+.head{display:flex;align-items:center;gap:8px;height:52px;flex-shrink:0;box-sizing:border-box;padding:0 8px;border-bottom:1px solid #ffffff1a}
+.ib{width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:8px;color:#a1a1a1;padding:0}
+.thread{flex:1 1 auto;display:flex;flex-direction:column;gap:14px;padding:14px 16px 10px;overflow:hidden}
+.q{align-self:flex-end;max-width:85%;padding:8px 12px;border-radius:12px 12px 4px 12px;background:#27272a}
+.ans{display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:start}
+.body{display:flex;flex-direction:column;gap:8px;min-width:0}
+.p{margin:0}
+.mono{font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px}
+.code{font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;background:#262626;border-radius:4px;padding:1px 4px}
+.src{display:flex;flex-wrap:wrap;gap:2px 8px;padding-top:6px;border-top:1px solid #ffffff1a;font-size:11px;line-height:16px;color:#a1a1a1}
+.card{display:flex;flex-direction:column;border:1px solid #ffffff26;border-radius:10px;background:#0a0a0a;overflow:hidden}
+.crow{display:grid;grid-template-columns:92px 1fr;gap:8px;padding:7px 12px;font-size:12px;line-height:17px}
+.crow + .crow{border-top:1px solid #ffffff12}
+.lab{color:#a1a1a1}
+.cfoot{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid #ffffff1a;background:#171717}
+.btn{height:30px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:8px;border:0;font:inherit;font-size:12.5px;font-weight:600}
+.primary{background:#9f0712;color:#fef2f2}
+.outline{background:transparent;color:#fafafa;border:1px solid #ffffff26}
+.hint{font-size:11.5px;color:#a1a1a1}
+.comp{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid #ffffff1a}
+.field{flex:1;min-width:0;height:34px;box-sizing:border-box;padding:0 10px;background:#0a0a0a;color:#a1a1a1;border:1px solid #ffffff26;border-radius:8px;font:inherit;font-size:13px}
+.send{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:#9f0712;color:#fef2f2;opacity:.5}
+.cap{width:440px;display:flex;flex-direction:column;gap:6px;color:#18181b}
+.eyebrow{margin:0;font-size:11px;letter-spacing:.12em;font-weight:600;color:#9f0712}
+.capt{margin:0;font-size:20px;line-height:26px;font-weight:650}
+.capd{margin:0;font-size:13px;line-height:19px;color:#52525b}
+.ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:2px}
+</style>
+<div style="width: 2000px; height: 860px; box-sizing: border-box; padding: 56px 64px; background: #f4f4f5; font-family: 'Geist', system-ui, sans-serif; display: flex; flex-direction: column; gap: 36px">
+<div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 40px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<p class="eyebrow">ASK LEDGE · LANCER UNE SESSION</p>
+<h1 style="margin: 0; font-size: 40px; line-height: 44px; font-weight: 700; color: #18181b; letter-spacing: -0.02em">Le chat propose, tu lances.</h1>
+</div>
+<p style="margin: 0; max-width: 560px; font-size: 14px; line-height: 21px; color: #52525b; text-align: right">« Ouvre une session… » en langage naturel. Ledge déduit le dossier, prend le harnais par défaut et affiche une carte. Rien ne démarre sans ton clic : le chat reste en lecture seule.</p>
+</div>
+
+<div style="display: flex; gap: 40px; align-items: flex-start">
+
+<!-- 01 Proposition -->
+<div style="display: flex; flex-direction: column; gap: 16px">
+<div class="cap"><p class="eyebrow">01 / LA PROPOSITION</p><p class="capt">Le dossier est clair : une carte.</p><p class="capd">Le chemin vient de tes sessions ou des dossiers récents. La demande devient la première instruction.</p></div>
+<div class="panel">
+<div class="head">
+<button class="ib" aria-label="Retour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></button>
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="19" rx="8" fill="#34434b"></rect><rect x="6.5" y="10" width="15" height="8" rx="4" fill="#172124"></rect><circle cx="11" cy="14" r="1.8" fill="#a9dfc7"></circle><circle cx="17" cy="14" r="1.8" fill="#a9dfc7"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1"><span style="font-size: 14px; line-height: 18px; font-weight: 650">Ledge<span style="color: #fb2c36">.</span></span><span style="font-size: 11px; line-height: 14px; color: #a1a1a1">3 sessions · 2 dépôts</span></div>
+<button class="ib" aria-label="Nouvelle conversation"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+<button class="ib" aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+</div>
+<div class="thread">
+<div class="q">Ouvre une session dans ledge pour corriger le build de l'overlay</div>
+<div class="ans">
+<svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="19" rx="8" fill="#34434b"></rect><rect x="6.5" y="10" width="15" height="8" rx="4" fill="#172124"></rect><circle cx="11" cy="14" r="1.8" fill="#a9dfc7"></circle><circle cx="17" cy="14" r="1.8" fill="#a9dfc7"></circle></svg>
+<div class="body">
+<p class="p">Je te propose une session dans <strong>ledge</strong>, le dépôt où <strong>Nova</strong> travaille déjà sur <span class="code">main</span>. Elle partira de ta demande.</p>
+<div class="card">
+<div class="crow"><span class="lab">Dossier</span><span style="display: flex; flex-direction: column; gap: 1px; min-width: 0"><strong>ledge</strong><span class="mono" style="color: #a1a1a1">~/development/github.com/Paradow-dev/ledge</span></span></div>
+<div class="crow"><span class="lab">Harnais</span><span>Claude Code <span style="color: #a1a1a1">· par défaut</span></span></div>
+<div class="crow"><span class="lab">Instruction</span><span>Corrige le build de l'overlay</span></div>
+<div class="cfoot">
+<button class="btn primary"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"></path></svg>Lancer la session</button>
+<span class="hint">ou reformule ta demande</span>
+</div>
+</div>
+<div class="src"><span style="font-weight: 500">Sources</span><span>sessions.md</span><span>folders.md</span><span>il y a 4 s</span></div>
+</div>
+</div>
+</div>
+<div class="comp"><input class="field" type="text" aria-label="Demander à Ledge" placeholder="Demander à Ledge…"><button class="send" aria-label="Envoyer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button></div>
+</div>
+</div>
+
+<!-- 02 Dossier ambigu -->
+<div style="display: flex; flex-direction: column; gap: 16px">
+<div class="cap"><p class="eyebrow">02 / DOSSIER AMBIGU</p><p class="capt">Pas sûr du dossier : il demande.</p><p class="capd">Aucune carte tant que le dossier n'est pas sûr. Ledge cite les candidats, tu réponds par un nom ou un chemin.</p></div>
+<div class="panel">
+<div class="head">
+<button class="ib" aria-label="Retour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></button>
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="19" rx="8" fill="#34434b"></rect><rect x="6.5" y="10" width="15" height="8" rx="4" fill="#172124"></rect><circle cx="11" cy="14" r="1.8" fill="#a9dfc7"></circle><circle cx="17" cy="14" r="1.8" fill="#a9dfc7"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1"><span style="font-size: 14px; line-height: 18px; font-weight: 650">Ledge<span style="color: #fb2c36">.</span></span><span style="font-size: 11px; line-height: 14px; color: #a1a1a1">3 sessions · 2 dépôts</span></div>
+<button class="ib" aria-label="Nouvelle conversation"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+<button class="ib" aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+</div>
+<div class="thread">
+<div class="q">Ouvre une session pour tester la nouvelle API</div>
+<div class="ans">
+<svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="19" rx="8" fill="#34434b"></rect><rect x="6.5" y="10" width="15" height="8" rx="4" fill="#172124"></rect><circle cx="11" cy="14" r="1.8" fill="#a9dfc7"></circle><circle cx="17" cy="14" r="1.8" fill="#a9dfc7"></circle></svg>
+<div class="body">
+<p class="p">Dans quel dossier ? Deux dossiers récents parlent d'API :</p>
+<ul class="ul">
+<li><strong>platform-api</strong> <span class="code">~/dev/speos/platform-api</span></li>
+<li><strong>api-gateway</strong> <span class="code">~/dev/speos/api-gateway</span></li>
+</ul>
+<p class="p">Dis-moi lequel, ou donne-moi le chemin.</p>
+<div class="src"><span style="font-weight: 500">Sources</span><span>folders.md</span><span>il y a 2 s</span></div>
+</div>
+</div>
+<div class="q">platform-api</div>
+<div class="ans">
+<svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="19" rx="8" fill="#34434b"></rect><rect x="6.5" y="10" width="15" height="8" rx="4" fill="#172124"></rect><circle cx="11" cy="14" r="1.8" fill="#90c7f2"></circle><circle cx="17" cy="14" r="1.8" fill="#90c7f2"></circle></svg>
+<div class="body"><span style="font-size: 12px; line-height: 16px; color: #a1a1a1">Lit folders.md…</span></div>
+</div>
+</div>
+<div class="comp"><input class="field" type="text" aria-label="Demander à Ledge" placeholder="Demander à Ledge…"><button class="send" aria-label="Envoyer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button></div>
+</div>
+</div>
+
+<!-- 03 Lancée -->
+<div style="display: flex; flex-direction: column; gap: 16px">
+<div class="cap"><p class="eyebrow">03 / LANCÉE</p><p class="capt">La carte devient la session.</p><p class="capd">Plus de bouton Lancer, même après une reconnexion. L'onglet s'ouvre si l'option du formulaire est cochée, sinon il est à un clic.</p></div>
+<div class="panel">
+<div class="head">
+<button class="ib" aria-label="Retour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></button>
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="19" rx="8" fill="#34434b"></rect><rect x="6.5" y="10" width="15" height="8" rx="4" fill="#172124"></rect><circle cx="11" cy="14" r="1.8" fill="#a9dfc7"></circle><circle cx="17" cy="14" r="1.8" fill="#a9dfc7"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1"><span style="font-size: 14px; line-height: 18px; font-weight: 650">Ledge<span style="color: #fb2c36">.</span></span><span style="font-size: 11px; line-height: 14px; color: #a1a1a1">4 sessions · 2 dépôts</span></div>
+<button class="ib" aria-label="Nouvelle conversation"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+<button class="ib" aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+</div>
+<div class="thread">
+<div class="q">Ouvre une session dans ledge pour corriger le build de l'overlay</div>
+<div class="ans">
+<svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="19" rx="8" fill="#34434b"></rect><rect x="6.5" y="10" width="15" height="8" rx="4" fill="#172124"></rect><circle cx="11" cy="14" r="1.8" fill="#a9dfc7"></circle><circle cx="17" cy="14" r="1.8" fill="#a9dfc7"></circle></svg>
+<div class="body">
+<p class="p">Je te propose une session dans <strong>ledge</strong>, le dépôt où <strong>Nova</strong> travaille déjà sur <span class="code">main</span>. Elle partira de ta demande.</p>
+<div class="card">
+<div class="crow"><span class="lab">Dossier</span><span style="display: flex; flex-direction: column; gap: 1px; min-width: 0"><strong>ledge</strong><span class="mono" style="color: #a1a1a1">~/development/github.com/Paradow-dev/ledge</span></span></div>
+<div class="crow"><span class="lab">Harnais</span><span>Claude Code <span style="color: #a1a1a1">· par défaut</span></span></div>
+<div class="crow"><span class="lab">Instruction</span><span>Corrige le build de l'overlay</span></div>
+<div class="cfoot">
+<svg width="22" height="22" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="19" rx="8" fill="#34434b"></rect><rect x="6.5" y="10" width="15" height="8" rx="4" fill="#172124"></rect><circle cx="11" cy="14" r="1.8" fill="#90c7f2"></circle><circle cx="17" cy="14" r="1.8" fill="#90c7f2"></circle></svg>
+<span style="flex-grow: 1; font-size: 12.5px"><a href="#" style="font-weight: 600">Otto</a> a démarré <span style="color: #a1a1a1">· il y a 3 s</span></span>
+<button class="btn outline"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-5-6-5M12 19h8"></path></svg>Terminal</button>
+</div>
+</div>
+<div class="src"><span style="font-weight: 500">Sources</span><span>sessions.md</span><span>folders.md</span><span>il y a 1 min</span></div>
+</div>
+</div>
+</div>
+<div class="comp"><input class="field" type="text" aria-label="Demander à Ledge" placeholder="Demander à Ledge…"><button class="send" aria-label="Envoyer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button></div>
+</div>
+</div>
+
+<!-- 04 Erreur -->
+<div style="display: flex; flex-direction: column; gap: 16px">
+<div class="cap"><p class="eyebrow">04 / ÉCHEC</p><p class="capt">L'erreur reste sur la carte.</p><p class="capd">Si le dossier a disparu entre la proposition et le clic, ou si tmux refuse, le message du daemon s'affiche ici. Réessayer relance la même demande.</p></div>
+<div class="panel">
+<div class="head">
+<button class="ib" aria-label="Retour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></button>
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="19" rx="8" fill="#34434b"></rect><rect x="6.5" y="10" width="15" height="8" rx="4" fill="#172124"></rect><circle cx="11" cy="14" r="1.8" fill="#a9dfc7"></circle><circle cx="17" cy="14" r="1.8" fill="#a9dfc7"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1"><span style="font-size: 14px; line-height: 18px; font-weight: 650">Ledge<span style="color: #fb2c36">.</span></span><span style="font-size: 11px; line-height: 14px; color: #a1a1a1">3 sessions · 2 dépôts</span></div>
+<button class="ib" aria-label="Nouvelle conversation"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+<button class="ib" aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+</div>
+<div class="thread">
+<div class="q">Lance une session sur le prototype de reporting</div>
+<div class="ans">
+<svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="19" rx="8" fill="#34434b"></rect><rect x="6.5" y="10" width="15" height="8" rx="4" fill="#172124"></rect><circle cx="11" cy="14" r="1.8" fill="#ffab9f"></circle><circle cx="17" cy="14" r="1.8" fill="#ffab9f"></circle></svg>
+<div class="body">
+<p class="p">Le seul dossier récent qui correspond est <strong>reporting-proto</strong>. Je te propose une session vide.</p>
+<div class="card">
+<div class="crow"><span class="lab">Dossier</span><span style="display: flex; flex-direction: column; gap: 1px; min-width: 0"><strong>reporting-proto</strong><span class="mono" style="color: #a1a1a1">~/dev/sandbox/reporting-proto</span></span></div>
+<div class="crow"><span class="lab">Harnais</span><span>Claude Code <span style="color: #a1a1a1">· par défaut</span></span></div>
+<div class="crow"><span class="lab">Instruction</span><span style="color: #a1a1a1">Aucune, session vide</span></div>
+<div role="alert" style="display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid #ffffff1a; background: #450a0a; color: #ffa2a2; font-size: 12px; line-height: 17px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex-shrink: 0; margin-top: 1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5M12 16v.5"></path></svg><span>Ce dossier n'existe plus : <span class="mono">~/dev/sandbox/reporting-proto</span></span></div>
+<div class="cfoot">
+<button class="btn outline">Réessayer</button>
+<span class="hint">ou donne-moi un autre dossier</span>
+</div>
+</div>
+<div class="src"><span style="font-weight: 500">Sources</span><span>folders.md</span><span>il y a 20 s</span></div>
+</div>
+</div>
+</div>
+<div class="comp"><input class="field" type="text" aria-label="Demander à Ledge" placeholder="Demander à Ledge…"><button class="send" aria-label="Envoyer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button></div>
+</div>
+</div>
+
+</div>
+</div>
+</body>
+</html>
