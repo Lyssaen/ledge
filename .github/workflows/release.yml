@@ -1,0 +1,69 @@
+# Builds the Windows installer and publishes it on the GitHub release of a `v*` tag.
+# The tag is annotated: its subject is the release title, its body the release notes. The install block and the
+# SHA-256 of the installer are appended. Re-running on an existing release replaces the asset and the notes.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/overlay/src-tauri
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck the overlay
+        run: pnpm --filter overlay typecheck
+      - name: Build the installer
+        run: pnpm tauri build
+        working-directory: apps/overlay
+      - name: Rust tests
+        run: cargo test
+        working-directory: apps/overlay/src-tauri
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $exe = Get-ChildItem apps/overlay/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          $sha = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
+          $title = (git tag -l --format='%(contents:subject)' $env:TAG).Trim()
+          if (-not $title) { $title = "Ledge $env:TAG" }
+          $body = (git tag -l --format='%(contents:body)' $env:TAG).Trim()
+          $install = @'
+
+          **Install**
+          1. The WSL side (`ledge` CLI and daemon) should already be on `main`.
+          2. Quit Ledge from the tray, then run `__EXE__` over the previous install.
+
+          The installer is not code-signed: Windows SmartScreen may warn on first launch ("More info" > "Run anyway").
+
+          SHA-256: `__SHA__`
+          '@
+          $notes = $body + ($install -replace '__EXE__', $exe.Name -replace '__SHA__', $sha)
+          Set-Content -Path notes.md -Value $notes -Encoding utf8
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:TAG $exe.FullName --clobber
+            gh release edit $env:TAG --title $title --notes-file notes.md
+          } else {
+            gh release create $env:TAG $exe.FullName --title $title --notes-file notes.md
+          }
