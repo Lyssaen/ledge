@@ -14,7 +14,7 @@ import { createSession } from '../src/cli/launch.js';
 
 const agent = fileURLToPath(new URL('./fake-agent.mjs', import.meta.url));
 const socket = `ledge-e2e-${process.pid}-${Date.now()}`;
-const tmux = realTmux(socket);
+const tmux = realTmux(socket, { scope: async () => false });
 let srv: Awaited<ReturnType<typeof startServer>>; let poller: ReturnType<typeof startPoller>; let store: Store;
 
 beforeAll(async () => {

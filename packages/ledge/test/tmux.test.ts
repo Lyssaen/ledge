@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const socket = `ledge-test-${process.pid}-${Date.now()}`;
-const tmux = realTmux(socket);
+const tmux = realTmux(socket, { scope: async () => false });
 const name = 'ledge-t1';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -94,7 +94,7 @@ describe('tmux', () => {
 describe('test helpers', () => {
   it('killTestServer kills the throwaway server and removes its socket file', async () => {
     const sock = `ledge-test-helper-${process.pid}-${Date.now()}`;
-    const t = realTmux(sock);
+    const t = realTmux(sock, { scope: async () => false });
     await t.newSession({ name: 'h', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
     expect(existsSync(testSocketPath(sock))).toBe(true);
     await killTestServer(sock);

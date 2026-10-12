@@ -20,7 +20,7 @@ describe('startDaemon', () => {
   it('restores live sessions, drops dead ones, keeps hook-only ones and serves a snapshot', async () => {
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
     const socket = `ledge-test-${process.pid}-${Date.now()}`;
-    const tmux = realTmux(socket);
+    const tmux = realTmux(socket, { scope: async () => false });
     await ensureLedgeDir();
     await tmux.newSession({ name: 'ledge-live', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
     try {
