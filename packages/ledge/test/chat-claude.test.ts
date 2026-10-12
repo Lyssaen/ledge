@@ -11,6 +11,9 @@ describe('claudeArgs', () => {
     expect(PERSONA).toContain('folders.md');
     expect(PERSONA).toContain('Tu n\'agis jamais toi-même');
     expect(PERSONA).not.toContain('Tu ne proposes jamais d\'agir');
+    // Codex reads only through shell commands (its sandbox is read-only): the persona must not forbid them.
+    expect(PERSONA).toContain('seulement des commandes de lecture');
+    expect(PERSONA).not.toContain('pas de commande,');
   });
   it('runs headless, restricted, read-only, streaming, with the day session', () => {
     const a = claudeArgs(opts());
