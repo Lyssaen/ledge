@@ -331,7 +331,7 @@ Get pnpm with `corepack enable` on either side if it is missing.
 git clone https://github.com/Paradow-dev/ledge.git ~/Workspace/ledge
 cd ~/Workspace/ledge
 pnpm install
-pnpm --filter ledge build
+pnpm --filter @paradow/ledge build
 chmod +x packages/ledge/dist/cli/index.js
 mkdir -p ~/.local/bin
 ln -sf "$PWD/packages/ledge/dist/cli/index.js" ~/.local/bin/ledge   # ~/.local/bin must be on the PATH Claude Code uses for hooks
@@ -388,7 +388,7 @@ The overlay speaks French by default. Settings > Langue switches it to English.
 ### Update
 
 ```sh
-cd ~/Workspace/ledge && git pull && pnpm install && pnpm --filter ledge build
+cd ~/Workspace/ledge && git pull && pnpm install && pnpm --filter @paradow/ledge build
 systemctl --user restart ledge-daemon.service    # the daemon runs the built CLI
 ```
 

@@ -14,4 +14,8 @@ describe('version', () => {
     expect(read('src-tauri/Cargo.toml')).toMatch(new RegExp(`^\\[package\\]\\nname = "ledge-overlay"\\nversion = "${pkg}"`, 'm'));
     expect(read('src-tauri/Cargo.lock')).toMatch(new RegExp(`^name = "ledge-overlay"\\nversion = "${pkg}"`, 'm'));
   });
+  it('is the same in the npm package of the daemon', () => {
+    const pkg = JSON.parse(read('package.json')).version;
+    expect(JSON.parse(read('../../packages/ledge/package.json')).version).toBe(pkg);
+  });
 });
