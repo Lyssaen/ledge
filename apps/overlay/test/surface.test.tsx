@@ -289,6 +289,38 @@ describe('<Surface>', () => {
     expect(say()).toHaveStyle({ opacity: '0' });
   });
 
+  it('a speech bubble lingers 5 s on the handle then fades; the bot stays held and a new ask speaks again', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); });
+    await act(async () => { vi.advanceTimersByTime(540); });
+    await act(async () => { vi.advanceTimersByTime(6100); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    const say = () => document.querySelector('[data-unread-say]') as HTMLElement;
+    expect(say()).toHaveAttribute('data-say-kind', 'finished');
+    expect(say()).toHaveStyle({ opacity: '1' });
+    await act(async () => { vi.advanceTimersByTime(4900); });
+    expect(say()).toHaveStyle({ opacity: '1' });
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(say()).toHaveStyle({ opacity: '0' });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    // The finish is still unread: the bot stays up and opens its session.
+    expect(surface()).toHaveStyle({ width: '28px' });
+    fireEvent.click(screen.getByRole('button', { name: 'Pim available, open' }));
+    expect(surface()).toHaveAttribute('data-mode', 'session');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    expect(say()).toHaveStyle({ opacity: '0' });
+    // A new situation gets its own 5 s.
+    await act(async () => { mock.upsert(pimAsks()); await sleep(50); vi.advanceTimersByTime(540); });
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    await act(async () => { vi.advanceTimersByTime(4100); });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    expect(say()).toHaveAttribute('data-say-kind', 'approval');
+    expect(say()).toHaveStyle({ opacity: '1' });
+    await act(async () => { vi.advanceTimersByTime(5100); });
+    expect(say()).toHaveStyle({ opacity: '0' });
+  });
+
   it('a bot that finishes its task (working → idle) unfolds a finished bubble that folds after 6 s', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); });

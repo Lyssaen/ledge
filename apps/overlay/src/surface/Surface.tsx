@@ -13,7 +13,7 @@ import type { SurfaceState } from './machine';
 import { Handle, type HandleBot } from './Handle';
 import { Tooltip } from './Tooltip';
 import { UnreadSay, UNREAD_SAY_BOX } from './UnreadSay';
-import { pickSay, pickSpeaker, sayKindOf, type SayCandidate } from './say';
+import { pickSay, pickSpeaker, sayKindOf, SAY_LINGER_MS, type SayCandidate } from './say';
 import { Bubble, type BubbleAck } from './Bubble';
 import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
@@ -355,6 +355,17 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   }
   const speaker = pickSpeaker(sayCandidates);
   const sayText = speaker ? pickSay(t.say[speaker.kind], speaker.seed) : '';
+  // A balloon speaks for 5 s once it is actually seen on the handle, then fades; a new situation (new ask, new finish)
+  // speaks again. Leaving the handle before the 5 s are up restarts them on return. The unread state stays either way.
+  const speakerKey = speaker ? `${speaker.id}|${speaker.seed}` : null;
+  const sayOnHandle = st.mode === 'handle' && speakerKey !== null;
+  const [sayExpired, setSayExpired] = useState<string | null>(null);
+  useEffect(() => {
+    if (!sayOnHandle || speakerKey === sayExpired) return;
+    const timer = setTimeout(() => setSayExpired(speakerKey), SAY_LINGER_MS);
+    return () => clearTimeout(timer);
+  }, [sayOnHandle, speakerKey, sayExpired]);
+  const sayShown = sayOnHandle && speakerKey !== sayExpired;
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -430,7 +441,6 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
     setSizes(s => s.tip.w === tip.w && s.tip.h === tip.h && s.status.w === status.w && s.status.h === status.h && s.say.w === say.w && s.say.h === say.h ? s : { tip, status, say });
   });
   const tipShown = st.mode === 'handle' && hovBot !== null;
-  const sayShown = st.mode === 'handle' && speaker !== null;
   const extras: Box[] = [];
   // The status line belongs to the handle (its scale); the tooltip, the unread say and the coachmark read at the windows' size.
   const statusLeft = Math.max(geo.w, SIZES.handleW * hs) + 8 * hs;
@@ -513,7 +523,7 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
         style={{ position: 'absolute', left: 0, top: geo.top, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--notch)', color: 'var(--sidebar-foreground)', borderRadius: '0 var(--radius-xl) var(--radius-xl) 0', boxShadow: 'var(--shadow-overlay)', opacity: unreachable ? 0.6 : 1, willChange: 'top, width, height',
           transition: surfaceTransition }}>
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-          <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} top={geo.top} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} sayId={speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+          <Handle bots={bots} slots={geo.slots} big={big} visible={st.mode === 'handle'} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} top={geo.top} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} sayId={sayShown && speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
