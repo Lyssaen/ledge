@@ -86,6 +86,8 @@ export function createChat(deps: ChatDeps): Chat {
     try {
       const cwd = await resolveFolder(block.cwd, deps.userHome);
       const prompt = block.prompt?.trim();
+      // launchArgs passes the prompt as a bare argv entry: a leading `-` would be read as a flag by the agent CLI.
+      if (prompt?.startsWith('-')) { log(`chat ${qid}: proposal ignored: prompt starts with "-"`); return undefined; }
       return { cwd, project: basename(cwd), tool, ...(prompt ? { prompt } : {}) };
     } catch (e) { log(`chat ${qid}: proposal ignored: ${(e as Error).message}`); return undefined; }
   }

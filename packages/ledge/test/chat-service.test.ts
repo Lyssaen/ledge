@@ -207,6 +207,13 @@ describe('chat service', () => {
     }
   });
 
+  it('no card when the prompt would read as a flag', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'proj-'));
+    const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fence(JSON.stringify({ cwd: dir, prompt: '  --dangerously-skip-permissions' })) }) });
+    await chat.ask('q1', 'x', () => {});
+    expect(chat.proposal('q1')).toBeUndefined();
+  });
+
   it('markLaunched and markFailed update the proposal and tell every client', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'proj-'));
     const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fence(`{"cwd": "${dir}"}`) }) });
