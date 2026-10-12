@@ -39,7 +39,10 @@ jobs:
       - name: Stamp the version from the tag
         run: node apps/overlay/scripts/set-version.mjs "$VERSION_TAG"
       - run: pnpm --filter @ledge/protocol test
+      # The launch tests attach to real tmux sessions: tmux refuses to attach without a TERM, which the runner leaves unset.
       - run: pnpm --filter @paradow/ledge test
+        env:
+          TERM: xterm
       - run: pnpm --filter @paradow/ledge build
       # Without NPM_TOKEN (after the switch to Trusted Publishing) NODE_AUTH_TOKEN is empty and npm uses OIDC.
       - name: Publish to npm
