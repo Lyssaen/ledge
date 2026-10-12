@@ -7,6 +7,7 @@ import { tmuxServerAtRisk, SERVICE } from './guard.js';
 
 export const PACKAGE = '@paradow/ledge';
 const NPM_TIMEOUT_MS = 3 * 60_000;
+const RESTART_COMMAND = 'systemctl --user restart ledge-daemon';
 
 /** The npm of the node running the daemon: under nvm, the one on PATH may be another node's (and need sudo). */
 export const npmCommand = (execPath: string, version: string) => ({ file: join(dirname(execPath), 'npm'), args: ['i', '-g', `${PACKAGE}@${version}`] });
@@ -19,7 +20,8 @@ export interface UpdaterDeps {
   info: () => DaemonInfo;
   atRisk: () => Promise<boolean>;
   npm: (cmd: { file: string; args: string[] }) => Promise<{ code: number; output: string }>;
-  restart: () => Promise<void>;
+  /** The exit code of the restart request. */
+  restart: () => Promise<number>;
   save: () => Promise<void>;
   execPath?: string;
 }
@@ -29,8 +31,9 @@ export function createDaemonUpdater(deps: UpdaterDeps) {
   let busy = false; let restarting = false;
   return {
     running: () => busy,
-    async update(version: string, send: (m: ServerMessage) => void): Promise<void> {
-      if (busy) return send({ type: 'update.failed', version, reason: 'busy' });
+    /** `reply` reaches only the asking client: a busy refusal must not fail the flow other overlays are following. */
+    async update(version: string, send: (m: ServerMessage) => void, reply: (m: ServerMessage) => void = send): Promise<void> {
+      if (busy) return reply({ type: 'update.failed', version, reason: 'busy' });
       const info = deps.info();
       const cmd = npmCommand(deps.execPath ?? process.execPath, version);
       const shown = `${cmd.file} ${cmd.args.join(' ')}`;
@@ -45,9 +48,15 @@ export function createDaemonUpdater(deps: UpdaterDeps) {
         if (r.code !== 0) { log(`update: npm failed (${r.code})\n${r.output}`); return send({ type: 'update.failed', version, reason: 'npm-failed', detail: lastLines(r.output), command: shown }); }
         send({ type: 'update.progress', version, step: 'restarting' });
         await deps.save();
+        // The new version is installed but this one keeps running: say how to restart it by hand.
+        const code = await deps.restart();
+        if (code !== 0) { log(`update: systemctl restart failed (${code})`); return send({ type: 'update.failed', version, reason: 'no-systemd', command: RESTART_COMMAND }); }
         // Once the restart is requested, stay busy: the process is about to be stopped, a second request must not start another npm.
-        await deps.restart();
         restarting = true;
+      } catch (e) {
+        // Every flow ends with a reason (spec §2): an unexpected throw must not leave the overlay waiting.
+        log(`update: ${(e as Error).stack ?? String(e)}`);
+        send({ type: 'update.failed', version, reason: 'npm-failed', detail: e instanceof Error ? e.message : String(e) });
       } finally { if (!restarting) busy = false; }
     }
   };
@@ -64,7 +73,7 @@ export function realUpdaterDeps(opts: { info: DaemonInfo; save: () => Promise<vo
       return r.code === 124 ? { code: 124, output: `npm timed out after 3 minutes\n${output}` } : { code: r.code, output };
     },
     // --no-block: this systemctl runs inside the cgroup being stopped; the job must not depend on it staying alive.
-    restart: async () => { await runFile('systemctl', ['--user', 'restart', '--no-block', SERVICE]); },
+    restart: async () => (await runFile('systemctl', ['--user', 'restart', '--no-block', SERVICE])).code,
     save: opts.save
   };
 }

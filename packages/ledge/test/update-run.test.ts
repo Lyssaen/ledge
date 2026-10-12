@@ -9,7 +9,7 @@ function deps(over: Partial<UpdaterDeps> = {}): UpdaterDeps & { calls: string[] 
     calls, execPath: '/home/u/.local/share/nvm/v26.7.0/bin/node',
     info: () => NPM_INFO, atRisk: async () => false,
     npm: async cmd => { calls.push(`npm ${cmd.file} ${cmd.args.join(' ')}`); return { code: 0, output: 'added 1 package' }; },
-    restart: async () => { calls.push('restart'); }, save: async () => { calls.push('save'); },
+    restart: async () => { calls.push('restart'); return 0; }, save: async () => { calls.push('save'); },
     ...over
   };
 }
@@ -82,5 +82,30 @@ describe('createDaemonUpdater', () => {
     expect(b.sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'busy' }]);
     release(); await first;
     expect(u.running()).toBe(false);
+  });
+  it('reports a failed systemctl restart with its command and is no longer busy', async () => {
+    const d = deps({ restart: async () => 1 }); const u = createDaemonUpdater(d); const { sent, send } = collect();
+    await u.update('0.3.0', send);
+    expect(sent.at(-1)).toEqual({ type: 'update.failed', version: '0.3.0', reason: 'no-systemd', command: 'systemctl --user restart ledge-daemon' });
+    expect(u.running()).toBe(false);
+  });
+  it('turns any throw into npm-failed with a detail, and is no longer busy', async () => {
+    for (const over of [{ save: async () => { throw new Error('disk full'); } }, { atRisk: async () => { throw new Error('no proc'); } }] as Partial<UpdaterDeps>[]) {
+      const u = createDaemonUpdater(deps(over)); const { sent, send } = collect();
+      await u.update('0.3.0', send);
+      expect(sent.at(-1)).toMatchObject({ type: 'update.failed', version: '0.3.0', reason: 'npm-failed', detail: expect.stringMatching(/disk full|no proc/) });
+      expect(u.running()).toBe(false);
+    }
+  });
+  it('answers busy to the asking client only, not to the running flow', async () => {
+    let release!: () => void;
+    const u = createDaemonUpdater(deps({ npm: () => new Promise(r => { release = () => r({ code: 1, output: 'x' }); }) }));
+    const all = collect(); const asker = collect();
+    const first = u.update('0.3.0', all.send);
+    await vi.waitFor(() => expect(u.running()).toBe(true));
+    await u.update('0.3.0', all.send, asker.send);
+    expect(asker.sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'busy' }]);
+    expect(all.sent).not.toContainEqual(expect.objectContaining({ reason: 'busy' }));
+    release(); await first;
   });
 });

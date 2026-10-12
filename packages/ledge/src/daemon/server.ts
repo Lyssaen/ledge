@@ -290,9 +290,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
+      // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
       case 'update.daemon':
         if (!opts.updater) return send(ws, { type: 'update.failed', version: msg.version, reason: 'no-systemd' });
-        return opts.updater.update(msg.version, broadcast);
+        return opts.updater.update(msg.version, broadcast, m => send(ws, m));
       case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast, msg.tool);
       case 'chat.cancel': return chat.cancel(msg.qid);
       case 'chat.reset': return chat.reset(broadcast);

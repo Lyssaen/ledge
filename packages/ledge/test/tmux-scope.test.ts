@@ -1,5 +1,8 @@
 import { describe, it, expect, afterAll } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ensureLedgeDir } from '../src/paths.js';
 import { newSessionCommand, systemdAvailable, realTmux, run } from '../src/tmux.js';
 import { killTestServer } from './helpers.js';
 
@@ -37,5 +40,20 @@ describe.skipIf(!systemdAvailable())('a scoped server (real systemd)', () => {
     const tmux = realTmux(socket, { scope: async () => true });
     await tmux.newSession({ name: 'ledge-s2', cwd: '/tmp', env: {}, command: ['cat'] });
     expect(await tmux.listSessions()).toEqual(expect.arrayContaining(['ledge-s1', 'ledge-s2']));
+  });
+});
+
+const fallback = `ledge-noscope-${process.pid}-${Date.now()}`;
+afterAll(async () => { await killTestServer(fallback); });
+
+describe('a scope that cannot be opened', () => {
+  it('still starts tmux, unscoped, so agents can launch', async () => {
+    process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-')); await ensureLedgeDir();
+    // A systemd-run that always fails, found first on the client PATH.
+    const bin = mkdtempSync(join(tmpdir(), 'ledge-bin-'));
+    writeFileSync(join(bin, 'systemd-run'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    const tmux = realTmux(fallback, { scope: async () => true });
+    await tmux.newSession({ name: 'ledge-f1', cwd: '/tmp', env: { PATH: `${bin}:${process.env.PATH}` }, command: ['cat'] });
+    expect(await tmux.listSessions()).toEqual(['ledge-f1']);
   });
 });

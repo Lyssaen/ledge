@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { paths } from './paths.js';
+import { log } from './log.js';
 
 export interface Tmux {
   newSession(opts: { name: string; cwd: string; env: Record<string, string>; command: string[] }): Promise<void>;
@@ -57,8 +58,11 @@ export function realTmux(socket = 'ledge', opts: { scope?: () => Promise<boolean
       const args = [...base(), 'new-session', '-d', '-s', name, '-c', cwd, '-x', '200', '-y', '50', ...envArgs, '--', ...command];
       // Only the call that starts the server needs a scope: later sessions are created by that server.
       const serverUp = (await t(['list-sessions'])).code === 0;
-      const { file, args: argv } = newSessionCommand(args, !serverUp && await scope(), `ledge-tmux-${Date.now()}`);
-      const r = await runFile(file, argv, clientEnv);
+      const scoped = !serverUp && await scope();
+      const { file, args: argv } = newSessionCommand(args, scoped, `ledge-tmux-${Date.now()}`);
+      let r = await runFile(file, argv, clientEnv);
+      // No scope is no reason to refuse an agent: start tmux plain (update/guard.ts then refuses updates for this server).
+      if (r.code !== 0 && scoped) { log(`tmux: scoped start failed (${r.stderr.trim()}), starting unscoped`); r = await runFile('tmux', args, clientEnv); }
       if (r.code !== 0) throw new Error(`tmux new-session failed: ${r.stderr.trim()}`);
     },
     async sendText(name, text) {
