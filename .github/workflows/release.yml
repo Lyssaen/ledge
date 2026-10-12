@@ -44,13 +44,14 @@ jobs:
         env:
           TERM: xterm
       - run: pnpm --filter @paradow/ledge build
-      # Without NPM_TOKEN (after the switch to Trusted Publishing) NODE_AUTH_TOKEN is empty and npm uses OIDC.
+      # Trusted Publishing: npm accepts the workflow's OIDC identity (id-token: write) instead of a token. It needs
+      # npm 11.5.1 or later, newer than the one Node 22 ships.
       - name: Publish to npm
         if: env.PUBLISH == 'true'
         working-directory: packages/ledge
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          npm install -g npm@11
+          npm --version
           v="${VERSION_TAG#v}"
           # A re-run of the same tag must not fail on a version npm already has.
           if npm view "@paradow/ledge@$v" version >/dev/null 2>&1; then echo "@paradow/ledge@$v already published"; exit 0; fi
