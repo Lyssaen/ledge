@@ -108,11 +108,11 @@ export function ChatView(p: ChatViewProps) {
                     })()}
                     {turn.answeredAt !== undefined && turn.relay ? (
                       <RelayCard relay={turn.relay} session={p.sessions.find(s => s.id === turn.relay!.id)} busy={p.relayingQid === turn.qid}
-                        disabled={!!p.offline || (!!p.relayingQid && p.relayingQid !== turn.qid)} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
+                        disabled={!!p.offline || (!!p.relayingQid && p.relayingQid !== turn.qid) || !!p.launchingQid} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
                         onSend={() => p.onRelay?.(turn.qid)} onCancel={() => p.onRelayCancel?.(turn.qid)} onOpenSession={p.onOpenSession} />
                     ) : turn.answeredAt !== undefined && turn.proposal && (
                       <LaunchCard proposal={turn.proposal} session={p.sessions.find(s => s.id === turn.proposal!.launchedId)} busy={p.launchingQid === turn.qid}
-                        disabled={!!p.offline || (!!p.launchingQid && p.launchingQid !== turn.qid)}
+                        disabled={!!p.offline || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid}
                         onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
                     )}
                     {turn.answeredAt !== undefined && (

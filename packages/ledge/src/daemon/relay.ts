@@ -9,14 +9,15 @@ export interface RelayDeps {
   /**
    * session.reply's path: null once typed and taken, the refusal otherwise; rejects when the injection fails.
    * The queue relies on this: once it resolves null, the session has already left idle (the server's verified injection applies
-   * Decided -> working), which keeps a second queued card from following in the same free moment.
+   * Decided -> working), which keeps a second queued card from following in the same free moment. On a failure the server moves the
+   * session to `error`, which counts as free, so a Retry goes at once.
    */
   replyTo: (id: string, text: string) => Promise<string | null>;
   broadcast: (m: ChatMessage) => void; now?: () => string;
 }
 
-/** Free to take a typed instruction: its turn, nothing pending. */
-const free = (s: Session | undefined): s is Session => !!s && s.state === 'idle' && !s.pending;
+/** Free to take a typed instruction: its turn (or in error, where session.reply types too), nothing pending. */
+const free = (s: Session | undefined): s is Session => !!s && (s.state === 'idle' || s.state === 'error') && !s.pending;
 const stopped = (name: string) => `${name} stopped before it got the instruction`;
 
 /**
@@ -41,7 +42,7 @@ export function createRelay(d: RelayDeps): Relay {
 
   /** Delivers the session's oldest queued card when it is free and nothing is being typed into it. */
   function kick(id: string): void {
-    const q = d.chat.queuedRelays().find(x => x.relay.id === id);
+    const q = d.chat.queuedRelays(d.broadcast).find(x => x.relay.id === id);
     if (!q || typing.has(id) || !free(d.store.get(id))) return;
     void deliverAndKick(q.qid, q.relay).catch(e => log(`relay ${q.qid} failed: ${(e as Error).message}`));
   }
@@ -55,10 +56,10 @@ export function createRelay(d: RelayDeps): Relay {
   const unsubscribe = d.store.onChange(c => {
     if (c.type === 'recents') return;
     const id = c.type === 'updated' ? c.session.id : c.id;
-    const queued = d.chat.queuedRelays().filter(q => q.relay.id === id);
+    const queued = d.chat.queuedRelays(d.broadcast).filter(q => q.relay.id === id);
     if (queued.length === 0) return;
     const s = c.type === 'updated' ? c.session : undefined;
-    if (!s || s.state === 'exited') { for (const q of queued) d.chat.markRelay(q.qid, { error: stopped(q.relay.name) }, d.broadcast); return; }
+    if (!s || s.state === 'exited') { for (const q of queued) if (!sending.has(q.qid)) d.chat.markRelay(q.qid, { error: stopped(q.relay.name) }, d.broadcast); return; }
     if (free(s) && !typing.has(id)) kick(id);
   });
 

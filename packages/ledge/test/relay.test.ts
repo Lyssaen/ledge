@@ -127,6 +127,44 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     relay.close();
   });
 
+  it('after a failed injection the server leaves the session in error, which is free: Retry goes at once', async () => {
+    store.upsert(mk('s1', { state: 'idle' }));
+    answer = async id => { store.upsert(mk(id, { state: 'error' })); return 'the agent did not take the answer'; };
+    const c = fakeChat({ q1: otto('a') });
+    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    await expect(relay.request('q1')).rejects.toThrow('the agent did not take the answer');
+    answer = async () => null;
+    await relay.request('q1');
+    expect(typed).toHaveLength(2);
+    expect(c.map.get('q1')!.status).toBe('sent');
+    relay.close();
+  });
+
+  it('a queued card goes when the session moves to error without pending', async () => {
+    store.upsert(mk('s1'));
+    const c = fakeChat({ q1: otto('a') });
+    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    await relay.request('q1');
+    store.upsert(mk('s1', { state: 'error' })); await flush();
+    expect(typed).toEqual([['s1', 'a']]);
+    expect(c.map.get('q1')!.status).toBe('sent');
+    relay.close();
+  });
+
+  it('a session exiting while its card is being typed leaves the outcome to the delivery, not a stopped flash', async () => {
+    store.upsert(mk('s1', { state: 'idle' }));
+    let release!: () => void; answer = () => new Promise(r => { release = () => r(null); });
+    const c = fakeChat({ q1: otto('a') });
+    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const p = relay.request('q1');
+    c.chat.markRelay('q1', { status: 'queued' }, c.broadcast);
+    store.upsert(mk('s1', { state: 'exited' })); await flush();
+    expect(c.map.get('q1')!.status).toBe('queued');
+    release(); await p;
+    expect(c.map.get('q1')).toMatchObject({ status: 'sent' });
+    relay.close();
+  });
+
   it('an unknown qid, and a card the chat no longer has (reset, new day), are refused', async () => {
     const c = fakeChat({});
     const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });

@@ -215,6 +215,14 @@ describe('the relay card', () => {
     expect(within(card()).getByRole('button', { name: /Send/ })).toBeDisabled();
   });
 
+  it('a launch in flight on another card disables Send, and a relay in flight disables the launch card', () => {
+    const turns: ChatTurn[] = [withRelay(relay)[0]!, { qid: 'q2', question: 'open one', askedAt: T0, steps: [], answer: 'Here.', answeredAt: T0, proposal: { cwd: '/w/ledge', project: 'ledge', tool: 'claude', prompt: 'Fix' } }];
+    const { rerender } = render(<ChatView {...base} sessions={[otto]} turns={turns} live={null} launchingQid="q2" />);
+    expect(within(card()).getByRole('button', { name: /Send/ })).toBeDisabled();
+    rerender(<ChatView {...base} sessions={[otto]} turns={turns} live={null} relayingQid="q1" />);
+    expect(within(screen.getByRole('region', { name: 'Proposed session' })).getByRole('button', { name: /Start the session/ })).toBeDisabled();
+  });
+
   it('a relay block being streamed is held back', () => {
     render(<ChatView {...base} sessions={[otto]} turns={[{ qid: 'q1', question: 'x', askedAt: T0, steps: [] }]} live={{ qid: 'q1', text: 'I will pass it on.\n```ledge-relay\n{"session": "a", "te' }} />);
     expect(screen.getByText('I will pass it on.')).toBeInTheDocument();

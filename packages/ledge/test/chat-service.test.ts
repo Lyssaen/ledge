@@ -252,7 +252,8 @@ describe('chat service', () => {
       ['unknown', '{"session": "nope", "text": "x"}', [session('s1')]],
       ['read-only', '{"session": "s1", "text": "x"}', [session('s1', { source: 'hook_only', tmuxSession: null })]],
       ['exited', '{"session": "s1", "text": "x"}', [session('s1', { state: 'exited' })]],
-      ['invalid', '{"session": "s1", "text": "   "}', [session('s1')]]
+      ['invalid', '{"session": "s1", "text": "   "}', [session('s1')]],
+      ['bash-mode', '{"session": "s1", "text": "  !rm -rf ~"}', [session('s1')]]
     ])('an %s session gives no card, the text stays', async (_why, block, sessions) => {
       const { chat, out } = await askWith(block, sessions);
       expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je transmets à Otto.', at: expect.any(String) });
@@ -280,8 +281,10 @@ describe('chat service', () => {
       const { chat } = await askWith('{"session": "s1", "text": "a"}', [session('s1')], { today: () => day });
       chat.markRelay('q1', { status: 'queued' }, () => {});
       day = '2026-10-12';
-      expect(chat.queuedRelays()).toEqual([]);
+      const histories: ServerMessage[] = [];
+      expect(chat.queuedRelays(m => histories.push(m))).toEqual([]);
       expect(chat.relay('q1')).toBeUndefined();
+      expect(histories).toEqual([{ type: 'chat.history', turns: [] }]);
       const again = await askWith('{"session": "s1", "text": "a"}', [session('s1')]);
       again.chat.markRelay('q1', { status: 'queued' }, () => {});
       await again.chat.reset(() => {});

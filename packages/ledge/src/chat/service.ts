@@ -25,7 +25,7 @@ export interface Chat {
   /** The card's state: queued, sent, failed, or `{}` back to proposed; every client gets the new history. */
   markRelay(qid: string, patch: Pick<ChatRelay, 'status' | 'sentAt' | 'error'>, emit: (m: ChatMessage) => void): void;
   /** Today's queued relays, oldest turn first. */
-  queuedRelays(): Array<{ qid: string; relay: ChatRelay }>;
+  queuedRelays(emit?: (m: ChatMessage) => void): Array<{ qid: string; relay: ChatRelay }>;
 }
 export interface ChatDeps {
   store: Store; tmux: Pick<Tmux, 'capture'>; home: string;
@@ -65,7 +65,7 @@ export function createChat(deps: ChatDeps): Chat {
   const CANCELLED = { ok: false as const, message: 'cancelled', resumed: false };
 
   /** A new day starts an empty history; the day file decides the Claude session separately. */
-  function rollDay(): void { const day = today(); if (turnsDay !== day) { turns = []; turnsDay = day; } }
+  function rollDay(): boolean { const day = today(); if (turnsDay === day) return false; turns = []; turnsDay = day; return true; }
 
   /** Today's session for this harness: resumed from the day file when it names today and the same tool, else a fresh id. */
   async function daySession(fresh: boolean, tool: Tool): Promise<{ sessionId: string; resume: boolean }> {
@@ -101,6 +101,8 @@ export function createChat(deps: ChatDeps): Chat {
   function relayFrom(raw: string, qid: string): ChatRelay | undefined {
     const block = parseRelayBlock(raw);
     if (!block) { log(`chat ${qid}: relay ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
+    // A leading `!` would put Claude Code in bash mode, and the chat model can be steered by pane or repo content.
+    if (block.text.trimStart().startsWith('!')) { log(`chat ${qid}: relay ignored: bash-mode instruction ${block.session}`); return undefined; }
     const s = deps.store.get(block.session);
     const why = !s ? 'unknown session' : s.source === 'hook_only' ? 'read-only session' : s.state === 'exited' ? 'session has exited' : null;
     if (why) { log(`chat ${qid}: relay ignored: ${why} ${block.session}`); return undefined; }
@@ -165,7 +167,8 @@ export function createChat(deps: ChatDeps): Chat {
       const { id, name, tool, text } = t.relay; t.relay = { id, name, tool, text, ...patch };
       emit({ type: 'chat.history', turns });
     },
-    queuedRelays() { rollDay(); return turns.flatMap(t => (t.relay?.status === 'queued' ? [{ qid: t.qid, relay: t.relay }] : [])); },
+    // A roll caught here is silent otherwise: the overlays would keep showing yesterday's queued card.
+    queuedRelays(emit) { if (rollDay()) emit?.({ type: 'chat.history', turns }); return turns.flatMap(t => (t.relay?.status === 'queued' ? [{ qid: t.qid, relay: t.relay }] : [])); },
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
     async reset(emit) {
       // The overlay only offers it between questions; a reset racing a question is dropped rather than orphaning its turn.

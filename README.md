@@ -225,7 +225,7 @@ Daemon to clients:
 | `chat.done { qid, text, at, proposal?, relay? }` | The finished answer; `proposal` the session card, `relay` the instruction card, if any. |
 | `chat.error { qid, message }` | The question could not be answered (busy, timeout, cancel, harness missing). |
 | `chat.history { turns }` | The day's turns (50 at most), after each snapshot and after each ask or reset. A turn still running has no `answer`. A turn's `proposal` carries `launchedId` once started and `error` if the start failed; its `relay` carries `status` (`queued` or `sent`), `sentAt` and `error`. |
-| `error { message, id? }` | A rejected command. With `id`, the overlay shows it on that session; without one, a refused launch. |
+| `error { message, id? }` | A rejected command. With `id`, the overlay shows it on that session; without one, a refused launch or relay (`session.relay`, `session.relay.cancel`). |
 
 Clients to daemon:
 
