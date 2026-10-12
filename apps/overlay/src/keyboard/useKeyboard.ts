@@ -12,6 +12,8 @@ export interface KeyboardOptions {
   onTerminal?: (id: string) => void;
   /** 1 to 9 in a session whose ask is a question: choose option N. */
   onChooseOption?: (n: number) => void;
+  /** `i` in the new-session form: focus its first instruction. */
+  onInstruction?: () => void;
 }
 
 const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
@@ -65,6 +67,7 @@ export function useKeyboard(o: KeyboardOptions) {
       else if (k === 'd') c.onToggleDnd();
       else if (k === 'Escape') c.onClose();
       else if (list && k === '/') c.onAsk?.();
+      else if (c.mode === 'launch' && k === 'i') c.onInstruction?.();
       else if (k === '?') c.onHelp();
       else return;
       e.preventDefault();

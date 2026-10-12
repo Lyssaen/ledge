@@ -536,6 +536,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     onFocus: setFocusedId, onOpen: openRow, onDecide: decide,
     onClose: () => st.mode === 'reader' ? readerBack() : dispatch({ type: detail ? 'back' : 'close' }),
     onAsk: () => surfaceRef.current?.querySelector<HTMLInputElement>('[data-ask-input]')?.focus(),
+    onInstruction: () => surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="launch"] [data-launch-prompt]')?.focus(),
     onReplyFocus: () => {
       if (st.mode !== 'session' && st.mode !== 'list') return;
       if (st.mode === 'session') { surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="session"] [data-reply]')?.focus(); return; }

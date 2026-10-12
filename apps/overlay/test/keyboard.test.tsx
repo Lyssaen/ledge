@@ -37,6 +37,16 @@ describe('useKeyboard', () => {
     press('?'); expect(h.onHelp).toHaveBeenCalled();
     press('d'); expect(h.onToggleDnd).toHaveBeenCalled();
   });
+  it('i focuses the first instruction in the new-session form only, and types as usual once there', () => {
+    const onInstruction = vi.fn();
+    const { rerender } = renderHook(({ mode }) => useKeyboard({ enabled: true, mode, sessions, focusedId: null, ...handlers(), onInstruction }), { initialProps: { mode: 'list' as 'list' | 'launch' } });
+    press('i'); expect(onInstruction).not.toHaveBeenCalled();
+    rerender({ mode: 'launch' });
+    expect(fireEvent.keyDown(window, { key: 'i' })).toBe(false); expect(onInstruction).toHaveBeenCalledTimes(1);
+    const area = document.createElement('textarea'); document.body.appendChild(area); area.focus();
+    fireEvent.keyDown(area, { key: 'i' }); expect(onInstruction).toHaveBeenCalledTimes(1);
+    area.remove();
+  });
   it('does nothing while disabled or while typing in an input', () => {
     const onFocus = vi.fn();
     renderHook(() => useKeyboard({ enabled: false, mode: 'list', sessions, focusedId: null, onFocus, onOpen: noop, onDecide: noop, onClose: noop, onReplyFocus: noop, onToggleDnd: noop, onHelp: noop }));

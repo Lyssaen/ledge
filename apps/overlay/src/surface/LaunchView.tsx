@@ -146,9 +146,12 @@ export function LaunchView(p: LaunchViewProps) {
               </div>
             </Row>
             <Row>
-              <label htmlFor="ledge-launch-prompt" style={label}>{t.launch.prompt} <span style={{ fontWeight: 400, color: 'var(--muted-foreground)' }}>· {t.launch.optional}</span></label>
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <label htmlFor="ledge-launch-prompt" style={label}>{t.launch.prompt} <span style={{ fontWeight: 400, color: 'var(--muted-foreground)' }}>· {t.launch.optional}</span></label>
+                <span data-launch-prompt-key title={t.launch.promptKey} aria-hidden="true"><Kbd>I</Kbd></span>
+              </span>
               <span style={{ ...hint, marginTop: 3 }}>{t.launch.promptHint(shownName)}</span>
-              <textarea id="ledge-launch-prompt" data-launch-prompt className="ledge-field" rows={3} value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={t.launch.promptPlaceholder(shownName)}
+              <textarea id="ledge-launch-prompt" data-launch-prompt aria-keyshortcuts="I" className="ledge-field" rows={3} value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={t.launch.promptPlaceholder(shownName)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
                 style={{ ...field, height: 72, padding: '8px 12px', lineHeight: '18px', resize: 'none', marginTop: 8 }} />
             </Row>

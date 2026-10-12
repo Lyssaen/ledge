@@ -36,7 +36,7 @@ test('Ctrl+Alt+L opens the list on the oldest ask; J/K move, Y approves, Enter o
   await expectMode(page, 'handle');
 });
 
-test('Alt+Arrow moves to the previous or next session, an ask or not; Ctrl+Alt+N opens the launch form', async ({ page }) => {
+test('Alt+Arrow moves to the previous or next session, an ask or not; Ctrl+Alt+N opens the launch form, I goes to its first instruction', async ({ page }) => {
   await fakeDaemon(page, sessions());
   await ready(page, 3);
   await page.keyboard.press('Control+Alt+L');
@@ -57,6 +57,10 @@ test('Alt+Arrow moves to the previous or next session, an ask or not; Ctrl+Alt+N
   await expectMode(page, 'handle');
   await page.keyboard.press('Control+Alt+N');
   await expectMode(page, 'launch');
+  await page.keyboard.press('i');
+  const instruction = layer(page, 'launch').locator('[data-launch-prompt]');
+  await expect(instruction).toBeFocused();
+  await expect(instruction).toHaveValue('');
   await page.keyboard.press('Control+Alt+N');
   await expectMode(page, 'handle');
 });

@@ -55,7 +55,7 @@ const fr = {
     pick: (project: string, cwd: string) => `Choisir ${project} (${cwd})`,
     tool: 'Outil', toolHint: 'Chacun est suivi par ses hooks ; ses demandes se règlent depuis Ledge.',
     bot: 'Compagnon', botHint: (title: string) => `Son nom donne le titre de l’onglet : ${title}.`, anotherName: 'Un autre nom', botPlaceholder: 'Au choix de Ledge',
-    prompt: 'Première instruction', optional: 'facultatif',
+    prompt: 'Première instruction', optional: 'facultatif', promptKey: 'Touche I pour y aller',
     promptHint: (name: string) => `Envoyée dès que ${name} est prêt. Sinon il attend votre tour dans son terminal.`,
     promptPlaceholder: (name: string) => `Que doit faire ${name} en premier ?`,
     resume: 'Reprendre la dernière conversation', resumeHint: 'Démarre avec --continue dans ce dossier.',
@@ -176,7 +176,7 @@ const fr = {
   help: {
     title: 'Au bout des doigts.',
     keys: [['Ouvrir la liste', ['Ctrl Alt L']], ['Choisir une session', ['J', 'K']], ['Ouvrir la sélection', ['Entrée']], ['Autoriser / refuser', ['Y', 'N']],
-      ['Session précédente / suivante', ['Alt ←', 'Alt →']], ['Nouvelle session', ['Ctrl Alt N']], ['Répondre', ['R']], ['Ouvrir l’onglet du terminal', ['O']], ['Ne pas déranger', ['D']], ['Retour, puis replier', ['Échap']]] as Array<[string, string[]]>,
+      ['Session précédente / suivante', ['Alt ←', 'Alt →']], ['Nouvelle session', ['Ctrl Alt N']], ['Aller à la première instruction', ['I']], ['Répondre', ['R']], ['Ouvrir l’onglet du terminal', ['O']], ['Ne pas déranger', ['D']], ['Retour, puis replier', ['Échap']]] as Array<[string, string[]]>,
     tab: 'Tab conserve la navigation entre les contrôles.'
   },
   coach: {
@@ -233,7 +233,7 @@ const en: Messages = {
     pick: (project: string, cwd: string) => `Choose ${project} (${cwd})`,
     tool: 'Tool', toolHint: 'Each is tracked through its hooks; its asks are answered from Ledge.',
     bot: 'Companion', botHint: (title: string) => `Its name titles the terminal tab: ${title}.`, anotherName: 'Another name', botPlaceholder: 'Ledge picks one',
-    prompt: 'First instruction', optional: 'optional',
+    prompt: 'First instruction', optional: 'optional', promptKey: 'Press I to get here',
     promptHint: (name: string) => `Sent as soon as ${name} is ready. Otherwise it waits for your turn in its terminal.`,
     promptPlaceholder: (name: string) => `What should ${name} do first?`,
     resume: 'Resume the last conversation', resumeHint: 'Starts with --continue in this folder.',
@@ -353,7 +353,7 @@ const en: Messages = {
   help: {
     title: 'Keyboard',
     keys: [['Open the list', ['Ctrl Alt L']], ['Choose a session', ['J', 'K']], ['Open the selection', ['Enter']], ['Approve or deny', ['Y', 'N']],
-      ['Previous or next session', ['Alt ←', 'Alt →']], ['New session', ['Ctrl Alt N']], ['Reply', ['R']], ['Open the terminal tab', ['O']], ['Do not disturb', ['D']], ['Back, then collapse', ['Esc']]],
+      ['Previous or next session', ['Alt ←', 'Alt →']], ['New session', ['Ctrl Alt N']], ['Go to the first instruction', ['I']], ['Reply', ['R']], ['Open the terminal tab', ['O']], ['Do not disturb', ['D']], ['Back, then collapse', ['Esc']]],
     tab: 'Tab keeps moving between the controls.'
   },
   coach: {
