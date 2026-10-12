@@ -201,7 +201,9 @@ One question at a time (a second one gets `chat.error`). A turn that takes more 
 
 Bot names in the answer are links that open that session.
 
-Ledge never sends an instruction to a pane from the chat, and never starts anything by itself. Asked to open or start a session ("open a session in ledge to fix the build"), it answers with a card when the folder is certain — an absolute path from `sessions.md`, from `folders.md` (the recent folders, written beside the other context files) or typed by the user — and asks which folder otherwise. The harness ends its answer with a ```` ```ledge-session ```` block holding `{"cwd", "prompt"?}`; the daemon takes the block out of the text, checks the folder, and attaches a `proposal` to the turn. The card's "Start the session" sends `session.launch { qid }`: the daemon launches the proposal's own folder, harness (the question's) and instruction, once, and marks the card started or failed for every client. The terminal tab opens as the launch form's switch says.
+Ledge never sends an instruction to a pane, or starts anything, by itself: the user clicks the card. Asked to open or start a session ("open a session in ledge to fix the build"), it answers with a card when the folder is certain — an absolute path from `sessions.md`, from `folders.md` (the recent folders, written beside the other context files) or typed by the user — and asks which folder otherwise. The harness ends its answer with a ```` ```ledge-session ```` block holding `{"cwd", "prompt"?}`; the daemon takes the block out of the text, checks the folder, and attaches a `proposal` to the turn. The card's "Start the session" sends `session.launch { qid }`: the daemon launches the proposal's own folder, harness (the question's) and instruction, once, and marks the card started or failed for every client. The terminal tab opens as the launch form's switch says.
+
+Ask it to pass something on — "tell Otto to run the overlay tests" — and, when exactly one tracked session matches and Ledge can type into it, the answer ends with a card: the session, its state, and the exact instruction. **Send** types it into the session the way a reply from the overlay does. If the session is busy, the card waits ("Otto is working; I'll send it as soon as it's done", **Cancel**) and the daemon sends it the next time the session is free, one instruction per free moment, oldest first, even with the overlay closed. Sessions started outside Ledge (hook only) are read-only and never get a card. A reset, a new day or a daemon restart drops the waiting instructions with the history; nothing is sent.
 
 ## Protocol
 
@@ -220,9 +222,9 @@ Daemon to clients:
 | `folder.listing { path, parent, entries, error? }` | To the requester of a `folder.list` or `folder.create` only: the folder (resolved, `~` expanded), its parent (`null` at the root) and its subfolders by name, hidden ones left out. A refusal says why in `error`, never in an `error` message. |
 | `chat.step { qid, step }` | What Ledge is reading: `sessions`, `pane`, `reply`, `git` or `repo` (`id` / `name` / `path` when they apply). |
 | `chat.delta { qid, text }` | The next slice of the answer, as the harness writes it. |
-| `chat.done { qid, text, at, proposal? }` | The finished answer; `proposal` the session card, if any. |
+| `chat.done { qid, text, at, proposal?, relay? }` | The finished answer; `proposal` the session card, `relay` the instruction card, if any. |
 | `chat.error { qid, message }` | The question could not be answered (busy, timeout, cancel, harness missing). |
-| `chat.history { turns }` | The day's turns (50 at most), after each snapshot and after each ask or reset. A turn still running has no `answer`. A turn's `proposal` carries `launchedId` once started and `error` if the start failed. |
+| `chat.history { turns }` | The day's turns (50 at most), after each snapshot and after each ask or reset. A turn still running has no `answer`. A turn's `proposal` carries `launchedId` once started and `error` if the start failed; its `relay` carries `status` (`queued` or `sent`), `sentAt` and `error`. |
 | `error { message, id? }` | A rejected command. With `id`, the overlay shows it on that session; without one, a refused launch. |
 
 Clients to daemon:
@@ -240,6 +242,8 @@ Clients to daemon:
 | `session.dismiss { id }` | overlay | Remove a finished or read-only session from the list. |
 | `session.focus { id }` | overlay | Acknowledged only; the overlay focuses the terminal itself. |
 | `session.launch { tool, cwd, name?, prompt?, continue?, qid? }` | overlay | Start a session: `cwd` a WSL folder (`~` allowed, must exist), `name` a preferred bot name, `prompt` the first instruction, `continue` resumes the folder's last conversation. The daemon spawns the agent exactly like `ledge <tool>` would (minus the exit-code wrapper: the poller sees the pane end) and answers `session.launched`. With `qid`, it starts that chat turn's proposal (the other fields are ignored), refused once started. |
+| `session.relay { qid }` | overlay | Sends the chat card's instruction now, or queues it until the session is free. Refusals: `unknown relay`, `already sent`, `already queued`. |
+| `session.relay.cancel { qid }` | overlay | Takes the card's instruction back out of the queue (`nothing queued` otherwise). |
 | `folder.list { path? }` | overlay | The launch form's folder browser: list a WSL folder's subfolders (home without `path`). |
 | `folder.create { parent, name }` | overlay | Make a folder named `name` (no `/`, not `.` or `..`) inside `parent`, then list it. |
 | `chat.ask { qid, text, tool? }` | overlay | Ask Ledge. `tool` is the overlay's default harness (`claude` when omitted). |
@@ -439,6 +443,7 @@ docs/                design specs, implementation plans, mockups, the approved p
 - Last-reply lists as real markdown lists: [spec](docs/superpowers/specs/2026-10-11-session-reply-lists-design.md).
 - Markdown document reader — **implemented in the overlay and WSL daemon**: [spec](docs/superpowers/specs/2026-10-11-markdown-reader-design.md), [implementation plan](docs/superpowers/plans/2026-10-11-markdown-reader.md), and [approved mockup](docs/mockups/ledge-reader-existing.html). Opens cited plans, designs and skills in the same 560 px panel, supports an 800 px expanded view, and returns to the conversation with its draft and scroll position preserved. Browser integration is tested; native Windows validation is still pending.
 - Starting a session from Ledge: [spec](docs/superpowers/specs/2026-10-10-launch-from-ledge-design.md) and [mockups](https://claude.ai/artifact/YBX4UV7Z2eBRNKAwNh3876)
+- Relaying an instruction from the chat to a session: [spec](docs/superpowers/specs/2026-10-12-relay-from-chat-design.md).
 - Design canvas (mockups and playable prototype): https://claude.ai/artifact/57oDjsKdabQBmPgAXn15mc
 - Design system "Shadcn Red": https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV
 - Initial mascot exploration: [docs/mockups/mascots.html](docs/mockups/mascots.html), a historical comparison of three directions.
