@@ -47,7 +47,7 @@ The Rust side compiles on Windows and its unit tests pass (`Cargo.lock` is commi
 1. `pnpm install`.
 2. `cd apps\overlay\src-tauri; cargo test`: all tests must pass.
 3. `pnpm tauri dev` with the daemon running in WSL, then check:
-   - the Ledge icon is in the notification area (tray): its tooltip and the first, greyed line of its menu read `Ledge 0.1.0 (dev)` under `tauri dev` and `Ledge 0.1.0` once installed; `Quitter Ledge` (`Quit Ledge` in English, it follows Settings > Language live) closes the overlay;
+   - the Ledge icon is in the notification area (tray): its tooltip and the first, greyed line of its menu read `Ledge <version> (dev)` under `tauri dev` and `Ledge <version>` once installed (the version of `package.json`, which the release workflow sets from the tag); `Quitter Ledge` (`Quit Ledge` in English, it follows Settings > Language live) closes the overlay;
    - borderless, transparent, no shadow, not in the taskbar, always on top; handle vertically centered on the left edge of the primary work area, nothing drawn twice or offset; also at 125% and 150% scaling and with the taskbar on the left;
    - resting the cursor on the handle opens the list after about 180 ms; leaving earlier does nothing; a list opened this way folds once the pointer leaves it, unless a field inside is being typed in; a click anywhere outside an open panel folds it; hovering does nothing while the daemon is down;
    - Ctrl+Alt+L from another app opens the list and gives the overlay focus (j/k/y/n work at once); pressing it again closes; an ask arriving while you type elsewhere shows the bubble without stealing focus; Ctrl+Alt+L while a bubble shows opens the list; Ctrl+Alt+N from anywhere opens the new-session form with its field focused, and again folds it;

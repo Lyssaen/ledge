@@ -349,7 +349,7 @@ ledge status
 
 ### 2. Get the Windows installer
 
-Download `Ledge_0.1.0_x64-setup.exe` from the [latest release](https://github.com/Paradow-dev/ledge/releases/latest). The release notes give its SHA-256.
+Download `Ledge_<version>_x64-setup.exe` from the [latest release](https://github.com/Paradow-dev/ledge/releases/latest). The release notes give its SHA-256.
 
 Or build it yourself. Clone the repository a second time, on the Windows disk, in PowerShell. Do not build from the `\\wsl$` path: `node_modules` must be the Windows one.
 
@@ -361,11 +361,11 @@ cd apps\overlay
 pnpm tauri build
 ```
 
-The installer lands in `apps\overlay\src-tauri\target\release\bundle\nsis\Ledge_0.1.0_x64-setup.exe`.
+The installer lands in `apps\overlay\src-tauri\target\release\bundle\nsis\Ledge_<version>_x64-setup.exe`.
 
 ### 3. Install Ledge on Windows
 
-Run `Ledge_0.1.0_x64-setup.exe`. It installs for your user only, under `%LOCALAPPDATA%`, with no administrator prompt. The installer is not code-signed, so SmartScreen may warn the first time: More info, then Run anyway. At the end, Ledge starts:
+Run `Ledge_<version>_x64-setup.exe`. It installs for your user only, under `%LOCALAPPDATA%`, with no administrator prompt. The installer is not code-signed, so SmartScreen may warn the first time: More info, then Run anyway. At the end, Ledge starts:
 
 - the Ledge mascot appears in the notification area, next to the clock;
 - the island appears at the top centre of your primary screen, a 38 px pill cut into the edge with the Ledge mascot on its left;

@@ -1,6 +1,7 @@
 # Builds the Windows installer and publishes it on the GitHub release of a `v*` tag.
 # The tag is annotated: its subject is the release title, its body the release notes. The install block and the
 # SHA-256 of the installer are appended. Re-running on an existing release replaces the asset and the notes.
+# The tag (vMAJOR.MINOR.PATCH) is the version: it is stamped into the build, whatever the repository says.
 name: Release
 
 on:
@@ -30,6 +31,11 @@ jobs:
         with:
           workspaces: apps/overlay/src-tauri
       - run: pnpm install --frozen-lockfile
+      # The tag is the version: written into the Tauri config (tray line, exe file version, installer name), the crate
+      # and the package before anything is built, so the release never ships the version left in the repository.
+      - name: Stamp the version from the tag
+        run: node scripts/set-version.mjs $env:GITHUB_REF_NAME
+        working-directory: apps/overlay
       - name: Typecheck the overlay
         run: pnpm --filter overlay typecheck
       - name: Build the installer
@@ -43,7 +49,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          $exe = Get-ChildItem apps/overlay/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          $version = $env:TAG -replace '^v', ''
+          $exe = Get-ChildItem "apps/overlay/src-tauri/target/release/bundle/nsis/*_$($version)_*-setup.exe" | Select-Object -First 1
+          if (-not $exe) { throw "No installer for $version under bundle/nsis" }
           $sha = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
           # actions/checkout leaves a lightweight tag on the commit: fetch the annotated one back before reading it.
           git fetch --force origin "refs/tags/$($env:TAG):refs/tags/$($env:TAG)"
