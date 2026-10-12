@@ -750,3 +750,19 @@ describe('chat', () => {
     await c.close();
   });
 });
+
+describe('update.daemon', () => {
+  it('sends the daemon info in the snapshot and routes update.daemon to the updater', async () => {
+    await srv.close();
+    const seen: string[] = [];
+    srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env }), daemon: { version: '0.2.2', install: 'npm', systemd: true },
+      updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); } } });
+    const c = await connect({ port: srv.port });
+    const snap = await c.next('snapshot');
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true });
+    c.send({ type: 'update.daemon', version: '0.3.0' });
+    expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
+    expect(seen).toEqual(['0.3.0']);
+    await c.close();
+  });
+});
