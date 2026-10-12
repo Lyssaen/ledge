@@ -66,9 +66,16 @@ describe('update machine', () => {
     const s = run([base[0]!, { type: 'snapshot', daemon: { ...NPM, version: '0.3.0' }, ids: ['a'] }, base[2]!, START]);
     expect(s.phase.kind).toBe('downloading');
   });
-  it('offers the app alone when the daemon is ahead', () => {
-    const s = run([base[0]!, { type: 'snapshot', daemon: { ...NPM, version: '0.3.0' }, ids: [] }, { type: 'checked', at: 1, latest: null }]);
+  it('offers the app alone when the daemon is ahead of it', () => {
+    const s = run([base[0]!, { type: 'snapshot', daemon: { ...NPM, version: '0.3.0' }, ids: [] }, base[2]!]);
     expect(targetOf(s)).toBe('0.3.0'); expect(cardView(s).kind).toBe('available');
+  });
+  it('never targets a version no release provides when the daemon is ahead of the latest release', () => {
+    const ahead = { ...NPM, version: '0.4.0' };
+    expect(targetOf(run([base[0]!, { type: 'snapshot', daemon: ahead, ids: [] }, base[2]!]))).toBe('0.3.0');
+    const s = run([base[0]!, { type: 'snapshot', daemon: ahead, ids: [] }, { type: 'checked', at: 1, latest: null }]);
+    expect(targetOf(s)).toBeNull(); expect(cardView(s)).toEqual({ kind: 'hidden' });
+    expect(targetOf(run([{ type: 'app', version: '0.3.0', updatedFrom: null }, { type: 'snapshot', daemon: ahead, ids: [] }, base[2]!]))).toBeNull();
   });
   it('a clone shows the manual command; the app button wakes up once the daemon has the target', () => {
     const git = { version: '0.2.2', install: 'git' as const, systemd: true, manual: 'cd /c && git pull' };
@@ -105,6 +112,10 @@ describe('update machine', () => {
     expect(s.phase).toEqual({ kind: 'daemon', step: 'sent' });
     s = run([{ type: 'disconnected' }, { type: 'timeout' }], s);
     expect(s.phase).toMatchObject({ kind: 'failed', reason: 'daemon-timeout' });
+  });
+  it('a daemon that stalls before restarting ends in daemon-timeout; a stall counts only during the daemon step', () => {
+    expect(run([...base, START, { type: 'progress', step: 'installing' }, { type: 'stalled' }]).phase).toMatchObject({ kind: 'failed', reason: 'daemon-timeout' });
+    expect(run([...base, START, { type: 'disconnected' }, { type: 'stalled' }]).phase.kind).toBe('waiting');
   });
   it('a dismissal with no target does not erase an earlier one', () => {
     const dismissed = run([...base, { type: 'dismiss' }]);

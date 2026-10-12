@@ -22,7 +22,7 @@ export type UpdateEvent =
   | { type: 'start'; sessions: Array<{ id: string; name: string }> }
   | { type: 'progress'; step: 'installing' | 'restarting' }
   | { type: 'failed'; reason: UpdateFailure; detail?: string; command?: string }
-  | { type: 'disconnected' } | { type: 'timeout' }
+  | { type: 'disconnected' } | { type: 'timeout' } | { type: 'stalled' }
   | { type: 'download'; done: number; total: number | null } | { type: 'downloaded' } | { type: 'download-failed' }
   | { type: 'dismiss' } | { type: 'ack-updated' } | { type: 'retry' };
 export type CardView =
@@ -37,15 +37,13 @@ export type PipTone = 'new' | 'busy' | 'bad' | 'ok' | null;
 export const initialUpdate = (dismissed: string | null, checkedAt: number | null): UpdateState =>
   ({ app: null, daemon: null, latest: null, phase: { kind: 'idle' }, target: null, before: null, dismissed, justUpdated: null, checkedAt });
 
-const newer = (a: string | null | undefined, b: string | null | undefined) => (!a ? b ?? null : !b ? a : compareVersions(a, b) >= 0 ? a : b);
-/** The version both halves should run: the newest of the release and the daemon, when one half is behind it. */
+/** The version both halves should run: the latest release, when one half is behind it. Never a version no release provides. */
 export function targetOf(s: UpdateState): string | null {
   // An unknown daemon (absent from the snapshot, so older than the auto-update) gets no update at all: spec §5.
-  if (!s.daemon) return null;
-  const t = newer(s.latest?.version, s.daemon.version);
-  if (!t) return null;
+  if (!s.daemon || !s.latest) return null;
+  const t = s.latest.version;
   const behind = (v: string | null | undefined) => !!v && compareVersions(v, t) < 0;
-  return behind(s.app) || behind(s.daemon?.version) ? t : null;
+  return behind(s.app) || behind(s.daemon.version) ? t : null;
 }
 export const needsDaemon = (s: UpdateState, t = s.target ?? targetOf(s)) => !!t && !!s.daemon && compareVersions(s.daemon.version, t) < 0;
 export const needsApp = (s: UpdateState, t = s.target ?? targetOf(s)) => !!t && !!s.app && compareVersions(s.app, t) < 0;
@@ -81,6 +79,8 @@ export function reduceUpdate(s: UpdateState, e: UpdateEvent): UpdateState {
     case 'failed': return s.phase.kind === 'daemon' ? { ...s, phase: { kind: 'failed', reason: e.reason, detail: e.detail, command: e.command } } : s;
     case 'disconnected': return s.phase.kind === 'daemon' ? { ...s, phase: { kind: 'waiting' } } : s;
     case 'timeout': return s.phase.kind === 'waiting' ? { ...s, phase: { kind: 'failed', reason: 'daemon-timeout' } } : s;
+    // The daemon took the request but neither failed, nor restarted, nor dropped the socket.
+    case 'stalled': return s.phase.kind === 'daemon' ? { ...s, phase: { kind: 'failed', reason: 'daemon-timeout' } } : s;
     case 'download': return s.phase.kind === 'downloading' ? { ...s, phase: { kind: 'downloading', done: e.done, total: e.total } } : s;
     case 'downloaded': return s.phase.kind === 'downloading' ? { ...s, phase: { kind: 'installing' } } : s;
     case 'download-failed': return s.phase.kind === 'downloading' || s.phase.kind === 'installing' ? { ...s, phase: { kind: 'failed', reason: 'download' } } : s;

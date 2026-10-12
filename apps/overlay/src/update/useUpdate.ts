@@ -15,10 +15,20 @@ export interface UpdateController {
   state: UpdateState; card: CardView; pip: PipTone; gear: boolean; auto: boolean;
   start(): void; later(): void; retry(): void; ackUpdated(): void; checkNow(): void; setAuto(on: boolean): void;
 }
-export interface UpdateDeps { check?: typeof checkForUpdate; relaunch?: typeof relaunchApp; version?: typeof appVersion; now?: () => number; everyMs?: number; waitMs?: number }
+export interface UpdateDeps { check?: typeof checkForUpdate; relaunch?: typeof relaunchApp; version?: typeof appVersion; now?: () => number; everyMs?: number; waitMs?: number; stallMs?: number; checkMs?: number }
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 const WAIT_MS = 45_000;
+/** Longer than the daemon's own 3-minute npm timeout: past it, the daemon will not answer any more. */
+const STALL_MS = 4 * 60_000;
+const CHECK_MS = 60_000;
+
+/** `p`, or a rejection once `ms` passed without it settling. */
+export function withinMs<T>(p: Promise<T>, ms: number): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => { t = setTimeout(() => reject(new Error(`no answer within ${ms} ms`)), ms); });
+  return Promise.race([p, late]).finally(() => clearTimeout(t));
+}
 
 export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateController {
   const [state, rawDispatch] = useReducer(reduceUpdate, undefined, () => initialUpdate(loadDismissed(), loadCheckedAt()));
@@ -87,6 +97,13 @@ export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateCo
     return () => clearTimeout(t);
   }, [kind, deps.waitMs, dispatch]);
 
+  // While the daemon holds the request: a watchdog, so a silent daemon never leaves the card running forever.
+  useEffect(() => {
+    if (kind !== 'daemon') return;
+    const t = setTimeout(() => dispatch({ type: 'stalled' }), deps.stallMs ?? STALL_MS);
+    return () => clearTimeout(t);
+  }, [kind, deps.stallMs, dispatch]);
+
   // Entering the download phase installs the app, once per entry.
   useEffect(() => {
     if (kind !== 'downloading') { downloadingFor.current = false; return; }
@@ -97,7 +114,7 @@ export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateCo
     void (async () => {
       try {
         // No update held (checks off or failed): look once more, and only install exactly the target.
-        const u = available.current ?? await (depsRef.current.check ?? defaultCheck())();
+        const u = available.current ?? await withinMs((depsRef.current.check ?? defaultCheck())(), depsRef.current.checkMs ?? CHECK_MS);
         if (!mounted.current) return;
         if (!u || u.version !== target) { dispatch({ type: 'download-failed' }); return; }
         available.current = u;
