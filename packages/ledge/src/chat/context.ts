@@ -1,9 +1,9 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import type { ChatStep, Session } from '@ledge/protocol';
+import type { ChatStep, Recent, Session } from '@ledge/protocol';
 
-export interface ContextInput { sessions: Session[]; capture: (s: Session) => Promise<string[] | null>; git: (cwd: string) => Promise<string | null>; now: string }
+export interface ContextInput { sessions: Session[]; recents?: Recent[]; capture: (s: Session) => Promise<string[] | null>; git: (cwd: string) => Promise<string | null>; now: string }
 export interface Context { dir: string; steps: Map<string, ChatStep>; repoPaths: string[] }
 
 const STATE: Record<Session['state'], string> = {
@@ -13,7 +13,7 @@ const STATE: Record<Session['state'], string> = {
 
 /**
  * The folder Ledge reads before answering (spec 2026-10-11 §5.3): `sessions.md` names every session and the files that
- * describe it; `pane-<id>.txt`, `reply-<id>.md` and `git-<id>.txt` exist only where there is something to read.
+ * describe it; `folders.md` lists the recent folders; `pane-<id>.txt`, `reply-<id>.md` and `git-<id>.txt` exist only where there is something to read.
  */
 export async function writeContext(dir: string, input: ContextInput): Promise<Context> {
   await rm(dir, { recursive: true, force: true }); await mkdir(dir, { recursive: true });
@@ -33,6 +33,10 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
     lines.push('');
   }
   await writeFile(join(dir, 'sessions.md'), lines.join('\n')); steps.set('sessions.md', { kind: 'sessions' });
+  // The folders a session can be proposed in (spec 2026-10-12 §4), beside the sessions' own folders in sessions.md.
+  const recents = input.recents ?? [];
+  await writeFile(join(dir, 'folders.md'), ['# Recent folders', '', 'The folders the user started sessions in, most recent first.', '',
+    ...(recents.length ? recents.map(r => `- ${r.project}: ${r.cwd} (last used ${r.lastAt})`) : ['- (none yet)']), ''].join('\n'));
   const repoPaths = [...new Set(input.sessions.map(s => s.repoPath ?? s.cwd).filter(p => p && !coversHome(p)).map(p => resolve(p)))];
   return { dir, steps, repoPaths };
 }

@@ -6,6 +6,12 @@ const FAKE = fileURLToPath(new URL('./fake-claude.mjs', import.meta.url));
 const opts = (extra = {}) => ({ question: 'Où en sont les autres ?', cwd: process.cwd(), addDirs: ['/w/ledge'], sessionId: '11111111-1111-4111-8111-111111111111', resume: false, env: { ...process.env }, bin: [process.execPath, FAKE], ...extra });
 
 describe('claudeArgs', () => {
+  it('the persona allows a proposal block only, and names folders.md', () => {
+    expect(PERSONA).toContain('```ledge-session');
+    expect(PERSONA).toContain('folders.md');
+    expect(PERSONA).toContain('Tu n\'agis jamais toi-même');
+    expect(PERSONA).not.toContain('Tu ne proposes jamais d\'agir');
+  });
   it('runs headless, restricted, read-only, streaming, with the day session', () => {
     const a = claudeArgs(opts());
     expect(a.slice(0, 2)).toEqual(['-p', '--restricted']);

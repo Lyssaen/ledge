@@ -10,6 +10,19 @@ const T0 = '2026-10-11T10:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: 'Otto', tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: 'Otto · ledge', tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra });
 
 describe('writeContext', () => {
+  it('writes folders.md from the recent folders, most recent first, and no step for it', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    const recents = [{ cwd: '/w/ledge', project: 'ledge', lastAt: '2026-10-12T09:00:00.000Z' }, { cwd: '/w/api', project: 'api', lastAt: '2026-10-11T09:00:00.000Z' }];
+    const ctx = await writeContext(dir, { sessions: [], recents, now: T0, capture: async () => null, git: async () => null });
+    const md = readFileSync(join(dir, 'folders.md'), 'utf8');
+    expect(md).toContain('- ledge: /w/ledge (last used 2026-10-12T09:00:00.000Z)');
+    expect(md.indexOf('/w/ledge')).toBeLessThan(md.indexOf('/w/api'));
+    expect(stepFor(join(dir, 'folders.md'), ctx)).toBeNull();
+    const empty = mkdtempSync(join(tmpdir(), 'ctx-'));
+    await writeContext(empty, { sessions: [], now: T0, capture: async () => null, git: async () => null });
+    expect(readFileSync(join(empty, 'folders.md'), 'utf8')).toContain('(none yet)');
+  });
+
   it('writes sessions.md and one file per source, and maps them to steps', async () => {
     const dir = join(mkdtempSync(join(tmpdir(), 'ledge-chat-')), 'context');
     const sessions = [
