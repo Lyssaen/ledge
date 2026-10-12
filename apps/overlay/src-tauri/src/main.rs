@@ -13,6 +13,13 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 pub const OUTSIDE_CLICK_EVENT: &str = "ledge://outside-click";
 /// Cursor positions near the notch, including while outside the webview. `null` ends the proximity gesture.
 pub const CURSOR_NEAR_EVENT: &str = "ledge://cursor-near";
+/// Emitted when a maximised (or monitor-covering) window takes or leaves the foreground: `{ covered }`.
+pub const FOREGROUND_EVENT: &str = "ledge://foreground";
+/// How far from the island (logical px) the poller still reports the cursor: the hot band's 40 px overhang plus
+/// the mascot's 140 px gaze reach, with margin.
+const NEAR_REACH: f64 = 170.0;
+/// The poller checks the foreground window every this many 50 ms ticks.
+const FOREGROUND_TICKS: u32 = 10;
 const CURSOR_POLL: Duration = Duration::from_millis(50);
 /// Re-read the chosen monitor every 40 polls (2 s): resolution, scale or taskbar changes are picked up.
 const MONITOR_REFRESH_TICKS: u32 = 40;
@@ -33,7 +40,12 @@ struct Screen(Mutex<ScreenState>);
 struct ScreenState {
     chosen: Option<String>,
     gen: u64,
-    last_frame: Option<(i32, u32, u32)>,
+    last_frame: Option<(i32, i32, u32, u32)>,
+    /// The island's x range in logical px (`set_hot_zone`): the poller watches the top band around it.
+    hot: Option<(i32, u32)>,
+    /// Set by `set_hot_zone` (the webview just mounted or reloaded): the next foreground check emits its state even
+    /// when it did not change, so a window already covering the screen at launch is reported.
+    foreground_dirty: bool,
 }
 
 /// One monitor as the Settings view lists it: logical sizes, the work area's height, whether it is the primary.
@@ -69,6 +81,9 @@ pub fn tray_title(version: &str, debug: bool) -> String {
 
 #[derive(Clone, Serialize)]
 struct CursorPayload { x: f64, y: f64 }
+
+#[derive(Clone, Serialize)]
+struct ForegroundPayload { covered: bool }
 
 /// The chosen monitor in physical px: its work area and its scale factor.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -118,14 +133,26 @@ fn target_area(app: &AppHandle, screen: &Screen) -> Area {
 }
 
 /// Physical position and size of a frame given in logical px relative to the work area's top-left corner.
-pub fn frame_rect(area: Area, top: i32, width: u32, height: u32) -> (i32, i32, u32, u32) {
+pub fn frame_rect(area: Area, left: i32, top: i32, width: u32, height: u32) -> (i32, i32, u32, u32) {
     let s = area.scale;
     (
-        area.x,
+        area.x + (left as f64 * s).round() as i32,
         area.y + (top as f64 * s).round() as i32,
         (width as f64 * s).round() as u32,
         (height as f64 * s).round() as u32,
     )
+}
+
+/// True when the logical cursor `(x, y)` is in the band along the top edge around the island `hot = (left, width)`,
+/// within `NEAR_REACH` of it: the hot band that opens the list and the region the mascot's gaze follows.
+pub fn cursor_near(hot: Option<(i32, u32)>, x: f64, y: f64) -> bool {
+    let Some((left, width)) = hot else { return false };
+    y >= 0.0 && y <= NEAR_REACH && x >= left as f64 - NEAR_REACH && x <= (left + width as i32) as f64 + NEAR_REACH
+}
+
+/// True when the window rectangle holds the whole monitor rectangle (a full-screen or maximised window).
+pub fn covers(win: (i32, i32, i32, i32), mon: (i32, i32, i32, i32)) -> bool {
+    win.0 <= mon.0 && win.1 <= mon.1 && win.2 >= mon.2 && win.3 >= mon.3
 }
 
 /// True when a mouse button has just gone down (`now_down` after `!prev_down`) with the physical cursor outside the
@@ -137,15 +164,21 @@ pub fn press_outside(prev_down: bool, now_down: bool, cursor: (i32, i32), rect: 
     !inside
 }
 
-/// Moves and resizes the window to `(0, top)` on the chosen monitor's work area, `width` x `height` (logical px),
+/// Moves and resizes the window to `(left, top)` on the chosen monitor's work area, `width` x `height` (logical px),
 /// in one native call so the webview never sees the new position with the old size.
-/// The webview reports the bounding frame of everything it draws (surface, tooltip, status, coachmark).
+/// The webview reports the bounding frame of everything it draws (surface, fillets, status, say, coachmark).
 #[tauri::command]
-async fn set_frame(window: WebviewWindow, top: i32, width: u32, height: u32, screen: tauri::State<'_, Screen>) -> Result<(), String> {
-    if let Ok(mut s) = screen.0.lock() { s.last_frame = Some((top, width, height)); }
+async fn set_frame(window: WebviewWindow, left: i32, top: i32, width: u32, height: u32, screen: tauri::State<'_, Screen>) -> Result<(), String> {
+    if let Ok(mut s) = screen.0.lock() { s.last_frame = Some((left, top, width, height)); }
     let area = target_area(window.app_handle(), &screen);
-    let (x, y, w, h) = frame_rect(area, top, width, height);
+    let (x, y, w, h) = frame_rect(area, left, top, width, height);
     place_window(&window, x, y, w, h)
+}
+
+/// The island's x range in logical px: the cursor poller reports the cursor in the top band around it.
+#[tauri::command]
+fn set_hot_zone(left: i32, width: u32, screen: tauri::State<'_, Screen>) {
+    if let Ok(mut s) = screen.0.lock() { s.hot = Some((left, width)); s.foreground_dirty = true; }
 }
 
 /// The monitors the Settings view offers, in the OS order.
@@ -167,8 +200,8 @@ fn set_monitor(window: WebviewWindow, id: Option<String>, screen: tauri::State<'
         Ok(mut s) => { s.chosen = id; s.gen = s.gen.wrapping_add(1); s.last_frame }
         Err(_) => return Err("screen state poisoned".into()),
     };
-    if let Some((top, width, height)) = last {
-        let (x, y, w, h) = frame_rect(target_area(window.app_handle(), &screen), top, width, height);
+    if let Some((left, top, width, height)) = last {
+        let (x, y, w, h) = frame_rect(target_area(window.app_handle(), &screen), left, top, width, height);
         place_window(&window, x, y, w, h)?;
     }
     Ok(())
@@ -288,6 +321,45 @@ fn foreground_is_terminal() -> bool {
 #[cfg(not(windows))]
 #[tauri::command]
 fn foreground_is_terminal() -> bool { false }
+
+/// The shell's desktop windows: a click on the wallpaper or Win+D brings one of them to the foreground, and its
+/// rectangle spans the monitor (every monitor for `Progman`) without covering anything.
+pub fn desktop_class(class: &str) -> bool { matches!(class, "Progman" | "WorkerW") }
+
+/// Ledge's own window handle, to leave it out of the foreground check.
+#[cfg(windows)]
+fn own_hwnd(app: &AppHandle) -> Option<isize> { app.get_webview_window("main")?.hwnd().ok().map(|h| h.0 as isize) }
+
+#[cfg(not(windows))]
+fn own_hwnd(_app: &AppHandle) -> Option<isize> { None }
+
+/// True when the foreground window is maximised or covers the whole monitor whose work area starts at `area`.
+/// The desktop itself and Ledge's own window (`own`) never count as covering.
+#[cfg(windows)]
+fn foreground_covers(area: Area, own: Option<isize>) -> bool {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+    use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, GetForegroundWindow, GetWindowRect, IsZoomed};
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() { return false; }
+        if own == Some(hwnd.0 as isize) { return false; }
+        let mut buf = [0u16; 128];
+        let n = GetClassNameW(hwnd, &mut buf) as usize;
+        if desktop_class(&String::from_utf16_lossy(&buf[..n])) { return false; }
+        let mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+        if !GetMonitorInfoW(mon, &mut info).as_bool() { return false; }
+        if info.rcWork.left != area.x || info.rcWork.top != area.y { return false; }
+        if IsZoomed(hwnd).as_bool() { return true; }
+        let mut r = RECT::default();
+        if GetWindowRect(hwnd, &mut r).is_err() { return false; }
+        covers((r.left, r.top, r.right, r.bottom), (info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom))
+    }
+}
+
+#[cfg(not(windows))]
+fn foreground_covers(_area: Area, _own: Option<isize>) -> bool { false }
 
 /// The `wt.exe` arguments that open a tab titled `title` in the current Windows Terminal window (a new one when none
 /// is open) running `command` inside the default WSL distribution. `command` is the daemon's launcher command plus
@@ -423,18 +495,22 @@ fn window_rect(app: &AppHandle) -> Option<(i32, i32, u32, u32)> {
     Some((p.x, p.y, s.width, s.height))
 }
 
-/// Polls the cursor every 50 ms: reports it near the notch (the mascot's gaze) and, while the outside watch is armed,
-/// emits `OUTSIDE_CLICK_EVENT` on a mouse press outside the window, which covers only what it draws.
+/// Polls the cursor every 50 ms: reports it in the top band around the island (the hot zone and the mascot's gaze),
+/// reports a maximised window taking or leaving the foreground, and, while the outside watch is armed, emits
+/// `OUTSIDE_CLICK_EVENT` on a mouse press outside the window, which covers only what it draws.
 fn spawn_cursor_poller(app: tauri::AppHandle) {
     std::thread::spawn(move || {
-        let mut cursor_near = false;
+        let mut was_near = false;
+        let mut was_covered = false;
+        let mut foreground_due = false;
         let mut was_down = false;
         let mut seen_screen: u64 = 0;
         let mut area: Option<Area> = None;
         let mut tick: u32 = 0;
         loop {
             std::thread::sleep(CURSOR_POLL);
-            let (chosen, screen_gen) = match app.state::<Screen>().0.lock() { Ok(s) => (s.chosen.clone(), s.gen), Err(_) => continue };
+            let (chosen, screen_gen, hot, dirty) = match app.state::<Screen>().0.lock() { Ok(mut s) => (s.chosen.clone(), s.gen, s.hot, std::mem::take(&mut s.foreground_dirty)), Err(_) => continue };
+            foreground_due |= dirty;
             if tick % MONITOR_REFRESH_TICKS == 0 || screen_gen != seen_screen {
                 seen_screen = screen_gen;
                 if let Some(m) = target_monitor(&app, chosen.as_deref()) { area = Some(area_of(&m)); }
@@ -443,13 +519,19 @@ fn spawn_cursor_poller(app: tauri::AppHandle) {
             let (Some(a), Some(c)) = (area, cursor_position()) else { continue };
             let x = (c.0 - a.x) as f64 / a.scale;
             let y = (c.1 - a.y) as f64 / a.scale;
-            let near = (0.0..=170.0).contains(&x);
+            let near = cursor_near(hot, x, y);
             if near {
                 let _ = app.emit(CURSOR_NEAR_EVENT, Some(CursorPayload { x, y }));
-            } else if cursor_near {
+            } else if was_near {
                 let _ = app.emit::<Option<CursorPayload>>(CURSOR_NEAR_EVENT, None);
             }
-            cursor_near = near;
+            was_near = near;
+            if tick % FOREGROUND_TICKS == 0 {
+                let covered = foreground_covers(a, own_hwnd(&app));
+                if covered != was_covered || foreground_due { let _ = app.emit(FOREGROUND_EVENT, ForegroundPayload { covered }); }
+                was_covered = covered;
+                foreground_due = false;
+            }
             let down = mouse_down();
             if app.state::<OutsideWatch>().0.load(Ordering::Relaxed) {
                 if let Some(rect) = window_rect(&app) {
@@ -468,7 +550,7 @@ fn main() {
         .manage(OutsideWatch::default())
         .manage(PrevForeground::default())
         .manage(Screen::default())
-        .invoke_handler(tauri::generate_handler![set_frame, set_outside_watch, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor, set_tray_labels, get_autostart, set_autostart])
+        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zone, set_outside_watch, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor, set_tray_labels, get_autostart, set_autostart])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") { let _ = w.set_always_on_top(true); }
             build_tray(app)?;
@@ -482,7 +564,15 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{autostart_by_default, choose, frame_rect, press_outside, terminal_args, title_matches, tray_title, Area};
+    use super::{autostart_by_default, choose, covers, cursor_near, desktop_class, frame_rect, press_outside, terminal_args, title_matches, tray_title, Area};
+
+    #[test] fn the_desktop_and_its_workers_never_cover_the_screen() {
+        assert!(desktop_class("Progman"));
+        assert!(desktop_class("WorkerW"));
+        assert!(!desktop_class("CASCADIA_HOSTING_WINDOW_CLASS"));
+        assert!(!desktop_class("Chrome_WidgetWin_1"));
+        assert!(!desktop_class(""));
+    }
 
     #[test] fn a_terminal_tab_runs_the_launcher_command_in_wsl() {
         let cmd: Vec<String> = ["/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"].iter().map(|s| s.to_string()).collect();
@@ -517,9 +607,28 @@ mod tests {
     const AREA: Area = Area { x: 0, y: 0, scale: 1.5 };
 
     #[test] fn frame_is_placed_on_the_work_area_in_physical_px() {
-        assert_eq!(frame_rect(AREA, 100, 380, 400), (0, 150, 570, 600));
+        assert_eq!(frame_rect(AREA, 770, 0, 380, 400), (1155, 0, 570, 600));
         let left_taskbar = Area { x: 72, y: 0, scale: 1.0 };
-        assert_eq!(frame_rect(left_taskbar, 40, 28, 60), (72, 40, 28, 60));
+        assert_eq!(frame_rect(left_taskbar, 100, 0, 117, 38), (172, 0, 117, 38));
+        let top_taskbar = Area { x: 0, y: 48, scale: 1.0 };
+        assert_eq!(frame_rect(top_taskbar, 900, 0, 117, 38), (900, 48, 117, 38));
+    }
+
+    #[test] fn the_cursor_is_near_in_the_top_band_around_the_island_only() {
+        let hot = Some((454, 117));
+        assert!(cursor_near(hot, 300.0, 5.0));    // 170 px left of the island, on the edge
+        assert!(cursor_near(hot, 740.0, 160.0));  // under its right end, within reach of the gaze
+        assert!(!cursor_near(hot, 300.0, 200.0)); // too low
+        assert!(!cursor_near(hot, 100.0, 5.0));   // too far left
+        assert!(!cursor_near(None, 500.0, 5.0));  // nothing known yet
+    }
+
+    #[test] fn a_window_covers_the_monitor_when_its_rect_holds_the_whole_of_it() {
+        let mon = (0, 0, 2560, 1440);
+        assert!(covers((0, 0, 2560, 1440), mon));
+        assert!(covers((-8, -8, 2568, 1448), mon)); // a maximised window's invisible border
+        assert!(!covers((0, 0, 2560, 1400), mon));
+        assert!(!covers((100, 0, 2660, 1440), mon));
     }
 
     #[test] fn only_a_fresh_press_outside_the_window_counts() {

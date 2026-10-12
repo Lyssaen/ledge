@@ -303,15 +303,16 @@ describe('<Surface> keyboard first', () => {
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.reply', id: 'b', text: '1' }));
   });
 
-  it('the coachmark flips above a row near the bottom so it stays inside the frame', () => {
+  it('the coachmark hangs 8 px under the panel, centred on it, and the native frame extends to hold it', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     act(() => shortcut());
     act(() => press('3'));
     const card = screen.getByRole('dialog', { name: 'Keyboard' });
-    const top = parseFloat(card.style.top), h = parseFloat(card.style.height);
-    const sTop = parseFloat(surface().style.top), sH = parseFloat(surface().style.height);
-    expect(top).toBeGreaterThanOrEqual(sTop);
-    expect(top + h).toBeLessThanOrEqual(sTop + sH);
+    const top = parseFloat(card.style.top), h = parseFloat(card.style.height), left = parseFloat(card.style.left);
+    const sLeft = parseFloat(surface().style.left), sW = parseFloat(surface().style.width), sH = parseFloat(surface().style.height);
+    expect(top).toBe(sH + 8);
+    expect(left).toBe(sLeft + sW / 2 - 150);
+    await waitFor(() => { const frame = vi.mocked(setFrame).mock.lastCall![0]; expect(frame.top + frame.h).toBeGreaterThanOrEqual(top + h); });
   });
 
   it('when the list is too short for the coachmark either way, the native frame extends to hold it', async () => {

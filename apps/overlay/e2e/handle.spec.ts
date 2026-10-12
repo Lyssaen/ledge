@@ -1,3 +1,4 @@
+import { islandWidth } from '../src/surface/geometry';
 import { test, expect, surface, layer, expectMode, received, ready } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 
@@ -32,5 +33,5 @@ test('an ask unfolds the bubble after the unfold delay; Approve decides and the 
   await expectMode(page, 'bubble');
   d.upsert(session('b', { name: 'Pim', state: 'working' }));
   await expectMode(page, 'handle');
-  await expect(surface(page)).toHaveCSS('width', '28px');
+  await expect(surface(page)).toHaveCSS('width', `${islandWidth(2)}px`);
 });

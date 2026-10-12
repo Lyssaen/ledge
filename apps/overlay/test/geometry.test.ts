@@ -1,112 +1,106 @@
 import { describe, it, expect } from 'vitest';
-import { layout, scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
+import { layout, scaledLayout, islandWidth, stripWidth, islandOrder, ISLAND, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
 import { frameOf } from '../src/surface/frame';
 const bots = (n: number, pending: number[] = []) => Array.from({ length: n }, (_, i) => ({ id: String(i), pending: pending.includes(i) }));
+const W = 1920, H = 1080;
 
-describe('geometry', () => {
-  it('sizes the reader at 560 or 800 and keeps its native frame within a narrow work area', () => {
-    const base = layout({ bots: [], mode: 'reader', screenH: 1080, screenW: 1200 });
-    expect(base).toMatchObject({ w: 560, h: 760 });
-    expect(layout({ bots: [], mode: 'reader', screenH: 600, screenW: 1200, readerExpanded: true })).toMatchObject({ w: 800, h: 520 });
+describe('island geometry', () => {
+  it('the compact island: margins, mascot, separator, 22 px companions 8 px apart, never past 300 px', () => {
+    expect(islandWidth(0)).toBe(12 + 22 + 14);
+    expect(islandWidth(2)).toBe(12 + 22 + 8 + 1 + 8 + 22 + 8 + 22 + 14);
+    expect(islandWidth(6)).toBe(12 + 22 + 8 + 1 + 8 + 6 * 22 + 5 * 8 + 14);
+    expect(islandWidth(7)).toBe(islandWidth(6) + 8 + ISLAND.pill);
+    expect(islandWidth(40)).toBe(islandWidth(7));
+    expect(islandWidth(40, true)).toBe(islandWidth(7) + 8 + ISLAND.moon);
+    expect(islandWidth(40, true)).toBeLessThan(300);
+    const l = layout({ bots: bots(2), mode: 'handle', screenH: H, screenW: W });
+    expect(l).toMatchObject({ top: 0, w: islandWidth(2), h: ISLAND.h });
+    expect(l.left).toBe(Math.round(W / 2 - islandWidth(2) / 2));
+    expect(l.handle).toEqual({ left: l.left, w: l.w, h: ISLAND.h });
+  });
+  it('slots run left to right after the separator, asks first, six at most', () => {
+    const l = layout({ bots: bots(8, [6]), mode: 'handle', screenH: H, screenW: W });
+    expect(islandOrder(bots(8, [6])).map(b => b.id)).toEqual(['6', '0', '1', '2', '3', '4', '5', '7']);
+    expect(l.slots.map(s => s.id)).toEqual(['6', '0', '1', '2', '3', '4']);
+    const first = l.left + 12 + 22 + 8 + 1 + 8;
+    expect(l.slots[0]).toEqual({ id: '6', size: 22, center: first + 11 });
+    expect(l.slots[1]!.center).toBe(first + 22 + 8 + 11);
+  });
+  it('no sessions: the mascot alone, no separator room', () => {
+    expect(layout({ bots: [], mode: 'handle', screenH: H, screenW: W })).toMatchObject({ w: 48, h: 38, slots: [] });
+  });
+  it('the discreet strip: 10 px high, dots 6 x 4 spaced 4, only in handle mode', () => {
+    expect(stripWidth(0)).toBe(islandWidth(0));
+    expect(stripWidth(3)).toBe(Math.max(48, 10 + 3 * 6 + 2 * 4 + 10));
+    expect(stripWidth(9)).toBe(Math.max(48, 10 + 6 * 6 + 5 * 4 + 10));
+    const s = layout({ bots: bots(3), mode: 'handle', screenH: H, screenW: W, strip: true });
+    expect(s).toMatchObject({ top: 0, h: ISLAND.stripH, w: stripWidth(3) });
+    expect(s.handle.h).toBe(ISLAND.stripH);
+    const b = layout({ bots: bots(3), mode: 'bubble', screenH: H, screenW: W, strip: true });
+    expect(b).toMatchObject({ w: SIZES.bubbleW, h: SIZES.bubbleH });
+    expect(layout({ bots: bots(3), mode: 'list', screenH: H, screenW: W, strip: true }).w).toBe(SIZES.listW);
+  });
+  it('every view hangs from the top edge, centred on the axis, at its own width', () => {
+    const list = layout({ bots: bots(3), mode: 'list', screenH: H, screenW: W });
+    expect(list).toMatchObject({ top: 0, w: SIZES.listW, left: (W - SIZES.listW) / 2 });
+    expect(list.h).toBe(SIZES.headerH + 16 + 3 * SIZES.rowH + SIZES.footerH + SURFACE_CHROME_Y);
+    expect(layout({ bots: bots(2), mode: 'session', screenH: H, screenW: W, sessionH: 500 })).toMatchObject({ top: 0, w: 480, h: 500, left: (W - 480) / 2 });
+    expect(layout({ bots: bots(2), mode: 'session', screenH: H, screenW: W, sessionH: 500, reading: true }).w).toBe(SIZES.readingW);
+    expect(layout({ bots: bots(2), mode: 'launch', screenH: H, screenW: W })).toMatchObject({ w: SIZES.listW, h: SIZES.launchH });
+    expect(layout({ bots: bots(2), mode: 'launch', screenH: H, screenW: W, detailH: 700 }).h).toBe(700);
+    expect(layout({ bots: [], mode: 'chat', screenH: 1000, screenW: W, detailH: 500 })).toMatchObject({ w: SIZES.sessionW, h: 500 });
+    expect(layout({ bots: [], mode: 'chat', screenH: 1000, screenW: W }).h).toBe(SIZES.chatH);
+    expect(layout({ bots: [], mode: 'list', screenH: H, screenW: W }).h).toBe(SIZES.headerH + SIZES.emptyH + SIZES.footerH + SURFACE_CHROME_Y);
+  });
+  it('heights are capped at the work area minus the bottom margin', () => {
+    expect(layout({ bots: bots(30), mode: 'list', screenH: 600, screenW: W }).h).toBe(600 - SIZES.margin);
+    expect(layout({ bots: bots(0), mode: 'launch', screenH: 300, screenW: W }).h).toBe(300 - SIZES.margin);
+    expect(layout({ bots: bots(3), mode: 'list', screenH: H, screenW: W, listExtraH: 42 }).h).toBe(layout({ bots: bots(3), mode: 'list', screenH: H, screenW: W }).h + 42);
+  });
+  it('the bubble is the island stretched to 440 px, top edge, centred, whatever bot asks', () => {
+    const l = layout({ bots: bots(5, [4]), mode: 'bubble', screenH: H, screenW: W });
+    expect(l).toMatchObject({ top: 0, w: 440, h: SIZES.bubbleH, left: (W - 440) / 2 });
+    expect(layout({ bots: bots(5, [4]), mode: 'bubble', screenH: H, screenW: W, bubbleH: 160 }).h).toBe(160);
+  });
+  it('the reader is 560 or 800, shrunk to the work area minus 24, and its frame stays on screen', () => {
+    expect(layout({ bots: [], mode: 'reader', screenH: H, screenW: 1200 })).toMatchObject({ w: 560, h: 760, top: 0 });
+    expect(layout({ bots: [], mode: 'reader', screenH: 600, screenW: 1200, readerExpanded: true })).toMatchObject({ w: 800, h: 560 });
+    const narrow = layout({ bots: [], mode: 'reader', screenH: 900, screenW: 700, readerExpanded: true });
+    expect(narrow.w).toBe(676); expect(narrow.left).toBe(12);
     for (const panel of [1, 1.5, 2]) {
       const g = scaledLayout({ bots: [], mode: 'reader', screenH: 900, screenW: 700, readerExpanded: true }, { handle: 1, panel });
-      expect(frameOf(g, [], 900).w).toBeLessThanOrEqual(700);
+      const f = frameOf(g, [], { w: 700, h: 900 });
+      expect(f.left).toBeGreaterThanOrEqual(0); expect(f.left + f.w).toBeLessThanOrEqual(700);
     }
   });
-  it('uses 20/12/5 up to five bots and 18/11/3 after', () => {
-    expect(slotSizes(5)).toEqual({ big: 20, small: 12, gap: 5 });
-    expect(slotSizes(6)).toEqual({ big: 18, small: 11, gap: 3 });
+  it('the island position moves the axis to a quarter of the screen, clamped inside it', () => {
+    const left = layout({ bots: bots(2), mode: 'handle', screenH: H, screenW: W, position: 'left' });
+    expect(left.left).toBe(Math.round(W / 4 - islandWidth(2) / 2));
+    const right = layout({ bots: bots(2), mode: 'list', screenH: H, screenW: W, position: 'right' });
+    expect(right.left).toBe(Math.round((3 * W) / 4 - SIZES.listW / 2));
+    // A view wider than the quarter: never off the left edge, never off the right one.
+    expect(layout({ bots: [], mode: 'reader', screenH: H, screenW: 1000, readerExpanded: true, position: 'left' }).left).toBe(0);
+    expect(layout({ bots: [], mode: 'reader', screenH: H, screenW: 1000, readerExpanded: true, position: 'right' }).left).toBe(1000 - 800);
   });
-  it('centres the handle and sizes it to the team', () => {
-    const l = layout({ bots: bots(5, [0, 1]), mode: 'handle', screenH: 1080 });
-    expect(l.w).toBe(SIZES.handleW);
-    expect(l.h).toBe(16 + SIZES.residentH + 5 + SIZES.separatorH + 5 + 20 + 20 + 12 + 12 + 12 + 4 * 5);
-    expect(l.top).toBe(Math.round(540 - l.h / 2));
-    expect(l.slots[0]!.center).toBe(l.top + 8 + SIZES.residentH + 5 + SIZES.separatorH + 5 + 10);
-    expect(l.slots[2]!.size).toBe(12);
+  it('adds a header height per group to the list', () => {
+    const two = bots(2);
+    expect(layout({ bots: two, mode: 'list', screenH: 1000, screenW: W, groups: 2 }).h - layout({ bots: two, mode: 'list', screenH: 1000, screenW: W, groups: 1 }).h).toBe(SIZES.groupH);
   });
-  it('a bubble sits at the asking bot slot, clamped to the margins', () => {
-    const l = layout({ bots: bots(5, [4]), mode: 'bubble', screenH: 1080, bubbleId: '4' });
-    const h = layout({ bots: bots(5, [4]), mode: 'handle', screenH: 1080 });
-    expect(l.w).toBe(SIZES.bubbleW); expect(l.h).toBe(SIZES.bubbleH);
-    expect(l.top).toBe(h.slots[4]!.center - 38);
-    const edge = layout({ bots: bots(10, [0]), mode: 'bubble', screenH: 300, bubbleId: '0' });
-    expect(edge.top).toBeGreaterThanOrEqual(SIZES.margin);
-  });
-  it('the launch form is a detail view at the list width, measured or at its fallback height', () => {
-    const l = layout({ bots: bots(2), mode: 'launch', screenH: 1080 });
-    expect(l.w).toBe(SIZES.listW); expect(l.h).toBe(SIZES.launchH);
-    expect(layout({ bots: bots(2), mode: 'launch', screenH: 1080, detailH: 700 }).h).toBe(700);
-    expect(layout({ bots: bots(0), mode: 'launch', screenH: 500 }).h).toBe(500 - 2 * SIZES.margin);
-  });
-  it('an empty list holds the empty state instead of rows', () => {
-    const l = layout({ bots: bots(0), mode: 'list', screenH: 1080 });
-    expect(l.h).toBe(SIZES.headerH + SIZES.emptyH + SIZES.footerH + SURFACE_CHROME_Y);
-    expect(l.w).toBe(SIZES.listW);
-  });
-  it('the list grows with the rows and never exceeds the screen minus margins', () => {
-    const l = layout({ bots: bots(3), mode: 'list', screenH: 1080 });
-    expect(l.h).toBe(SIZES.headerH + 16 + 3 * SIZES.rowH + SIZES.footerH + SURFACE_CHROME_Y);
-    const big = layout({ bots: bots(10, [0, 4, 8]), mode: 'list', screenH: 600 });
-    expect(big.h).toBe(600 - 2 * SIZES.margin);
-    expect(big.top).toBe(SIZES.margin);
-  });
-  it('an empty team still has a visible mascot in the full-width notch', () => {
-    const l = layout({ bots: [], mode: 'handle', screenH: 1080 });
-    expect(l).toMatchObject({ w: 28, h: 36 });
-  });
-  it('reading mode widens the session past its 480 px page', () => {
-    expect(layout({ bots: bots(2), mode: 'session', screenH: 1080, sessionH: 500 }).w).toBe(480);
-    expect(layout({ bots: bots(2), mode: 'session', screenH: 1080, sessionH: 500, reading: true }).w).toBe(SIZES.readingW);
-  });
-  it('an expanded focused row adds its extra height to the list, still clamped', () => {
-    const base = layout({ bots: bots(3), mode: 'list', screenH: 1080 }).h;
-    expect(layout({ bots: bots(3), mode: 'list', screenH: 1080, listExtraH: 42 }).h).toBe(base + 42);
-    expect(layout({ bots: bots(30), mode: 'list', screenH: 1080, listExtraH: 42 }).h).toBe(1080 - 2 * SIZES.margin);
-  });
-  it('scaled layout: the handle follows the handle scale, the opened views the window scale, independently', () => {
-    const input = { bots: bots(2, [1]), screenH: 2160 };
-    const h1 = layout({ ...input, mode: 'handle', screenH: 1080 });
+  it('scaled layout: the island follows the handle scale, the views the window scale, both centred on the real screen', () => {
+    const input = { bots: bots(2, [1]), screenH: 2160, screenW: 3840 };
+    const h1 = layout({ ...input, mode: 'handle', screenH: 1080, screenW: 1920 });
     const h2 = scaledLayout({ ...input, mode: 'handle' }, { handle: 2, panel: 1 });
-    expect(h2).toMatchObject({ top: h1.top * 2, w: h1.w * 2, h: h1.h * 2 });
+    expect(h2).toMatchObject({ left: h1.left * 2, top: 0, w: h1.w * 2, h: h1.h * 2 });
     expect(h2.slots.map(s => s.center)).toEqual(h1.slots.map(s => s.center * 2));
-    // The list at 100 % on the same screen: base width, centered on the real 2160 px; the handle data is unchanged.
+    expect(h2.handle).toEqual({ left: h1.left * 2, w: h1.w * 2, h: 76 });
     const l = scaledLayout({ ...input, mode: 'list' }, { handle: 2, panel: 1 });
     expect(l.w).toBe(SIZES.listW);
-    expect(l.top + l.h / 2).toBeCloseTo(1080, 0);
+    expect(l.left + l.w / 2).toBeCloseTo(1920, 0);
     expect(l.handle).toEqual(h2.handle);
-    // Windows at 150 %: content scaled, the 1 px border kept.
-    const base = layout({ ...input, mode: 'list', screenH: 2160 / 1.5 });
+    const base = layout({ ...input, mode: 'list', screenH: 2160 / 1.5, screenW: 3840 / 1.5 });
     const l15 = scaledLayout({ ...input, mode: 'list' }, { handle: 2, panel: 1.5 });
     expect(l15.w).toBe(SIZES.listW * 1.5);
     expect(l15.h).toBe((base.h - SURFACE_CHROME_Y) * 1.5 + SURFACE_CHROME_Y);
-    // The bubble still aligns to its bot's real center.
-    const b = scaledLayout({ ...input, mode: 'bubble', bubbleId: '1', bubbleH: 120 }, { handle: 2, panel: 1 });
-    expect(b.top).toBe(Math.round(h2.slots[1]!.center - 38));
-  });
-  it('adds a header height per group to the list', () => {
-    const bots = [{ id: 'a', pending: false }, { id: 'b', pending: false }];
-    const one = layout({ bots, mode: 'list', screenH: 1000, groups: 1 });
-    const two = layout({ bots, mode: 'list', screenH: 1000, groups: 2 });
-    expect(two.h - one.h).toBe(SIZES.groupH);
-  });
-  it('the first slot sits under the resident, a gap, the separator and a gap', () => {
-    const l = layout({ bots: [{ id: 'a', pending: false }], mode: 'handle', screenH: 1000 });
-    const { small, gap } = slotSizes(1);
-    expect(l.slots[0]!.center).toBe(l.handle.top + 8 + SIZES.residentH + gap + SIZES.separatorH + gap + small / 2);
-    expect(l.handle.h).toBe(16 + SIZES.residentH + gap + SIZES.separatorH + gap + small);
-  });
-
-  it('sizes the chat like a session, by its measured height', () => {
-    const l = layout({ bots: [], mode: 'chat', screenH: 1000, detailH: 500 });
-    expect(l.w).toBe(SIZES.sessionW); expect(l.h).toBe(500);
-    expect(layout({ bots: [], mode: 'chat', screenH: 1000 }).h).toBe(SIZES.chatH);
-  });
-  it('a Ledge finish bubble sits at the resident, not the first bot', () => {
-    const h = layout({ bots: bots(3, [0]), mode: 'handle', screenH: 1080 });
-    const l = layout({ bots: bots(3, [0]), mode: 'bubble', screenH: 1080, bubbleId: 'ledge' });
-    const resident = h.handle.top + 8 + SIZES.residentH / 2;
-    expect(l.top).toBe(Math.round(resident - 38));
-    expect(l.top).not.toBe(h.slots[0]!.center - 38);
+    expect(l15.left).toBe(base.left * 1.5);
   });
 });

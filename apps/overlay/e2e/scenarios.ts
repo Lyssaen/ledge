@@ -50,11 +50,13 @@ export const overview = (): Session[] => [
 export const team = (): Session[] => ['Otto', 'Nova', 'Pim', 'Bix', 'Lu', 'Milo', 'Ada', 'Nox', 'Pip', 'Sol', 'Mina', 'Tao'].map((name, i) =>
   session(`t${i}`, { name, tool: (['claude', 'codex', 'cursor'] as const)[i % 3], project: ['harness-assistant', 'design-system', 'landing-page'][i % 3]!, startedAt: ago(12 - i), ...(i === 1 || i === 7 || i === 10 ? perm : i % 3 === 0 ? { state: 'idle' as const } : {}) }));
 
-/** Hovers the handle with the real mouse. The list opens after the dwell. */
+/** Hovers the island with the real mouse, coming from below it. The list opens after the dwell. */
 export async function hoverHandle(page: Page) {
+  // The island and every panel share the axis, so the centre x holds while a panel folds; y = 12 is inside the
+  // island at any scale, under the hot band. Two steps only: a pending ask unfolds its bubble 540 ms after the
+  // sessions arrive unless the island is hovered first, and each step costs the loaded browser ~50 ms.
   const h = (await surface(page).boundingBox())!;
-  await page.mouse.move(200, h.y + h.height / 2);
-  await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2, { steps: 3 });
+  await page.mouse.move(h.x + h.width / 2, 12, { steps: 2 });
 }
 /** Opens the list by hovering the handle with the real mouse, then rests the pointer inside the surface. */
 export async function openList(page: Page) {

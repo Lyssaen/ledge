@@ -36,31 +36,30 @@ beforeEach(() => { native.invoke.mockClear(); native.invoke.mockImplementation(a
 afterEach(() => { leaveTauri(); vi.unstubAllEnvs(); });
 
 describe('frameOf', () => {
-  it('pads the surface for its shadow, from the left screen edge, in whole px', () => {
-    expect(frameOf({ top: 518, w: 28, h: 45 }, [], 1080)).toEqual({ top: 518 - FRAME_PAD.top, w: 28 + FRAME_PAD.right, h: 45 + FRAME_PAD.top + FRAME_PAD.bottom });
-    expect(frameOf({ top: 100, w: 28, h: 40 }, [{ left: 36, top: 110.5, w: 200.4, h: 30 }], 1080)).toEqual({ top: 92, w: 253, h: 73 });
+  it('pads the surface for its shadow on the sides and below, never above the top edge, in whole px', () => {
+    expect(frameOf({ left: 900, top: 0, w: 117, h: 38 }, [], { w: 1920, h: 1080 })).toEqual({ left: 900 - FRAME_PAD.left, top: 0, w: 117 + FRAME_PAD.left + FRAME_PAD.right, h: 38 + FRAME_PAD.bottom });
+    expect(frameOf({ left: 900.4, top: 0, w: 117, h: 38 }, [{ left: 880.5, top: 44.5, w: 200.4, h: 30 }], { w: 1920, h: 1080 })).toEqual({ left: 864, top: 0, w: 233, h: 99 });
   });
 
-  it('extends to the extras beside the surface and stays inside the work area', () => {
-    // A wide extra beside the handle widens the frame; it does not move the top.
-    expect(frameOf({ top: 500, w: 28, h: 60 }, [{ left: 36, top: 515, w: 420, h: 30 }], 1080).w).toBe(36 + 420 + FRAME_PAD.right);
-    // A coachmark below the list extends the frame down; one above it extends it up.
-    const below = frameOf({ top: 300, w: 380, h: 200 }, [{ left: 44, top: 460, w: 300, h: 136 }], 1080);
-    expect(below.top + below.h).toBe(460 + 136 + FRAME_PAD.bottom);
-    expect(frameOf({ top: 300, w: 380, h: 200 }, [{ left: 44, top: 200, w: 300, h: 136 }], 1080).top).toBe(200 - FRAME_PAD.top);
-    // Clamped to the work area.
-    expect(frameOf({ top: 2, w: 380, h: 1070 }, [], 1080)).toEqual({ top: 0, w: 396, h: 1080 });
+  it('extends to the extras around the surface and stays inside the work area', () => {
+    // The fillets either side widen the frame; a coachmark under the panel extends it down.
+    expect(frameOf({ left: 770, top: 0, w: 380, h: 300 }, [{ left: 758, top: 0, w: 404, h: 12 }], { w: 1920, h: 1080 }).w).toBe(404 + FRAME_PAD.left + FRAME_PAD.right);
+    const below = frameOf({ left: 770, top: 0, w: 380, h: 300 }, [{ left: 810, top: 308, w: 300, h: 128 }], { w: 1920, h: 1080 });
+    expect(below.top + below.h).toBe(308 + 128 + FRAME_PAD.bottom);
+    // Clamped to the work area on every side.
+    expect(frameOf({ left: 4, top: 0, w: 1912, h: 1070 }, [], { w: 1920, h: 1080 })).toEqual({ left: 0, top: 0, w: 1920, h: 1080 });
   });
 
   it('the union holds both frames', () => {
-    expect(unionFrame({ top: 100, w: 44, h: 80 }, { top: 300, w: 396, h: 500 })).toEqual({ top: 100, w: 396, h: 700 });
+    expect(unionFrame({ left: 900, top: 0, w: 149, h: 62 }, { left: 754, top: 0, w: 412, h: 500 })).toEqual({ left: 754, top: 0, w: 412, h: 500 });
+    expect(unionFrame({ left: 100, top: 0, w: 50, h: 80 }, { left: 120, top: 10, w: 100, h: 30 })).toEqual({ left: 100, top: 0, w: 120, h: 80 });
   });
 });
 
 describe('bridge', () => {
   it('in the browser nothing reaches the shell', async () => {
     const b = await loadBridge();
-    await expect(b.setFrame({ top: 1, w: 2, h: 3 })).resolves.toBe(false);
+    await expect(b.setFrame({ left: 0, top: 1, w: 2, h: 3 })).resolves.toBe(false);
     b.setOutsideWatch(true); await b.focusOverlay(); await b.releaseFocus();
     await expect(b.focusTerminal('Otto')).resolves.toBe(false);
     await expect(b.openTerminal('Otto', ['node', 'cli', 'attach', 'a'])).resolves.toBe(false);
@@ -70,28 +69,28 @@ describe('bridge', () => {
     expect(native.listeners.size).toBe(0);
   });
 
-  it('set_frame takes top, width and height, once per distinct frame and in call order', async () => {
+  it('set_frame takes left, top, width and height, once per distinct frame and in call order', async () => {
     enterTauri(); const b = await loadBridge();
     const order: unknown[] = [];
     let release!: () => void;
     native.invoke.mockImplementationOnce(async (_c, a) => { await new Promise<void>(r => { release = r; }); order.push(a); });
     native.invoke.mockImplementation(async (_c, a) => { order.push(a); });
-    const first = b.setFrame({ top: 510, w: 44, h: 77 });
-    const second = b.setFrame({ top: 300, w: 396, h: 500 });
+    const first = b.setFrame({ left: 900, top: 0, w: 149, h: 62 });
+    const second = b.setFrame({ left: 754, top: 0, w: 412, h: 500 });
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     expect(order).toEqual([]); // the second waits for the first
     release();
     await expect(first).resolves.toBe(true); await expect(second).resolves.toBe(true);
-    expect(order).toEqual([{ top: 510, width: 44, height: 77 }, { top: 300, width: 396, height: 500 }]);
-    await b.setFrame({ top: 300, w: 396, h: 500 });
+    expect(order).toEqual([{ left: 900, top: 0, width: 149, height: 62 }, { left: 754, top: 0, width: 412, height: 500 }]);
+    await b.setFrame({ left: 754, top: 0, w: 412, h: 500 });
     expect(calls('set_frame')).toHaveLength(2);
   });
 
   it('a failed set_frame resolves false and is retried next time', async () => {
     enterTauri(); const b = await loadBridge();
     native.invoke.mockRejectedValueOnce(new Error('no window'));
-    await expect(b.setFrame({ top: 1, w: 2, h: 3 })).resolves.toBe(false);
-    await expect(b.setFrame({ top: 1, w: 2, h: 3 })).resolves.toBe(true);
+    await expect(b.setFrame({ left: 0, top: 1, w: 2, h: 3 })).resolves.toBe(false);
+    await expect(b.setFrame({ left: 0, top: 1, w: 2, h: 3 })).resolves.toBe(true);
     expect(calls('set_frame')).toHaveLength(2);
   });
 
@@ -147,15 +146,16 @@ describe('bridge', () => {
 
   it('a zoomed frame is rounded outward to whole monitor px; frames go out in order', async () => {
     enterTauri(); const b = await loadBridge();
-    expect(b.toMonitorFrame({ top: 101, w: 45, h: 77 }, 1)).toEqual({ top: 101, w: 45, h: 77 });
-    // 101 * 1.25 = 126.25 -> 126; (101 + 77) * 1.25 = 222.5 -> 223; 45 * 1.25 = 56.25 -> 57.
-    expect(b.toMonitorFrame({ top: 101, w: 45, h: 77 }, 1.25)).toEqual({ top: 126, w: 57, h: 97 });
+    expect(b.toMonitorFrame({ left: 10, top: 101, w: 45, h: 77 }, 1)).toEqual({ left: 10, top: 101, w: 45, h: 77 });
+    // 101 * 1.25 = 126.25 -> 126; (101 + 77) * 1.25 = 222.5 -> 223; 10 * 1.25 = 12.5 -> 12; (10 + 45) * 1.25 = 68.75 -> 69.
+    expect(b.toMonitorFrame({ left: 10, top: 101, w: 45, h: 77 }, 1.25)).toEqual({ left: 12, top: 126, w: 57, h: 97 });
+    expect(b.toMonitorFrame({ left: 10.4, top: 0, w: 20.2, h: 10.2 }, 1.5)).toEqual({ left: 15, top: 0, w: 31, h: 16 });
     const order: string[] = [];
     native.invoke.mockImplementation(async (c: string) => { order.push(c); });
-    await b.setFrame({ top: 100, w: 44, h: 80 }, 2);
-    await b.setFrame({ top: 100, w: 44, h: 80 }, 1.5); // same CSS frame, new zoom: sent again
-    await b.setFrame({ top: 100, w: 44, h: 80 }, 1.5); // unchanged: not sent twice
-    expect(calls('set_frame')).toEqual([{ top: 200, width: 88, height: 160 }, { top: 150, width: 66, height: 120 }]);
+    await b.setFrame({ left: 0, top: 100, w: 44, h: 80 }, 2);
+    await b.setFrame({ left: 0, top: 100, w: 44, h: 80 }, 1.5); // same CSS frame, new zoom: sent again
+    await b.setFrame({ left: 0, top: 100, w: 44, h: 80 }, 1.5); // unchanged: not sent twice
+    expect(calls('set_frame')).toEqual([{ left: 0, top: 200, width: 88, height: 160 }, { left: 0, top: 150, width: 66, height: 120 }]);
     expect(order).toEqual(['set_frame', 'set_frame']);
   });
 
@@ -223,6 +223,28 @@ describe('bridge', () => {
     await expect(b.getAutostart()).resolves.toBeNull();
     await expect(b.setAutostart(true)).resolves.toBeNull();
   });
+
+  it('the hot zone goes to the shell once per distinct band; the foreground event reaches the page in both worlds', async () => {
+    enterTauri();
+    const b = await loadBridge();
+    b.setHotZone(900, 117); b.setHotZone(900, 117); b.setHotZone(880, 157);
+    await vi.waitFor(() => expect(calls('set_hot_zone')).toEqual([{ left: 900, width: 117 }, { left: 880, width: 157 }]));
+    const seen: boolean[] = [];
+    const off = b.onForegroundCovered(c => seen.push(c));
+    await vi.waitFor(() => expect(native.listeners.has('ledge://foreground')).toBe(true));
+    native.listeners.get('ledge://foreground')!({ payload: { covered: true } });
+    expect(seen).toEqual([true]);
+    off();
+    leaveTauri();
+    const b2 = await loadBridge();
+    const seen2: boolean[] = [];
+    const off2 = b2.onForegroundCovered(c => seen2.push(c));
+    window.dispatchEvent(new CustomEvent('ledge:foreground', { detail: { covered: true } }));
+    window.dispatchEvent(new CustomEvent('ledge:foreground', { detail: { covered: false } }));
+    expect(seen2).toEqual([true, false]);
+    off2();
+    expect(calls('set_hot_zone')).toHaveLength(2);
+  });
 });
 
 describe('<Surface> under Tauri', () => {
@@ -230,7 +252,7 @@ describe('<Surface> under Tauri', () => {
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
   const surface = () => document.querySelector('[data-surface]') as HTMLElement;
   const content = () => document.querySelector('[data-frame-content]') as HTMLElement | null;
-  const lastFrame = () => calls('set_frame').at(-1) as { top: number; width: number; height: number };
+  const lastFrame = () => calls('set_frame').at(-1) as { left: number; top: number; width: number; height: number };
 
   async function mount(opts: { tauri: boolean; handleScale?: number; panelScale?: number; screenH?: number; launcher?: string[]; onToggleDnd?: () => void }) {
     if (opts.tauri) enterTauri();
@@ -284,64 +306,64 @@ describe('<Surface> under Tauri', () => {
     expect(native.invoke).not.toHaveBeenCalled();
   });
 
-  it('sends the bounding frame and offsets the page by its top', async () => {
+  it('sends the bounding frame (island plus fillets) and offsets the page by its left and top', async () => {
     await mount({ tauri: true });
-    // Two quiet bots plus Ledge: the handle is 76 px tall at 502 on a 1080 px work area.
-    expect(surface()).toHaveStyle({ top: '502px', width: '28px', height: '76px' });
-    // The frame also holds the fillets joining the handle to the screen edge, above and below it.
-    await waitFor(() => expect(lastFrame()).toEqual({ top: 502 - SHOULDER_R - FRAME_PAD.top, width: 28 + FRAME_PAD.right, height: 76 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
-    await waitFor(() => expect(content()).toHaveStyle({ top: `-${502 - SHOULDER_R - FRAME_PAD.top}px` }));
+    // Two quiet bots plus Ledge on a 1024 px wide jsdom viewport: 117 px wide at x 454, 38 px high on the top edge.
+    expect(surface()).toHaveStyle({ left: '454px', top: '0px', width: '117px', height: '38px' });
+    // Fillets of 12 px either side, 16 px of shadow left and right, 24 px below: (426, 0) 173 x 62.
+    await waitFor(() => expect(lastFrame()).toEqual({ left: 454 - SHOULDER_R - FRAME_PAD.left, top: 0, width: 117 + 2 * SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 38 + FRAME_PAD.bottom }));
+    await waitFor(() => expect(content()).toHaveStyle({ left: `-${454 - SHOULDER_R - FRAME_PAD.left}px`, top: '0px' }));
   });
 
   it('the page offset is committed with the set_frame request, after the painted frame that starts the transition, never after the shell answers', async () => {
     // The shell answers only when the test says so, and every request records the offset the page already shows when
     // it goes out.
-    const seen: Array<{ top: number; offset: string | undefined }> = [];
+    const seen: Array<{ left: number; offset: string | undefined }> = [];
     const pending: Array<() => void> = [];
     const answer = () => act(async () => { while (pending.length) pending.shift()!(); await Promise.resolve(); });
     native.invoke.mockImplementation((cmd: string, a?: unknown) => {
       if (cmd !== 'set_frame') return Promise.resolve(undefined);
-      seen.push({ top: (a as { top: number }).top, offset: content()?.style.top });
+      seen.push({ left: (a as { left: number }).left, offset: content()?.style.left });
       return new Promise<undefined>(r => pending.push(() => r(undefined)));
     });
     await mount({ tauri: true });
-    const handleTop = 502 - SHOULDER_R - FRAME_PAD.top;
-    await waitFor(() => expect(seen.at(-1)).toEqual({ top: handleTop, offset: `-${handleTop}px` }));
-    expect(content()).toHaveStyle({ top: `-${handleTop}px` }); // still unanswered
+    const handleLeft = 454 - SHOULDER_R - FRAME_PAD.left;
+    await waitFor(() => expect(seen.at(-1)).toEqual({ left: handleLeft, offset: `-${handleLeft}px` }));
+    expect(content()).toHaveStyle({ left: `-${handleLeft}px` }); // still unanswered
     await answer();
-    // Handle to list: the list frame holds the handle frame, so it applies as soon as the first frame of the
-    // transition is painted. In the pass that opened the list the page still shows the handle's offset.
+    // Handle to list: the list is wider, so its frame starts further left and holds the island's; it applies as soon
+    // as the first frame of the transition is painted. In the pass that opened the list the page still shows the island's offset.
     await waitFor(() => expect(native.shortcut).not.toBeNull());
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
-    const listTop = parseFloat(surface().style.top) - SHOULDER_R - FRAME_PAD.top;
-    expect(listTop).toBeLessThan(handleTop);
-    expect(content()).toHaveStyle({ top: `-${handleTop}px` });
-    expect(seen.at(-1)!.top).toBe(handleTop);
-    await waitFor(() => expect(seen.at(-1)).toEqual({ top: listTop, offset: `-${listTop}px` }));
-    expect(content()).toHaveStyle({ top: `-${listTop}px` }); // committed with the request, the shell has not answered
+    const listLeft = parseFloat(surface().style.left) - SHOULDER_R - FRAME_PAD.left;
+    expect(listLeft).toBeLessThan(handleLeft);
+    expect(content()).toHaveStyle({ left: `-${handleLeft}px` });
+    expect(seen.at(-1)!.left).toBe(handleLeft);
+    await waitFor(() => expect(seen.at(-1)).toEqual({ left: listLeft, offset: `-${listLeft}px` }));
+    expect(content()).toHaveStyle({ left: `-${listLeft}px` }); // committed with the request, the shell has not answered
     await answer();
     // List to handle (no settle with VITE_LEDGE_MOTION=0): straight back after the next painted frame, offset first.
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
-    await waitFor(() => expect(content()).toHaveStyle({ top: `-${handleTop}px` }));
+    await waitFor(() => expect(content()).toHaveStyle({ left: `-${handleLeft}px` }));
     await answer(); // the bridge sends frames one after the other: this one waited for the list frame's answer
-    await waitFor(() => expect(seen.at(-1)).toEqual({ top: handleTop, offset: `-${handleTop}px` }));
+    await waitFor(() => expect(seen.at(-1)).toEqual({ left: handleLeft, offset: `-${handleLeft}px` }));
   });
 
-  it('a handle at 2x on a 4K work area: the surface and the frame are the 1080p ones doubled', async () => {
-    // A 4K work area (2160 logical px), handle 200 %: the handle lays out in 1080 units and is drawn at 2x.
+  it('an island at 2x on a 4K work area: the surface and the frame are the 512-unit ones doubled', async () => {
+    // A 4K work area (2160 logical px), island 200 %: the island lays out in a 512 x 1080 unit screen and is drawn at 2x.
     await mount({ tauri: true, screenH: 2160, handleScale: 2, panelScale: 1 });
-    expect(surface()).toHaveStyle({ top: `${2 * 502}px`, width: '56px', height: '152px' });
+    expect(surface()).toHaveStyle({ left: '396px', top: '0px', width: '234px', height: '76px' });
     expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('2');
     expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1');
-    const top = 2 * 502 - SHOULDER_R - FRAME_PAD.top;
-    await waitFor(() => expect(lastFrame()).toEqual({ top, width: 56 + FRAME_PAD.right, height: 152 + 2 * SHOULDER_R + FRAME_PAD.top + FRAME_PAD.bottom }));
-    expect(content()).toHaveStyle({ top: `-${top}px` });
-    // The windows keep their own scale: the list opens at its base 380 px, centered on the real screen.
+    const left = 396 - SHOULDER_R - FRAME_PAD.left;
+    await waitFor(() => expect(lastFrame()).toEqual({ left, top: 0, width: 234 + 2 * SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 76 + FRAME_PAD.bottom }));
+    expect(content()).toHaveStyle({ left: `-${left}px`, top: '0px' });
+    // The windows keep their own scale: the list opens at its base 380 px, centred on the real screen.
     await waitFor(() => expect(native.shortcut).not.toBeNull());
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
-    expect(surface()).toHaveStyle({ width: '380px' });
-    const listTop = parseFloat(surface().style.top), listH = parseFloat(surface().style.height);
-    expect(Math.abs(listTop + listH / 2 - 1080)).toBeLessThanOrEqual(1);
+    expect(surface()).toHaveStyle({ width: '380px', top: '0px' });
+    const listLeft = parseFloat(surface().style.left);
+    expect(Math.abs(listLeft + 190 - 512)).toBeLessThanOrEqual(1);
   });
 
   it('the native cursor event moves Ledge’s gaze outside the narrow webview, and null recentres it', async () => {
@@ -349,8 +371,8 @@ describe('<Surface> under Tauri', () => {
     await mount({ tauri: true });
     await waitFor(() => expect([...native.listeners.keys()]).toContain('ledge://cursor-near'));
     const face = document.querySelector('[data-resident] svg') as SVGSVGElement;
-    const center = parseFloat(surface().style.top) + 18;
-    act(() => native.listeners.get('ledge://cursor-near')!({ payload: { x: 80, y: center } }));
+    // The mascot sits 23 px into the island (x 477), 19 px under the top edge; a cursor 60 px to its right is near.
+    act(() => native.listeners.get('ledge://cursor-near')!({ payload: { x: 454 + 83, y: 19 } }));
     expect(face).toHaveAttribute('data-near', 'true');
     expect(face.style.getPropertyValue('--resident-gx')).not.toBe('0px');
     act(() => native.listeners.get('ledge://cursor-near')!({ payload: null }));
@@ -383,7 +405,8 @@ describe('<Surface> under Tauri', () => {
     await act(async () => { native.listeners.get('ledge://outside-click')!({ payload: null }); });
     expect(surface()).toHaveAttribute('data-mode', 'handle');
     await waitFor(() => expect(calls('set_outside_watch').at(-1)).toEqual({ on: false }));
-    expect(calls('set_hot_zones')).toHaveLength(0);
+    // The shell watches the top band over the island's span (the band's depth and overhang are its own).
+    expect(calls('set_hot_zone').at(-1)).toEqual({ left: 454, width: 117 });
   });
 
   it('a press outside a keyboard-opened panel folds it without handing focus back over the window just clicked', async () => {
@@ -430,28 +453,28 @@ describe('useNativeFrame', () => {
   beforeEach(() => { vi.useFakeTimers(); enterTauri(); });
   afterEach(() => { vi.useRealTimers(); });
   const log: string[] = [];
-  async function probe(first: { top: number; w: number; h: number }, settleMs = 320) {
+  async function probe(first: { left: number; top: number; w: number; h: number }, settleMs = 320) {
     vi.resetModules(); log.length = 0;
     const { useNativeFrame } = await import('../src/tauri/useNativeFrame');
     native.invoke.mockImplementation(async (cmd: string, a?: unknown) => {
       if (cmd === 'set_frame') log.push(`${JSON.stringify(a)} offset=${document.querySelector('[data-off]')?.textContent}`);
     });
-    function Probe({ f }: { f: { top: number; w: number; h: number } }) { return <span data-off>{useNativeFrame(f, settleMs)}</span>; }
+    function Probe({ f }: { f: { left: number; top: number; w: number; h: number } }) { return <span data-off>{useNativeFrame(f, settleMs).top}</span>; }
     const r = render(<Probe f={first} />);
-    return { rerender: (f: { top: number; w: number; h: number }) => r.rerender(<Probe f={f} />), offset: () => document.querySelector('[data-off]')!.textContent };
+    return { rerender: (f: { left: number; top: number; w: number; h: number }) => r.rerender(<Probe f={f} />), offset: () => document.querySelector('[data-off]')!.textContent };
   }
   const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
-  const handle = { top: 510, w: 44, h: 77 }, list = { top: 292, w: 396, h: 500 };
+  const handle = { left: 100, top: 510, w: 44, h: 77 }, list = { left: 60, top: 292, w: 396, h: 500 };
 
   it('the first placement is committed in the render pass; a grow waits for the frame that starts the transition to be painted, then goes out once with its offset', async () => {
     const p = await probe(handle);
     expect(p.offset()).toBe('510'); // committed in the same pass, no shell answer needed
     await tick(0);
-    expect(log).toEqual(['{"top":510,"width":44,"height":77} offset=510']);
+    expect(log).toEqual(['{"left":100,"top":510,"width":44,"height":77} offset=510']);
     // The list opens: laid out at a fallback size, then measured, in the same pass. The first painted frame of the
     // transition shows no motion yet, so the page keeps the handle's offset through it: the shell then has a whole
     // frame to move the window before the page is presented at the new offset (a blank or displaced frame otherwise).
-    p.rerender({ top: 300, w: 396, h: 480 });
+    p.rerender({ left: 60, top: 300, w: 396, h: 480 });
     p.rerender(list);
     expect(p.offset()).toBe('510');
     await tick(15);
@@ -460,7 +483,7 @@ describe('useNativeFrame', () => {
     // Right after that frame: one request, for the last frame of the pass, its offset already committed.
     await tick(2);
     expect(p.offset()).toBe('292');
-    expect(log).toEqual(['{"top":510,"width":44,"height":77} offset=510', '{"top":292,"width":396,"height":500} offset=292']);
+    expect(log).toEqual(['{"left":100,"top":510,"width":44,"height":77} offset=510', '{"left":60,"top":292,"width":396,"height":500} offset=292']);
   });
 
   it('a shrink holds the union through the settle time and one more painted frame, each step with its offset already committed', async () => {
@@ -476,7 +499,7 @@ describe('useNativeFrame', () => {
     expect(p.offset()).toBe('292'); // the settle time is up: the shrink waits for the transition's last frame to be painted
     await tick(17);
     expect(p.offset()).toBe('510');
-    expect(log).toEqual(['{"top":292,"width":396,"height":500} offset=292', '{"top":510,"width":44,"height":77} offset=510']);
+    expect(log).toEqual(['{"left":60,"top":292,"width":396,"height":500} offset=292', '{"left":100,"top":510,"width":44,"height":77} offset=510']);
   });
 
   it('a frame change during the settle re-plans against the frame the shell holds', async () => {
@@ -489,7 +512,7 @@ describe('useNativeFrame', () => {
     expect(p.offset()).toBe('292');
     await tick(400);
     expect(p.offset()).toBe('292'); // the cancelled settle never shrank the window to the handle
-    expect(log).toEqual(['{"top":292,"width":396,"height":500} offset=292']);
+    expect(log).toEqual(['{"left":60,"top":292,"width":396,"height":500} offset=292']);
   });
 
   it('with no settle time a shrink still waits for the painted frame, then applies at once', async () => {
@@ -499,7 +522,7 @@ describe('useNativeFrame', () => {
     expect(p.offset()).toBe('292');
     await tick(17);
     expect(p.offset()).toBe('510');
-    expect(log).toEqual(['{"top":292,"width":396,"height":500} offset=292', '{"top":510,"width":44,"height":77} offset=510']);
+    expect(log).toEqual(['{"left":60,"top":292,"width":396,"height":500} offset=292', '{"left":100,"top":510,"width":44,"height":77} offset=510']);
   });
 
   it('a hidden document (no animation frames) still commits, after a short fallback', async () => {

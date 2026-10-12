@@ -119,6 +119,8 @@ Le hook `SessionStart` l'enregistre avec `source: hook_only`. Elle apparaît en 
 
 ## 5. Interface
 
+> Note du 2026-10-12 : la géométrie décrite dans « La surface vivante », « La poignée » et « La bulle » (surface ancrée au bord gauche, verticalement centrée, bulle déployée à côté) est remplacée par la [spec de l'île](2026-10-12-island-design.md) : la surface est une île centrée sur le bord supérieur de l'écran, d'où la bulle, la liste et les vues descendent. Le reste de la section reste la référence.
+
 ### La surface vivante
 
 Il n'y a qu'une seule surface, ancrée au bord gauche de l'écran principal, ou de l'écran choisi dans les réglages (« Écran » : l'écran principal ou un autre écran branché ; un écran choisi puis débranché rend la surface à l'écran principal sans perdre le réglage), verticalement centrée dans sa zone de travail. Au repos c'est la **poignée** ; c'est elle qui grandit en **bulle**, en **liste** ou en **session**, puis rétrécit. Rien n'apparaît jamais à côté d'elle. Sa hauteur suit toujours son contenu : nombre de bots pour la poignée et la liste, contenu de la vue pour la session.

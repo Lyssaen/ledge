@@ -3,6 +3,7 @@ import { DEFAULT_ACCENT, parseAccent } from '../accent';
 import { transition } from '../motion';
 import { DetailHeader } from './DetailHeader';
 import { UI_SCALES, percent, type ScaleTarget, type UiScale } from '../scale';
+import { ISLAND_POSITIONS, type IslandPosition } from '../island';
 import { useI18n } from '../i18n/lang';
 import { LANGS, type Lang } from '../i18n/messages';
 import { Button } from '../ui/Button';
@@ -25,6 +26,8 @@ export interface SettingsViewProps {
   scales?: Record<ScaleTarget, UiScale>; autoScales?: Record<ScaleTarget, number>; onScale?: (target: ScaleTarget, s: UiScale) => void;
   /** The Language setting (applied live). */
   onLang?: (l: Lang) => void;
+  /** The island's position on the top edge and the discreet strip under a covering window (both applied live). */
+  islandPosition?: IslandPosition; onIslandPosition?: (p: IslandPosition) => void; discreet?: boolean; onDiscreet?: (on: boolean) => void;
   /** The Screen setting: the monitors to choose from (none: the group is not shown), the choice (null: the primary)
    *  and how to change it (live). */
   monitors?: MonitorInfo[]; monitor?: string | null; onMonitor?: (id: string | null) => void;
@@ -152,8 +155,11 @@ export function SettingsView(p: SettingsViewProps) {
                   onChange={p.onMonitor ? v => p.onMonitor!(v === 'primary' ? null : v) : undefined}
                   options={monitorOptions(monitors, choice, { primary: t.settings.screenPrimary, nth: t.settings.screenNth, missing: t.settings.screenMissing })} /></Row>
               )}
+              <Row><Segmented<IslandPosition> name="ledge-island-position" label={t.settings.islandPosition} hint={t.settings.islandPositionHint} value={p.islandPosition ?? 'center'} onChange={p.onIslandPosition}
+                options={ISLAND_POSITIONS.map(v => ({ value: v, label: t.settings.islandPositions[v] }))} /></Row>
+              <Row><Switch label={t.settings.discreet} hint={t.settings.discreetHint} checked={p.discreet ?? true} onChange={on => p.onDiscreet?.(on)} /></Row>
               {(['handle', 'panel'] as const).map(target => (
-                <Row key={target}><Segmented<UiScale> name={`ledge-${target}-scale`} label={target === 'handle' ? t.settings.handleSize : t.settings.windowSize} hint={target === 'handle' ? t.settings.handleSizeHint : t.settings.windowSizeHint}
+                <Row key={target}><Segmented<UiScale> name={`ledge-${target}-scale`} label={target === 'handle' ? t.settings.islandSize : t.settings.windowSize} hint={target === 'handle' ? t.settings.islandSizeHint : t.settings.windowSizeHint}
                   value={p.scales?.[target] ?? 'auto'} onChange={p.onScale ? s => p.onScale!(target, s) : undefined}
                   options={UI_SCALES.map(s => ({ value: s, label: s === 'auto' ? t.settings.auto(percent(p.autoScales?.[target] ?? 1)) : percent(s), wide: s === 'auto' }))} /></Row>
               ))}

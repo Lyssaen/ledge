@@ -1,3 +1,4 @@
+import { islandWidth } from '../src/surface/geometry';
 import { test, expect, layer, expectMode, ready, surface } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 import { overview, team, perm, openList, restInside } from './scenarios';
@@ -14,13 +15,14 @@ const openSession = async (page: Page, row: string) => {
   await restInside(page);
 };
 
-test('handle: one bot per session on the left edge, 28 px wide, vertically centered', async ({ page }) => {
-  await fakeDaemon(page, overview());
+test('island: one companion per session on the top edge, centred, 38 px high', async ({ page }) => {
+  // Quiet sessions: an ask would unfold its bubble while the island is measured.
+  await fakeDaemon(page, ['a', 'b', 'c', 'd'].map(id => session(id)));
   await ready(page, 4);
-  await expect.poll(async () => (await box(surface(page))).width).toBe(28);
+  await expect.poll(async () => (await box(surface(page))).width).toBe(islandWidth(4));
   const s = await box(surface(page));
-  expect(s.x).toBe(0);
-  expect(Math.abs(s.y + s.height / 2 - 500)).toBeLessThan(4);
+  expect(s.y).toBe(0); expect(s.height).toBe(38);
+  expect(Math.abs(s.x + s.width / 2 - 800)).toBeLessThan(2);
 });
 
 test('overview: brand with its red period, subtitle, header icons, rows with tinted badges, footer', async ({ page }) => {
@@ -130,7 +132,7 @@ test.describe('team on a short screen', () => {
     expect(m.w).toBe('thin');
     expect(m.c).not.toBe('auto');
     const s = await box(surface(page));
-    expect(s.y).toBeGreaterThanOrEqual(40); expect(s.y + s.height).toBeLessThanOrEqual(690);
+    expect(s.y).toBe(0); expect(s.height).toBeLessThanOrEqual(730);
     await scroller.evaluate(el => { el.scrollTop = el.scrollHeight; });
     await expect(layer(page, 'list').getByRole('button', { name: 'landing-page, Tao, ouvrir' })).toBeInViewport();
   });
@@ -188,5 +190,5 @@ test('bubble: a new ask unfolds "Otto attend votre accord" with Refuser and Auto
   await expect(bubble).toContainText('pnpm test --filter overlay');
   const deny = bubble.getByRole('button', { name: 'Refuser' }); const allow = bubble.getByRole('button', { name: 'Autoriser' });
   expect((await box(allow)).x).toBeGreaterThan((await box(deny)).x);
-  await expect.poll(async () => (await box(surface(page))).width).toBe(336);
+  await expect.poll(async () => (await box(surface(page))).width).toBe(440);
 });

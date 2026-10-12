@@ -5,7 +5,7 @@ import { useI18n } from '../i18n/lang';
 
 const KEY = 'ledge.coachmarks';
 export const COACHMARK_OPENS = 3;
-/** Fixed card height, so the surface can place it (below or above the row) without a layout pass. */
+/** Fixed card height, so the surface can place it under the panel without a layout pass. */
 export const COACHMARK_H = 128;
 /** Counts a keyboard open; true while it is one of the first three. Storage failures show nothing and count nothing. */
 export function countCoachmarkOpen(): boolean {
@@ -17,10 +17,10 @@ export function countCoachmarkOpen(): boolean {
   } catch { return false; }
 }
 
-export function Coachmark({ visible, top, onDismiss }: { visible: boolean; top: number; onDismiss: () => void }) {
+export function Coachmark({ visible, top, left = 44, onDismiss }: { visible: boolean; top: number; left?: number; onDismiss: () => void }) {
   const { t } = useI18n();
   return (
-    <div role="dialog" aria-label={t.coach.label} aria-hidden={!visible || undefined} inert={!visible} data-coachmark style={{ position: 'absolute', left: 44, top, width: 300, height: COACHMARK_H, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 8, padding: '12px 14px', background: 'var(--popover)', color: 'var(--popover-foreground)', border: '1px solid var(--input)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-overlay)', opacity: visible ? 1 : 0, transform: `translateY(${visible ? 0 : -6}px)`, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut'], ['transform', 'grow', visible ? 140 : 0]]) }}>
+    <div role="dialog" aria-label={t.coach.label} aria-hidden={!visible || undefined} inert={!visible} data-coachmark style={{ position: 'absolute', left, top, width: 300, height: COACHMARK_H, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 8, padding: '12px 14px', background: 'var(--popover)', color: 'var(--popover-foreground)', border: '1px solid var(--input)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-overlay)', opacity: visible ? 1 : 0, transform: `translateY(${visible ? 0 : -6}px)`, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut'], ['transform', 'grow', visible ? 140 : 0]]) }}>
       {/* Title and button share the first row; the caption gets a row of its own, so nothing wraps into the button. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 500, flexGrow: 1, minWidth: 0 }}>{t.coach.title}</span>

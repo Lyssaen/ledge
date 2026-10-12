@@ -34,5 +34,5 @@ export async function received<T extends ClientMessage['type']>(list: ClientMess
 /** The app is up and showing the daemon's sessions on the handle. */
 export async function ready(page: Page, bots: number) {
   await page.goto('/');
-  await expect(layer(page, 'handle').locator('button:not([data-resident])')).toHaveCount(bots);
+  await expect(layer(page, 'handle').locator('button:not([data-resident]):not([data-overflow])')).toHaveCount(bots);
 }

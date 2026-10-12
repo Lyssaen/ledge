@@ -70,7 +70,7 @@ test('Settings opens from the header and Help from ?; Escape returns to the list
   await expect(page.locator('[data-coachmark]')).toHaveAttribute('aria-hidden', 'true');
   await layer(page, 'list').getByRole('button', { name: 'Settings' }).click();
   await expectMode(page, 'settings');
-  await expect(layer(page, 'settings').getByRole('group', { name: 'Handle size' })).toBeVisible();
+  await expect(layer(page, 'settings').getByRole('group', { name: 'Island size' })).toBeVisible();
   await expect(layer(page, 'settings').getByRole('group', { name: 'Window size' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expectMode(page, 'list');

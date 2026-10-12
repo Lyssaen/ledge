@@ -1,34 +1,36 @@
 # Ledge, a tour
 
-Ledge is a handle on the left edge of your Windows screen. Every agent you start from WSL2 with `ledge claude`, or from the handle itself, gets a mascot in it. When an agent needs you, its mascot lights up, a bubble unfolds, and you answer from there. The terminal tab is one click away when you want the whole conversation.
+Ledge is an island at the top of your Windows screen: a dark pill cut into the centre of the top edge, the way a dynamic island is. Every agent you start from WSL2 with `ledge claude`, or from the island itself, gets a mascot in it. When an agent needs you, its mascot lights up, the island stretches into a bubble, and you answer from there. The terminal tab is one click away when you want the whole conversation.
 
 All captures below are the real overlay, in French (its default language, English is one toggle away), running against simulated sessions. Dark theme "Signal" unless noted; the light theme is "Galet".
 
-## The handle
+## The island
 
-Ledge's own mascot sits on top of the handle, grey with a peach antenna light, the same one as the app and tray icon. It stays there with or without sessions: it follows your cursor with its eyes, and a click on it opens the list. Below it, four sessions, four mascots. Each one wears the colour of its state: red for a permission to give, amber for a question, blue for an agent at work, green for one waiting for your next instruction. A mascot that waits for you breathes.
+Ledge's own mascot sits at the left of the island, grey with a peach antenna light, the same one as the app and tray icon. It stays there with or without sessions: it follows your cursor with its eyes, and a click on it opens the list. After a thin separator, four sessions, four mascots, left to right. The island is 38 px high and never wider than 300 px: beyond six companions a "+n" pill counts the rest, asks first. Each one wears the colour of its state: red for a permission to give, amber for a question, blue for an agent at work, green for one waiting for your next instruction. A mascot that waits for you breathes.
 
 <p>
-  <img src="screens/handle-dark.png" alt="The handle on the left edge, the Ledge mascot on top of four session mascots, dark theme" height="151">
-  <img src="screens/handle-light.png" alt="The same handle in light theme" height="151">
+  <img src="screens/handle-dark.png" alt="The island on the top edge, the Ledge mascot then four session mascots, dark theme" height="151">
+  <img src="screens/handle-light.png" alt="The same island in light theme" height="151">
 </p>
 
-**The handle lives.** A working bot hops every 3.6 to 4.4 s, 2 px high in the handle, so you can tell a bot that works from one that waits without opening anything. Under reduced motion the antenna light pulses instead.
+**The island lives.** A working bot hops every 3.6 to 4.4 s, 2 px high in the island, so you can tell a bot that works from one that waits without opening anything. Under reduced motion the antenna light pulses instead.
+
+**Discreet under a window.** When a maximised or full-screen window fills the island's screen, the island shrinks to a 10 px strip with one dot per session in the colour of its state, so the window's title and tabs stay clear. Resting the cursor on the strip, or on the band along the top edge around it, brings the island back; so do `Ctrl+Alt+L`, an ask and a finished turn. It becomes a strip again half a second after folding. Settings › Display › "Mode discret sous une fenêtre" turns this off; the island then stays compact.
 
 ## The bubble
 
-When an agent asks something, the bubble unfolds beside the handle for a few seconds with the request and the two answers. "+1 autre" means another ask is queued behind it. Nothing steals your focus: you keep typing wherever you were, and the bubble folds back on its own.
+When an agent asks something, the island itself stretches to 440 px for a few seconds: the companion grows first, then the island widens on both sides and comes down with the request and the two answers. "+1 autre" means another ask is queued behind it. A 2 px line along the bottom of the island counts down (4 s for an ask), paused while you hover it or it has the focus. Nothing steals your focus: you keep typing wherever you were, and the island folds back on its own.
 
 <p>
   <img src="screens/bubble-dark.png" alt="Bubble: Otto waits for your approval, pnpm test --filter overlay, Refuser and Autoriser" width="364">
   <img src="screens/bubble-light.png" alt="The same bubble in light theme" width="364">
 </p>
 
-**Finished.** When a bot ends its turn, it grows in the handle and a bubble says "Otto finished · 2m 40s of work · harness-assistant" for 6 s, with OK and Open. A request always comes before a notice. Settings › "When a bot finishes" chooses bubble, sound, both or the handle only.
+**Finished.** When a bot ends its turn, it grows in the island, which stretches the same way in green to say "Otto finished · 2m 40s of work · harness-assistant" for 6 s, with OK and Open. A request always comes before a notice. Settings › "When a bot finishes" chooses bubble, sound, both or the island only.
 
 ## The list
 
-Resting the cursor on the handle, or pressing `Ctrl+Alt+L` from anywhere, opens the list. A list opened by hovering folds back when the cursor leaves it, unless you are typing in one of its fields; a click anywhere outside an open panel folds it too. Rows are grouped by repository. Line 1 of a row is the topic (what the agent is working on), line 2 is the bot's name · branch · age, with the badge for the state on the right. Rename the topic from the session header (an empty name hands back to the conversation title, then the first prompt). Asks come first, oldest on top with the red bar.
+Resting the cursor on the island, or on the 10 px band along the top edge that runs 40 px past it on each side, opens the list after 180 ms; `Ctrl+Alt+L` opens it from anywhere. The panel hangs down from the island, centred on the same axis. A list opened by hovering folds back half a second after the cursor leaves it, unless you are typing in one of its fields, and never while a session is open; a click anywhere outside an open panel folds it too. Rows are grouped by repository. Line 1 of a row is the topic (what the agent is working on), line 2 is the bot's name · branch · age, with the badge for the state on the right. Rename the topic from the session header (an empty name hands back to the conversation title, then the first prompt). Asks come first, oldest on top with the red bar.
 
 <p>
   <img src="screens/list-dark.png" alt="The list of four sessions in dark theme" width="408">
@@ -76,7 +78,7 @@ The text comes from the `Stop` hook of Claude Code (its `last_assistant_message`
 
 ## Reading a cited Markdown file
 
-Click a `.md` or `.markdown` reference in an agent reply or in Ledge's chat. Ledge opens the file in the same panel, at 560 px or 800 px when expanded. The reader has a collapsible table of contents, a rendered view and a Markdown source view. Links to another local Markdown file open inside the reader; Back walks through those documents before returning to the original conversation. The reply and any draft remain in place. Escape goes back; the close button folds the panel to the handle.
+Click a `.md` or `.markdown` reference in an agent reply or in Ledge's chat. Ledge opens the file in the same panel, at 560 px or 800 px when expanded. The reader has a collapsible table of contents, a rendered view and a Markdown source view. Links to another local Markdown file open inside the reader; Back walks through those documents before returning to the original conversation. The reply and any draft remain in place. Escape goes back; the close button folds the panel to the island.
 
 The WSL daemon reads a regular UTF-8 Markdown file, up to 1 MiB, from the session's working directory or an absolute WSL path. Relative paths in the Ledge chat need a known source and otherwise show a clear error. The reader does not edit files or send decisions to agents. HTML and images in documents remain inert. Reload explicitly reads the file again. Windows drive paths and `file:` links are outside this first version. The browser flow is covered by `apps/overlay/e2e/document-reader.spec.ts`; native Windows display and DPI validation remains to be done.
 
@@ -86,7 +88,7 @@ A working session shows the terminal preview: the last thirty lines of the conve
 
 <img src="screens/session-preview-dark.png" alt="Session: Pim at work, the terminal preview shows the agent running the tests" width="448">
 
-When the agent hands part of the work to subagents, they appear under the title as small bots with their task and their state. A session whose main thread is only waiting for its subagents stays "au travail" in the list, the handle and the bubble, instead of reading as available.
+When the agent hands part of the work to subagents, they appear under the title as small bots with their task and their state. A session whose main thread is only waiting for its subagents stays "au travail" in the list, the island and the bubble, instead of reading as available.
 
 <img src="screens/session-helpers-dark.png" alt="Session: Pim in progress, two subagents under the title with their task, general-purpose and Explore, both at work" width="448">
 
@@ -105,9 +107,9 @@ A session started with plain `claude`, without the launcher, is still visible th
 
 ## Settings
 
-Three tabs, the last one opened remembered. Display: language, the default harness (new sessions and the Ledge chat), the screen the handle sits on, the size of the handle and of the windows (auto or 100 to 200 percent), the theme (`Ctrl+Alt+T`) and reduced motion. Notifications: do-not-disturb and when a bot finishes (bubble and sound, bubble, sound, or handle only). Sounds: everything below.
+Three tabs, the last one opened remembered. Display: language, the default harness (new sessions and the Ledge chat), the screen the island sits on, "Position de l'île" (Centre, À gauche or À droite: the island's axis moves to a quarter of the screen width, to keep window titles and browser tabs clear), "Mode discret sous une fenêtre" (a switch, on by default: the strip under a maximised window), the size of the island and of the windows (auto or 100 to 200 percent), the theme (`Ctrl+Alt+T`) and reduced motion. Notifications: do-not-disturb and when a bot finishes (bubble and sound, bubble, sound, or island only). Sounds: everything below.
 
-<img src="screens/settings-dark.png" alt="Settings, Display tab: language, screen, handle size, window size, theme, reduced motion" width="408">
+<img src="screens/settings-dark.png" alt="Settings, Display tab: language, screen, island position, discreet mode, island size, window size, theme, reduced motion" width="408">
 
 **Sounds.** Eight short synthesised cues, one family: asks rise or knock, results fall, your own decisions tick. Settings › Sounds has the switch, the volume with a Test button, one checkbox per category, and "Only when the terminal is behind", which keeps Ledge quiet while Windows Terminal is the front window. Do not disturb silences everything.
 
