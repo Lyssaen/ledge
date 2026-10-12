@@ -10,6 +10,16 @@ Node >= 22 is required.
 npm i -g @paradow/ledge && ledge setup
 ```
 
+## Update
+
+From the Ledge island: the card in the list updates the daemon, then the Windows app. By hand:
+
+```sh
+npm i -g @paradow/ledge@latest && systemctl --user restart ledge-daemon
+```
+
+A daemon started from a clone (see below) is not touched by the island's button.
+
 ## Install for development
 
 Run from the repository root:

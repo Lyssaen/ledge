@@ -1,5 +1,5 @@
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { ClientMessage, Recent, Session } from '@ledge/protocol';
+import type { ClientMessage, DaemonInfo, Recent, Session } from '@ledge/protocol';
 
 export const T0 = new Date(Date.now() - 5 * 60_000).toISOString();
 export function session(id: string, extra: Partial<Session> = {}): Session {
@@ -7,7 +7,7 @@ export function session(id: string, extra: Partial<Session> = {}): Session {
 }
 
 /** Simulates the ledge daemon inside the page: answers the overlay's WebSocket with a snapshot and lets the test push updates. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { recents?: Recent[]; launcher?: string[] } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { recents?: Recent[]; launcher?: string[]; daemon?: DaemonInfo } = {}) {
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
   let socket: WebSocketRoute | null = null;
@@ -19,6 +19,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { recen
   const send = (m: unknown) => socket?.send(JSON.stringify(m));
   return {
     received,
+    /** Any server message, as is (update.progress, update.failed, …). */
+    send,
     upsert(s: Session) { sessions.set(s.id, s); send({ type: 'session.updated', session: s }); },
     remove(id: string) { sessions.delete(id); send({ type: 'session.removed', id }); },
     preview(id: string, lines: string[]) { send({ type: 'session.preview', id, lines }); },

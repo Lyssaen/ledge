@@ -4,7 +4,7 @@ Date : 2026-10-12 · Projet personnel, hors story Jira · Auteur : Joffrey Desan
 
 Maquette validée : https://claude.ai/artifact/7fTAguyjmNDdnZy5QXuG7A, copie locale [docs/mockups/ledge-update.html](../../mockups/ledge-update.html). Cinq états de la carte (Disponible, En cours, Redémarrage, Échec du daemon, Installé depuis git) et l'onglet « À propos » des réglages.
 
-Statut : design validé, pas encore implémenté.
+Statut : implémenté le 2026-10-12 (plan : 2026-10-12-auto-update.md)
 
 ## 1. Objectif
 

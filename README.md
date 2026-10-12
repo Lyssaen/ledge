@@ -109,6 +109,7 @@ One binary, `ledge`, with seven commands. Source under `src/`:
 | `adapters/` | One adapter per tool (`Adapter` in `types.ts`): prompt detection in the pane, `promptStillVisible`, key plans for accept/deny/reply/interrupt, and preview cleaning. `claude.ts`, `codex.ts` and `cursor.ts` are all implemented. Claude Code's adapter also answers a multi-question `AskUserQuestion` (one tab after another, then the review that has no footer). |
 | `tmux.ts` | Thin wrapper over the dedicated server `tmux -L ledge -f ~/.ledge/tmux.conf`. `newSession` runs the tmux client with the pane's PATH: tmux gives a detached session's pane the client's PATH, over `-e`. |
 | `shell-path.ts` | The environment a login shell (`$SHELL -l`) starts with. Under systemd the daemon has the bare system environment: `claude` (`~/.local/bin`) does not resolve and no proxy variable is set; an agent launched from the overlay (or Ask Ledge) gets the terminal's on top of the daemon's, or the daemon's alone (logged) when the shell fails. |
+| `update/` | The daemon's half of the auto-update: `self.ts` (version, install kind `npm`/`git`/`unknown`, systemd or not, sent in the snapshot), `guard.ts` (refuses when a restart would close live sessions) and `run-update.ts` (`update.daemon`: `npm i -g @paradow/ledge@<version>`, then restarts the service, reporting `update.progress` or `update.failed`). |
 | `client.ts`, `names.ts`, `paths.ts`, `log.ts` | WebSocket client for the CLI modes, the list of 64 bot names, `~/.ledge` paths (`LEDGE_HOME` overrides), the daemon log. |
 
 ### `apps/overlay` (Windows, Tauri 2 + React 19 + Tailwind 4)
@@ -127,6 +128,7 @@ The UI is plain web code under `src/`, developed and unit-tested in WSL; the Rus
 | `src/defaultTool.ts` | The default harness (`ledge.defaultTool`): new sessions and the Ledge chat start on it. Claude Code when nothing valid is stored. |
 | `src/bots/` | The mascots: material, pose per state, halo in the state colour, breathing while waiting. |
 | `src/keyboard/` | Keyboard navigation (j/k, Alt ←/→ to the previous or next session, y/n, digits for a question's options, Esc) and the first-use coachmark. |
+| `src/update/` | The overlay's half of the auto-update: `machine.ts` (the pure update state machine, daemon first then app), `useUpdate.ts` (checks at startup and every 6 hours, drives the daemon and Tauri's updater), `bridge.ts` (the updater plugin, a no-op in a browser), `UpdateCard.tsx` (the card in the list), `prefs.ts`. The About tab of the settings shows both versions. |
 | `src/i18n/` | One typed catalogue, French (default) and English, same keys enforced by the type checker. |
 | `src/tauri/bridge.ts` | The only file that calls `invoke`: `set_frame`, `set_outside_watch`, `focus_overlay`, `release_focus`, `focus_terminal`, `open_terminal`, `list_monitors`, `set_monitor`, plus the `ledge://outside-click` event and the `Ctrl+Alt+L` and `Ctrl+Alt+N` global shortcuts. Everything degrades to no-ops in a browser. |
 | `src-tauri/src/main.rs` | The Rust shell: a borderless, transparent, always-on-top window outside the taskbar; a thread that polls the cursor every 50 ms, reports it in the hot band along the top edge (10 px high, the island plus 40 px on each side) for the hover and the mascot's gaze, tells the page when a maximised or full-screen window holds the foreground on the island's monitor (the discreet strip) and, while a panel shows, emits a press of the mouse outside the window (`GetAsyncKeyState`); window placement at `(left, top)` in physical pixels against the top edge of the monitor's work area; focus hand-back to the previously active window; `focus_terminal` finds the Windows Terminal window whose title matches the bot's tab (Win32 `EnumWindows`); `open_terminal` opens a Windows Terminal tab running `ledge attach <id>` in WSL (`wt.exe -w 0 new-tab`). |
@@ -311,6 +313,9 @@ Windows side, the overlay keeps its preferences in the WebView's `localStorage`:
 - An answer is typed only if the prompt is on screen, and reported as taken only if the prompt then disappears. Nothing is retried automatically; the session goes to `error` and the overlay offers a retry.
 - A decision is locked in the overlay until the daemon confirms, rejects, or the connection drops, so a double click never sends two answers.
 - The overlay survives the daemon: it shows "daemon unreachable, retrying" under the island and reconnects with backoff.
+- The Windows app updates itself through Tauri's updater. Each release is signed with a minisign key, and the app checks the signature against the public key it ships with before installing anything. Releases are fetched from GitHub over HTTPS.
+- Update order is fixed: the daemon first, the app second. The overlay asks the daemon to run `npm i -g`, then restart the service, and compares the sessions before and after. The app is only installed if every session came back. If one is missing, or if the restart would close live sessions, nothing else changes and the card says why.
+- The daemon refuses to update itself when it runs from a git clone or without systemd, and shows the manual command instead.
 
 ## How to install?
 
@@ -328,15 +333,10 @@ Get pnpm with `corepack enable` on either side if it is missing.
 ### 1. Install the CLI and the daemon in WSL
 
 ```sh
-git clone https://github.com/Paradow-dev/ledge.git ~/Workspace/ledge
-cd ~/Workspace/ledge
-pnpm install
-pnpm --filter @paradow/ledge build
-chmod +x packages/ledge/dist/cli/index.js
-mkdir -p ~/.local/bin
-ln -sf "$PWD/packages/ledge/dist/cli/index.js" ~/.local/bin/ledge   # ~/.local/bin must be on the PATH Claude Code uses for hooks
-ledge setup
+npm i -g @paradow/ledge && ledge setup
 ```
+
+Use the `npm` of the Node 22+ that will run the daemon. With nvm, that is the version active when you run the command: `ledge setup` writes that Node into the systemd unit. To work from a clone instead, see [Development](#development).
 
 `ledge setup` prints what it did. It writes `~/.ledge`, adds Ledge's hooks to Claude Code (`~/.claude/settings.json`), and to Codex (`~/.codex/hooks.json`) and Cursor Agent (`~/.cursor/hooks.json`) when their folders exist. It keeps whatever hooks you already have. Codex asks you to review the new hooks at its next start: trust them there or from Ledge.
 
@@ -387,12 +387,17 @@ The overlay speaks French by default. Settings > Langue switches it to English.
 
 ### Update
 
+Ledge checks for a new release at startup, then every 6 hours (Settings > À propos turns this off). It never updates without your click. When a release is out, a dot appears on the island's mascot and a card appears at the top of the list: click "Mettre à jour". Ledge updates the WSL daemon first, waits for your sessions to come back, then downloads and installs the Windows app, which restarts. Your sessions keep running. See the [tour](docs/tour.md#updating).
+
+To update by hand:
+
 ```sh
-cd ~/Workspace/ledge && git pull && pnpm install && pnpm --filter @paradow/ledge build
-systemctl --user restart ledge-daemon.service    # the daemon runs the built CLI
+npm i -g @paradow/ledge@latest && systemctl --user restart ledge-daemon
 ```
 
-Then on Windows, quit Ledge from its tray menu and run the newer installer over the old one, downloaded from the releases or rebuilt in your Windows clone.
+Then on Windows, quit Ledge from its tray menu and run the newer installer over the old one, downloaded from the releases. A daemon that runs from a git clone is never touched by the button: the card shows the command to run, and `git pull && pnpm install && pnpm --filter @paradow/ledge build` followed by the restart does the same job.
+
+A tmux server started before the scoped-service version lives inside the daemon's service, so a restart would close its sessions. Ledge refuses to restart then, and says so. Close those sessions or restart WSL once; later sessions are safe.
 
 ### Uninstall
 
@@ -411,7 +416,18 @@ More details: the WSL side in [packages/ledge/README.md](packages/ledge/README.m
 ## Development
 
 ```sh
+git clone https://github.com/Paradow-dev/ledge.git ~/Workspace/ledge && cd ~/Workspace/ledge
 pnpm install
+pnpm --filter @paradow/ledge build
+chmod +x packages/ledge/dist/cli/index.js
+mkdir -p ~/.local/bin
+ln -sf "$PWD/packages/ledge/dist/cli/index.js" ~/.local/bin/ledge   # ~/.local/bin must be on the PATH Claude Code uses for hooks
+ledge setup                         # a clone install: the update button leaves it alone
+```
+
+Then:
+
+```sh
 pnpm -r typecheck
 pnpm -r test                        # protocol, ledge (unit + tmux + end-to-end, needs tmux, no AI), overlay (vitest + jsdom)
 pnpm --filter overlay dev           # the UI alone on http://localhost:1420, against a daemon running in WSL

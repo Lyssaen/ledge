@@ -265,3 +265,44 @@ for (const theme of ['dark', 'light'] as const) {
     }
   });
 }
+
+// The update flow, dark only: the card in its three states, then the About tab. The browser has no updater, so the
+// release comes from the dev-only window.__LEDGE_FAKE_UPDATE__ hook.
+test.describe('update', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { __LEDGE_FAKE_UPDATE__: unknown }).__LEDGE_FAKE_UPDATE__ = {
+        version: '0.3.0', notes: '- Réponses depuis le chat\n- Île plus réactive\n- Mise à jour en un clic',
+        downloadAndInstall: async () => { await new Promise(() => {}); }
+      };
+    });
+  });
+  const daemon = { version: '0.2.2', install: 'npm' as const, systemd: true };
+
+  test('the card: available, running, failed', async ({ page }) => {
+    await desktop(page, 'dark');
+    const d = await fakeDaemon(page, overview(), { daemon });
+    await ready(page, 4);
+    await openList(page);
+    await expect(layer(page, 'list').locator('[data-update-card="available"]')).toBeVisible();
+    await shoot(page, 'update-available-dark');
+    await layer(page, 'list').getByRole('button', { name: 'Mettre à jour' }).click();
+    await expect(layer(page, 'list').locator('[data-update-card="running"]')).toBeVisible();
+    await shoot(page, 'update-running-dark');
+    d.send({ type: 'update.failed', version: '0.3.0', reason: 'sessions-at-risk' });
+    await expect(layer(page, 'list').locator('[data-update-card="failed"]')).toBeVisible();
+    await shoot(page, 'update-failed-dark');
+  });
+
+  test('settings, About tab', async ({ page }) => {
+    await desktop(page, 'dark');
+    await fakeDaemon(page, overview(), { daemon });
+    await ready(page, 4);
+    await openList(page);
+    await layer(page, 'list').getByRole('button', { name: 'Réglages' }).click();
+    await expectMode(page, 'settings');
+    await restInside(page);
+    await layer(page, 'settings').getByRole('tab', { name: 'À propos' }).click();
+    await shoot(page, 'settings-about-dark');
+  });
+});

@@ -5,6 +5,12 @@ import { appVersion, checkForUpdate, relaunchApp, type AvailableUpdate } from '.
 import { cardView, gearPip, initialUpdate, pipTone, reduceUpdate, type CardView, type PipTone, type UpdateEvent, type UpdateState } from './machine';
 import { loadAuto, loadCheckedAt, loadDismissed, saveAuto, saveCheckedAt, saveDismissed, saveUpdatedFrom, takeUpdatedFrom } from './prefs';
 
+declare global { interface Window { __LEDGE_FAKE_UPDATE__?: AvailableUpdate } }
+
+/** Dev-only injection point for the e2e specs and the screenshots: the browser has no updater. */
+const fakeCheck = (): Promise<AvailableUpdate | null> => Promise.resolve(window.__LEDGE_FAKE_UPDATE__ ?? null);
+const defaultCheck = (): typeof checkForUpdate => (import.meta.env.DEV && window.__LEDGE_FAKE_UPDATE__ ? fakeCheck : checkForUpdate);
+
 export interface UpdateController {
   state: UpdateState; card: CardView; pip: PipTone; gear: boolean; auto: boolean;
   start(): void; later(): void; retry(): void; ackUpdated(): void; checkNow(): void; setAuto(on: boolean): void;
@@ -34,7 +40,7 @@ export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateCo
 
   const checkNow = useCallback(() => {
     const d = depsRef.current;
-    void (d.check ?? checkForUpdate)().then(u => {
+    void (d.check ?? defaultCheck())().then(u => {
       if (!mounted.current) return;
       available.current = u;
       const at = (d.now ?? Date.now)();
@@ -91,7 +97,7 @@ export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateCo
     void (async () => {
       try {
         // No update held (checks off or failed): look once more, and only install exactly the target.
-        const u = available.current ?? await (depsRef.current.check ?? checkForUpdate)();
+        const u = available.current ?? await (depsRef.current.check ?? defaultCheck())();
         if (!mounted.current) return;
         if (!u || u.version !== target) { dispatch({ type: 'download-failed' }); return; }
         available.current = u;
