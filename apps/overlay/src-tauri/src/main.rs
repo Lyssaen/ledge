@@ -33,7 +33,8 @@ struct OutsideWatch(AtomicBool);
 struct PrevForeground(Mutex<Option<isize>>);
 
 /// The Screen setting: the id of the monitor the overlay lives on (`None`: the primary), a generation bumped on every
-/// change so the poller re-reads its monitor at once, and the last frame the webview asked for, re-placed on a change.
+/// change so the poller re-reads its monitor at once, the last frame the webview asked for (re-applied on a change)
+/// and the window rectangle last placed.
 #[derive(Default)]
 struct Screen(Mutex<ScreenState>);
 #[derive(Default)]
@@ -41,6 +42,9 @@ struct ScreenState {
     chosen: Option<String>,
     gen: u64,
     last_frame: Option<(i32, i32, u32, u32)>,
+    /// The window rectangle last placed (physical px): the whole work area of the chosen monitor. The window is
+    /// placed once and again only when that area changes; the frame only sets its region.
+    placed: Option<(i32, i32, u32, u32)>,
     /// The island's x range in logical px (`set_hot_zone`): the poller watches the top band around it.
     hot: Option<(i32, u32)>,
     /// Set by `set_hot_zone` (the webview just mounted or reloaded): the next foreground check emits its state even
@@ -90,12 +94,14 @@ struct ForegroundPayload { covered: bool }
 pub struct Area {
     pub x: i32,
     pub y: i32,
+    pub w: u32,
+    pub h: u32,
     pub scale: f64,
 }
 
 fn area_of(m: &tauri::window::Monitor) -> Area {
     let wa = m.work_area();
-    Area { x: wa.position.x, y: wa.position.y, scale: m.scale_factor() }
+    Area { x: wa.position.x, y: wa.position.y, w: wa.size.width, h: wa.size.height, scale: m.scale_factor() }
 }
 
 /// A monitor's stable id: its name (`\\.\DISPLAY1` on Windows), or its index when the OS gives none.
@@ -129,7 +135,7 @@ fn chosen_of(screen: &Screen) -> Option<String> {
 }
 
 fn target_area(app: &AppHandle, screen: &Screen) -> Area {
-    target_monitor(app, chosen_of(screen).as_deref()).map(|m| area_of(&m)).unwrap_or(Area { x: 0, y: 0, scale: 1.0 })
+    target_monitor(app, chosen_of(screen).as_deref()).map(|m| area_of(&m)).unwrap_or(Area { x: 0, y: 0, w: 1920, h: 1080, scale: 1.0 })
 }
 
 /// Physical position and size of a frame given in logical px relative to the work area's top-left corner.
@@ -142,6 +148,16 @@ pub fn frame_rect(area: Area, left: i32, top: i32, width: u32, height: u32) -> (
         (height as f64 * s).round() as u32,
     )
 }
+
+/// The window's region for that frame: the same rectangle in physical px from the window's own top-left corner,
+/// which is the work area's (`window_rect_of`).
+pub fn region_rect(area: Area, left: i32, top: i32, width: u32, height: u32) -> (i32, i32, u32, u32) {
+    let (x, y, w, h) = frame_rect(area, left, top, width, height);
+    (x - area.x, y - area.y, w, h)
+}
+
+/// The window rectangle in physical px: the whole work area of the chosen monitor.
+pub fn window_rect_of(area: Area) -> (i32, i32, u32, u32) { (area.x, area.y, area.w, area.h) }
 
 /// True when the logical cursor `(x, y)` is in the band along the top edge around the island `hot = (left, width)`,
 /// within `NEAR_REACH` of it: the hot band that opens the list and the region the mascot's gaze follows.
@@ -164,15 +180,30 @@ pub fn press_outside(prev_down: bool, now_down: bool, cursor: (i32, i32), rect: 
     !inside
 }
 
-/// Moves and resizes the window to `(left, top)` on the chosen monitor's work area, `width` x `height` (logical px),
-/// in one native call so the webview never sees the new position with the old size.
-/// The webview reports the bounding frame of everything it draws (surface, fillets, status, say, coachmark).
+/// Sets the frame: the bounding rectangle of everything the webview draws (surface, fillets, status, say, coachmark),
+/// `(left, top)` `width` x `height` in logical px from the work area's top-left corner. The window itself covers the
+/// whole work area of the chosen monitor and is placed once (and again only when that area changes); the frame becomes
+/// the window's *region*. Outside the region the window does not exist for hit-testing, so clicks reach the windows
+/// beneath, and its pixels are transparent anyway. Only the region changes while the surface animates: a region change
+/// never moves or resizes the webview, so the shell and the page can never disagree for a frame (the blink between two
+/// shapes when the window moved and the page was presented at its new offset in different compositor frames).
 #[tauri::command]
 async fn set_frame(window: WebviewWindow, left: i32, top: i32, width: u32, height: u32, screen: tauri::State<'_, Screen>) -> Result<(), String> {
     if let Ok(mut s) = screen.0.lock() { s.last_frame = Some((left, top, width, height)); }
     let area = target_area(window.app_handle(), &screen);
-    let (x, y, w, h) = frame_rect(area, left, top, width, height);
-    place_window(&window, x, y, w, h)
+    apply_frame(&window, area, (left, top, width, height), &screen)
+}
+
+/// Places the window on `area` unless it is already there, then sets its region to `frame`.
+fn apply_frame(window: &WebviewWindow, area: Area, frame: (i32, i32, u32, u32), screen: &Screen) -> Result<(), String> {
+    let win = window_rect_of(area);
+    let placed = screen.0.lock().ok().and_then(|s| s.placed);
+    if placed != Some(win) {
+        place_window(window, win.0, win.1, win.2, win.3)?;
+        if let Ok(mut s) = screen.0.lock() { s.placed = Some(win); }
+    }
+    let (l, t, w, h) = region_rect(area, frame.0, frame.1, frame.2, frame.3);
+    set_region(window, l, t, w, h)
 }
 
 /// The island's x range in logical px: the cursor poller reports the cursor in the top band around it.
@@ -200,21 +231,38 @@ fn set_monitor(window: WebviewWindow, id: Option<String>, screen: tauri::State<'
         Ok(mut s) => { s.chosen = id; s.gen = s.gen.wrapping_add(1); s.last_frame }
         Err(_) => return Err("screen state poisoned".into()),
     };
-    if let Some((left, top, width, height)) = last {
-        let (x, y, w, h) = frame_rect(target_area(window.app_handle(), &screen), left, top, width, height);
-        place_window(&window, x, y, w, h)?;
+    if let Some(frame) = last {
+        apply_frame(&window, target_area(window.app_handle(), &screen), frame, &screen)?;
     }
     Ok(())
+}
+
+/// The window's HWND for this crate's `windows` version: Tauri's may come from another one, so go through the raw handle.
+#[cfg(windows)]
+fn hwnd_of(window: &WebviewWindow) -> Result<windows::Win32::Foundation::HWND, String> {
+    let raw = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+    Ok(windows::Win32::Foundation::HWND(raw as *mut core::ffi::c_void))
 }
 
 #[cfg(windows)]
 fn place_window(window: &WebviewWindow, x: i32, y: i32, w: u32, h: u32) -> Result<(), String> {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER};
-    // Tauri's HWND may come from another `windows` crate version: go through the raw handle.
-    let raw = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
-    let hwnd = HWND(raw as *mut core::ffi::c_void);
+    let hwnd = hwnd_of(window)?;
     unsafe { SetWindowPos(hwnd, HWND::default(), x, y, w as i32, h as i32, SWP_NOACTIVATE | SWP_NOZORDER) }.map_err(|e| e.to_string())
+}
+
+/// Sets the window's region to the rectangle `(l, t)` `w` x `h` in physical px from its top-left corner. No forced
+/// repaint (`bRedraw` false): the page paints the change itself. The window owns the region from here on.
+#[cfg(windows)]
+fn set_region(window: &WebviewWindow, l: i32, t: i32, w: u32, h: u32) -> Result<(), String> {
+    use windows::Win32::Foundation::BOOL;
+    use windows::Win32::Graphics::Gdi::{CreateRectRgn, SetWindowRgn};
+    let hwnd = hwnd_of(window)?;
+    let rgn = unsafe { CreateRectRgn(l, t, l + w as i32, t + h as i32) };
+    if rgn.0.is_null() { return Err("CreateRectRgn failed".into()); }
+    if unsafe { SetWindowRgn(hwnd, rgn, BOOL(0)) } == 0 { return Err("SetWindowRgn failed".into()); }
+    Ok(())
 }
 
 #[cfg(not(windows))]
@@ -222,6 +270,10 @@ fn place_window(window: &WebviewWindow, x: i32, y: i32, w: u32, h: u32) -> Resul
     window.set_position(tauri::PhysicalPosition::new(x, y)).map_err(|e| e.to_string())?;
     window.set_size(tauri::PhysicalSize::new(w, h)).map_err(|e| e.to_string())
 }
+
+/// Window regions are a Windows notion; elsewhere the window stays the whole work area.
+#[cfg(not(windows))]
+fn set_region(_window: &WebviewWindow, _l: i32, _t: i32, _w: u32, _h: u32) -> Result<(), String> { Ok(()) }
 
 /// Arms (or disarms) the watch for a mouse press outside the window.
 #[tauri::command]
@@ -487,17 +539,16 @@ fn mouse_down() -> bool {
 #[cfg(not(windows))]
 fn mouse_down() -> bool { false }
 
-/// The overlay window's outer rectangle in physical px.
-fn window_rect(app: &AppHandle) -> Option<(i32, i32, u32, u32)> {
-    let w = app.get_webview_window("main")?;
-    let p = w.outer_position().ok()?;
-    let s = w.outer_size().ok()?;
-    Some((p.x, p.y, s.width, s.height))
+/// The rectangle the overlay draws (its window region) in physical px: the last frame, on `area`. The window itself
+/// covers the whole work area, so a press is "outside" when it misses the drawing, not the window.
+fn drawn_rect(app: &AppHandle, area: Area) -> Option<(i32, i32, u32, u32)> {
+    let (left, top, width, height) = app.state::<Screen>().0.lock().ok()?.last_frame?;
+    Some(frame_rect(area, left, top, width, height))
 }
 
 /// Polls the cursor every 50 ms: reports it in the top band around the island (the hot zone and the mascot's gaze),
 /// reports a maximised window taking or leaving the foreground, and, while the outside watch is armed, emits
-/// `OUTSIDE_CLICK_EVENT` on a mouse press outside the window, which covers only what it draws.
+/// `OUTSIDE_CLICK_EVENT` on a mouse press outside the drawn rectangle (the window's region).
 fn spawn_cursor_poller(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut was_near = false;
@@ -534,7 +585,7 @@ fn spawn_cursor_poller(app: tauri::AppHandle) {
             }
             let down = mouse_down();
             if app.state::<OutsideWatch>().0.load(Ordering::Relaxed) {
-                if let Some(rect) = window_rect(&app) {
+                if let Some(rect) = drawn_rect(&app, a) {
                     if press_outside(was_down, down, c, rect) { let _ = app.emit(OUTSIDE_CLICK_EVENT, ()); }
                 }
             }
@@ -566,7 +617,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{autostart_by_default, choose, covers, cursor_near, desktop_class, frame_rect, press_outside, terminal_args, title_matches, tray_title, Area};
+    use super::{autostart_by_default, choose, covers, cursor_near, desktop_class, frame_rect, press_outside, region_rect, terminal_args, title_matches, tray_title, window_rect_of, Area};
 
     #[test] fn the_desktop_and_its_workers_never_cover_the_screen() {
         assert!(desktop_class("Progman"));
@@ -606,14 +657,24 @@ mod tests {
         assert!(!title_matches("Visual Studio Code", "Pim · speos-api"));
     }
 
-    const AREA: Area = Area { x: 0, y: 0, scale: 1.5 };
+    const AREA: Area = Area { x: 0, y: 0, w: 2880, h: 1548, scale: 1.5 };
+    const LEFT_TASKBAR: Area = Area { x: 72, y: 0, w: 1848, h: 1080, scale: 1.0 };
+    const TOP_TASKBAR: Area = Area { x: 0, y: 48, w: 1920, h: 1032, scale: 1.0 };
 
     #[test] fn frame_is_placed_on_the_work_area_in_physical_px() {
         assert_eq!(frame_rect(AREA, 770, 0, 380, 400), (1155, 0, 570, 600));
-        let left_taskbar = Area { x: 72, y: 0, scale: 1.0 };
-        assert_eq!(frame_rect(left_taskbar, 100, 0, 117, 38), (172, 0, 117, 38));
-        let top_taskbar = Area { x: 0, y: 48, scale: 1.0 };
-        assert_eq!(frame_rect(top_taskbar, 900, 0, 117, 38), (900, 48, 117, 38));
+        assert_eq!(frame_rect(LEFT_TASKBAR, 100, 0, 117, 38), (172, 0, 117, 38));
+        assert_eq!(frame_rect(TOP_TASKBAR, 900, 0, 117, 38), (900, 48, 117, 38));
+    }
+
+    #[test] fn the_window_is_the_work_area_and_the_region_is_the_frame_from_its_corner() {
+        assert_eq!(window_rect_of(AREA), (0, 0, 2880, 1548));
+        assert_eq!(window_rect_of(LEFT_TASKBAR), (72, 0, 1848, 1080));
+        assert_eq!(window_rect_of(TOP_TASKBAR), (0, 48, 1920, 1032));
+        // The region is window-relative: the work area's offset (a taskbar on the left or the top) drops out.
+        assert_eq!(region_rect(AREA, 770, 0, 380, 400), (1155, 0, 570, 600));
+        assert_eq!(region_rect(LEFT_TASKBAR, 100, 0, 117, 38), (100, 0, 117, 38));
+        assert_eq!(region_rect(TOP_TASKBAR, 900, 0, 117, 38), (900, 0, 117, 38));
     }
 
     #[test] fn the_cursor_is_near_in_the_top_band_around_the_island_only() {

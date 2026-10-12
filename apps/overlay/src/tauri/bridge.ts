@@ -1,7 +1,8 @@
 /**
  * Everything the web app asks of the native shell goes through here. In a plain browser (dev, tests) every call is a
  * no-op or a DOM fallback; under Tauri it talks to the commands and events in `src-tauri/src/main.rs`:
- *   set_frame { left, top, width, height }   window to (left, top) on the chosen monitor's work area, sized width x height
+ *   set_frame { left, top, width, height }   the rectangle the page draws, from the work area's corner: the window itself
+ *                                      covers the whole work area and only its region follows the frame (clicks pass outside it)
  *   set_hot_zone { left, width }       the island's x range (logical px): the cursor poller watches the top band around it
  *   set_outside_watch { on }           arm (or disarm) the native watch for a mouse press outside the window
  *   list_monitors                      every monitor (logical sizes, work-area height, which one is the primary)
