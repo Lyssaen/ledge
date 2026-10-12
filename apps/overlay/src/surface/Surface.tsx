@@ -11,7 +11,7 @@ import { ISLAND, LEDGE_ID, scaledLayout, SIZES, SURFACE_CHROME_Y, type IslandPos
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
 import { Handle, type HandleBot } from './Handle';
-import { UnreadSay, UNREAD_SAY_BOX } from './UnreadSay';
+import { UnreadSay, UNREAD_SAY_BOX, SAY_TAIL_X } from './UnreadSay';
 import { pickSay, pickSpeaker, sayKindOf, type SayCandidate } from './say';
 import { Bubble, type BubbleAck } from './Bubble';
 import { SettingsView } from './SettingsView';
@@ -504,7 +504,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const statusLeft = geo.left + geo.w / 2 - statusW / 2, statusTop = geo.h + 6 * hs;
   const saySlot = speaker && speaker.id !== LEDGE_ID ? geo.slots.find(s => s.id === speaker.id) : undefined;
   const speakerX = saySlot ? saySlot.center : geo.left + (ISLAND.padL + ISLAND.resident / 2) * hs;
-  const sayLeft = speakerX - 12 * ps, sayTop = geo.h + 4 * ps;
+  const sayLeft = speakerX - SAY_TAIL_X * ps, sayTop = geo.h + 4 * ps;
   if (sayShown) extras.push({ left: sayLeft, top: sayTop, w: sizes.say.w || UNREAD_SAY_BOX.w * ps, h: sizes.say.h || UNREAD_SAY_BOX.h * ps });
   if (unreachable) extras.push({ left: statusLeft, top: statusTop, w: statusW, h: statusH });
   if (coachShown) extras.push({ left: coachLeft, top: coachTop, w: 300 * ps, h: COACHMARK_H * ps });
