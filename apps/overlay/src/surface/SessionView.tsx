@@ -70,8 +70,8 @@ function HelpersTree({ parent, helpers, t, theme, paused, frozen, reducedMotion 
           <li key={h.id} data-helper data-last={last ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, fontSize: 12, lineHeight: '16px' }}>
             <span aria-hidden="true" className="mono" style={{ width: 14, flexShrink: 0, color: 'var(--muted-foreground)' }}>{last ? '└' : '├'}</span>
             <Bot seed={seed} tool={parent.tool} state={st} pose={poseFor(seed, st)} size={20} theme={theme} paused={paused} frozen={frozen} reducedMotion={reducedMotion} />
-            <span style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--sidebar-foreground)' }}>{h.task || h.kind}</span>
-            <span style={{ flexShrink: 0, color: 'var(--muted-foreground)' }}>{h.task ? `${h.kind} · ` : ''}{t.botLabel[st]}</span>
+            <span data-helper-task style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--sidebar-foreground)' }}>{h.task}</span>
+            <span style={{ flexShrink: 0, color: 'var(--muted-foreground)' }}>{h.kind} · {t.botLabel[st]}</span>
           </li>
         );
       })}

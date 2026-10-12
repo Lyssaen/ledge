@@ -104,24 +104,34 @@ function adoptCursorTask(s: Session, id: string): Session {
   return { ...s, helpers };
 }
 
+/**
+ * Claude Code announces every helper it shows with SubagentStart. Its internal agents (delegated observation) skip
+ * it and not always send SubagentStop, so a helper first seen through another event is not tracked; a request of
+ * its own is still routed to the parent.
+ */
+const untracked = (s: Session, id: string) => s.tool === 'claude' && !s.helpers.some(h => h.id === id);
+
 function reduceHelper(s: Session, ev: SessionEvent & { helperId: string }): Session {
   s = adoptCursorTask(s, ev.helperId);
   const at = ev.at;
   const id = ev.helperId;
   const own = s.pending?.helperId === id;
+  // A description arriving with any event names a helper that has none (Claude Code's comes after SubagentStart).
+  const named = ev.task && !s.helpers.find(h => h.id === id)?.task ? { task: ev.task } : {};
+  const track = (patch: Partial<Helper>, kind?: string) => (untracked(s, id) ? s.helpers : setHelper(s, id, { ...patch, ...named }, kind));
   switch (ev.name) {
     case 'SubagentStart': {
       const known = s.helpers.find(h => h.id === id);
-      const patch: Partial<Helper> = { state: 'working', kind: ev.tool ?? known?.kind ?? 'subagent', task: ev.text || known?.task || '' };
+      const patch: Partial<Helper> = { state: 'working', kind: ev.tool ?? known?.kind ?? 'subagent', task: ev.text || known?.task || ev.task || '' };
       return { ...s, helpers: setHelper(s, id, patch), lastHookAt: at, lastActivityAt: at };
     }
     case 'SubagentStop': {
-      const helpers = setHelper(s, id, { state: 'exited' }, ev.tool ?? 'subagent');
+      const helpers = track({ state: 'exited' }, ev.tool ?? 'subagent');
       if (own) return { ...s, helpers, pending: undefined, state: restored(s), lastHookAt: at, lastActivityAt: at };
       return { ...s, helpers, lastHookAt: at, lastActivityAt: at };
     }
     case 'PermissionRequest': {
-      const helpers = setHelper(s, id, { state: 'waiting_permission' });
+      const helpers = track({ state: 'waiting_permission' });
       if (s.pending && s.pending.source === 'hook') return { ...s, helpers, lastHookAt: at, lastActivityAt: at };
       const pending = { ...pendingFor(ev)!, helperId: id, parentState: settled(s.state) };
       return { ...s, helpers, state: 'waiting_permission', pending, lastHookAt: at, lastActivityAt: at };
@@ -131,7 +141,7 @@ function reduceHelper(s: Session, ev: SessionEvent & { helperId: string }): Sess
     case 'PostToolUseFailure': {
       const helper = s.helpers.find(h => h.id === id);
       const busy = ev.name === 'PreToolUse' && helper?.state === 'waiting_permission';
-      const helpers = busy ? s.helpers : setHelper(s, id, { state: ev.interrupt ? 'idle' : 'working' });
+      const helpers = busy ? s.helpers : track({ state: ev.interrupt ? 'idle' : 'working' });
       if (ev.name !== 'PreToolUse' && own && (ev.interrupt || clearedByToolRun(s.pending!, ev.tool))) {
         return { ...s, helpers, pending: undefined, state: restored(s), lastHookAt: at, lastActivityAt: at };
       }

@@ -354,13 +354,47 @@ describe('reduce: helpers (subagents)', () => {
     expect(next.helpers.map(h => [h.id, h.state])).toEqual([['a1', 'exited'], ['a2', 'working']]);
     expect(next.state).toBe('working');
   });
-  it('SubagentStop for an unknown helper records it as exited', () => {
-    const next = reduce(session('working'), ev('SubagentStop', { helperId: 'zz', tool: 'Explore' }));
+  it('SubagentStop for an unknown helper records it as exited (not Claude Code: see below)', () => {
+    const next = reduce(session('working', { tool: 'codex' }), ev('SubagentStop', { helperId: 'zz', tool: 'Explore' }));
     expect(next.helpers).toEqual([{ id: 'zz', kind: 'Explore', task: '', state: 'exited' }]);
   });
   it('a helper event without helperId is ignored', () => {
     const s = session('working');
     expect(reduce(s, ev('SubagentStart'))).toBe(s);
+  });
+  // Claude Code's internal agents (delegated observation) fire tool hooks with an agent_id but never SubagentStart,
+  // and not always SubagentStop: tracked from their tool runs, they would stay working forever.
+  it('Claude Code: tool runs of a helper never started are not tracked', () => {
+    for (const name of ['PreToolUse', 'PostToolUse', 'PostToolUseFailure'] as const) {
+      expect(reduce(session('working'), ev(name, { tool: 'Read', helperId: 'zz' })).helpers).toEqual([]);
+    }
+  });
+  it('Claude Code: SubagentStop of a helper never started is not tracked', () => {
+    expect(reduce(session('working'), ev('SubagentStop', { helperId: 'zz' })).helpers).toEqual([]);
+  });
+  it('Claude Code: a helper never started still routes its permission to the parent, untracked', () => {
+    const next = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'zz' }));
+    expect(next.pending).toMatchObject({ helperId: 'zz', text: 'npm test' });
+    expect(next.helpers).toEqual([]);
+    const done = reduce(next, ev('PostToolUse', { tool: 'Bash', helperId: 'zz', at: later(6000) }));
+    expect(done.pending).toBeUndefined();
+    expect(done.state).toBe('working');
+    expect(done.helpers).toEqual([]);
+  });
+  it('Claude Code: a started helper is still tracked through its tool runs', () => {
+    const s = reduce(session('working'), start());
+    expect(reduce(s, ev('PostToolUseFailure', { tool: 'Bash', helperId: 'a1', interrupt: true })).helpers[0]!.state).toBe('idle');
+  });
+  it('a helper event with a task names a helper that has none, never renames one', () => {
+    const s = reduce(session('working'), ev('SubagentStart', { helperId: 'a1', tool: 'general-purpose' }));
+    const named = reduce(s, ev('PreToolUse', { tool: 'Read', helperId: 'a1', task: 'Review task 3' }));
+    expect(named.helpers[0]).toMatchObject({ task: 'Review task 3', state: 'working' });
+    expect(reduce(named, ev('PostToolUse', { tool: 'Read', helperId: 'a1', task: 'other' })).helpers[0]!.task).toBe('Review task 3');
+    expect(reduce(s, ev('SubagentStop', { helperId: 'a1', task: 'Review task 3' })).helpers[0]).toMatchObject({ task: 'Review task 3', state: 'exited' });
+  });
+  it('Codex: tool runs of a helper never started are still tracked', () => {
+    expect(reduce(session('working', { tool: 'codex' }), ev('PreToolUse', { tool: 'Bash', helperId: 'zz' })).helpers)
+      .toEqual([{ id: 'zz', kind: 'subagent', task: '', state: 'working' }]);
   });
 });
 
@@ -409,7 +443,7 @@ describe('reduce: subagent isolation', () => {
     expect(next.pending).toEqual({ kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook', helperId: 'a1', parentState: 'working' });
   });
   it('the helper own PostToolUse clears its routed pending and the parent goes back to working', () => {
-    const s = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));
+    const s = reduce(reduce(session('working'), ev('SubagentStart', { helperId: 'a1', tool: 'Explore' })), ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));
     const next = reduce(s, ev('PostToolUse', { tool: 'Bash', helperId: 'a1', at: later(6000) }));
     expect(next.pending).toBeUndefined();
     expect(next.state).toBe('working');
@@ -433,7 +467,7 @@ describe('reduce: subagent isolation', () => {
     expect(next.pending).toEqual(s.pending);
   });
   it('SubagentStop clears that helper routed pending', () => {
-    const s = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));
+    const s = reduce(reduce(session('working'), ev('SubagentStart', { helperId: 'a1', tool: 'Explore' })), ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));
     const next = reduce(s, ev('SubagentStop', { helperId: 'a1', at: later(6000) }));
     expect(next.pending).toBeUndefined();
     expect(next.state).toBe('working');
@@ -456,7 +490,7 @@ describe('reduce: interrupted tool (Esc)', () => {
     expect(next.pending).toBeUndefined();
   });
   it('an interrupted helper tool sets the helper idle and clears its routed pending', () => {
-    const s = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));
+    const s = reduce(reduce(session('working'), ev('SubagentStart', { helperId: 'a1', tool: 'Explore' })), ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));
     const next = reduce(s, ev('PostToolUseFailure', { tool: 'Bash', helperId: 'a1', interrupt: true, at: later(6000) }));
     expect(next.pending).toBeUndefined();
     expect(next.helpers[0]!.state).toBe('idle');
