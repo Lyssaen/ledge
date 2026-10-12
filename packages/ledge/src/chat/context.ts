@@ -22,6 +22,7 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
   for (const s of input.sessions) {
     lines.push(`## ${s.name} (${s.tool}) — ${STATE[s.state]}`, `- id: ${s.id}`, `- topic: ${s.topic ?? '(none yet)'}`, `- folder: ${s.cwd}`,
       `- repository: ${s.repo ?? s.project}${s.branch ? `, branch ${s.branch}${s.worktree ? ' (linked worktree)' : ''}` : ''}`, `- started: ${s.startedAt}, last activity: ${s.lastActivityAt}`);
+    if (s.source === 'hook_only') lines.push('- read-only: Ledge cannot send to it');
     if (s.pending) lines.push(`- pending ${s.pending.kind}: ${s.pending.text}`);
     const live = s.helpers.filter(h => h.state !== 'exited');
     if (live.length) lines.push(`- subagents: ${live.map(h => h.task || h.kind).join('; ')}`);

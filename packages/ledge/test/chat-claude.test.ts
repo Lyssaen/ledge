@@ -15,6 +15,13 @@ describe('claudeArgs', () => {
     expect(PERSONA).toContain('seulement des commandes de lecture');
     expect(PERSONA).not.toContain('pas de commande,');
   });
+  it('the persona allows a relay block for one sure, writable session, and never sends anything itself', () => {
+    expect(PERSONA).toContain('```ledge-relay');
+    expect(PERSONA).toContain('{"session": "<id>", "text": "<l\'instruction, formulée pour l\'agent>"}');
+    expect(PERSONA).toContain('tu n\'envoies jamais rien toi-même à une session');
+    expect(PERSONA).toContain('pas en lecture seule');
+    expect(PERSONA).not.toContain('jamais d\'instruction envoyée à une session');
+  });
   it('runs headless, restricted, read-only, streaming, with the day session', () => {
     const a = claudeArgs(opts());
     expect(a.slice(0, 2)).toEqual(['-p', '--restricted']);
