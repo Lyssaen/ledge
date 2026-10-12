@@ -411,11 +411,15 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     setChatLaunching(null);
     if (loadOpenTab()) openTab(lastLaunched.id);
   }, [lastLaunched?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The card's own outcome frees it: the daemon answers a launch with a fresh chat.history (launchedId or error), so a new proposal object
-  // ends it. An unrelated id-less error must not, or the later session.launched finds no launch and the tab stays closed.
+  // The card's own outcome frees it: the daemon marks the turn (launchedId, or error) in a chat.history, then answers. Any other history frame
+  // or id-less error must not, or the later session.launched finds no launch and the tab stays closed. A retry failing with the same message
+  // leaves the history unchanged: its error, matching the turn's, frees it.
   const launchedFrom = useRef<ChatProposal | undefined>(undefined);
   const launchingProposal = chatLaunching ? chat.find(x => x.qid === chatLaunching)?.proposal : undefined;
-  useEffect(() => { if (chatLaunching && launchingProposal !== launchedFrom.current) setChatLaunching(null); }, [chatLaunching, launchingProposal]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (chatLaunching && (!launchingProposal || launchingProposal.launchedId || launchingProposal.error !== launchedFrom.current?.error)) setChatLaunching(null);
+  }, [chatLaunching, launchingProposal?.launchedId, launchingProposal?.error, !launchingProposal]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (chatLaunching && lastError && !lastError.id && lastError.message === launchingProposal?.error) setChatLaunching(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && chatLaunching) setChatLaunching(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   const sayCandidates: SayCandidate[] = [];
   if (ledgeUnread) sayCandidates.push({ id: LEDGE_ID, kind: 'ledge', seed: ledgeSaySeed });

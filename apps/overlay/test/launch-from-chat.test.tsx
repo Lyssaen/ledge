@@ -67,6 +67,21 @@ describe('launching from a chat card', () => {
     act(() => { daemonStore.setStatus('open'); });
     expect(within(card()).getByRole('button', { name: /Retry/ })).toBeEnabled();
   });
+  it('an unrelated history frame keeps the launch; a retry failing again with the same message is freed by its error', () => {
+    const qid = askAndPropose();
+    const turn = (p: ChatProposal) => ({ qid, question: 'q', askedAt: new Date().toISOString(), steps: [], answer: 'a', answeredAt: new Date().toISOString(), proposal: p });
+    fireEvent.click(within(card()).getByRole('button', { name: /Start the session/ }));
+    // Another client's question: a fresh history whose proposal is unchanged.
+    apply({ type: 'chat.history', turns: [turn({ ...proposal })] });
+    expect(within(card()).getByRole('button', { name: /Starting…/ })).toBeDisabled();
+    const failed = { ...proposal, error: 'tmux failed' };
+    apply({ type: 'chat.history', turns: [turn(failed)] }); apply({ type: 'error', message: 'tmux failed' });
+    fireEvent.click(within(card()).getByRole('button', { name: /Retry/ }));
+    apply({ type: 'chat.history', turns: [turn({ ...failed })] });
+    expect(within(card()).getByRole('button', { name: /Starting…/ })).toBeDisabled();
+    apply({ type: 'error', message: 'tmux failed' });
+    expect(within(card()).getByRole('button', { name: /Retry/ })).toBeEnabled();
+  });
   it('an unrelated id-less error does not stop the tab opening on the later session.launched', () => {
     askAndPropose();
     fireEvent.click(within(card()).getByRole('button', { name: /Start the session/ }));
