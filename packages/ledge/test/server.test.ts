@@ -542,7 +542,8 @@ describe('server', () => {
         async ask() {}, cancel() {}, async reset() {}, history: () => [],
         proposal: qid => (qid === 'q1' ? proposal : undefined),
         markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
-        markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); }
+        markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); },
+        relay: () => undefined, markRelay() {}, queuedRelays: () => []
       };
       return { chat, marks };
     }

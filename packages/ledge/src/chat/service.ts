@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, parseProposalBlock, type ChatProposal, type ChatTurn, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { extractProposal, parseProposalBlock, parseRelayBlock, type ChatProposal, type ChatRelay, type ChatTurn, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -20,6 +20,12 @@ export interface Chat {
   proposal(qid: string): ChatProposal | undefined;
   /** The card's launch went through (`launchedId`) or failed (`error`); every client gets the new history. */
   markLaunched(qid: string, id: string, emit: (m: ChatMessage) => void): void; markFailed(qid: string, message: string, emit: (m: ChatMessage) => void): void;
+  /** The turn's relay (spec 2026-10-12 relay §4), if the turn is still in the day's history. */
+  relay(qid: string): ChatRelay | undefined;
+  /** The card's state: queued, sent, failed, or `{}` back to proposed; every client gets the new history. */
+  markRelay(qid: string, patch: Pick<ChatRelay, 'status' | 'sentAt' | 'error'>, emit: (m: ChatMessage) => void): void;
+  /** Today's queued relays, oldest turn first. */
+  queuedRelays(): Array<{ qid: string; relay: ChatRelay }>;
 }
 export interface ChatDeps {
   store: Store; tmux: Pick<Tmux, 'capture'>; home: string;
@@ -91,6 +97,15 @@ export function createChat(deps: ChatDeps): Chat {
       return { cwd, project: basename(cwd), tool, ...(prompt ? { prompt } : {}) };
     } catch (e) { log(`chat ${qid}: proposal ignored: ${(e as Error).message}`); return undefined; }
   }
+  /** A relay block as a card: its session must be tracked, writable and still running now; otherwise no card and a log line. */
+  function relayFrom(raw: string, qid: string): ChatRelay | undefined {
+    const block = parseRelayBlock(raw);
+    if (!block) { log(`chat ${qid}: relay ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
+    const s = deps.store.get(block.session);
+    const why = !s ? 'unknown session' : s.source === 'hook_only' ? 'read-only session' : s.state === 'exited' ? 'session has exited' : null;
+    if (why) { log(`chat ${qid}: relay ignored: ${why} ${block.session}`); return undefined; }
+    return { id: s!.id, name: s!.name, tool: s!.tool, text: block.text };
+  }
   const turnOf = (qid: string) => turns.find(t => t.qid === qid);
 
   /** One run; the context folder (terminal tails, last replies) is removed once it ends, whatever the outcome. */
@@ -121,11 +136,13 @@ export function createChat(deps: ChatDeps): Chat {
     if (r.code !== 0) return { ok: false, message: r.code === null ? `${label} could not start: ${r.stderr.trim() || 'not found in PATH'}` : r.stderr.trim() || `${label} exited with code ${r.code}`, resumed: resume };
     if (resultError) return { ok: false, message: resultError, resumed: false };
     // The proposal block never reaches the reader: the card stands for it (spec 2026-10-12 §3-4).
-    const { text, raw } = extractProposal(answer);
-    const proposal = raw === null ? undefined : await proposalFrom(raw, tool, turn.qid);
+    const { text, kind, raw } = extractProposal(answer);
+    const proposal = kind === 'session' ? await proposalFrom(raw!, tool, turn.qid) : undefined;
+    const relay = kind === 'relay' ? relayFrom(raw!, turn.qid) : undefined;
     turn.answer = text; turn.answeredAt = now();
     if (proposal) turn.proposal = proposal;
-    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal } : {}) });
+    if (relay) turn.relay = relay;
+    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal } : {}), ...(relay ? { relay } : {}) });
     return { ok: true };
   }
 
@@ -142,6 +159,13 @@ export function createChat(deps: ChatDeps): Chat {
       t.proposal = { ...t.proposal, error: message };
       emit({ type: 'chat.history', turns });
     },
+    relay: qid => { rollDay(); return turnOf(qid)?.relay; },
+    markRelay(qid, patch, emit) {
+      const t = turnOf(qid); if (!t?.relay) return;
+      const { id, name, tool, text } = t.relay; t.relay = { id, name, tool, text, ...patch };
+      emit({ type: 'chat.history', turns });
+    },
+    queuedRelays() { rollDay(); return turns.flatMap(t => (t.relay?.status === 'queued' ? [{ qid: t.qid, relay: t.relay }] : [])); },
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
     async reset(emit) {
       // The overlay only offers it between questions; a reset racing a question is dropped rather than orphaning its turn.
