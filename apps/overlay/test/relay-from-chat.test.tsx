@@ -67,11 +67,13 @@ describe('relaying from a chat card', () => {
     expect(within(card()).getByRole('button', { name: /Send/ })).toBeEnabled();
   });
 
-  it('never in flight together with a launch: an id-less error frees only the one that asked', () => {
+  it('never in flight together with a launch: the + form cannot start a session while a relay is in flight', () => {
     askAndRelay();
     fireEvent.click(within(card()).getByRole('button', { name: /Send/ }));
-    // The + form refuses to launch while a relay is in flight, so the next error can only be the relay's.
     fireEvent.keyDown(window, { key: 'n', ctrlKey: true, altKey: true });
+    expect(mode()).toBe('launch');
+    fireEvent.change(document.querySelector('[data-launch-cwd]')!, { target: { value: '/home/u/ledge' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Start/ }));
     expect(sent.filter(m => m.type === 'session.launch')).toEqual([]);
   });
 });
