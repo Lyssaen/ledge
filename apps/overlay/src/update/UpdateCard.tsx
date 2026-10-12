@@ -9,6 +9,8 @@ export interface UpdateCardProps {
   view: Exclude<CardView, { kind: 'hidden' }>;
   /** Live sessions, for the « they keep running » line. */
   sessions: number;
+  /** The daemon socket is closed: the buttons that need it are disabled. */
+  offline?: boolean; theme?: 'dark' | 'light';
   onUpdate: () => void; onLater: () => void; onRetry: () => void; onAck: () => void; onNotes: () => void;
 }
 
@@ -49,7 +51,7 @@ function Dot({ status }: { status: 'done' | 'run' | 'todo' }) {
 }
 
 /** The update, as a card between the list's header and its rows (mockup docs/mockups/ledge-update.html). */
-export function UpdateCard({ view, sessions, onUpdate, onLater, onRetry, onAck, onNotes }: UpdateCardProps) {
+export function UpdateCard({ view, sessions, offline = false, theme = 'dark', onUpdate, onLater, onRetry, onAck, onNotes }: UpdateCardProps) {
   const { t } = useI18n();
   const u = t.update;
   let title: string; let subtitle: string | null = null; let badge: string; let tone: Tone;
@@ -66,7 +68,7 @@ export function UpdateCard({ view, sessions, onUpdate, onLater, onRetry, onAck, 
     <div role={view.kind === 'failed' ? 'alert' : view.kind === 'running' ? 'status' : undefined} data-update-card={view.kind}
       style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: `${NOTICE_GAP}px 12px 0`, padding: 12, boxSizing: 'border-box', borderRadius: 'var(--radius-lg)', background: 'var(--well)', border: `1px solid ${border}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-        <span style={{ display: 'inline-flex', flexShrink: 0, lineHeight: 0 }}><ResidentMascot size={28} theme="dark" paused frozen /></span>
+        <span style={{ display: 'inline-flex', flexShrink: 0, lineHeight: 0 }}><ResidentMascot size={28} theme={theme} paused frozen /></span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, flex: 1 }}>
           <strong style={{ fontSize: 14, lineHeight: '18px', fontWeight: 600 }}>{title}</strong>
           {subtitle && <span style={sub}>{subtitle}</span>}
@@ -79,7 +81,7 @@ export function UpdateCard({ view, sessions, onUpdate, onLater, onRetry, onAck, 
           {view.notes.length > 0 && <ul style={{ margin: 0, padding: '0 0 0 16px', display: 'flex', flexDirection: 'column', gap: 2, ...sub, lineHeight: '17px' }}>{view.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
           <span style={{ ...sub, fontSize: 11, lineHeight: '15px' }}>{u.keepRunning(sessions)}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Button variant="primary" size="sm" onClick={onUpdate} style={{ height: 28, padding: '0 12px', fontSize: 12 }}>{u.update}</Button>
+            <Button variant="primary" size="sm" disabled={offline} onClick={onUpdate} style={{ height: 28, padding: '0 12px', fontSize: 12 }}>{u.update}</Button>
             <Button variant="ghost" size="sm" onClick={onLater} style={{ height: 28, padding: '0 8px', fontSize: 12 }}>{u.later}</Button>
             <span style={{ flexGrow: 1 }} />
             <Button variant="ghost" size="sm" onClick={onNotes} style={{ height: 28, padding: '0 8px', fontSize: 12, textDecoration: 'underline', textUnderlineOffset: 3 }}>{u.notes}</Button>
@@ -91,7 +93,7 @@ export function UpdateCard({ view, sessions, onUpdate, onLater, onRetry, onAck, 
         <>
           {command && <><span style={sub}>{u.manualHint}</span><Command text={command} /></>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Button variant="primary" size="sm" disabled={!view.canInstallApp} onClick={onUpdate} style={{ height: 28, padding: '0 12px', fontSize: 12 }}>{u.manualApp}</Button>
+            <Button variant="primary" size="sm" disabled={offline || !view.canInstallApp} onClick={onUpdate} style={{ height: 28, padding: '0 12px', fontSize: 12 }}>{u.manualApp}</Button>
             <Button variant="ghost" size="sm" onClick={onLater} style={{ height: 28, padding: '0 8px', fontSize: 12 }}>{u.later}</Button>
           </div>
           {!view.canInstallApp && <span style={{ ...sub, fontSize: 11, lineHeight: '15px' }}>{u.manualWait(view.version)}</span>}
@@ -121,8 +123,7 @@ export function UpdateCard({ view, sessions, onUpdate, onLater, onRetry, onAck, 
           {command && <Command text={command} />}
           {view.detail && <span className="mono" title={u.log} style={{ fontSize: 11, lineHeight: '15px', color: 'var(--danger-text)', wordBreak: 'break-word' }}>{view.detail}</span>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Button variant="outline" size="sm" onClick={onRetry} style={{ height: 28, padding: '0 12px', fontSize: 12 }}>{u.retry}</Button>
-            <Button variant="ghost" size="sm" onClick={onLater} style={{ height: 28, padding: '0 8px', fontSize: 12 }}>{u.later}</Button>
+            <Button variant="outline" size="sm" disabled={offline} onClick={onRetry} style={{ height: 28, padding: '0 12px', fontSize: 12 }}>{u.retry}</Button>
           </div>
         </>
       )}

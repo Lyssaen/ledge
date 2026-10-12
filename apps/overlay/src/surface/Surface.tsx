@@ -379,7 +379,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const updateCard = update && update.card.kind !== 'hidden' ? update.card : null;
   const updateRef = useRef<HTMLDivElement>(null);
   const updateH = useMeasuredHeight(updateRef, st.mode === 'list' && !!updateCard, ps);
-  const updateExtraH = updateCard ? NOTICE_GAP + (updateH || 120) : 0;
+  // The measured box is the wrapper, which carries the card's top margin already.
+  const updateExtraH = updateCard ? updateH || NOTICE_GAP + 120 : 0;
   // The « up to date » pip only stays six seconds.
   const [okGone, setOkGone] = useState(false);
   const okPip = update?.pip === 'ok';
@@ -606,7 +607,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
             <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               onDismiss={id => { if (!unreachable) send({ type: 'session.dismiss', id }); }} offline={unreachable}
               onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} noticeRef={noticeRef} gearPip={!!update?.gear} gearLabel={gearLabel} updateRef={updateRef}
-              update={updateCard ? <UpdateCard view={updateCard} sessions={sessions.length} onUpdate={update!.start} onLater={update!.later} onRetry={update!.retry} onAck={update!.ackUpdated} onNotes={() => openUrl('https://github.com/Paradow-dev/ledge/releases/latest')} /> : null} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
+              update={updateCard ? <UpdateCard view={updateCard} sessions={sessions.length} offline={unreachable} theme={theme} onUpdate={update!.start} onLater={update!.later} onRetry={update!.retry} onAck={update!.ackUpdated} onNotes={() => openUrl('https://github.com/Paradow-dev/ledge/releases/latest')} /> : null} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
               onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>

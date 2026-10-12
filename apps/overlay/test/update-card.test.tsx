@@ -44,4 +44,24 @@ describe('UpdateCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Notes complètes' }));
     expect(onNotes).toHaveBeenCalledOnce();
   });
+  it('a failed card has no Later button: dismiss does not hide a failure', () => {
+    r(<UpdateCard view={{ kind: 'failed', reason: 'npm-failed' }} sessions={0} onUpdate={noop} onLater={noop} onRetry={noop} onAck={noop} onNotes={noop} />);
+    expect(screen.queryByRole('button', { name: 'Plus tard' })).toBeNull();
+  });
+  it('offline disables update, retry and the app button; online enables them', () => {
+    const views: Array<React.ComponentProps<typeof UpdateCard>['view']> = [
+      { kind: 'available', version: '0.3.0', current: '0.2.2', notes: [] },
+      { kind: 'failed', reason: 'npm-failed' },
+      { kind: 'manual', version: '0.3.0', command: null, canInstallApp: true }
+    ];
+    const names = ['Mettre à jour', 'Réessayer', 'Mettre à jour l’application'];
+    views.forEach((view, i) => {
+      const off = r(<UpdateCard view={view} sessions={0} offline onUpdate={noop} onLater={noop} onRetry={noop} onAck={noop} onNotes={noop} />);
+      expect((screen.getByRole('button', { name: names[i] }) as HTMLButtonElement).disabled).toBe(true);
+      off.unmount();
+      const on = r(<UpdateCard view={view} sessions={0} onUpdate={noop} onLater={noop} onRetry={noop} onAck={noop} onNotes={noop} />);
+      expect((screen.getByRole('button', { name: names[i] }) as HTMLButtonElement).disabled).toBe(false);
+      on.unmount();
+    });
+  });
 });
