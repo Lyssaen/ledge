@@ -15,6 +15,8 @@ export const SessionEventSchema = z.object({
   kind: z.enum(['question', 'permission', 'plan', 'diff']).optional(),
   exitCode: z.number().int().nullable().optional(),
   helperId: z.string().optional(),
+  /** The helper's description, once known (Claude Code: its `.meta.json`, written after SubagentStart). */
+  task: z.string().optional(),
   /** PostToolUseFailure: the user interrupted the turn (Esc); Claude then waits for input with no Stop. */
   interrupt: z.boolean().optional()
 });

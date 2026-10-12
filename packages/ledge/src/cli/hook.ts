@@ -3,7 +3,7 @@ import { connect } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
 import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
 
 type Payload = Record<string, unknown>;
@@ -81,7 +81,22 @@ export function mapHook(agent: Tool, eventName: string, payload: unknown, at: st
   if (!id) return null;
   const cwd = str(p.cwd) || undefined;
   const event = mapEvent(eventName, p, at, launched);
-  return event ? { id, event, agent, ...(cwd ? { cwd } : {}) } : null;
+  if (!event) return null;
+  const task = agent === 'claude' && event.helperId ? helperDescription(str(p.transcript_path), event.helperId) : undefined;
+  return { id, event: task ? { ...event, task } : event, agent, ...(cwd ? { cwd } : {}) };
+}
+
+/**
+ * The first line of a Claude Code subagent's description, from the `.meta.json` beside the session transcript
+ * (`<session>/subagents/agent-<id>.meta.json`). SubagentStart carries none and the file is written just after it, so
+ * it is read on each of the subagent's events; its internal agents have none.
+ */
+function helperDescription(transcriptPath: string | undefined, agentId: string): string | undefined {
+  if (!transcriptPath?.endsWith('.jsonl') || !/^[\w-]+$/.test(agentId)) return undefined;
+  try {
+    const meta = JSON.parse(readFileSync(join(transcriptPath.slice(0, -'.jsonl'.length), 'subagents', `agent-${agentId}.meta.json`), 'utf8')) as Payload;
+    return str(meta.description)?.split('\n')[0]?.trim() || undefined;
+  } catch { return undefined; }
 }
 
 function mapEvent(eventName: string, p: Payload, at: string, launched: boolean): SessionEvent | null {

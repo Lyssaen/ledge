@@ -100,6 +100,17 @@ describe('mapClaudeHook', () => {
     const payload = { ...common, hook_event_name: 'SubagentStop', stop_hook_active: false, agent_id: 'a7c2e', agent_transcript_path: '/t/a7c2e.jsonl', agent_type: 'Explore', last_assistant_message: 'done' };
     expect(mapClaudeHook('SubagentStop', payload, at)?.event).toEqual({ name: 'SubagentStop', at, source: 'hook', helperId: 'a7c2e', tool: 'Explore' });
   });
+  it('a subagent event carries its description from its .meta.json, written once the subagent runs', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ledge-meta-'));
+    mkdirSync(join(dir, 's', 'subagents'), { recursive: true });
+    writeFileSync(join(dir, 's', 'subagents', 'agent-a1.meta.json'), JSON.stringify({ agentType: 'general-purpose', description: 'Review task 3\nmore' }));
+    const payload = { ...common, transcript_path: join(dir, 's.jsonl'), agent_id: 'a1', tool_name: 'Read', tool_input: { file_path: '/w/a.ts' } };
+    expect(mapClaudeHook('PreToolUse', payload, at)?.event.task).toBe('Review task 3');
+    expect(mapClaudeHook('PreToolUse', { ...payload, agent_id: 'a2' }, at)?.event).not.toHaveProperty('task');
+    expect(mapClaudeHook('PreToolUse', { ...payload, agent_id: undefined }, at)?.event).not.toHaveProperty('task');
+    writeFileSync(join(dir, 's', 'subagents', 'agent-a1.meta.json'), '{"agentType":"Explore"}');
+    expect(mapClaudeHook('PreToolUse', payload, at)?.event).not.toHaveProperty('task');
+  });
   it('drops SubagentStart/SubagentStop without agent_id', () => {
     expect(mapClaudeHook('SubagentStart', { ...common, agent_type: 'Explore' }, at)).toBeNull();
     expect(mapClaudeHook('SubagentStop', { ...common }, at)).toBeNull();
