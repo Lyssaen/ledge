@@ -138,7 +138,8 @@ export function SettingsView(p: SettingsViewProps) {
   const choice = p.monitor ?? null;
   const chosen = resolveMonitor(choice, monitors);
   const chosenValue = choice !== null && !monitors.some(m => m.id === choice) ? choice : chosen && !chosen.primary ? chosen.id : 'primary';
-  const [tab, setTab] = useState<SettingsTab>(loadSettingsTab);
+  const [storedTab, setTab] = useState<SettingsTab>(loadSettingsTab);
+  const tab: SettingsTab = storedTab === 'about' && !p.about ? 'display' : storedTab;
   const chooseTab = (next: SettingsTab) => { setTab(next); saveSettingsTab(next); };
   const tabLabel = { display: t.settings.tabDisplay, notifications: t.settings.tabNotifications, sounds: t.settings.tabSounds, about: t.settings.tabAbout } as const;
   const about = p.about;

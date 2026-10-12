@@ -147,6 +147,12 @@ describe('<SettingsView> About tab', () => {
     view();
     expect(screen.queryByRole('tab', { name: 'About' })).toBeNull();
   });
+  it('falls back to Display when About is stored but unavailable', () => {
+    localStorage.setItem('ledge.settings.tab', 'about');
+    view();
+    expect(screen.getByRole('tab', { name: 'Display' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument();
+  });
   it('shows both versions, flags a mismatch and checks on demand', () => {
     localStorage.setItem('ledge.settings.tab', 'about');
     const onCheck = vi.fn(), onAuto = vi.fn();
