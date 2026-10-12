@@ -18,7 +18,7 @@ describe('the resident Ledge mascot', () => {
   });
 
   it('remains visible ahead of session bots, even when one is asking', () => {
-    const bots = [{ id: 'a', name: 'Otto', tool: 'claude' as const, state: 'approval' as const, pose: 1 as const, pending: true, tip: 'needs approval' }];
+    const bots = [{ id: 'a', name: 'Otto', tool: 'claude' as const, state: 'approval' as const, pose: 1 as const, pending: true }];
     const geo = layout({ bots: [{ id: 'a', pending: true }], mode: 'handle', screenH: 1080 });
     const { container } = render(<Handle bots={bots} slots={geo.slots} big={20} visible hoverId={null} onHover={() => {}} onOpen={() => {}} onOpenHome={() => {}} />);
     const buttons = [...container.querySelectorAll('[data-layer="handle"] button')];

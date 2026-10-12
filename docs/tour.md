@@ -13,10 +13,6 @@ Ledge's own mascot sits on top of the handle, grey with a peach antenna light, t
   <img src="screens/handle-light.png" alt="The same handle in light theme" height="151">
 </p>
 
-Hovering a mascot tells you who it is and what it waits for.
-
-<img src="screens/handle-tooltip-dark.png" alt="Tooltip: Otto, waits for your approval, pnpm test --filter overlay, click to open" width="504">
-
 **The handle lives.** A working bot hops every 3.6 to 4.4 s, 2 px high in the handle, so you can tell a bot that works from one that waits without opening anything. Under reduced motion the antenna light pulses instead.
 
 ## The bubble

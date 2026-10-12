@@ -2,7 +2,7 @@
  * Two UI scales, set apart in Settings: the handle on the screen edge, and the windows that open from it (bubble, list,
  * session, settings, help, coachmark). Every size in the app is a CSS px designed for a 1080p work area; a scale
  * multiplies its own layer only (a CSS `zoom` on that layer, its geometry multiplied in `surface/geometry.ts`), so the
- * page itself is never zoomed and the native frame and edge bands are plain logical px.
+ * page itself is never zoomed and the native frame is plain logical px.
  */
 export type UiScale = 'auto' | 1 | 1.25 | 1.5 | 2;
 export type ScaleTarget = 'handle' | 'panel';

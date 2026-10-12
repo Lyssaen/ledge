@@ -42,7 +42,7 @@ describe('frameOf', () => {
   });
 
   it('extends to the extras beside the surface and stays inside the work area', () => {
-    // A wide tooltip beside the handle widens the frame; it does not move the top.
+    // A wide extra beside the handle widens the frame; it does not move the top.
     expect(frameOf({ top: 500, w: 28, h: 60 }, [{ left: 36, top: 515, w: 420, h: 30 }], 1080).w).toBe(36 + 420 + FRAME_PAD.right);
     // A coachmark below the list extends the frame down; one above it extends it up.
     const below = frameOf({ top: 300, w: 380, h: 200 }, [{ left: 44, top: 460, w: 300, h: 136 }], 1080);
@@ -342,13 +342,6 @@ describe('<Surface> under Tauri', () => {
     expect(surface()).toHaveStyle({ width: '380px' });
     const listTop = parseFloat(surface().style.top), listH = parseFloat(surface().style.height);
     expect(Math.abs(listTop + listH / 2 - 1080)).toBeLessThanOrEqual(1);
-  });
-
-  it('the hovered bot tooltip widens the frame beside the handle', async () => {
-    await mount({ tauri: true });
-    await waitFor(() => expect(lastFrame().width).toBe(28 + FRAME_PAD.right));
-    fireEvent.mouseEnter(screen.getByRole('button', { name: /Pim/ }));
-    await waitFor(() => expect(lastFrame().width).toBe(36 + 324 + FRAME_PAD.right));
   });
 
   it('the native cursor event moves Ledge’s gaze outside the narrow webview, and null recentres it', async () => {

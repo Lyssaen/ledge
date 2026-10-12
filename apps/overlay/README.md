@@ -49,19 +49,18 @@ The Rust side compiles on Windows and its unit tests pass (`Cargo.lock` is commi
 3. `pnpm tauri dev` with the daemon running in WSL, then check:
    - the Ledge icon is in the notification area (tray): its tooltip and the first, greyed line of its menu read `Ledge 0.1.0 (dev)` under `tauri dev` and `Ledge 0.1.0` once installed; `Quitter Ledge` (`Quit Ledge` in English, it follows Settings > Language live) closes the overlay;
    - borderless, transparent, no shadow, not in the taskbar, always on top; handle vertically centered on the left edge of the primary work area, nothing drawn twice or offset; also at 125% and 150% scaling and with the taskbar on the left;
-   - hovering a bot shows the full tooltip, even for a long pending text;
-   - cursor against the left edge above or below the handle opens the list after about 180 ms; leaving earlier does nothing; the edge does nothing while the list or a session is open, or the daemon is down;
-   - Ctrl+Alt+L from another app opens the list and gives the overlay focus (j/k/digits/y/n work at once); pressing it again closes; an ask arriving while you type elsewhere shows the bubble without stealing focus; Ctrl+Alt+L while a bubble shows opens the list;
+   - resting the cursor on the handle opens the list after about 180 ms; leaving earlier does nothing; a list opened this way folds once the pointer leaves it, unless a field inside is being typed in; a click anywhere outside an open panel folds it; hovering does nothing while the daemon is down;
+   - Ctrl+Alt+L from another app opens the list and gives the overlay focus (j/k/y/n work at once); pressing it again closes; an ask arriving while you type elsewhere shows the bubble without stealing focus; Ctrl+Alt+L while a bubble shows opens the list; Ctrl+Alt+N from anywhere opens the new-session form with its field focused, and again folds it;
    - with a terminal focused, Ctrl+Alt+L, then Y, then Esc: typing reaches the terminal again at once (focus is handed back, no click needed);
    - the window grows with the surface and shrinks only after the shrink animation; the coachmark (first three keyboard opens) is fully visible;
    - with the daemon stopped, "daemon injoignable, nouvelle tentative" ("daemon unreachable, retrying" in English) is fully visible beside the handle;
    - in a session, `o` or the terminal button brings Windows Terminal forward;
-   - open the list with Ctrl+Alt+L while the cursor rests on the left edge, then press Esc: it must not reopen until the cursor leaves the edge and comes back;
+   - open the list with Ctrl+Alt+L while the cursor rests on the handle, then press Esc: it must not reopen while the cursor rests there;
    - open and close transitions show no flash of misplaced content;
    - clicks beside the surface reach the app underneath;
    - sizes on the 4K screen: Settings shows Handle size `Auto (200%)` and Window size `Auto (100%)` at 100% Windows scaling (see Sizes below for the rules), the handle and bots are clearly readable, the handle stays centered on the left edge, and the list opens at its base 380 px;
-   - switching each size between Auto, 100%, 125%, 150% and 200% resizes only its own part, live, with nothing clipped or offset: the handle size moves the handle, its bots, the tooltip and the edge bands; the window size moves the bubble, list, session, settings, help and coachmark; the window follows the surface, the edge bands above and below the handle still open the list, clicks beside the surface still reach the app underneath;
-   - with two screens: Settings shows a Screen group (`Primary`, `Screen 2`, in the OS order); choosing `Screen 2` moves the handle to that screen's left edge at once, centered in its work area, the edge bands and the tooltip follow, the list opens there; back to `Primary` returns it; the choice survives a restart (`ledge.monitor`); unplugging the chosen screen brings the handle back to the primary and Settings shows the choice as `Unplugged` until the screen returns; a screen plugged in after the start appears in the group the next time Settings opens.
+   - switching each size between Auto, 100%, 125%, 150% and 200% resizes only its own part, live, with nothing clipped or offset: the handle size moves the handle and its bots; the window size moves the bubble, list, session, settings, help and coachmark; the window follows the surface, hovering the handle still opens the list, clicks beside the surface still reach the app underneath;
+   - with two screens: Settings shows a Screen group (`Primary`, `Screen 2`, in the OS order); choosing `Screen 2` moves the handle to that screen's left edge at once, centered in its work area, the list opens there; back to `Primary` returns it; the choice survives a restart (`ledge.monitor`); unplugging the chosen screen brings the handle back to the primary and Settings shows the choice as `Unplugged` until the screen returns; a screen plugged in after the start appears in the group the next time Settings opens.
 4. `pnpm tauri build`: NSIS installer with the Ledge mascot as its icon.
 5. Install it, then check launch at login (see below): the first start turns it on, Settings > Display shows `Lancer au démarrage` checked, turning it off and signing out then in leaves Ledge closed, turning it on again brings it back at the next sign-in; uninstalling removes the `Ledge` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
 
@@ -79,11 +78,12 @@ pnpm tauri icon src-tauri/icons/ledge-app.svg
 | --- | --- |
 | Ctrl+Alt+L | open / close the list (global); over a bubble it opens the list |
 | J K (or arrows) | move in the list |
-| 1-9 | jump to a row in the list; choose an option inside a question card |
+| 1-9 | choose an option inside a question card |
 | Enter | open the focused row |
 | / | focus the Ask Ledge field (list only) |
 | Y N | approve / deny a permission ask; on a question, a diff or a plan in the list they open it instead (a diff or plan is decided from its open session, after review) |
-| Alt+Right | next ask |
+| Alt+Left / Alt+Right | previous / next session, wrapping, an ask or not (focused in the list, opened from a session) |
+| Ctrl+Alt+N | open / close the new-session form (global) |
 | R | reply |
 | O | open the terminal tab |
 | D | do not disturb |
@@ -103,7 +103,7 @@ An installed Ledge starts with Windows: `tauri-plugin-autostart` writes a `Ledge
 
 ## Screen
 
-The handle sits on the left edge of one screen: the primary by default, or the one chosen in Settings > Screen. The shell lists the monitors (`list_monitors`) and moves the window to the chosen one (`set_monitor`); frames and edge bands are then in that screen's work-area coordinates. The choice is a monitor name (`\\.\DISPLAY2` on Windows); a chosen screen that is unplugged falls back to the primary until it comes back, without losing the setting.
+The handle sits on the left edge of one screen: the primary by default, or the one chosen in Settings > Screen. The shell lists the monitors (`list_monitors`) and moves the window to the chosen one (`set_monitor`); frames are then in that screen's work-area coordinates. The choice is a monitor name (`\\.\DISPLAY2` on Windows); a chosen screen that is unplugged falls back to the primary until it comes back, without losing the setting.
 
 ## Language
 
@@ -113,10 +113,10 @@ The overlay speaks French (the default) and English. Settings > Langue / Languag
 
 Every size is designed in CSS px for a 1080p work area. Settings has two sizes, each Auto, 100%, 125%, 150% or 200%, remembered separately:
 
-- **Handle size** (`ledge.handleScale`): the resting handle on the screen edge, its bots, gaps and tick, the tooltip, the "daemon unreachable" line and the edge bands. Auto is the primary work area's height in logical px (after Windows scaling) divided by 1080, to the nearest quarter, between 100% and 200%: 1080 px is 100%, 1440 px 125%, 1600 px 150%, 2160 px (4K at 100% Windows scaling) 200%.
+- **Handle size** (`ledge.handleScale`): the resting handle on the screen edge, its bots, gaps and tick, and the "daemon unreachable" line. Auto is the primary work area's height in logical px (after Windows scaling) divided by 1080, to the nearest quarter, between 100% and 200%: 1080 px is 100%, 1440 px 125%, 1600 px 150%, 2160 px (4K at 100% Windows scaling) 200%.
 - **Window size** (`ledge.panelScale`): the bubble, the list, a session, the chat, settings, help and the coachmark. Auto is the height divided by 2160, to the nearest quarter, between 100% and 200%: 100% up to a 4K work area at 100% Windows scaling, larger only on taller work areas. The list is 380 px; a session and the chat are 480 px so the header actions keep their hit area; reading the raw last reply widens the session to 560 px.
 
-Changing one never changes the other. A value saved by an older version under `ledge.uiScale` is copied to both once. The page itself is never zoomed: the geometry (`scaledLayout` in `src/surface/geometry.ts`) lays the handle out in a screen of height / handle scale and the opened views in height / window scale, then multiplies each by its scale; each layer carries a CSS `zoom` of its own scale. Frames and edge bands sent to the shell are therefore plain logical px (the Rust side is unchanged). The OS reduced-motion preference always wins. While the daemon is unreachable, and for sessions started without Ledge (read only), every send and decision path is disabled, keys included; the terminal tab button and O still bring the terminal forward.
+Changing one never changes the other. A value saved by an older version under `ledge.uiScale` is copied to both once. The page itself is never zoomed: the geometry (`scaledLayout` in `src/surface/geometry.ts`) lays the handle out in a screen of height / handle scale and the opened views in height / window scale, then multiplies each by its scale; each layer carries a CSS `zoom` of its own scale. Frames sent to the shell are therefore plain logical px (the Rust side is unchanged). The OS reduced-motion preference always wins. While the daemon is unreachable, and for sessions started without Ledge (read only), every send and decision path is disabled, keys included; the terminal tab button and O still bring the terminal forward.
 
 ## Your turn: the last reply read like a plan
 

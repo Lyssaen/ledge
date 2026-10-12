@@ -5,7 +5,7 @@ export interface Box { left: number; top: number; w: number; h: number }
 /** Room around the drawn boxes for the overlay shadow (it falls mostly downward). */
 export const FRAME_PAD = { top: 8, right: 16, bottom: 24 } as const;
 
-/** The native window: the bounding box of the surface and every visible extra (tooltip, status line, coachmark),
+/** The native window: the bounding box of the surface and every visible extra (status line, unread say, coachmark),
  *  from the left screen edge, padded for the shadow and clamped to the work area. Integer px for the shell. */
 export function frameOf(surface: { top: number; w: number; h: number }, extras: Box[], screenH: number): Frame {
   const boxes: Box[] = [{ left: 0, top: surface.top, w: surface.w, h: surface.h }, ...extras];

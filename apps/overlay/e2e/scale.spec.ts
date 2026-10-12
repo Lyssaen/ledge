@@ -29,18 +29,6 @@ test.describe('4K work area', () => {
     await expect.poll(async () => (await box(layer(page, 'list').locator('[data-row]').first())).height).toBeCloseTo(58, 0);
   });
 
-  test('the handle tooltip reads at the windows size, beside the 2x handle', async ({ page }) => {
-    await fakeDaemon(page, [session('a'), session('b', { name: 'Pim', project: 'speos-api' })]);
-    await ready(page, 2);
-    await layer(page, 'handle').locator('button:not([data-resident])').nth(1).hover();
-    const tip = page.getByRole('tooltip');
-    await expect(tip).toHaveCSS('opacity', '1');
-    const t = await box(tip);
-    expect(t.height).toBeLessThan(40); // 30 px at 100 %, not 60 px at the handle's 200 %
-    expect(t.x).toBeGreaterThanOrEqual(56); // clear of the 56 px handle
-    expect(t.x).toBeLessThan(80);
-  });
-
   test('hover works on the 2x handle; the list stays open under a resting pointer when it changes shape', async ({ page }) => {
     const d = await fakeDaemon(page, team());
     await ready(page, 3);

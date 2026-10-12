@@ -14,7 +14,7 @@ test.describe('French by default', () => {
     await expect(list.getByText('4 sessions · 2 demandes pour vous')).toBeVisible();
     for (const name of ['Ne pas déranger', 'Réglages', 'Replier']) await expect(list.getByRole('button', { name, exact: true }).first()).toBeVisible();
     for (const word of ['Votre accord', 'Une question', 'Au travail', 'Disponible']) await expect(list.getByText(word, { exact: true })).toBeVisible();
-    await expect(list.getByText('Otto · Claude Code · 18 min')).toBeVisible();
+    await expect(list.locator('[data-row]', { hasText: /Otto\s*·\s*18 min/ }).first()).toBeVisible();
     await expect(list.locator('kbd', { hasText: 'Ctrl Alt L' })).toBeVisible();
     await list.getByRole('button', { name: 'harness-assistant, Otto, ouvrir' }).click();
     await expectMode(page, 'session');
@@ -65,7 +65,7 @@ test.describe('Language setting', () => {
     await expectMode(page, 'list');
     await expect(layer(page, 'list').getByText('4 sessions · 2 waiting for you')).toBeVisible();
     await expect(layer(page, 'list').getByText('Running', { exact: true })).toBeVisible();
-    await expect(layer(page, 'list').getByText('Otto · Claude Code · 18m')).toBeVisible();
+    await expect(layer(page, 'list').locator('[data-row]', { hasText: /Otto\s*·\s*18m/ }).first()).toBeVisible();
     // Remembered across a reload.
     await page.reload();
     await expect(layer(page, 'handle').getByRole('button', { name: /^Otto needs your approval, open/ })).toBeAttached();

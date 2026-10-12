@@ -9,7 +9,7 @@ import type { Slot } from './geometry';
 import { slotSizes } from './geometry';
 import { useI18n } from '../i18n/lang';
 
-export interface HandleBot { id: string; name: string; tool: Tool; state: BotState; pose: 1 | 2 | 3; pending: boolean; lifted?: boolean; held?: boolean; readOnly?: boolean; tip: string }
+export interface HandleBot { id: string; name: string; tool: Tool; state: BotState; pose: 1 | 2 | 3; pending: boolean; lifted?: boolean; held?: boolean; readOnly?: boolean }
 
 export function Handle({ bots, slots, big, visible, hoverId, onHover, onOpen, onOpenHome, top = 0, scale = 1, pointer = null, dnd = false, unread = false, sayId = null, residentSignal, theme = 'dark', frozen = false, reducedMotion }: { bots: HandleBot[]; slots: Slot[]; big: number; visible: boolean; hoverId: string | null; onHover: (id: string | null) => void; onOpen: (id: string) => void; onOpenHome?: () => void; top?: number; scale?: number; pointer?: { x: number; y: number } | null; dnd?: boolean; unread?: boolean; sayId?: string | null; residentSignal?: { key: number; kind: ResidentGesture }; theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean }) {
   const { small, gap } = slotSizes(bots.length);

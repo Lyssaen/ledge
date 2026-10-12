@@ -31,7 +31,6 @@ const fr = {
   /** The handle's bot buttons: "<Name> <label>, open". */
   handleLabel: { starting: 'démarre', idle: 'disponible', approval: 'attend votre accord', question: 'a une question', working: 'au travail', done: 'terminée', error: 'en erreur', readonly: 'en lecture seule' } as Record<BotState, string>,
   open: 'ouvrir',
-  clickToOpen: 'cliquer pour ouvrir',
   hint: { startedWithoutLedge: 'lancée sans Ledge', exited: (code: string) => `terminée (code ${code})`, error: 'erreur', available: 'disponible', running: 'au travail', helpersRunning: (n: number) => `disponible · ${n} sous-agent${n > 1 ? 's' : ''} au travail` },
   offline: 'Hors connexion : reconnexion au daemon',
   readOnlyBlocked: 'Lecture seule : lancée sans Ledge, répondez dans son terminal',
@@ -208,7 +207,6 @@ const en: Messages = {
   botNotLive: 'Not live',
   handleLabel: { starting: 'starting', idle: 'available', approval: 'needs your approval', question: 'has a question', working: 'working', done: 'done', error: 'error', readonly: 'read only' },
   open: 'open',
-  clickToOpen: 'click to open',
   hint: { startedWithoutLedge: 'started without ledge', exited: (code: string) => `exited ${code}`, error: 'error', available: 'available', running: 'running', helpersRunning: (n: number) => `available · ${n} subagent${n > 1 ? 's' : ''} working` },
   offline: 'Offline: reconnecting to the daemon',
   readOnlyBlocked: 'Read only: started without Ledge, answer in its terminal',

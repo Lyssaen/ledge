@@ -5,9 +5,9 @@ import { Badge } from '../src/ui/Badge';
 import { layout } from '../src/surface/geometry';
 
 const bots = [
-  { id: 'a', name: 'Otto', tool: 'claude' as const, state: 'approval' as const, pose: 1 as const, pending: true, tip: 'needs your approval · npm test' },
-  { id: 'b', name: 'Pim', tool: 'codex' as const, state: 'working' as const, pose: 2 as const, pending: false, tip: 'reading migrations' },
-  { id: 'c', name: 'Lu', tool: 'codex' as const, state: 'done' as const, pose: 1 as const, pending: false, tip: 'exited 0' }
+  { id: 'a', name: 'Otto', tool: 'claude' as const, state: 'approval' as const, pose: 1 as const, pending: true },
+  { id: 'b', name: 'Pim', tool: 'codex' as const, state: 'working' as const, pose: 2 as const, pending: false },
+  { id: 'c', name: 'Lu', tool: 'codex' as const, state: 'done' as const, pose: 1 as const, pending: false }
 ];
 const l = layout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: 'handle', screenH: 1080 });
 
@@ -79,8 +79,8 @@ describe('<Handle> inertness', () => {
   });
   it('hides the edge tick on the bot that is speaking and grows a held finished bot', () => {
     const asking = [
-      { id: 'a', name: 'Otto', tool: 'claude' as const, state: 'approval' as const, pose: 1 as const, pending: true, tip: '' },
-      { id: 'b', name: 'Pim', tool: 'codex' as const, state: 'idle' as const, pose: 1 as const, pending: false, held: true, tip: '' }
+      { id: 'a', name: 'Otto', tool: 'claude' as const, state: 'approval' as const, pose: 1 as const, pending: true },
+      { id: 'b', name: 'Pim', tool: 'codex' as const, state: 'idle' as const, pose: 1 as const, pending: false, held: true }
     ];
     render(<Handle bots={asking} slots={[{ id: 'a', size: 20, center: 18 }, { id: 'b', size: 20, center: 42 }]} big={20} visible hoverId={null} onHover={() => {}} onOpen={() => {}} sayId="a" />);
     const otto = screen.getByRole('button', { name: /Otto/ });
@@ -91,7 +91,7 @@ describe('<Handle> inertness', () => {
     expect(pim.querySelector('[data-tick]')).toHaveStyle({ opacity: '0' });
   });
   it('a lifted bot (finishing) is drawn big without the edge tick', () => {
-    const lifted = [{ id: 'a', name: 'Otto', tool: 'claude', state: 'idle', pose: 1, pending: false, lifted: true, tip: '' }] as const;
+    const lifted = [{ id: 'a', name: 'Otto', tool: 'claude', state: 'idle', pose: 1, pending: false, lifted: true }] as const;
     render(<Handle bots={lifted as never} slots={[{ id: 'a', size: 20, center: 18 }]} big={20} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
     const btn = screen.getByRole('button', { name: /Otto/ });
     expect(btn).toHaveStyle({ width: '20px', opacity: '1' });

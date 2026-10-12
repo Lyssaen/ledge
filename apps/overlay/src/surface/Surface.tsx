@@ -11,7 +11,6 @@ import { LEDGE_ID, scaledLayout, slotSizes, SIZES, SURFACE_CHROME_Y, type Layout
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
 import { Handle, type HandleBot } from './Handle';
-import { Tooltip } from './Tooltip';
 import { UnreadSay, UNREAD_SAY_BOX } from './UnreadSay';
 import { pickSay, pickSpeaker, sayKindOf, type SayCandidate } from './say';
 import { Bubble, type BubbleAck } from './Bubble';
@@ -27,7 +26,7 @@ import { useSoundPrefs } from '../sounds/preferences';
 import { useSounds } from '../sounds/useSounds';
 import { createSilentPlayer, type SoundPlayer } from '../sounds/player';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
-import { SessionList, rowHint, EXPANDED_ROW_H, ASK_H, NOTICE_GAP, type ListNotice } from './SessionList';
+import { SessionList, EXPANDED_ROW_H, ASK_H, NOTICE_GAP, type ListNotice } from './SessionList';
 import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
 import { useI18n, type Lang } from '../i18n/lang';
 import { transition, MOTION, ms, enterDelay } from '../motion';
@@ -44,7 +43,6 @@ import type { MonitorInfo } from '../monitor';
 import { Coachmark, countCoachmarkOpen, COACHMARK_H } from '../keyboard/Coachmark';
 
 /** Fallback extents of the extras beside the surface, before (or without) a layout measurement. */
-export const TOOLTIP_BOX = { left: 36, w: 324, h: 30 } as const;
 export const STATUS_BOX = { w: 190, h: 20 } as const;
 /** The native frame waits out the surface's size transition before it shrinks (shrink delay + duration). */
 const SETTLE_MS = Math.max(MOTION.grow.ms, MOTION.shrink.delayMs + MOTION.shrink.ms);
@@ -61,7 +59,7 @@ export interface SurfaceProps {
   /** The work-area height in logical px (the page itself is never zoomed). */
   screenH: number; theme: 'dark' | 'light'; client: DaemonClient; dnd: boolean; onToggleDnd: () => void; onToggleTheme?: () => void;
   screenW?: number;
-  /** The applied scales: the handle's (its layer, slots and edge bands) and the opened views' (bubble, list, session,
+  /** The applied scales: the handle's (its layer and slots) and the opened views' (bubble, list, session,
    *  settings, help, coachmark). Each is a CSS `zoom` on its own layer, with the geometry multiplied to match. */
   handleScale?: number; panelScale?: number;
   /** The two size settings, the values Auto resolves to, and how to change them (Settings). */
@@ -253,7 +251,7 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
 
   // The finishing bot is big from the moment its notice is due until the bubble folds.
   const liftedId = st.queue.length === 0 && st.done.length > 0 && (st.unfoldDue || (st.mode === 'bubble' && st.bubbleKind === 'finished')) ? st.done[0] : null;
-  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, held: !!finishedUnread[s.id], readOnly: s.source === 'hook_only', tip: isPending(s) ? `${t.handleLabel[botState(s)]} · ${s.pending?.text ?? ''}` : (s.topic ? `${s.topic} · ${rowHint(s, t)}` : rowHint(s, t)) })), [sessions, t, liftedId, finishedUnread]);
+  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, held: !!finishedUnread[s.id], readOnly: s.source === 'hook_only' })), [sessions, liftedId, finishedUnread]);
   const previousResident = useRef({ ids: new Set(sessions.map(s => s.id)), pending: new Set(sessions.filter(isPending).map(s => s.id)) });
   const signalCounter = useRef(0);
   const [residentSignal, setResidentSignal] = useState<{ key: number; kind: ResidentGesture }>();
@@ -418,8 +416,6 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   };
 
   const { big } = slotSizes(bots.length);
-  const hovBot = bots.find(b => b.id === hoverId) ?? null;
-  const hovSlot = geo.slots.find(s => s.id === hoverId);
   const panel = st.mode !== 'handle' && st.mode !== 'bubble';
   const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch' || st.mode === 'chat' || st.mode === 'reader';
   const openDocument = (ref: DocumentReference, origin: { kind: 'session'; sessionId: string } | { kind: 'chat' }) => { documentSourceFocus.current = document.activeElement as HTMLElement; reader.open(ref, origin); dispatch({ type: 'documentOpen', origin }); };
@@ -461,27 +457,23 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
   const rowBottom = focusIndex < 0 ? geo.top + SIZES.headerH * ps : rowTop + (focused && isYesNo(focused) ? EXPANDED_ROW_H : SIZES.rowH) * ps;
   const below = rowBottom + 8 * ps; const above = rowTop - (8 + COACHMARK_H) * ps;
   const coachTop = below + COACHMARK_H * ps <= geo.top + geo.h || above < geo.top ? below : above;
-  // The native window is the bounding frame of what is visible: the surface plus the tooltip, the status line and the
-  // coachmark when shown. Text extras are measured after layout (fixed fallbacks where layout gives nothing).
-  const tipRef = useRef<HTMLDivElement>(null); const statusRef = useRef<HTMLDivElement>(null); const sayRef = useRef<HTMLButtonElement>(null);
-  const [sizes, setSizes] = useState({ tip: { w: 0, h: 0 }, status: { w: 0, h: 0 }, say: { w: 0, h: 0 } });
+  // The native window is the bounding frame of what is visible: the surface plus the status line, the unread say and
+  // the coachmark when shown. Text extras are measured after layout (fixed fallbacks where layout gives nothing).
+  const statusRef = useRef<HTMLDivElement>(null); const sayRef = useRef<HTMLButtonElement>(null);
+  const [sizes, setSizes] = useState({ status: { w: 0, h: 0 }, say: { w: 0, h: 0 } });
   useLayoutEffect(() => {
-    const tip = measure(tipRef.current), status = measure(statusRef.current), say = measure(sayRef.current);
-    setSizes(s => s.tip.w === tip.w && s.tip.h === tip.h && s.status.w === status.w && s.status.h === status.h && s.say.w === say.w && s.say.h === say.h ? s : { tip, status, say });
+    const status = measure(statusRef.current), say = measure(sayRef.current);
+    setSizes(s => s.status.w === status.w && s.status.h === status.h && s.say.w === say.w && s.say.h === say.h ? s : { status, say });
   });
-  const tipShown = st.mode === 'handle' && hovBot !== null;
   const sayShown = st.mode === 'handle' && speaker !== null;
   const extras: Box[] = [];
-  // The status line belongs to the handle (its scale); the tooltip, the unread say and the coachmark read at the windows' size.
+  // The status line belongs to the handle (its scale); the unread say and the coachmark read at the windows' size.
   const statusLeft = Math.max(geo.w, SIZES.handleW * hs) + 8 * hs;
-  // The tooltip sits beside the handle (whose width follows the handle size) but reads at the windows' size.
-  const tipLeft = SIZES.handleW * hs + (TOOLTIP_BOX.left - SIZES.handleW) * ps;
   const sayLeft = SIZES.handleW * hs + (UNREAD_SAY_BOX.left - SIZES.handleW) * ps;
   const sayH = sizes.say.h || UNREAD_SAY_BOX.h * ps;
   const saySlot = speaker && speaker.id !== LEDGE_ID ? geo.slots.find(s => s.id === speaker.id) : undefined;
   const speakerTop = saySlot ? saySlot.center - saySlot.size / 2 : geo.top + 8 * hs;
   const sayTop = speakerTop - sayH - 2 * ps;
-  if (tipShown) { const h = sizes.tip.h || TOOLTIP_BOX.h * ps; extras.push({ left: tipLeft, top: (hovSlot?.center ?? geo.top) - h / 2, w: sizes.tip.w || TOOLTIP_BOX.w * ps, h }); }
   if (sayShown) extras.push({ left: sayLeft, top: sayTop, w: sizes.say.w || UNREAD_SAY_BOX.w * ps, h: sizes.say.h || UNREAD_SAY_BOX.h * ps });
   if (unreachable) extras.push({ left: statusLeft, top: geo.top, w: sizes.status.w || STATUS_BOX.w * hs, h: sizes.status.h || STATUS_BOX.h * hs });
   if (coachShown) extras.push({ left: 44 * ps, top: coachTop, w: 300 * ps, h: COACHMARK_H * ps });
@@ -600,9 +592,6 @@ export function Surface({ screenH, screenW, theme, client, dnd, onToggleDnd, onT
       {/* Zoomed extras: a zoomed element's own offsets are zoomed too, so their real-px positions are divided back. */}
       <div data-zoom="coachmark" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Coachmark visible={coachShown} top={coachTop / ps} onDismiss={() => { setCoach(false); if (focusedRowId) surfaceRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusedRowId)}"] [data-row]`)?.focus(); }} />
-      </div>
-      <div data-zoom="tooltip" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
-        <Tooltip ref={tipRef} bot={st.mode === 'handle' ? hovBot : null} y={(hovSlot?.center ?? geo.top) / ps} left={tipLeft / ps} />
       </div>
       <div data-zoom="unread-say" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <UnreadSay ref={sayRef} visible={sayShown} text={sayText} kind={speaker?.kind ?? 'ledge'} top={sayTop / ps} left={sayLeft / ps} onOpen={() => {
