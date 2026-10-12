@@ -154,7 +154,7 @@ Un module `update/` contient une machine d'état pure (testable sans Tauri) et u
 
 - `check()` au démarrage, puis toutes les 6 heures, et sur « Vérifier » dans À propos.
 - Un échec réseau est silencieux. À propos affiche l'heure du dernier succès. Le proxy d'entreprise est à vérifier sur la machine de référence pendant l'implémentation : l'updater passe par `reqwest`, côté Rust.
-- La version cible est la plus récente entre celle de `latest.json` et celle du daemon. Si le daemon est déjà en avance (clone mis à jour à la main), l'application seule est proposée.
+- La version cible est toujours une release : celle de `latest.json`, quand le daemon ou l'application est en retard sur elle. Si le daemon est déjà à jour ou en avance, l'application seule est proposée. Sans release connue (vérification coupée ou en échec), rien n'est proposé.
 - La réponse à « Plus tard » est enregistrée dans `localStorage` (`ledge.update.dismissed = "0.3.0"`). Elle masque la carte et la pastille de l'île jusqu'à une version plus récente. La pastille de la roue dentée reste.
 - Le réglage « Rechercher les mises à jour » (actif par défaut) coupe la vérification périodique.
 
