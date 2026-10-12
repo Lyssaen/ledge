@@ -54,13 +54,25 @@ describe('launching from a chat card', () => {
     expect(bridge.focusTerminal).not.toHaveBeenCalled();
   });
   it('a refused launch frees the button; a lost connection does too', () => {
-    askAndPropose();
+    const qid = askAndPropose();
     fireEvent.click(within(card()).getByRole('button', { name: /Start the session/ }));
-    apply({ type: 'error', message: 'no such folder: /home/u/ledge' });
-    expect(within(card()).getByRole('button', { name: /Start the session/ })).toBeEnabled();
-    fireEvent.click(within(card()).getByRole('button', { name: /Start the session/ }));
+    // The daemon's markFailed: the card's own error comes back with chat.history.
+    apply({ type: 'chat.history', turns: [{ qid, question: 'q', askedAt: new Date().toISOString(), steps: [], answer: 'a', answeredAt: new Date().toISOString(), proposal: { ...proposal, error: 'no such folder: /home/u/ledge' } }] });
+    expect(within(card()).getByRole('button', { name: /Retry/ })).toBeEnabled();
+    fireEvent.click(within(card()).getByRole('button', { name: /Retry/ }));
+    expect(sent.filter(m => m.type === 'session.launch')).toHaveLength(2);
+    expect(within(card()).getByRole('button', { name: /Starting…/ })).toBeDisabled();
+    expect(within(card()).queryByRole('button', { name: /Retry/ })).toBeNull();
     act(() => { daemonStore.setStatus('unreachable'); });
     act(() => { daemonStore.setStatus('open'); });
-    expect(within(card()).getByRole('button', { name: /Start the session/ })).toBeEnabled();
+    expect(within(card()).getByRole('button', { name: /Retry/ })).toBeEnabled();
+  });
+  it('an unrelated id-less error does not stop the tab opening on the later session.launched', () => {
+    askAndPropose();
+    fireEvent.click(within(card()).getByRole('button', { name: /Start the session/ }));
+    apply({ type: 'error', message: 'something else' });
+    expect(within(card()).getByRole('button', { name: /Starting…/ })).toBeDisabled();
+    apply({ type: 'session.updated', session: juno }); apply({ type: 'session.launched', id: 'n1' });
+    expect(bridge.focusTerminal).toHaveBeenCalledWith('Juno · ledge');
   });
 });

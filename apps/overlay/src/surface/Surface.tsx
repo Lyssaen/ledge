@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
-import type { Session, Tool } from '@ledge/protocol';
+import type { ChatProposal, Session, Tool } from '@ledge/protocol';
 import { loadDefaultTool, saveDefaultTool } from '../defaultTool';
 import { useDaemon, daemonStore } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
@@ -403,7 +403,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const launchProposal = (qid: string) => {
     const p = chat.find(x => x.qid === qid)?.proposal;
     if (!p || p.launchedId || launching || chatLaunching || status === 'unreachable') return;
-    setChatLaunching(qid);
+    launchedFrom.current = p; setChatLaunching(qid);
     send({ type: 'session.launch', tool: p.tool, cwd: p.cwd, ...(p.prompt ? { prompt: p.prompt } : {}), qid });
   };
   useEffect(() => {
@@ -411,7 +411,11 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     setChatLaunching(null);
     if (loadOpenTab()) openTab(lastLaunched.id);
   }, [lastLaunched?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (chatLaunching && lastError && !lastError.id) setChatLaunching(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The card's own outcome frees it: the daemon answers a launch with a fresh chat.history (launchedId or error), so a new proposal object
+  // ends it. An unrelated id-less error must not, or the later session.launched finds no launch and the tab stays closed.
+  const launchedFrom = useRef<ChatProposal | undefined>(undefined);
+  const launchingProposal = chatLaunching ? chat.find(x => x.qid === chatLaunching)?.proposal : undefined;
+  useEffect(() => { if (chatLaunching && launchingProposal !== launchedFrom.current) setChatLaunching(null); }, [chatLaunching, launchingProposal]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && chatLaunching) setChatLaunching(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   const sayCandidates: SayCandidate[] = [];
   if (ledgeUnread) sayCandidates.push({ id: LEDGE_ID, kind: 'ledge', seed: ledgeSaySeed });
