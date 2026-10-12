@@ -103,7 +103,7 @@ One binary, `ledge`, with seven commands. Source under `src/`:
 | `daemon/state.ts` | The pure reducer `reduce(session, event)`: the whole state machine, including helper (subagent) routing, the hook-over-pane priority, the session topic (`PaneTitle`, `Renamed`, first `UserPromptSubmit`) and `lastReply` from a `Stop`. |
 | `daemon/git.ts` | One `git rev-parse` per session: repository name and path, checked-out branch, and whether `cwd` is a linked worktree. |
 | `daemon/poller.ts` | Every 1 s captures each live pane (200 lines), hashes it to detect activity, broadcasts a 30-line preview when it changed, runs the adapter's prompt detection on the last 60 lines, reads Claude Code's conversation title (`PaneTitle`), refreshes git fields on the life check (every 5 s), and drops exited sessions after 10 min. |
-| `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect (then `chat.history`), broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent with the login shell's environment (see `shell-path.ts`) and answers `session.launched`. `session.rename` sets the topic. Chat commands go to `chat/`. |
+| `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect (then `chat.history`), broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent with the login shell's environment (see `shell-path.ts`) and answers `session.launched`. With a chat card's `qid`, it launches the proposal once and marks the turn. `session.rename` sets the topic. Chat commands go to `chat/`. |
 | `daemon/folders.ts` | `resolveFolder` (`~` expanded, absolute, existing) and the folder browser's `listFolder` and `createFolder`, which answer with a `folder.listing`. |
 | `chat/` | Ask Ledge: `service.ts` keeps one conversation a day per harness (50 turns, 180 s cap), writes `~/.ledge/chat/context/`, and runs `claude.ts` (`claude -p --restricted`), `codex.ts` (`codex exec --sandbox read-only`) or `cursor.ts` (`cursor-agent -p --mode ask`). `LEDGE_CHAT=1` so Ledge's own hooks ignore the run; no API key is inherited. |
 | `adapters/` | One adapter per tool (`Adapter` in `types.ts`): prompt detection in the pane, `promptStillVisible`, key plans for accept/deny/reply/interrupt, and preview cleaning. `claude.ts`, `codex.ts` and `cursor.ts` are all implemented. Claude Code's adapter also answers a multi-question `AskUserQuestion` (one tab after another, then the review that has no footer). |
@@ -199,7 +199,9 @@ The overlay sends `chat.ask { qid, text, tool? }`. `tool` is the default harness
 
 One question at a time (a second one gets `chat.error`). A turn that takes more than 180 s is stopped and reported as a timeout, with no retry. A failed resume of the day's session is retried once with a fresh id. The question goes on stdin, never in argv. `LEDGE_CHAT=1` so Ledge's own hooks ignore the run; an inherited `ANTHROPIC_API_KEY` is dropped so the CLI's own login is used. The context folder is deleted when the turn ends. `~/.ledge/chat.json` remembers the day's session id and which harness it belongs to.
 
-Bot names in the answer are links that open that session. Ledge never sends an instruction to a pane from the chat.
+Bot names in the answer are links that open that session.
+
+Ledge never sends an instruction to a pane from the chat, and never starts anything by itself. Asked to open or start a session ("open a session in ledge to fix the build"), it answers with a card when the folder is certain — an absolute path from `sessions.md`, from `folders.md` (the recent folders, written beside the other context files) or typed by the user — and asks which folder otherwise. The harness ends its answer with a ```` ```ledge-session ```` block holding `{"cwd", "prompt"?}`; the daemon takes the block out of the text, checks the folder, and attaches a `proposal` to the turn. The card's "Start the session" sends `session.launch { qid }`: the daemon launches the proposal's own folder, harness (the question's) and instruction, once, and marks the card started or failed for every client. The terminal tab opens as the launch form's switch says.
 
 ## Protocol
 
@@ -218,9 +220,9 @@ Daemon to clients:
 | `folder.listing { path, parent, entries, error? }` | To the requester of a `folder.list` or `folder.create` only: the folder (resolved, `~` expanded), its parent (`null` at the root) and its subfolders by name, hidden ones left out. A refusal says why in `error`, never in an `error` message. |
 | `chat.step { qid, step }` | What Ledge is reading: `sessions`, `pane`, `reply`, `git` or `repo` (`id` / `name` / `path` when they apply). |
 | `chat.delta { qid, text }` | The next slice of the answer, as the harness writes it. |
-| `chat.done { qid, text, at }` | The finished answer. |
+| `chat.done { qid, text, at, proposal? }` | The finished answer; `proposal` the session card, if any. |
 | `chat.error { qid, message }` | The question could not be answered (busy, timeout, cancel, harness missing). |
-| `chat.history { turns }` | The day's turns (50 at most), after each snapshot and after each ask or reset. A turn still running has no `answer`. |
+| `chat.history { turns }` | The day's turns (50 at most), after each snapshot and after each ask or reset. A turn still running has no `answer`. A turn's `proposal` carries `launchedId` once started and `error` if the start failed. |
 | `error { message, id? }` | A rejected command. With `id`, the overlay shows it on that session; without one, a refused launch. |
 
 Clients to daemon:
@@ -237,7 +239,7 @@ Clients to daemon:
 | `session.kill { id }` | overlay | Kill the tmux session. |
 | `session.dismiss { id }` | overlay | Remove a finished or read-only session from the list. |
 | `session.focus { id }` | overlay | Acknowledged only; the overlay focuses the terminal itself. |
-| `session.launch { tool, cwd, name?, prompt?, continue? }` | overlay | Start a session: `cwd` a WSL folder (`~` allowed, must exist), `name` a preferred bot name, `prompt` the first instruction, `continue` resumes the folder's last conversation. The daemon spawns the agent exactly like `ledge <tool>` would (minus the exit-code wrapper: the poller sees the pane end) and answers `session.launched`. |
+| `session.launch { tool, cwd, name?, prompt?, continue?, qid? }` | overlay | Start a session: `cwd` a WSL folder (`~` allowed, must exist), `name` a preferred bot name, `prompt` the first instruction, `continue` resumes the folder's last conversation. The daemon spawns the agent exactly like `ledge <tool>` would (minus the exit-code wrapper: the poller sees the pane end) and answers `session.launched`. With `qid`, it starts that chat turn's proposal (the other fields are ignored), refused once started. |
 | `folder.list { path? }` | overlay | The launch form's folder browser: list a WSL folder's subfolders (home without `path`). |
 | `folder.create { parent, name }` | overlay | Make a folder named `name` (no `/`, not `.` or `..`) inside `parent`, then list it. |
 | `chat.ask { qid, text, tool? }` | overlay | Ask Ledge. `tool` is the overlay's default harness (`claude` when omitted). |
