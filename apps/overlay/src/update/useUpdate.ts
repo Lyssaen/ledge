@@ -86,12 +86,16 @@ export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateCo
     if (kind !== 'downloading') { downloadingFor.current = false; return; }
     if (downloadingFor.current) return;
     downloadingFor.current = true;
-    const u = available.current;
-    if (!u) return;
     const app = stateRef.current.app;
-    if (app) saveUpdatedFrom(app);
+    const target = stateRef.current.target;
     void (async () => {
       try {
+        // No update held (checks off or failed): look once more, and only install exactly the target.
+        const u = available.current ?? await (depsRef.current.check ?? checkForUpdate)();
+        if (!mounted.current) return;
+        if (!u || u.version !== target) { dispatch({ type: 'download-failed' }); return; }
+        available.current = u;
+        if (app) saveUpdatedFrom(app);
         await u.downloadAndInstall((done, total) => dispatch({ type: 'download', done, total }));
         dispatch({ type: 'downloaded' });
         await (depsRef.current.relaunch ?? relaunchApp)();
@@ -100,6 +104,8 @@ export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateCo
   }, [kind, dispatch]);
 
   const start = useCallback(() => {
+    // A click while the socket is closed would be dropped by the client and leave the phase stuck.
+    if (clientRef.current.status() !== 'open') return;
     const sessions = daemonStore.getState().sessions.map(x => ({ id: x.id, name: x.name }));
     const event: UpdateEvent = { type: 'start', sessions };
     const next = reduceUpdate(stateRef.current, event);

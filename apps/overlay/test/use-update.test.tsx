@@ -8,7 +8,7 @@ import { useUpdate } from '../src/update/useUpdate';
 let cleanup: Array<() => unknown> = [];
 afterEach(async () => { for (const c of cleanup.reverse()) await c(); cleanup = []; daemonStore.reset(); localStorage.clear(); });
 
-async function setup(daemonVersion = '0.2.2') {
+async function setup(daemonVersion = '0.2.2', check?: () => Promise<null>) {
   const daemon = await createMockDaemon();
   daemon.extras.daemon = { version: daemonVersion, install: 'npm', systemd: true };
   daemon.sessions.set('a', fakeSession('a', { name: 'Otto' }));
@@ -17,9 +17,9 @@ async function setup(daemonVersion = '0.2.2') {
   cleanup.push(() => { off(); client.close(); }, () => daemon.close());
   const install = vi.fn(async (p: (d: number, t: number | null) => void) => { p(5, 10); p(10, 10); });
   const relaunch = vi.fn(async () => {});
-  const hook = renderHook(() => useUpdate(client, { version: async () => '0.2.2', check: async () => ({ version: '0.3.0', notes: '- Une', downloadAndInstall: install }), relaunch, waitMs: 2000 }));
+  const hook = renderHook(() => useUpdate(client, { version: async () => '0.2.2', check: check ?? (async () => ({ version: '0.3.0', notes: '- Une', downloadAndInstall: install })), relaunch, waitMs: 200 }));
   await waitFor(() => expect(hook.result.current.card.kind).toBe('available'));
-  return { daemon, hook, install, relaunch };
+  return { daemon, hook, install, relaunch, client };
 }
 
 describe('useUpdate', () => {
@@ -56,5 +56,19 @@ describe('useUpdate', () => {
     await waitFor(() => expect(daemon.received).toContainEqual({ type: 'update.daemon', version: '0.3.0' }));
     await daemon.dropClients(); // it restarts but still reports 0.2.2
     await waitFor(() => expect(hook.result.current.card).toMatchObject({ kind: 'failed', reason: 'daemon-timeout' }), { timeout: 4000 });
+  });
+  it('fails instead of hanging when the daemon is at the target but no update is held', async () => {
+    const { hook, install } = await setup('0.3.0', async () => null);
+    act(() => hook.result.current.start());
+    await waitFor(() => expect(hook.result.current.card).toMatchObject({ kind: 'failed', reason: 'download' }));
+    expect(install).not.toHaveBeenCalled();
+  });
+  it('does nothing when the daemon socket is not open', async () => {
+    const { daemon, hook, client } = await setup();
+    vi.spyOn(client, 'status').mockReturnValue('connecting');
+    const before = daemon.received.length;
+    act(() => hook.result.current.start());
+    expect(hook.result.current.card.kind).toBe('available');
+    expect(daemon.received.slice(before)).not.toContainEqual({ type: 'update.daemon', version: '0.3.0' });
   });
 });
