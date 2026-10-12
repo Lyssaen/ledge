@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The overlay window: monitor lookup, the webview zoom (UI scale), the outside-click event, the global shortcut and the app's own commands.",
+  "description": "The overlay window: monitor lookup, the webview zoom (UI scale), the outside-click event, the global shortcut, the updater and the relaunch after an update, and the app's own commands.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -14,6 +14,8 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister"
+    "global-shortcut:allow-unregister",
+    "updater:default",
+    "process:allow-restart"
   ]
 }
