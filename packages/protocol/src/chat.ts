@@ -16,9 +16,17 @@ export const ChatProposalSchema = z.object({
 });
 export type ChatProposal = z.infer<typeof ChatProposalSchema>;
 
+/** An instruction the chat proposes to send to a tracked session (spec 2026-10-12 relay §5): the session as the store named it,
+ *  `status` once the card sent it or queued it, `error` when the last attempt failed. */
+export const ChatRelaySchema = z.object({
+  id: z.string().min(1), name: z.string(), tool: ToolSchema, text: z.string().min(1),
+  status: z.enum(['queued', 'sent']).optional(), sentAt: z.string().datetime().optional(), error: z.string().optional()
+});
+export type ChatRelay = z.infer<typeof ChatRelaySchema>;
+
 /** One question to Ledge and its answer; `error` set when it could not answer, both absent while it is still reading. */
 export const ChatTurnSchema = z.object({
   qid: z.string().min(1), question: z.string(), askedAt: z.string().datetime(),
-  steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional()
+  steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), relay: ChatRelaySchema.optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;

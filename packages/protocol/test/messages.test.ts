@@ -164,3 +164,22 @@ describe('protocol: browsing folders from the launch form', () => {
     expect(ServerMessageSchema.parse(failed)).toEqual(failed);
   });
 });
+
+describe('relay from the chat (spec 2026-10-12 relay §5)', () => {
+  const relay = { id: 's1', name: 'Otto', tool: 'claude', text: 'Lance les tests' };
+  it('a turn and chat.done carry a relay; old messages still parse', () => {
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', relay })).toMatchObject({ relay });
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z' })).not.toHaveProperty('relay');
+    const turn = { qid: 'q1', question: 'dis à Otto', askedAt: '2026-10-12T10:00:00.000Z', steps: [], relay: { ...relay, status: 'sent', sentAt: '2026-10-12T10:01:00.000Z' } };
+    expect(parseServerMessage({ type: 'chat.history', turns: [turn] })).toEqual({ type: 'chat.history', turns: [turn] });
+  });
+  it('rejects an unknown status and an empty text', () => {
+    expect(() => parseServerMessage({ type: 'chat.history', turns: [{ qid: 'q1', question: 'x', askedAt: '2026-10-12T10:00:00.000Z', steps: [], relay: { ...relay, status: 'lost' } }] })).toThrow();
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', relay: { ...relay, text: '' } })).toThrow();
+  });
+  it('session.relay and session.relay.cancel name the turn', () => {
+    expect(parseClientMessage({ type: 'session.relay', qid: 'q1' })).toEqual({ type: 'session.relay', qid: 'q1' });
+    expect(parseClientMessage({ type: 'session.relay.cancel', qid: 'q1' })).toEqual({ type: 'session.relay.cancel', qid: 'q1' });
+    expect(() => parseClientMessage({ type: 'session.relay', qid: '' })).toThrow();
+  });
+});
