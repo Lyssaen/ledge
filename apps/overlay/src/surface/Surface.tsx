@@ -552,9 +552,11 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const send = (m: Parameters<DaemonClient['send']>[0]) => client.send(m);
   // The thread is not in the snapshot: ask for it when a session opens (or after a reconnection emptied the threads).
   const threadWanted = st.mode === 'session' ? st.selectedId : null;
+  // A boolean, not the Map: the store rebuilds `threads` on every update, which would re-send the request while the reply is pending.
+  const threadLoaded = threadWanted != null && threads.has(threadWanted);
   useEffect(() => {
-    if (threadWanted && !threads.has(threadWanted) && status === 'open') send({ type: 'session.thread', id: threadWanted });
-  }, [threadWanted, threads, status]);
+    if (threadWanted && !threadLoaded && status === 'open') send({ type: 'session.thread', id: threadWanted });
+  }, [threadWanted, threadLoaded, status]);
   // Offline or read-only: every send/decision path (buttons and keys alike) is off, with the reason shown.
   const blockedFor = (s: Session | null | undefined): string | null => unreachable ? t.offline : s?.source === 'hook_only' ? t.readOnlyBlocked : s ? null : t.offline;
   const canDecide = (s: Session) => blockedFor(s) === null && !asks.inFlight.has(s.id);
