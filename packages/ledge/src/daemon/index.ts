@@ -23,7 +23,9 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const daemon = await daemonInfo();
   const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save() }));
   const history = new History();
-  await history.load();
+  try { await history.load(); } catch (e) { log(`history not loaded: ${(e as Error).message}`); }
+  // The startup prune above ran before the history existed: the journals of the sessions it dropped go now.
+  for (const id of history.ids()) if (!store.get(id)) history.forget(id);
   const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history });
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
   await writeFile(paths().pid, String(process.pid));

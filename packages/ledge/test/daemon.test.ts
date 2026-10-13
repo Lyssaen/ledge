@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { startDaemon } from '../src/daemon/index.js';
-import { realTmux } from '../src/tmux.js';
+import { realTmux, type Tmux } from '../src/tmux.js';
 import { killTestServer } from './helpers.js';
 import { connect } from '../src/client.js';
-import { ensureLedgeDir } from '../src/paths.js';
+import { ensureLedgeDir, paths } from '../src/paths.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
@@ -38,5 +38,24 @@ describe('startDaemon', () => {
         expect(snap.map(s => s.id).sort()).toEqual(['hook', 'live']);
       } finally { await d2.stop(); }
     } finally { await killTestServer(socket); }
+  });
+
+  it('removes the history journals of the sessions it prunes at startup, and keeps the others', async () => {
+    process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
+    await ensureLedgeDir();
+    const seed = new Store();
+    seed.upsert(mk('live', { tmuxSession: 'ledge-live' })); seed.upsert(mk('dead'));
+    await seed.save();
+    const dir = paths().history; mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify({ kind: 'prompt', id: 'prompt-1', at: T0, turn: 1, text: 'x' }) + '\n';
+    for (const id of ['live', 'dead', 'orphan']) writeFileSync(join(dir, `${id}.jsonl`), line);
+    const tmux: Tmux = {
+      async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return ''; },
+      async hasSession(n) { return n === 'ledge-live'; }, async listSessions() { return ['ledge-live']; },
+      async killSession() {}, async setOption() {}, attachArgs: n => ['attach', n]
+    };
+    const d = await startDaemon({ port: 0, tmux });
+    await d.stop(); // flushes the history writes
+    expect(['live', 'dead', 'orphan'].filter(id => existsSync(join(dir, `${id}.jsonl`)))).toEqual(['live']);
   });
 });
