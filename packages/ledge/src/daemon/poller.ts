@@ -77,7 +77,7 @@ export function startPoller(opts: {
       // Unchanged pane: re-apply a remembered prompt only if nothing is pending (a hook may have
       // shadowed it inside the priority window). The reducer keeps no-ops identical.
       const m = matches.get(s.id);
-      if (m && !store.get(s.id)?.pending) store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options });
+      if (m && !store.get(s.id)?.pending) store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options, ...(m.optionDetails ? { optionDetails: m.optionDetails } : {}) });
       rested(s.id, t);
       return;
     }
@@ -96,7 +96,7 @@ export function startPoller(opts: {
     const m = adapter.detectPrompt(pane);
     if (!m) { matches.delete(s.id); rested(s.id, t); return; }
     matches.set(s.id, m);
-    store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options });
+    store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options, ...(m.optionDetails ? { optionDetails: m.optionDetails } : {}) });
   }
 
   /** A pane at rest for REST_MS reports it; the reducer decides what that ends (and keeps no-ops identical). */

@@ -26,12 +26,16 @@ export const shownReply = (s: Session) => (!s.pending && (s.state === 'idle' || 
 
 /** A first estimate of the view's height, before (or without) a measurement of its content. */
 export function measureSessionH(s: Session, reading: boolean): number {
-  const ask = !s.pending ? 0 : s.pending.kind === 'question' ? 140 + (s.pending.options?.length ?? 0) * 56 : 260;
+  const ask = !s.pending ? 0 : s.pending.kind === 'question' ? 140 + (s.pending.options?.length ?? 0) * 56 + detailsH(s.pending) : 260;
   const reply = shownReply(s) ? Math.min(560, 160 + shownReply(s)!.text.length / 3) : 0;
   return SESSION_HEADER_H + 90 + ask + reply + (reading ? 400 : 240) + 96;
 }
 /** The cap the request block grows to (its content is always shorter): only the fold animation uses it. */
-export const askMaxH = (p: Pending) => (p.kind === 'question' ? 160 + (p.options?.length ?? 0) * 72 : 360);
+export const askMaxH = (p: Pending) => (p.kind === 'question' ? 160 + (p.options?.length ?? 0) * 72 + detailsH(p) * 1.5 : 360);
+/** What the options' descriptions add: a 16px line per ~55 characters, plus the gap above each one. */
+function detailsH(p: Pending): number {
+  return (p.optionDetails ?? []).reduce((h, d) => (d ? h + 2 + Math.ceil(d.length / 55) * 16 : h), 0);
+}
 
 /** `freeText`: the daemon can type an answer into the dialog's own free-text row (Claude Code); otherwise Other stays off. */
 function QuestionCard({ pending, onReply, disabled, freeText, t }: { pending: Pending; onReply: (t: string) => void; disabled: boolean; freeText: boolean; t: Messages }) {
@@ -39,6 +43,7 @@ function QuestionCard({ pending, onReply, disabled, freeText, t }: { pending: Pe
   const [choice, setChoice] = useState(0);
   const [other, setOther] = useState('');
   const opts = pending.options ?? [];
+  const details = pending.optionDetails ?? [];
   const answer = choice < 0 ? other.trim() : String(choice + 1);
   const send = () => { if (answer) onReply(answer); };
   const card: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, minHeight: 48, boxSizing: 'border-box', padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', backgroundColor: 'transparent', cursor: 'pointer', transition: transition([['border-color', 'hover'], ['background-color', 'hover']]) };
@@ -48,9 +53,12 @@ function QuestionCard({ pending, onReply, disabled, freeText, t }: { pending: Pe
       <fieldset disabled={disabled} style={{ margin: 0, padding: 0, border: 'none', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
         <legend style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{t.session.options}</legend>
         {opts.map((o, i) => (
-          <label key={o} className="ledge-opt" data-checked={choice === i || undefined} style={card}>
-            <input type="radio" name="opt" checked={choice === i} onChange={() => setChoice(i)} style={{ margin: 0, width: 16, height: 16, flexShrink: 0 }} />
-            <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{o}</span>
+          <label key={o} className="ledge-opt" data-checked={choice === i || undefined} style={details[i] ? { ...card, alignItems: 'flex-start' } : card}>
+            <input type="radio" name="opt" checked={choice === i} onChange={() => setChoice(i)} aria-labelledby={details[i] ? `ledge-opt-label-${i}` : undefined} aria-describedby={details[i] ? `ledge-opt-detail-${i}` : undefined} style={{ margin: details[i] ? '2px 0 0' : 0, width: 16, height: 16, flexShrink: 0 }} />
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+              <span id={`ledge-opt-label-${i}`} style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{o}</span>
+              {details[i] && <span id={`ledge-opt-detail-${i}`} style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', overflowWrap: 'anywhere' }}>{details[i]}</span>}
+            </span>
           </label>
         ))}
         {/* Only some daemons' adapters can type a free-text answer into the select dialog: elsewhere the field stays visible but off. */}

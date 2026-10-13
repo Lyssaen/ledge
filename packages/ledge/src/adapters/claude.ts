@@ -74,17 +74,20 @@ function dialogEnd(lines: string[]): number {
   return footer >= 0 ? footer : reviewEnd(lines);
 }
 
-/** Options 1..n between `from` (option 1) and the footer; any other line is a description or a rule. */
-function optionsBetween(lines: string[], from: number, footer: number): string[] {
+/** Options 1..n between `from` (option 1) and the footer; any other non-blank line is a description (joined) or a rule. */
+function optionsBetween(lines: string[], from: number, footer: number): { options: string[]; details: string[] } {
   const options: string[] = [];
+  const details: string[] = [];
   for (let i = from; i < footer; i++) {
     const m = lines[i]!.match(OPTION);
-    if (m && Number(m[1]) === options.length + 1) options.push(m[2]!.replace(/\s+✔$/, ''));
+    if (m && Number(m[1]) === options.length + 1) { options.push(m[2]!.replace(/\s+✔$/, '')); details.push(''); }
+    else if (options.length && !isBlank(lines[i]!) && !isRule(lines[i]!)) details[options.length - 1] = `${details[options.length - 1]} ${lines[i]!.trim()}`.trim();
   }
-  return options;
+  // A description that only repeats its label says nothing.
+  return { options, details: details.map((d, i) => (d === options[i] ? '' : d)) };
 }
 
-type Dialog = { kind: 'permission' | 'question' | 'plan'; title: string[]; question: string; options: string[] };
+type Dialog = { kind: 'permission' | 'question' | 'plan'; title: string[]; question: string; options: string[]; details: string[] };
 
 function parseDialog(pane: string): Dialog | null {
   const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
@@ -97,7 +100,7 @@ function parseDialog(pane: string): Dialog | null {
     if (m && m[1] === '1') { first = i; break; }
   }
   if (first < 0) return null;
-  const options = optionsBetween(lines, first, footer);
+  const { options, details } = optionsBetween(lines, first, footer);
 
   // The question is the block of text right above option 1 (wrapped lines joined).
   let q = first - 1;
@@ -115,7 +118,8 @@ function parseDialog(pane: string): Dialog | null {
       ? 'question' : PLAN_FOOTER.test(lines[footer] ?? '') ? 'plan' : 'permission',
     title: lines.slice(top + 1, q + 1),
     question: questionLines.join(' '),
-    options
+    options,
+    details
   };
 }
 
@@ -173,7 +177,8 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   if (t) return { kind: 'permission', text: `Trust this folder? ${t.path}`.trim(), options: t.options };
   const d = parseDialog(pane);
   if (!d) return null;
-  if (d.kind === 'question') return { kind: 'question', text: d.question, options: d.options };
+  // Only a question's lines under an option are its description; elsewhere they wrap a long option.
+  if (d.kind === 'question') return { kind: 'question', text: d.question, options: d.options, ...(d.details.some(Boolean) ? { optionDetails: d.details } : {}) };
   if (d.kind === 'plan') return { kind: 'plan', text: d.question, options: d.options };
   return { kind: 'permission', text: permissionText(d.title, d.question), options: d.options };
 }

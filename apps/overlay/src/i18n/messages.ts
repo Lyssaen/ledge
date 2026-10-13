@@ -125,6 +125,7 @@ const fr = {
     questionCount: (n: number) => `${n} ${plural(n, 'question', 'questions')}`,
     question: 'Question',
     typeAnswer: 'Répondre librement',
+    recommended: 'Recommandé',
     showRaw: 'Réponse complète, telle quelle', showStructured: 'Vue structurée',
     hintChips: 'Une puce remplit le champ, Entrée envoie',
     hintAnswerAll: 'Une ligne par question, Entrée envoie'
@@ -350,6 +351,7 @@ const en: Messages = {
     questionCount: (n: number) => `${n} ${plural(n, 'question', 'questions')}`,
     question: 'Question',
     typeAnswer: 'Type an answer',
+    recommended: 'Recommended',
     showRaw: 'Full reply as written', showStructured: 'Structured view',
     hintChips: 'A chip fills the field, Enter sends',
     hintAnswerAll: 'One line per question, Enter sends'

@@ -39,7 +39,7 @@ test('opens a Markdown plan in the same panel and returns to the preserved reply
   await layer(page, 'reader').getByRole('button', { name: 'Markdown' }).click();
   await expect(layer(page, 'reader').locator('[data-document-source]')).toContainText('# Plan');
   await layer(page, 'reader').getByRole('button', { name: 'Expand' }).click();
-  await expect(surface(page)).toHaveCSS('width', '800px');
+  await expect(surface(page)).toHaveCSS('width', '1152px'); // 60% of the 1920 px screen
   await page.keyboard.press('y');
   await page.keyboard.press('n');
   await page.keyboard.press('1');

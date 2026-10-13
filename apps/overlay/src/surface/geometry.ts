@@ -1,4 +1,4 @@
-export const SIZES = { bubbleW: 440, bubbleH: 128, listW: 380, sessionW: 480, readingW: 560, readerW: 560, readerExpandedW: 800, readerH: 760, rowH: 58, headerH: 72, footerH: 44, margin: 40, settingsH: 360, helpH: 420, launchH: 600, chatH: 560, emptyH: 200, groupH: 28, separatorH: 1 } as const;
+export const SIZES = { bubbleW: 440, bubbleH: 128, listW: 380, sessionW: 480, readingW: 560, readerW: 560, readerExpandedW: 800, expandedMaxW: 1200, readerH: 760, rowH: 58, headerH: 72, footerH: 44, margin: 40, settingsH: 360, helpH: 420, launchH: 600, chatH: 560, emptyH: 200, groupH: 28, separatorH: 1 } as const;
 /** The compact island, a row along the top edge (spec 2026-10-12 §3): margins, the Ledge mascot, the separator, the
  *  companions, the "+n" pill past six, the DND moon; and the discreet strip with one dot per session. */
 export const ISLAND = { h: 38, padL: 12, padR: 14, resident: 22, sepGap: 8, companion: 22, gap: 8, max: 6, pill: 30, moon: 12, stripH: 10, stripPad: 10, dotW: 6, dotH: 4, dotGap: 4 } as const;
@@ -50,6 +50,8 @@ export const islandAxis = (screenW: number, position: IslandPosition = 'center')
   position === 'left' ? screenW / 4 : position === 'right' ? (3 * screenW) / 4 : screenW / 2;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+/** An enlarged view (reading mode, expanded reader) takes 60% of the screen width, never less than `min` nor more than `expandedMaxW`. */
+export const expandedWidth = (screenW: number, min: number) => clamp(Math.round(screenW * 0.6), min, SIZES.expandedMaxW);
 
 /** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of the list: an expanded (focused) row, the notice, the update card. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
 export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
@@ -75,14 +77,14 @@ export function layout(input: LayoutInput): Layout {
   if (mode === 'handle') return { left: handle.left, top: 0, w: handleW, h: handle.h, slots, handle };
   if (mode === 'bubble') return view(SIZES.bubbleW, input.bubbleH ?? SIZES.bubbleH);
   // The native frame adds a small shadow outside this width.
-  if (mode === 'reader') return view(Math.min(input.readerExpanded ? SIZES.readerExpandedW : SIZES.readerW, Math.max(0, screenW - 24)), SIZES.readerH);
+  if (mode === 'reader') return view(Math.min(input.readerExpanded ? expandedWidth(screenW, SIZES.readerExpandedW) : SIZES.readerW, Math.max(0, screenW - 24)), SIZES.readerH);
   if (mode === 'chat') return view(SIZES.sessionW, input.detailH ?? SIZES.chatH);
   if (mode === 'settings' || mode === 'help' || mode === 'launch') return view(SIZES.listW, input.detailH ?? DETAIL_FALLBACK_H[mode]);
   // An empty list shows the empty state (a bot, two lines, a button) instead of rows; the extras (the update card,
   // the notice) still grow it.
   const rowsH = (n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.groups ?? 0) * SIZES.groupH) + (input.listExtraH ?? 0);
   if (mode === 'list') return view(SIZES.listW, SIZES.headerH + rowsH + (input.askH ?? 0) + SIZES.footerH + SURFACE_CHROME_Y);
-  return view(input.reading ? SIZES.readingW : SIZES.sessionW, input.sessionH ?? 480);
+  return view(input.reading ? Math.min(expandedWidth(screenW, SIZES.readingW), Math.max(SIZES.sessionW, screenW - 24)) : SIZES.sessionW, input.sessionH ?? 480);
 }
 
 /**

@@ -33,6 +33,10 @@ describe('mapClaudeHook', () => {
     const m = mapClaudeHook('PreToolUse', payload, at);
     expect(m?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'AskUserQuestion', text: 'Which?', options: ['A', 'B'] });
   });
+  it('maps PreToolUse AskUserQuestion option descriptions, by index', () => {
+    const payload = { session_id: 's', tool_name: 'AskUserQuestion', tool_input: { questions: [{ question: 'Which?', options: [{ label: 'A', description: ' Keeps it simple. ' }, { label: 'B' }] }] } };
+    expect(mapClaudeHook('PreToolUse', payload, at)?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'AskUserQuestion', text: 'Which?', options: ['A', 'B'], optionDetails: ['Keeps it simple.', ''] });
+  });
   it('maps Notification permission_prompt to kind permission', () => {
     const m = mapClaudeHook('Notification', { session_id: 's', notification_type: 'permission_prompt', message: 'Claude needs your permission' }, at);
     expect(m?.event.kind).toBe('permission');
@@ -172,10 +176,10 @@ describe('mapHook codex', () => {
     const m = mapHook('codex', 'PermissionRequest', codex({ tool_name: 'apply_patch', tool_input: { command } }), at);
     expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', tool: 'apply_patch', text: '/home/dev/demo/README.md, /home/dev/demo/b.txt' });
   });
-  it('maps request_user_input to a question with its options', () => {
+  it('maps request_user_input to a question with its options and their descriptions', () => {
     const tool_input = { questions: [{ header: 'Banner color', id: 'banner_color', question: 'Which color should the banner be?', options: [{ label: 'Blue (Recommended)', description: 'calm' }, { label: 'Red', description: 'bold' }] }] };
     const m = mapHook('codex', 'PreToolUse', codex({ tool_name: 'request_user_input', tool_input }), at);
-    expect(m?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'request_user_input', text: 'Which color should the banner be?', options: ['Blue (Recommended)', 'Red'] });
+    expect(m?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'request_user_input', text: 'Which color should the banner be?', options: ['Blue (Recommended)', 'Red'], optionDetails: ['calm', 'bold'] });
   });
   it('maps Stop with its last message, and a null one to a bare Stop', () => {
     expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: 'Created `hello.txt`.' }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook', text: 'Created `hello.txt`.' });

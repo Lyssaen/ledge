@@ -26,10 +26,11 @@ describe('codex adapter: detection (Codex CLI 0.162 captures)', () => {
       options: ['Yes, proceed', "Yes, and don't ask again for these files", 'No, and tell Codex what to do differently']
     });
   });
-  it('detects a request_user_input question with its option labels, without descriptions', () => {
+  it('detects a request_user_input question with its option labels and their descriptions', () => {
     expect(codexAdapter.detectPrompt(fx('codex-question'))).toEqual({
       kind: 'question', text: 'Which color should the banner be?',
-      options: ['Blue (Recommended)', 'Red', 'Green', 'None of the above']
+      options: ['Blue (Recommended)', 'Red', 'Green', 'None of the above'],
+      optionDetails: ['Uses a versatile, calm color that works well for most banners.', 'Creates a bold, urgent, high-attention banner.', 'Creates a positive, natural, success-oriented banner.', 'Optionally, add details in notes (tab)']
     });
   });
   it('detects the plan approval at the end of a Plan mode turn', () => {

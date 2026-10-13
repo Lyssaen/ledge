@@ -72,6 +72,13 @@ describe('<SessionView>', () => {
     fireEvent.click(screen.getByLabelText('Shadow table'));
     fireEvent.click(screen.getByRole('button', { name: 'Answer' })); expect(onReply).toHaveBeenLastCalledWith('2');
   });
+  it('shows each option\'s description under its label, as its accessible description', () => {
+    const withDetails = { ...q, pending: { ...q.pending!, optionDetails: ['Copies the history first.', ''] } };
+    render(<SessionView {...base} session={withDetails} />);
+    expect(screen.getByLabelText('Backfill')).toHaveAccessibleDescription('Copies the history first.');
+    expect(screen.getByLabelText('Shadow table')).not.toHaveAccessibleDescription();
+    expect(askMaxH(withDetails.pending)).toBeGreaterThan(askMaxH(q.pending!));
+  });
   it('the ask card folds when pending disappears', () => {
     const { rerender, container } = render(<SessionView {...base} session={perm} />);
     expect(container.querySelector('[data-ask]')).toHaveStyle({ maxHeight: `${askMaxH(perm.pending!)}px`, opacity: '1' });

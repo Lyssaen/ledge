@@ -60,7 +60,7 @@ describe('island geometry', () => {
     expect(list).toMatchObject({ top: 0, w: SIZES.listW, left: (W - SIZES.listW) / 2 });
     expect(list.h).toBe(SIZES.headerH + 16 + 3 * SIZES.rowH + SIZES.footerH + SURFACE_CHROME_Y);
     expect(layout({ bots: bots(2), mode: 'session', screenH: H, screenW: W, sessionH: 500 })).toMatchObject({ top: 0, w: 480, h: 500, left: (W - 480) / 2 });
-    expect(layout({ bots: bots(2), mode: 'session', screenH: H, screenW: W, sessionH: 500, reading: true }).w).toBe(SIZES.readingW);
+    expect(layout({ bots: bots(2), mode: 'session', screenH: H, screenW: W, sessionH: 500, reading: true }).w).toBe(1152); // 60% of W
     expect(layout({ bots: bots(2), mode: 'launch', screenH: H, screenW: W })).toMatchObject({ w: SIZES.listW, h: SIZES.launchH });
     expect(layout({ bots: bots(2), mode: 'launch', screenH: H, screenW: W, detailH: 700 }).h).toBe(700);
     expect(layout({ bots: [], mode: 'chat', screenH: 1000, screenW: W, detailH: 500 })).toMatchObject({ w: SIZES.sessionW, h: 500 });
@@ -90,6 +90,15 @@ describe('island geometry', () => {
       const f = frameOf(g, [], { w: 700, h: 900 });
       expect(f.left).toBeGreaterThanOrEqual(0); expect(f.left + f.w).toBeLessThanOrEqual(700);
     }
+  });
+  it('an enlarged view (reading mode, expanded reader) takes 60% of the screen, between its old width and 1200', () => {
+    const w = (mode: 'session' | 'reader', screenW: number) => layout({ bots: [], mode, screenH: H, screenW, reading: true, readerExpanded: true }).w;
+    expect(w('session', 1920)).toBe(1152); expect(w('reader', 1920)).toBe(1152);
+    expect(w('session', 2560)).toBe(1200); expect(w('reader', 3840)).toBe(1200);
+    expect(w('session', 1280)).toBe(768); expect(w('reader', 1280)).toBe(800);
+    expect(w('session', 800)).toBe(560);
+    expect(w('session', 500)).toBe(480); // never narrower than the session view itself
+    expect(layout({ bots: [], mode: 'session', screenH: H, screenW: 1920, sessionH: 500 }).w).toBe(SIZES.sessionW);
   });
   it('the island position moves the axis to a quarter of the screen, clamped inside it', () => {
     const left = layout({ bots: bots(2), mode: 'handle', screenH: H, screenW: W, position: 'left' });

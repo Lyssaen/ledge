@@ -92,6 +92,40 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
     fireEvent.click(within(q).getByRole('button', { name: 'Type an answer' }));
     expect(document.activeElement).toBe(container.querySelector('[data-reply]'));
   });
+  it('described options are rows, the description under the label; a row writes only its label', () => {
+    const onDraft = vi.fn();
+    const described = fakeSession('d', { state: 'idle', lastReply: { at, text: '## Choix\n\nQuelle base ?\n\n- **PostgreSQL** — robuste, mais demande un serveur\n- **SQLite** — zéro infra' } });
+    const { container } = render(<SessionView {...base} session={described} onDraft={onDraft} />);
+    const q = screen.getByRole('group', { name: 'Question 1' });
+    expect(q.querySelector('[data-options="detailed"]')).not.toBeNull();
+    const pg = within(q).getByRole('button', { name: 'PostgreSQL' });
+    expect(pg).toHaveAccessibleDescription('robuste, mais demande un serveur');
+    expect(container.querySelectorAll('[data-chip-detail]')).toHaveLength(2);
+    fireEvent.click(pg);
+    expect(onDraft).toHaveBeenCalledWith('PostgreSQL');
+    expect(pg).toHaveAttribute('aria-pressed', 'true');
+    expect(within(q).getByRole('button', { name: 'Type an answer' })).toBeInTheDocument();
+  });
+  it('lettered choices: the ★ option carries a badge, and each answer line names its question', () => {
+    const onDraft = vi.fn();
+    const lettered = fakeSession('l', { state: 'idle', lastReply: { at, text: 'Quelques décisions :\n\n1. **Framework HTTP** : a) Express ★ (même socle), b) Fastify, c) NestJS.\n2. **Tests** : a) mocha, b) vitest ★.' } });
+    render(<SessionView {...base} session={lettered} onDraft={onDraft} />);
+    const q1 = screen.getByRole('group', { name: 'Question 1' });
+    const express = within(q1).getByRole('button', { name: 'Express' });
+    expect(express).toHaveAccessibleDescription('même socle');
+    expect(express.querySelector('[data-recommended]')).toHaveTextContent('Recommended');
+    expect(within(q1).getByRole('button', { name: 'Fastify' }).querySelector('[data-recommended]')).toBeNull();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Question 2' })).getByRole('button', { name: 'vitest' }));
+    fireEvent.click(express);
+    expect(onDraft).toHaveBeenLastCalledWith('Framework HTTP: Express\nTests: vitest');
+  });
+  it('a decision axis keeps its recommendation and remarks under the question, its options as rows', () => {
+    const axes = fakeSession('x', { state: 'idle', lastReply: { at, text: 'Les options :\n\n1. **Format**\n   - **YAML** : lisible\n   - **JSON** : stdlib seule\n   - Ma recommandation : YAML, sauf si zéro dépendance.' } });
+    render(<SessionView {...base} session={axes} onDraft={vi.fn()} />);
+    const q = screen.getByRole('group', { name: 'Question 1' });
+    expect(within(q).getByRole('button', { name: 'YAML' }).querySelector('[data-recommended]')).not.toBeNull();
+    expect(q.querySelector('[data-question-notes]')).toHaveTextContent('Ma recommandation : YAML, sauf si zéro dépendance.');
+  });
   it('several questions build one line per question, numbered, and the pressed chip reads as pressed', () => {
     const onDraft = vi.fn();
     const multi = fakeSession('m', { name: 'Lu', state: 'idle', lastReply: { at, text: 'Before I start:\n\n1. Stored per screen or derived?\n2. Linked or independent?\n3. Copy the old value?' } });

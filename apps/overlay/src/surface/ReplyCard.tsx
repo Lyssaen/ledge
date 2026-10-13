@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import type { Block, Item, ReplyDoc, Section } from '../reply/parse';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
@@ -92,19 +92,41 @@ function Row({ item, kind, n, onDocument }: { item: Item; kind: Section['kind'];
   );
 }
 
-function QuestionCard({ text, options, n, total, answer, onAnswer, onFree, t, onDocument }: { text: string; options: string[]; n: number; total: number; answer?: string; onAnswer: (opt: string) => void; onFree: () => void; t: Messages; onDocument?: (ref: DocumentReference) => void }) {
+/** An option that comes with a description: a full-width row, its label over the description. */
+function DetailedOption({ label, detail, on, star, onAnswer, t }: { label: string; detail: string; on: boolean; star: boolean; onAnswer: () => void; t: Messages }) {
+  const id = useId();
+  return (
+    <Button variant="outline" aria-pressed={on} data-chip onClick={onAnswer} aria-labelledby={`${id}-l`} aria-describedby={detail ? `${id}-d` : undefined}
+      style={{ height: 'auto', minHeight: 36, padding: '7px 12px', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', gap: 2, textAlign: 'left', width: '100%', ...(on ? { borderColor: 'var(--sidebar-primary)', background: 'color-mix(in srgb, var(--sidebar-primary) 10%, transparent)' } : {}) }}>
+      <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span id={`${id}-l`} style={{ fontSize: 13, lineHeight: '18px', fontWeight: 600, color: 'var(--sidebar-foreground)', overflowWrap: 'anywhere' }}>{label}</span>
+        {star && <span data-recommended style={{ fontSize: 11, lineHeight: '16px', fontWeight: 500, padding: '0 6px', borderRadius: 999, color: 'var(--sidebar-primary)', background: 'color-mix(in srgb, var(--sidebar-primary) 12%, transparent)' }}>{t.reply.recommended}</span>}
+      </span>
+      {detail && <span id={`${id}-d`} data-chip-detail style={{ fontSize: 12, lineHeight: '16px', fontWeight: 400, color: 'var(--muted-foreground)', overflowWrap: 'anywhere' }}>{detail}</span>}
+    </Button>
+  );
+}
+
+function QuestionCard({ text, options, details, recommended, notes, n, total, answer, onAnswer, onFree, t, onDocument }: { text: string; options: string[]; details?: string[]; recommended?: number; notes?: string[]; n: number; total: number; answer?: string; onAnswer: (opt: string) => void; onFree: () => void; t: Messages; onDocument?: (ref: DocumentReference) => void }) {
+  const free = <Button variant="ghost" size="sm" data-chip-free onClick={onFree} style={{ ...chipStyle, border: '1px solid var(--border)' }}>{t.reply.typeAnswer}</Button>;
   return (
     <div data-question={n} role="group" aria-label={`${t.reply.question} ${n + 1}`} style={{ ...card, borderColor: 'color-mix(in srgb, var(--warning) 35%, transparent)' }}>
       <span style={{ ...marker, background: 'var(--status-warning-soft)', color: 'var(--warning)' }}>{total > 1 ? n + 1 : '?'}</span>
       <span style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, flexGrow: 1 }}>
         <span style={{ fontSize: 13.5, lineHeight: '19px', fontWeight: 500, overflowWrap: 'anywhere' }}>{inline(text, 0, undefined, onDocument)}</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {options.map(o => {
-            const on = answer === o;
-            return <Button key={o} variant={on ? 'primary' : 'secondary'} size="sm" aria-pressed={on} data-chip onClick={() => onAnswer(o)} style={chipStyle}>{o}</Button>;
-          })}
-          <Button variant="ghost" size="sm" data-chip-free onClick={onFree} style={{ ...chipStyle, border: '1px solid var(--border)' }}>{t.reply.typeAnswer}</Button>
-        </span>
+        {notes && notes.length > 0 && <span data-question-notes style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, lineHeight: '18px', color: 'var(--muted-foreground)', overflowWrap: 'anywhere' }}>{notes.map((x, j) => <span key={j}>{inline(x, 0, undefined, onDocument)}</span>)}</span>}
+        {details || recommended !== undefined
+          ? <span data-options="detailed" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+            {options.map((o, i) => <DetailedOption key={o} label={o} detail={details?.[i] ?? ''} on={answer === o} star={recommended === i} onAnswer={() => onAnswer(o)} t={t} />)}
+            {free}
+          </span>
+          : <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {options.map(o => {
+              const on = answer === o;
+              return <Button key={o} variant={on ? 'primary' : 'secondary'} size="sm" aria-pressed={on} data-chip onClick={() => onAnswer(o)} style={chipStyle}>{o}</Button>;
+            })}
+            {free}
+          </span>}
       </span>
     </div>
   );
@@ -117,14 +139,16 @@ export interface ReplyCardProps {
   onDraft: (text: string) => void; onFocusReply: () => void;
 }
 
-/** The agent's last message, read like a plan: sections with their markers, questions with their option chips. */
+/** The agent's last message, read like a plan: sections with their markers, questions with their option chips (a row per
+ *  option, its description under it, when the agent describes them). */
 export function ReplyCard({ doc, raw, t, onDraft, onFocusReply, onDocument }: ReplyCardProps) {
   const [showRaw, setShowRaw] = useState(false);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const answer = (q: number, opt: string) => {
     const next = { ...answers, [q]: opt };
     setAnswers(next);
-    const text = doc.questions.length === 1 ? opt : doc.questions.map((_, i) => (next[i] ? `${i + 1}. ${next[i]}` : null)).filter(Boolean).join('\n');
+    // Several questions: one line each, named by the question's short name when it has one ("Framework HTTP: Express").
+    const text = doc.questions.length === 1 ? opt : doc.questions.map((x, i) => (next[i] ? `${x.ref ? `${x.ref}:` : `${i + 1}.`} ${next[i]}` : null)).filter(Boolean).join('\n');
     onDraft(text); onFocusReply();
   };
   const renderBlock = (b: Block, kind: Section['kind'], key: number): ReactNode => {
@@ -144,7 +168,7 @@ export function ReplyCard({ doc, raw, t, onDraft, onFocusReply, onDocument }: Re
       );
     }
     if (b.type === 'p') {
-      if (b.q !== undefined) { const q = doc.questions[b.q]!; return <QuestionCard key={key} text={q.text} options={q.options} n={b.q} total={doc.questions.length} answer={answers[b.q]} onAnswer={o => answer(b.q!, o)} onFree={onFocusReply} t={t} onDocument={onDocument} />; }
+      if (b.q !== undefined) { const q = doc.questions[b.q]!; return <QuestionCard key={key} text={q.text} options={q.options} details={q.details} recommended={q.recommended} n={b.q} total={doc.questions.length} answer={answers[b.q]} onAnswer={o => answer(b.q!, o)} onFree={onFocusReply} t={t} onDocument={onDocument} />; }
       return <p key={key} style={{ margin: 0, fontSize: 14, lineHeight: '21px', overflowWrap: 'anywhere' }}>{inline(b.text, 0, undefined, onDocument)}</p>;
     }
     if (kind === 'next') {
@@ -165,7 +189,7 @@ export function ReplyCard({ doc, raw, t, onDraft, onFocusReply, onDocument }: Re
     return (
       <Tag key={key} data-list={b.ordered ? 'ordered' : 'bullet'} style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {b.items.map((it, i) => it.q !== undefined
-          ? <li key={i}><QuestionCard text={doc.questions[it.q]!.text} options={doc.questions[it.q]!.options} n={it.q} total={doc.questions.length} answer={answers[it.q]} onAnswer={o => answer(it.q!, o)} onFree={onFocusReply} t={t} onDocument={onDocument} /></li>
+          ? <li key={i}><QuestionCard text={doc.questions[it.q]!.text} options={doc.questions[it.q]!.options} details={doc.questions[it.q]!.details} recommended={doc.questions[it.q]!.recommended} notes={it.sub} n={it.q} total={doc.questions.length} answer={answers[it.q]} onAnswer={o => answer(it.q!, o)} onFree={onFocusReply} t={t} onDocument={onDocument} /></li>
           : it.checked === true
             ? <Row key={i} item={it} kind={kind} n={i + 1} onDocument={onDocument} />
             : <li key={i} data-item="item" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minWidth: 0 }}>

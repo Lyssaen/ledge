@@ -6,7 +6,7 @@ import type { Pending, Tool } from '@ledge/protocol';
  * one read can apply them all to the screen it had): if it never does, the rest is not sent.
  */
 export type KeyPlan = Array<{ text: string } | { keys: string[] } | { waitMs: number } | { until: (lastLines: string) => boolean }>;
-export type PanePromptMatch = { kind: 'permission' | 'question' | 'plan'; text: string; options?: string[] };
+export type PanePromptMatch = { kind: 'permission' | 'question' | 'plan'; text: string; options?: string[]; optionDetails?: string[] };
 
 export interface Adapter {
   tool: Tool;

@@ -11,6 +11,8 @@ export const PendingSchema = z.object({
   text: z.string(),
   tool: z.string().optional(),
   options: z.array(z.string()).optional(),
+  /** Each option's description, by index ('' when it has none); left out when no option has one. */
+  optionDetails: z.array(z.string()).optional(),
   source: z.enum(['hook', 'pane']),
   /** Set when the request comes from a helper (subagent): it is routed through its parent. */
   helperId: z.string().optional(),

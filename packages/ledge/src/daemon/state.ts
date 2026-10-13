@@ -17,6 +17,9 @@ export const QUESTION_TOOLS: ReadonlySet<string> = new Set(['AskUserQuestion', '
 /** Tools whose permission request is a file change: Claude Code's, and Codex's patch. */
 const DIFF_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'apply_patch']);
 
+/** The options' descriptions travel with them, only when there are some. */
+const details = (ev: SessionEvent) => (ev.optionDetails?.some(Boolean) ? { optionDetails: ev.optionDetails } : {});
+
 function pendingFor(ev: SessionEvent): Pending | undefined {
   if (ev.name === 'PermissionRequest') {
     const diff = !!ev.tool && DIFF_TOOLS.has(ev.tool);
@@ -24,7 +27,7 @@ function pendingFor(ev: SessionEvent): Pending | undefined {
   }
   if (ev.name === 'PreToolUse' && ev.tool && QUESTION_TOOLS.has(ev.tool)) {
     // The tool is kept only when it is not Claude's, so its PostToolUse can still be matched (see pendingTool).
-    return { kind: 'question', text: ev.text ?? '', options: ev.options, source: 'hook', ...(ev.tool !== 'AskUserQuestion' ? { tool: ev.tool } : {}) };
+    return { kind: 'question', text: ev.text ?? '', options: ev.options, ...details(ev), source: 'hook', ...(ev.tool !== 'AskUserQuestion' ? { tool: ev.tool } : {}) };
   }
   if (ev.name === 'PreToolUse' && ev.tool === 'ExitPlanMode') {
     return { kind: 'plan', text: ev.text ?? '', source: 'hook' };
@@ -33,7 +36,7 @@ function pendingFor(ev: SessionEvent): Pending | undefined {
     return { kind: 'permission', text: ev.text ?? '', source: 'hook' };
   }
   if (ev.name === 'PanePrompt') {
-    return { kind: ev.kind ?? 'permission', text: ev.text ?? '', options: ev.options, source: 'pane' };
+    return { kind: ev.kind ?? 'permission', text: ev.text ?? '', options: ev.options, ...details(ev), source: 'pane' };
   }
   return undefined;
 }
@@ -48,7 +51,11 @@ function mergePending(current: Pending | undefined, incoming: Pending): Pending 
   // A permission/diff request over a richer hook pending (plan, question) keeps that kind.
   if (current.source === 'hook' && (current.kind === 'plan' || current.kind === 'question') && incoming.source === 'hook') return current;
   const kind = incoming.kind;
-  return { ...current, ...incoming, kind, text: incoming.text || current.text, tool: incoming.tool ?? current.tool, options: incoming.options ?? current.options };
+  // The descriptions belong to the options they came with.
+  const options = incoming.options ?? current.options;
+  const optionDetails = incoming.options ? incoming.optionDetails : current.optionDetails;
+  const { optionDetails: _old, ...rest } = { ...current, ...incoming };
+  return { ...rest, kind, text: incoming.text || current.text, tool: incoming.tool ?? current.tool, options, ...(optionDetails ? { optionDetails } : {}) };
 }
 
 /** The tool whose PostToolUse means a hook pending was answered (in the terminal or from Ledge). */
@@ -159,7 +166,7 @@ function withoutReply(s: Session): Session {
 
 function samePending(a: Pending, b: Pending): boolean {
   return a.kind === b.kind && a.text === b.text && a.tool === b.tool && a.source === b.source
-    && JSON.stringify(a.options) === JSON.stringify(b.options);
+    && JSON.stringify(a.options) === JSON.stringify(b.options) && JSON.stringify(a.optionDetails) === JSON.stringify(b.optionDetails);
 }
 
 /**

@@ -14,6 +14,8 @@ export const SessionEventSchema = z.object({
   tool: z.string().optional(),
   text: z.string().optional(),
   options: z.array(z.string()).optional(),
+  /** Each option's description, by index ('' when it has none); left out when no option has one. */
+  optionDetails: z.array(z.string()).optional(),
   kind: z.enum(['question', 'permission', 'plan', 'diff']).optional(),
   exitCode: z.number().int().nullable().optional(),
   helperId: z.string().optional(),

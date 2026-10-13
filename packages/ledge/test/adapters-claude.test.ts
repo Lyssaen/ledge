@@ -20,10 +20,11 @@ describe('claude adapter: detection (Claude Code 2.x captures)', () => {
       options: ['Yes', 'Yes, and switch to accept edits (auto-approve file edits and common file', 'No']
     });
   });
-  it('detects a question with its options, without description lines', () => {
+  it('detects a question with its options, the lines under each as its description', () => {
     expect(claudeAdapter.detectPrompt(fx('claude2-question'))).toEqual({
       kind: 'question', text: 'Which color do you prefer?',
-      options: ['Red', 'Blue', 'Type something.', 'Chat about this']
+      options: ['Red', 'Blue', 'Type something.', 'Chat about this'],
+      optionDetails: ['Choose red as your preferred color.', 'Choose blue as your preferred color.', '', '']
     });
   });
   it('reads only the last dialog when an older one is still in scrollback', () => {

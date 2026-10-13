@@ -139,8 +139,10 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
       if (tool && QUESTION_TOOLS.has(tool)) {
         const qs = ((p.tool_input as Payload | undefined)?.questions as Array<Payload> | undefined) ?? [];
         const q = qs[0];
-        const options = ((q?.options as Array<Payload> | undefined) ?? []).map(o => str(o.label) ?? '').filter(Boolean);
-        return { name: 'PreToolUse', ...base, tool, text: str(q?.question) ?? '', options };
+        const opts = ((q?.options as Array<Payload> | undefined) ?? []).filter(o => !!str(o.label));
+        const options = opts.map(o => str(o.label)!);
+        const optionDetails = opts.map(o => str(o.description)?.trim() ?? '');
+        return { name: 'PreToolUse', ...base, tool, text: str(q?.question) ?? '', options, ...(optionDetails.some(Boolean) ? { optionDetails } : {}) };
       }
       return { name: 'PreToolUse', ...base, tool, text: describeTool(tool, p.tool_input) };
     }

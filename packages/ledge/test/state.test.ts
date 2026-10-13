@@ -77,6 +77,12 @@ describe('reduce: pending rules', () => {
     const next = reduce(session('working'), ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Which one?', options: ['Backfill', 'Shadow'] }));
     expect(next.pending).toEqual({ kind: 'question', text: 'Which one?', options: ['Backfill', 'Shadow'], source: 'hook' });
   });
+  it('AskUserQuestion keeps its option descriptions; a pane prompt with new options drops the old ones', () => {
+    const next = reduce(session('working'), ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Which one?', options: ['Backfill', 'Shadow'], optionDetails: ['Copies the history.', ''] }));
+    expect(next.pending).toEqual({ kind: 'question', text: 'Which one?', options: ['Backfill', 'Shadow'], optionDetails: ['Copies the history.', ''], source: 'hook' });
+    const pane = reduce(session('working'), ev('PanePrompt', { source: 'pane', kind: 'question', text: 'Which one?', options: ['A', 'B'], optionDetails: ['', ''] }));
+    expect(pane.pending).toEqual({ kind: 'question', text: 'Which one?', options: ['A', 'B'], source: 'pane' });
+  });
   it('ExitPlanMode sets a plan pending', () => {
     const next = reduce(session('working'), ev('PreToolUse', { tool: 'ExitPlanMode', text: 'Fix three findings' }));
     expect(next.pending?.kind).toBe('plan');
