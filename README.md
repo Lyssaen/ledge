@@ -219,8 +219,8 @@ Daemon to clients:
 | `session.updated { session }` | Any change to a session. |
 | `session.removed { id }` | The session left the list (retired or dismissed). |
 | `session.preview { id, lines }` | The last 30 cleaned lines of the pane, sent only when they changed. |
-| `session.thread` | A session's thread (`items`), answered to a `session.thread` request. |
-| `session.thread.item` | One thread item created or updated, broadcast as it happens. |
+| `session.thread { id, items }` | A session's thread, answered to a `session.thread` request. |
+| `session.thread.item { id, item }` | One thread item created or updated, broadcast as it happens. |
 | `session.launched { id }` | To the requester of a `session.launch` only: the session exists (its `session.updated` was broadcast just before). |
 | `recents { recents }` | The recent folders changed. |
 | `folder.listing { path, parent, entries, error? }` | To the requester of a `folder.list` or `folder.create` only: the folder (resolved, `~` expanded), its parent (`null` at the root) and its subfolders by name, hidden ones left out. A refusal says why in `error`, never in an `error` message. |
@@ -253,7 +253,7 @@ Clients to daemon:
 | `chat.ask { qid, text, tool? }` | overlay | Ask Ledge. `tool` is the overlay's default harness (`claude` when omitted). |
 | `chat.cancel { qid }` | overlay | Stop the running question. |
 | `chat.reset` | overlay | Clear the day's turns and start a new harness session on the next question. Refused while a question is running. |
-| `session.thread` | overlay | Ask for a session's thread; it is not in the snapshot. |
+| `session.thread { id }` | overlay | Ask for a session's thread; it is not in the snapshot. |
 | `snapshot.request` | any | Ask for a fresh snapshot. |
 
 The server accepts connections with no `Origin` header (Node clients) or with the Tauri origins (`tauri://localhost`, `http://tauri.localhost`, the Vite dev server). Any other web page is refused.
@@ -334,6 +334,7 @@ Windows side, the overlay keeps its preferences in the WebView's `localStorage`:
 
 - The daemon listens on the loopback only and refuses browser origins other than the overlay's. There is no authentication beyond that: anything running on the machine can talk to it, which is the accepted scope of a personal tool.
 - A hook never blocks or fails the agent: 100 ms budget, every error swallowed and logged.
+- The `transcriptPath` of a local `session.event` is read by the daemon to fill the thread: only the tail of the file (512 KiB at most), only its text blocks, broadcast to local clients. It trusts that path under the same loopback model as `session.reply`: whatever can send it could already type into a pane.
 - An answer is typed only if the prompt is on screen, and reported as taken only if the prompt then disappears. Nothing is retried automatically; the session goes to `error` and the overlay offers a retry.
 - A decision is locked in the overlay until the daemon confirms, rejects, or the connection drops, so a double click never sends two answers.
 - The overlay survives the daemon: it shows "daemon unreachable, retrying" under the island and reconnects with backoff.
