@@ -8,7 +8,9 @@ export { LEDGE_ID };
 export interface Ack { id: string; minElapsed: boolean; confirmed: boolean }
 export type BubbleKind = 'ask' | 'finished';
 export interface SurfaceState {
-  mode: Mode; selectedId: string | null; bubbleId: string | null; queue: string[]; openedBy: 'mouse' | 'keyboard' | null;
+  mode: Mode; selectedId: string | null;
+  /** The helper whose thread the helper view shows (spec 2026-10-13 §6). */
+  helperId: string | null; bubbleId: string | null; queue: string[]; openedBy: 'mouse' | 'keyboard' | null;
   /** What the bubble shows: a request to decide, or a finished notice (spec §5). */
   bubbleKind: BubbleKind;
   /** Finished notices waiting for, or showing in, a bubble; oldest first. Forgotten whenever the surface leaves the bubble. */
@@ -40,7 +42,7 @@ export type SurfaceEvent =
   | { type: 'focusWithin'; on: boolean } | { type: 'editing'; on: boolean } | { type: 'visibility'; hidden: boolean } | { type: 'outsideClick' }
   | { type: 'botClick'; id: string } | { type: 'rowClick'; id: string } | { type: 'homeClick' } | { type: 'bubbleClick' } | Elapsed<'bubbleElapsed'>
   | { type: 'decidedInBubble' } | Elapsed<'holdElapsed'> | { type: 'decisionFailed'; id: string }
-  | { type: 'back' } | { type: 'close' } | { type: 'shortcut' } | { type: 'newSession' } | { type: 'settings' } | { type: 'help' } | { type: 'launch' } | { type: 'chat' }
+  | { type: 'openHelper'; id: string } | { type: 'back' } | { type: 'close' } | { type: 'shortcut' } | { type: 'newSession' } | { type: 'settings' } | { type: 'help' } | { type: 'launch' } | { type: 'chat' }
   | { type: 'documentOpen'; origin: DocumentOrigin } | { type: 'documentExpanded'; on: boolean }
   | { type: 'typing'; on: boolean } | { type: 'reading'; on: boolean } | { type: 'dnd'; on: boolean };
 
@@ -52,7 +54,7 @@ export const ELAPSED: Record<TimerName, 'dwellElapsed' | 'leaveElapsed' | 'bubbl
   { dwell: 'dwellElapsed', leave: 'leaveElapsed', bubble: 'bubbleElapsed', hold: 'holdElapsed', unfold: 'unfoldElapsed' };
 
 export const initialSurface = (): SurfaceState => ({
-  mode: 'handle', selectedId: null, bubbleId: null, queue: [], openedBy: null, bubbleKind: 'ask', done: [], hot: false, reading: false, typing: false, documentOrigin: null, documentExpanded: false,
+  mode: 'handle', selectedId: null, helperId: null, bubbleId: null, queue: [], openedBy: null, bubbleKind: 'ask', done: [], hot: false, reading: false, typing: false, documentOrigin: null, documentExpanded: false,
   hovering: false, focusWithin: false, hidden: false, editing: false, ack: null, failed: null, unfoldDue: false, rev: 0
 });
 
@@ -62,10 +64,10 @@ const cancel = (name: TimerName): Effect => ({ type: 'cancelTimer', name });
 const cancelAll: Effect[] = (['dwell', 'leave', 'bubble', 'hold', 'unfold'] as TimerName[]).map(cancel);
 const same = (s: SurfaceState): Result => ({ state: s, effects: [] });
 const held = (s: SurfaceState) => s.hovering || s.focusWithin || s.hidden;
-const toHandle = (s: SurfaceState): SurfaceState => ({ ...s, mode: 'handle', bubbleId: null, bubbleKind: 'ask', done: [], selectedId: null, openedBy: null, hot: false, reading: false, typing: false, documentOrigin: null, documentExpanded: false, ack: null, failed: null, unfoldDue: false });
-const open = (s: SurfaceState, id: string): Result => ({ state: { ...s, mode: 'session', selectedId: id, bubbleId: null, bubbleKind: 'ask', done: [], hot: false, ack: null, failed: null }, effects: cancelAll });
+const toHandle = (s: SurfaceState): SurfaceState => ({ ...s, mode: 'handle', bubbleId: null, bubbleKind: 'ask', done: [], selectedId: null, helperId: null, openedBy: null, hot: false, reading: false, typing: false, documentOrigin: null, documentExpanded: false, ack: null, failed: null, unfoldDue: false });
+const open = (s: SurfaceState, id: string): Result => ({ state: { ...s, mode: 'session', selectedId: id, helperId: null, bubbleId: null, bubbleKind: 'ask', done: [], hot: false, ack: null, failed: null }, effects: cancelAll });
 /** Panels opened inside the same surface; Escape/back from a detail view returns to the list. */
-const detail = (m: Mode) => m === 'session' || m === 'settings' || m === 'help' || m === 'launch' || m === 'chat';
+const detail = (m: Mode) => m === 'session' || m === 'helper' || m === 'settings' || m === 'help' || m === 'launch' || m === 'chat';
 /** Shows the bubble for `id` with a fresh clock, paused straight away if something already holds it. */
 const showBubble = (s: SurfaceState, id: string, extra: Effect[] = [], kind: BubbleKind = 'ask'): Result => ({
   state: { ...s, mode: 'bubble', bubbleId: id, bubbleKind: kind, ack: null, failed: null },
@@ -135,8 +137,8 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
     case 'removed': {
       const queue = s.queue.filter(id => id !== e.id);
       const done = s.done.filter(id => id !== e.id);
-      if (s.mode === 'session' && s.selectedId === e.id) return { state: e.remaining.length ? { ...s, queue, done, mode: 'list', selectedId: null, reading: false } : toHandle({ ...s, queue }), effects: cancelAll };
-      if (s.mode === 'reader' && s.documentOrigin?.kind === 'session' && s.documentOrigin.sessionId === e.id) return same({ ...s, queue, done, selectedId: null });
+      if ((s.mode === 'session' || s.mode === 'helper') && s.selectedId === e.id) return { state: e.remaining.length ? { ...s, queue, done, mode: 'list', selectedId: null, helperId: null, reading: false } : toHandle({ ...s, queue }), effects: cancelAll };
+      if (s.mode === 'reader' && s.documentOrigin?.kind === 'session' && s.documentOrigin.sessionId === e.id) return same({ ...s, queue, done, selectedId: null, helperId: null });
       if (s.mode === 'bubble' && s.bubbleKind === 'finished' && s.bubbleId === e.id)
         return done.length ? showBubble({ ...s, queue, done }, done[0]!, [], 'finished') : { state: toHandle({ ...s, queue }), effects: cancelAll };
       if (s.mode === 'bubble' && s.ack?.id === e.id) return confirm({ ...s, done }, queue);
@@ -177,7 +179,7 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
     case 'rowClick': return open(s, e.id);
     case 'homeClick': return s.mode === 'handle' ? { state: { ...s, mode: 'list', openedBy: 'mouse', hot: false, unfoldDue: false }, effects: cancelAll } : same(s);
     case 'bubbleClick':
-      if (s.bubbleId === LEDGE_ID) return { state: { ...s, mode: 'chat', selectedId: null, bubbleId: null, bubbleKind: 'ask', done: [], hot: false, ack: null, failed: null }, effects: cancelAll };
+      if (s.bubbleId === LEDGE_ID) return { state: { ...s, mode: 'chat', selectedId: null, helperId: null, bubbleId: null, bubbleKind: 'ask', done: [], hot: false, ack: null, failed: null }, effects: cancelAll };
       return s.bubbleId ? open(s, s.bubbleId) : same(s);
     case 'bubbleElapsed': {
       if (s.mode !== 'bubble' || s.ack) return same(s);
@@ -201,24 +203,27 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
     /* Settings, help and the launch form: detail views over the list (never from the handle or a bubble). */
     case 'settings': case 'help': case 'launch': {
       if (s.mode === 'handle' || s.mode === 'bubble' || s.mode === e.type) return same(s);
-      return { state: { ...s, mode: e.type, selectedId: null, reading: false }, effects: [cancel('leave')] };
+      return { state: { ...s, mode: e.type, selectedId: null, helperId: null, reading: false }, effects: [cancel('leave')] };
     }
     case 'chat': {
       if (s.mode === 'chat') return same(s);
       if (s.mode === 'handle' || s.mode === 'bubble') {
-        return { state: { ...s, mode: 'chat', selectedId: null, bubbleId: null, bubbleKind: 'ask', done: [], hot: false, ack: null, failed: null, unfoldDue: false }, effects: cancelAll };
+        return { state: { ...s, mode: 'chat', selectedId: null, helperId: null, bubbleId: null, bubbleKind: 'ask', done: [], hot: false, ack: null, failed: null, unfoldDue: false }, effects: cancelAll };
       }
-      return { state: { ...s, mode: 'chat', selectedId: null, reading: false }, effects: [cancel('leave')] };
+      return { state: { ...s, mode: 'chat', selectedId: null, helperId: null, reading: false }, effects: [cancel('leave')] };
     }
     case 'documentOpen': return s.mode === 'session' || s.mode === 'chat' ? { state: { ...s, mode: 'reader', documentOrigin: e.origin, documentExpanded: false }, effects: [cancel('leave')] } : same(s);
     case 'documentExpanded': return s.mode === 'reader' ? same({ ...s, documentExpanded: e.on }) : same(s);
+    case 'openHelper':
+      return s.mode === 'session' && s.selectedId ? { state: { ...s, mode: 'helper', helperId: e.id }, effects: [] } : same(s);
     case 'back': {
+      if (s.mode === 'helper') return { state: { ...s, mode: 'session', helperId: null }, effects: [] };
       if (s.mode === 'reader') {
         const origin = s.documentOrigin;
         const available = origin?.kind === 'session' && s.selectedId !== null;
-        return { state: { ...s, mode: origin?.kind === 'chat' ? 'chat' : available ? 'session' : 'list', selectedId: available ? s.selectedId : null, documentOrigin: null, documentExpanded: false }, effects: [] };
+        return { state: { ...s, mode: origin?.kind === 'chat' ? 'chat' : available ? 'session' : 'list', selectedId: available ? s.selectedId : null, helperId: null, documentOrigin: null, documentExpanded: false }, effects: [] };
       }
-      return detail(s.mode) ? { state: { ...s, mode: 'list', selectedId: null, reading: false }, effects: [] } : same(s);
+      return detail(s.mode) ? { state: { ...s, mode: 'list', selectedId: null, helperId: null, reading: false }, effects: [] } : same(s);
     }
     case 'close': return { state: toHandle(s), effects: cancelAll };
     /* A press outside the window folds an open panel; the handle and a bubble are left alone. */
@@ -227,7 +232,7 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
     case 'newSession': {
       if (s.mode === 'launch') return { state: toHandle(s), effects: cancelAll };
       const quiet = s.mode === 'handle' || s.mode === 'bubble';
-      return { state: { ...s, mode: 'launch', openedBy: 'keyboard', selectedId: null, reading: false, documentOrigin: null, documentExpanded: false, hot: false, bubbleId: null, bubbleKind: 'ask', done: quiet ? [] : s.done, ack: null, failed: null, unfoldDue: false }, effects: cancelAll };
+      return { state: { ...s, mode: 'launch', openedBy: 'keyboard', selectedId: null, helperId: null, reading: false, documentOrigin: null, documentExpanded: false, hot: false, bubbleId: null, bubbleKind: 'ask', done: quiet ? [] : s.done, ack: null, failed: null, unfoldDue: false }, effects: cancelAll };
     }
     /* Ctrl+Alt+L opens the list from the handle or over a bubble (the ask stays queued), and closes any open panel. */
     case 'shortcut': return s.mode === 'handle' || s.mode === 'bubble'

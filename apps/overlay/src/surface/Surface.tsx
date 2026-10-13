@@ -18,6 +18,7 @@ import { pickSay, pickSpeaker, sayKindOf, SAY_LINGER_MS, type SayCandidate } fro
 import { Bubble, type BubbleAck } from './Bubble';
 import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
+import { HelperView } from './HelperView';
 import { LaunchView, LAUNCH_FOOTER_H, type LaunchRequest } from './LaunchView';
 import { ChatView, CHAT_HEADER_H, CHAT_COMPOSER_H } from './ChatView';
 import { loadOpenTab } from './openTabPreference';
@@ -348,6 +349,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const sessionContentRef = useRef<HTMLDivElement>(null); const sessionReplyRef = useRef<HTMLDivElement>(null);
   const contentH = useMeasuredHeight(sessionContentRef, st.mode === 'session', ps);
   const replyH = useMeasuredHeight(sessionReplyRef, st.mode === 'session', ps);
+  const helperRef = useRef<HTMLDivElement>(null);
+  const helperContentH = useMeasuredHeight(helperRef, st.mode === 'helper', ps);
+  const helperH = helperContentH ? SESSION_HEADER_H + helperContentH + SURFACE_CHROME_Y : 480;
   const sessionH = !selected ? 480 : contentH ? SESSION_HEADER_H + contentH + (selected.source === 'hook_only' ? 0 : replyH) + SURFACE_CHROME_Y : measureSessionH(selected, st.reading);
   // Settings and help size themselves to their content too (their header is the 56 px DetailHeader).
   const settingsRef = useRef<HTMLDivElement>(null); const helpRef = useRef<HTMLDivElement>(null);
@@ -491,7 +495,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // The strip shows under a covering window once the island has been folded and left alone for 500 ms; a say
   // still hanging under its speaker keeps the island compact, the strip has no companion to hang it from.
   const strip = useDelayed(discreet && covered && st.mode === 'handle' && !st.hot && !st.hovering && bandPointer === null && !sayShown, STRIP_BACK_MS);
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, dnd, readerExpanded: st.documentExpanded, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, dnd, readerExpanded: st.documentExpanded, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
   geoRef.current = geo;
   // The shell watches the top band over the island's span (its depth and overhang are the shell's own constants).
   useEffect(() => { setHotZone(Math.round(geo.handle.left), Math.round(geo.handle.w)); }, [geo.handle.left, geo.handle.w]);
@@ -537,7 +541,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   }, [bandPointer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const panel = st.mode !== 'handle' && st.mode !== 'bubble';
-  const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch' || st.mode === 'chat' || st.mode === 'reader';
+  const detail = st.mode === 'session' || st.mode === 'helper' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch' || st.mode === 'chat' || st.mode === 'reader';
   const openDocument = (ref: DocumentReference, origin: DocumentOrigin) => { documentSourceFocus.current = document.activeElement as HTMLElement; reader.open(ref, origin); dispatch({ type: 'documentOpen', origin }); };
   const readerBack = () => reader.back();
   const readerClose = () => { documentSourceFocus.current = null; reader.close(); dispatch({ type: 'close' }); };
@@ -551,7 +555,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const bubblePaused = st.hovering || st.focusWithin || st.hidden || st.ack !== null;
   const send = (m: Parameters<DaemonClient['send']>[0]) => client.send(m);
   // The thread is not in the snapshot: ask for it when a session opens (or after a reconnection emptied the threads).
-  const threadWanted = st.mode === 'session' ? st.selectedId : null;
+  const threadWanted = st.mode === 'session' || st.mode === 'helper' ? st.selectedId : null;
   // A boolean, not the Map: the store rebuilds `threads` on every update, which would re-send the request while the reply is pending.
   const threadLoaded = threadWanted != null && threads.has(threadWanted);
   useEffect(() => {
@@ -703,7 +707,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
             <HelpView contentRef={helpRef} visible={st.mode === 'help'} enterDelay={enter} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'session' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'session' ? 'auto' : 'none', transform: `translateX(${st.mode === 'session' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            {shown && <SessionView contentRef={sessionContentRef} replyRef={sessionReplyRef} session={shown} preview={shownPreview} visible={st.mode === 'session'} enterDelay={enter} reading={st.reading} draft={drafts[shown.id] ?? ''}
+            {shown && <SessionView contentRef={sessionContentRef} replyRef={sessionReplyRef} session={shown} preview={shownPreview} visible={st.mode === 'session'} enterDelay={enter} reading={st.reading} draft={drafts[shown.id] ?? ''} thread={threads.get(shown.id)} onOpenHelper={id => dispatch({ type: 'openHelper', id })}
               blocked={blockedFor(shown)} deciding={asks.inFlight.has(shown.id)} failure={asks.failures[shown.id]} frozen={unreachable} reducedMotion={reducedMotion}
               onDraft={t => { setDrafts(x => ({ ...x, [shown.id]: t })); dispatch({ type: 'typing', on: t.length > 0 }); }}
               onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onDecide={d => decide(shown.id, d)} onReply={t => reply(shown.id, t)}
@@ -711,6 +715,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               onDismiss={() => { if (!unreachable) send({ type: 'session.dismiss', id: shown.id }); }} dismissOff={unreachable}
               onFocus={() => focusTab(shown.id)} onToggleReading={() => dispatch({ type: 'reading', on: !st.reading })} onRename={shown.state !== 'exited' ? topic => send({ type: 'session.rename', id: shown.id, topic }) : undefined} onDocument={ref => openDocument(ref, { kind: 'session', sessionId: shown.id })} theme={theme} />}
           </div>
+          {shown && st.helperId && <HelperView contentRef={helperRef} session={shown} helperId={st.helperId} items={threads.get(shown.id) ?? []} visible={st.mode === 'helper'} enterDelay={enter} theme={theme} paused={st.mode !== 'helper'} frozen={unreachable} reducedMotion={reducedMotion}
+            onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />}
           {st.mode === 'reader' && activeReading && documentState && <DocumentView state={documentState} reading={activeReading} onReading={reader.setReading} originName={st.documentOrigin?.kind === 'session' ? byId.get(st.documentOrigin.sessionId)?.name ?? st.documentOrigin.sessionId : 'Ledge'} theme={theme} expanded={st.documentExpanded} onBack={readerBack} onClose={readerClose} onExpand={() => dispatch({ type: 'documentExpanded', on: !st.documentExpanded })} onReload={reader.reload} onDocument={reader.follow} />}
         </div>
       </div>

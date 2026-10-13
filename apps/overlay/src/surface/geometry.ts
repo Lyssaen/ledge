@@ -6,7 +6,7 @@ export const ISLAND = { h: 38, padL: 12, padR: 14, resident: 22, sepGap: 8, comp
  *  the notch is borderless so it merges with the screen edge. */
 export const SURFACE_BORDER = 0;
 export const SURFACE_CHROME_Y = 2 * SURFACE_BORDER;
-export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'settings' | 'help' | 'launch' | 'chat' | 'reader';
+export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'helper' | 'settings' | 'help' | 'launch' | 'chat' | 'reader';
 /** Where the island's axis sits on the top edge: the centre, or a quarter of the width from the left or the right. */
 export type IslandPosition = 'center' | 'left' | 'right';
 /** The resident's finished-chat notice: not a session id. */
@@ -54,7 +54,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 export const expandedWidth = (screenW: number, min: number) => clamp(Math.round(screenW * 0.6), min, SIZES.expandedMaxW);
 
 /** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of the list: an expanded (focused) row, the notice, the update card. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
-export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
+export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; /** Measured height of the open helper view. */ helperH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
 
 /** Everything hangs from the top edge of the work area, centred on the island's axis; `left` is clamped into the screen. */
 export function layout(input: LayoutInput): Layout {
@@ -84,6 +84,7 @@ export function layout(input: LayoutInput): Layout {
   // the notice) still grow it.
   const rowsH = (n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.groups ?? 0) * SIZES.groupH) + (input.listExtraH ?? 0);
   if (mode === 'list') return view(SIZES.listW, SIZES.headerH + rowsH + (input.askH ?? 0) + SIZES.footerH + SURFACE_CHROME_Y);
+  if (mode === 'helper') return view(SIZES.sessionW, input.helperH ?? 480);
   return view(input.reading ? Math.min(expandedWidth(screenW, SIZES.readingW), Math.max(SIZES.sessionW, screenW - 24)) : SIZES.sessionW, input.sessionH ?? 480);
 }
 

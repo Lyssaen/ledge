@@ -509,4 +509,17 @@ describe('surface machine: decision failure and detail views', () => {
     expect(r.s).toMatchObject({ mode: 'bubble', bubbleId: 'ledge', bubbleKind: 'finished' });
     expect(run([{ type: 'bubbleClick' }], r.s).s).toMatchObject({ mode: 'chat', bubbleId: null, selectedId: null });
   });
+  it('opens a helper from a session and comes back to the same session', () => {
+    const { s } = run([{ type: 'rowClick', id: 'a' }, { type: 'openHelper', id: 'h1' }]);
+    expect(s).toMatchObject({ mode: 'helper', selectedId: 'a', helperId: 'h1' });
+    const back = run([{ type: 'back' }], s).s;
+    expect(back).toMatchObject({ mode: 'session', selectedId: 'a', helperId: null });
+    expect(run([{ type: 'openHelper', id: 'h1' }], run([{ type: 'homeClick' }]).s).s.mode).toBe('list'); // only from a session
+    const closed = run([{ type: 'close' }], s).s;
+    expect(closed.mode).not.toBe('helper');
+    expect(closed.helperId).toBeNull();
+    // Same as a session: the list while other sessions remain, the handle when none do.
+    expect(run([{ type: 'removed', id: 'a', remaining: ['b'] }], s).s).toMatchObject({ mode: 'list', helperId: null, selectedId: null });
+    expect(run([{ type: 'removed', id: 'a', remaining: [] }], s).s).toMatchObject({ mode: 'handle', helperId: null });
+  });
 });
