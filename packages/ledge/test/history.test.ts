@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionEvent } from '@ledge/protocol';
-import { History, MAX_ITEMS } from '../src/daemon/history.js';
+import { History, MAX_ITEMS, SYNC_MS } from '../src/daemon/history.js';
 import { paths } from '../src/paths.js';
 
 const T0 = '2026-10-13T10:00:00.000Z';
@@ -116,5 +116,24 @@ describe('History', () => {
     expect(again.items('o')[1]).toMatchObject({ status: 'success' });
     again.record('o', ev('UserPromptSubmit', { text: 'next' }, 4));
     expect(again.items('o').at(-1)).toMatchObject({ id: 'prompt-2' });
+  });
+
+  it('syncs the agent messages of the current turn once a second, forced at the end of a turn, and the helper ones under its id', () => {
+    const p = join(dir, 'c.jsonl');
+    const line = (uuid: string, ts: string, text: string) => JSON.stringify({ uuid, timestamp: ts, type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
+    writeFileSync(p, [line('u0', later(-5), 'Vieux tour'), line('u1', later(1), 'Je regarde.')].join('\n') + '\n');
+    const h = new History();
+    expect(h.sync('s', p, { now: 1000 })).toEqual([]); // no prompt known yet: nothing to anchor the turn on
+    h.record('s', ev('UserPromptSubmit', { text: 'Fais le plan' }));
+    expect(h.sync('s', p, { now: 2000 }).map(i => i.id)).toEqual(['msg-u1']);
+    expect(h.items('s')[1]).toMatchObject({ kind: 'message', text: 'Je regarde.', turn: 1, at: later(1) });
+    writeFileSync(p, line('u2', later(2), 'Puis je corrige.') + '\n', { flag: 'a' });
+    expect(h.sync('s', p, { now: 2000 + SYNC_MS - 1 })).toEqual([]); // throttled
+    expect(h.sync('s', p, { now: 2000 + SYNC_MS - 1, force: true }).map(i => i.id)).toEqual(['msg-u2']);
+    expect(h.sync('s', p, { now: 5000 })).toEqual([]); // nothing new
+    const hp = join(dir, 'agent-h1.jsonl');
+    writeFileSync(hp, line('a1', later(3), 'Je cherche les appels.') + '\n');
+    h.record('s', ev('SubagentStart', { helperId: 'h1', tool: 'Explore', text: 'find consumers' }, 3));
+    expect(h.sync('s', hp, { helperId: 'h1', force: true })[0]).toMatchObject({ kind: 'message', id: 'msg-a1', helperId: 'h1' });
   });
 });

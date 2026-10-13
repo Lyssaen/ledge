@@ -4,9 +4,11 @@ import type { SessionEvent, ThreadItem, ToolItem } from '@ledge/protocol';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
 import { filesOf } from './files.js';
+import { agentMessages } from './transcript.js';
 
 /** Native tracking (spec 2026-10-13 §3–4): one thread per session, reduced from the events the store applies. */
 export const MAX_ITEMS = 400;
+export const SYNC_MS = 1000;
 type Listener = (id: string, item: ThreadItem) => void;
 
 /** What an action's row shows when unfolded: the command, or the input as JSON. */
@@ -22,6 +24,7 @@ function inputText(input: Record<string, unknown> | undefined): string | undefin
 export class History {
   private threads = new Map<string, ThreadItem[]>();
   private turns = new Map<string, number>();
+  private synced = new Map<string, number>();
   private listeners = new Set<Listener>();
   private writes: Promise<void> = Promise.resolve();
   private readonly dir: string;
@@ -115,6 +118,25 @@ export class History {
   }
 
   /** The row a result belongs to: by id, else the last running call of that tool in the same thread (Cursor gives no id). */
+  /** Inserts the agent's messages the transcript holds and the thread lacks, from the current turn's prompt on (or the
+   *  helper's start). At most once a second per thread unless forced (end of a turn). */
+  sync(id: string, path: string, opts: { helperId?: string; force?: boolean; now?: number } = {}): ThreadItem[] {
+    const key = `${id}/${opts.helperId ?? ''}`; const now = opts.now ?? Date.now();
+    if (!opts.force && now - (this.synced.get(key) ?? 0) < SYNC_MS) return [];
+    this.synced.set(key, now);
+    const items = this.items(id);
+    const since = opts.helperId ? items.find(i => i.id === opts.helperId)?.at : [...items].reverse().find(i => i.kind === 'prompt')?.at;
+    if (!since) return []; // a daemon that joined mid-turn: the old tail would flood the thread
+    const have = new Set(items.map(i => i.id));
+    const turn = this.turns.get(id) ?? 0;
+    const added: ThreadItem[] = [];
+    for (const m of agentMessages(path)) {
+      if (m.at < since || have.has(`msg-${m.id}`)) continue;
+      added.push(this.put(id, { kind: 'message', id: `msg-${m.id}`, at: m.at, turn, text: m.text, ...(opts.helperId ? { helperId: opts.helperId } : {}) }));
+    }
+    return added;
+  }
+
   private callFor(id: string, ev: SessionEvent): ToolItem | undefined {
     const items = this.items(id);
     if (ev.toolUseId) { const hit = items.find(i => i.id === ev.toolUseId); if (hit?.kind === 'tool') return hit; }
