@@ -138,6 +138,7 @@ for (const theme of ['dark', 'light'] as const) {
       d.emit({ type: 'session.thread', id: 'pim', items: [
         { kind: 'prompt', id: 'prompt-1', at: at(0), turn: 1, text: 'Corrige le reducer et relance les tests.' },
         { kind: 'helper', id: 'h1', at: at(1), turn: 1, task: 'find the reducer consumers', agentType: 'Explore', state: 'exited' },
+        { kind: 'message', id: 'msg-h1', at: at(1.5), turn: 1, helperId: 'h1', text: 'Searching the callers of reduce().' },
         { kind: 'reply', id: 'report-h1', at: at(2), turn: 1, helperId: 'h1', text: 'Three consumers, all in the daemon.' },
         { kind: 'message', id: 'msg-1', at: at(3), turn: 1, text: 'Je corrige la transition puis je relance la suite.' },
         { kind: 'tool', id: 'toolu_1', at: at(4), turn: 1, tool: 'Edit', label: 'Edit · state.ts', status: 'success', durationMs: 120, files: [{ path: 'packages/ledge/src/daemon/state.ts', change: 'edit', diff: '- if (ev.name === "Stop") return s;\n+ if (ev.name === "Stop") return { ...s, state: "idle" };' }] },
@@ -147,6 +148,7 @@ for (const theme of ['dark', 'light'] as const) {
       await shoot(page, `session-thread-${theme}`);
       await layer(page, 'session').locator('[data-helper]').click();
       await expectMode(page, 'helper');
+      await expect(page.getByText('Searching the callers of reduce().')).toBeVisible();
       await shoot(page, `session-helper-${theme}`);
     });
 
