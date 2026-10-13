@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ledge — Le fil des agents</title>
+  <link rel="stylesheet" href="prototype/mascot.css">
+  <link rel="stylesheet" href="native-sessions/style.css">
+  <link rel="stylesheet" href="native-sessions/thread.css">
+  <script src="prototype/mascot-svg.js" defer></script>
+  <script src="native-sessions/data.js" defer></script>
+  <script src="native-sessions/thread.js" defer></script>
+</head>
+<body>
+  <div class="page">
+    <header class="page-head">
+      <a class="brand" href="ledge-native-sessions.html"><span id="brand-bot" aria-hidden="true"></span>Ledge<span class="brand-dot">.</span></a>
+      <span class="study-label">ÉTUDE PRODUIT <span>/</span> 03</span>
+      <button class="board-button" id="theme">Apparence claire <span aria-hidden="true">◐</span></button>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div><p class="eyebrow">LE SUIVI NATIF DES SESSIONS</p><h1>Toute la session,<br><span>un seul fil.</span></h1></div>
+        <div class="intro-copy"><p>Une discussion, des actions, des fichiers.<br>Chaque sous-agent ouvre sa propre discussion.</p><div class="prototype-label"><span></span>Maquette interactive · données fictives</div></div>
+      </section>
+
+      <section class="workbench" aria-label="Maquette du suivi natif">
+        <aside class="scenario-rail">
+          <div class="rail-heading"><span class="eyebrow">EXPLORER</span><span class="small-label">Scénarios</span></div>
+          <h2>Choisissez une session.</h2>
+          <nav id="scenarios" aria-label="Sessions de démonstration"></nav>
+          <div class="rail-note"><span class="note-mark">↳</span><p>Les sous-agents restent sous le titre, comme aujourd’hui. Chaque ligne est cliquable : elle ouvre la discussion de l’agent, et la flèche de retour retrouve le fil principal à la même position.</p></div>
+          <div class="demo-controls"><button id="replay" class="board-button"><span aria-hidden="true">↻</span> Rejouer le scénario</button><p id="replay-note">Les actions restent dans cette maquette.</p></div>
+          <div class="variant-switch"><span class="eyebrow">DERNIÈRE RÉPONSE</span><div role="group" aria-label="Rendu de la dernière réponse" id="reply-variant"><button data-reply="inline" aria-pressed="true">A · Dans le fil</button><button data-reply="card" aria-pressed="false">B · Carte</button></div><p>Visible sur Pim, sur Nova après le rejeu, et dans le rapport final de chaque sous-agent.</p></div>
+          <div class="principle"><span class="eyebrow">LE PRINCIPE</span><p>Des faits transmis par l’agent.<br>Un historique qui reste.<br>Des informations manquantes signalées.</p></div>
+        </aside>
+
+        <div class="preview-column">
+          <div class="desktop-edge"><span>APERÇU DE L’OVERLAY</span><span>520 px</span></div>
+          <div class="island-handle" aria-label="Agents suivis"><span class="handle-brand">L</span><span class="handle-separator"></span><div id="handle-bots"></div><span class="handle-dot"></span></div>
+          <section class="overlay" aria-label="Session Ledge">
+            <div id="session-head"></div>
+            <div class="session-content">
+              <div class="viewport" id="viewport" tabindex="0" aria-label="Fil de la session">
+                <div id="panel-feed"></div>
+              </div>
+              <div class="viewport" id="agent-viewport" tabindex="0" aria-label="Discussion du sous-agent" hidden>
+                <div id="agent-feed"></div>
+              </div>
+            </div>
+            <div id="session-footer" class="session-footer"></div>
+          </section>
+          <p class="preview-caption"><span class="caption-dot"></span>Messages et événements structurés · aucune lecture de l’écran du terminal</p>
+        </div>
+
+        <aside class="inspector-rail">
+          <div class="rail-heading"><span class="eyebrow">COMPRENDRE</span><span class="small-label">Hors interface</span></div>
+          <h2>D’où vient l’information ?</h2>
+          <div id="inspector" aria-live="polite"></div>
+          <div id="coverage"></div>
+        </aside>
+      </section>
+
+      <section class="possibilities" aria-labelledby="possibilities-title">
+        <div class="section-title"><p class="eyebrow">CE QUE CE SUIVI REND POSSIBLE</p><h2 id="possibilities-title">Plus de contexte. Moins de devinettes.</h2></div>
+        <div class="possibility-grid">
+          <article><span class="feature-index">01</span><h3>Comprendre une action</h3><p>La commande exécutée, sa sortie et son code de retour. Une erreur d’outil reste visible même si l’agent la corrige ensuite.</p></article>
+          <article><span class="feature-index">02</span><h3>Les fichiers au bon endroit</h3><p>Chaque fichier apparaît sous l’action qui l’a modifié. Son changement se déplie dans le fil, avec son état de confirmation.</p></article>
+          <article><span class="feature-index">03</span><h3>La discussion de chaque agent</h3><p>Une ligne par sous-agent. Un clic ouvre sa consigne, ses messages, ses outils et sa réponse. Retour à la session sans perdre sa lecture.</p></article>
+          <article><span class="feature-index">04</span><h3>Connaître les limites</h3><p>Un appel enregistré ne prouve pas sa réussite. Un résultat, une durée ou un usage absent est affiché comme indisponible.</p></article>
+        </div>
+      </section>
+    </main>
+    <footer class="page-footer"><span>Ledge / Exploration du suivi natif</span><span>Scénarios illustratifs · connecteurs à implémenter · aucune session réelle connectée</span></footer>
+  </div>
+  <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
+</body>
+</html>
