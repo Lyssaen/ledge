@@ -7,3 +7,4 @@ export * from './proposal.js';
 export * from './topic.js';
 export * from './routing.js';
 export * from './ssh.js';
+export * from './thread.js';

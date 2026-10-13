@@ -4,6 +4,7 @@ import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema } f
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
 import { SshAliasSchema } from './ssh.js';
+import { ThreadItemSchema } from './thread.js';
 
 export const PROTOCOL_PORT = 47831;
 
@@ -22,7 +23,20 @@ export const SessionEventSchema = z.object({
   /** The helper's description, once known (Claude Code: its `.meta.json`, written after SubagentStart). */
   task: z.string().optional(),
   /** PostToolUseFailure: the user interrupted the turn (Esc); Claude then waits for input with no Stop. */
-  interrupt: z.boolean().optional()
+  interrupt: z.boolean().optional(),
+  /** Native tracking (spec 2026-10-13 §2): the harness's id of the tool call, so its result lands on the same row. */
+  toolUseId: z.string().optional(),
+  /** The tool's input as the harness gave it, every string capped by the hook. */
+  toolInput: z.record(z.string(), z.unknown()).optional(),
+  /** PostToolUse: the result as text; SubagentStop: nothing (the report travels in `text`). */
+  output: z.string().optional(),
+  durationMs: z.number().nonnegative().optional(),
+  /** PostToolUseFailure: the harness's error message. */
+  error: z.string().optional(),
+  /** The session's transcript, or the helper's on SubagentStop; the daemon reads its tail for the agent's messages. */
+  transcriptPath: z.string().optional(),
+  /** Decided: what was chosen when the daemon knows it. */
+  decision: z.enum(['accept', 'deny']).optional()
 });
 export type SessionEvent = z.infer<typeof SessionEventSchema>;
 
@@ -50,6 +64,9 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.updated'), session: SessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
+  /** A session's thread, on request (spec 2026-10-13 §5); then each created or updated item, broadcast. */
+  z.object({ type: z.literal('session.thread'), id: z.string(), items: z.array(ThreadItemSchema) }),
+  z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema }),
   /** Answer to the requester of a `session.launch`: the session exists (its `session.updated` is broadcast as usual). */
   z.object({ type: z.literal('session.launched'), id: z.string() }),
   z.object({ type: z.literal('recents'), recents: z.array(RecentSchema) }),
@@ -95,6 +112,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.dismiss'), id: z.string() }),
   /** The user names the session's topic from the overlay (500 characters at most, the hook's prompt cap); an empty topic hands back to the automatic sources. */
   z.object({ type: z.literal('session.rename'), id: z.string(), topic: z.string().max(500) }),
+  z.object({ type: z.literal('session.thread'), id: z.string() }),
   z.object({ type: z.literal('session.register'), session: SessionSchema }),
   /** `agent` and `cwd` describe the session when the daemon does not know it yet (a hook from an agent started without ledge). */
   z.object({ type: z.literal('session.event'), id: z.string(), event: SessionEventSchema, agent: ToolSchema.optional(), cwd: z.string().optional() }),

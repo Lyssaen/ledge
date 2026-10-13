@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema } from '../src/index.js';
 
 const T0 = '2026-10-09T18:02:00.000Z';
 
@@ -201,5 +201,31 @@ describe('update messages', () => {
     expect(parseClientMessage({ type: 'update.daemon', version: '0.3.0' })).toEqual({ type: 'update.daemon', version: '0.3.0' });
     expect(() => parseClientMessage({ type: 'update.daemon', version: 'latest' })).toThrow();
     expect(() => parseClientMessage({ type: 'update.daemon', version: '0.3.0; rm -rf ~' })).toThrow();
+  });
+});
+
+describe('native session tracking (spec 2026-10-13 §3, §5)', () => {
+  const at = '2026-10-13T10:00:00.000Z';
+  it('validates each thread item kind and defaults the files of an action', () => {
+    const tool = ThreadItemSchema.parse({ kind: 'tool', id: 'toolu_1', at, turn: 1, tool: 'Bash', label: 'Bash · pnpm test', status: 'running' });
+    expect(tool).toMatchObject({ kind: 'tool', files: [] });
+    expect(ThreadItemSchema.parse({ kind: 'prompt', id: 'p1', at, turn: 1, text: 'Fais le plan' }).kind).toBe('prompt');
+    expect(ThreadItemSchema.parse({ kind: 'helper', id: 'h1', at, turn: 1, task: 'review task 1', agentType: 'Explore', state: 'working' }).kind).toBe('helper');
+    expect(ThreadItemSchema.parse({ kind: 'permission', id: 'perm-1', at, turn: 1, tool: 'Bash', text: 'rm -rf dist', decision: 'deny' }).kind).toBe('permission');
+    expect(ThreadItemSchema.parse({ kind: 'reply', id: 'r1', at, turn: 1, text: 'Terminé', helperId: 'h1' }).helperId).toBe('h1');
+    expect(() => ThreadItemSchema.parse({ kind: 'tool', id: 't', at, turn: 1, tool: 'Bash', label: 'x', status: 'done' })).toThrow();
+  });
+  it('accepts the enriched hook event and keeps the old shape valid', () => {
+    const old = { type: 'session.event', id: 's', event: { name: 'PostToolUse', at, source: 'hook', tool: 'Bash' } };
+    expect(parseClientMessage(old)).toMatchObject(old);
+    const rich = { ...old, event: { ...old.event, toolUseId: 'toolu_1', toolInput: { command: 'pnpm test' }, output: 'ok', durationMs: 812, transcriptPath: '/t.jsonl' } };
+    expect(parseClientMessage(rich)).toMatchObject(rich);
+    expect(() => parseClientMessage({ ...old, event: { ...old.event, durationMs: -1 } })).toThrow();
+  });
+  it('carries a thread request, a thread and a single item', () => {
+    expect(parseClientMessage({ type: 'session.thread', id: 's' })).toEqual({ type: 'session.thread', id: 's' });
+    const item = { kind: 'message', id: 'm1', at, turn: 1, text: 'Je regarde le reducer.' };
+    expect(parseServerMessage({ type: 'session.thread', id: 's', items: [item] })).toMatchObject({ type: 'session.thread', items: [item] });
+    expect(parseServerMessage({ type: 'session.thread.item', id: 's', item })).toMatchObject({ type: 'session.thread.item', item });
   });
 });
