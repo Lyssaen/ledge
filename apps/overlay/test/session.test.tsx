@@ -22,8 +22,10 @@ describe('<SessionView>', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent('review task 1');
     expect(rows[0]).toHaveTextContent('Working');
-    expect(rows[1]).toHaveTextContent('Explore');
-    expect(rows[1]).toHaveTextContent('Needs your approval');
+    expect(rows[0]).toHaveTextContent('general-purpose · Working');
+    // No description: its place stays empty (the type is not shown in its stead).
+    expect(rows[1]!.querySelector('[data-helper-task]')).toBeEmptyDOMElement();
+    expect(rows[1]).toHaveTextContent('Explore · Needs your approval');
     expect(rows[1]).toHaveAttribute('data-last', 'true');
     expect(tree.querySelectorAll('svg')).toHaveLength(2);
     rerender(<SessionView {...base} session={fakeSession('a', { state: 'idle', helpers: helpers.map(h => ({ ...h, state: 'exited' as const })) })} />);

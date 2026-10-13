@@ -1,5 +1,5 @@
 import type { Session } from '@ledge/protocol';
-import type { Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { Bot } from '../bots/Bot';
 import { ResidentMascot } from '../bots/ResidentMascot';
 import { botState, liveHelpers, poseFor } from '../bots/poseFor';
@@ -53,6 +53,8 @@ export interface ListProps {
   onLaunch?: () => void; notice?: ListNotice | null;
   /** The notice's box, measured by the surface so the panel grows by its height instead of scrolling the rows. */
   noticeRef?: Ref<HTMLDivElement>;
+  /** The update card under the notice, its measured box, and the pip on the settings gear (an update is pending); `gearLabel` is the gear's accessible name. */
+  update?: ReactNode; updateRef?: Ref<HTMLDivElement>; gearPip?: boolean; gearLabel?: string;
   /**
    * The ask field above the sessions (shown when `onAsk` is set), matching the notch's mascot-then-bots stack; `onOpenChat`
    * opens the conversation without asking (Enter on the empty field, the mascot); `onTyping` reports focus and typing,
@@ -66,7 +68,7 @@ export interface ListProps {
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number;
 }
 
-export function SessionList({ sessions, visible, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onOpenChat, onTyping, askDisabled = false, notice = null, noticeRef, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
+export function SessionList({ sessions, visible, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onOpenChat, onTyping, askDisabled = false, notice = null, noticeRef, update, updateRef, gearPip = false, gearLabel, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
   const { t } = useI18n();
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
@@ -117,7 +119,10 @@ export function SessionList({ sessions, visible, selectedId, focusedId = null, d
         </div>
         {onLaunch && <Button variant="outline" size="icon" data-launch aria-label={t.list.newSession} title={t.list.newSession} onClick={onLaunch} style={{ width: 32, height: 32, color: 'var(--sidebar-foreground)' }}><Icon size={16} {...ICONS.plus} /></Button>}
         <Button variant="ghost" size="icon" aria-label={t.list.dnd} title={t.list.dnd} aria-pressed={dnd} onClick={onToggleDnd} style={{ color: dnd ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)' }}><Icon size={18} {...ICONS.dnd} /></Button>
-        <Button variant="ghost" size="icon" aria-label={t.list.settings} title={t.list.settings} onClick={onSettings} style={{ color: 'var(--sidebar-foreground)' }}><Icon size={18} {...ICONS.gear} /></Button>
+        <Button variant="ghost" size="icon" aria-label={gearLabel ?? t.list.settings} title={gearLabel ?? t.list.settings} onClick={onSettings} style={{ position: 'relative', color: 'var(--sidebar-foreground)' }}>
+          <Icon size={18} {...ICONS.gear} />
+          {gearPip && <span data-gear-pip aria-hidden="true" style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: 9999, background: 'var(--sidebar-primary)', border: '2px solid var(--sidebar)' }} />}
+        </Button>
         <Button variant="ghost" size="icon" aria-label={t.list.collapse} title={t.list.collapse} onClick={onClose} style={{ color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.chevronLeft} /></Button>
       </div>
       {notice && (
@@ -127,6 +132,7 @@ export function SessionList({ sessions, visible, selectedId, focusedId = null, d
           {notice.action && <button type="button" onClick={notice.action.onClick} className="ledge-text-btn" style={{ border: 'none', background: 'transparent', padding: '2px 0', fontSize: 13, fontWeight: 500, color: 'var(--info)', cursor: 'pointer', whiteSpace: 'nowrap' }}>{notice.action.label} ↗</button>}
         </div>
       )}
+      {update && <div ref={updateRef} data-update>{update}</div>}
       {onAsk && <AskField onAsk={onAsk} onOpen={onOpenChat} onTyping={onTyping} disabled={askDisabled} theme={theme} reducedMotion={reducedMotion} />}
       <div data-scroll className="ledge-scroll" style={{ display: 'flex', flexDirection: 'column', padding: sessions.length ? '8px 0' : 0, flexGrow: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {sessions.length === 0 && (

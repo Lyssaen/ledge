@@ -138,7 +138,7 @@ const fr = {
     answer: (opt: string) => `Répondre : ${opt}`, firstOption: 'première option'
   },
   settings: {
-    title: 'Votre Ledge', tabs: 'Sections des réglages', tabDisplay: 'Affichage', tabNotifications: 'Notifications', tabSounds: 'Sons', islandSize: 'Taille de l’île', islandSizeHint: 'L’île et ses compagnons en haut de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
+    title: 'Votre Ledge', tabs: 'Sections des réglages', tabDisplay: 'Affichage', tabNotifications: 'Notifications', tabSounds: 'Sons', tabAbout: 'À propos', islandSize: 'Taille de l’île', islandSizeHint: 'L’île et ses compagnons en haut de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
     screen: 'Écran', screenHint: (w: number, h: number) => `L’île se pose en haut de cet écran (${w}\u00a0×\u00a0${h}).`, screenHintNone: 'L’île se pose en haut de l’écran principal.',
     islandPosition: 'Position de l’île', islandPositionHint: 'Au centre du bord supérieur, ou décalée au quart de l’écran pour laisser libres les titres et les onglets.', islandPositions: { center: 'Centre', left: 'À gauche', right: 'À droite' },
     discreet: 'Mode discret sous une fenêtre', discreetHint: 'Un simple trait quand une fenêtre maximisée occupe l’écran ; un survol la redéploie.',
@@ -147,6 +147,11 @@ const fr = {
     autostart: 'Lancer au démarrage', autostartHint: 'Ledge s’ouvre avec votre session Windows.',
     dnd: 'Ne pas déranger', dndHint: 'Les demandes restent dans l’île.',
     reduced: 'Mouvements réduits', reducedHint: 'Les états restent lisibles sans animation.',
+    versions: 'Versions', versionsHint: 'Les deux moitiés de Ledge doivent avoir la même version.',
+    versionsMismatch: 'Les deux moitiés n’ont pas la même version.', versionApp: 'Application Windows', versionDaemon: 'Daemon WSL', versionLatest: 'Dernière version',
+    installKind: { npm: 'npm', git: 'clone git', unknown: 'inconnu' }, unknownVersion: '—',
+    autoUpdate: 'Rechercher les mises à jour', autoUpdateHint: 'Au démarrage, puis toutes les 6 heures. Ledge ne met jamais à jour sans votre clic.',
+    checked: (ago: string) => `Vérifié il y a ${ago}`, neverChecked: 'Jamais vérifié', checkedHint: 'Sur les releases GitHub de Paradow-dev/ledge.', checkNow: 'Vérifier',
     osReduced: 'Votre système demande des mouvements réduits ; Ledge continue de le respecter.',
     finished: 'Quand un bot ou Ledge a terminé', finishedHint: 'Une bulle de 6 s, un son, les deux, ou seulement l’île.',
     finishedBoth: 'Bulle et son', finishedBubble: 'Bulle', finishedSound: 'Son', finishedNone: 'Île seule',
@@ -195,6 +200,29 @@ const fr = {
     label: 'Clavier', title: 'Naviguer au clavier', ok: 'Compris',
     upDown: 'monter et descendre', prevNext: 'session précédente / suivante', decide: 'décider', close: 'fermer', esc: 'Échap',
     note: 'Affiché aux trois premières ouvertures au clavier'
+  },
+  update: {
+    available: (v: string) => `Ledge ${v} est disponible`, current: (v: string) => `Vous avez la ${v}`, badgeNew: 'Nouveau',
+    update: 'Mettre à jour', later: 'Plus tard', notes: 'Notes complètes', retry: 'Réessayer', ok: 'OK', copy: 'Copier', copied: 'Copié', log: 'Journal du daemon',
+    keepRunning: (n: number) => n === 0 ? 'Ledge se ferme environ 20 s pour se mettre à jour.' : `Vos ${n} session${n > 1 ? 's' : ''} continue${n > 1 ? 'nt' : ''}. Ledge se ferme environ 20 s pour se mettre à jour.`,
+    running: (v: string) => `Mise à jour vers ${v}`, dontClose: 'Ne fermez pas Ledge', badgeRunning: 'En cours',
+    steps: { daemon: 'Daemon WSL mis à jour', restart: 'Daemon redémarré, sessions retrouvées', download: 'Téléchargement de l’application', install: 'Installation et redémarrage' },
+    updated: (v: string) => `Ledge ${v} est installé`, badgeUpdated: 'À jour',
+    manualTitle: 'Votre daemon tourne depuis un clone git', manualHint: 'Ledge ne touche pas à un clone. Mettez le daemon à jour dans WSL :', manualApp: 'Mettre à jour l’application', manualWait: (v: string) => `Le bouton s’active dès que le daemon annonce ${v}.`, badgeManual: 'Manuel',
+    failedBadge: 'Échec',
+    failed: {
+      'git-install': 'Votre daemon tourne depuis un clone git : mettez-le à jour vous-même.',
+      'no-systemd': 'Le daemon ne tourne pas comme service : il ne peut pas se relancer seul.',
+      'sessions-at-risk': 'Vos sessions tournent dans le service du daemon : un redémarrage les fermerait. Fermez-les, ou redémarrez WSL, puis réessayez.',
+      'npm-failed': 'Le daemon n’a pas pu se mettre à jour. Rien n’a changé.',
+      'busy': 'Une mise à jour est déjà en cours.',
+      'daemon-timeout': 'Le daemon ne répond plus.',
+      'sessions-lost': 'Toutes vos sessions ne sont pas revenues. L’application n’a pas été mise à jour.',
+      'download': 'L’application n’a pas pu être téléchargée. Elle n’a pas changé.'
+    },
+    timeoutCommand: 'systemctl --user status ledge-daemon',
+    missing: (names: string[]) => `Manquantes : ${names.join(', ')}`,
+    pip: { new: (v: string) => `Ledge ${v} est prêt`, busy: 'Mise à jour en cours…', bad: 'La mise à jour a échoué', ok: 'Ledge est à jour' }
   },
   shortcut: 'Ctrl Alt L'
 };
@@ -327,7 +355,7 @@ const en: Messages = {
     answer: (opt: string) => `Answer: ${opt}`, firstOption: 'first option'
   },
   settings: {
-    title: 'Your Ledge', tabs: 'Settings sections', tabDisplay: 'Display', tabNotifications: 'Notifications', tabSounds: 'Sounds', islandSize: 'Island size', islandSizeHint: 'The island and its companions at the top of the screen.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
+    title: 'Your Ledge', tabs: 'Settings sections', tabDisplay: 'Display', tabNotifications: 'Notifications', tabSounds: 'Sounds', tabAbout: 'About', islandSize: 'Island size', islandSizeHint: 'The island and its companions at the top of the screen.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
     screen: 'Screen', screenHint: (w: number, h: number) => `The island sits at the top of this screen (${w}\u00a0×\u00a0${h}).`, screenHintNone: 'The island sits at the top of the primary screen.',
     islandPosition: 'Island position', islandPositionHint: 'Centred on the top edge, or a quarter of the way in to keep window titles and tabs clear.', islandPositions: { center: 'Centre', left: 'Left', right: 'Right' },
     discreet: 'Discreet under a window', discreetHint: 'A thin strip while a maximised window fills the screen; hovering brings the island back.',
@@ -336,6 +364,11 @@ const en: Messages = {
     autostart: 'Launch at startup', autostartHint: 'Ledge opens when you sign in to Windows.',
     dnd: 'Do not disturb', dndHint: 'New asks stay in the island.',
     reduced: 'Reduced motion', reducedHint: 'States stay readable without animation.',
+    versions: 'Versions', versionsHint: 'Both halves of Ledge must run the same version.',
+    versionsMismatch: 'The two halves are not on the same version.', versionApp: 'Windows app', versionDaemon: 'WSL daemon', versionLatest: 'Latest version',
+    installKind: { npm: 'npm', git: 'clone', unknown: 'unknown' }, unknownVersion: '—',
+    autoUpdate: 'Check for updates', autoUpdateHint: 'At startup, then every 6 hours. Ledge never updates without your click.',
+    checked: (ago: string) => `Checked ${ago} ago`, neverChecked: 'Never checked', checkedHint: 'On the GitHub releases of Paradow-dev/ledge.', checkNow: 'Check',
     osReduced: 'Your system asks for reduced motion; Ledge keeps respecting it.',
     finished: 'When a bot or Ledge finishes', finishedHint: 'A 6 s bubble, a sound, both, or the island only.',
     finishedBoth: 'Bubble and sound', finishedBubble: 'Bubble', finishedSound: 'Sound', finishedNone: 'Island only',
@@ -384,6 +417,29 @@ const en: Messages = {
     label: 'Keyboard', title: 'Move with the keyboard', ok: 'Got it',
     upDown: 'up and down', prevNext: 'previous / next session', decide: 'decide', close: 'close', esc: 'Esc',
     note: 'Shown on the first three keyboard opens'
+  },
+  update: {
+    available: (v: string) => `Ledge ${v} is available`, current: (v: string) => `You have ${v}`, badgeNew: 'New',
+    update: 'Update', later: 'Later', notes: 'Full notes', retry: 'Retry', ok: 'OK', copy: 'Copy', copied: 'Copied', log: 'Daemon log',
+    keepRunning: (n: number) => n === 0 ? 'Ledge closes for about 20 s to update.' : `Your ${n} session${n > 1 ? 's' : ''} keep${n > 1 ? '' : 's'} running. Ledge closes for about 20 s to update.`,
+    running: (v: string) => `Updating to ${v}`, dontClose: 'Do not close Ledge', badgeRunning: 'Running',
+    steps: { daemon: 'WSL daemon updated', restart: 'Daemon restarted, sessions found again', download: 'Downloading the app', install: 'Installing and restarting' },
+    updated: (v: string) => `Ledge ${v} is installed`, badgeUpdated: 'Up to date',
+    manualTitle: 'Your daemon runs from a git clone', manualHint: 'Ledge does not touch a clone. Update the daemon in WSL:', manualApp: 'Update the app', manualWait: (v: string) => `The button turns on once the daemon reports ${v}.`, badgeManual: 'Manual',
+    failedBadge: 'Failed',
+    failed: {
+      'git-install': 'Your daemon runs from a git clone: update it yourself.',
+      'no-systemd': 'The daemon does not run as a service: it cannot restart itself.',
+      'sessions-at-risk': 'Your sessions run inside the daemon service: a restart would close them. Close them, or restart WSL, then retry.',
+      'npm-failed': 'The daemon could not update. Nothing changed.',
+      'busy': 'An update is already running.',
+      'daemon-timeout': 'The daemon is not answering.',
+      'sessions-lost': 'Not all your sessions came back. The app was not updated.',
+      'download': 'The app could not be downloaded. It did not change.'
+    },
+    timeoutCommand: 'systemctl --user status ledge-daemon',
+    missing: (names: string[]) => `Missing: ${names.join(', ')}`,
+    pip: { new: (v: string) => `Ledge ${v} is ready`, busy: 'Update in progress…', bad: 'The update failed', ok: 'Ledge is up to date' }
   },
   shortcut: 'Ctrl Alt L'
 };

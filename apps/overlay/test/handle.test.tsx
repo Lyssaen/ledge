@@ -139,6 +139,16 @@ describe('<Handle> island extras', () => {
   });
 });
 
+describe('<Handle> update pip', () => {
+  it('shows the pip on the mascot with its tone, and none by default', () => {
+    const { rerender } = render(<Handle bots={bots} slots={l.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
+    expect(document.querySelector('[data-update-pip]')).toBeNull();
+    rerender(<Handle bots={bots} slots={l.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} updatePip="new" updateVersion="0.3.0" />);
+    expect(document.querySelector('[data-update-pip="new"]')).not.toBeNull();
+    expect(document.querySelector('[data-resident]')!.getAttribute('title')).toMatch(/^Ledge 0\.3\.0 is ready\./);
+  });
+});
+
 describe('<Badge>', () => {
   it('shows the word for each state', () => {
     render(<Badge state="readonly" />); expect(screen.getByText('Read only')).toBeInTheDocument();

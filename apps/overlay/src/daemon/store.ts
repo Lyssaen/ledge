@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { ChatTurn, Recent, ServerMessage, Session } from '@ledge/protocol';
+import type { ChatTurn, DaemonInfo, Recent, ServerMessage, Session } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 
 /** The daemon's last `error` reply; `seq` tells two identical messages apart. */
@@ -16,10 +16,16 @@ export interface DaemonState {
   lastListing: FolderListing | null;
   /** The day's conversation with Ledge, oldest first, and the answer being streamed (null between questions). */
   chat: ChatTurn[]; chatLive: { qid: string; text: string } | null;
+  /** The daemon's version and install mode, from the last snapshot; null when it does not report them. */
+  daemon: DaemonInfo | null;
+  /** How many snapshots arrived (one per connection), so a reconnect after a restart is detectable. */
+  snapshotSeq: number;
+  /** The daemon's last update.progress / update.failed message; `seq` tells two identical ones apart. */
+  lastUpdate: { msg: Extract<ServerMessage, { type: 'update.progress' | 'update.failed' }>; seq: number } | null;
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
 export type FolderListing = Omit<Extract<ServerMessage, { type: 'folder.listing' }>, 'type'> & { seq: number };
-const empty = (): DaemonState => ({ sessions: [], byId: new Map(), status: 'connecting', previews: new Map(), lastError: null, recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null });
+const empty = (): DaemonState => ({ sessions: [], byId: new Map(), status: 'connecting', previews: new Map(), lastError: null, recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, lastUpdate: null });
 let state: DaemonState = empty();
 const subs = new Set<() => void>();
 const emit = () => subs.forEach(f => f());
@@ -45,19 +51,21 @@ export const daemonStore = {
     if (m.type === 'error') { state = { ...state, lastError: { id: m.id, message: m.message, seq: (state.lastError?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'session.launched') { state = { ...state, lastLaunched: { id: m.id, seq: (state.lastLaunched?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'folder.listing') { const { type: _, ...l } = m; state = { ...state, lastListing: { ...l, seq: (state.lastListing?.seq ?? 0) + 1 } }; emit(); return; }
+    if (m.type === 'update.progress' || m.type === 'update.failed') { state = { ...state, lastUpdate: { msg: m, seq: (state.lastUpdate?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'recents') { state = { ...state, recents: m.recents }; emit(); return; }
     const byId = new Map(state.byId); const previews = new Map(state.previews);
-    let { recents, launcher } = state;
+    let { recents, launcher, daemon, snapshotSeq } = state;
     switch (m.type) {
       case 'snapshot':
         byId.clear(); for (const s of m.sessions) byId.set(s.id, s); for (const id of previews.keys()) if (!byId.has(id)) previews.delete(id);
         recents = m.recents ?? []; launcher = m.launcher ?? null;
+        daemon = m.daemon ?? null; snapshotSeq += 1;
         break;
       case 'session.updated': byId.set(m.session.id, m.session); break;
       case 'session.removed': byId.delete(m.id); previews.delete(m.id); break;
       case 'session.preview': previews.set(m.id, m.lines); break;
     }
-    state = { ...state, byId, previews, sessions: sorted(byId), recents, launcher }; emit();
+    state = { ...state, byId, previews, sessions: sorted(byId), recents, launcher, daemon, snapshotSeq }; emit();
   }
 };
 

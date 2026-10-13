@@ -1,0 +1,111 @@
+import { describe, it, expect, vi } from 'vitest';
+import type { DaemonInfo, ServerMessage } from '@ledge/protocol';
+import { createDaemonUpdater, npmCommand, npmEnv, lastLines, type UpdaterDeps } from '../src/update/run-update.js';
+
+const NPM_INFO: DaemonInfo = { version: '0.2.2', install: 'npm', systemd: true };
+function deps(over: Partial<UpdaterDeps> = {}): UpdaterDeps & { calls: string[] } {
+  const calls: string[] = [];
+  return {
+    calls, execPath: '/home/u/.local/share/nvm/v26.7.0/bin/node',
+    info: () => NPM_INFO, atRisk: async () => false,
+    npm: async cmd => { calls.push(`npm ${cmd.file} ${cmd.args.join(' ')}`); return { code: 0, output: 'added 1 package' }; },
+    restart: async () => { calls.push('restart'); return 0; }, save: async () => { calls.push('save'); },
+    ...over
+  };
+}
+const collect = () => { const sent: ServerMessage[] = []; return { sent, send: (m: ServerMessage) => { sent.push(m); } }; };
+
+describe('npmCommand', () => {
+  it('uses the npm next to the running node, not the one on PATH', () => {
+    expect(npmCommand('/home/u/.local/share/nvm/v26.7.0/bin/node', '0.3.0')).toEqual({ file: '/home/u/.local/share/nvm/v26.7.0/bin/npm', args: ['i', '-g', '@paradow/ledge@0.3.0'] });
+  });
+});
+
+describe('npmEnv', () => {
+  it('puts the daemon node dir first in PATH and keeps the other variables', () => {
+    const env = npmEnv('/n/v26/bin/node', { PATH: '/usr/bin:/bin', HTTPS_PROXY: 'http://p:1' });
+    expect(env.PATH).toBe('/n/v26/bin:/usr/bin:/bin');
+    expect(env.HTTPS_PROXY).toBe('http://p:1');
+  });
+});
+
+describe('lastLines', () => {
+  it('keeps the end of npm output, without blank lines', () => {
+    expect(lastLines('a\n\nnpm ERR! code EACCES\nnpm ERR! path /usr/local/lib/node_modules\n\n', 2)).toBe('npm ERR! code EACCES\nnpm ERR! path /usr/local/lib/node_modules');
+  });
+});
+
+describe('createDaemonUpdater', () => {
+  it('installs, says so, saves the journal, then restarts', async () => {
+    const d = deps(); const { sent, send } = collect();
+    await createDaemonUpdater(d).update('0.3.0', send);
+    expect(sent).toEqual([{ type: 'update.progress', version: '0.3.0', step: 'installing' }, { type: 'update.progress', version: '0.3.0', step: 'restarting' }]);
+    expect(d.calls).toEqual(['npm /home/u/.local/share/nvm/v26.7.0/bin/npm i -g @paradow/ledge@0.3.0', 'save', 'restart']);
+  });
+  it('stays busy once the restart is requested', async () => {
+    const u = createDaemonUpdater(deps()); const b = collect();
+    await u.update('0.3.0', collect().send);
+    await u.update('0.3.0', b.send);
+    expect(b.sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'busy' }]);
+  });
+  it('refuses a clone and gives its command, touching nothing', async () => {
+    const d = deps({ info: () => ({ version: '0.2.2', install: 'git', systemd: true, manual: 'cd /c && git pull' }) }); const { sent, send } = collect();
+    await createDaemonUpdater(d).update('0.3.0', send);
+    expect(sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'git-install', command: 'cd /c && git pull' }]);
+    expect(d.calls).toEqual([]);
+  });
+  it('refuses without systemd and gives the npm command', async () => {
+    const d = deps({ info: () => ({ ...NPM_INFO, systemd: false }) }); const { sent, send } = collect();
+    await createDaemonUpdater(d).update('0.3.0', send);
+    expect(sent[0]).toMatchObject({ reason: 'no-systemd', command: '/home/u/.local/share/nvm/v26.7.0/bin/npm i -g @paradow/ledge@0.3.0' });
+    expect(d.calls).toEqual([]);
+  });
+  it('refuses when the tmux server lives in the daemon service', async () => {
+    const d = deps({ atRisk: async () => true }); const { sent, send } = collect();
+    await createDaemonUpdater(d).update('0.3.0', send);
+    expect(sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'sessions-at-risk' }]);
+    expect(d.calls).toEqual([]);
+  });
+  it('reports npm failures with its output and never restarts', async () => {
+    const d = deps({ npm: async () => ({ code: 243, output: 'npm ERR! code EACCES\nnpm ERR! path /usr/local/lib/node_modules\n' }) }); const { sent, send } = collect();
+    await createDaemonUpdater(d).update('0.3.0', send);
+    expect(sent.at(-1)).toMatchObject({ type: 'update.failed', reason: 'npm-failed', detail: expect.stringContaining('EACCES'), command: expect.stringContaining('@paradow/ledge@0.3.0') });
+    expect(d.calls).not.toContain('restart');
+  });
+  it('answers busy while an update runs', async () => {
+    let release!: () => void;
+    const d = deps({ npm: () => new Promise(r => { release = () => r({ code: 1, output: 'x' }); }) });
+    const u = createDaemonUpdater(d); const a = collect(); const b = collect();
+    const first = u.update('0.3.0', a.send);
+    await vi.waitFor(() => expect(u.running()).toBe(true));
+    await u.update('0.3.0', b.send);
+    expect(b.sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'busy' }]);
+    release(); await first;
+    expect(u.running()).toBe(false);
+  });
+  it('reports a failed systemctl restart with its command and is no longer busy', async () => {
+    const d = deps({ restart: async () => 1 }); const u = createDaemonUpdater(d); const { sent, send } = collect();
+    await u.update('0.3.0', send);
+    expect(sent.at(-1)).toEqual({ type: 'update.failed', version: '0.3.0', reason: 'no-systemd', command: 'systemctl --user restart ledge-daemon' });
+    expect(u.running()).toBe(false);
+  });
+  it('turns any throw into npm-failed with a detail, and is no longer busy', async () => {
+    for (const over of [{ save: async () => { throw new Error('disk full'); } }, { atRisk: async () => { throw new Error('no proc'); } }] as Partial<UpdaterDeps>[]) {
+      const u = createDaemonUpdater(deps(over)); const { sent, send } = collect();
+      await u.update('0.3.0', send);
+      expect(sent.at(-1)).toMatchObject({ type: 'update.failed', version: '0.3.0', reason: 'npm-failed', detail: expect.stringMatching(/disk full|no proc/) });
+      expect(u.running()).toBe(false);
+    }
+  });
+  it('answers busy to the asking client only, not to the running flow', async () => {
+    let release!: () => void;
+    const u = createDaemonUpdater(deps({ npm: () => new Promise(r => { release = () => r({ code: 1, output: 'x' }); }) }));
+    const all = collect(); const asker = collect();
+    const first = u.update('0.3.0', all.send);
+    await vi.waitFor(() => expect(u.running()).toBe(true));
+    await u.update('0.3.0', all.send, asker.send);
+    expect(asker.sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'busy' }]);
+    expect(all.sent).not.toContainEqual(expect.objectContaining({ reason: 'busy' }));
+    release(); await first;
+  });
+});

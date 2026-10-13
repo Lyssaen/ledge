@@ -107,11 +107,29 @@ A session started with plain `claude`, without the launcher, is still visible th
 
 ## Settings
 
-Three tabs, the last one opened remembered. Display: language, the default harness (new sessions and the Ledge chat), the screen the island sits on, "Position de l'île" (Centre, À gauche or À droite: the island's axis moves to a quarter of the screen width, to keep window titles and browser tabs clear), "Mode discret sous une fenêtre" (a switch, on by default: the strip under a maximised window), the size of the island and of the windows (auto or 100 to 200 percent), the theme (`Ctrl+Alt+T`) and reduced motion. Notifications: do-not-disturb and when a bot finishes (bubble and sound, bubble, sound, or island only). Sounds: everything below.
+Four tabs, the last one opened remembered. Display: language, the default harness (new sessions and the Ledge chat), the screen the island sits on, "Position de l'île" (Centre, À gauche or À droite: the island's axis moves to a quarter of the screen width, to keep window titles and browser tabs clear), "Mode discret sous une fenêtre" (a switch, on by default: the strip under a maximised window), the size of the island and of the windows (auto or 100 to 200 percent), the theme (`Ctrl+Alt+T`) and reduced motion. Notifications: do-not-disturb and when a bot finishes (bubble and sound, bubble, sound, or island only). Sounds: everything below. About: versions and updates (see Updating).
 
 <img src="screens/settings-dark.png" alt="Settings, Display tab: language, screen, island position, discreet mode, island size, window size, theme, reduced motion" width="408">
 
 **Sounds.** Eight short synthesised cues, one family: asks rise or knock, results fall, your own decisions tick. Settings › Sounds has the switch, the volume with a Test button, one checkbox per category, and "Only when the terminal is behind", which keeps Ledge quiet while Windows Terminal is the front window. Do not disturb silences everything.
+
+## Updating
+
+When a newer release is out, a dot appears on the mascot and on the gear, and a card sits between the list's header and its rows. One click on "Mettre à jour" updates the WSL daemon first, then the Windows app. Your sessions keep running, and Ledge closes for about twenty seconds.
+
+<img src="screens/update-available-dark.png" alt="The list with the update card: Ledge 0.3.0 is available, the release notes, Mettre à jour and Plus tard" width="408">
+
+While it runs, the card lists the four steps: the daemon updated, the daemon restarted with every session found again, the download, the install.
+
+<img src="screens/update-running-dark.png" alt="The update card in progress: the first step running, three to come" width="408">
+
+If something stops it, the card says what and nothing else has changed. Here a restart would have closed live sessions, so Ledge refuses. The app is only updated after every session has come back.
+
+<img src="screens/update-failed-dark.png" alt="The update card after a failure: the sessions run in the daemon's service, a restart would close them" width="408">
+
+Settings › À propos shows the version of the app and of the daemon, the latest release, and a switch for the automatic check (at startup, then every six hours). Ledge never updates without your click.
+
+<img src="screens/settings-about-dark.png" alt="Settings, À propos tab: Windows app and WSL daemon versions, latest release, automatic check switch" width="408">
 
 ## Refreshing these captures
 

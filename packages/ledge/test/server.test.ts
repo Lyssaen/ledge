@@ -12,6 +12,7 @@ import { startServer, ALLOWED_ORIGINS, launchArgs, resolveFolder } from '../src/
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
+import { createDaemonUpdater } from '../src/update/run-update.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
@@ -859,5 +860,37 @@ describe('chat', () => {
     const err = await c.next('chat.error'); expect(err.qid).toBe('q2');
     await c.next('chat.done', 5000);
     await c.close();
+  });
+});
+
+describe('update.daemon', () => {
+  it('sends the daemon info in the snapshot and routes update.daemon to the updater', async () => {
+    await srv.close();
+    const seen: string[] = [];
+    srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env }), daemon: { version: '0.2.2', install: 'npm', systemd: true },
+      updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); } } });
+    const c = await connect({ port: srv.port });
+    const snap = await c.next('snapshot');
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true });
+    c.send({ type: 'update.daemon', version: '0.3.0' });
+    expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
+    expect(seen).toEqual(['0.3.0']);
+    await c.close();
+  });
+  it('answers busy to the second overlay only, the first keeps its flow', async () => {
+    await srv.close();
+    let release!: () => void;
+    const updater = createDaemonUpdater({ info: () => ({ version: '0.2.2', install: 'npm', systemd: true }), atRisk: async () => false,
+      npm: () => new Promise(r => { release = () => r({ code: 1, output: 'x' }); }), restart: async () => 0, save: async () => {} });
+    srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env }), daemon: { version: '0.2.2', install: 'npm', systemd: true }, updater });
+    const a = await connect({ port: srv.port }); const b = await connect({ port: srv.port });
+    await a.next('snapshot'); await b.next('snapshot');
+    a.send({ type: 'update.daemon', version: '0.3.0' });
+    await a.next('update.progress'); await b.next('update.progress');
+    b.send({ type: 'update.daemon', version: '0.3.0' });
+    expect(await b.next('update.failed')).toMatchObject({ reason: 'busy' });
+    await expect(a.next('update.failed', 200)).rejects.toThrow(/timeout/);
+    release();
+    await a.close(); await b.close();
   });
 });

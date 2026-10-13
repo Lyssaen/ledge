@@ -11,8 +11,9 @@ import { Tabs, tabIds } from '../ui/Tabs';
 import { CATEGORIES, FINISHED_VALUES, VOLUMES, type FinishedNotify, type SoundPrefs, type SoundPatch } from '../sounds/preferences';
 import { resolveMonitor, type MonitorInfo } from '../monitor';
 import { TOOLS } from '../defaultTool';
-import { toolName } from '../format';
-import type { Tool } from '@ledge/protocol';
+import { toolName, duration } from '../format';
+import { compareVersions } from '../update/semver';
+import type { DaemonInfo, Tool } from '@ledge/protocol';
 
 export interface SettingsViewProps {
   visible: boolean; theme: 'dark' | 'light'; dnd: boolean;
@@ -37,6 +38,8 @@ export interface SettingsViewProps {
   defaultTool?: Tool; onDefaultTool?: (tool: Tool) => void;
   /** The brand colour (null: factory coral) and how to change it (live). */
   accent?: string | null; onAccent?: (hex: string | null) => void;
+  /** The About tab: both versions, the latest known release and the update check (absent: no tab). */
+  about?: { app: string | null; daemon: DaemonInfo | null; latest: string | null; auto: boolean; checkedAt: number | null; onAuto: (on: boolean) => void; onCheck: () => void };
   /** The body's natural height, measured by the surface to size itself. */
   contentRef?: Ref<HTMLDivElement>;
 }
@@ -110,7 +113,7 @@ function AccentRow({ value, onChange }: { value: string | null; onChange?: (hex:
 }
 
 /** The settings sections, one tab each; the last one opened is remembered. */
-export const SETTINGS_TABS = ['display', 'notifications', 'sounds'] as const;
+export const SETTINGS_TABS = ['display', 'notifications', 'sounds', 'about'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 const TAB_KEY = 'ledge.settings.tab';
 const isTab = (v: unknown): v is SettingsTab => (SETTINGS_TABS as readonly unknown[]).includes(v);
@@ -135,16 +138,19 @@ export function SettingsView(p: SettingsViewProps) {
   const choice = p.monitor ?? null;
   const chosen = resolveMonitor(choice, monitors);
   const chosenValue = choice !== null && !monitors.some(m => m.id === choice) ? choice : chosen && !chosen.primary ? chosen.id : 'primary';
-  const [tab, setTab] = useState<SettingsTab>(loadSettingsTab);
+  const [storedTab, setTab] = useState<SettingsTab>(loadSettingsTab);
+  const tab: SettingsTab = storedTab === 'about' && !p.about ? 'display' : storedTab;
   const chooseTab = (next: SettingsTab) => { setTab(next); saveSettingsTab(next); };
-  const tabLabel = { display: t.settings.tabDisplay, notifications: t.settings.tabNotifications, sounds: t.settings.tabSounds } as const;
+  const tabLabel = { display: t.settings.tabDisplay, notifications: t.settings.tabNotifications, sounds: t.settings.tabSounds, about: t.settings.tabAbout } as const;
+  const about = p.about;
+  const tabs = SETTINGS_TABS.filter(v => v !== 'about' || about);
   const { tabId, panelId } = tabIds('ledge-settings', tab);
   return (
     <div data-layer="settings" data-delay={enterDelay} inert={!p.visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: p.visible ? 1 : 0, pointerEvents: p.visible ? 'auto' : 'none', transition: transition([['opacity', p.visible ? 'fadeIn' : 'fadeOut', p.visible ? enterDelay : 0]]) }}>
       <DetailHeader title={t.settings.title} onBack={p.onBack} onClose={p.onClose} />
       <div className="ledge-scroll" style={{ overflowY: 'auto', minHeight: 0, overscrollBehavior: 'contain' }}>
         <div ref={p.contentRef} style={{ display: 'flex', flexDirection: 'column', padding: '12px 17px 12px' }}>
-          <Tabs<SettingsTab> id="ledge-settings" label={t.settings.tabs} value={tab} onChange={chooseTab} tabs={SETTINGS_TABS.map(v => ({ value: v, label: tabLabel[v] }))} />
+          <Tabs<SettingsTab> id="ledge-settings" label={t.settings.tabs} value={tab} onChange={chooseTab} tabs={tabs.map(v => ({ value: v, label: tabLabel[v] }))} />
           <div role="tabpanel" id={panelId} aria-labelledby={tabId} style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
             {tab === 'display' && <>
               {p.autostart != null && p.onAutostart && <Row><Switch label={t.settings.autostart} hint={t.settings.autostartHint} checked={p.autostart} onChange={p.onAutostart} /></Row>}
@@ -181,6 +187,32 @@ export function SettingsView(p: SettingsViewProps) {
               <Segmented<FinishedNotify> name="ledge-finished" label={t.settings.finished} hint={t.settings.finishedHint} value={p.finished} onChange={p.onFinished}
                 options={FINISHED_VALUES.map(v => ({ value: v, label: { both: t.settings.finishedBoth, bubble: t.settings.finishedBubble, sound: t.settings.finishedSound, none: t.settings.finishedNone }[v], wide: v === 'both' }))} />
             </>}
+            {tab === 'about' && about && (() => {
+              const mismatch = !!about.app && !!about.daemon && compareVersions(about.app, about.daemon.version) !== 0;
+              const newer = !!about.latest && [about.app, about.daemon?.version].some(v => !!v && compareVersions(about.latest!, v) > 0);
+              const col = { display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, lineHeight: '20px', margin: 0 } as const;
+              return <>
+                <Row>
+                  <div style={{ padding: '12px 0' }}>
+                    <div style={{ fontSize: 14, lineHeight: '18px', fontWeight: 600 }}>{t.settings.versions}</div>
+                    <div style={{ marginTop: 3, fontSize: 12, lineHeight: '16px', color: mismatch ? 'var(--warning)' : 'var(--muted-foreground)' }}>{mismatch ? t.settings.versionsMismatch : t.settings.versionsHint}</div>
+                    <dl style={{ margin: '8px 0 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <div style={col}><dt style={{ color: 'var(--muted-foreground)' }}>{t.settings.versionApp}</dt><dd style={{ margin: 0 }}>{about.app ?? t.settings.unknownVersion}</dd></div>
+                      <div style={col}><dt style={{ color: 'var(--muted-foreground)' }}>{t.settings.versionDaemon}</dt><dd style={{ margin: 0 }}>{about.daemon ? `${about.daemon.version} · ${t.settings.installKind[about.daemon.install]}` : t.settings.unknownVersion}</dd></div>
+                      <div style={col}><dt style={{ color: 'var(--muted-foreground)' }}>{t.settings.versionLatest}</dt><dd style={{ margin: 0, color: newer ? 'var(--sidebar-primary)' : undefined }}>{about.latest ?? t.settings.unknownVersion}</dd></div>
+                    </dl>
+                  </div>
+                </Row>
+                <Row><Switch label={t.settings.autoUpdate} hint={t.settings.autoUpdateHint} checked={about.auto} onChange={about.onAuto} /></Row>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 3, flexGrow: 1 }}>
+                    <span style={{ fontSize: 14, lineHeight: '18px', fontWeight: 600 }}>{about.checkedAt != null ? t.settings.checked(duration(Date.now() - about.checkedAt, t)) : t.settings.neverChecked}</span>
+                    <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.settings.checkedHint}</span>
+                  </span>
+                  <Button variant="outline" size="sm" onClick={about.onCheck}>{t.settings.checkNow}</Button>
+                </div>
+              </>;
+            })()}
             {tab === 'sounds' && <>
               <Row><Switch label={t.settings.sounds} hint={t.settings.soundsHint} checked={p.sounds.enabled} onChange={on => p.onSounds({ enabled: on })} /></Row>
               <div data-testid="sound-sections" style={{ opacity: p.sounds.enabled ? 1 : 0.5, transition: transition([['opacity', 'hover']]) }}>

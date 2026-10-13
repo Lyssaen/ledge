@@ -15,6 +15,8 @@ export const SessionEventSchema = z.object({
   kind: z.enum(['question', 'permission', 'plan', 'diff']).optional(),
   exitCode: z.number().int().nullable().optional(),
   helperId: z.string().optional(),
+  /** The helper's description, once known (Claude Code: its `.meta.json`, written after SubagentStart). */
+  task: z.string().optional(),
   /** PostToolUseFailure: the user interrupted the turn (Esc); Claude then waits for input with no Stop. */
   interrupt: z.boolean().optional()
 });
@@ -24,12 +26,22 @@ export type SessionEvent = z.infer<typeof SessionEventSchema>;
 export const RecentSchema = z.object({ cwd: z.string().min(1), project: z.string().min(1), lastAt: z.string().datetime() });
 export type Recent = z.infer<typeof RecentSchema>;
 
+/** A release version as the tag gives it, without the `v` and without a pre-release suffix. */
+export const SEMVER = /^\d+\.\d+\.\d+$/;
+/** What the daemon knows of itself (spec 2026-10-12 auto-update §6): its version, how it was installed, whether it runs
+ *  as the systemd service, and the command a person runs by hand when it cannot update itself. */
+export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional() });
+export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
+export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
+export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
+
 export const ServerMessageSchema = z.discriminatedUnion('type', [
   DocumentContentSchema,
   DocumentErrorSchema,
   /** `recents`: the folders of past sessions, most recent first. `launcher`: the command that runs `ledge` inside WSL
-   *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. */
-  z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional() }),
+   *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. `daemon`: absent
+   *  from daemons older than the auto-update. */
+  z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional(), daemon: DaemonInfoSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: SessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
@@ -46,6 +58,10 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), relay: ChatRelaySchema.optional() }),
   z.object({ type: z.literal('chat.error'), qid: z.string(), message: z.string() }),
   z.object({ type: z.literal('chat.history'), turns: z.array(ChatTurnSchema) }),
+  /** The daemon updating itself: npm is running, then the service restarts (the socket closes right after). */
+  z.object({ type: z.literal('update.progress'), version: z.string(), step: z.enum(['installing', 'restarting']) }),
+  /** Nothing was changed. `detail`: the useful end of npm's output; `command`: what the person can run instead. */
+  z.object({ type: z.literal('update.failed'), version: z.string(), reason: UpdateFailureSchema, detail: z.string().optional(), command: z.string().optional() }),
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional() })
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
@@ -81,7 +97,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.ask'), qid: z.string().min(1), text: z.string().min(1), tool: ToolSchema.optional() }),
   z.object({ type: z.literal('chat.cancel'), qid: z.string().min(1) }),
   /** Starts a new conversation with Ledge: the day's turns are cleared and the next question opens a new harness session. */
-  z.object({ type: z.literal('chat.reset') })
+  z.object({ type: z.literal('chat.reset') }),
+  /** Installs `@paradow/ledge@version` and restarts the service (spec 2026-10-12 auto-update §6). */
+  z.object({ type: z.literal('update.daemon'), version: z.string().regex(SEMVER) })
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 

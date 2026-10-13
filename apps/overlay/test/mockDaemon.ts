@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { parseClientMessage, type ClientMessage, type Recent, type ServerMessage, type Session } from '@ledge/protocol';
+import { parseClientMessage, type ClientMessage, type DaemonInfo, type Recent, type ServerMessage, type Session } from '@ledge/protocol';
 
 export async function createMockDaemon(opts: { port?: number } = {}) {
   const wss = new WebSocketServer({ host: '127.0.0.1', port: opts.port ?? 0 });
@@ -8,7 +8,7 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
   const sessions = new Map<string, Session>();
   const received: ClientMessage[] = [];
   /** What the snapshot carries beside the sessions (the launch form's inputs); set before a client connects. */
-  const extras: { recents?: Recent[]; launcher?: string[] } = {};
+  const extras: { recents?: Recent[]; launcher?: string[]; daemon?: DaemonInfo } = {};
   const bc = (m: ServerMessage) => { for (const c of wss.clients) if (c.readyState === WebSocket.OPEN) c.send(JSON.stringify(m)); };
   const snapshot = (): ServerMessage => ({ type: 'snapshot', sessions: [...sessions.values()], ...extras });
   /** The last client to send anything: a reply (`session.launched`, an `error` for a launch) goes to it alone. */
@@ -28,6 +28,8 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     launched(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); last?.send(JSON.stringify({ type: 'session.launched', id: s.id })); },
     /** A launch refused: an `error` with no id, to the last requester. */
     refuse(message: string) { last?.send(JSON.stringify({ type: 'error', message })); },
+    /** Cuts every open socket, as a daemon restart does; the client reconnects and gets a fresh snapshot. */
+    dropClients: async () => { for (const c of wss.clients) c.terminate(); },
     close: () => new Promise<void>(r => { for (const c of wss.clients) c.terminate(); wss.close(() => r()); })
   };
 }

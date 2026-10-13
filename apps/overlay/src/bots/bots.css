@@ -25,7 +25,7 @@
   animation-delay: var(--bot-phase, 0s);
 }
 /* Reduced motion keeps the progress signal: the antenna light pulses at the running-dot rhythm (hidden at ≤ 20 px). */
-.bot[data-reduced="true"][data-state="working"]:not([data-frozen="true"]):not([data-paused="true"]):not([data-readonly="true"]) .antenna-light {
+.bot[data-detailed="true"][data-reduced="true"][data-state="working"]:not([data-frozen="true"]):not([data-paused="true"]):not([data-readonly="true"]) .antenna-light {
   animation: bot-pulse 1.2s ease-in-out infinite !important;
 }
 .bot .pose {
@@ -140,4 +140,111 @@
   0%, 100% { transform: rotate(-22deg) translateY(-5px); }
   35% { transform: rotate(-42deg) translateY(-7px); }
   65% { transform: rotate(-16deg) translateY(-5px); }
+}
+
+/* Persistent layers compose transitions, tool signatures and interaction. */
+.bot :is(.arrival, .signature, .touch) { transform-origin: 48px 70px; }
+.bot .ground { transform-origin: 48px 88px; }
+.bot[data-tool="claude"] { --bot-roll-pre: 0deg; --bot-roll-top: 0deg; --bot-roll-land: 5deg; }
+.bot[data-tool="codex"] { --bot-roll-pre: -4deg; --bot-roll-top: 5deg; --bot-roll-land: 2deg; }
+.bot[data-tool="cursor"] { --bot-roll-pre: -2deg; --bot-roll-top: 7deg; --bot-roll-land: 2deg; }
+.bot[data-detailed="true"][data-hop="true"] .signature,
+.bot[data-detailed="true"][data-hop="true"] .antenna-group,
+.bot[data-detailed="true"][data-hop="true"][data-halo="false"] .ground {
+  animation-duration: var(--bot-hop-cycle, 3.6s);
+  animation-delay: var(--bot-phase, 0s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.bot[data-detailed="true"][data-hop="true"] .signature { animation-name: bot-signature; }
+.bot[data-detailed="true"][data-hop="true"] .antenna-group { transform-origin: 49px 22px; animation-name: bot-antenna; }
+.bot[data-detailed="true"][data-hop="true"][data-halo="false"] .ground { animation-name: bot-shadow; }
+.bot[data-detailed="true"] .antenna-light { filter: drop-shadow(0 0 2px var(--bot-eye)); }
+.bot[data-detailed="true"][data-hop="true"][data-transition="working"] .hop { animation: none; }
+.bot[data-detailed="true"][data-hop="true"][data-transition="working"] .arrival { transform-origin: 48px 83px; animation: bot-entry-hop var(--bot-entry-hop-ms, 480ms) linear; }
+.bot[data-detailed="true"][data-hop="true"][data-transition="working"] .signature { animation: bot-entry-signature var(--bot-entry-hop-ms, 480ms) linear; }
+.bot[data-detailed="true"][data-hop="true"][data-transition="working"] .antenna-group { animation: bot-entry-antenna var(--bot-entry-hop-ms, 480ms) linear; }
+.bot[data-detailed="true"][data-hop="true"][data-transition="working"][data-halo="false"] .ground { animation: bot-entry-shadow var(--bot-entry-hop-ms, 480ms) linear; }
+.bot[data-transition="question"] .arrival { animation: bot-question var(--bot-arrival-ms, 500ms) var(--bot-ease); }
+.bot[data-transition="question"] .gaze { animation: bot-question-gaze var(--bot-question-ms, 650ms) var(--bot-ease); }
+.bot[data-transition="idle"] .arrival { animation: bot-idle-arrival var(--bot-arrival-ms, 500ms) var(--bot-ease); }
+.bot[data-transition="error"] .arrival { animation: bot-recoil var(--bot-arrival-ms, 500ms) var(--bot-ease); }
+.bot[data-transition="done"] .eye-blink { animation: bot-close var(--bot-arrival-ms, 500ms) ease-in-out; }
+.bot[data-transition="done"] .eye-open { animation: bot-close-open var(--bot-arrival-ms, 500ms) linear; }
+.bot[data-transition="done"] .eye-sleep { animation: bot-close-sleep var(--bot-arrival-ms, 500ms) linear; }
+.bot[data-transition="done"] .arrival { animation: bot-settle var(--bot-arrival-ms, 500ms) var(--bot-ease); }
+.bot[data-touch="true"] .touch { animation: bot-touch var(--bot-touch-ms, 360ms) var(--bot-ease); }
+.bot[data-idle="look"] .gaze { animation: bot-idle-look var(--bot-idle-ms, 1700ms) ease-in-out; }
+.bot[data-idle="stretch"] .arrival { animation: bot-stretch var(--bot-idle-ms, 1700ms) ease-in-out; }
+.bot[data-idle="tilt"] .arrival { animation: bot-idle-tilt var(--bot-idle-ms, 1700ms) ease-in-out; }
+.bot[data-hover="true"] .gaze { animation: none; transition-duration: 220ms; }
+/* A scaled full SVG also keeps only the work hop at ≤20 px. */
+.bot[data-detailed="false"], .bot[data-detailed="false"] * { animation: none !important; transition: none !important; }
+.bot[data-detailed="false"][data-hop="true"] .hop {
+  animation: bot-hop var(--bot-hop-cycle, 3.6s) linear infinite !important;
+  animation-delay: var(--bot-phase, 0s) !important;
+}
+.bot[data-suspended="true"], .bot[data-suspended="true"] * { animation-play-state: paused !important; transition: none !important; }
+.bot[data-paused="true"] *, .bot[data-frozen="true"] *, [inert] .bot *, .bot[data-readonly="true"] * { transition: none !important; }
+.bot[data-readonly="true"] *, .bot[data-reduced="true"] * { animation: none !important; }
+
+@keyframes bot-entry-hop {
+  0%, 100% { transform: translateY(0) scale(1); }
+  14% { transform: scale(1.06,.92); animation-timing-function: cubic-bezier(.2,.7,.3,1); }
+  44% { transform: translateY(calc(var(--bot-hop) * -1)) scale(.96,1.06); animation-timing-function: cubic-bezier(.6,0,.9,.4); }
+  70% { transform: scale(1.05,.95); animation-timing-function: ease-out; }
+}
+@keyframes bot-question { 0% { transform: rotate(-5deg); } 50% { transform: rotate(2deg); } 100% { transform: rotate(0deg); } }
+@keyframes bot-question-gaze { 0%, 30%, 100% { transform: translate(0,0); } 60% { transform: translate(2px,-1px); } }
+@keyframes bot-idle-arrival { 0%, 100% { transform: scale(1); } 40% { transform: translateY(-2px) scale(.98,1.04); } 70% { transform: scale(1.03,.97); } }
+@keyframes bot-recoil { 0%, 100% { transform: translateX(0); } 40% { transform: translateX(-3px) rotate(-3deg); } }
+@keyframes bot-close { 0%, 100% { transform: scaleY(1); } 25% { transform: scaleY(.5); } 45% { transform: scaleY(.65); } 70% { transform: scaleY(.12); } }
+@keyframes bot-close-open { 0%, 60% { opacity: 1; } 70%, 100% { opacity: 0; } }
+@keyframes bot-close-sleep { 0%, 60% { opacity: 0; } 70%, 100% { opacity: 1; } }
+@keyframes bot-settle { 0% { transform: translateY(-1px); } 100% { transform: translateY(0); } }
+@keyframes bot-touch { 0%, 100% { transform: scale(1); } 35% { transform: scale(1.07,.92); } 65% { transform: scale(.97,1.04); } }
+@keyframes bot-idle-look { 0%, 100% { transform: translateX(0); } 35%, 65% { transform: translateX(2px); } }
+@keyframes bot-stretch { 0%, 100% { transform: scale(1); } 50% { transform: scale(.98,1.04); } }
+@keyframes bot-idle-tilt { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-2deg); } }
+
+@keyframes bot-signature {
+  0%, 13.3%, 100% { transform: rotate(0deg); }
+  1.9% { transform: rotate(var(--bot-roll-pre)); }
+  5.9% { transform: rotate(var(--bot-roll-top)); }
+  9.3% { transform: rotate(var(--bot-roll-land)); }
+}
+
+@keyframes bot-antenna {
+  0%, 13.3%, 100% { transform: rotate(0deg); }
+  1.9% { transform: rotate(0deg); }
+  5.9% { transform: rotate(-3deg); }
+  9.3% { transform: rotate(3deg); }
+}
+
+@keyframes bot-shadow {
+  0%, 13.3%, 100% { transform: scaleX(1); opacity: .16; }
+  1.9% { transform: scaleX(.9); }
+  5.9% { transform: scaleX(.72); opacity: .07; }
+  9.3% { transform: scaleX(.95); }
+}
+
+@keyframes bot-entry-signature {
+  0%, 100% { transform: rotate(0deg); }
+  14% { transform: rotate(var(--bot-roll-pre)); }
+  44% { transform: rotate(var(--bot-roll-top)); }
+  70% { transform: rotate(var(--bot-roll-land)); }
+}
+
+@keyframes bot-entry-antenna {
+  0%, 100% { transform: rotate(0deg); }
+  14% { transform: rotate(0deg); }
+  44% { transform: rotate(-3deg); }
+  70% { transform: rotate(3deg); }
+}
+
+@keyframes bot-entry-shadow {
+  0%, 100% { transform: scaleX(1); opacity: .16; }
+  14% { transform: scaleX(.9); }
+  44% { transform: scaleX(.72); opacity: .07; }
+  70% { transform: scaleX(.95); }
 }

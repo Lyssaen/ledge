@@ -1,5 +1,8 @@
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { paths } from './paths.js';
+import { log } from './log.js';
 
 export interface Tmux {
   newSession(opts: { name: string; cwd: string; env: Record<string, string>; command: string[] }): Promise<void>;
@@ -16,16 +19,35 @@ export interface Tmux {
   attachArgs(name: string): string[];
 }
 
-export function run(args: string[], env?: NodeJS.ProcessEnv): Promise<{ code: number; stdout: string; stderr: string }> {
+export function runFile(file: string, args: string[], env?: NodeJS.ProcessEnv, opts?: { timeoutMs?: number }): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise(resolve => {
-    execFile('tmux', args, { maxBuffer: 4 * 1024 * 1024, env }, (err, stdout, stderr) => {
-      const code = err && typeof (err as NodeJS.ErrnoException & { code?: number }).code === 'number' ? (err as unknown as { code: number }).code : err ? 1 : 0;
+    execFile(file, args, { maxBuffer: 4 * 1024 * 1024, env, ...(opts?.timeoutMs ? { timeout: opts.timeoutMs, killSignal: 'SIGTERM' as const } : {}) }, (err, stdout, stderr) => {
+      // A killed-on-timeout child reports 124, as timeout(1) does.
+      const code = err && opts?.timeoutMs && (err as { killed?: boolean }).killed ? 124 : err && typeof (err as NodeJS.ErrnoException & { code?: number }).code === 'number' ? (err as unknown as { code: number }).code : err ? 1 : 0;
       resolve({ code, stdout: String(stdout), stderr: String(stderr) });
     });
   });
 }
 
-export function realTmux(socket = 'ledge'): Tmux {
+export const run = (args: string[], env?: NodeJS.ProcessEnv) => runFile('tmux', args, env);
+
+/** The user manager answers on this socket: present when WSL runs systemd (`systemd=true`). */
+export function systemdAvailable(env: NodeJS.ProcessEnv = process.env, exists: (p: string) => boolean = existsSync): boolean {
+  return !!env.XDG_RUNTIME_DIR && exists(join(env.XDG_RUNTIME_DIR, 'systemd', 'private'));
+}
+
+/**
+ * The tmux server forks from the client that starts it and stays in that client's cgroup. Started from the daemon, it
+ * would sit in ledge-daemon.service and die with every restart, taking every agent with it (spec 2026-10-12 auto-update §3).
+ * Scoped, the first `new-session` runs under its own transient scope, so the server outlives the daemon.
+ */
+export function newSessionCommand(tmuxArgs: string[], scoped: boolean, unit: string): { file: string; args: string[] } {
+  if (!scoped) return { file: 'tmux', args: tmuxArgs };
+  return { file: 'systemd-run', args: ['--user', '--scope', '--quiet', '--collect', `--unit=${unit}`, '--', 'tmux', ...tmuxArgs] };
+}
+
+export function realTmux(socket = 'ledge', opts: { scope?: () => Promise<boolean> } = {}): Tmux {
+  const scope = opts.scope ?? (async () => systemdAvailable());
   const base = () => ['-L', socket, '-f', paths().tmuxConf];
   const t = (args: string[], env?: NodeJS.ProcessEnv) => run([...base(), ...args], env);
   return {
@@ -33,7 +55,14 @@ export function realTmux(socket = 'ledge'): Tmux {
       const envArgs = Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
       // tmux gives a detached session's pane the PATH of the client that created it, over `-e`: the client carries the pane's.
       const clientEnv = env.PATH === undefined ? undefined : { ...process.env, PATH: env.PATH };
-      const r = await t(['new-session', '-d', '-s', name, '-c', cwd, '-x', '200', '-y', '50', ...envArgs, '--', ...command], clientEnv);
+      const args = [...base(), 'new-session', '-d', '-s', name, '-c', cwd, '-x', '200', '-y', '50', ...envArgs, '--', ...command];
+      // Only the call that starts the server needs a scope: later sessions are created by that server.
+      const serverUp = (await t(['list-sessions'])).code === 0;
+      const scoped = !serverUp && await scope();
+      const { file, args: argv } = newSessionCommand(args, scoped, `ledge-tmux-${Date.now()}`);
+      let r = await runFile(file, argv, clientEnv);
+      // No scope is no reason to refuse an agent: start tmux plain (update/guard.ts then refuses updates for this server).
+      if (r.code !== 0 && scoped) { log(`tmux: scoped start failed (${r.stderr.trim()}), starting unscoped`); r = await runFile('tmux', args, clientEnv); }
       if (r.code !== 0) throw new Error(`tmux new-session failed: ${r.stderr.trim()}`);
     },
     async sendText(name, text) {

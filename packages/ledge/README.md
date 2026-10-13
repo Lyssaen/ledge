@@ -1,4 +1,24 @@
-# ledge (WSL side)
+# @paradow/ledge (WSL side)
+
+The Ledge daemon and CLI: follow and answer your WSL agent sessions (Claude Code, Codex, Cursor Agent) from the Ledge island on Windows. See the [repository README](https://github.com/Paradow-dev/ledge#readme) for the whole picture.
+
+## Install
+
+Node >= 22 is required.
+
+```sh
+npm i -g @paradow/ledge && ledge setup
+```
+
+## Update
+
+From the Ledge island: the card in the list updates the daemon, then the Windows app. By hand:
+
+```sh
+npm i -g @paradow/ledge@latest && systemctl --user restart ledge-daemon
+```
+
+A daemon started from a clone (see below) is not touched by the island's button.
 
 ## Install for development
 
@@ -6,14 +26,14 @@ Run from the repository root:
 
 ```sh
 pnpm install
-pnpm --filter ledge build
+pnpm --filter @paradow/ledge build
 chmod +x packages/ledge/dist/cli/index.js
 mkdir -p ~/.local/bin
 ln -sf "$PWD/packages/ledge/dist/cli/index.js" ~/.local/bin/ledge   # ~/.local/bin must be on the PATH Claude Code uses for hooks
 ledge setup
 ```
 
-The daemon is spawned from the built CLI (`dist/cli/index.js`), so rebuild after changes (`pnpm --filter ledge build`).
+The daemon is spawned from the built CLI (`dist/cli/index.js`), so rebuild after changes (`pnpm --filter @paradow/ledge build`).
 
 ## Use
 
@@ -31,7 +51,7 @@ ledge uninstall         # undo ledge setup: hooks, service and the ~/.local/bin 
 ```sh
 systemctl --user status ledge-daemon.service
 journalctl --user -u ledge-daemon.service -f
-systemctl --user restart ledge-daemon.service   # after pnpm --filter ledge build
+systemctl --user restart ledge-daemon.service   # after pnpm --filter @paradow/ledge build
 systemctl --user disable --now ledge-daemon.service   # back to on-demand start by ledge claude
 ```
 
@@ -74,8 +94,8 @@ Session names and tab titles: Ledge sets `set-titles` in `~/.ledge/tmux.conf`. A
 ## Tests
 
 ```sh
-pnpm --filter ledge test            # unit + tmux + end-to-end (needs tmux, no AI)
-pnpm --filter ledge test state      # only the transition table
+pnpm --filter @paradow/ledge test            # unit + tmux + end-to-end (needs tmux, no AI)
+pnpm --filter @paradow/ledge test state      # only the transition table
 ```
 
 ## Refreshing pane fixtures

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Writes one version into every file the Windows build reads it from: the tray line and the exe's file version
-// (tauri.conf.json), the installer name (the same), the crate and its lock entry, the overlay package.
+// (tauri.conf.json), the installer name (the same), the crate and its lock entry, the overlay package and the daemon's npm package.
 // Usage: node scripts/set-version.mjs 0.3.0   (or v0.3.0, as the release tag gives it)
 // Line endings may be CRLF: the Windows runner checks out with core.autocrlf.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -30,3 +30,4 @@ replaceOnce('package.json', /^(  "version": )"[^"]*"/m, `$1"${version}"`);
 replaceOnce('src-tauri/tauri.conf.json', /^(  "version": )"[^"]*"/m, `$1"${version}"`);
 replaceOnce('src-tauri/Cargo.toml', /^(\[package\]\r?\nname = "ledge-overlay"\r?\nversion = )"[^"]*"/m, `$1"${version}"`);
 replaceOnce('src-tauri/Cargo.lock', /^(name = "ledge-overlay"\r?\nversion = )"[^"]*"/m, `$1"${version}"`);
+replaceOnce('../../packages/ledge/package.json', /^(  "version": )"[^"]*"/m, `$1"${version}"`);

@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
@@ -17,6 +17,7 @@ import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
 import { readDocument } from './documents.js';
 import { createRelay } from './relay.js';
+import type { createDaemonUpdater } from '../update/run-update.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -65,7 +66,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[] }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater> }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -101,7 +102,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher });
+    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: opts.daemon } : {}) });
     for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
     send(ws, { type: 'chat.history', turns: chat.history() });
   };
@@ -319,6 +320,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
+      // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
+      // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
+      case 'update.daemon':
+        if (!opts.updater) return send(ws, { type: 'update.failed', version: msg.version, reason: 'no-systemd' });
+        return opts.updater.update(msg.version, broadcast, m => send(ws, m));
       case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast, msg.tool);
       case 'chat.cancel': return chat.cancel(msg.qid);
       case 'chat.reset': return chat.reset(broadcast);

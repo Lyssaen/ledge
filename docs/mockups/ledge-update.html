@@ -1,0 +1,335 @@
+<title>Ledge — mise à jour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a desk strip with the island on top, the real 400 px Ledge panel beside its annotations; a state switcher drives both. Tokens copied from apps/overlay/src/styles/tokens.css. */
+:root {
+  color-scheme: dark;
+  --page: #0b0b0c; --page-fg: oklch(0.92 0 0); --page-muted: oklch(0.62 0 0); --page-line: #ffffff14;
+  --notch: #000; --panel: #000; --fg: oklch(0.985 0 0); --muted: oklch(0.269 0 0); --muted-fg: oklch(0.708 0 0);
+  --border: #ffffff1a; --input: #ffffff26; --well: oklch(0.145 0 0); --row-hot: #ffffff0f;
+  --brand: oklch(0.637 0.237 25.331); --brand-fg: oklch(0.971 0.013 17.38); --brand-soft: #3a0d0b;
+  --success: #34d399; --warning: #fbbf24; --info: #60a5fa; --danger: oklch(0.704 0.191 22.216);
+  --success-soft: #052e16; --warning-soft: #422006; --info-soft: #172554; --danger-soft: #450a0a;
+  --bot-top: #34434b; --bot-bottom: #273238; --bot-visor: #172124;
+  --sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'Geist Mono', ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  color-scheme: light;
+  --page: #ececee; --page-fg: oklch(0.2 0 0); --page-muted: oklch(0.45 0 0); --page-line: #00000014;
+  --notch: #fff; --panel: #fff; --fg: oklch(0.145 0 0); --muted: oklch(0.96 0 0); --muted-fg: oklch(0.5 0 0);
+  --border: oklch(0.922 0 0); --input: oklch(0.9 0 0); --well: oklch(0.98 0 0); --row-hot: #0000000a;
+  --brand: oklch(0.577 0.245 27.325); --brand-fg: oklch(0.985 0.01 17); --brand-soft: #fdecea;
+  --success: #059669; --warning: #b45309; --info: #2563eb; --danger: oklch(0.505 0.213 27.518);
+  --success-soft: #ecfdf5; --warning-soft: #fffbeb; --info-soft: #eff6ff; --danger-soft: #fef2f2;
+  --bot-top: #e7ecef; --bot-bottom: #cfd8dd; --bot-visor: #233036;
+} }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page: #ececee; --page-fg: oklch(0.2 0 0); --page-muted: oklch(0.45 0 0); --page-line: #00000014;
+  --notch: #fff; --panel: #fff; --fg: oklch(0.145 0 0); --muted: oklch(0.96 0 0); --muted-fg: oklch(0.5 0 0);
+  --border: oklch(0.922 0 0); --input: oklch(0.9 0 0); --well: oklch(0.98 0 0); --row-hot: #0000000a;
+  --brand: oklch(0.577 0.245 27.325); --brand-fg: oklch(0.985 0.01 17); --brand-soft: #fdecea;
+  --success: #059669; --warning: #b45309; --info: #2563eb; --danger: oklch(0.505 0.213 27.518);
+  --success-soft: #ecfdf5; --warning-soft: #fffbeb; --info-soft: #eff6ff; --danger-soft: #fef2f2;
+  --bot-top: #e7ecef; --bot-bottom: #cfd8dd; --bot-visor: #233036;
+}
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--page-fg); font-family: var(--sans); font-size: 14px; line-height: 20px; }
+.wrap { max-width: 1060px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: flex; flex-direction: column; gap: 28px; }
+header h1 { margin: 0; font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+header h1 b { color: var(--brand); }
+header p { margin: 6px 0 0; color: var(--page-muted); max-width: 66ch; }
+.mono { font-family: var(--mono); }
+
+/* State switcher */
+.states { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: 8px; background: var(--muted); border: 1px solid var(--input); width: fit-content; max-width: 100%; }
+.states button { font: 500 12px/16px var(--sans); color: var(--muted-fg); background: transparent; border: none; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.states button[aria-pressed="true"] { background: var(--panel); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .25); }
+.states button:focus-visible, .btn:focus-visible, .linkish:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* Desk strip with the island */
+.desk { position: relative; height: 92px; border-radius: 12px; border: 1px solid var(--page-line); background: linear-gradient(180deg, color-mix(in oklab, var(--page) 70%, #3b4a63) 0%, var(--page) 100%); overflow: hidden; }
+.desk .cap { position: absolute; left: 14px; bottom: 10px; font-size: 11px; color: var(--page-muted); letter-spacing: .04em; text-transform: uppercase; }
+.island { position: absolute; top: 0; left: 50%; transform: translateX(-50%); height: 38px; padding: 0 16px 0 12px; display: flex; align-items: center; gap: 10px; background: var(--notch); border-radius: 0 0 18px 18px; }
+.island .sep { width: 1px; height: 18px; background: var(--border); }
+.island .say { position: absolute; top: 46px; left: 0; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--fg); background: var(--notch); padding: 5px 10px; border-radius: 8px; }
+.island .say::before { content: ""; position: absolute; top: -5px; left: 14px; border: 5px solid transparent; border-top: 0; border-bottom-color: var(--notch); }
+
+/* Mascots */
+.bot { position: relative; flex-shrink: 0; width: 22px; height: 18px; border-radius: 7px; background: linear-gradient(var(--bot-top), var(--bot-bottom)); box-shadow: 0 0 10px -2px var(--halo, transparent); }
+.bot::after { content: ""; position: absolute; inset: 4px 3px 5px; border-radius: 4px; background: var(--bot-visor); }
+.bot i { position: absolute; z-index: 1; top: 7px; width: 3px; height: 4px; border-radius: 1px; background: var(--eye, #9ee); }
+.bot i:first-child { left: 7px; } .bot i:last-child { right: 7px; }
+.bot.lg { width: 28px; height: 23px; border-radius: 9px; } .bot.lg i { top: 9px; width: 4px; height: 5px; } .bot.lg i:first-child { left: 8px; } .bot.lg i:last-child { right: 8px; }
+.bot.ledge { --eye: var(--brand); --halo: transparent; }
+.pip { position: absolute; z-index: 2; top: -3px; right: -4px; width: 9px; height: 9px; border-radius: 50%; background: var(--brand); border: 2px solid var(--notch); }
+.pip.busy { background: var(--info); animation: pulse 1.2s ease-in-out infinite; }
+.pip.bad { background: var(--danger); }
+.pip.ok { background: var(--success); }
+@keyframes pulse { 50% { opacity: .35; } }
+
+/* Stage: panel + notes */
+.stage { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (max-width: 860px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+.panel { width: 100%; max-width: 400px; background: var(--panel); color: var(--fg); border-radius: 0 0 22px 22px; box-shadow: 0 20px 40px -12px rgb(0 0 0 / .55); overflow: hidden; }
+.ph { display: flex; align-items: flex-start; gap: 8px; padding: 18px 17px 14px; }
+.ph h2 { margin: 0; font-size: 18px; line-height: 24px; font-weight: 700; letter-spacing: -0.01em; }
+.ph h2 b { color: var(--brand); }
+.ph .sub { font-size: 12px; color: var(--muted-fg); }
+.ph .tools { margin-left: auto; display: flex; gap: 6px; }
+.ic { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: var(--fg); position: relative; }
+.ic.boxed { border: 1px solid var(--input); }
+.ic svg { width: 16px; height: 16px; }
+.ic .pip { top: 3px; right: 3px; width: 8px; height: 8px; border-color: var(--panel); }
+.ask { margin: 0 17px 14px; height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border: 1px solid var(--input); border-radius: 8px; background: var(--well); color: var(--muted-fg); font-size: 13px; }
+.ask .k { margin-left: auto; font-family: var(--mono); font-size: 11px; border: 1px solid var(--input); border-radius: 4px; padding: 0 5px; }
+
+/* The update card */
+.upd { margin: 0 17px 14px; border: 1px solid var(--input); border-radius: 10px; background: var(--well); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.upd.is-error { border-color: color-mix(in oklab, var(--danger) 45%, var(--input)); }
+.upd.is-done { border-color: color-mix(in oklab, var(--success) 40%, var(--input)); }
+.uh { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.uh .t { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.uh .t strong { font-size: 14px; line-height: 18px; font-weight: 600; }
+.uh .t span { font-size: 12px; line-height: 16px; color: var(--muted-fg); }
+.badge { flex-shrink: 0; font-size: 11px; font-weight: 600; line-height: 16px; padding: 2px 8px; border-radius: 6px; }
+.badge.new { color: var(--brand); background: var(--brand-soft); }
+.badge.run { color: var(--info); background: var(--info-soft); }
+.badge.bad { color: var(--danger); background: var(--danger-soft); }
+.badge.ok { color: var(--success); background: var(--success-soft); }
+.badge.warn { color: var(--warning); background: var(--warning-soft); }
+.notes { margin: 0; padding: 0 0 0 16px; font-size: 12px; line-height: 17px; color: var(--muted-fg); display: flex; flex-direction: column; gap: 2px; }
+.row-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.btn { font: 600 12px/16px var(--sans); height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn.primary { background: var(--brand); color: var(--brand-fg); }
+.btn.outline { background: transparent; color: var(--fg); border-color: var(--input); }
+.btn.ghost { background: transparent; color: var(--muted-fg); }
+.linkish { margin-left: auto; font-size: 12px; color: var(--muted-fg); text-decoration: underline; text-underline-offset: 3px; background: none; border: none; cursor: pointer; padding: 0; }
+.hint { font-size: 11px; line-height: 15px; color: var(--muted-fg); display: flex; gap: 6px; }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.steps li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 12px; line-height: 16px; }
+.steps li .m { color: var(--muted-fg); font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 11px; }
+.steps li.todo { color: var(--muted-fg); }
+.dot { width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center; font-size: 9px; font-weight: 700; }
+.dot.ok { background: var(--success-soft); color: var(--success); }
+.dot.run { border: 2px solid var(--info); border-right-color: transparent; animation: spin .9s linear infinite; }
+.dot.todo { border: 1.5px solid var(--input); }
+.dot.bad { background: var(--danger-soft); color: var(--danger); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.bar { grid-column: 2 / 4; height: 4px; border-radius: 4px; background: var(--muted); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 62%; background: var(--info); border-radius: 4px; }
+.cmd { display: flex; align-items: center; gap: 8px; border: 1px solid var(--input); border-radius: 8px; padding: 6px 6px 6px 10px; background: var(--panel); min-width: 0; }
+.cmd code { font-family: var(--mono); font-size: 11px; line-height: 15px; flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; }
+.err { font-size: 12px; line-height: 16px; color: var(--muted-fg); }
+.err .mono { color: var(--danger); font-size: 11px; }
+
+/* Session rows */
+.grp { display: flex; align-items: baseline; gap: 8px; padding: 4px 17px 8px; font-size: 12px; }
+.grp b { font-weight: 600; } .grp .p { font-family: var(--mono); font-size: 11px; color: var(--muted-fg); } .grp .n { margin-left: auto; color: var(--muted-fg); }
+.srow { display: flex; align-items: center; gap: 12px; padding: 10px 17px; }
+.srow .t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.srow .t strong { font-size: 14px; font-weight: 500; color: var(--muted-fg); }
+.srow .t span { font-size: 12px; color: var(--muted-fg); }
+.foot { display: flex; align-items: center; gap: 8px; padding: 12px 17px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted-fg); }
+.foot .k { margin-left: auto; font-family: var(--mono); font-size: 11px; border: 1px solid var(--input); border-radius: 4px; padding: 0 5px; }
+
+/* Annotations */
+.notes-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.notes-col h3 { margin: 0 0 4px; font-size: 15px; line-height: 20px; }
+.notes-col p, .notes-col li { color: var(--page-muted); margin: 0; max-width: 62ch; }
+.notes-col ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.notes-col code { font-family: var(--mono); font-size: 12px; color: var(--page-fg); }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; font-size: 13px; }
+.kv dt { color: var(--page-muted); } .kv dd { margin: 0; }
+
+/* Settings mock */
+.section-title { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--page-muted); margin: 8px 0 -14px; }
+.set-h { display: flex; align-items: center; gap: 12px; padding: 16px 17px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.set-h .x { margin-left: auto; color: var(--muted-fg); }
+.tabs { margin: 12px 17px 4px; display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--muted); border: 1px solid var(--input); }
+.tabs span { flex: 1; text-align: center; font-size: 12px; font-weight: 500; height: 28px; line-height: 28px; border-radius: 6px; color: var(--muted-fg); }
+.tabs span.on { background: var(--panel); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .2); }
+.srow2 { margin: 0 17px; padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+.srow2:last-child { border-bottom: none; }
+.srow2 .t { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.srow2 .t strong { font-size: 14px; line-height: 18px; font-weight: 600; }
+.srow2 .t span { font-size: 12px; line-height: 16px; color: var(--muted-fg); }
+.ver { display: grid; grid-template-columns: max-content max-content; gap: 2px 14px; font-size: 12px; margin-top: 6px; }
+.ver dt { color: var(--muted-fg); } .ver dd { margin: 0; font-family: var(--mono); font-size: 11px; }
+.sw { width: 32px; height: 18px; border-radius: 99px; background: var(--brand); position: relative; flex-shrink: 0; }
+.sw::after { content: ""; position: absolute; left: 16px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--brand-fg); }
+@media (prefers-reduced-motion: reduce) { .dot.run, .pip.busy { animation: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Ledge<b>.</b> se met à jour</h1>
+    <p>Maquette du parcours de mise à jour : un point sur l'île signale qu'une version est disponible, une carte en haut de la liste propose de tout mettre à jour d'un clic (daemon WSL puis application Windows). Choisissez un état pour voir la carte évoluer.</p>
+  </header>
+
+  <div class="states" role="group" aria-label="État de la mise à jour" id="states">
+    <button type="button" data-s="available" aria-pressed="true">Disponible</button>
+    <button type="button" data-s="running" aria-pressed="false">En cours</button>
+    <button type="button" data-s="done" aria-pressed="false">Redémarrage</button>
+    <button type="button" data-s="error" aria-pressed="false">Échec du daemon</button>
+    <button type="button" data-s="clone" aria-pressed="false">Installé depuis git</button>
+  </div>
+
+  <div class="desk" aria-label="Bord supérieur de l'écran">
+    <div class="island">
+      <span class="bot ledge" style="--eye: var(--brand)"><i></i><i></i><span class="pip" id="island-pip"></span></span>
+      <span class="sep"></span>
+      <span class="bot" style="--eye:#f87171;--halo:#f8717188"><i></i><i></i></span>
+      <span class="bot" style="--eye:#fbbf24;--halo:#fbbf2466"><i></i><i></i></span>
+      <span class="bot" style="--eye:#60a5fa"><i></i><i></i></span>
+      <span class="bot" style="--eye:#34d399"><i></i><i></i></span>
+      <span class="say" id="island-say">Ledge 0.3.0 est prêt</span>
+    </div>
+    <span class="cap">L'île, au survol de la mascotte Ledge</span>
+  </div>
+
+  <div class="stage">
+    <div class="panel" aria-label="Liste des sessions">
+      <div class="ph">
+        <div>
+          <h2>Ledge<b>.</b></h2>
+          <div class="sub">4 sessions · 2 demandes pour vous</div>
+        </div>
+        <div class="tools">
+          <span class="ic boxed" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></svg></span>
+          <span class="ic" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11a5.5 5.5 0 0 0 0-11z" fill="currentColor"/></svg></span>
+          <span class="ic" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/></svg><span class="pip" id="gear-pip"></span></span>
+        </div>
+      </div>
+      <div class="ask"><span class="bot ledge"><i></i><i></i></span>Demander à Ledge…<span class="k">/</span></div>
+
+      <div id="card"></div>
+
+      <div class="grp"><b>harness-assistant</b><span class="p">/w/harness-assistant</span><span class="n">4 bots</span></div>
+      <div class="srow" style="background: var(--row-hot); box-shadow: inset 2px 0 var(--brand)"><span class="bot lg" style="--eye:#f87171;--halo:#f8717188"><i></i><i></i></span><span class="t"><strong>Sans sujet encore</strong><span>Otto · 18 min</span></span><span class="badge bad">Votre accord</span></div>
+      <div class="srow"><span class="bot lg" style="--eye:#fbbf24;--halo:#fbbf2466"><i></i><i></i></span><span class="t"><strong>Sans sujet encore</strong><span>Nova · 12 min</span></span><span class="badge warn">Une question</span></div>
+      <div class="srow"><span class="bot lg" style="--eye:#60a5fa"><i></i><i></i></span><span class="t"><strong>Sans sujet encore</strong><span>Pim · 8 min</span></span><span class="badge run">Au travail</span></div>
+      <div class="foot"><span>◔</span> Ne pas déranger <span class="k">Ctrl Alt L</span></div>
+    </div>
+
+    <div class="notes-col" id="notes"></div>
+  </div>
+
+  <div class="section-title">Réglages · nouvel onglet « À propos »</div>
+  <div class="stage">
+    <div class="panel" aria-label="Réglages, onglet À propos">
+      <div class="set-h"><span class="mono" style="color:var(--muted-fg)">‹</span> Votre Ledge <span class="x">✕</span></div>
+      <div class="tabs"><span>Affichage</span><span>Notifications</span><span>Sons</span><span class="on">À propos</span></div>
+      <div class="srow2">
+        <span class="t"><strong>Versions</strong><span>Les deux moitiés de Ledge doivent avoir la même version.</span>
+          <dl class="ver"><dt>Application Windows</dt><dd>0.2.2</dd><dt>Daemon WSL</dt><dd>0.2.2 · npm</dd><dt>Dernière version</dt><dd style="color:var(--brand)">0.3.0</dd></dl>
+        </span>
+      </div>
+      <div class="srow2">
+        <span class="t"><strong>Rechercher les mises à jour</strong><span>Au démarrage, puis toutes les 6 heures. Ledge ne met jamais à jour sans votre clic.</span></span>
+        <span class="sw" role="img" aria-label="Activé"></span>
+      </div>
+      <div class="srow2">
+        <span class="t"><strong>Vérifié il y a 12 min</strong><span>Sur les releases GitHub de Paradow-dev/ledge.</span></span>
+        <button type="button" class="btn outline">Vérifier</button>
+      </div>
+    </div>
+    <div class="notes-col">
+      <div>
+        <h3>Pourquoi un onglet de plus</h3>
+        <p>La carte de la liste disparaît après « Plus tard » jusqu'à la version suivante. L'onglet À propos reste le seul endroit permanent pour voir les versions, relancer une vérification ou couper la recherche automatique. Le point corail sur la roue dentée y mène tant qu'une version attend.</p>
+      </div>
+      <div>
+        <h3>Écart de versions</h3>
+        <p>Si le daemon et l'application n'ont pas la même version (mise à jour interrompue, clone git en avance), la ligne Versions passe en orange et la carte propose d'aligner la moitié en retard.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const S = {
+  available: {
+    pip: '', say: 'Ledge 0.3.0 est prêt', gear: true,
+    card: `<div class="upd">
+      <div class="uh"><span class="bot lg ledge"><i></i><i></i></span><span class="t"><strong>Ledge 0.3.0 est disponible</strong><span>Vous avez la 0.2.2</span></span><span class="badge new">Nouveau</span></div>
+      <ul class="notes"><li>Réponses aux questions depuis le chat</li><li>L'île se replie plus vite au départ du curseur</li><li>Correctifs du lecteur Markdown</li></ul>
+      <div class="row-actions"><button type="button" class="btn primary">Mettre à jour</button><button type="button" class="btn ghost">Plus tard</button><button type="button" class="linkish">Notes complètes</button></div>
+      <div class="hint"><span>ⓘ</span><span>Vos 4 sessions continuent. Ledge se ferme environ 20 s pour se mettre à jour.</span></div>
+    </div>`,
+    notes: `<div><h3>Disponible</h3><p>L'application compare sa version à <code>latest.json</code> de la dernière release GitHub, et le daemon donne la sienne dans le <code>snapshot</code>. Quand une version plus récente existe, trois signaux apparaissent, du plus discret au plus visible :</p>
+      <ul><li>une pastille corail sur la mascotte Ledge de l'île, avec une bulle au survol ;</li><li>une carte en haut de la liste, au-dessus des sessions ;</li><li>une pastille sur la roue dentée, qui mène à l'onglet À propos.</li></ul></div>
+      <div><h3>Ce que fait le bouton</h3><ul><li>Ledge demande au daemon <code>update.daemon {version}</code>, qui lance <code>npm i -g @paradow/ledge@0.3.0</code> avec le npm du Node qui le fait tourner, puis redémarre son service.</li><li>Ledge se reconnecte et vérifie que le daemon annonce bien 0.3.0.</li><li>Ensuite seulement, Ledge télécharge l'installeur signé, l'installe et redémarre.</li></ul></div>
+      <div><h3>Plus tard</h3><p>Masque la carte et la pastille de l'île jusqu'à la version suivante. Celle de la roue dentée reste.</p></div>`
+  },
+  running: {
+    pip: 'busy', say: 'Mise à jour en cours…', gear: false,
+    card: `<div class="upd">
+      <div class="uh"><span class="bot lg ledge"><i></i><i></i></span><span class="t"><strong>Mise à jour vers 0.3.0</strong><span>Ne fermez pas Ledge</span></span><span class="badge run">En cours</span></div>
+      <ol class="steps">
+        <li><span class="dot ok">✓</span><span>Daemon WSL mis à jour</span><span class="m">0.3.0</span></li>
+        <li><span class="dot ok">✓</span><span>Daemon redémarré, sessions retrouvées</span><span class="m">4/4</span></li>
+        <li><span class="dot run"></span><span>Téléchargement de l'application</span><span class="m">5,1/8,2 Mo</span><span class="bar"><i></i></span></li>
+        <li class="todo"><span class="dot todo"></span><span>Installation et redémarrage</span><span class="m"></span></li>
+      </ol>
+    </div>`,
+    notes: `<div><h3>En cours</h3><p>Une étape par ligne, dans l'ordre réel. Le daemon passe toujours en premier : s'il échoue, l'application reste telle quelle et rien n'est cassé.</p></div>
+      <div><h3>Les sessions</h3><p>Elles tournent sur le serveur tmux de Ledge, pas dans le daemon. Au redémarrage, le daemon relit <code>~/.ledge/sessions.json</code> et reprend le suivi. La ligne affiche combien de sessions il a retrouvées.</p></div>
+      <div><h3>Pas d'annulation</h3><p>Une fois le téléchargement de l'application commencé, le bouton disparaît. L'installeur NSIS est rapide et une interruption laisserait une installation à moitié faite.</p></div>`
+  },
+  done: {
+    pip: 'ok', say: 'Ledge redémarre…', gear: false,
+    card: `<div class="upd is-done">
+      <div class="uh"><span class="bot lg ledge"><i></i><i></i></span><span class="t"><strong>Ledge 0.3.0 est installé</strong><span>Redémarrage dans 3 s</span></span><span class="badge ok">Prêt</span></div>
+      <ol class="steps">
+        <li><span class="dot ok">✓</span><span>Daemon WSL mis à jour</span><span class="m">0.3.0</span></li>
+        <li><span class="dot ok">✓</span><span>Daemon redémarré, sessions retrouvées</span><span class="m">4/4</span></li>
+        <li><span class="dot ok">✓</span><span>Application téléchargée et vérifiée</span><span class="m">8,2 Mo</span></li>
+        <li><span class="dot run"></span><span>Redémarrage de Ledge</span><span class="m"></span></li>
+      </ol>
+    </div>`,
+    notes: `<div><h3>Redémarrage</h3><p>L'installeur remplace l'exe puis relance Ledge. Au retour, l'île affiche une bulle « Ledge 0.3.0 · voir les nouveautés » pendant quelques secondes, puis plus rien.</p></div>
+      <div><h3>Vérification de l'installeur</h3><p>L'updater Tauri vérifie la signature minisign de l'installeur avec la clé publique embarquée dans l'application. Un fichier modifié est refusé avant d'être lancé.</p></div>`
+  },
+  error: {
+    pip: 'bad', say: 'La mise à jour a échoué', gear: true,
+    card: `<div class="upd is-error">
+      <div class="uh"><span class="bot lg ledge"><i></i><i></i></span><span class="t"><strong>Le daemon n'a pas pu se mettre à jour</strong><span>Rien n'a changé : Ledge reste en 0.2.2</span></span><span class="badge bad">Échec</span></div>
+      <ol class="steps">
+        <li><span class="dot bad">✕</span><span>Daemon WSL</span><span class="m">npm a échoué</span></li>
+        <li class="todo"><span class="dot todo"></span><span>Application non touchée</span><span class="m"></span></li>
+      </ol>
+      <div class="err">npm ne peut pas écrire dans son dossier global : <span class="mono">EACCES /usr/local/lib/node_modules</span>. Lancez la commande vous-même dans WSL, puis réessayez.</div>
+      <div class="cmd"><code>npm i -g @paradow/ledge@0.3.0</code><button type="button" class="btn outline">Copier</button></div>
+      <div class="row-actions"><button type="button" class="btn primary">Réessayer</button><button type="button" class="btn ghost">Plus tard</button><button type="button" class="linkish">Journal du daemon</button></div>
+    </div>`,
+    notes: `<div><h3>Échec</h3><p>Le message dit ce qui a échoué et comment s'en sortir, avec la commande exacte à copier. « Réessayer » relance tout le parcours : si le daemon est déjà en 0.3.0, l'étape est cochée d'office.</p></div>
+      <div><h3>Autres échecs prévus</h3><ul><li>Daemon injoignable après redémarrage (30 s) : « Le daemon ne répond plus », avec <code>systemctl --user status ledge-daemon</code>.</li><li>Téléchargement ou signature refusés : l'application n'est pas touchée, avec le bouton Réessayer.</li><li>Pas de réseau ou proxy : la vérification échoue en silence, et l'onglet À propos affiche l'heure du dernier succès.</li></ul></div>`
+  },
+  clone: {
+    pip: '', say: 'Ledge 0.3.0 est prêt', gear: true,
+    card: `<div class="upd">
+      <div class="uh"><span class="bot lg ledge"><i></i><i></i></span><span class="t"><strong>Ledge 0.3.0 est disponible</strong><span>Votre daemon tourne depuis un clone git</span></span><span class="badge warn">Manuel</span></div>
+      <div class="err">Ledge ne touche pas à un clone. Mettez le daemon à jour dans WSL :</div>
+      <div class="cmd"><code>cd ~/soft/ledge &amp;&amp; git pull &amp;&amp; pnpm i &amp;&amp; pnpm --filter @paradow/ledge build &amp;&amp; systemctl --user restart ledge-daemon</code><button type="button" class="btn outline">Copier</button></div>
+      <div class="row-actions"><button type="button" class="btn primary" disabled style="opacity:.5;cursor:default">Mettre à jour l'application</button><button type="button" class="btn ghost">Plus tard</button></div>
+      <div class="hint"><span>ⓘ</span><span>Le bouton s'active dès que le daemon annonce 0.3.0.</span></div>
+    </div>`,
+    notes: `<div><h3>Installé depuis git</h3><p>C'est le cas de votre machine aujourd'hui : le service lance <code>dist/cli/index.js</code> depuis un clone. Le daemon s'en rend compte (il n'est pas sous un <code>node_modules</code> global) et l'indique dans le <code>snapshot</code> par <code>install: "git"</code>.</p></div>
+      <div><h3>Passer à npm</h3><p>Une fois le paquet publié, <code>npm i -g @paradow/ledge &amp;&amp; ledge setup</code> réécrit l'unité systemd vers le binaire npm. Les mises à jour suivantes passent alors par le bouton.</p></div>`
+  }
+};
+const card = document.getElementById('card'), notes = document.getElementById('notes');
+const pip = document.getElementById('island-pip'), say = document.getElementById('island-say'), gear = document.getElementById('gear-pip');
+function show(k) {
+  const s = S[k];
+  card.innerHTML = s.card; notes.innerHTML = s.notes;
+  pip.className = 'pip' + (s.pip ? ' ' + s.pip : ''); say.textContent = s.say; gear.hidden = !s.gear;
+  document.querySelectorAll('#states button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.s === k)));
+  try { localStorage.setItem('ledge-upd-state', k); } catch (e) {}
+}
+document.getElementById('states').addEventListener('click', e => { const b = e.target.closest('button[data-s]'); if (b) show(b.dataset.s); });
+let start = 'available'; try { const v = localStorage.getItem('ledge-upd-state'); if (v && S[v]) start = v; } catch (e) {}
+show(start);
+</script>
