@@ -8,6 +8,31 @@ const q = fakeSession('b', { name: 'Pim', tool: 'codex', state: 'waiting_input',
 const base = { preview: ['● Bash(npm test)', 'Do you want to proceed?'], visible: true, reading: false, draft: '', onDraft: () => {}, onBack: () => {}, onClose: () => {}, onDecide: () => {}, onReply: () => {}, onInterrupt: () => {}, onKill: () => {}, onFocus: () => {}, onToggleReading: () => {} };
 
 describe('<SessionView>', () => {
+  it('renders the thread under the helpers and opens a helper on click, finished ones included', () => {
+    const at = (s: number) => new Date(Date.UTC(2026, 9, 13, 10, 0, s)).toISOString();
+    const thread = [
+      { kind: 'prompt' as const, id: 'prompt-1', at: at(0), turn: 1, text: 'Review the reducer' },
+      { kind: 'helper' as const, id: 'h1', at: at(1), turn: 1, task: 'find consumers', agentType: 'Explore', state: 'exited' as const },
+      { kind: 'tool' as const, id: 'toolu_1', at: at(2), turn: 1, tool: 'Bash', label: 'Bash · pnpm test', status: 'success' as const, files: [] }
+    ];
+    const onOpenHelper = vi.fn();
+    const { container } = render(<SessionView {...base} session={fakeSession('a', { state: 'working', helpers: [] })} thread={thread} onOpenHelper={onOpenHelper} />);
+    expect(container.querySelector('[data-prompt]')).toHaveTextContent('Review the reducer');
+    expect(container.querySelector('[data-action]')).toHaveTextContent('Bash · pnpm test');
+    const row = screen.getByRole('button', { name: 'find consumers · Open the discussion' });
+    expect(row).toHaveTextContent('Explore · Done');
+    fireEvent.click(row);
+    expect(onOpenHelper).toHaveBeenCalledWith('h1');
+    // The thread comes before the reply card and the ask fold.
+    const helpersEl = container.querySelector('[data-helpers]')!; const threadEl = container.querySelector('[data-thread]')!;
+    expect(helpersEl.compareDocumentPosition(threadEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it('shows no counters under the title once a reply arrived', () => {
+    const reply = { text: '## Done\n- [x] a\n- [x] b\n\n## Questions\n1. Which one?\n   - A\n   - B', at: '2026-10-09T18:05:00.000Z' };
+    const { container } = render(<SessionView {...base} session={fakeSession('a', { state: 'idle', lastReply: reply })} thread={[]} />);
+    expect(container.textContent).not.toMatch(/\d+ (done|question)/);
+    expect(container.querySelector('[data-thread][data-empty]')).toBeInTheDocument();
+  });
   it('lists the live helpers under the title and keeps an idle parent "in progress" while one works', () => {
     const helpers = [
       { id: 'h0', kind: 'Explore', task: 'find reducer consumers', state: 'exited' as const },
@@ -20,6 +45,7 @@ describe('<SessionView>', () => {
     const tree = screen.getByRole('list', { name: 'Subagents' });
     const rows = tree.querySelectorAll('[data-helper]');
     expect(rows).toHaveLength(2);
+    expect(rows[0]!.tagName).toBe('BUTTON');
     expect(rows[0]).toHaveTextContent('review task 1');
     expect(rows[0]).toHaveTextContent('Working');
     expect(rows[0]).toHaveTextContent('general-purpose · Working');

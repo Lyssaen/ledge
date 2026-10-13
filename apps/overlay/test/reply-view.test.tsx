@@ -45,7 +45,7 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
     const { container } = render(<SessionView {...base} session={idle} />);
     expect(screen.getByRole('heading', { level: 2, name: 'Three reducer findings fixed' })).toBeInTheDocument();
     expect(container.querySelector('[data-eyebrow]')).toHaveTextContent('Your turn');
-    expect(container.querySelector('[data-reply-meta]')).toHaveTextContent('Otto finished 20s ago · 2 done · 1 question');
+    expect(container.querySelector('[data-reply-meta]')).toHaveTextContent('Otto finished 20s ago');
     expect(container.querySelector('[data-reply-lead]')).toHaveTextContent('Steps 1 to 6 are done and green.');
     const kickers = [...container.querySelectorAll('[data-kicker]')].map(k => k.textContent);
     expect(kickers).toEqual(['What I did · 2', 'Verified', 'Open question', 'Left to do']);

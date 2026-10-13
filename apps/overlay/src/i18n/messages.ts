@@ -121,8 +121,6 @@ const fr = {
   /** The agent's last message, read like a plan (the "your turn" view). */
   reply: {
     finished: (name: string, when: string) => `${name} a terminé il y a ${when}`,
-    doneCount: (n: number) => `${n} ${plural(n, 'point fait', 'points faits')}`,
-    questionCount: (n: number) => `${n} ${plural(n, 'question', 'questions')}`,
     question: 'Question',
     typeAnswer: 'Répondre librement',
     recommended: 'Recommandé',
@@ -359,8 +357,6 @@ const en: Messages = {
   },
   reply: {
     finished: (name: string, when: string) => `${name} finished ${when} ago`,
-    doneCount: (n: number) => `${n} done`,
-    questionCount: (n: number) => `${n} ${plural(n, 'question', 'questions')}`,
     question: 'Question',
     typeAnswer: 'Type an answer',
     recommended: 'Recommended',

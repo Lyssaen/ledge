@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
-import type { Helper, Pending, Session } from '@ledge/protocol';
+import type { Helper, Pending, Session, ThreadItem } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
 import { botState, liveHelpers, poseFor, type BotState } from '../bots/poseFor';
 import { Badge } from '../ui/Badge';
@@ -13,6 +13,8 @@ import { canDismiss } from './SessionList';
 import { parseReply } from '../reply/parse';
 import { BranchChip } from '../ui/BranchChip';
 import { ReplyCard, inline } from './ReplyCard';
+import { Thread } from './Thread';
+import { helperRows, type HelperRow } from '../thread/turns';
 import type { DocumentReference } from '../documents/references';
 
 const mono = "'Geist Mono', ui-monospace, monospace";
@@ -76,18 +78,24 @@ function QuestionCard({ pending, onReply, disabled, freeText, t }: { pending: Pe
 
 const HELPER_STATE: Record<Helper['state'], BotState> = { starting: 'starting', working: 'working', waiting_input: 'question', waiting_permission: 'approval', idle: 'idle', exited: 'done', error: 'error' };
 
-/** Spec board 17: the live helpers under their bot, 20 px each, in a tree whose last branch ends in └. */
-function HelpersTree({ parent, helpers, t, theme, paused, frozen, reducedMotion }: { parent: Session; helpers: Helper[]; t: Messages; theme: 'dark' | 'light'; paused: boolean; frozen?: boolean; reducedMotion?: boolean }) {
+/** Spec 2026-10-13 §6: the current turn's helpers under the title, 20 px bots in a tree whose last branch ends in └; each
+ *  row opens the helper's own thread. */
+function HelpersTree({ parent, helpers, t, theme, paused, frozen, reducedMotion, onOpen }: { parent: Session; helpers: HelperRow[]; t: Messages; theme: 'dark' | 'light'; paused: boolean; frozen?: boolean; reducedMotion?: boolean; onOpen?: (id: string) => void }) {
   return (
     <ul data-helpers aria-label={t.session.helpers} style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
       {helpers.map((h, i) => {
         const st = HELPER_STATE[h.state]; const seed = `${parent.id}:${h.id}`; const last = i === helpers.length - 1;
+        const stateLabel = h.state === 'exited' ? t.thread.helperDone : t.botLabel[st];
         return (
-          <li key={h.id} data-helper data-last={last ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, fontSize: 12, lineHeight: '16px' }}>
-            <span aria-hidden="true" className="mono" style={{ width: 14, flexShrink: 0, color: 'var(--muted-foreground)' }}>{last ? '└' : '├'}</span>
-            <Bot seed={seed} tool={parent.tool} state={st} pose={poseFor(seed, st)} size={20} theme={theme} paused={paused} frozen={frozen} reducedMotion={reducedMotion} />
-            <span data-helper-task style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--sidebar-foreground)' }}>{h.task}</span>
-            <span style={{ flexShrink: 0, color: 'var(--muted-foreground)' }}>{h.kind} · {t.botLabel[st]}</span>
+          <li key={h.id} style={{ minWidth: 0 }}>
+            <button type="button" data-helper data-helper-id={h.id} data-last={last ? 'true' : undefined} aria-label={`${h.task} · ${t.thread.helperOpen}`} onClick={() => onOpen?.(h.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0, padding: 0, background: 'none', border: 0, textAlign: 'left', font: 'inherit', fontSize: 12, lineHeight: '16px', color: 'var(--sidebar-foreground)', cursor: 'pointer', borderRadius: 4 }}>
+              <span aria-hidden="true" className="mono" style={{ width: 14, flexShrink: 0, color: 'var(--muted-foreground)' }}>{last ? '└' : '├'}</span>
+              <Bot seed={seed} tool={parent.tool} state={st} pose={poseFor(seed, st)} size={20} theme={theme} paused={paused} frozen={frozen} reducedMotion={reducedMotion} />
+              <span data-helper-task style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.task}</span>
+              <span style={{ flexShrink: 0, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{h.kind} · {stateLabel}</span>
+              <span aria-hidden="true" style={{ flexShrink: 0, color: 'var(--muted-foreground)', fontSize: 14 }}>›</span>
+            </button>
           </li>
         );
       })}
@@ -102,6 +110,9 @@ export interface SessionViewProps {
   onDraft: (t: string) => void; onBack: () => void; onClose: () => void; onDecide: (d: 'accept' | 'deny') => void; onReply: (t: string) => void;
   onInterrupt: () => void; onKill: () => void; onFocus: () => void; onToggleReading: () => void; onRename?: (topic: string) => void;
   onDocument?: (ref: DocumentReference) => void;
+  /** Native tracking (spec 2026-10-13 §6): the session's thread once received; undefined while it is on its way. */
+  thread?: ThreadItem[];
+  onOpenHelper?: (id: string) => void;
   /** Removes a finished or read-only session from the list (shown only for those); `dismissOff` while offline. */
   onDismiss?: () => void; dismissOff?: boolean;
   /** Null when commands may be sent; otherwise why every send/decision path is disabled (offline, read-only). */
@@ -128,9 +139,10 @@ export function SessionView(p: SessionViewProps) {
   const shown = pending ?? last;
   const isQ = shown?.kind === 'question';
   const st = botState(s);
-  const helpers = liveHelpers(s);
+  const live = liveHelpers(s);
+  const rows = helperRows(s, p.thread);
   // The daemon rests the main thread between turns while a background helper still works: the view reads as in progress.
-  const busy = s.state === 'working' || (s.state === 'idle' && helpers.length > 0);
+  const busy = s.state === 'working' || (s.state === 'idle' && live.length > 0);
   // The preview follows its latest line, like a terminal: on open, and on each update unless the user scrolled up to read.
   const termRef = useRef<HTMLPreElement>(null);
   const stuck = useRef(true);
@@ -147,7 +159,6 @@ export function SessionView(p: SessionViewProps) {
   const doc = useMemo(() => (reply ? parseReply(reply.text) : null), [reply?.text]); // eslint-disable-line react-hooks/exhaustive-deps
   const replyField = useRef<HTMLTextAreaElement>(null);
   const questions = doc?.questions.length ?? 0;
-  const doneCount = doc ? doc.sections.reduce((n, sec) => n + sec.blocks.reduce((m, b) => m + (b.type === 'list' ? b.items.filter(it => sec.kind === 'done' || it.checked).length : 0), 0), 0) : 0;
   const hint = blocked ?? (promptOnly ? t.session.hintPrompt(pending!.kind)
     : pending?.kind === 'question' ? t.session.hintQuestion
     : questions > 1 ? t.reply.hintAnswerAll : questions === 1 ? t.reply.hintChips
@@ -179,10 +190,13 @@ export function SessionView(p: SessionViewProps) {
             {readOnly ? <Badge state="readonly" tone={badgeState} caps /> : <Badge state={badgeState} caps />}
           </div>
           <h2 style={{ margin: 0, fontSize: 18, lineHeight: '26px', fontWeight: 650, letterSpacing: '-0.01em', overflowWrap: 'anywhere' }}>{title}</h2>
-          {helpers.length > 0 && <HelpersTree parent={s} helpers={helpers} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} />}
+          {rows.length > 0 && <HelpersTree parent={s} helpers={rows} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
+          {p.thread !== undefined
+            ? <Thread session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} />
+            : <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '12px 0 0' }}>{t.thread.loading}</p>}
           {reply && doc && <>
             <span data-reply-meta style={{ marginTop: 6, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
-              {[t.reply.finished(s.name, relativeTime(reply.at, p.now, t)), doneCount ? t.reply.doneCount(doneCount) : null, questions ? t.reply.questionCount(questions) : null].filter(Boolean).join(' · ')}
+              {t.reply.finished(s.name, relativeTime(reply.at, p.now, t))}
             </span>
             {doc.lead && <p data-reply-lead style={{ margin: '10px 0 0', fontSize: 14, lineHeight: '21px', color: 'var(--sidebar-foreground)', overflowWrap: 'anywhere' }}>{inline(doc.lead, 0, undefined, p.onDocument)}</p>}
             <div style={{ marginTop: 14 }}>
