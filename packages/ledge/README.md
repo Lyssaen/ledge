@@ -1,6 +1,6 @@
 # @paradow/ledge (WSL side)
 
-The Ledge daemon and CLI: follow and answer your WSL agent sessions (Claude Code, Codex, Cursor Agent) from the Ledge island on Windows. See the [repository README](https://github.com/Paradow-dev/ledge#readme) for the whole picture.
+The Ledge daemon and CLI: follow and answer your WSL agent sessions (Claude Code, Codex, Cursor Agent) from the Ledge island on Windows. See the [repository README](https://github.com/Lyssaen/ledge#readme) for the whole picture.
 
 ## Install
 

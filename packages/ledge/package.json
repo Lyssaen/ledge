@@ -6,8 +6,8 @@
   "bin": { "ledge": "dist/cli/index.js" },
   "files": ["dist"],
   "engines": { "node": ">=22" },
-  "repository": { "type": "git", "url": "git+https://github.com/Paradow-dev/ledge.git", "directory": "packages/ledge" },
-  "homepage": "https://github.com/Paradow-dev/ledge#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/Lyssaen/ledge.git", "directory": "packages/ledge" },
+  "homepage": "https://github.com/Lyssaen/ledge#readme",
   "license": "UNLICENSED",
   "publishConfig": { "access": "public", "provenance": true },
   "scripts": {
