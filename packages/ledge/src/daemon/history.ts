@@ -109,7 +109,10 @@ export class History {
         const perm = [...this.items(id)].reverse().find(i => i.kind === 'permission' && i.decision === undefined);
         return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision: ev.decision ?? 'unknown' }) : undefined;
       }
-      case 'Stop': return ev.text ? this.put(id, { kind: 'reply', id: `reply-${turn}`, at: ev.at, turn, text: ev.text }) : undefined;
+      case 'Stop': {
+        if (!ev.helperId) this.settle(id, i => i.turn === turn && !i.helperId);
+        return ev.text ? this.put(id, { kind: 'reply', id: `reply-${turn}`, at: ev.at, turn, text: ev.text }) : undefined;
+      }
       case 'SubagentStart': {
         if (!ev.helperId) return undefined;
         const task = ev.text ?? ev.task ?? '';
@@ -122,6 +125,7 @@ export class History {
         const prev = this.items(id).find(i => i.id === ev.helperId);
         const row = prev && prev.kind === 'helper' ? prev : { kind: 'helper' as const, id: ev.helperId, at: ev.at, turn, task: ev.task ?? '', ...(ev.tool ? { agentType: ev.tool } : {}), state: 'working' as const };
         this.put(id, { ...row, state: 'exited' });
+        this.settle(id, i => i.helperId === ev.helperId);
         return ev.text ? this.put(id, { kind: 'reply', id: `report-${ev.helperId}`, at: ev.at, turn, helperId: ev.helperId, text: ev.text }) : undefined;
       }
       default: return undefined;
@@ -146,6 +150,12 @@ export class History {
       added.push(this.put(id, { kind: 'message', id: `msg-${m.id}`, at: m.at, turn, text: m.text, ...(opts.helperId ? { helperId: opts.helperId } : {}) }));
     }
     return added;
+  }
+
+  /** The turn (or the helper) is over: an action still running will not get its result from this side. It shows as
+   *  unknown, not as waiting forever; a result that arrives later still settles it (callFor finds it by id). */
+  private settle(id: string, mine: (i: ToolItem) => boolean): void {
+    for (const i of this.items(id)) if (i.kind === 'tool' && i.status === 'running' && mine(i)) this.put(id, { ...i, status: 'unknown' });
   }
 
   private callFor(id: string, ev: SessionEvent): ToolItem | undefined {

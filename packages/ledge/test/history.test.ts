@@ -69,6 +69,25 @@ describe('History', () => {
     expect(h.items('s')[4]).toMatchObject({ kind: 'helper', task: 'review task 1' });
   });
 
+  it('marks an action left without result as unknown at the end of its turn or of its helper, a late result still settles it', () => {
+    const h = new History(); const seen: string[] = []; h.onItem((_, it) => { if (it.kind === 'tool') seen.push(`${it.id}:${it.status}`); });
+    h.record('s', ev('UserPromptSubmit', { text: 'go' }));
+    h.record('s', ev('PreToolUse', { tool: 'Bash', text: 'Bash · sleep', toolUseId: 'toolu_1' }, 1));
+    h.record('s', ev('PreToolUse', { tool: 'Read', text: 'Read · a.ts', toolUseId: 'toolu_2' }, 2));
+    h.record('s', ev('PostToolUse', { tool: 'Read', toolUseId: 'toolu_2', output: 'a' }, 3));
+    h.record('s', ev('SubagentStart', { helperId: 'h1', tool: 'Explore', text: 'look' }, 4));
+    h.record('s', ev('PreToolUse', { helperId: 'h1', tool: 'Grep', text: 'Grep · x', toolUseId: 'toolu_3' }, 5));
+    h.record('s', ev('Stop', { text: 'done' }, 6));
+    const status = (tid: string) => { const it = h.items('s').find(i => i.id === tid); return it?.kind === 'tool' ? it.status : undefined; };
+    expect([status('toolu_1'), status('toolu_2'), status('toolu_3')]).toEqual(['unknown', 'success', 'running']); // the helper's row is not the turn's
+    expect(seen).toContain('toolu_1:unknown'); // broadcast like any update
+    h.record('s', ev('SubagentStop', { helperId: 'h1', tool: 'Explore', text: 'found' }, 7));
+    expect(status('toolu_3')).toBe('unknown');
+    h.record('s', ev('PostToolUse', { tool: 'Bash', toolUseId: 'toolu_1', output: 'late' }, 8));
+    expect(h.items('s').find(i => i.id === 'toolu_1')).toMatchObject({ status: 'success', output: 'late' });
+    expect(h.items('s').filter(i => i.id === 'toolu_1')).toHaveLength(1);
+  });
+
   it('ignores pane and daemon noise', () => {
     const h = new History();
     for (const name of ['PaneChanged', 'PaneIdle', 'PaneTitle', 'Renamed', 'SessionStart', 'Notification'] as const) h.record('s', ev(name, { text: 'x' }));
