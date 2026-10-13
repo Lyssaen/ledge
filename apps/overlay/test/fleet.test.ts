@@ -36,6 +36,14 @@ describe('multi-machine connections', () => {
     client.send({ type: 'session.decide', id: 'server:same', decision: 'accept' });
     expect(local.sent).toEqual([]); expect(server.sent).toEqual([]);
   });
+  it('qualifies the session of a thread message, whichever machine sent it', () => {
+    const { got, local, server } = setup();
+    const at = new Date().toISOString();
+    const item = { kind: 'message' as const, id: 'm1', at, turn: 1, text: 'hi' };
+    local.emit({ type: 'session.thread', id: 'same', items: [item] });
+    server.emit({ type: 'session.thread.item', id: 'same', item });
+    expect(got.filter(m => m.type === 'session.thread' || m.type === 'session.thread.item').map(m => (m as { id: string }).id)).toEqual(['local:same', 'server:same']);
+  });
   it('qualifies colliding IDs and never broadcasts a command', () => {
     const { client, got, local, server } = setup();
     expect(lastSnapshot(got).sessions.map(s => s.id)).toEqual(['local:same', 'server:same']);

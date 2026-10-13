@@ -219,6 +219,8 @@ Daemon to clients:
 | `session.updated { session }` | Any change to a session. |
 | `session.removed { id }` | The session left the list (retired or dismissed). |
 | `session.preview { id, lines }` | The last 30 cleaned lines of the pane, sent only when they changed. |
+| `session.thread` | A session's thread (`items`), answered to a `session.thread` request. |
+| `session.thread.item` | One thread item created or updated, broadcast as it happens. |
 | `session.launched { id }` | To the requester of a `session.launch` only: the session exists (its `session.updated` was broadcast just before). |
 | `recents { recents }` | The recent folders changed. |
 | `folder.listing { path, parent, entries, error? }` | To the requester of a `folder.list` or `folder.create` only: the folder (resolved, `~` expanded), its parent (`null` at the root) and its subfolders by name, hidden ones left out. A refusal says why in `error`, never in an `error` message. |
@@ -251,6 +253,7 @@ Clients to daemon:
 | `chat.ask { qid, text, tool? }` | overlay | Ask Ledge. `tool` is the overlay's default harness (`claude` when omitted). |
 | `chat.cancel { qid }` | overlay | Stop the running question. |
 | `chat.reset` | overlay | Clear the day's turns and start a new harness session on the next question. Refused while a question is running. |
+| `session.thread` | overlay | Ask for a session's thread; it is not in the snapshot. |
 | `snapshot.request` | any | Ask for a fresh snapshot. |
 
 The server accepts connections with no `Origin` header (Node clients) or with the Tauri origins (`tauri://localhost`, `http://tauri.localhost`, the Vite dev server). Any other web page is refused.
@@ -285,6 +288,21 @@ startedAt, lastActivityAt, lastHookAt?, exitCode?, exitedAt?, lastError?, source
 | `exited` | Terminal. Set by `session.unregister`, a terminal `SessionEnd`, or the pane disappearing. |
 
 Where a pending request comes from, for Claude Code: `PermissionRequest` gives `permission` (or `diff` for Edit/Write/MultiEdit), `PreToolUse` on `AskUserQuestion` gives `question` with the first question's options (later questions and the "Ready to submit your answers?" review come from the pane), `PreToolUse` on `ExitPlanMode` gives `plan`, a permission `Notification` gives `permission`, and the pane detector gives `permission`, `question` or `plan` from the dialog footer (the workspace trust dialog included). A `PostToolUse` for the same tool, a `Stop`, a confirmed injection, or the pane at rest clears it. Answering question 1 of a multi-question dialog so that question 2 appears is success: the first prompt is gone.
+
+### Thread
+
+Each session has a thread the daemon builds from the hooks (`~/.ledge/history/<id>.jsonl`, 400 items kept):
+
+```
+prompt { text }                                  UserPromptSubmit
+message { text }                                 the agent's text, read from the transcript tail
+tool { tool, label, input?, output?, error?, status: running | success | failed | unknown, durationMs?, files[] }
+permission { tool, text, decision?: accept | deny | unknown }
+reply { text }                                   Stop, or a helper's report (helperId)
+helper { task, agentType?, state: working | exited }
+```
+
+Every item carries `id`, `at`, `turn` and, for a subagent's own items, `helperId`. What a harness does not send (Cursor: results, durations, messages) is shown as unavailable, never guessed.
 
 ## Files and settings
 

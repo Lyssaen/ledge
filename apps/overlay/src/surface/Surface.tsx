@@ -255,7 +255,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     else if (st.mode === 'handle' || st.mode === 'bubble') { setFocusedId(null); setCoach(false); replyAfterOpen.current = false; }
   }, [st.mode, st.selectedId, st.openedBy, sessions]);
 
-  useFocusRestore(surfaceRef, { mode: st.mode, selectedId: st.selectedId });
+  useFocusRestore(surfaceRef, { mode: st.mode, selectedId: st.selectedId, helperId: st.helperId });
   useEffect(() => {
     if ((st.mode !== 'session' && st.mode !== 'chat' && st.mode !== 'list') || !documentSourceFocus.current) return;
     const source = documentSourceFocus.current;

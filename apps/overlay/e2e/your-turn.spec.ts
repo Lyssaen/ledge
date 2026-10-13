@@ -9,7 +9,7 @@ test('an idle session shows its last reply read like a plan; a chip fills the fi
   await expectMode(page, 'session');
   const view = layer(page, 'session');
   await expect(view.getByRole('heading', { level: 2 })).toHaveText('Three reducer findings fixed, transitions covered by a table test');
-  await expect(view.locator('[data-kicker]')).toHaveText(['What I did · 6', 'Verified · 3', 'Open question', 'Left to do · 2']);
+  await expect(view.locator('[data-kicker]')).toHaveText(['What I did', 'Verified', 'Open question', 'Left to do']);
   await expect(view.locator('[data-item="done"]')).toHaveCount(6);
   // The terminal preview folds under the reply.
   d.preview('bix', ['● Bash(pnpm test --filter ledge)', '  ⎿  112 passed']);
