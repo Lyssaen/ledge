@@ -107,6 +107,22 @@ describe('daemon client + store', () => {
     expect(client.status()).toBe('connecting');
   });
 
+  it('keeps the proposal a chat.done carries', () => {
+    daemonStore.reset();
+    daemonStore.beginTurn({ qid: 'q1', question: 'x', askedAt: T0, steps: [] });
+    const proposal = { cwd: '/w/ledge', project: 'ledge', tool: 'claude' as const };
+    daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, proposal });
+    expect(daemonStore.getState().chat[0]).toMatchObject({ answer: 'ok', proposal });
+  });
+
+  it('chat.done keeps the relay', () => {
+    daemonStore.reset();
+    daemonStore.beginTurn({ qid: 'q1', question: 'dis à Otto', askedAt: T0, steps: [] });
+    const relay = { id: 's1', name: 'Otto', tool: 'claude' as const, text: 'Lance les tests' };
+    daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, relay });
+    expect(daemonStore.getState().chat[0]!.relay).toEqual(relay);
+  });
+
   it('keeps the chat turns and the live answer', () => {
     daemonStore.reset();
     daemonStore.apply({ type: 'chat.history', turns: [{ qid: 'q0', question: 'hier', askedAt: T0, steps: [], answer: 'ok', answeredAt: T0 }] });

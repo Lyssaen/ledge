@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { SessionSchema, ToolSchema } from './session.js';
-import { ChatStepSchema, ChatTurnSchema } from './chat.js';
+import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema } from './chat.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 
 export const PROTOCOL_PORT = 47831;
@@ -55,7 +55,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** The chat (spec 2026-10-11 §5): what Ledge reads, its words as they come, the final text, or why it stopped; the day's turns after each snapshot. */
   z.object({ type: z.literal('chat.step'), qid: z.string(), step: ChatStepSchema }),
   z.object({ type: z.literal('chat.delta'), qid: z.string(), text: z.string() }),
-  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime() }),
+  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), relay: ChatRelaySchema.optional() }),
   z.object({ type: z.literal('chat.error'), qid: z.string(), message: z.string() }),
   z.object({ type: z.literal('chat.history'), turns: z.array(ChatTurnSchema) }),
   /** The daemon updating itself: npm is running, then the service restarts (the socket closes right after). */
@@ -69,13 +69,18 @@ export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 export const ClientMessageSchema = z.discriminatedUnion('type', [
   DocumentReadSchema,
   /** The overlay starts a session: `cwd` is a WSL path (`~` allowed), `name` a preferred bot name (the daemon picks a
-   *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation. */
-  z.object({ type: z.literal('session.launch'), tool: ToolSchema, cwd: z.string().min(1), name: z.string().optional(), prompt: z.string().optional(), continue: z.boolean().optional() }),
+   *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation.
+   *  With `qid` it is the chat card of that turn: the daemon launches the turn's proposal and ignores the other fields. */
+  z.object({ type: z.literal('session.launch'), tool: ToolSchema, cwd: z.string().min(1), name: z.string().optional(), prompt: z.string().optional(), continue: z.boolean().optional(), qid: z.string().min(1).optional() }),
   /** The launch form's folder browser: list a folder's subfolders (home when no `path`), or make `name` inside `parent`
    *  and list it. Both are answered with a `folder.listing`. */
   z.object({ type: z.literal('folder.list'), path: z.string().optional() }),
   z.object({ type: z.literal('folder.create'), parent: z.string().min(1), name: z.string().min(1) }),
   z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1) }),
+  /** The chat card's instruction (spec 2026-10-12 relay §4): sent now if the session is free, else queued until it is. */
+  z.object({ type: z.literal('session.relay'), qid: z.string().min(1) }),
+  /** Takes the card's queued instruction back out of the queue. */
+  z.object({ type: z.literal('session.relay.cancel'), qid: z.string().min(1) }),
   z.object({ type: z.literal('session.decide'), id: z.string(), decision: z.enum(['accept', 'deny']) }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),
   z.object({ type: z.literal('session.kill'), id: z.string() }),

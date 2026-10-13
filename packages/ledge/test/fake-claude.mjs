@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs';
 import { stdin, stdout, stderr, env, argv, exit } from 'node:process';
 let q = ''; stdin.setEncoding('utf8'); for await (const c of stdin) q += c;
 const say = o => stdout.write(JSON.stringify(o) + '\n');
@@ -20,12 +21,16 @@ if (agent === 'codex') {
   say({ type: 'tool_call', subtype: 'started', tool_call: { readToolCall: { args: { path: process.cwd() + '/sessions.md' } } } });
   if (mode === 'slow') await new Promise(r => setTimeout(r, 5000));
   for (const t of ['Deux ', 'compagnons ', 'travaillent.']) say({ type: 'assistant', message: { content: [{ type: 'text', text: t }] } });
-  say({ type: 'result', subtype: 'success', is_error: false, result: 'Deux compagnons travaillent. Question : ' + q.trim(), session_id: sid });
+  // FAKE_ANSWER replaces the final text (a proposal block, say); `folders` answers with the folders.md Ledge was given.
+  const answer = mode === 'folders' ? readFileSync(process.cwd() + '/folders.md', 'utf8') : env.FAKE_ANSWER ?? 'Deux compagnons travaillent. Question : ' + q.trim();
+  say({ type: 'result', subtype: 'success', is_error: false, result: answer, session_id: sid });
 } else {
   say({ type: 'system', subtype: 'init', session_id: sid, cwd: process.cwd() });
   say({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: process.cwd() + '/sessions.md' } }] } });
   say({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't2', name: 'Read', input: { file_path: process.cwd() + '/pane-a.txt' } }] } });
   if (mode === 'slow') await new Promise(r => setTimeout(r, 5000));
   for (const t of ['Deux ', 'compagnons ', 'travaillent.']) say({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: t } } });
-  say({ type: 'result', subtype: 'success', is_error: false, result: 'Deux compagnons travaillent. Question : ' + q.trim(), session_id: sid });
+  // FAKE_ANSWER replaces the final text (a proposal block, say); `folders` answers with the folders.md Ledge was given.
+  const answer = mode === 'folders' ? readFileSync(process.cwd() + '/folders.md', 'utf8') : env.FAKE_ANSWER ?? 'Deux compagnons travaillent. Question : ' + q.trim();
+  say({ type: 'result', subtype: 'success', is_error: false, result: answer, session_id: sid });
 }

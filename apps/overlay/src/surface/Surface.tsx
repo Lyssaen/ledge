@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
-import type { Session, Tool } from '@ledge/protocol';
+import type { ChatProposal, Session, Tool } from '@ledge/protocol';
 import { loadDefaultTool, saveDefaultTool } from '../defaultTool';
 import { useDaemon, daemonStore } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
@@ -18,6 +18,7 @@ import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
 import { LaunchView, LAUNCH_FOOTER_H, type LaunchRequest } from './LaunchView';
 import { ChatView, CHAT_HEADER_H } from './ChatView';
+import { loadOpenTab } from './openTabPreference';
 import { DETAIL_HEADER_H } from './DetailHeader';
 import { useMeasuredHeight } from './useMeasuredHeight';
 import { useDaemonAsks, isPending } from './useDaemonAsks';
@@ -367,6 +368,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const chatBody = st.mode === 'chat' && chatH ? CHAT_HEADER_H + chatH + 60 + (chat.length === 0 ? 44 : 0) + SURFACE_CHROME_Y : undefined;
   const [launching, setLaunching] = useState<{ openTab: boolean } | null>(null);
   const [launchFailure, setLaunchFailure] = useState<string | null>(null);
+  // A chat card's launch (spec 2026-10-12 §6): the turn's qid while the daemon answers. The card's own state
+  // (launched, failed) comes back with chat.history; the chat stays open.
+  const [chatLaunching, setChatLaunching] = useState<string | null>(null);
   const [notice, setNotice] = useState<ListNotice | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(noticeTimer.current), []);
@@ -396,8 +400,22 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     const s = byId.get(id); if (!s) return;
     void focusTerminal(s.title).then(found => { if (!found && launcher && s.tmuxSession) return openTerminal(s.title, [...launcher, 'attach', id]); return found; });
   };
+  // A chat card's relay (spec 2026-10-12 relay §6): the turn's qid while the daemon answers. The card's own state (queued, sent, failed)
+  // comes back with chat.history; a refusal comes back as an id-less error, so a relay and a launch are never in flight together.
+  const [relaying, setRelaying] = useState<string | null>(null);
+  const relayState = (qid: string | null) => { const r = qid ? chat.find(x => x.qid === qid)?.relay : undefined; return r ? `${r.status ?? ''}|${r.sentAt ?? ''}|${r.error ?? ''}` : 'gone'; };
+  const relayFrom = useRef('');
+  const relayCard = (type: 'session.relay' | 'session.relay.cancel', qid: string) => {
+    if (relaying || launching || chatLaunching || status === 'unreachable' || !chat.find(x => x.qid === qid)?.relay) return;
+    relayFrom.current = relayState(qid); setRelaying(qid);
+    send({ type, qid });
+  };
+  const relayingNow = relayState(relaying);
+  useEffect(() => { if (relaying && relayingNow !== relayFrom.current) setRelaying(null); }, [relaying, relayingNow]);
+  useEffect(() => { if (relaying && lastError && !lastError.id) setRelaying(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (status === 'unreachable' && relaying) setRelaying(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   const launch = (req: LaunchRequest) => {
-    if (launching || status === 'unreachable') return;
+    if (launching || chatLaunching || relaying || status === 'unreachable') return;
     setLaunchFailure(null); setLaunching({ openTab: req.openTab });
     send({ type: 'session.launch', tool: req.tool, cwd: req.cwd, name: req.name, prompt: req.prompt, continue: req.continue });
   };
@@ -417,6 +435,27 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     setLaunching(null); setLaunchFailure(lastError.message);
   }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+  const launchProposal = (qid: string) => {
+    const p = chat.find(x => x.qid === qid)?.proposal;
+    if (!p || p.launchedId || launching || chatLaunching || relaying || status === 'unreachable') return;
+    launchedFrom.current = p; setChatLaunching(qid);
+    send({ type: 'session.launch', tool: p.tool, cwd: p.cwd, ...(p.prompt ? { prompt: p.prompt } : {}), qid });
+  };
+  useEffect(() => {
+    if (!lastLaunched || !chatLaunching) return;
+    setChatLaunching(null);
+    if (loadOpenTab()) openTab(lastLaunched.id);
+  }, [lastLaunched?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The card's own outcome frees it: the daemon marks the turn (launchedId, or error) in a chat.history, then answers. Any other history frame
+  // or id-less error must not, or the later session.launched finds no launch and the tab stays closed. A retry failing with the same message
+  // leaves the history unchanged: its error, matching the turn's, frees it.
+  const launchedFrom = useRef<ChatProposal | undefined>(undefined);
+  const launchingProposal = chatLaunching ? chat.find(x => x.qid === chatLaunching)?.proposal : undefined;
+  useEffect(() => {
+    if (chatLaunching && (!launchingProposal || launchingProposal.launchedId || launchingProposal.error !== launchedFrom.current?.error)) setChatLaunching(null);
+  }, [chatLaunching, launchingProposal?.launchedId, launchingProposal?.error, !launchingProposal]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (chatLaunching && lastError && !lastError.id && lastError.message === launchingProposal?.error) setChatLaunching(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (status === 'unreachable' && chatLaunching) setChatLaunching(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   const sayCandidates: SayCandidate[] = [];
   if (ledgeUnread) sayCandidates.push({ id: LEDGE_ID, kind: 'ledge', seed: ledgeSaySeed });
   for (const s of sessions) {
@@ -620,6 +659,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <ChatView contentRef={chatRef} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
               onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onOpenSession={openRow}
+              launchingQid={chatLaunching} onLaunchProposal={launchProposal} onTerminal={focusTab}
+              relayingQid={relaying} onRelay={qid => relayCard('session.relay', qid)} onRelayCancel={qid => relayCard('session.relay.cancel', qid)}
               theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openDocument(ref, { kind: 'chat' })} />
           </div>
           <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>

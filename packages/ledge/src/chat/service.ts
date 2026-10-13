@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import type { ChatTurn, ServerMessage, Session, Tool } from '@ledge/protocol';
+import { extractProposal, parseProposalBlock, parseRelayBlock, type ChatProposal, type ChatRelay, type ChatTurn, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
 import { gitSummary } from '../daemon/git.js';
@@ -13,9 +14,23 @@ import { runCursor } from './cursor.js';
 import { log } from '../log.js';
 
 export type ChatMessage = Extract<ServerMessage, { type: 'chat.history' | 'chat.step' | 'chat.delta' | 'chat.done' | 'chat.error' }>;
-export interface Chat { ask(qid: string, text: string, emit: (m: ChatMessage) => void, tool?: Tool): Promise<void>; cancel(qid: string): void; reset(emit: (m: ChatMessage) => void): Promise<void>; history(): ChatTurn[] }
+export interface Chat {
+  ask(qid: string, text: string, emit: (m: ChatMessage) => void, tool?: Tool): Promise<void>; cancel(qid: string): void; reset(emit: (m: ChatMessage) => void): Promise<void>; history(): ChatTurn[];
+  /** The turn's session proposal (spec 2026-10-12 §4), if the turn is still in the day's history. */
+  proposal(qid: string): ChatProposal | undefined;
+  /** The card's launch went through (`launchedId`) or failed (`error`); every client gets the new history. */
+  markLaunched(qid: string, id: string, emit: (m: ChatMessage) => void): void; markFailed(qid: string, message: string, emit: (m: ChatMessage) => void): void;
+  /** The turn's relay (spec 2026-10-12 relay §4), if the turn is still in the day's history. */
+  relay(qid: string): ChatRelay | undefined;
+  /** The card's state: queued, sent, failed, or `{}` back to proposed; every client gets the new history. */
+  markRelay(qid: string, patch: Pick<ChatRelay, 'status' | 'sentAt' | 'error'>, emit: (m: ChatMessage) => void): void;
+  /** Today's queued relays, oldest turn first. */
+  queuedRelays(emit?: (m: ChatMessage) => void): Array<{ qid: string; relay: ChatRelay }>;
+}
 export interface ChatDeps {
   store: Store; tmux: Pick<Tmux, 'capture'>; home: string;
+  /** Where a proposal's `~` resolves (the user's home, as for session.launch). */
+  userHome?: string;
   /** The environment the chat process runs in (the login shell's PATH, like a launched agent). */
   env: () => Promise<NodeJS.ProcessEnv>;
   now?: () => string; today?: () => string; uuid?: () => string; bin?: string[]; bins?: Partial<Record<Tool, string[]>>; spawn?: typeof nodeSpawn; timeoutMs?: number;
@@ -50,7 +65,7 @@ export function createChat(deps: ChatDeps): Chat {
   const CANCELLED = { ok: false as const, message: 'cancelled', resumed: false };
 
   /** A new day starts an empty history; the day file decides the Claude session separately. */
-  function rollDay(): void { const day = today(); if (turnsDay !== day) { turns = []; turnsDay = day; } }
+  function rollDay(): boolean { const day = today(); if (turnsDay === day) return false; turns = []; turnsDay = day; return true; }
 
   /** Today's session for this harness: resumed from the day file when it names today and the same tool, else a fresh id. */
   async function daySession(fresh: boolean, tool: Tool): Promise<{ sessionId: string; resume: boolean }> {
@@ -70,13 +85,38 @@ export function createChat(deps: ChatDeps): Chat {
 
   const contextDir = join(deps.home, 'chat', 'context');
 
+  /** A block as a card: its folder must exist now; a bad block or a missing folder gives no card and a log line. */
+  async function proposalFrom(raw: string, tool: Tool, qid: string): Promise<ChatProposal | undefined> {
+    const block = parseProposalBlock(raw);
+    if (!block) { log(`chat ${qid}: proposal ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
+    try {
+      const cwd = await resolveFolder(block.cwd, deps.userHome);
+      const prompt = block.prompt?.trim();
+      // launchArgs passes the prompt as a bare argv entry: a leading `-` would be read as a flag by the agent CLI.
+      if (prompt?.startsWith('-')) { log(`chat ${qid}: proposal ignored: prompt starts with "-"`); return undefined; }
+      return { cwd, project: basename(cwd), tool, ...(prompt ? { prompt } : {}) };
+    } catch (e) { log(`chat ${qid}: proposal ignored: ${(e as Error).message}`); return undefined; }
+  }
+  /** A relay block as a card: its session must be tracked, writable and still running now; otherwise no card and a log line. */
+  function relayFrom(raw: string, qid: string): ChatRelay | undefined {
+    const block = parseRelayBlock(raw);
+    if (!block) { log(`chat ${qid}: relay ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
+    // A leading `!` would put Claude Code in bash mode, and the chat model can be steered by pane or repo content.
+    if (block.text.trimStart().startsWith('!')) { log(`chat ${qid}: relay ignored: bash-mode instruction ${block.session}`); return undefined; }
+    const s = deps.store.get(block.session);
+    const why = !s ? 'unknown session' : s.source === 'hook_only' ? 'read-only session' : s.state === 'exited' ? 'session has exited' : null;
+    if (why) { log(`chat ${qid}: relay ignored: ${why} ${block.session}`); return undefined; }
+    return { id: s!.id, name: s!.name, tool: s!.tool, text: block.text };
+  }
+  const turnOf = (qid: string) => turns.find(t => t.qid === qid);
+
   /** One run; the context folder (terminal tails, last replies) is removed once it ends, whatever the outcome. */
   async function attempt(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
     try { return await run(turn, emit, fresh, mine, tool); } finally { mine.handle = null; await rm(contextDir, { recursive: true, force: true }).catch(() => {}); }
   }
 
   async function run(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
-    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), now: now(), capture, git: cwd => gitSummary(cwd) });
+    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), now: now(), capture, git: cwd => gitSummary(cwd) });
     if (mine.cancelled) return CANCELLED;
     const { sessionId, resume } = await daySession(fresh, tool);
     const label = TOOL_LABEL[tool];
@@ -97,13 +137,38 @@ export function createChat(deps: ChatDeps): Chat {
     if (timedOut) return { ok: false, message: `${label} did not answer within 3 minutes`, resumed: false };
     if (r.code !== 0) return { ok: false, message: r.code === null ? `${label} could not start: ${r.stderr.trim() || 'not found in PATH'}` : r.stderr.trim() || `${label} exited with code ${r.code}`, resumed: resume };
     if (resultError) return { ok: false, message: resultError, resumed: false };
-    turn.answer = answer; turn.answeredAt = now();
-    emit({ type: 'chat.done', qid: turn.qid, text: answer, at: turn.answeredAt });
+    // The proposal block never reaches the reader: the card stands for it (spec 2026-10-12 §3-4).
+    const { text, kind, raw } = extractProposal(answer);
+    const proposal = kind === 'session' ? await proposalFrom(raw!, tool, turn.qid) : undefined;
+    const relay = kind === 'relay' ? relayFrom(raw!, turn.qid) : undefined;
+    turn.answer = text; turn.answeredAt = now();
+    if (proposal) turn.proposal = proposal;
+    if (relay) turn.relay = relay;
+    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal } : {}), ...(relay ? { relay } : {}) });
     return { ok: true };
   }
 
   return {
     history: () => turns,
+    proposal: qid => turnOf(qid)?.proposal,
+    markLaunched(qid, id, emit) {
+      const t = turnOf(qid); if (!t?.proposal) return;
+      const next = { ...t.proposal, launchedId: id }; delete next.error; t.proposal = next;
+      emit({ type: 'chat.history', turns });
+    },
+    markFailed(qid, message, emit) {
+      const t = turnOf(qid); if (!t?.proposal) return;
+      t.proposal = { ...t.proposal, error: message };
+      emit({ type: 'chat.history', turns });
+    },
+    relay: qid => { rollDay(); return turnOf(qid)?.relay; },
+    markRelay(qid, patch, emit) {
+      const t = turnOf(qid); if (!t?.relay) return;
+      const { id, name, tool, text } = t.relay; t.relay = { id, name, tool, text, ...patch };
+      emit({ type: 'chat.history', turns });
+    },
+    // A roll caught here is silent otherwise: the overlays would keep showing yesterday's queued card.
+    queuedRelays(emit) { if (rollDay()) emit?.({ type: 'chat.history', turns }); return turns.flatMap(t => (t.relay?.status === 'queued' ? [{ qid: t.qid, relay: t.relay }] : [])); },
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
     async reset(emit) {
       // The overlay only offers it between questions; a reset racing a question is dropped rather than orphaning its turn.

@@ -16,6 +16,7 @@ import { log } from '../log.js';
 import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
 import { readDocument } from './documents.js';
+import { createRelay } from './relay.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
@@ -72,7 +73,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
-  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, env: agentEnv, bin: opts.claudeBin, now });
+  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now });
   const wss = new WebSocketServer({
     host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT,
     verifyClient: ({ req }: { req: IncomingMessage }) => {
@@ -86,6 +87,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
   const broadcast = (msg: ServerMessage) => { for (const c of wss.clients) send(c, msg); };
+  const relay = createRelay({ chat, store, replyTo, broadcast, now });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -182,6 +184,34 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const NOT_TAKEN = 'the terminal did not take it';
   const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
 
+  /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
+  async function replyTo(id: string, text: string): Promise<string | null> {
+    const s = store.get(id); if (!s) return 'unknown session';
+    if (s.source === 'hook_only') return READ_ONLY;
+    // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
+    if (s.pending && s.pending.kind !== 'question') return `a ${s.pending.kind} prompt takes accept or deny, not a reply`;
+    if (text.trim() === '') return 'empty reply';
+    // The 2.x question dialog is a select: typed text then Enter would silently pick the highlighted option.
+    if (s.pending?.kind === 'question' && !/^[1-9]$/.test(text.trim())) return FREE_TEXT;
+    // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
+    const pending = s.pending; const adapter = adapterFor(s.tool);
+    await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending);
+    return null;
+  }
+
+  /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
+  const chatLaunches = new Set<string>();
+  /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
+  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean }): Promise<Session> {
+    const cwd = await resolveFolder(req.cwd, opts.home);
+    const live = store.all();
+    const env = await agentEnv();
+    const session = await spawnSession({ tool: req.tool, args: launchArgs(req), name: req.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+    store.upsert(session);
+    store.touchRecent(session.cwd, session.project, session.startedAt);
+    log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
+    return session;
+  }
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case 'document.read': {
@@ -213,14 +243,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.launch': {
         // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
-        const cwd = await resolveFolder(msg.cwd, opts.home);
-        const live = store.all();
-        const env = await agentEnv();
-        const session = await spawnSession({ tool: msg.tool, args: launchArgs(msg), name: msg.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
-        store.upsert(session);
-        store.touchRecent(session.cwd, session.project, session.startedAt);
-        log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
-        return send(ws, { type: 'session.launched', id: session.id });
+        if (msg.qid === undefined) return send(ws, { type: 'session.launched', id: (await launch(msg)).id });
+        // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's.
+        const qid = msg.qid; const p = chat.proposal(qid);
+        if (!p) return send(ws, { type: 'error', message: 'unknown proposal' });
+        if (p.launchedId || chatLaunches.has(qid)) return send(ws, { type: 'error', message: 'already launched' });
+        chatLaunches.add(qid);
+        try {
+          const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt });
+          send(ws, { type: 'session.launched', id: session.id });
+          chat.markLaunched(qid, session.id, broadcast);
+        } catch (e) { chat.markFailed(qid, (e as Error).message, broadcast); throw e; }
+        finally { chatLaunches.delete(qid); }
+        return;
       }
       case 'folder.list': return send(ws, await listFolder(msg.path, opts.home));
       case 'folder.create': {
@@ -255,16 +290,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return injectAndVerify(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true);
       }
       case 'session.reply': {
-        const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
-        if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
-        // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
-        if (s.pending && s.pending.kind !== 'question') return send(ws, { type: 'error', id: msg.id, message: `a ${s.pending.kind} prompt takes accept or deny, not a reply` });
-        if (msg.text.trim() === '') return send(ws, { type: 'error', id: msg.id, message: 'empty reply' });
-        // The 2.x question dialog is a select: typed text then Enter would silently pick the highlighted option.
-        if (s.pending?.kind === 'question' && !/^[1-9]$/.test(msg.text.trim())) return send(ws, { type: 'error', id: msg.id, message: FREE_TEXT });
-        // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
-        const pending = s.pending; const adapter = adapterFor(s.tool);
-        return injectAndVerify(msg.id, pane => adapter.replyPlan(msg.text, pending, pane || undefined), !!pending);
+        const refused = await replyTo(msg.id, msg.text);
+        if (refused) send(ws, { type: 'error', id: msg.id, message: refused });
+        return;
       }
       case 'session.interrupt': {
         const s = store.get(msg.id);
@@ -289,6 +317,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.remove(msg.id);
         return;
       }
+      // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
+      case 'session.relay': return relay.request(msg.qid);
+      case 'session.relay.cancel': return relay.cancel(msg.qid);
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
       // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
       case 'update.daemon':
@@ -321,6 +352,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port,
     broadcast,
     preview,
-    close: () => new Promise(res => { unsubscribe(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
+    close: () => new Promise(res => { unsubscribe(); relay.close(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
   };
 }

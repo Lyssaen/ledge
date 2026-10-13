@@ -176,13 +176,25 @@ const fr = {
     source: { sessions: 'les sessions', pane: (name: string) => `le terminal de ${name}`, reply: (name: string) => `la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'aucune lecture', ago: (when: string) => `il y a ${when}`,
     error: (why: string) => `Ledge n’a pas pu répondre : ${why}`,
-    stopped: 'Arrêté.'
+    stopped: 'Arrêté.',
+    card: {
+      label: 'Session proposée', folder: 'Dossier', tool: 'Harnais', byDefault: (tool: string) => `${tool} · par défaut`, prompt: 'Instruction', noPrompt: 'Aucune, session vide',
+      launch: 'Lancer la session', launching: 'Lancement…', retry: 'Réessayer', orRephrase: 'ou reformule ta demande', orFolder: 'ou donne-moi un autre dossier',
+      failed: (why: string) => `Échec du lancement : ${why}`, started: 'a démarré', startedUnknown: 'Session démarrée', terminal: 'Terminal'
+    },
+    relay: {
+      label: 'Instruction à envoyer', session: 'Session', instruction: 'Instruction',
+      send: 'Envoyer', sending: 'Envoi…', cancel: 'Annuler', retry: 'Réessayer', orRephrase: 'ou reformule ta demande',
+      queued: 'travaille, j’enverrai dès qu’il aura fini', sentTo: 'Envoyé à', failed: (why: string) => `Échec de l’envoi : ${why}`,
+      pill: { yours: 'à toi', working: 'travaille', waiting: 'attend ta réponse', stopped: 'arrêtée' }
+    },
   },
   help: {
     title: 'Au bout des doigts.',
     keys: [['Ouvrir la liste', ['Ctrl Alt L']], ['Choisir une session', ['J', 'K']], ['Ouvrir la sélection', ['Entrée']], ['Autoriser / refuser', ['Y', 'N']],
       ['Session précédente / suivante', ['Alt ←', 'Alt →']], ['Nouvelle session', ['Ctrl Alt N']], ['Aller à la première instruction', ['I']], ['Répondre', ['R']], ['Ouvrir l’onglet du terminal', ['O']], ['Ne pas déranger', ['D']], ['Retour, puis replier', ['Échap']]] as Array<[string, string[]]>,
-    tab: 'Tab conserve la navigation entre les contrôles.'
+    tab: 'Tab conserve la navigation entre les contrôles.',
+    chat: 'Au chat, « ouvre une session dans ledge pour corriger le build » propose une carte : le clic sur Lancer démarre la session. « Dis à Otto de lancer les tests » propose une instruction : Envoyer la tape dans sa session, tout de suite ou dès qu’il a fini.'
   },
   coach: {
     label: 'Clavier', title: 'Naviguer au clavier', ok: 'Compris',
@@ -381,13 +393,25 @@ const en: Messages = {
     source: { sessions: 'the sessions', pane: (name: string) => `${name}'s terminal`, reply: (name: string) => `${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'nothing read', ago: (when: string) => `${when} ago`,
     error: (why: string) => `Ledge could not answer: ${why}`,
-    stopped: 'Stopped.'
+    stopped: 'Stopped.',
+    card: {
+      label: 'Proposed session', folder: 'Folder', tool: 'Harness', byDefault: (tool: string) => `${tool} · default`, prompt: 'Instruction', noPrompt: 'None, empty session',
+      launch: 'Start the session', launching: 'Starting…', retry: 'Retry', orRephrase: 'or rephrase your request', orFolder: 'or give me another folder',
+      failed: (why: string) => `Could not start: ${why}`, started: 'has started', startedUnknown: 'Session started', terminal: 'Terminal'
+    },
+    relay: {
+      label: 'Instruction to send', session: 'Session', instruction: 'Instruction',
+      send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',
+      queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: (why: string) => `Could not send: ${why}`,
+      pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
+    },
   },
   help: {
     title: 'Keyboard',
     keys: [['Open the list', ['Ctrl Alt L']], ['Choose a session', ['J', 'K']], ['Open the selection', ['Enter']], ['Approve or deny', ['Y', 'N']],
       ['Previous or next session', ['Alt ←', 'Alt →']], ['New session', ['Ctrl Alt N']], ['Go to the first instruction', ['I']], ['Reply', ['R']], ['Open the terminal tab', ['O']], ['Do not disturb', ['D']], ['Back, then collapse', ['Esc']]],
-    tab: 'Tab keeps moving between the controls.'
+    tab: 'Tab keeps moving between the controls.',
+    chat: 'Ask the chat "open a session in ledge to fix the build": it proposes a card, and Start the session starts it. "Tell Otto to run the tests" proposes an instruction: Send types it into his session, now or as soon as he is done.'
   },
   coach: {
     label: 'Keyboard', title: 'Move with the keyboard', ok: 'Got it',
