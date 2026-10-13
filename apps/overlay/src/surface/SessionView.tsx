@@ -33,10 +33,16 @@ export function measureSessionH(s: Session, reading: boolean): number {
 /** The cap the request block grows to (its content is always shorter): only the fold animation uses it. */
 export const askMaxH = (p: Pending) => (p.kind === 'question' ? 160 + (p.options?.length ?? 0) * 72 : 360);
 
-function QuestionCard({ pending, onReply, disabled, t }: { pending: Pending; onReply: (t: string) => void; disabled: boolean; t: Messages }) {
+/** `freeText`: the daemon can type an answer into the dialog's own free-text row (Claude Code); otherwise Other stays off. */
+function QuestionCard({ pending, onReply, disabled, freeText, t }: { pending: Pending; onReply: (t: string) => void; disabled: boolean; freeText: boolean; t: Messages }) {
+  /** The option picked, or -1 for Other. */
   const [choice, setChoice] = useState(0);
+  const [other, setOther] = useState('');
   const opts = pending.options ?? [];
+  const answer = choice < 0 ? other.trim() : String(choice + 1);
+  const send = () => { if (answer) onReply(answer); };
   const card: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, minHeight: 48, boxSizing: 'border-box', padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', backgroundColor: 'transparent', cursor: 'pointer', transition: transition([['border-color', 'hover'], ['background-color', 'hover']]) };
+  const why = freeText ? undefined : 'ledge-other-why';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <fieldset disabled={disabled} style={{ margin: 0, padding: 0, border: 'none', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
@@ -47,13 +53,15 @@ function QuestionCard({ pending, onReply, disabled, t }: { pending: Pending; onR
             <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{o}</span>
           </label>
         ))}
-        {/* The daemon cannot type a free-text answer into the select dialog yet: the field stays visible but off. */}
-        <input type="radio" name="opt" data-other aria-label={t.session.other} disabled aria-describedby="ledge-other-why" style={{ position: 'absolute', opacity: 0, width: 1, height: 1, margin: 0 }} />
-        <input type="text" className="ledge-field" placeholder={t.session.otherPlaceholder} disabled aria-label={t.session.otherAnswer} aria-describedby="ledge-other-why"
-          style={{ height: 40, boxSizing: 'border-box', padding: '0 12px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 14, cursor: 'not-allowed' }} />
-        <span id="ledge-other-why" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.session.otherWhy}</span>
+        {/* Only some daemons' adapters can type a free-text answer into the select dialog: elsewhere the field stays visible but off. */}
+        <input type="radio" name="opt" data-other aria-label={t.session.other} disabled={!freeText} checked={choice < 0} onChange={() => setChoice(-1)} aria-describedby={why} style={{ position: 'absolute', opacity: 0, width: 1, height: 1, margin: 0 }} />
+        <input type="text" className="ledge-field" placeholder={t.session.otherPlaceholder} disabled={!freeText} aria-label={t.session.otherAnswer} aria-describedby={why}
+          value={other} onFocus={() => setChoice(-1)} onChange={e => { setOther(e.target.value); setChoice(-1); }}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}
+          style={{ height: 40, boxSizing: 'border-box', padding: '0 12px', background: 'var(--well)', color: 'inherit', border: `1px solid ${choice < 0 ? 'var(--ring)' : 'var(--border)'}`, borderRadius: 'var(--radius-md)', fontSize: 14, cursor: freeText ? 'text' : 'not-allowed' }} />
+        {!freeText && <span id="ledge-other-why" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.session.otherWhy}</span>}
       </fieldset>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}><Button variant="primary" disabled={disabled} onClick={() => onReply(String(choice + 1))}>{t.session.send}</Button></div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}><Button variant="primary" disabled={disabled || !answer} onClick={send}>{t.session.send}</Button></div>
     </div>
   );
 }
@@ -182,7 +190,7 @@ export function SessionView(p: SessionViewProps) {
           {failureText && <span role="status" style={{ marginTop: 10, fontSize: 12, lineHeight: '16px', color: 'var(--danger-text)' }}>{failureText}</span>}
 
           <div data-ask inert={!pending} style={{ flexShrink: 0, maxHeight: pending ? `${askMaxH(pending)}px` : '0px', opacity: pending ? 1 : 0, overflow: 'hidden', transition: pending ? transition([['max-height', 'grow'], ['opacity', 'fadeIn', 0]]) : transition([['max-height', 'cardExit'], ['opacity', 'cardExit']]) }}>
-            {shown && (isQ ? <div style={{ paddingTop: 14 }}><QuestionCard key={shown.text} pending={shown} onReply={p.onReply} disabled={decideOff} t={t} /></div> : (
+            {shown && (isQ ? <div style={{ paddingTop: 14 }}><QuestionCard key={shown.text} pending={shown} onReply={p.onReply} disabled={decideOff} freeText={s.tool === 'claude'} t={t} /></div> : (
               <div style={{ paddingTop: 14 }}>
                 <section style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14, background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
                   <h3 style={{ margin: 0, fontSize: 14, lineHeight: '20px', fontWeight: 650, overflowWrap: 'anywhere' }}>{shown.kind === 'permission' ? t.session.runIn(s.project) : t.session.reviewIn(s.project)}</h3>

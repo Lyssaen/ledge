@@ -274,6 +274,21 @@ function optionNumber(text: string, pending: Pending | undefined): number | null
   return pending?.kind === 'question' && /^[1-9]$/.test(text) ? Number(text) : null;
 }
 
+// A question's own free-text row: its digit puts the cursor in it without answering (the footer gains "ctrl+g to
+// edit"), what is typed then replaces "Type something." and Enter sends it.
+//
+//   ❯ 3. Type something.        →        ❯ 3. Vert pomme
+const FREE_ROW = /^Type something\.?$/;
+const NO_FREE_ROW = 'no free-text row in this dialog, answer in the terminal';
+
+function freeTextPlan(text: string, pane: string | undefined): KeyPlan {
+  const d = pane ? parseDialog(pane) : null;
+  const i = d?.kind === 'question' ? d.options.findIndex(o => FREE_ROW.test(o)) : -1;
+  if (i < 0) throw new Error(NO_FREE_ROW);
+  const row = new RegExp(`^\\s*❯\\s*${i + 1}\\.\\s`, 'm');
+  return [...digit(i + 1), { until: p => row.test(p) }, { text }, { keys: ['Enter'] }];
+}
+
 /** Accepting a plan keeps the permission mode as it was: never the option that turns on auto mode or auto edits. */
 const PLAN_ACCEPT = /\bmanually approve\b/i;
 
@@ -299,11 +314,13 @@ export const claudeAdapter: Adapter = {
     }
     return digit(1);
   },
-  replyPlan(text, pending) {
+  freeText: true,
+  replyPlan(text, pending, pane) {
     // Tmux.sendText rejects newlines: flatten here, Enter is a separate key step.
     const flat = text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
     const n = optionNumber(flat, pending);
     if (n !== null) return digit(n);
+    if (pending?.kind === 'question') return freeTextPlan(flat, pane);
     return [{ text: flat }, { keys: ['Enter'] }];
   },
   interruptKeys: () => ['Escape']

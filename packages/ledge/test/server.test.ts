@@ -354,6 +354,18 @@ describe('server', () => {
     c.close();
   });
 
+  it('Claude Code: a free-text answer goes through the "Type something." row, typed once that row has the cursor', async () => {
+    const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8').replace(/\s+$/, '');
+    tmux = fakeTmux({ 'ledge-a': [fx('claude2-question'), fx('claude2-question'), fx('claude2-question-other-focused'), '● Thinking…'] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0, untilMs: 300, verify: { attempts: 2, intervalMs: 20 } });
+    store.upsert(mk('a', { tool: 'claude', state: 'waiting_input', pending: { kind: 'question', text: 'Which color do you prefer?', options: ['Red', 'Blue'], source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: 'Vert pomme' });
+    await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '3'], ['text', 'ledge-a', 'Vert pomme'], ['keys', 'ledge-a', 'Enter']]);
+    c.close();
+  });
+
   describe('Claude Code: an AskUserQuestion with two questions, answered from Ledge', () => {
     const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8').replace(/\s+$/, '');
     async function answer(panes: string[], pending: { kind: 'question'; text: string; source: 'hook' | 'pane' }) {
@@ -420,8 +432,8 @@ describe('server', () => {
     c.close();
   });
 
-  it.each(['shadow table', '12', '0', '2 please'])('refuses a free-text reply (%j) to a question, nothing injected (fail closed)', async text => {
-    const before = mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', options: ['Red', 'Blue'], source: 'pane' } });
+  it.each(['shadow table', '12', '0', '2 please'])('refuses a free-text reply (%j) to a question of a tool that cannot take one, nothing injected (fail closed)', async text => {
+    const before = mk('a', { tool: 'codex', state: 'waiting_input', pending: { kind: 'question', text: 'Which?', options: ['Red', 'Blue'], source: 'pane' } });
     store.upsert(before);
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.reply', id: 'a', text });

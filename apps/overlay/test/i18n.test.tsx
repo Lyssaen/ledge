@@ -70,8 +70,8 @@ describe('French labels', () => {
     expect(screen.getByPlaceholderText('Une instruction pour votre compagnon…')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Voir l’onglet du terminal' })).toBeInTheDocument();
   });
-  it('a question offers radio cards, "Ou proposez autre chose…" (off) and "Envoyer la réponse →"', () => {
-    const q = fakeSession('b', { state: 'waiting_input', pending: { kind: 'question', text: 'Quel thème ?', options: ['Sombre', 'Clair'], source: 'pane' } });
+  it('a question offers radio cards, "Ou proposez autre chose…" (off for Codex) and "Envoyer la réponse →"', () => {
+    const q = fakeSession('b', { tool: 'codex', state: 'waiting_input', pending: { kind: 'question', text: 'Quel thème ?', options: ['Sombre', 'Clair'], source: 'pane' } });
     render(<LangProvider lang="fr"><SessionView {...viewProps} session={q} /></LangProvider>);
     expect(screen.getByRole('heading', { name: 'Quel thème ?' })).toBeInTheDocument();
     expect(screen.getByText('Une question')).toBeInTheDocument();

@@ -191,10 +191,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
     if (s.pending && s.pending.kind !== 'question') return `a ${s.pending.kind} prompt takes accept or deny, not a reply`;
     if (text.trim() === '') return 'empty reply';
-    // The 2.x question dialog is a select: typed text then Enter would silently pick the highlighted option.
-    if (s.pending?.kind === 'question' && !/^[1-9]$/.test(text.trim())) return FREE_TEXT;
-    // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
+    // A question dialog is a select: typed text then Enter would silently pick the highlighted option, unless the
+    // adapter knows the dialog's own free-text field.
     const pending = s.pending; const adapter = adapterFor(s.tool);
+    if (pending?.kind === 'question' && !/^[1-9]$/.test(text.trim()) && !adapter.freeText) return FREE_TEXT;
+    // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
     await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending);
     return null;
   }
