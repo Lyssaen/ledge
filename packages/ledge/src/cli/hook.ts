@@ -35,6 +35,33 @@ function lastReply(p: Payload): string | undefined {
   return text.length > REPLY_MAX ? `${text.slice(0, REPLY_MAX)}\n\n[…]` : text;
 }
 
+/** Each string of a tool input is capped: a Write carries a whole file, the daemon only shows a diff of it. */
+export const INPUT_MAX = 8_000;
+
+/** The tool's input, strings capped, or nothing when the harness gave no object. */
+export function trimInput(input: unknown): Record<string, unknown> | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+  const trim = (v: unknown): unknown => typeof v === 'string' ? v.slice(0, INPUT_MAX)
+    : Array.isArray(v) ? v.map(trim)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, trim(x)])) : v;
+  return trim(input) as Record<string, unknown>;
+}
+
+/** A tool_response as text: a string as is, `{stdout, stderr}` joined, content blocks' texts, anything else as JSON. */
+export function toolOutput(response: unknown): string | undefined {
+  if (response === null || response === undefined) return undefined;
+  let text: string;
+  if (typeof response === 'string') text = response;
+  else if (Array.isArray(response)) text = response.map(b => str((b as Payload)?.text) ?? '').filter(Boolean).join('\n');
+  else if (typeof response === 'object' && ('stdout' in response || 'stderr' in response)) {
+    const r = response as Payload;
+    text = [str(r.stdout), str(r.stderr)].filter(Boolean).join('\n');
+  } else {
+    try { text = JSON.stringify(response); } catch { text = String(response); }
+  }
+  return text.slice(0, REPLY_MAX);
+}
+
 /** SessionEnd reasons after which the same agent process keeps running (Claude Code 2.1). */
 const NON_TERMINAL_END_REASONS = new Set(['clear', 'resume']);
 
@@ -104,6 +131,11 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
   // agent_id is present only when the hook fires inside a subagent (absent on the main thread, even with --agent).
   const agentId = str(p.agent_id) || undefined;
   const base = { at, source: 'hook' as const, ...(agentId ? { helperId: agentId } : {}) };
+  const toolUseId = str(p.tool_use_id) || undefined;
+  const toolInput = trimInput(p.tool_input);
+  const call = { ...(toolUseId ? { toolUseId } : {}), ...(toolInput ? { toolInput } : {}) };
+  const transcript = str(p.transcript_path) ? { transcriptPath: str(p.transcript_path)! } : {};
+  const duration = typeof p.duration_ms === 'number' && p.duration_ms >= 0 ? { durationMs: p.duration_ms } : {};
   switch (eventName) {
     case 'SubagentStart':
     case 'SubagentStop': {
@@ -111,10 +143,19 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
       if (!agentId) return null;
       const type = str(p.agent_type) || undefined;
       const task = eventName === 'SubagentStart' ? (str(p.description) || str(p.prompt))?.split('\n')[0] : undefined;
-      return { name: eventName, ...base, ...(type ? { tool: type } : {}), ...(task ? { text: task } : {}) };
+      // SubagentStop: the helper's report and its own transcript, which the daemon reads for its messages.
+      const report = eventName === 'SubagentStop' ? lastReply(p) : undefined;
+      const agentTranscript = eventName === 'SubagentStop' && str(p.agent_transcript_path) ? { transcriptPath: str(p.agent_transcript_path)! } : {};
+      return { name: eventName, ...base, ...(type ? { tool: type } : {}), ...(task ? { text: task } : {}), ...(report ? { text: report } : {}), ...agentTranscript };
     }
-    case 'PostToolUse': return { name: 'PostToolUse', ...base, tool };
-    case 'PostToolUseFailure': return { name: 'PostToolUseFailure', ...base, tool, ...(p.is_interrupt === true ? { interrupt: true } : {}) };
+    case 'PostToolUse': {
+      const output = toolOutput(p.tool_response);
+      return { name: 'PostToolUse', ...base, tool, ...call, ...(output !== undefined ? { output } : {}), ...duration };
+    }
+    case 'PostToolUseFailure': {
+      const error = str(p.error) || undefined;
+      return { name: 'PostToolUseFailure', ...base, tool, ...call, ...(error ? { error } : {}), ...duration, ...(p.is_interrupt === true ? { interrupt: true } : {}) };
+    }
     case 'StopFailure': {
       const error = str(p.error); const details = str(p.error_details);
       const text = [error, details].filter(Boolean).join(': ').slice(0, 300) || undefined;
@@ -123,10 +164,10 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
     // Codex: Esc on a running turn or on an approval. Like Claude's interrupted tool run, no Stop follows.
     case 'Interrupt': return { name: 'PostToolUseFailure', ...base, interrupt: true };
     case 'SessionStart': return { name: 'SessionStart', ...base };
-    case 'UserPromptSubmit': return { name: 'UserPromptSubmit', ...base, ...promptText(p) };
+    case 'UserPromptSubmit': return { name: 'UserPromptSubmit', ...base, ...promptText(p), ...transcript };
     case 'Stop': {
       const text = lastReply(p);
-      return { name: 'Stop', ...base, ...(text ? { text } : {}) };
+      return { name: 'Stop', ...base, ...(text ? { text } : {}), ...transcript };
     }
     case 'SessionEnd':
       // Under the launcher, the exit belongs to session.unregister (real exit code) and PaneGone:
@@ -134,7 +175,7 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
       if (launched) return null;
       if (NON_TERMINAL_END_REASONS.has(str(p.reason) ?? '')) return null;
       return { name: 'SessionEnd', ...base, exitCode: null };
-    case 'PermissionRequest': return { name: 'PermissionRequest', ...base, tool, text: describeTool(tool, p.tool_input) };
+    case 'PermissionRequest': return { name: 'PermissionRequest', ...base, tool, text: describeTool(tool, p.tool_input), ...call, ...transcript };
     case 'PreToolUse': {
       if (tool && QUESTION_TOOLS.has(tool)) {
         const qs = ((p.tool_input as Payload | undefined)?.questions as Array<Payload> | undefined) ?? [];
@@ -142,9 +183,9 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
         const opts = ((q?.options as Array<Payload> | undefined) ?? []).filter(o => !!str(o.label));
         const options = opts.map(o => str(o.label)!);
         const optionDetails = opts.map(o => str(o.description)?.trim() ?? '');
-        return { name: 'PreToolUse', ...base, tool, text: str(q?.question) ?? '', options, ...(optionDetails.some(Boolean) ? { optionDetails } : {}) };
+        return { name: 'PreToolUse', ...base, tool, text: str(q?.question) ?? '', options, ...(optionDetails.some(Boolean) ? { optionDetails } : {}), ...call, ...transcript };
       }
-      return { name: 'PreToolUse', ...base, tool, text: describeTool(tool, p.tool_input) };
+      return { name: 'PreToolUse', ...base, tool, text: describeTool(tool, p.tool_input), ...call, ...transcript };
     }
     case 'Notification': {
       const type = str(p.notification_type) ?? '';
@@ -262,8 +303,8 @@ function mapCursorEvent(eventName: string, p: Payload, at: string, launched: boo
       }
       return { name: 'PreToolUse', ...base, tool, text: describeCursorTool(input) };
     }
-    case 'postToolUse': return { name: 'PostToolUse', ...base, tool };
-    case 'postToolUseFailure': return { name: 'PostToolUseFailure', ...base, tool, ...(p.is_interrupt === true ? { interrupt: true } : {}) };
+    case 'postToolUse': return { name: 'PostToolUse', ...base, tool, ...(trimInput(p.tool_input) ? { toolInput: trimInput(p.tool_input) } : {}) };
+    case 'postToolUseFailure': return { name: 'PostToolUseFailure', ...base, tool, ...(trimInput(p.tool_input) ? { toolInput: trimInput(p.tool_input) } : {}), ...(p.is_interrupt === true ? { interrupt: true } : {}) };
     case 'stop':
       // Ctrl-C sends `aborted` then, some 60 ms later, a stray `error`: the reducer keeps a session at rest there.
       if (str(p.status) === 'error') return { name: 'StopFailure', ...base };
