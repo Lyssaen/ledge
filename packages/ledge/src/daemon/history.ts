@@ -41,11 +41,11 @@ export class History {
       const byId = new Map<string, ThreadItem>();
       for (const line of (await readFile(join(this.dir, name), 'utf8')).split('\n')) {
         if (!line.trim()) continue;
-        try { const it = JSON.parse(line) as ThreadItem; byId.delete(it.id); byId.set(it.id, it); } catch { /* a partial or corrupt line: skip it */ }
+        try { const it = JSON.parse(line) as ThreadItem; if (typeof it?.id === 'string') byId.set(it.id, it); /* a Map keeps the first position: the thread order survives */ } catch { /* a partial or corrupt line: skip it */ }
       }
       const items = [...byId.values()].slice(-MAX_ITEMS);
       this.threads.set(id, items);
-      this.turns.set(id, items.reduce((n, it) => Math.max(n, it.turn), 0));
+      this.turns.set(id, items.reduce((n, it) => (typeof it.turn === 'number' ? Math.max(n, it.turn) : n), 0));
     }
   }
 

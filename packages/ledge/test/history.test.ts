@@ -101,4 +101,20 @@ describe('History', () => {
     h.record('z', ev('UserPromptSubmit', { text: 'y' }, 1));
     expect(h.items('z').at(-1)).toMatchObject({ id: 'prompt-4', turn: 4 });
   });
+
+  it('keeps the thread order when it reloads, and skips lines that are not items', async () => {
+    const h = new History();
+    h.record('o', ev('UserPromptSubmit', { text: 'go' }));
+    h.record('o', ev('PreToolUse', { tool: 'Bash', text: 'Bash · ls', toolUseId: 'toolu_1' }, 1));
+    h.record('o', ev('Stop', { text: 'done' }, 2));
+    h.record('o', ev('PostToolUse', { tool: 'Bash', toolUseId: 'toolu_1', output: 'ok' }, 3));
+    await h.flush();
+    const file = join(dir, 'history', 'o.jsonl');
+    writeFileSync(file, readFileSync(file, 'utf8') + '5\n{}\n');
+    const again = new History(); await again.load();
+    expect(again.items('o').map(i => i.kind)).toEqual(['prompt', 'tool', 'reply']);
+    expect(again.items('o')[1]).toMatchObject({ status: 'success' });
+    again.record('o', ev('UserPromptSubmit', { text: 'next' }, 4));
+    expect(again.items('o').at(-1)).toMatchObject({ id: 'prompt-2' });
+  });
 });
