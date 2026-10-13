@@ -77,8 +77,17 @@ describe('<ChatView>', () => {
     const onAsk = vi.fn();
     render(<ChatView {...base} turns={[]} live={null} onAsk={onAsk} />);
     expect(screen.getByText('Sees 2 sessions · 2 repositories · read only')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'How are the others doing?' }));
+    // The suggestions sit inside the measured thread content: the view is sized to hold them, nothing scrolls.
+    const content = document.querySelector('[data-chat-content]')!;
+    expect(within(content as HTMLElement).getByText('To start with')).toBeInTheDocument();
+    const chip = within(content as HTMLElement).getByRole('button', { name: 'How are the others doing?' });
+    fireEvent.click(chip);
     expect(onAsk).toHaveBeenCalledWith('How are the others doing?');
+  });
+  it('hides the suggestions once a question was asked', () => {
+    const turn: ChatTurn = { qid: 'q1', question: 'Hi', askedAt: T0, steps: [], answeredAt: T0, answer: 'Hello.' };
+    render(<ChatView {...base} turns={[turn]} live={null} />);
+    expect(screen.queryByRole('button', { name: 'How are the others doing?' })).toBeNull();
   });
   it('shows a running turn with its steps, the live text and a stop button', () => {
     const onCancel = vi.fn();

@@ -19,7 +19,7 @@ import { Bubble, type BubbleAck } from './Bubble';
 import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
 import { LaunchView, LAUNCH_FOOTER_H, type LaunchRequest } from './LaunchView';
-import { ChatView, CHAT_HEADER_H } from './ChatView';
+import { ChatView, CHAT_HEADER_H, CHAT_COMPOSER_H } from './ChatView';
 import { loadOpenTab } from './openTabPreference';
 import { DETAIL_HEADER_H } from './DetailHeader';
 import { useMeasuredHeight } from './useMeasuredHeight';
@@ -368,10 +368,10 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const launchH = useMeasuredHeight(launchRef, launchMode, ps, launchOpen);
   // The launch form's footer (the actions) sits under the measured, scrolling body.
   const detailBody = st.mode === 'settings' ? settingsH : st.mode === 'help' ? helpH : launchMode && launchH ? launchH + LAUNCH_FOOTER_H : 0;
-  // The chat sizes itself to its thread: header + measured content + the composer (+ the suggestion chips while empty).
+  // The chat sizes itself to its thread: header + measured content (the empty state and its starters included) + the composer.
   const chatRef = useRef<HTMLDivElement>(null);
   const chatH = useMeasuredHeight(chatRef, st.mode === 'chat', ps);
-  const chatBody = st.mode === 'chat' && chatH ? CHAT_HEADER_H + chatH + 60 + (chat.length === 0 ? 44 : 0) + SURFACE_CHROME_Y : undefined;
+  const chatBody = st.mode === 'chat' && chatH ? CHAT_HEADER_H + chatH + CHAT_COMPOSER_H + SURFACE_CHROME_Y : undefined;
   const [launching, setLaunching] = useState<{ openTab: boolean } | null>(null);
   const [launchFailure, setLaunchFailure] = useState<string | null>(null);
   // A chat card's launch (spec 2026-10-12 §6): the turn's qid while the daemon answers. The card's own state

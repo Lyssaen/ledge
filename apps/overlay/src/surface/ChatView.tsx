@@ -13,6 +13,8 @@ import { groupSessions } from './groups';
 import type { DocumentReference } from '../documents/references';
 
 export const CHAT_HEADER_H = 56;
+/** The composer under the thread: its padding, the 34 px field and the top border. */
+export const CHAT_COMPOSER_H = 10 + 34 + 10 + 1;
 export interface ChatViewProps {
   turns: ChatTurn[]; live: { qid: string; text: string } | null; sessions: Session[]; visible: boolean; enterDelay?: number;
   /** Null when questions may be sent; otherwise why not (offline). */
@@ -83,8 +85,21 @@ export function ChatView(p: ChatViewProps) {
       <div ref={thread} data-scroll className="ledge-scroll" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         <div ref={p.contentRef} data-chat-content style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 16px 10px' }}>
           {turns.length === 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6, padding: '18px 16px 8px', color: 'var(--muted-foreground)', fontSize: 12.5, lineHeight: '18px' }}>
-              {mascot(44)}<strong style={{ color: 'var(--sidebar-foreground)', fontSize: 14 }}>{t.chat.emptyTitle}</strong><span>{t.chat.emptyHint(p.sessions.length)}</span>
+            <div data-chat-empty style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6, padding: '26px 4px 6px', color: 'var(--muted-foreground)', fontSize: 12.5, lineHeight: '18px' }}>
+              {mascot(56)}
+              <strong style={{ color: 'var(--sidebar-foreground)', fontSize: 15, lineHeight: '20px', marginTop: 8 }}>{t.chat.emptyTitle}</strong>
+              <span style={{ maxWidth: 340 }}>{t.chat.emptyHint(p.sessions.length)}</span>
+              {/* The starters live in the thread so the measured content includes them: the view grows to hold them instead of scrolling. */}
+              <div data-chips style={{ display: 'flex', flexDirection: 'column', gap: 6, alignSelf: 'stretch', marginTop: 24, textAlign: 'left' }}>
+                <span style={{ fontSize: 11, lineHeight: '14px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 2 }}>{t.chat.starters}</span>
+                {t.chat.chips.map(c => (
+                  <button key={c} type="button" className="ledge-recent" disabled={busy || !!p.offline} onClick={() => submit(c)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, height: 38, padding: '0 12px', border: '1px solid var(--sidebar-border)', borderRadius: 'var(--radius-md)', background: 'var(--well)', color: 'var(--sidebar-foreground)', fontSize: 13, lineHeight: '18px', textAlign: 'left', cursor: 'pointer', transition: transition([['background-color', 'hover']]) }}>
+                    <span style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c}</span>
+                    <span style={{ display: 'flex', color: 'var(--muted-foreground)' }}><Icon size={14} {...ICONS.chevronRight} /></span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {turns.map(turn => (
@@ -133,11 +148,6 @@ export function ChatView(p: ChatViewProps) {
           ))}
         </div>
       </div>
-      {turns.length === 0 && (
-        <div data-chips style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 10px' }}>
-          {t.chat.chips.map(c => <Button key={c} variant="outline" size="sm" disabled={busy || !!p.offline} onClick={() => submit(c)} style={{ height: 28, padding: '0 10px', borderRadius: 999, fontSize: 12 }}>{c}</Button>)}
-        </div>
-      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', borderTop: '1px solid var(--sidebar-border)' }}>
         {p.offline && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{p.offline}</span>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
