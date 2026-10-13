@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import type { Block, Item, ReplyDoc, Section } from '../reply/parse';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
@@ -137,19 +137,30 @@ export interface ReplyCardProps {
   onDocument?: (ref: DocumentReference) => void;
   /** The reply field's draft and how to change it: a chip writes the answer there, one line per question. */
   onDraft: (text: string) => void; onFocusReply: () => void;
+  /** Spec 2026-10-13 §6: the answer form inside the card. Absent in read-only sessions. */
+  onSend?: (text: string) => void;
 }
 
 /** The agent's last message, read like a plan: sections with their markers, questions with their option chips (a row per
  *  option, its description under it, when the agent describes them). */
-export function ReplyCard({ doc, raw, t, onDraft, onFocusReply, onDocument }: ReplyCardProps) {
+export function ReplyCard({ doc, raw, t, onDraft, onFocusReply, onDocument, onSend }: ReplyCardProps) {
   const [showRaw, setShowRaw] = useState(false);
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [free, setFree] = useState('');
+  // Several questions: one line each, named by the question's short name when it has one ("Framework HTTP: Express").
+  const compose = (a: Record<number, string>) => doc.questions.length === 1 ? (a[0] ?? '') : doc.questions.map((x, i) => (a[i] ? `${x.ref ? `${x.ref}:` : `${i + 1}.`} ${a[i]}` : null)).filter(Boolean).join('\n');
   const answer = (q: number, opt: string) => {
     const next = { ...answers, [q]: opt };
     setAnswers(next);
-    // Several questions: one line each, named by the question's short name when it has one ("Framework HTTP: Express").
-    const text = doc.questions.length === 1 ? opt : doc.questions.map((x, i) => (next[i] ? `${x.ref ? `${x.ref}:` : `${i + 1}.`} ${next[i]}` : null)).filter(Boolean).join('\n');
+    const text = compose(next);
     onDraft(text); onFocusReply();
+    setFree(text);
+  };
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const text = free.trim() || compose(answers);
+    if (!text || !onSend) return;
+    onSend(text); setFree(''); setAnswers({});
   };
   const renderBlock = (b: Block, kind: Section['kind'], key: number): ReactNode => {
     if (b.type === 'code') return <pre key={key} className="mono ledge-scroll" style={{ margin: 0, padding: '10px 12px', background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 12, lineHeight: '18px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 260, overflow: 'auto' }}>{b.text}</pre>;
@@ -202,17 +213,26 @@ export function ReplyCard({ doc, raw, t, onDraft, onFocusReply, onDocument }: Re
       </Tag>
     );
   };
-  const count = (s: Section) => s.blocks.reduce((n, b) => n + (b.type === 'list' ? b.items.length : 0), 0);
   return (
     <div data-reply-card style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {showRaw
         ? <pre data-reply-raw className="ledge-scroll" style={{ margin: 0, padding: '12px 14px', background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', fontSize: 13, lineHeight: '20px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontFamily: 'inherit' }}>{raw}</pre>
         : doc.sections.map((s, i) => (
           <section key={i} data-section={s.kind} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {s.title && <span data-kicker style={kickerStyle}>{s.title}{count(s) > 1 ? ` · ${count(s)}` : ''}</span>}
+            {s.title && <span data-kicker style={kickerStyle}>{s.title}</span>}
             {s.blocks.map((b, j) => renderBlock(b, s.kind, j))}
           </section>
         ))}
+      {onSend && doc.questions.length > 0 && !showRaw && (
+        <form data-reply-answer onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+          <input data-reply-free value={free} onChange={e => setFree(e.target.value)} placeholder={t.session.otherPlaceholder} aria-label={t.session.otherAnswer}
+            style={{ height: 34, padding: '0 11px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--card, var(--well))', color: 'var(--sidebar-foreground)', fontSize: 12, outline: 0 }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <small data-reply-hint style={{ fontSize: 10, lineHeight: '14px', color: 'var(--muted-foreground)' }}>{t.reply.hintChips}</small>
+            <Button type="submit" variant="primary" size="sm" data-reply-submit>{t.session.send}</Button>
+          </div>
+        </form>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Button variant="ghost" size="sm" aria-pressed={showRaw} onClick={() => setShowRaw(r => !r)} style={{ height: 26, padding: '0 6px', fontSize: 12, gap: 6, transition: transition([['color', 'hover']]) }}>
           <Icon {...ICONS.text} size={13} />{showRaw ? t.reply.showStructured : t.reply.showRaw}

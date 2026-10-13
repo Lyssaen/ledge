@@ -200,7 +200,7 @@ export function SessionView(p: SessionViewProps) {
             </span>
             {doc.lead && <p data-reply-lead style={{ margin: '10px 0 0', fontSize: 14, lineHeight: '21px', color: 'var(--sidebar-foreground)', overflowWrap: 'anywhere' }}>{inline(doc.lead, 0, undefined, p.onDocument)}</p>}
             <div style={{ marginTop: 14 }}>
-              <ReplyCard key={reply.at} doc={doc} raw={reply.text} t={t} onDraft={p.onDraft} onFocusReply={() => replyField.current?.focus()} onDocument={p.onDocument} />
+              <ReplyCard key={reply.at} doc={doc} raw={reply.text} t={t} onDraft={p.onDraft} onFocusReply={() => replyField.current?.focus()} onDocument={p.onDocument} onSend={readOnly ? undefined : p.onReply} />
             </div>
           </>}
           {readOnly && <>

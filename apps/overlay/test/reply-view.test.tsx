@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SessionView, measureSessionH, shownReply } from '../src/surface/SessionView';
 import { fakeSession, T0 } from './mockDaemon';
+import { parseReply } from '../src/reply/parse';
 
 const text = `## Three reducer findings fixed
 
@@ -48,7 +49,7 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
     expect(container.querySelector('[data-reply-meta]')).toHaveTextContent('Otto finished 20s ago');
     expect(container.querySelector('[data-reply-lead]')).toHaveTextContent('Steps 1 to 6 are done and green.');
     const kickers = [...container.querySelectorAll('[data-kicker]')].map(k => k.textContent);
-    expect(kickers).toEqual(['What I did · 2', 'Verified', 'Open question', 'Left to do']);
+    expect(kickers).toEqual(['What I did', 'Verified', 'Open question', 'Left to do']);
     expect(container.querySelectorAll('[data-item="done"]')).toHaveLength(2);
     expect(container.querySelectorAll('[data-item="verified"]')).toHaveLength(1);
     expect(container.querySelector('[data-next]')).toHaveTextContent('Step 7, the one-hour soak.');
@@ -88,7 +89,7 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
     fireEvent.click(within(q).getByRole('button', { name: 'Keep it' }));
     expect(onDraft).toHaveBeenCalledWith('Keep it');
     expect(document.activeElement).toBe(container.querySelector('[data-reply]'));
-    expect(screen.getByText('A chip fills the field, Enter sends')).toBeInTheDocument();
+    expect(screen.getAllByText('A chip fills the field, Enter sends').length).toBeGreaterThan(0);
     fireEvent.click(within(q).getByRole('button', { name: 'Type an answer' }));
     expect(document.activeElement).toBe(container.querySelector('[data-reply]'));
   });
@@ -197,5 +198,32 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
   });
   it('estimates a taller view for a reply', () => {
     expect(measureSessionH(idle, false)).toBeGreaterThan(measureSessionH(fakeSession('n', { state: 'idle', startedAt: T0 }), false));
+  });
+  it('answers from inside the card: a chip fills the field, the free field wins, Enter sends (spec 2026-10-13 §6)', () => {
+    const onReply = vi.fn(); const onDraft = vi.fn();
+    const s = fakeSession('a', { state: 'idle', lastReply: { text, at: T0 } });
+    const { container } = render(<SessionView {...base} session={s} onReply={onReply} onDraft={onDraft} thread={[]} />);
+    const form = container.querySelector('[data-reply-answer]')!;
+    expect(form).toBeInTheDocument();
+    expect(form.querySelector('[data-reply-free]')).toHaveAttribute('placeholder', 'Other…');
+    expect(form.querySelector('[data-reply-hint]')).toHaveTextContent('A chip fills the field, Enter sends');
+    const opt = parseReply(text).questions[0]!.options[0]!;
+    fireEvent.click(container.querySelectorAll('[data-reply-card] [data-chip]')[0]!);
+    expect(onDraft).toHaveBeenCalled();
+    expect(form.querySelector<HTMLInputElement>('[data-reply-free]')!.value).toBe(opt);
+    fireEvent.change(form.querySelector('[data-reply-free]')!, { target: { value: 'Neither, keep both for now' } });
+    fireEvent.submit(form);
+    expect(onReply).toHaveBeenCalledWith('Neither, keep both for now');
+  });
+  it('sends nothing when the card is empty, and shows no form in read-only sessions or without questions', () => {
+    const onReply = vi.fn();
+    const { container, rerender } = render(<SessionView {...base} session={fakeSession('a', { state: 'idle', lastReply: { text, at: T0 } })} onReply={onReply} thread={[]} />);
+    fireEvent.submit(container.querySelector('[data-reply-answer]')!);
+    expect(onReply).not.toHaveBeenCalled();
+    rerender(<SessionView {...base} session={fakeSession('a', { state: 'idle', source: 'hook_only', lastReply: { text, at: T0 } })} onReply={onReply} thread={[]} />);
+    expect(container.querySelector('[data-reply-answer]')).toBeNull();
+    rerender(<SessionView {...base} session={fakeSession('a', { state: 'idle', lastReply: { text: 'Intro\n\n## Done\n- [x] a\n- [x] b', at: T0 } })} onReply={onReply} thread={[]} />);
+    expect(container.querySelector('[data-reply-answer]')).toBeNull();
+    expect(container.querySelector('[data-kicker]')).toHaveTextContent(/^Done$/); // no " · 2"
   });
 });
