@@ -91,6 +91,11 @@ export class History {
   record(id: string, ev: SessionEvent): ThreadItem | undefined {
     const turn = this.turns.get(id) ?? 0;
     const common = { at: ev.at, turn, ...(ev.helperId ? { helperId: ev.helperId } : {}) };
+    // Claude 2.1 starts a helper without its task; the hook reads it later, on the helper's own events.
+    if (ev.helperId && ev.task) {
+      const helper = this.items(id).find(i => i.id === ev.helperId);
+      if (helper?.kind === 'helper' && !helper.task) this.put(id, { ...helper, task: ev.task });
+    }
     switch (ev.name) {
       case 'UserPromptSubmit': {
         if (!ev.text) return undefined;

@@ -120,6 +120,18 @@ describe('History', () => {
     expect(handBack('Liste <agent-message from="x">')).toBeUndefined();
   });
 
+  it('gives a helper started without a task the one its later events carry', () => {
+    const h = new History(); const seen: string[] = []; h.onItem((_, it) => { if (it.kind === 'helper') seen.push(it.task); });
+    h.record('s', ev('SubagentStart', { helperId: 'h1', tool: 'Explore' }));
+    expect(h.items('s')[0]).toMatchObject({ kind: 'helper', task: '' });
+    h.record('s', ev('PreToolUse', { helperId: 'h1', task: 'Lister les fichiers du dossier', tool: 'Bash', text: 'Bash · ls', toolUseId: 'toolu_1' }, 1));
+    expect(h.items('s')[0]).toMatchObject({ kind: 'helper', task: 'Lister les fichiers du dossier' });
+    expect(seen).toEqual(['', 'Lister les fichiers du dossier']);
+    h.record('s', ev('PostToolUse', { helperId: 'h1', task: 'Autre chose', tool: 'Bash', toolUseId: 'toolu_1' }, 2));
+    expect(h.items('s')[0]).toMatchObject({ task: 'Lister les fichiers du dossier' }); // a task once known stays
+    expect(seen).toHaveLength(2);
+  });
+
   it('ignores pane and daemon noise', () => {
     const h = new History();
     for (const name of ['PaneChanged', 'PaneIdle', 'PaneTitle', 'Renamed', 'SessionStart', 'Notification'] as const) h.record('s', ev(name, { text: 'x' }));
