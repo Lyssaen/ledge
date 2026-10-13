@@ -43,7 +43,7 @@ describe('<SessionView>', () => {
     expect(screen.getByRole('checkbox', { name: 'Always for this session' })).toBeDisabled();
     expect(screen.getByText('Do you want to proceed?')).toBeInTheDocument();
   });
-  it('shows a question with options and answers by number; Other is off (free text is not supported yet)', () => {
+  it('shows a question with options and answers by number; Other is off for a tool that cannot take free text (Codex)', () => {
     const onReply = vi.fn();
     render(<SessionView {...base} session={q} onReply={onReply} />);
     expect(screen.getByLabelText('Backfill')).toBeChecked();
@@ -53,6 +53,23 @@ describe('<SessionView>', () => {
     expect(screen.getByPlaceholderText('Other…')).toBeDisabled();
     expect(screen.getByLabelText('Other')).toHaveAccessibleDescription('answer in the terminal');
     fireEvent.click(screen.getByLabelText('Other'));
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' })); expect(onReply).toHaveBeenLastCalledWith('2');
+  });
+  it('Claude Code: Other takes free text, picked by typing in its field, sent with the button or Enter', () => {
+    const onReply = vi.fn();
+    render(<SessionView {...base} session={{ ...q, tool: 'claude' }} onReply={onReply} />);
+    const field = screen.getByPlaceholderText('Other…');
+    expect(field).toBeEnabled();
+    expect(screen.queryByText('answer in the terminal')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Other'));
+    expect(screen.getByLabelText('Other')).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Answer' })).toBeDisabled();
+    fireEvent.click(screen.getByLabelText('Backfill'));
+    fireEvent.change(field, { target: { value: '  Vert pomme ' } });
+    expect(screen.getByLabelText('Other')).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' })); expect(onReply).toHaveBeenLastCalledWith('Vert pomme');
+    fireEvent.keyDown(field, { key: 'Enter' }); expect(onReply).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByLabelText('Shadow table'));
     fireEvent.click(screen.getByRole('button', { name: 'Answer' })); expect(onReply).toHaveBeenLastCalledWith('2');
   });
   it('the ask card folds when pending disappears', () => {

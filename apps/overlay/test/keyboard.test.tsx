@@ -295,7 +295,7 @@ describe('<Surface> keyboard first', () => {
     expect(fields().every(f => !f.disabled)).toBe(true);
   });
 
-  it('digits choose the question options in an open session; a focused radio keeps native arrows; Other is off', async () => {
+  it('digits choose the question options in an open session; a focused radio keeps native arrows; Other takes typed digits as text', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     await act(async () => { mock.upsert({ ...sessions[1]!, pending: { kind: 'question', text: 'Which?', source: 'hook', options: ['Rebase', 'Merge'] } }); await sleep(50); });
     act(() => shortcut());
@@ -306,11 +306,12 @@ describe('<Surface> keyboard first', () => {
     expect(merge).toBeChecked(); expect(document.activeElement).toBe(merge);
     act(() => { fireEvent.keyDown(merge, { key: '1' }); });
     expect(screen.getByRole('radio', { name: 'Rebase' })).toBeChecked();
-    // Free text is not supported by the daemon yet: the Other field is disabled and takes no focus.
-    const other = screen.getByPlaceholderText('Other…'); other.focus();
-    expect(other).toBeDisabled(); expect(document.activeElement).not.toBe(other);
-    fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
-    await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.reply', id: 'b', text: '1' }));
+    // Claude Code takes free text: in the Other field a digit is text, not an option.
+    const other = screen.getByPlaceholderText('Other…');
+    act(() => { other.focus(); fireEvent.keyDown(other, { key: '2' }); fireEvent.change(other, { target: { value: '2 tabs' } }); });
+    expect(document.activeElement).toBe(other); expect(merge).not.toBeChecked();
+    fireEvent.keyDown(other, { key: 'Enter' });
+    await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.reply', id: 'b', text: '2 tabs' }));
   });
 
   it('the coachmark hangs 8 px under the panel, centred on it, and the native frame extends to hold it', async () => {
