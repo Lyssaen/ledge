@@ -22,6 +22,19 @@ function inputText(input: Record<string, unknown> | undefined): string | undefin
   return text === '{}' ? undefined : text;
 }
 
+/** Claude Code hands a backgrounded helper's report back as a prompt: `<agent-message from="<id>">`, a `[...]` frame
+ *  line, the report indented. Returns the helper and the report, or undefined for a real prompt. The report may be
+ *  empty: the hook keeps only the start of a prompt. */
+const HANDBACK = /^<agent-message from="([^"]+)">\n?([\s\S]*?)(?:<\/agent-message>\s*)?$/;
+export function handBack(text: string): { helperId: string; report: string } | undefined {
+  const m = HANDBACK.exec(text.trimStart());
+  if (!m) return undefined;
+  const lines = m[2]!.split('\n');
+  while (lines.length && (!lines[0]!.trim() || /^\s*\[[^\]]*\]/.test(lines[0]!))) lines.shift();
+  const indent = Math.min(...lines.filter(l => l.trim()).map(l => l.length - l.trimStart().length));
+  return { helperId: m[1]!, report: lines.map(l => l.slice(Number.isFinite(indent) ? indent : 0)).join('\n').trim() };
+}
+
 export class History {
   private threads = new Map<string, ThreadItem[]>();
   private turns = new Map<string, number>();
@@ -81,6 +94,13 @@ export class History {
     switch (ev.name) {
       case 'UserPromptSubmit': {
         if (!ev.text) return undefined;
+        const back = handBack(ev.text);
+        if (back) { // not a turn: the helper's report
+          const helper = this.items(id).find(i => i.id === back.helperId);
+          if (helper?.kind === 'helper' && helper.state !== 'exited') this.put(id, { ...helper, state: 'exited' });
+          if (helper?.kind === 'helper') this.settle(id, i => i.helperId === back.helperId);
+          return back.report ? this.put(id, { kind: 'reply', id: `report-${back.helperId}`, at: ev.at, turn: helper?.turn ?? turn, helperId: back.helperId, text: back.report }) : undefined;
+        }
         this.turns.set(id, turn + 1);
         return this.put(id, { kind: 'prompt', id: `prompt-${turn + 1}`, at: ev.at, turn: turn + 1, text: ev.text });
       }

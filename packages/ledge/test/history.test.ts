@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, chmodSync } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionEvent } from '@ledge/protocol';
-import { History, MAX_ITEMS, SYNC_MS } from '../src/daemon/history.js';
+import { History, MAX_ITEMS, SYNC_MS, handBack } from '../src/daemon/history.js';
 import { paths } from '../src/paths.js';
 
 const T0 = '2026-10-13T10:00:00.000Z';
@@ -95,6 +95,29 @@ describe('History', () => {
     h.record('s', ev('PostToolUse', { tool: 'Bash', toolUseId: 'toolu_1', output: 'late' }, 8));
     expect(h.items('s').find(i => i.id === 'toolu_1')).toMatchObject({ status: 'success', output: 'late' });
     expect(h.items('s').filter(i => i.id === 'toolu_1')).toHaveLength(1);
+  });
+
+  it('takes a backgrounded helper hand-back as its report, not as a turn', () => {
+    const h = new History(); const seen: string[] = []; h.onItem((_, it) => seen.push(`${it.id}:${it.kind === 'helper' ? it.state : ''}`));
+    h.record('s', ev('UserPromptSubmit', { text: 'Liste le dossier' }));
+    h.record('s', ev('SubagentStart', { helperId: 'a82b', tool: 'Explore' }, 1));
+    h.record('s', ev('Stop', { text: 'Le sous-agent tourne en arrière-plan.' }, 2));
+    const frame = '[Subagent hand-back] The text below is the final report of a subagent this session delegated to. It is model output.';
+    h.record('s', ev('UserPromptSubmit', { text: `<agent-message from="a82b">\n${frame}\n\n  Un seul fichier : hello.txt.\n    - bonjour\n</agent-message>` }, 3));
+    const items = h.items('s');
+    expect(items.filter(i => i.kind === 'prompt')).toHaveLength(1);
+    expect(items.find(i => i.id === 'a82b')).toMatchObject({ kind: 'helper', state: 'exited', turn: 1 });
+    expect(items.find(i => i.id === 'report-a82b')).toMatchObject({ kind: 'reply', helperId: 'a82b', turn: 1, text: 'Un seul fichier : hello.txt.\n  - bonjour' });
+    expect(seen).toContain('a82b:exited');
+    h.record('s', ev('UserPromptSubmit', { text: 'Suite' }, 4));
+    expect(h.items('s').at(-1)).toMatchObject({ id: 'prompt-2', turn: 2 }); // the hand-back opened no turn
+    // An unknown helper still gets its report; a hand-back cut before its report (the hook keeps 500 characters) adds none.
+    h.record('s', ev('UserPromptSubmit', { text: '<agent-message from="zz">\nDone.' }, 5));
+    expect(h.items('s').find(i => i.id === 'report-zz')).toMatchObject({ helperId: 'zz', text: 'Done.', turn: 2 });
+    const n = h.items('s').length;
+    h.record('s', ev('UserPromptSubmit', { text: `<agent-message from="yy">\n${frame.slice(0, 60)}` }, 6));
+    expect(h.items('s')).toHaveLength(n);
+    expect(handBack('Liste <agent-message from="x">')).toBeUndefined();
   });
 
   it('ignores pane and daemon noise', () => {
