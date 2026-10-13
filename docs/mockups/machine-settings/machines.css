@@ -1,0 +1,46 @@
+.ms-panel { height:640px; }
+.ms-scroll { overflow-y:auto; min-height:0; flex:1; overscroll-behavior:contain; }
+.ms-content { display:flex; flex-direction:column; padding:12px 17px; }
+.ms-panel-body { display:flex; flex-direction:column; margin-top:4px; }
+.ms-intro, .ms-elsewhere, .ms-empty { font-size:12px; line-height:16px; color:var(--muted-foreground); margin:0; padding:12px 0; }
+.ms-intro { border-bottom:1px solid var(--sidebar-border); }
+.ms-row { display:grid; grid-template-columns:28px minmax(0,1fr); gap:10px; padding:12px 0; border-bottom:1px solid var(--sidebar-border); }
+.ms-icon { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-md); background:var(--muted); border:1px solid var(--input); color:var(--muted-foreground); }
+.ms-body { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.ms-line { display:flex; align-items:center; gap:8px; }
+.ms-name { flex:1; min-width:0; font-size:14px; line-height:18px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ms-meta { font-size:12px; line-height:16px; color:var(--muted-foreground); overflow-wrap:anywhere; }
+.ms-status { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted-foreground); flex-shrink:0; }
+.ms-dot { width:6px; height:6px; border-radius:9999px; background:currentColor; }
+.ms-status[data-status=online] .ms-dot { background:var(--success); }
+.ms-status[data-status=offline] { color:var(--warning); }
+.ms-status[data-status=checking] .ms-dot { animation:ms-pulse 1s ease-in-out infinite; }
+@keyframes ms-pulse { 50% { opacity:.25; } }
+.ms-actions { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:6px; margin-left:-8px; }
+.ms-form .ms-actions, .ms-confirm .ms-actions { margin-left:0; }
+.ms-error, .ms-confirm { margin-top:6px; padding:8px 10px; border-radius:var(--radius-md); background:var(--well); border:1px solid var(--input); font-size:12px; line-height:16px; }
+.ms-error p, .ms-confirm p, .ms-test p { margin:0; }
+code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; }
+.ms-error code, .ms-test code { display:block; margin-top:4px; color:var(--muted-foreground); overflow-wrap:anywhere; }
+.ms-error p { color:var(--sidebar-foreground); }
+.ms-add { padding:12px 0; }
+.ms-form { display:flex; flex-direction:column; gap:12px; padding:12px 0; border-bottom:1px solid var(--sidebar-border); }
+.ms-title { font-size:14px; line-height:18px; font-weight:600; }
+.ms-field { display:flex; flex-direction:column; gap:3px; font-size:12px; font-weight:500; }
+.ms-field small { font-size:12px; font-weight:400; color:var(--muted-foreground); line-height:16px; }
+.ms-field input { margin-top:5px; height:32px; padding:0 10px; border:1px solid var(--input); border-radius:var(--radius-md); background:var(--well); color:inherit; font-size:13px; }
+.ms-invalid { color:var(--danger-text); font-weight:400; margin-top:2px; }
+.ms-help button { display:flex; align-items:center; gap:6px; background:transparent; border:0; padding:0; color:var(--muted-foreground); font:inherit; font-size:12px; cursor:pointer; }
+.ms-help button:hover { color:var(--sidebar-foreground); }
+.ms-help ol { margin:8px 0 0; padding:8px 10px 8px 28px; border-radius:var(--radius-md); background:var(--well); border:1px solid var(--input); font-size:12px; line-height:18px; color:var(--muted-foreground); }
+.ms-help li + li { margin-top:4px; }
+.ms-help code { color:var(--sidebar-foreground); white-space:nowrap; }
+.ms-test { display:flex; align-items:flex-start; gap:8px; font-size:12px; line-height:16px; padding:8px 10px; border-radius:var(--radius-md); border:1px solid var(--input); background:var(--well); }
+.ms-test svg { flex-shrink:0; margin-top:1px; }
+.ms-test[data-state=ok] svg { color:var(--success); }
+.ms-test[data-state=fail] svg { color:var(--danger-text); }
+.ms-spin { animation:ms-spin 1s linear infinite; }
+@keyframes ms-spin { to { transform:rotate(360deg); } }
+.ms-confirm strong { font-weight:600; }
+.ms-chevron, .ms-spin { display:inline-flex; }
+.ms-chevron[data-open] { transform:rotate(90deg); }

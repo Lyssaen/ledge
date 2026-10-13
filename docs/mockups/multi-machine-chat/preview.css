@@ -1,0 +1,61 @@
+html, body, #root { height: auto; min-height:100%; overflow:auto; }
+#root { position:static; }
+* { box-sizing:border-box; }
+body { background:var(--background); }
+.design-page { max-width:1320px; margin:auto; padding:0 48px 48px; }
+.studio-head { height:86px; display:flex; align-items:center; gap:24px; border-bottom:1px solid var(--border); }
+.wordmark { font-size:20px; font-weight:650; letter-spacing:-.7px; }
+.wordmark span, .chat-brand strong span { color:var(--sidebar-primary); }
+.studio-label { font:10px ui-monospace,monospace; letter-spacing:1.2px; color:var(--muted-foreground); }
+.studio-head>.ledge-btn { margin-left:auto; }
+.studio-layout { display:grid; grid-template-columns: minmax(260px,340px) minmax(540px,1fr); gap:64px; padding-top:54px; }
+.notes { padding-top:20px; }
+.eyebrow { color:var(--muted-foreground); font:10px ui-monospace,monospace; letter-spacing:1.5px; }
+h1 { font-size:38px; font-weight:500; line-height:1.16; letter-spacing:-1.6px; margin:20px 0; }
+.notes>p { color:var(--muted-foreground); font-size:14px; line-height:23px; }
+.notes nav { display:flex; flex-direction:column; margin:36px 0; border-top:1px solid var(--border); }
+.notes nav button { display:flex; gap:14px; align-items:center; background:transparent; border:0; border-bottom:1px solid var(--border); color:var(--muted-foreground); padding:18px 10px; text-align:left; cursor:pointer; }
+.notes nav button[aria-pressed=true] { color:var(--foreground); background:var(--accent); border-radius:6px; }
+.notes nav button:hover { color:var(--foreground); }
+.step-number { font:11px ui-monospace,monospace; }
+.notes nav button[aria-pressed=true] .step-number { color:var(--sidebar-primary); }
+.notes nav strong { font-size:13px; font-weight:550; display:block; }
+.notes nav small { display:block; margin-top:4px; font-size:12px; color:var(--muted-foreground); }
+.notes nav svg { margin-left:auto; }
+.design-note { font-size:12px; line-height:20px; padding-left:16px; border-left:2px solid var(--border); }
+.design-note p { color:var(--muted-foreground); margin-top:4px; }
+.simulation { display:block; color:var(--muted-foreground); font:10px/17px ui-monospace,monospace; margin-top:36px; }
+.preview-area { border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.desktop-bar { height:36px; background:var(--background); padding:0 16px; display:flex; align-items:center; justify-content:space-between; gap:10px; color:var(--muted-foreground); font:9px ui-monospace,monospace; letter-spacing:.5px; }
+.desktop { min-height:685px; background:radial-gradient(ellipse at 75% 75%,#2c323b,#1b1d23 65%); position:relative; display:flex; align-items:center; flex-direction:column; }
+:root[data-theme=light] .desktop { background:radial-gradient(ellipse at 75% 75%,#d7dde3,#e9edf1 65%); }
+.island-frame { position:relative; width:480px; max-width:calc(100% - 28px); }
+.chat-panel { background:var(--notch); color:var(--sidebar-foreground); border-radius:0 0 18px 18px; box-shadow:var(--shadow-overlay); display:flex; flex-direction:column; height:560px; overflow:hidden; }
+.chat-header { height:56px; flex-shrink:0; padding:0 8px; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--sidebar-border); }
+.chat-brand { display:flex; flex-direction:column; gap:2px; flex:1; }
+.chat-brand strong { font-size:14px; line-height:18px; font-weight:650; }
+.chat-brand small { font-size:11px; line-height:14px; color:var(--muted-foreground); }
+.conversation { flex:1; overflow:auto; min-height:0; padding:18px 16px 22px; display:flex; flex-direction:column; gap:22px; }
+.user-message { align-self:flex-end; max-width:85%; padding:8px 12px; border-radius:12px 12px 4px 12px; background:var(--secondary); font-size:13px; line-height:19px; }
+.answer { display:grid; grid-template-columns:24px minmax(0,1fr); gap:10px; }
+.answer-content { display:flex; flex-direction:column; gap:12px; }
+.answer p { margin:0; font-size:13px; line-height:20px; }
+.choices { display:flex; flex-wrap:wrap; gap:8px; }
+.choices .ledge-btn { font-size:12px !important; padding:0 10px !important; height:30px !important; }
+.response-hint { font-size:11px; color:var(--muted-foreground); line-height:16px; }
+.destination { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted-foreground); margin-bottom:-4px; }
+.destination>span:first-of-type { color:var(--sidebar-foreground); font-weight:500; }
+.change-target { margin-left:auto; font:inherit; background:transparent; color:var(--muted-foreground); border:0; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px; }
+.offline { color:var(--warning); font-size:11px; }
+.composer { flex-shrink:0; border-top:1px solid var(--sidebar-border); padding:10px 12px; }
+.composer>div { display:flex; gap:8px; }
+.composer input { min-width:0; flex:1; height:34px; border:1px solid var(--input); border-radius:var(--radius-md); background:var(--well); padding:0 10px; color:inherit; font-size:13px; }
+.composer .ledge-btn { width:34px !important; height:34px !important; }
+.feedback { display:block; font-size:11px; color:var(--muted-foreground); padding-bottom:8px; }
+.desktop-caption { display:flex; gap:8px; align-items:center; font-size:11px; line-height:18px; color:#9fa5b0; padding:30px 20px; text-align:center; }
+.caption-line { width:18px; height:1px; background:currentColor; }
+:root[data-theme=light] .desktop-caption { color:#66707a; }
+.folded { display:flex; justify-content:center; width:90px; padding:8px; border:0; border-radius:0 0 16px 16px; background:var(--notch); cursor:pointer; }
+@media(max-width:1080px) { .design-page { padding:0 24px 28px; } .studio-layout { gap:30px; grid-template-columns:minmax(240px,1fr) minmax(510px,1.5fr); } h1 { font-size:32px; } }
+@media(max-width:850px) { .studio-layout { grid-template-columns:1fr; padding-top:16px; } .notes nav { margin:20px 0; } .design-note,.simulation { display:none; } .studio-label { display:none; } .notes { padding-top:0; } h1 { font-size:30px; } }
+@media(max-width:520px) { .design-page { padding:0 10px 20px; } .desktop-bar span:last-child { display:none; } .desktop-caption { font-size:10px; } .chat-header { gap:3px; } .chat-brand small { font-size:10px; } .conversation { padding:16px 12px; } }
