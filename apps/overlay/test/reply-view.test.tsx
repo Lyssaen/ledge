@@ -226,4 +226,9 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
     expect(container.querySelector('[data-reply-answer]')).toBeNull();
     expect(container.querySelector('[data-kicker]')).toHaveTextContent(/^Done$/); // no " · 2"
   });
+  it('hides the card form while the reply is blocked, like the composer', () => {
+    const { container } = render(<SessionView {...base} session={fakeSession('a', { state: 'idle', lastReply: { text, at: T0 } })} blocked="Offline: reconnecting to the daemon" thread={[]} />);
+    expect(container.querySelector('[data-reply-card]')).toBeInTheDocument();
+    expect(container.querySelector('[data-reply-answer]')).toBeNull();
+  });
 });
