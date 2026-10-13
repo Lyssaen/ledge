@@ -46,4 +46,19 @@ describe('agentMessages', () => {
     ].join('\n'));
     expect(agentMessages(p)).toEqual([{ id: 'i1', at: '2026-10-13T10:00:01.000Z', text: 'Je lance les tests.' }]);
   });
+  it('reads a Claude helper transcript, where every entry is a sidechain, only when told it is one', () => {
+    const p = join(dir, 'agent-h1.jsonl');
+    const side = { isSidechain: true, agentId: 'h1' };
+    writeFileSync(p, [
+      JSON.stringify({ uuid: 'a0', timestamp: '2026-10-13T10:00:00.000Z', type: 'user', message: { role: 'user', content: 'find reducer consumers' }, ...side }),
+      claude('a1', '2026-10-13T10:00:01.000Z', [{ type: 'text', text: 'Searching the callers of reduce().' }, { type: 'tool_use', id: 'toolu_7', name: 'Grep', input: {} }], side),
+      JSON.stringify({ uuid: 'a2', timestamp: '2026-10-13T10:00:02.000Z', type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_7', content: 'a.ts' }] }, ...side }),
+      claude('a3', '2026-10-13T10:00:03.000Z', [{ type: 'thinking', thinking: 'ok' }, { type: 'text', text: 'Three consumers.' }], side)
+    ].join('\n') + '\n');
+    expect(agentMessages(p)).toEqual([]); // read as a main transcript, a helper's lines are all filtered out
+    expect(agentMessages(p, { sidechain: true })).toEqual([
+      { id: 'a1', at: '2026-10-13T10:00:01.000Z', text: 'Searching the callers of reduce().' },
+      { id: 'a3', at: '2026-10-13T10:00:03.000Z', text: 'Three consumers.' }
+    ]);
+  });
 });

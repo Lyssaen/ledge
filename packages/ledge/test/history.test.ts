@@ -132,8 +132,13 @@ describe('History', () => {
     expect(h.sync('s', p, { now: 2000 + SYNC_MS - 1, force: true }).map(i => i.id)).toEqual(['msg-u2']);
     expect(h.sync('s', p, { now: 5000 })).toEqual([]); // nothing new
     const hp = join(dir, 'agent-h1.jsonl');
-    writeFileSync(hp, line('a1', later(3), 'Je cherche les appels.') + '\n');
+    // A Claude Code helper transcript: every entry is a sidechain.
+    const side = (uuid: string, ts: string, text: string) => JSON.stringify({ ...JSON.parse(line(uuid, ts, text)), isSidechain: true, agentId: 'h1' });
+    writeFileSync(hp, [side('a0', later(2), 'Avant le départ.'), side('a1', later(3), 'Je cherche les appels.'), side('a2', later(4), 'Trois appels.')].join('\n') + '\n');
     h.record('s', ev('SubagentStart', { helperId: 'h1', tool: 'Explore', text: 'find consumers' }, 3));
-    expect(h.sync('s', hp, { helperId: 'h1', force: true })[0]).toMatchObject({ kind: 'message', id: 'msg-a1', helperId: 'h1' });
+    const mine = h.sync('s', hp, { helperId: 'h1', force: true });
+    expect(mine.map(i => i.id)).toEqual(['msg-a1', 'msg-a2']); // from the helper's start on
+    expect(mine.every(i => i.kind === 'message' && i.helperId === 'h1')).toBe(true);
+    expect(mine[1]).toMatchObject({ text: 'Trois appels.', turn: 1 });
   });
 });

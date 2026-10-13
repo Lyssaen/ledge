@@ -130,7 +130,7 @@ export class History {
     const have = new Set(items.map(i => i.id));
     const turn = this.turns.get(id) ?? 0;
     const added: ThreadItem[] = [];
-    for (const m of agentMessages(path)) {
+    for (const m of agentMessages(path, { sidechain: !!opts.helperId })) {
       if (m.at < since || have.has(`msg-${m.id}`)) continue;
       added.push(this.put(id, { kind: 'message', id: `msg-${m.id}`, at: m.at, turn, text: m.text, ...(opts.helperId ? { helperId: opts.helperId } : {}) }));
     }

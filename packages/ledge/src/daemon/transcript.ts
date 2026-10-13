@@ -25,15 +25,18 @@ type Block = { type?: string; text?: string };
 const texts = (blocks: unknown, kind: string): string =>
   (Array.isArray(blocks) ? blocks as Block[] : []).filter(b => b?.type === kind && typeof b.text === 'string').map(b => b.text!.trim()).filter(Boolean).join('\n\n');
 
-export function agentMessages(path: string, bytes = TAIL_BYTES): AgentText[] {
+/** `sidechain`: the file is a helper's own transcript. Claude Code marks every entry of it `isSidechain: true`, so the
+ *  filter that keeps a helper's lines out of the main transcript would leave a helper with no message at all. */
+export function agentMessages(path: string, opts: { sidechain?: boolean; bytes?: number } = {}): AgentText[] {
   const out: AgentText[] = [];
-  for (const line of tailLines(path, bytes)) {
+  for (const line of tailLines(path, opts.bytes ?? TAIL_BYTES)) {
     let e: Record<string, unknown>;
     try { e = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
     const at = typeof e.timestamp === 'string' ? e.timestamp : undefined;
     if (!at) continue;
-    // Claude Code: an assistant entry's text blocks. Thinking and tool_use are not messages; sidechains belong to helpers.
-    if (e.type === 'assistant' && e.isSidechain !== true) {
+    // Claude Code: an assistant entry's text blocks. Thinking and tool_use are not messages; in the main transcript,
+    // sidechains belong to helpers. A helper's transcript is read whole.
+    if (e.type === 'assistant' && (opts.sidechain || e.isSidechain !== true)) {
       const text = texts((e.message as { content?: unknown } | undefined)?.content, 'text');
       if (text && typeof e.uuid === 'string') out.push({ id: e.uuid, at, text });
       continue;
