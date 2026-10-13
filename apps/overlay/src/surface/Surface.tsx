@@ -351,7 +351,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const replyH = useMeasuredHeight(sessionReplyRef, st.mode === 'session', ps);
   const helperRef = useRef<HTMLDivElement>(null);
   const helperContentH = useMeasuredHeight(helperRef, st.mode === 'helper', ps);
-  const helperH = helperContentH ? SESSION_HEADER_H + helperContentH + SURFACE_CHROME_Y : 480;
+  const helperH = helperContentH ? helperContentH + SURFACE_CHROME_Y : 480;
   const sessionH = !selected ? 480 : contentH ? SESSION_HEADER_H + contentH + (selected.source === 'hook_only' ? 0 : replyH) + SURFACE_CHROME_Y : measureSessionH(selected, st.reading);
   // Settings and help size themselves to their content too (their header is the 56 px DetailHeader).
   const settingsRef = useRef<HTMLDivElement>(null); const helpRef = useRef<HTMLDivElement>(null);

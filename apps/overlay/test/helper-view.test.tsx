@@ -1,3 +1,4 @@
+import { createRef } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { ThreadItem } from '@ledge/protocol';
@@ -17,7 +18,8 @@ const items: ThreadItem[] = [
 describe('<HelperView>', () => {
   it('shows the back row, who delegated, the task, the helper thread and the final report', () => {
     const onBack = vi.fn();
-    const { container } = render(<HelperView session={fakeSession('a')} helperId="h1" items={items} visible onBack={onBack} onClose={() => {}} theme="dark" paused />);
+    const ref = createRef<HTMLDivElement>();
+    const { container } = render(<HelperView contentRef={ref} session={fakeSession('a')} helperId="h1" items={items} visible onBack={onBack} onClose={() => {}} theme="dark" paused />);
     expect(container.querySelector('[data-back]')).toHaveTextContent('Otto · Main discussion');
     expect(container).toHaveTextContent('Delegated by Otto');
     expect(container).toHaveTextContent('Done');
@@ -28,6 +30,9 @@ describe('<HelperView>', () => {
     expect(container.querySelector('[data-action]')).toHaveTextContent('Grep · reduce(');
     expect(container.querySelector('[data-report]')).toHaveTextContent('Final report');
     expect(container.querySelector('[data-report]')).toHaveTextContent('Three consumers, all in the daemon.');
+    // The measured block holds the header and the body, so the panel is sized to both.
+    expect(ref.current).toContainElement(container.querySelector('[data-back]'));
+    expect(ref.current).toContainElement(container.querySelector('[data-report]'));
     fireEvent.click(container.querySelector('[data-back]')!);
     expect(onBack).toHaveBeenCalled();
   });

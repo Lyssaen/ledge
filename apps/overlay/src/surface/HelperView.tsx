@@ -23,7 +23,9 @@ export function HelperView({ session, helperId, items, visible, onBack, onClose,
   const helperSession: Session = { ...session, helpers: [] };
   return (
     <div data-layer="helper" data-delay={enterDelay} inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay : 0]]) }}>
-      <div style={{ padding: '12px 17px 10px', borderBottom: '1px solid var(--border)' }}>
+      {/* Header and body are measured together (natural height, capped by the layer) so the panel fits both. */}
+      <div ref={contentRef} data-helper-content style={{ display: 'flex', flexDirection: 'column', flex: '0 1 auto', minHeight: 0, maxHeight: '100%' }}>
+      <div style={{ position: 'relative', flex: '0 0 auto', padding: '12px 17px 10px', borderBottom: '1px solid var(--border)' }}>
         <button type="button" data-back data-initial-focus onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: 0, background: 'none', border: 0, font: 'inherit', fontSize: 12, color: 'var(--sidebar-foreground)', cursor: 'pointer', textAlign: 'left' }}>
           <span aria-hidden style={{ fontSize: 17, lineHeight: 1 }}>←</span>
           <span>{session.name} · {t.thread.backTo}</span>
@@ -36,7 +38,7 @@ export function HelperView({ session, helperId, items, visible, onBack, onClose,
         <button type="button" aria-label={t.session.close} onClick={onClose} style={{ position: 'absolute', top: 10, right: 12, background: 'none', border: 0, color: 'var(--muted-foreground)', cursor: 'pointer', fontSize: 14 }}>×</button>
       </div>
       <div className="ledge-scroll" style={{ overflowY: 'auto', minHeight: 0, overscrollBehavior: 'contain' }}>
-        <div ref={contentRef} style={{ padding: '8px 17px 16px' }}>
+        <div style={{ padding: '8px 17px 16px' }}>
           {prompt && <div style={{ padding: '8px 0 10px', borderBottom: '1px solid var(--border)' }}>
             <span style={{ ...muted, fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase' }}>{t.thread.instruction}</span>
             <p style={{ ...muted, margin: '4px 0 0', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{prompt.text}</p>
@@ -49,6 +51,7 @@ export function HelperView({ session, helperId, items, visible, onBack, onClose,
               </article>
             : working && <p style={{ ...muted, margin: '12px 0 0' }}>{helper?.agentType ?? session.name} {t.thread.helperWaiting}</p>}
         </div>
+      </div>
       </div>
     </div>
   );
