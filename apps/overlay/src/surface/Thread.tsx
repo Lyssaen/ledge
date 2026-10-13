@@ -67,7 +67,7 @@ export function ActionRow({ item, t }: { item: ToolItem; t: Messages }) {
           <p style={{ ...muted, margin: '8px 0 0', fontSize: 10 }}>{bottom} · {item.durationMs !== undefined ? duration(item.durationMs, t) : t.thread.noDuration}</p>
         </div>
       </details>
-      {item.files.map(f => <FileRow key={f.path} file={f} status={item.status} t={t} />)}
+      {item.files.map((f, i) => <FileRow key={`${i}-${f.path}`} file={f} status={item.status} t={t} />)}
     </article>
   );
 }
@@ -113,7 +113,11 @@ function PreviousTurn({ turn, t, now }: { turn: Turn; t: Messages; now?: number 
 export function Thread(p: ThreadProps) {
   const { items, t, session, hideCurrentReply = true } = p;
   const all = turns(items);
-  if (all.length === 0) return <p data-thread data-empty style={{ ...muted, margin: '12px 0 0' }}>{t.thread.empty}</p>;
+  // Cursor tells less: the note matters most while there is nothing to show yet.
+  const note = session.tool === 'cursor' && <p data-source-note style={{ ...muted, margin: '10px 0 0' }}>{t.thread.cursorNote}</p>;
+  if (all.length === 0) return note
+    ? <div data-thread data-empty style={{ marginTop: 12 }}><p style={{ ...muted, margin: 0 }}>{t.thread.empty}</p>{note}</div>
+    : <p data-thread data-empty style={{ ...muted, margin: '12px 0 0' }}>{t.thread.empty}</p>;
   const current = all[all.length - 1]!;
   const rows: ReactNode[] = all.slice(0, -1).map(turn => <PreviousTurn key={turn.n} turn={turn} t={t} now={p.now} />);
   for (const it of current.items) {
@@ -123,7 +127,7 @@ export function Thread(p: ThreadProps) {
   return (
     <div data-thread style={{ display: 'flex', flexDirection: 'column', marginTop: 12 }}>
       {rows}
-      {session.tool === 'cursor' && <p data-source-note style={{ ...muted, margin: '10px 0 0' }}>{t.thread.cursorNote}</p>}
+      {note}
     </div>
   );
 }

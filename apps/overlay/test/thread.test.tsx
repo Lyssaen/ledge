@@ -67,5 +67,20 @@ describe('<Thread>', () => {
     expect(container.querySelector('[data-source-note]')).toHaveTextContent('neither results nor intermediate messages');
     rerender(<Thread session={fakeSession('a')} items={[]} t={t} theme="dark" paused />);
     expect(screen.getByText('The thread fills up with the agent’s next event.')).toBeInTheDocument();
+    expect(container.querySelector('[data-source-note]')).toBeNull();
+    // An empty Cursor thread is where the note helps most.
+    rerender(<Thread session={fakeSession('c', { tool: 'cursor' })} items={[]} t={t} theme="dark" paused />);
+    expect(screen.getByText('The thread fills up with the agent’s next event.')).toBeInTheDocument();
+    expect(container.querySelector('[data-thread][data-empty] [data-source-note]')).toHaveTextContent('neither results nor intermediate messages');
+  });
+  it('keys file rows by position: one action touching the same path twice renders both without a key clash', () => {
+    const errors: unknown[] = []; const orig = console.error; console.error = (...a: unknown[]) => { errors.push(a); };
+    try {
+      const tool = { kind: 'tool' as const, id: 'toolu_m', at: '2026-10-13T10:00:00.000Z', turn: 1, tool: 'MultiEdit', label: 'MultiEdit · a.ts', status: 'success' as const,
+        files: [{ path: '/w/a.ts', change: 'edit' as const, diff: '- a\n+ b' }, { path: '/w/a.ts', change: 'edit' as const, diff: '- c\n+ d' }] };
+      const { container } = render(<Thread session={fakeSession('a')} items={[{ kind: 'prompt', id: 'prompt-1', at: tool.at, turn: 1, text: 'go' }, tool]} t={t} theme="dark" paused />);
+      expect(container.querySelectorAll('[data-action] [data-file]').length).toBe(2);
+      expect(errors.filter(e => String((e as unknown[])[0]).includes('same key'))).toEqual([]);
+    } finally { console.error = orig; }
   });
 });
