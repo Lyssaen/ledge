@@ -20,7 +20,7 @@ export function ledgeDir(): string {
 
 export function paths() {
   const dir = ledgeDir();
-  return { dir, tmuxConf: join(dir, 'tmux.conf'), journal: join(dir, 'sessions.json'), log: join(dir, 'daemon.log'), pid: join(dir, 'daemon.pid') };
+  return { dir, tmuxConf: join(dir, 'tmux.conf'), journal: join(dir, 'sessions.json'), log: join(dir, 'daemon.log'), pid: join(dir, 'daemon.pid'), history: join(dir, 'history') };
 }
 
 export async function ensureLedgeDir(): Promise<void> {
