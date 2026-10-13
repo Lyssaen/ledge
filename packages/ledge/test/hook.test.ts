@@ -288,6 +288,10 @@ describe('mapCursorHook', () => {
     expect(cursor('postToolUse', { tool_name: 'Shell' })?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', tool: 'Shell' });
     expect(cursor('postToolUse', { tool_name: 'Shell', tool_input: { command: 'ls' } })?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', tool: 'Shell', toolInput: { command: 'ls' } });
     expect(cursor('postToolUseFailure', { tool_name: 'Shell', tool_input: { command: 'x' } })?.event.toolInput).toEqual({ command: 'x' });
+    // A CallDynamicTool is its inner tool: the name and the input are the unwrapped ones.
+    const dynamic = { tool_name: 'CallDynamicTool', tool_input: { namespace: 'cursor', toolName: 'Read', arguments: { file_path: '/w/a.ts' } } };
+    expect(cursor('postToolUse', dynamic)?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', tool: 'Read', toolInput: { file_path: '/w/a.ts' } });
+    expect(cursor('postToolUseFailure', dynamic)?.event).toMatchObject({ tool: 'Read', toolInput: { file_path: '/w/a.ts' } });
     expect(cursor('postToolUseFailure', { tool_name: 'Read', failure_type: 'error', is_interrupt: false })?.event.interrupt).toBeUndefined();
     expect(cursor('postToolUseFailure', { tool_name: 'Shell', is_interrupt: true })?.event.interrupt).toBe(true);
   });

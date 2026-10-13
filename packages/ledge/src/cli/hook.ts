@@ -290,6 +290,7 @@ function mapCursorHelperEvent(eventName: string, p: Payload, at: string, helperI
 
 function mapCursorEvent(eventName: string, p: Payload, at: string, launched: boolean, transcript: string | undefined): SessionEvent | null {
   const { name: tool, input } = unwrapTool(str(p.tool_name), p.tool_input);
+  const toolInput = p.tool_input ? trimInput(input) : undefined; // unwrapTool gives {} for no input
   const base = { at, source: 'hook' as const };
   switch (eventName) {
     case 'sessionStart': return { name: 'SessionStart', ...base };
@@ -303,8 +304,8 @@ function mapCursorEvent(eventName: string, p: Payload, at: string, launched: boo
       }
       return { name: 'PreToolUse', ...base, tool, text: describeCursorTool(input) };
     }
-    case 'postToolUse': return { name: 'PostToolUse', ...base, tool, ...(trimInput(p.tool_input) ? { toolInput: trimInput(p.tool_input) } : {}) };
-    case 'postToolUseFailure': return { name: 'PostToolUseFailure', ...base, tool, ...(trimInput(p.tool_input) ? { toolInput: trimInput(p.tool_input) } : {}), ...(p.is_interrupt === true ? { interrupt: true } : {}) };
+    case 'postToolUse': return { name: 'PostToolUse', ...base, tool, ...(toolInput ? { toolInput } : {}) };
+    case 'postToolUseFailure': return { name: 'PostToolUseFailure', ...base, tool, ...(toolInput ? { toolInput } : {}), ...(p.is_interrupt === true ? { interrupt: true } : {}) };
     case 'stop':
       // Ctrl-C sends `aborted` then, some 60 ms later, a stray `error`: the reducer keeps a session at rest there.
       if (str(p.status) === 'error') return { name: 'StopFailure', ...base };
