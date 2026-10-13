@@ -60,6 +60,11 @@ describe('<LaunchView>', () => {
     // The terminal-tab choice is remembered for the next form.
     expect(localStorage.getItem('ledge.launch.openTab')).toBe('0');
   });
+  it('shows only the three most recent folders', () => {
+    const many = Array.from({ length: 5 }, (_, i) => ({ cwd: `/w/p${i}`, project: `p${i}`, lastAt: `2026-10-1${i}T10:00:00.000Z` }));
+    mount({ recents: many });
+    expect(screen.getAllByRole('listitem').map(el => el.getAttribute('data-recent'))).toEqual(['/w/p0', '/w/p1', '/w/p2']);
+  });
   it('the die gives another free name; an empty name leaves the choice to the daemon', () => {
     const { onLaunch } = mount();
     const name = screen.getByLabelText('Companion');

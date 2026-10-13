@@ -54,6 +54,9 @@ function Switch({ id, label: text, hint: why, checked, onChange, last }: { id: s
   );
 }
 
+/** How many recent folders the form offers: the daemon remembers more, the list stays short. */
+export const SHOWN_RECENTS = 3;
+
 export interface LaunchViewProps {
   machines?: MachineState[]; machineId?: string; onMachine?: (id: string) => void;
   visible: boolean; recents: Recent[]; sessions: Session[];
@@ -117,7 +120,7 @@ export function LaunchView(p: LaunchViewProps) {
               <span style={{ ...hint, marginTop: 10, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>{t.launch.recents}</span>
               {p.recents.length === 0 && <span style={{ ...hint, marginTop: 4 }}>{t.launch.noRecents}</span>}
               <div role="list" style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
-                {p.recents.map(r => {
+                {p.recents.slice(0, SHOWN_RECENTS).map(r => {
                   const who = busyIn(r.cwd); const on = r.cwd === cwd.trim();
                   return (
                     <button key={r.cwd} type="button" role="listitem" data-recent={r.cwd} aria-label={t.launch.pick(r.project, r.cwd)} aria-pressed={on} onClick={() => setCwd(r.cwd)} className="ledge-recent"
