@@ -151,6 +151,9 @@ export class History {
       case 'SubagentStop': {
         if (!ev.helperId) return undefined;
         const prev = this.items(id).find(i => i.id === ev.helperId);
+        // Claude's placeholder stop for a backgrounded Task: never started, no transcript, the parent's reply as report.
+        // With a transcript it is a real helper whose start was lost (a daemon restart): it gets its row.
+        if (!prev && !ev.transcriptPath) return undefined;
         const row = prev && prev.kind === 'helper' ? prev : { kind: 'helper' as const, id: ev.helperId, at: ev.at, turn, task: ev.task ?? '', ...(ev.tool ? { agentType: ev.tool } : {}), state: 'working' as const };
         this.put(id, { ...row, state: 'exited' });
         this.settle(id, i => i.helperId === ev.helperId);

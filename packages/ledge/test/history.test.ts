@@ -132,6 +132,18 @@ describe('History', () => {
     expect(seen).toHaveLength(2);
   });
 
+  it('ignores the stop of a helper never started that has no transcript, keeps one that has', () => {
+    const h = new History();
+    h.record('s', ev('UserPromptSubmit', { text: 'go' }));
+    h.record('s', ev('Stop', { text: 'Le sous-agent tourne en arrière-plan.' }, 1));
+    const n = h.items('s').length;
+    h.record('s', ev('SubagentStop', { helperId: 'aba5', text: 'Le sous-agent tourne en arrière-plan.' }, 2));
+    expect(h.items('s')).toHaveLength(n);
+    h.record('s', ev('SubagentStop', { helperId: 'h9', tool: 'Explore', text: 'Fini.', transcriptPath: '/w/agent-h9.jsonl' }, 3));
+    expect(h.items('s').slice(n).map(i => `${i.kind}:${i.id}`)).toEqual(['helper:h9', 'reply:report-h9']);
+    expect(h.items('s').find(i => i.id === 'h9')).toMatchObject({ state: 'exited', agentType: 'Explore' });
+  });
+
   it('ignores pane and daemon noise', () => {
     const h = new History();
     for (const name of ['PaneChanged', 'PaneIdle', 'PaneTitle', 'Renamed', 'SessionStart', 'Notification'] as const) h.record('s', ev(name, { text: 'x' }));
