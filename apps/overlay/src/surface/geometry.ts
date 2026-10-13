@@ -42,7 +42,7 @@ export const islandAxis = (screenW: number, position: IslandPosition = 'center')
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-/** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of an expanded (focused) list row. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
+/** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of the list: an expanded (focused) row, the notice, the update card. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
 export interface LayoutInput { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
 
 /** Everything hangs from the top edge of the work area, centred on the island's axis; `left` is clamped into the screen. */
@@ -65,8 +65,9 @@ export function layout(input: LayoutInput): Layout {
   if (mode === 'reader') return view(Math.min(input.readerExpanded ? SIZES.readerExpandedW : SIZES.readerW, Math.max(0, screenW - 24)), SIZES.readerH);
   if (mode === 'chat') return view(SIZES.sessionW, input.detailH ?? SIZES.chatH);
   if (mode === 'settings' || mode === 'help' || mode === 'launch') return view(SIZES.listW, input.detailH ?? DETAIL_FALLBACK_H[mode]);
-  // An empty list shows the empty state (a bot, two lines, a button) instead of rows.
-  const rowsH = n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.groups ?? 0) * SIZES.groupH + (input.listExtraH ?? 0);
+  // An empty list shows the empty state (a bot, two lines, a button) instead of rows; the extras (the update card,
+  // the notice) still grow it.
+  const rowsH = (n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.groups ?? 0) * SIZES.groupH) + (input.listExtraH ?? 0);
   if (mode === 'list') return view(SIZES.listW, SIZES.headerH + rowsH + (input.askH ?? 0) + SIZES.footerH + SURFACE_CHROME_Y);
   return view(input.reading ? SIZES.readingW : SIZES.sessionW, input.sessionH ?? 480);
 }

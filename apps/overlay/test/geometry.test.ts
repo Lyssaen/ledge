@@ -57,6 +57,9 @@ describe('island geometry', () => {
     expect(layout({ bots: bots(0), mode: 'launch', screenH: 300, screenW: W }).h).toBe(300 - SIZES.margin);
     expect(layout({ bots: bots(3), mode: 'list', screenH: H, screenW: W, listExtraH: 42 }).h).toBe(layout({ bots: bots(3), mode: 'list', screenH: H, screenW: W }).h + 42);
   });
+  it('the empty list also grows by the extra height (the update card, the notice)', () => {
+    expect(layout({ bots: [], mode: 'list', screenH: H, screenW: W, listExtraH: 150 }).h).toBe(layout({ bots: [], mode: 'list', screenH: H, screenW: W }).h + 150);
+  });
   it('the bubble is the island stretched to 440 px, top edge, centred, whatever bot asks', () => {
     const l = layout({ bots: bots(5, [4]), mode: 'bubble', screenH: H, screenW: W });
     expect(l).toMatchObject({ top: 0, w: 440, h: SIZES.bubbleH, left: (W - 440) / 2 });
