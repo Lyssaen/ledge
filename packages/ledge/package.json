@@ -1,6 +1,6 @@
 {
   "name": "@paradow/ledge",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Follow and answer your WSL agent sessions (Claude Code, Codex, Cursor Agent) from the Ledge island on Windows.",
   "type": "module",
   "bin": { "ledge": "dist/cli/index.js" },
