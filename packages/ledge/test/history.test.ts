@@ -54,6 +54,15 @@ describe('History', () => {
     expect(h.items('s')[1]).toMatchObject({ decision: 'deny' });
   });
 
+  it('records no permission for a question tool, whose row already shows it', () => {
+    const h = new History();
+    h.record('s', ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Créer bye.txt ?', toolUseId: 'toolu_q', options: ['Oui', 'Non'] }));
+    h.record('s', ev('PermissionRequest', { tool: 'AskUserQuestion', text: '{"questions":[{"question":"Créer bye.txt ?"}]}' }, 1));
+    expect(h.items('s').map(i => i.kind)).toEqual(['tool']);
+    h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist' }, 2));
+    expect(h.items('s').map(i => i.kind)).toEqual(['tool', 'permission']);
+  });
+
   it('follows a helper: its row, its own actions, its report', () => {
     const h = new History();
     h.record('s', ev('UserPromptSubmit', { text: 'Revois le reducer' }));

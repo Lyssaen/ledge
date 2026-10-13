@@ -5,6 +5,7 @@ import { paths } from '../paths.js';
 import { log } from '../log.js';
 import { filesOf } from './files.js';
 import { agentMessages } from './transcript.js';
+import { QUESTION_TOOLS } from './state.js';
 
 /** Native tracking (spec 2026-10-13 §3–4): one thread per session, reduced from the events the store applies. */
 export const MAX_ITEMS = 400;
@@ -101,6 +102,8 @@ export class History {
       }
       case 'PermissionRequest': {
         if (!ev.tool || !ev.text) return undefined;
+        // A question's tool row already shows it and its options; its permission text is only the raw input.
+        if (QUESTION_TOOLS.has(ev.tool)) return undefined;
         const last = [...this.items(id)].reverse().find(i => i.kind === 'permission');
         if (last && last.kind === 'permission' && last.decision === undefined && last.text === ev.text) return last;
         return this.put(id, { kind: 'permission', id: `perm-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, text: ev.text });
