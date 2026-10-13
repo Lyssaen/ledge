@@ -178,9 +178,21 @@ describe('server', () => {
     });
   });
 
+  it('routes the first event of a hook-only session through the store, so event listeners see it', async () => {
+    const seen: string[] = [];
+    store.onEvent((id, ev) => seen.push(`${id}:${ev.name}`));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'h1', cwd: '/w/x', event: { name: 'UserPromptSubmit', at: T0, source: 'hook', text: 'Fais le plan' } });
+    await c.next('session.updated');
+    expect(seen).toEqual(['h1:UserPromptSubmit']);
+    expect(store.get('h1')?.source).toBe('hook_only');
+    c.close();
+  });
+
   it('register upgrades a hook_only session created by an early hook', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.event', id: 'b', event: { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'npm test' } });
+    await c.next('session.updated'); // the bare session, then the event applied to it
     const first = await c.next('session.updated');
     expect(first.session.source).toBe('hook_only');
     expect(first.session.pending?.text).toBe('npm test');

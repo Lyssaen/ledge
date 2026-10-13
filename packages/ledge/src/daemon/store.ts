@@ -14,6 +14,7 @@ export class Store {
   private sessions = new Map<string, Session>();
   private recentList: Recent[] = [];
   private listeners = new Set<(c: StoreChange) => void>();
+  private eventListeners = new Set<(id: string, event: SessionEvent) => void>();
   private timer: NodeJS.Timeout | null = null;
   private saving: Promise<void> = Promise.resolve();
   private readonly journalPath: string;
@@ -66,9 +67,16 @@ export class Store {
     this.upsert({ ...cur, ...fields });
   }
 
+  /** Every event applied to a known session, before the reducer decides whether it changes anything. */
+  onEvent(listener: (id: string, event: SessionEvent) => void): () => void {
+    this.eventListeners.add(listener);
+    return () => this.eventListeners.delete(listener);
+  }
+
   apply(id: string, event: SessionEvent): Session | undefined {
     const cur = this.sessions.get(id);
     if (!cur) return undefined;
+    for (const l of this.eventListeners) { try { l(id, event); } catch (e) { log(`event listener failed: ${(e as Error).message}`); } }
     const next = reduce(cur, event);
     if (next === cur) return cur;
     this.sessions.set(id, next);

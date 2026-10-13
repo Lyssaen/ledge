@@ -6,7 +6,6 @@ import type { Store } from './store.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
 import { verifyGone } from '../adapters/verify.js';
-import { reduce } from './state.js';
 import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
 import { spawnSession } from '../spawn.js';
@@ -278,7 +277,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           const taken = store.all().map(s => s.name);
           const cwd = msg.cwd ?? '';
           const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
-          store.upsert(reduce(base, msg.event));
+          store.upsert(base);
+          store.apply(msg.id, msg.event); // through apply, so the history sees the session's first event too
         } else store.apply(msg.id, msg.event);
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
         return;
