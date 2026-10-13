@@ -13,6 +13,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { createDaemonUpdater } from '../src/update/run-update.js';
+import { History } from '../src/daemon/history.js';
+import { until } from './helpers.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
@@ -916,5 +918,42 @@ describe('update.daemon', () => {
     await expect(a.next('update.failed', 200)).rejects.toThrow(/timeout/);
     release();
     await a.close(); await b.close();
+  });
+});
+
+describe('session thread (spec 2026-10-13 §5)', () => {
+  it('answers a thread request, broadcasts each item, syncs the transcript, records the decision and forgets a removed session', async () => {
+    const dir = process.env.LEDGE_HOME!;
+    const store = new Store(); const history = new History({ dir: join(dir, 'history') });
+    const transcript = join(dir, 'c.jsonl');
+    writeFileSync(transcript, JSON.stringify({ uuid: 'u1', timestamp: '2026-10-09T18:00:30.000Z', type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Je lance les tests.' }] } }) + '\n');
+    store.upsert(mk('a'));
+    const server = await startServer({ store, tmux: fakeTmux({ 'ledge-a': [PROMPT, ''] }), port: 0, history });
+    const c = await connect({ port: server.port, host: '127.0.0.1', timeoutMs: 2000 });
+    await c.next('snapshot', 2000);
+    c.send({ type: 'session.thread', id: 'a' });
+    expect(await c.next('session.thread', 2000)).toEqual({ type: 'session.thread', id: 'a', items: [] });
+    c.send({ type: 'session.event', id: 'a', event: { name: 'UserPromptSubmit', at: T0, source: 'hook', text: 'Lance les tests', transcriptPath: transcript } });
+    expect(await c.next('session.thread.item', 2000)).toMatchObject({ id: 'a', item: { kind: 'prompt', text: 'Lance les tests' } });
+    c.send({ type: 'session.event', id: 'a', event: { name: 'PreToolUse', at: '2026-10-09T18:01:00.000Z', source: 'hook', tool: 'Bash', text: 'Bash · pnpm test', toolUseId: 'toolu_1', transcriptPath: transcript } });
+    expect(await c.next('session.thread.item', 2000)).toMatchObject({ item: { kind: 'message', id: 'msg-u1' } }); // synced before the row
+    expect(await c.next('session.thread.item', 2000)).toMatchObject({ item: { kind: 'tool', id: 'toolu_1', status: 'running' } });
+    c.send({ type: 'session.event', id: 'a', event: { name: 'PermissionRequest', at: '2026-10-09T18:02:00.000Z', source: 'hook', tool: 'Bash', text: 'pnpm test' } });
+    expect(await c.next('session.thread.item', 2000)).toMatchObject({ item: { kind: 'permission', text: 'pnpm test' } });
+    await until(() => store.get('a')?.state === 'waiting_permission', 2000);
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    await until(() => history.items('a').some(i => i.kind === 'permission' && i.decision === 'accept'), 2000);
+    store.remove('a');
+    await until(() => history.items('a').length === 0, 1000);
+    c.close(); await server.close();
+  });
+  it('answers an unknown session with an empty thread and works without a history', async () => {
+    const store = new Store();
+    const server = await startServer({ store, tmux: fakeTmux({}), port: 0 });
+    const c = await connect({ port: server.port, host: '127.0.0.1', timeoutMs: 2000 });
+    await c.next('snapshot', 2000);
+    c.send({ type: 'session.thread', id: 'nope' });
+    expect(await c.next('session.thread', 2000)).toEqual({ type: 'session.thread', id: 'nope', items: [] });
+    c.close(); await server.close();
   });
 });

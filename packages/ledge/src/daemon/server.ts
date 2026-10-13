@@ -3,6 +3,7 @@ import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PROTOCOL_PORT, SshAliasSchema, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
+import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
 import { verifyGone } from '../adapters/verify.js';
@@ -68,7 +69,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -94,6 +95,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const localClients = new Set<WebSocket>();
   const remoteClients = new Set<WebSocket>();
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); };
+  const history = opts.history;
+  const unsubscribeHistory = history ? [
+    history.onItem((id, item) => broadcast({ type: 'session.thread.item', id, item })),
+    store.onEvent((id, ev) => history.record(id, ev)),
+    store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })
+  ] : [];
   const relay = createRelay({ chat, store, replyTo, broadcast, now });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
@@ -272,6 +279,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return send(ws, listing);
       }
       case 'session.event': {
+        const ev = msg.event;
+        // The agent's text precedes the action it announces: sync the parent's transcript before the row lands.
+        const ownTurn = !ev.helperId && (ev.name === 'PreToolUse' || ev.name === 'PermissionRequest' || ev.name === 'Stop');
+        const helperEnd = ev.name === 'SubagentStop' && !!ev.helperId;
+        if (history && ev.transcriptPath && (ownTurn || helperEnd)) {
+          try { history.sync(msg.id, ev.transcriptPath, { helperId: helperEnd ? ev.helperId : undefined, force: ev.name === 'Stop' || helperEnd }); }
+          catch (e) { log(`transcript not read for ${msg.id}: ${(e as Error).message}`); }
+        }
         const before = store.get(msg.id);
         if (!before) {
           const taken = store.all().map(s => s.name);
@@ -283,6 +298,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
         return;
       }
+      case 'session.thread':
+        return send(ws, { type: 'session.thread', id: msg.id, items: history?.items(msg.id) ?? [] });
       case 'session.rename': {
         if (!store.get(msg.id)) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
         store.apply(msg.id, { name: 'Renamed', at: now(), source: 'daemon', text: msg.topic });
@@ -296,7 +313,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
         if (!s.pending) return send(ws, { type: 'error', id: msg.id, message: 'nothing to decide' });
         const pending = s.pending; const adapter = adapterFor(s.tool);
-        return injectAndVerify(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true);
+        await injectAndVerify(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true);
+        history?.decide(msg.id, msg.decision);
+        return;
       }
       case 'session.reply': {
         const refused = await replyTo(msg.id, msg.text);
@@ -374,6 +393,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port,
     broadcast,
     preview,
-    close: () => new Promise(res => { unsubscribe(); relay.close(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
+    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); relay.close(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
   };
 }

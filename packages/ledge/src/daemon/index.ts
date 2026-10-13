@@ -1,5 +1,6 @@
 import { writeFile, rm } from 'node:fs/promises';
 import { Store } from './store.js';
+import { History } from './history.js';
 import { startServer } from './server.js';
 import { startPoller } from './poller.js';
 import { realTmux, type Tmux } from '../tmux.js';
@@ -21,14 +22,16 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   }
   const daemon = await daemonInfo();
   const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save() }));
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater });
+  const history = new History();
+  await history.load();
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history });
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
   await writeFile(paths().pid, String(process.pid));
   log(`daemon started on ${server.port} with ${store.all().length} sessions`);
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {
     process.off('SIGTERM', onSignal); process.off('SIGINT', onSignal);
-    poller.stop(); await server.close(); await store.save(); await rm(paths().pid, { force: true }); log('daemon stopped');
+    poller.stop(); await server.close(); await store.save(); await history.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
   })();
   const onSignal = () => { stop().finally(() => process.exit(0)); };
   process.once('SIGTERM', onSignal);
