@@ -11,7 +11,9 @@ const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
 /** The longest first prompt sent as a topic candidate; the reducer cuts it to one line of TOPIC_MAX. */
 const PROMPT_MAX = 500;
-const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, PROMPT_MAX) } : {}; };
+/** Claude Code hands a backgrounded helper's report back as a prompt: that text is the report, capped like a tool input. */
+const handBack = (t: string) => t.startsWith('<agent-message from="');
+const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, handBack(t) ? INPUT_MAX : PROMPT_MAX) } : {}; };
 
 function describeTool(tool: string | undefined, input: unknown): string {
   const i = (input && typeof input === 'object' ? input : {}) as Payload;

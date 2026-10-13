@@ -432,6 +432,11 @@ describe('prompts and the chat marker', () => {
     const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(600) }, at);
     expect(m?.event.name).toBe('UserPromptSubmit'); expect(m?.event.text).toHaveLength(500);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's' }, at)?.event.text).toBeUndefined();
+    // A helper's hand-back is its report: kept whole up to the tool input cap.
+    const back = `<agent-message from="a82b">\n[Subagent hand-back] The text below is the final report.\n${'  ligne du rapport\n'.repeat(160)}</agent-message>`;
+    expect(back.length).toBeGreaterThan(3000);
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back }, at)?.event.text).toBe(back);
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back + 'x'.repeat(INPUT_MAX) }, at)?.event.text).toHaveLength(INPUT_MAX);
   });
   it('Cursor beforeSubmitPrompt carries the prompt too', () => {
     const m = mapCursorHook('beforeSubmitPrompt', { session_id: 's', prompt: 'Corrige le test' }, at, {});
