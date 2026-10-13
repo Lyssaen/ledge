@@ -6,6 +6,7 @@ const requestId = z.string().min(1);
 
 export const DocumentReadSchema = z.object({
   type: z.literal('document.read'), requestId, path,
+  machineId: z.string().optional(),
   sessionId: z.string().min(1).optional(), basePath: path.optional()
 });
 export const DocumentContentSchema = z.object({

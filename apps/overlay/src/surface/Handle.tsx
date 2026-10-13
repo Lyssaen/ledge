@@ -1,15 +1,15 @@
 import type { Tool } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
 import { ResidentMascot, type ResidentGesture } from '../bots/ResidentMascot';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { BotState } from '../bots/poseFor';
 import { BADGE } from '../ui/Badge';
 import { transition } from '../motion';
-import { ISLAND, SIZES, islandOrder, type Slot } from './geometry';
+import { ISLAND, SIZES, islandOrder, pipeBefore, type Slot } from './geometry';
 import { useI18n } from '../i18n/lang';
 import type { PipTone } from '../update/machine';
 
-export interface HandleBot { id: string; name: string; tool: Tool; state: BotState; pose: 1 | 2 | 3; pending: boolean; lifted?: boolean; held?: boolean; readOnly?: boolean }
+export interface HandleBot { id: string; name: string; tool: Tool; state: BotState; pose: 1 | 2 | 3; pending: boolean; lifted?: boolean; held?: boolean; readOnly?: boolean; /** The session's machine (absent: this one). */ machine?: string }
 
 export interface HandleProps {
   bots: HandleBot[]; slots: Slot[]; visible: boolean; hoverId: string | null; onHover: (id: string | null) => void; onOpen: (id: string) => void; onOpenHome?: () => void;
@@ -23,7 +23,8 @@ export interface HandleProps {
 }
 
 /** The compact island's content (spec 2026-10-12 §3): the Ledge mascot, a separator, the companions in `islandOrder`
- *  (asks first), a "+n" pill past six, the DND moon; or the discreet strip, one dot per session. */
+ *  (by machine, asks first) with a separator between two machines, a "+n" pill past six, the DND moon; or the
+ *  discreet strip, one dot per session. */
 export function Handle({ bots, slots, visible, hoverId, onHover, onOpen, onOpenHome, left = 0, scale = 1, pointer = null, strip = false, updatePip = null, updateVersion = '', dnd = false, unread = false, sayId = null, residentSignal, theme = 'dark', frozen = false, reducedMotion }: HandleProps) {
   const { t } = useI18n();
   const opening = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -54,12 +55,15 @@ export function Handle({ bots, slots, visible, hoverId, onHover, onOpen, onOpenH
       <span data-separator aria-hidden="true" style={{ display: 'block', flexShrink: 0, width: bots.length ? SIZES.separatorH : 0, height: 16, marginLeft: bots.length ? ISLAND.sepGap : 0, background: 'var(--sidebar-border)', opacity: bots.length ? 1 : 0, transition: transition([['opacity', 'fadeIn', 0], ['margin-left', 'grow', 0], ['width', 'grow', 0]]) }} />
       {ordered.map(b => {
         const on = slots.some(s => s.id === b.id);
+        const pipe = on && pipeBefore(shown[shown.indexOf(b) - 1], b);
         const up = b.pending || !!b.lifted || !!b.held;
         const hov = hoverId === b.id;
         const quiet = b.state === 'done' || b.state === 'readonly';
         const tick = b.pending && b.id !== sayId;
         return (
-          <button key={b.id} type="button" tabIndex={on ? undefined : -1} aria-hidden={on ? undefined : true} aria-label={`${b.name} ${t.handleLabel[b.state]}, ${t.open}`} onClick={() => onOpen(b.id)} onMouseEnter={() => onHover(b.id)} onMouseLeave={() => onHover(null)}
+          <Fragment key={b.id}>
+          <span data-machine-separator aria-hidden="true" style={{ display: 'block', flexShrink: 0, width: pipe ? SIZES.separatorH : 0, height: 16, marginLeft: pipe ? ISLAND.sepGap : 0, background: 'var(--sidebar-border)', opacity: pipe ? 1 : 0, transition: transition([['opacity', 'fadeIn', 0], ['margin-left', 'grow', 0], ['width', 'grow', 0]]) }} />
+          <button type="button" tabIndex={on ? undefined : -1} aria-hidden={on ? undefined : true} aria-label={`${b.name} ${t.handleLabel[b.state]}, ${t.open}`} onClick={() => onOpen(b.id)} onMouseEnter={() => onHover(b.id)} onMouseLeave={() => onHover(null)}
             style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0, border: 'none', borderRadius: 9999, cursor: 'pointer', background: hov ? 'var(--sidebar-accent)' : 'transparent', width: on ? ISLAND.companion : 0, height: ISLAND.companion, marginLeft: on ? ISLAND.gap : 0, opacity: !on ? 0 : hov || up ? 1 : quiet ? 0.55 : 0.8,
               transition: transition([['width', 'grow', 0], ['margin-left', 'grow', 0], ['opacity', 'fadeIn', on ? 80 : 0], ['background-color', 'hover']]) }}>
             <span data-tick style={{ position: 'absolute', left: 4, right: 4, top: -3, height: 1, borderRadius: '0 0 1px 1px', background: BADGE[b.state].fg, opacity: tick ? 1 : 0, transition: transition([['opacity', 'fadeIn', tick ? 160 : 0], ['background-color', 'hover']]) }} />
@@ -67,6 +71,7 @@ export function Handle({ bots, slots, visible, hoverId, onHover, onOpen, onOpenH
               <Bot seed={b.id} readOnly={b.readOnly} tool={b.tool} state={b.state} pose={b.pose} size={ISLAND.companion} shownSize={ISLAND.companion} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} />
             </span>
           </button>
+          </Fragment>
         );
       })}
       {extra > 0 && (

@@ -14,13 +14,13 @@ test('a finished row is removed from the list; a running launcher row has no rem
   await ready(page, 3);
   await openList(page);
   const list = layer(page, 'list');
-  const row = list.locator('[data-row-id="lu"]');
+  const row = list.locator('[data-row-id="local:lu"]');
   const remove = list.getByRole('button', { name: 'Remove from list: documentation, Lu' });
   // Hidden until the row is hovered (or focused), then a real button.
   await expect(remove).toHaveCSS('opacity', '0');
   await row.hover();
   await expect(remove).toHaveCSS('opacity', '1');
-  await expect(list.locator('[data-row-id="pim"] [data-dismiss]')).toHaveCount(0);
+  await expect(list.locator('[data-row-id="local:pim"] [data-dismiss]')).toHaveCount(0);
   await expect(list.getByRole('button', { name: 'Remove from list: speos-api, Bix' })).toHaveCount(1);
   await remove.click();
   expect(await received(d.received, 'session.dismiss')).toEqual({ type: 'session.dismiss', id: 'lu' });
@@ -56,7 +56,7 @@ test('from the session view of a read-only session, then back to the list once r
   expect(await received(d.received, 'session.dismiss')).toEqual({ type: 'session.dismiss', id: 'bix' });
   d.remove('bix');
   await expectMode(page, 'list');
-  await expect(layer(page, 'list').locator('[data-row-id="bix"]')).toHaveCount(0);
+  await expect(layer(page, 'list').locator('[data-row-id="local:bix"]')).toHaveCount(0);
 });
 
 test('a session removed while open slides out with its content, never as an empty panel', async ({ page }) => {

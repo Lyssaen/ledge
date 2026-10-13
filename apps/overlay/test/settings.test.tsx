@@ -173,3 +173,24 @@ describe('<SettingsView> About tab', () => {
     expect(screen.getByText('Never checked')).toBeTruthy();
   });
 });
+
+describe('<SettingsView> Machines tab', () => {
+  beforeEach(() => localStorage.clear());
+  const local = { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831', status: 'open' as const, ready: true, recents: [], sessions: [], launcher: null };
+  it('has no Machines tab without a fleet, and a stored Machines tab falls back to Display', () => {
+    localStorage.setItem('ledge.settings.tab', 'machines');
+    view();
+    expect(screen.queryByRole('tab', { name: 'Machines' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Display' })).toHaveAttribute('aria-selected', 'true');
+  });
+  it('sits between Display and Notifications and holds the machines, not the Display panel', () => {
+    view({ machines: [local], onMachines: () => {} });
+    expect(screen.getAllByRole('tab').map(t => t.textContent)).toEqual(['Display', 'Machines', 'Notifications', 'Sounds']);
+    expect(within(screen.getByRole('tabpanel', { name: 'Display' })).queryByText('This machine')).toBeNull();
+    tab('Machines');
+    const panel = screen.getByRole('tabpanel', { name: 'Machines' });
+    expect(within(panel).getByText('This machine')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Add a machine' })).toBeInTheDocument();
+    expect(localStorage.getItem('ledge.settings.tab')).toBe('machines');
+  });
+});

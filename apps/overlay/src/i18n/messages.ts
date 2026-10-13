@@ -1,5 +1,6 @@
 import type { SoundCategory } from '../sounds/preferences';
 import type { BotState } from '../bots/poseFor';
+import type { SshProblem } from '../daemon/machines';
 
 /**
  * Every user-visible string of the overlay, aria-labels and tooltips included, in French (the default) and English.
@@ -9,6 +10,13 @@ import type { BotState } from '../bots/poseFor';
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 const fr = {
+  machines: { title: 'Machines', target: 'Machine', hint: 'Le compagnon et son dossier vivent sur cette machine.', local: 'Cette machine', online: 'Connectée', offline: 'Hors ligne', reconnecting: (names: string) => `${names} : reconnexion en cours`, count: (n: number) => `${n} machines`, add: 'Ajouter une machine', save: 'Enregistrer', remove: 'Retirer', label: 'Nom', ssh: 'Alias SSH', invalid: 'Vérifiez le nom et l’alias SSH. Chaque alias ne peut être ajouté qu’une fois.',
+    intro: 'Ledge rejoint vos serveurs par SSH, depuis WSL. Leurs sessions s’affichent dans vos projets, avec le nom de la machine.', localMeta: 'Local · WSL', connecting: 'Connexion…', version: (v: string) => `Ledge ${v}`, sessions: (n: number) => `${n} session${n > 1 ? 's' : ''}`,
+    test: 'Tester', retry: 'Réessayer', edit: 'Modifier', cancel: 'Annuler', removeAsk: 'Retirer', removeNote: '? Ses sessions disparaissent de la liste. Rien n’est arrêté ni supprimé sur le serveur.', none: 'Aucun serveur pour l’instant. Vos sessions locales ne changent pas.',
+    editTitle: (name: string) => `Modifier ${name}`, labelHint: 'Ce que vous verrez dans les sessions et le chat.', labelPlaceholder: 'Serveur de dev', sshHint: 'Le nom d’un bloc Host de ~/.ssh/config dans WSL.', duplicate: 'Cet alias est déjà ajouté.',
+    before: 'Avant d’ajouter un serveur', steps: [['L’alias fonctionne depuis WSL, sans mot de passe : ', 'ssh mon-serveur'], ['La clé du serveur est déjà approuvée (première connexion faite à la main).'], ['Node 22+ et tmux sont installés sur le serveur.'], ['Ledge est installé et démarré sur le serveur : ', 'npm i -g @paradow/ledge && ledge setup']] as ReadonlyArray<readonly [string, string?]>,
+    probe: 'Tester la connexion', probing: 'Connexion à', probeOk: (v: string | undefined, n: number) => `${v ? `Ledge ${v}` : 'Ledge'} répond · ${n} session${n > 1 ? 's' : ''}`, savedAnyway: 'Le test est facultatif : une machine injoignable peut être enregistrée.',
+    problem: { alias: 'Alias introuvable. Ajoutez un bloc Host pour cet alias dans ~/.ssh/config de WSL.', key: 'La clé SSH est refusée. Vérifiez IdentityFile pour cet alias dans ~/.ssh/config de WSL.', hostKey: 'La clé du serveur n’est pas encore approuvée. Connectez-vous une fois depuis WSL avec ssh et cet alias.', unreachable: 'Le serveur ne répond pas. Il est peut-être éteint, ou hors du réseau.', ledge: 'Ledge est absent ou trop ancien sur ce serveur. Installez-le, puis lancez « ledge setup ».', stopped: 'Le service Ledge ne tourne pas sur le serveur. Lancez « ledge setup » sur le serveur.', local: 'Mettez à jour Ledge sur cette machine pour rejoindre un serveur.', other: 'La connexion a échoué.' } as Record<SshProblem, string>, clarification: 'Vous pouvez aussi répondre dans le chat.', destination: 'Destination', choose: (name: string) => `Sur ${name}.`, configure: 'Configurer les machines' },
   lang: { label: 'Langue', hint: 'La langue de Ledge.', fr: 'Français', en: 'English' },
   /** The Windows tray icon's menu (its first line, the product and version, is not translated). */
   tray: { open: 'Ouvrir Ledge', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', quit: 'Quitter Ledge' },
@@ -230,6 +238,13 @@ const fr = {
 export type Messages = typeof fr;
 
 const en: Messages = {
+  machines: { title: 'Machines', target: 'Machine', hint: 'The companion and its folder live on this machine.', local: 'This machine', online: 'Connected', offline: 'Offline', reconnecting: (names: string) => `${names}: reconnecting`, count: (n: number) => `${n} machines`, add: 'Add a machine', save: 'Save', remove: 'Remove', label: 'Name', ssh: 'SSH alias', invalid: 'Check the name and SSH alias. Each alias can only be added once.',
+    intro: 'Ledge reaches your servers over SSH, from WSL. Their sessions show in your projects, with the machine’s name.', localMeta: 'Local · WSL', connecting: 'Connecting…', version: (v: string) => `Ledge ${v}`, sessions: (n: number) => `${n} session${n === 1 ? '' : 's'}`,
+    test: 'Test', retry: 'Retry', edit: 'Edit', cancel: 'Cancel', removeAsk: 'Remove', removeNote: '? Its sessions leave the list. Nothing is stopped or deleted on the server.', none: 'No servers yet. Your local sessions do not change.',
+    editTitle: (name: string) => `Edit ${name}`, labelHint: 'What you will see in sessions and the chat.', labelPlaceholder: 'Dev server', sshHint: 'The name of a Host block in ~/.ssh/config in WSL.', duplicate: 'This alias is already added.',
+    before: 'Before adding a server', steps: [['The alias works from WSL, without a password: ', 'ssh my-server'], ['The server’s host key is already approved (first connection made by hand).'], ['Node 22+ and tmux are installed on the server.'], ['Ledge is installed and running on the server: ', 'npm i -g @paradow/ledge && ledge setup']],
+    probe: 'Test the connection', probing: 'Connecting to', probeOk: (v: string | undefined, n: number) => `${v ? `Ledge ${v}` : 'Ledge'} answers · ${n} session${n > 1 ? 's' : ''}`, savedAnyway: 'The test is optional: an unreachable machine can be saved.',
+    problem: { alias: 'Alias not found. Add a Host block for this alias to ~/.ssh/config in WSL.', key: 'The SSH key is refused. Check IdentityFile for this alias in ~/.ssh/config in WSL.', hostKey: 'The server’s host key is not approved yet. Connect once from WSL with ssh and this alias.', unreachable: 'The server does not answer. It may be off, or out of the network.', ledge: 'Ledge is missing or too old on this server. Install it, then run “ledge setup”.', stopped: 'The Ledge service is not running on the server. Run “ledge setup” on the server.', local: 'Update Ledge on this machine to reach a server.', other: 'The connection failed.' }, clarification: 'You can also answer in the chat.', destination: 'Destination', choose: (name: string) => `On ${name}.`, configure: 'Configure machines' },
   lang: { label: 'Language', hint: 'The language of Ledge.', fr: 'Français', en: 'English' },
   tray: { open: 'Open Ledge', newSession: 'New session', dnd: 'Do not disturb', quit: 'Quit Ledge' },
   time: { seconds: (n: number) => `${n}s`, minutes: (n: number) => `${n}m`, hours: (n: number) => `${n}h`, locale: 'en-US' },

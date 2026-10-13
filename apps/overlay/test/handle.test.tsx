@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { Handle } from '../src/surface/Handle';
+import { Handle, type HandleBot } from '../src/surface/Handle';
 import { Badge } from '../src/ui/Badge';
 import { layout } from '../src/surface/geometry';
 
@@ -54,6 +54,20 @@ describe('<Handle> separator', () => {
     expect(document.querySelector('[data-separator]')).toHaveStyle({ opacity: '1' });
     rerender(<Handle bots={[]} slots={[]} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
     expect(document.querySelector('[data-separator]')).toHaveStyle({ opacity: '0' });
+  });
+});
+
+describe('<Handle> machine pipes', () => {
+  it('draws a pipe where the companions change machine, none on a single machine', () => {
+    const fleet: HandleBot[] = [{ ...bots[1]!, machine: 'srv' }, bots[0]!, { ...bots[2]!, machine: 'srv' }];
+    const fl = layout({ bots: fleet.map(b => ({ id: b.id, pending: b.pending, machine: b.machine })), mode: 'handle', screenH: 1080, screenW: 1920 });
+    const { container, rerender } = render(<Handle bots={fleet} slots={fl.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
+    const row = [...container.querySelectorAll('[data-layer="handle"] > [data-machine-separator], [data-layer="handle"] > button:not([data-resident])')]
+      .map(e => e.hasAttribute('data-machine-separator') ? (e as HTMLElement).style.opacity === '1' ? '|' : null : e.getAttribute('aria-label')!.split(' ')[0]).filter(Boolean);
+    expect(row).toEqual(['Otto', '|', 'Pim', 'Lu']);
+    expect(container.querySelectorAll('[data-machine-separator]')[1]).toHaveStyle({ width: '1px', marginLeft: '8px', height: '16px' });
+    rerender(<Handle bots={bots} slots={l.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
+    expect([...container.querySelectorAll('[data-machine-separator]')].every(e => (e as HTMLElement).style.opacity === '0')).toBe(true);
   });
 });
 

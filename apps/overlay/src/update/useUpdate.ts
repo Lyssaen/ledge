@@ -69,6 +69,21 @@ export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateCo
 
   // The daemon store: snapshots, update progress, disconnects, removed sessions.
   useEffect(() => {
+    const fleet = clientRef.current.fleet;
+    if (fleet) {
+      const primary = fleet.primary;
+      const snapshot = fleet.localSnapshot();
+      if (snapshot) dispatch({ type: 'snapshot', daemon: snapshot.daemon ?? null, ids: snapshot.sessions.map(s => s.id) });
+      const offMessage = primary.onMessage(m => {
+        if (m.type === 'snapshot') dispatch({ type: 'snapshot', daemon: m.daemon ?? null, ids: m.sessions.map(s => s.id) });
+        if (m.type === 'session.removed') dispatch({ type: 'removed', id: m.id });
+        if (m.type === 'update.progress') dispatch({ type: 'progress', step: m.step });
+        if (m.type === 'update.failed') dispatch({ type: 'failed', reason: m.reason, detail: m.detail, command: m.command });
+      });
+      let was = primary.status();
+      const offStatus = primary.onStatus(s => { if (was === 'open' && s !== 'open') dispatch({ type: 'disconnected' }); was = s; });
+      return () => { offMessage(); offStatus(); };
+    }
     let snapshotSeq = 0; let updateSeq = daemonStore.getState().lastUpdate?.seq ?? 0;
     let status = daemonStore.getState().status;
     const onChange = () => {
@@ -128,8 +143,9 @@ export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateCo
 
   const start = useCallback(() => {
     // A click while the socket is closed would be dropped by the client and leave the phase stuck.
-    if (clientRef.current.status() !== 'open') return;
-    const sessions = daemonStore.getState().sessions.map(x => ({ id: x.id, name: x.name }));
+    const fleet = clientRef.current.fleet;
+    if ((fleet?.primary ?? clientRef.current).status() !== 'open') return;
+    const sessions = (fleet ? fleet.localSnapshot()?.sessions ?? [] : daemonStore.getState().sessions).map(x => ({ id: x.id, name: x.name }));
     const event: UpdateEvent = { type: 'start', sessions };
     const next = reduceUpdate(stateRef.current, event);
     rawDispatch(event);

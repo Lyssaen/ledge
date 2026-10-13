@@ -14,6 +14,7 @@ import { DetailHeader } from './DetailHeader';
 import { Segmented } from './SettingsView';
 import { useI18n } from '../i18n/lang';
 import { loadOpenTab, saveOpenTab } from './openTabPreference';
+import type { MachineState } from '../daemon/machines';
 
 /** What the form sends: the daemon's `session.launch` fields, plus whether to open a terminal tab once it answers. */
 export interface LaunchRequest { tool: Tool; cwd: string; name?: string; prompt?: string; continue: boolean; openTab: boolean }
@@ -54,6 +55,7 @@ function Switch({ id, label: text, hint: why, checked, onChange, last }: { id: s
 }
 
 export interface LaunchViewProps {
+  machines?: MachineState[]; machineId?: string; onMachine?: (id: string) => void;
   visible: boolean; recents: Recent[]; sessions: Session[];
   /** The daemon is unreachable: nothing can be sent (the reason is shown under the actions). */
   offline?: string | null;
@@ -104,6 +106,7 @@ export function LaunchView(p: LaunchViewProps) {
       <form data-launch-form onSubmit={e => { e.preventDefault(); submit(); }} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flexGrow: 1 }}>
         <div className="ledge-scroll" style={{ overflowY: 'auto', minHeight: 0, overscrollBehavior: 'contain' }}>
           <div ref={p.contentRef} style={{ display: 'flex', flexDirection: 'column', padding: '4px 17px 8px' }}>
+            {p.machines && p.machines.length > 1 && <div style={{ borderBottom: '1px solid var(--sidebar-border)' }}><Segmented name="launch-machine" label={t.machines.target} hint={t.machines.hint} value={p.machineId ?? 'local'} onChange={p.busy ? undefined : p.onMachine} options={p.machines.map(m => ({ value: m.id, label: `${m.id === 'local' ? t.machines.local : m.label}${!m.ready ? ` · ${t.machines.offline}` : ''}` }))} /></div>}
             <Row>
               <label htmlFor="ledge-launch-cwd" style={label}>{t.launch.folder}</label>
               <span style={{ ...hint, marginTop: 3 }}>{t.launch.folderHint}</span>

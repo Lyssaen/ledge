@@ -18,7 +18,8 @@ export interface ChatViewProps {
   /** Null when questions may be sent; otherwise why not (offline). */
   offline: string | null;
   onAsk: (text: string) => void; onCancel: (qid: string) => void; onReset: () => void; onBack: () => void; onClose: () => void; onOpenSession: (id: string) => void;
-  onDocument?: (ref: DocumentReference) => void;
+  onDocument?: (ref: DocumentReference, qid?: string) => void;
+  turnAvailable?: (qid: string) => boolean;
   /** The chat card being launched (its turn's qid) and the card's actions (spec 2026-10-12 §6). */
   launchingQid?: string | null; onLaunchProposal?: (qid: string) => void; onTerminal?: (id: string) => void;
   /** The relay card's turn being sent (its qid) and its actions. */
@@ -104,15 +105,17 @@ export function ChatView(p: ChatViewProps) {
                     {(() => {
                       // While it streams, a proposal block (closed or not) is held back: the card shows it once the turn is done.
                       const text = turn.answer || (turn.answeredAt === undefined && live?.qid === turn.qid ? hideProposal(live.text) : '');
-                      return text && <Answer text={text} sessions={p.sessions} onOpen={p.onOpenSession} onDocument={p.onDocument} />;
+                      return text && <Answer text={text} sessions={p.sessions.filter(s => !turn.machineId || s.machineId === turn.machineId)} onOpen={p.onOpenSession} onDocument={p.onDocument ? ref => p.onDocument!(ref, turn.qid) : undefined} />;
                     })()}
+                    {!!turn.choices?.length && turn === turns.at(-1) && <><div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{turn.choices.map(c => <Button key={c.id} variant="outline" size="sm" disabled={busy || !!p.offline} onClick={() => submit(t.machines.choose(c.label))} style={{ height: 30, padding: '0 10px', fontSize: 12 }}>{c.label}</Button>)}</div><small style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{t.machines.clarification}</small></>}
+                    {turn.machineName && (turn.proposal || turn.relay) && <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.machines.destination} : <strong style={{ color: 'var(--sidebar-foreground)' }}>{turn.machineId === 'local' ? t.machines.local : turn.machineName}</strong>{p.turnAvailable?.(turn.qid) === false && ` · ${t.machines.offline}`}</div>}
                     {turn.answeredAt !== undefined && turn.relay ? (
                       <RelayCard relay={turn.relay} session={p.sessions.find(s => s.id === turn.relay!.id)} busy={p.relayingQid === turn.qid}
-                        disabled={!!p.offline || (!!p.relayingQid && p.relayingQid !== turn.qid) || !!p.launchingQid} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
+                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.relayingQid && p.relayingQid !== turn.qid) || !!p.launchingQid} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
                         onSend={() => p.onRelay?.(turn.qid)} onCancel={() => p.onRelayCancel?.(turn.qid)} onOpenSession={p.onOpenSession} />
                     ) : turn.answeredAt !== undefined && turn.proposal && (
                       <LaunchCard proposal={turn.proposal} session={p.sessions.find(s => s.id === turn.proposal!.launchedId)} busy={p.launchingQid === turn.qid}
-                        disabled={!!p.offline || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid}
+                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid}
                         onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
                     )}
                     {turn.answeredAt !== undefined && (

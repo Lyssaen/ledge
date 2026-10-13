@@ -6,6 +6,7 @@ ledge hook [codex|cursor] <Event>                            receive a hook (rea
 ledge setup                                                  install hooks and ~/.ledge
 ledge uninstall [--purge]                                    remove hooks, service and link (--purge: ~/.ledge too)
 ledge status                                                 list sessions
+ledge bridge                                                 exchange Ledge messages over SSH stdio
 ledge --version                                              print the installed version`;
 
 /**
@@ -33,6 +34,7 @@ async function main(argv: string[]): Promise<number> {
     case 'setup': { const { runSetup } = await import('./setup.js'); for (const l of await runSetup()) console.log(l); return 0; }
     case 'uninstall': { const { runUninstall } = await import('./uninstall.js'); const r = await runUninstall({ purge: rest.includes('--purge') }); for (const l of r.lines) console.log(l); return r.ok ? 0 : 1; }
     case 'status': { const { printStatus } = await import('./status.js'); console.log(await printStatus()); return 0; }
+    case 'bridge': { const { bridge } = await import('./bridge.js'); await bridge(); return 0; }
     case 'claude': case 'codex': case 'cursor': { const { launch } = await import('./launch.js'); return launch(cmd, rest); }
     case 'attach': { const { attach } = await import('./attach.js'); return attach(rest[0] ?? ''); }
     default: console.log(USAGE); return cmd ? 1 : 0;

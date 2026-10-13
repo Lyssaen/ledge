@@ -30,7 +30,7 @@ test('the + opens the form on the most recent folder; Start sends session.launch
   const list = layer(page, 'list');
   await expect(list.getByRole('status')).toHaveText(/Juno is starting in api-gateway\./);
   await expect(list.getByRole('button', { name: 'api-gateway, Juno, open' })).toBeVisible();
-  await expect(list.locator('[data-row-id="n1"]')).toContainText('Starting');
+  await expect(list.locator('[data-row-id="local:n1"]')).toContainText('Starting');
 });
 
 test('a refused launch keeps the form open with the reason', async ({ page }) => {
