@@ -156,9 +156,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * With `requirePrompt`, fail closed: the prompt must be on screen before anything is typed, else a
    * stale pending (or a dialog the adapter cannot read) would get keys meant for something else and
    * the "prompt gone" check would then report success. A plan given as a function is built from that
-   * same capture, so the keys match the dialog actually on screen.
+   * same capture, so the keys match the dialog actually on screen. True once `Decided` is applied, false when a newer
+   * prompt arrived meanwhile and was left alone.
    */
-  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean): Promise<void> {
+  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean): Promise<boolean> {
     const s = store.get(id);
     if (!s) throw new Error(`unknown session ${id}`);
     if (inFlight.has(id)) throw new Error('a decision is already in progress');
@@ -185,8 +186,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const gone = decided && adapter.promptGone
         ? await verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
         : await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
-      if (!stillTheSame()) return; // a newer prompt arrived meanwhile: leave it alone
-      if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon' }); return; }
+      if (!stillTheSame()) return false; // a newer prompt arrived meanwhile: leave it alone
+      if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon' }); return true; }
       // The client gets an `error` reply for that id (via the caller's catch), so a retry from `error` reads as failed.
       store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: NOT_TAKEN });
       throw new Error(NOT_TAKEN);
@@ -313,8 +314,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
         if (!s.pending) return send(ws, { type: 'error', id: msg.id, message: 'nothing to decide' });
         const pending = s.pending; const adapter = adapterFor(s.tool);
-        await injectAndVerify(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true);
-        history?.decide(msg.id, msg.decision);
+        // Only a decision the terminal took lands in the thread: otherwise the last open permission may be the newer one.
+        if (await injectAndVerify(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true)) history?.decide(msg.id, msg.decision);
         return;
       }
       case 'session.reply': {

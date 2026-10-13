@@ -947,6 +947,30 @@ describe('session thread (spec 2026-10-13 §5)', () => {
     await until(() => history.items('a').length === 0, 1000);
     c.close(); await server.close();
   });
+  it('records no decision when a newer prompt replaced the one decided while the keys were typed', async () => {
+    const store = new Store(); const history = new History({ dir: join(process.env.LEDGE_HOME!, 'history') });
+    const NEWER = PROMPT.replace('Bash command', 'Bash command (rm -rf dist)');
+    const tmux = fakeTmux({ 'ledge-a': [PROMPT, NEWER] });
+    store.upsert(mk('a'));
+    const server = await startServer({ store, tmux, port: 0, history, verify: { attempts: 2, intervalMs: 20 } });
+    const c = await connect({ port: server.port, host: '127.0.0.1', timeoutMs: 2000 });
+    await c.next('snapshot', 2000);
+    c.send({ type: 'session.event', id: 'a', event: { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'pnpm test' } });
+    await until(() => store.get('a')?.state === 'waiting_permission', 2000);
+    // The agent asks again while the answer is typed: the pane and the pending now show the newer prompt.
+    const typed = tmux.sendText.bind(tmux);
+    tmux.sendText = async (n, t) => {
+      await typed(n, t);
+      store.upsert({ ...store.get('a')!, pending: { kind: 'permission', text: 'rm -rf dist', tool: 'Bash', source: 'hook' } });
+      history.record('a', { name: 'PermissionRequest', at: '2026-10-09T18:00:05.000Z', source: 'hook', tool: 'Bash', text: 'rm -rf dist' });
+    };
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    await until(() => tmux.sent.length === 1, 2000);
+    await new Promise(r => setTimeout(r, 200)); // past the verification
+    expect(store.get('a')?.pending?.text).toBe('rm -rf dist');
+    expect(history.items('a').filter(i => i.kind === 'permission').map(i => i.kind === 'permission' && [i.text, i.decision])).toEqual([['pnpm test', undefined], ['rm -rf dist', undefined]]);
+    c.close(); await server.close();
+  });
   it('answers an unknown session with an empty thread and works without a history', async () => {
     const store = new Store();
     const server = await startServer({ store, tmux: fakeTmux({}), port: 0 });
