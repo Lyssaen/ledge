@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionEvent } from '@ledge/protocol';
@@ -92,6 +92,42 @@ describe('History', () => {
     again.forget('s'); await again.flush();
     expect(again.items('s')).toEqual([]);
     expect(() => readFileSync(join(dir, 'history', 's.jsonl'))).toThrow();
+  });
+
+  it('loads the readable journals and skips what it cannot read: a directory, an unreadable file, other names', async () => {
+    const hd = join(dir, 'history'); mkdirSync(join(hd, 'x.jsonl'), { recursive: true });
+    const line = JSON.stringify({ kind: 'prompt', id: 'prompt-1', at: T0, turn: 1, text: 'ok' }) + '\n';
+    writeFileSync(join(hd, 'ok.jsonl'), line);
+    writeFileSync(join(hd, 'locked.jsonl'), line); chmodSync(join(hd, 'locked.jsonl'), 0o000);
+    writeFileSync(join(hd, 'notes.txt'), line);
+    const h = new History();
+    try { await h.load(); } finally { chmodSync(join(hd, 'locked.jsonl'), 0o600); }
+    expect(h.ids()).toContain('ok');
+    expect(h.ids()).not.toContain('x'); expect(h.ids()).not.toContain('notes');
+    expect(h.items('ok')).toMatchObject([{ id: 'prompt-1', text: 'ok' }]);
+    // As root the locked file is readable all the same: only its absence of harm is asserted then.
+    if (process.getuid?.() !== 0) expect(h.ids()).not.toContain('locked');
+  });
+
+  it('compacts a journal at load: one line per item kept, the thread unchanged', async () => {
+    const h = new History();
+    h.record('k', ev('UserPromptSubmit', { text: 'go' }));
+    h.record('k', ev('PreToolUse', { tool: 'Bash', text: 'Bash · ls', toolUseId: 'toolu_1' }, 1));
+    for (let i = 0; i < 50; i++) h.record('k', ev('PermissionRequest', { tool: 'Bash', text: `p${i}` }, 2 + i));
+    for (let i = 0; i < 50; i++) h.record('k', ev('Decided', { source: 'daemon' }, 60 + i));
+    h.record('k', ev('PostToolUse', { tool: 'Bash', toolUseId: 'toolu_1', output: 'a b' }, 200));
+    await h.flush();
+    const file = join(dir, 'history', 'k.jsonl');
+    expect(readFileSync(file, 'utf8').trim().split('\n')).toHaveLength(103);
+    const again = new History(); await again.load(); await again.flush();
+    expect(again.items('k')).toEqual(h.items('k'));
+    const lines = readFileSync(file, 'utf8').trim().split('\n');
+    expect(lines).toHaveLength(52);
+    expect(lines.map(l => JSON.parse(l))).toEqual(h.items('k'));
+    // Appends after the compaction land after it.
+    again.record('k', ev('Stop', { text: 'done' }, 300)); await again.flush();
+    const third = new History(); await third.load();
+    expect(third.items('k').at(-1)).toMatchObject({ kind: 'reply', text: 'done' });
   });
 
   it('numbers the turns after a reload', async () => {

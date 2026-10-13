@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readdir, readFile, rm } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SessionEvent, ThreadItem, ToolItem } from '@ledge/protocol';
 import { paths } from '../paths.js';
@@ -35,22 +35,33 @@ export class History {
   /** Waits for the journal writes issued so far (tests, shutdown). */
   flush(): Promise<void> { return this.writes; }
 
-  /** Reads every `<id>.jsonl`: one item per line, the last line of an id wins, a bad line is skipped. */
+  /** Reads every `<id>.jsonl`: one item per line, the last line of an id wins, a bad line is skipped. A file that cannot
+   *  be read is logged and left alone: the thread is a display, it must not keep the daemon from starting. A journal
+   *  holding more lines than items (updates, evicted items) is rewritten with the items kept, through the write chain. */
   async load(): Promise<void> {
     await mkdir(this.dir, { recursive: true });
-    for (const name of await readdir(this.dir)) {
-      if (!name.endsWith('.jsonl')) continue;
+    for (const entry of await readdir(this.dir, { withFileTypes: true })) {
+      const name = entry.name;
+      if (!entry.isFile() || !name.endsWith('.jsonl')) continue;
       const id = name.slice(0, -'.jsonl'.length);
-      const byId = new Map<string, ThreadItem>();
-      for (const line of (await readFile(join(this.dir, name), 'utf8')).split('\n')) {
+      let text: string;
+      try { text = await readFile(join(this.dir, name), 'utf8'); }
+      catch (e) { log(`history not read for ${id}: ${(e as Error).message}`); continue; }
+      const byId = new Map<string, ThreadItem>(); let lines = 0;
+      for (const line of text.split('\n')) {
         if (!line.trim()) continue;
+        lines++;
         try { const it = JSON.parse(line) as ThreadItem; if (typeof it?.id === 'string') byId.set(it.id, it); /* a Map keeps the first position: the thread order survives */ } catch { /* a partial or corrupt line: skip it */ }
       }
       const items = [...byId.values()].slice(-MAX_ITEMS);
       this.threads.set(id, items);
       this.turns.set(id, items.reduce((n, it) => (typeof it.turn === 'number' ? Math.max(n, it.turn) : n), 0));
+      if (lines > items.length) this.compact(id, items);
     }
   }
+
+  /** The ids of the threads held, loaded or recorded. */
+  ids(): string[] { return [...this.threads.keys()]; }
 
   forget(id: string): void {
     this.threads.delete(id); this.turns.delete(id);
@@ -141,6 +152,13 @@ export class History {
     const items = this.items(id);
     if (ev.toolUseId) { const hit = items.find(i => i.id === ev.toolUseId); if (hit?.kind === 'tool') return hit; }
     return [...items].reverse().find((i): i is ToolItem => i.kind === 'tool' && i.tool === ev.tool && i.status === 'running' && i.helperId === ev.helperId);
+  }
+
+  /** Rewrites a journal with one line per item, via a temporary file so a crash leaves the old journal whole. */
+  private compact(id: string, items: ThreadItem[]): void {
+    const file = join(this.dir, `${id}.jsonl`); const tmp = `${file}.tmp`;
+    const text = items.map(it => JSON.stringify(it) + '\n').join('');
+    this.writes = this.writes.then(() => writeFile(tmp, text)).then(() => rename(tmp, file)).catch(e => log(`history not compacted for ${id}: ${(e as Error).message}`));
   }
 
   private put(id: string, item: ThreadItem): ThreadItem {
