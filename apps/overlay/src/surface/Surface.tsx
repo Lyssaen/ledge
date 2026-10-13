@@ -4,6 +4,8 @@ import type { ChatProposal, Session, Tool } from '@ledge/protocol';
 import { loadDefaultTool, saveDefaultTool } from '../defaultTool';
 import { useDaemon, daemonStore } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
+import { useMachines } from '../daemon/machines';
+import type { DocumentOrigin } from '../documents/useDocumentReader';
 import { botState, poseFor } from '../bots/poseFor';
 import type { ResidentGesture } from '../bots/ResidentMascot';
 import { displayOrder, groupSessions, headersBefore } from './groups';
@@ -101,6 +103,10 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
   const { sessions: daemonSessions, byId, status, previews, lastError, recents, launcher, lastLaunched, lastListing, chat, chatLive } = useDaemon();
+  const machines = useMachines(client);
+  const launchMachine = client.fleet?.selected();
+  const chosenMachine = machines.find(m => m.id === launchMachine);
+  const disconnected = machines.filter(m => !m.ready).map(m => m.label);
   // Everything indexed (digits, J/K, the handle, the coachmark row) follows the order the list displays: grouped by repository.
   const sessions = useMemo(() => displayOrder(daemonSessions), [daemonSessions]);
   const groups = useMemo(() => groupSessions(sessions), [sessions]);
@@ -278,7 +284,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
 
   // The finishing bot is big from the moment its notice is due until the bubble folds.
   const liftedId = st.queue.length === 0 && st.done.length > 0 && (st.unfoldDue || (st.mode === 'bubble' && st.bubbleKind === 'finished')) ? st.done[0] : null;
-  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, held: !!finishedUnread[s.id], readOnly: s.source === 'hook_only' })), [sessions, liftedId, finishedUnread]);
+  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, held: !!finishedUnread[s.id], readOnly: s.source === 'hook_only', machine: s.machineId })), [sessions, liftedId, finishedUnread]);
   const previousResident = useRef({ ids: new Set(sessions.map(s => s.id)), pending: new Set(sessions.filter(isPending).map(s => s.id)) });
   const signalCounter = useRef(0);
   const [residentSignal, setResidentSignal] = useState<{ key: number; kind: ResidentGesture }>();
@@ -398,7 +404,10 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   /** The session's terminal tab: brought forward when it exists, else opened on the session (a daemon-launched one has none yet). */
   const openTab = (id: string) => {
     const s = byId.get(id); if (!s) return;
-    void focusTerminal(s.title).then(found => { if (!found && launcher && s.tmuxSession) return openTerminal(s.title, [...launcher, 'attach', id]); return found; });
+    const command = client.fleet ? client.fleet.terminal(id) : launcher ? [...launcher, 'attach', id] : null;
+    // Identical bot names and topics may exist on different hosts: never focus a local tab for a remote session.
+    if (s.machineId && s.machineId !== 'local') { if (command && s.tmuxSession) void openTerminal(`${s.machineName} · ${s.title}`, command); return; }
+    void focusTerminal(s.title).then(found => { if (!found && command && s.tmuxSession) return openTerminal(s.title, command); return found; });
   };
   // A chat card's relay (spec 2026-10-12 relay §6): the turn's qid while the daemon answers. The card's own state (queued, sent, failed)
   // comes back with chat.history; a refusal comes back as an id-less error, so a relay and a launch are never in flight together.
@@ -406,6 +415,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const relayState = (qid: string | null) => { const r = qid ? chat.find(x => x.qid === qid)?.relay : undefined; return r ? `${r.status ?? ''}|${r.sentAt ?? ''}|${r.error ?? ''}` : 'gone'; };
   const relayFrom = useRef('');
   const relayCard = (type: 'session.relay' | 'session.relay.cancel', qid: string) => {
+    if (client.fleet && !client.fleet.turnMachine(qid)?.ready) return;
     if (relaying || launching || chatLaunching || status === 'unreachable' || !chat.find(x => x.qid === qid)?.relay) return;
     relayFrom.current = relayState(qid); setRelaying(qid);
     send({ type, qid });
@@ -436,6 +446,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   const launchProposal = (qid: string) => {
+    if (client.fleet && !client.fleet.turnMachine(qid)?.ready) return;
     const p = chat.find(x => x.qid === qid)?.proposal;
     if (!p || p.launchedId || launching || chatLaunching || relaying || status === 'unreachable') return;
     launchedFrom.current = p; setChatLaunching(qid);
@@ -456,6 +467,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   }, [chatLaunching, launchingProposal?.launchedId, launchingProposal?.error, !launchingProposal]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (chatLaunching && lastError && !lastError.id && lastError.message === launchingProposal?.error) setChatLaunching(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && chatLaunching) setChatLaunching(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (chatLaunching && client.fleet && !client.fleet.turnMachine(chatLaunching)?.ready) setChatLaunching(null); }, [machines, chatLaunching, client]);
   const sayCandidates: SayCandidate[] = [];
   if (ledgeUnread) sayCandidates.push({ id: LEDGE_ID, kind: 'ledge', seed: ledgeSaySeed });
   for (const s of sessions) {
@@ -479,7 +491,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // The strip shows under a covering window once the island has been folded and left alone for 500 ms; a say
   // still hanging under its speaker keeps the island compact, the strip has no companion to hang it from.
   const strip = useDelayed(discreet && covered && st.mode === 'handle' && !st.hot && !st.hovering && bandPointer === null && !sayShown, STRIP_BACK_MS);
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held })), mode: st.mode, screenH, screenW, position: islandPosition, strip, dnd, readerExpanded: st.documentExpanded, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, dnd, readerExpanded: st.documentExpanded, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
   geoRef.current = geo;
   // The shell watches the top band over the island's span (its depth and overhang are the shell's own constants).
   useEffect(() => { setHotZone(Math.round(geo.handle.left), Math.round(geo.handle.w)); }, [geo.handle.left, geo.handle.w]);
@@ -526,7 +538,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
 
   const panel = st.mode !== 'handle' && st.mode !== 'bubble';
   const detail = st.mode === 'session' || st.mode === 'settings' || st.mode === 'help' || st.mode === 'launch' || st.mode === 'chat' || st.mode === 'reader';
-  const openDocument = (ref: DocumentReference, origin: { kind: 'session'; sessionId: string } | { kind: 'chat' }) => { documentSourceFocus.current = document.activeElement as HTMLElement; reader.open(ref, origin); dispatch({ type: 'documentOpen', origin }); };
+  const openDocument = (ref: DocumentReference, origin: DocumentOrigin) => { documentSourceFocus.current = document.activeElement as HTMLElement; reader.open(ref, origin); dispatch({ type: 'documentOpen', origin }); };
   const readerBack = () => reader.back();
   const readerClose = () => { documentSourceFocus.current = null; reader.close(); dispatch({ type: 'close' }); };
   const activeReading = reader.state.current;
@@ -595,7 +607,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const openRow = (id: string) => dispatch({ type: 'rowClick', id });
   /** Asks Ledge: the turn appears at once in the store, the daemon streams its steps and answer back. */
   const ask = (text: string) => {
-    const qid = `q-${Date.now().toString(36)}`;
+    const qid = `q-${crypto.randomUUID()}`;
     daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
     send({ type: 'chat.ask', qid, text, tool: defaultTool });
     if (ctl.state().mode !== 'chat') dispatch({ type: 'chat' });
@@ -651,6 +663,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
         <div data-panel style={{ position: 'absolute', inset: 0, zoom: ps, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
+              disconnected={disconnected}
               onDismiss={id => { if (!unreachable) send({ type: 'session.dismiss', id }); }} offline={unreachable}
               onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} noticeRef={noticeRef} gearPip={!!update?.gear} gearLabel={gearLabel} updateRef={updateRef}
               update={updateCard ? <UpdateCard view={updateCard} sessions={sessions.length} offline={unreachable} theme={theme} onUpdate={update!.start} onLater={update!.later} onRetry={update!.retry} onAck={update!.ackUpdated} onNotes={() => openUrl('https://github.com/Lyssaen/ledge/releases/latest')} /> : null} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
@@ -658,18 +671,21 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <ChatView contentRef={chatRef} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
+              turnAvailable={qid => !client.fleet || !!client.fleet.turnMachine(qid)?.ready}
               onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onOpenSession={openRow}
               launchingQid={chatLaunching} onLaunchProposal={launchProposal} onTerminal={focusTab}
               relayingQid={relaying} onRelay={qid => relayCard('session.relay', qid)} onRelayCancel={qid => relayCard('session.relay.cancel', qid)}
-              theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openDocument(ref, { kind: 'chat' })} />
+              theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={(ref, qid) => openDocument(ref, { kind: 'chat', machineId: qid ? client.fleet?.turnMachine(qid)?.id : undefined })} />
           </div>
           <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <LaunchView key={launchOpen} contentRef={launchRef} visible={st.mode === 'launch'} enterDelay={enter} recents={recents} sessions={sessions} offline={unreachable ? t.offline : null} busy={!!launching} failure={launchFailure}
+            <LaunchView key={`${launchOpen}-${launchMachine ?? ''}`} contentRef={launchRef} visible={st.mode === 'launch'} enterDelay={enter} recents={recents} sessions={sessions.filter(s => !launchMachine || s.machineId === launchMachine)} offline={unreachable || (chosenMachine && !chosenMachine.ready) ? t.offline : null} busy={!!launching} failure={launchFailure}
+              machines={machines} machineId={launchMachine} onMachine={id => { setLaunchFailure(null); client.fleet?.select(id); }}
               listing={lastListing} onFolders={m => send(m)}
               onLaunch={launch} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
           </div>
           <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SettingsView contentRef={settingsRef} onLang={onLang} visible={st.mode === 'settings'} enterDelay={enter} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} finished={prefs.finished} onFinished={prefs.setFinished} sounds={prefs.sounds} onSounds={prefs.setSounds} onTestSound={sounds.test} scales={scales} autoScales={autoScales} onScale={onScale}
+              machines={client.fleet ? machines : undefined} onMachines={client.fleet?.configure} onProbe={client.fleet?.probe} onRetry={client.fleet?.retry}
               monitors={monitors} monitor={monitor} onMonitor={onMonitor} autostart={autostart} onAutostart={onAutostart}
               defaultTool={defaultTool} onDefaultTool={chooseDefaultTool} accent={accent} onAccent={onAccent}
               islandPosition={islandPosition} onIslandPosition={onIslandPosition} discreet={discreet} onDiscreet={onDiscreet}

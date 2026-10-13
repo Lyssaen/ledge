@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { layout, scaledLayout, islandWidth, stripWidth, islandOrder, ISLAND, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
+import { layout, scaledLayout, islandWidth, islandPipes, stripWidth, islandOrder, ISLAND, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
 import { frameOf } from '../src/surface/frame';
 const bots = (n: number, pending: number[] = []) => Array.from({ length: n }, (_, i) => ({ id: String(i), pending: pending.includes(i) }));
 const W = 1920, H = 1080;
@@ -25,6 +25,21 @@ describe('island geometry', () => {
     const first = l.left + 12 + 22 + 8 + 1 + 8;
     expect(l.slots[0]).toEqual({ id: '6', size: 22, center: first + 11 });
     expect(l.slots[1]!.center).toBe(first + 22 + 8 + 11);
+  });
+  it('several machines: this machine first, asks first inside each machine, a 9 px pipe between two machines', () => {
+    const fleet = [{ id: 'r1', pending: false, machine: 'srv' }, { id: 'l1', pending: false }, { id: 'r2', pending: true, machine: 'srv' }, { id: 'l2', pending: true, machine: 'local' }, { id: 'o1', pending: false, machine: 'other' }];
+    const ordered = islandOrder(fleet);
+    expect(ordered.map(b => b.id)).toEqual(['l2', 'l1', 'r2', 'r1', 'o1']);
+    expect(islandPipes(ordered)).toBe(2);
+    expect(islandPipes(islandOrder(bots(8, [6])))).toBe(0);
+    expect(islandWidth(5, false, 2)).toBe(islandWidth(5) + 2 * (8 + 1));
+    const l = layout({ bots: fleet, mode: 'handle', screenH: H, screenW: W });
+    expect(l.w).toBe(islandWidth(5, false, 2));
+    const first = l.left + 12 + 22 + 8 + 1 + 8;
+    expect(l.slots.map(s => s.center - first - 11)).toEqual([0, 30, 30 + 9 + 30, 30 + 9 + 60, 30 + 9 + 60 + 9 + 30]);
+    // Only the shown companions count: a machine pushed past six behind the "+n" draws no pipe.
+    const many = [...bots(6), { id: 'x', pending: false, machine: 'srv' }];
+    expect(layout({ bots: many, mode: 'handle', screenH: H, screenW: W }).w).toBe(islandWidth(7));
   });
   it('no sessions: the mascot alone, no separator room', () => {
     expect(layout({ bots: [], mode: 'handle', screenH: H, screenW: W })).toMatchObject({ w: 48, h: 38, slots: [] });

@@ -1,7 +1,9 @@
 import { parseServerMessage, type ClientMessage, type ServerMessage } from '@ledge/protocol';
+import type { Fleet } from './machines';
 
 export type DaemonStatus = 'connecting' | 'open' | 'unreachable';
 export interface DaemonClient {
+  fleet?: Fleet;
   connect(): void; close(): void; send(msg: ClientMessage): void; status(): DaemonStatus;
   onMessage(fn: (m: ServerMessage) => void): () => void; onStatus(fn: (s: DaemonStatus) => void): () => void;
 }
@@ -19,8 +21,8 @@ export function createDaemonClient(opts: { url: string; WebSocketImpl?: WsCtor; 
     if (closed) return;
     setStatus(status === 'open' ? 'connecting' : status);
     const sock = new Ws(opts.url); ws = sock;
-    sock.onopen = () => { backoff = min; setStatus('open'); };
-    sock.onmessage = ev => { try { const m = parseServerMessage(JSON.parse(String(ev.data))); msgFns.forEach(f => f(m)); } catch { /* ignore malformed */ } };
+    sock.onopen = () => { if (ws !== sock) return; setStatus('open'); };
+    sock.onmessage = ev => { if (ws !== sock) return; try { const m = parseServerMessage(JSON.parse(String(ev.data))); if (m.type === 'snapshot') backoff = min; msgFns.forEach(f => f(m)); } catch { /* ignore malformed */ } };
     sock.onerror = () => { /* onclose follows */ };
     sock.onclose = () => { if (ws !== sock) return; ws = null; setStatus('unreachable'); schedule(); };
   }

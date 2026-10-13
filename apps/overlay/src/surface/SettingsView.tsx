@@ -14,8 +14,12 @@ import { TOOLS } from '../defaultTool';
 import { toolName, duration } from '../format';
 import { compareVersions } from '../update/semver';
 import type { DaemonInfo, Tool } from '@ledge/protocol';
+import { MachineSettings } from './MachineSettings';
+import type { MachineConfig, MachineState, ProbeResult } from '../daemon/machines';
 
 export interface SettingsViewProps {
+  /** The Machines tab (absent: no tab): the machines, how to change them, test an SSH alias and reconnect one now. */
+  machines?: MachineState[]; onMachines?: (config: MachineConfig[]) => void; onProbe?: (ssh: string) => Promise<ProbeResult>; onRetry?: (id: string) => void;
   visible: boolean; theme: 'dark' | 'light'; dnd: boolean;
   /** When the layer's fade-in starts, in ms (see `enterDelay` in motion). */
   enterDelay?: number;
@@ -113,7 +117,7 @@ function AccentRow({ value, onChange }: { value: string | null; onChange?: (hex:
 }
 
 /** The settings sections, one tab each; the last one opened is remembered. */
-export const SETTINGS_TABS = ['display', 'notifications', 'sounds', 'about'] as const;
+export const SETTINGS_TABS = ['display', 'machines', 'notifications', 'sounds', 'about'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 const TAB_KEY = 'ledge.settings.tab';
 const isTab = (v: unknown): v is SettingsTab => (SETTINGS_TABS as readonly unknown[]).includes(v);
@@ -139,11 +143,12 @@ export function SettingsView(p: SettingsViewProps) {
   const chosen = resolveMonitor(choice, monitors);
   const chosenValue = choice !== null && !monitors.some(m => m.id === choice) ? choice : chosen && !chosen.primary ? chosen.id : 'primary';
   const [storedTab, setTab] = useState<SettingsTab>(loadSettingsTab);
-  const tab: SettingsTab = storedTab === 'about' && !p.about ? 'display' : storedTab;
+  const fleet = !!(p.machines && p.onMachines);
+  const tab: SettingsTab = (storedTab === 'about' && !p.about) || (storedTab === 'machines' && !fleet) ? 'display' : storedTab;
   const chooseTab = (next: SettingsTab) => { setTab(next); saveSettingsTab(next); };
-  const tabLabel = { display: t.settings.tabDisplay, notifications: t.settings.tabNotifications, sounds: t.settings.tabSounds, about: t.settings.tabAbout } as const;
+  const tabLabel = { display: t.settings.tabDisplay, machines: t.machines.title, notifications: t.settings.tabNotifications, sounds: t.settings.tabSounds, about: t.settings.tabAbout } as const;
   const about = p.about;
-  const tabs = SETTINGS_TABS.filter(v => v !== 'about' || about);
+  const tabs = SETTINGS_TABS.filter(v => (v !== 'about' || about) && (v !== 'machines' || fleet));
   const { tabId, panelId } = tabIds('ledge-settings', tab);
   return (
     <div data-layer="settings" data-delay={enterDelay} inert={!p.visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: p.visible ? 1 : 0, pointerEvents: p.visible ? 'auto' : 'none', transition: transition([['opacity', p.visible ? 'fadeIn' : 'fadeOut', p.visible ? enterDelay : 0]]) }}>
@@ -182,6 +187,7 @@ export function SettingsView(p: SettingsViewProps) {
               <Switch label={t.settings.reduced} hint={t.settings.reducedHint} checked={p.reduced} onChange={p.onReduced} />
               {p.osReduced && !p.reduced && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', padding: '0 0 8px' }}>{t.settings.osReduced}</span>}
             </>}
+            {tab === 'machines' && p.machines && p.onMachines && <MachineSettings machines={p.machines} onChange={p.onMachines} onProbe={p.onProbe} onRetry={p.onRetry} />}
             {tab === 'notifications' && <>
               <Row><Switch label={t.settings.dnd} hint={t.settings.dndHint} checked={p.dnd} onChange={on => { if (on !== p.dnd) p.onToggleDnd(); }} /></Row>
               <Segmented<FinishedNotify> name="ledge-finished" label={t.settings.finished} hint={t.settings.finishedHint} value={p.finished} onChange={p.onFinished}

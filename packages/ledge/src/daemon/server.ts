@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { PROTOCOL_PORT, SshAliasSchema, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
@@ -18,6 +18,9 @@ import { paths } from '../paths.js';
 import { readDocument } from './documents.js';
 import { createRelay } from './relay.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
+import { createRouter } from '../chat/routing.js';
+import { serveSsh } from '../transport/ssh.js';
+import { MAX_FRAME } from '../transport/frames.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -66,7 +69,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater> }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -74,10 +77,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now });
+  const router = createRouter({ env: agentEnv });
   const wss = new WebSocketServer({
-    host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT,
+    host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT, maxPayload: MAX_FRAME,
     verifyClient: ({ req }: { req: IncomingMessage }) => {
-      const ok = originAllowed(req.headers.origin);
+      const path = req.url ?? '/';
+      const ok = originAllowed(req.headers.origin) && (path === '/' || (path.startsWith('/ssh/') && SshAliasSchema.safeParse(path.slice(5)).success));
       if (!ok) log(`refused a connection from origin ${String(req.headers.origin)}`);
       return ok;
     }
@@ -86,7 +91,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const port = (wss.address() as { port: number }).port;
 
   const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
-  const broadcast = (msg: ServerMessage) => { for (const c of wss.clients) send(c, msg); };
+  // Remote peers must never receive local snapshots, sessions, previews or chat broadcasts.
+  const localClients = new Set<WebSocket>();
+  const remoteClients = new Set<WebSocket>();
+  const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); };
   const relay = createRelay({ chat, store, replyTo, broadcast, now });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
@@ -102,7 +110,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: opts.daemon } : {}) });
+    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true } } : {}) });
     for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
     send(ws, { type: 'chat.history', turns: chat.history() });
   };
@@ -327,15 +335,28 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (!opts.updater) return send(ws, { type: 'update.failed', version: msg.version, reason: 'no-systemd' });
         return opts.updater.update(msg.version, broadcast, m => send(ws, m));
       case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast, msg.tool);
-      case 'chat.cancel': return chat.cancel(msg.qid);
+      case 'chat.route':
+        try { send(ws, { type: 'chat.routed', qid: msg.qid, result: await router.route(msg) }); }
+        catch (e) { send(ws, { type: 'chat.error', qid: msg.qid, message: (e as Error).message }); }
+        return;
+      case 'chat.cancel': router.cancel(msg.qid); return chat.cancel(msg.qid);
       case 'chat.reset': return chat.reset(broadcast);
       case 'session.focus':
         return; // handled by the overlay plan via wt.exe; the daemon only acknowledges
     }
   }
 
-  wss.on('connection', ws => {
+  wss.on('connection', (ws, req) => {
     ws.on('error', e => log(`socket error: ${e.message}`));
+    if (req.url?.startsWith('/ssh/')) {
+      if (remoteClients.size >= 20) { ws.close(1013, 'Too many remote connections'); return; }
+      remoteClients.add(ws); ws.once('close', () => remoteClients.delete(ws));
+      const alias = SshAliasSchema.parse(req.url.slice(5));
+      void agentEnv().then(env => { if (ws.readyState === WebSocket.OPEN) (opts.ssh ?? serveSsh)(ws, alias, { env }); })
+        .catch(e => { send(ws, { type: 'error', message: (e as Error).message }); ws.close(1011); });
+      return;
+    }
+    localClients.add(ws); ws.once('close', () => localClients.delete(ws));
     sendSnapshot(ws);
     ws.on('message', data => {
       let msg: ClientMessage;

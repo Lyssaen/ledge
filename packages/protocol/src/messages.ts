@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { SessionSchema, ToolSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema } from './chat.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
+import { RoutingContextSchema, RouteResultSchema } from './routing.js';
+import { SshAliasSchema } from './ssh.js';
 
 export const PROTOCOL_PORT = 47831;
 
@@ -30,18 +32,19 @@ export type Recent = z.infer<typeof RecentSchema>;
 export const SEMVER = /^\d+\.\d+\.\d+$/;
 /** What the daemon knows of itself (spec 2026-10-12 auto-update §6): its version, how it was installed, whether it runs
  *  as the systemd service, and the command a person runs by hand when it cannot update itself. */
-export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional() });
+export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
 
 export const ServerMessageSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('chat.routed'), qid: z.string(), result: RouteResultSchema }),
   DocumentContentSchema,
   DocumentErrorSchema,
   /** `recents`: the folders of past sessions, most recent first. `launcher`: the command that runs `ledge` inside WSL
    *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. `daemon`: absent
    *  from daemons older than the auto-update. */
-  z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional(), daemon: DaemonInfoSchema.optional() }),
+  z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional(), daemon: DaemonInfoSchema.optional(), sshAlias: SshAliasSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: SessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
@@ -67,6 +70,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('chat.route'), qid: z.string().min(1).max(100), text: z.string().min(1).max(20000), tool: ToolSchema.optional(), context: RoutingContextSchema }),
   DocumentReadSchema,
   /** The overlay starts a session: `cwd` is a WSL path (`~` allowed), `name` a preferred bot name (the daemon picks a
    *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation.

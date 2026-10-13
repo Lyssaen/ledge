@@ -39,6 +39,8 @@ export const TopicSourceSchema = z.enum(['user', 'pane', 'prompt']);
 export type TopicSource = z.infer<typeof TopicSourceSchema>;
 
 export const SessionSchema =z.object({
+  /** Origin is annotated by the overlay, never used as an unqualified session id on the wire. */
+  machineId: z.string().optional(), machineName: z.string().optional(), repoId: z.string().optional(),
   id: z.string().min(1),
   name: z.string().min(1),
   tool: ToolSchema,

@@ -8,6 +8,7 @@ Commence toujours par lire sessions.md. Ne lis que ce que la question demande.
 Réponds dans la langue de la question, en 3 à 10 lignes, en Markdown simple : paragraphes courts, listes à puces, \`code\` pour les commandes, fichiers et branches. Nomme chaque bot par son prénom en gras (**Nova**) la première fois. Dis d'où vient chaque fait et de quand il date quand cela compte. Si une information manque, dis-le au lieu de supposer. Tu n'agis jamais toi-même ; tu peux lui dire quel bot ouvrir. Quand l'utilisateur demande explicitement d'ouvrir ou de lancer une session, et seulement si le dossier est sûr — un chemin absolu lu dans sessions.md ou folders.md, ou donné tel quel par l'utilisateur —, réponds en une ou deux lignes puis termine par un bloc \`\`\`ledge-session contenant {"cwd": "<chemin>", "prompt": "<l'instruction, s'il y en a une>"}. Si plusieurs dossiers conviennent ou aucun, ne mets pas de bloc : cite les candidats et demande lequel. Quand l'utilisateur demande explicitement de dire, demander ou envoyer quelque chose à une session, et seulement si une seule session de sessions.md correspond et qu'elle n'est pas en lecture seule, réponds en une ou deux lignes puis termine par un bloc \`\`\`ledge-relay contenant {\"session\": \"<id>\", \"text\": \"<l'instruction, formulée pour l'agent>\"}. Si plusieurs sessions conviennent ou aucune, ne mets pas de bloc : cite les candidats et demande laquelle.`;
 
 export interface RunOptions {
+  persona?: string;
   question: string; cwd: string; addDirs: string[]; sessionId: string; resume: boolean; env: NodeJS.ProcessEnv;
   /** The executable and its leading arguments (`['claude']` by default; tests pass `[node, fake-claude.mjs]`). */
   bin?: string[]; maxTurns?: number;
@@ -16,7 +17,7 @@ export interface RunOptions {
 /** `claude -p` headless, restricted to reading (spec §5.2); the question goes on stdin, never in argv. */
 export function claudeArgs(o: RunOptions): string[] {
   return ['-p', '--restricted', '--tools', 'Read,Grep,Glob', '--permission-mode', 'dontAsk', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-    '--max-turns', String(o.maxTurns ?? 16), '--append-system-prompt', PERSONA, ...o.addDirs.flatMap(d => ['--add-dir', d]), ...(o.resume ? ['--resume', o.sessionId] : ['--session-id', o.sessionId])];
+    '--max-turns', String(o.maxTurns ?? 16), '--append-system-prompt', o.persona ?? PERSONA, ...o.addDirs.flatMap(d => ['--add-dir', d]), ...(o.resume ? ['--resume', o.sessionId] : ['--session-id', o.sessionId])];
 }
 
 export type ClaudeEvent = { type: 'init'; sessionId: string } | { type: 'tool'; tool: string; path?: string } | { type: 'delta'; text: string } | { type: 'result'; text: string; isError: boolean };

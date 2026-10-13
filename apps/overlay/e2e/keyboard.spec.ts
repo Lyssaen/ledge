@@ -6,7 +6,7 @@ const sessions = () => [
   session('b', { name: 'Pim', project: 'speos-api', state: 'waiting_permission', pending: { kind: 'permission', text: 'Run pnpm test', source: 'hook' } }),
   session('c', { name: 'Ada', project: 'ledge-docs' })
 ];
-const row = (page: import('@playwright/test').Page, id: string) => page.locator(`[data-row-id="${id}"] [data-row]`);
+const row = (page: import('@playwright/test').Page, id: string) => page.locator(`[data-row-id="local:${id}"] [data-row]`);
 
 test('Ctrl+Alt+L opens the list on the oldest ask; J/K move, Y approves, Enter opens', async ({ page }) => {
   const d = await fakeDaemon(page, sessions());

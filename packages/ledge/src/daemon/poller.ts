@@ -59,7 +59,7 @@ export function startPoller(opts: {
       return;
     }
     // The repository can change under the agent (checkout, new worktree): first sight, then every dead check.
-    if ((deadCheck || !gitSeen.has(s.id)) && s.cwd) { gitSeen.add(s.id); const g = await git(s.cwd); if (g) store.patch(s.id, g); }
+    if ((deadCheck || !gitSeen.has(s.id)) && s.cwd) { gitSeen.add(s.id); const g = await git(s.cwd); if (g) store.patch(s.id, { ...g, repoId: g.repoId }); }
     if (!s.tmuxSession) return;
     if (deadCheck && !(await tmux.hasSession(s.tmuxSession))) {
       store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' });

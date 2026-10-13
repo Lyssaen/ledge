@@ -26,6 +26,7 @@ export type ChatRelay = z.infer<typeof ChatRelaySchema>;
 
 /** One question to Ledge and its answer; `error` set when it could not answer, both absent while it is still reading. */
 export const ChatTurnSchema = z.object({
+  machineId: z.string().optional(), machineName: z.string().optional(), choices: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
   qid: z.string().min(1), question: z.string(), askedAt: z.string().datetime(),
   steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), relay: ChatRelaySchema.optional()
 });
