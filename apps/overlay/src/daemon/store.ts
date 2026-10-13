@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { ChatTurn, DaemonInfo, Recent, ServerMessage, Session } from '@ledge/protocol';
+import type { ChatTurn, DaemonInfo, Recent, ServerMessage, Session, ThreadItem } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 
 /** The daemon's last `error` reply; `seq` tells two identical messages apart. */
@@ -8,6 +8,8 @@ export interface DaemonError { id?: string; message: string; seq: number }
 export interface Launched { id: string; seq: number }
 export interface DaemonState {
   sessions: Session[]; byId: Map<string, Session>; status: DaemonStatus; previews: Map<string, string[]>; lastError: DaemonError | null;
+  /** Native tracking: the threads received so far, by session (asked for when a session opens). */
+  threads: Map<string, ThreadItem[]>;
   /** The folders of past sessions, most recent first (the launch form's suggestions). */
   recents: Recent[];
   /** The command that runs `ledge` inside WSL, from the snapshot; null until known. */
@@ -25,7 +27,7 @@ export interface DaemonState {
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
 export type FolderListing = Omit<Extract<ServerMessage, { type: 'folder.listing' }>, 'type'> & { seq: number };
-const empty = (): DaemonState => ({ sessions: [], byId: new Map(), status: 'connecting', previews: new Map(), lastError: null, recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, lastUpdate: null });
+const empty = (): DaemonState => ({ sessions: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, lastUpdate: null });
 let state: DaemonState = empty();
 const subs = new Set<() => void>();
 const emit = () => subs.forEach(f => f());
@@ -53,19 +55,27 @@ export const daemonStore = {
     if (m.type === 'folder.listing') { const { type: _, ...l } = m; state = { ...state, lastListing: { ...l, seq: (state.lastListing?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'update.progress' || m.type === 'update.failed') { state = { ...state, lastUpdate: { msg: m, seq: (state.lastUpdate?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'recents') { state = { ...state, recents: m.recents }; emit(); return; }
-    const byId = new Map(state.byId); const previews = new Map(state.previews);
+    const byId = new Map(state.byId); const previews = new Map(state.previews); const threads = new Map(state.threads);
     let { recents, launcher, daemon, snapshotSeq } = state;
     switch (m.type) {
       case 'snapshot':
         byId.clear(); for (const s of m.sessions) byId.set(s.id, s); for (const id of previews.keys()) if (!byId.has(id)) previews.delete(id);
         recents = m.recents ?? []; launcher = m.launcher ?? null;
-        daemon = m.daemon ?? null; snapshotSeq += 1;
+        daemon = m.daemon ?? null; snapshotSeq += 1; threads.clear();
         break;
       case 'session.updated': byId.set(m.session.id, m.session); break;
-      case 'session.removed': byId.delete(m.id); previews.delete(m.id); break;
+      case 'session.removed': byId.delete(m.id); previews.delete(m.id); threads.delete(m.id); break;
       case 'session.preview': previews.set(m.id, m.lines); break;
+      case 'session.thread': threads.set(m.id, m.items); break;
+      case 'session.thread.item': {
+        const cur = threads.get(m.id);
+        if (!cur) break;
+        const at = cur.findIndex(i => i.id === m.item.id);
+        threads.set(m.id, at >= 0 ? cur.map((i, k) => (k === at ? m.item : i)) : [...cur, m.item]);
+        break;
+      }
     }
-    state = { ...state, byId, previews, sessions: sorted(byId), recents, launcher, daemon, snapshotSeq }; emit();
+    state = { ...state, byId, previews, threads, sessions: sorted(byId), recents, launcher, daemon, snapshotSeq }; emit();
   }
 };
 

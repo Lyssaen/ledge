@@ -102,7 +102,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
-  const { sessions: daemonSessions, byId, status, previews, lastError, recents, launcher, lastLaunched, lastListing, chat, chatLive } = useDaemon();
+  const { sessions: daemonSessions, byId, status, previews, threads, lastError, recents, launcher, lastLaunched, lastListing, chat, chatLive } = useDaemon();
   const machines = useMachines(client);
   const launchMachine = client.fleet?.selected();
   const chosenMachine = machines.find(m => m.id === launchMachine);
@@ -550,6 +550,11 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const chatOffline = status !== 'open' ? t.offline : null;
   const bubblePaused = st.hovering || st.focusWithin || st.hidden || st.ack !== null;
   const send = (m: Parameters<DaemonClient['send']>[0]) => client.send(m);
+  // The thread is not in the snapshot: ask for it when a session opens (or after a reconnection emptied the threads).
+  const threadWanted = st.mode === 'session' ? st.selectedId : null;
+  useEffect(() => {
+    if (threadWanted && !threads.has(threadWanted) && status === 'open') send({ type: 'session.thread', id: threadWanted });
+  }, [threadWanted, threads, status]);
   // Offline or read-only: every send/decision path (buttons and keys alike) is off, with the reason shown.
   const blockedFor = (s: Session | null | undefined): string | null => unreachable ? t.offline : s?.source === 'hook_only' ? t.readOnlyBlocked : s ? null : t.offline;
   const canDecide = (s: Session) => blockedFor(s) === null && !asks.inFlight.has(s.id);
