@@ -1,6 +1,16 @@
-import { generateRegistrationOptions, verifyRegistrationResponse, type PublicKeyCredentialCreationOptionsJSON, type RegistrationResponseJSON } from '@simplewebauthn/server';
+import {
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+  type AuthenticationResponseJSON,
+  type AuthenticatorTransport,
+  type PublicKeyCredentialCreationOptionsJSON,
+  type PublicKeyCredentialRequestOptionsJSON,
+  type RegistrationResponseJSON
+} from '@simplewebauthn/server';
 import { COSEALG, isoBase64URL } from '@simplewebauthn/server/helpers';
-import { RegistrationJsonSchema } from '@ledge/protocol';
+import { AuthenticationJsonSchema, RegistrationJsonSchema } from '@ledge/protocol';
 import type { MobileConfig } from '../mobile/config.js';
 import type { StoredCredential } from './devices.js';
 
@@ -43,4 +53,52 @@ export async function verifyRegistration(cfg: MobileConfig, response: unknown, e
     counter: credential.counter,
     ...(credential.transports?.length ? { transports: credential.transports } : {})
   };
+}
+
+/**
+ * The options the phone passes to `navigator.credentials.get()` for a high-impact decision. The challenge comes
+ * from `ChallengeStore` and is passed as bytes, so the options carry it unchanged (a string would be re-encoded).
+ */
+export function assertionOptions(cfg: MobileConfig, credential: StoredCredential, challenge: string): Promise<PublicKeyCredentialRequestOptionsJSON> {
+  return generateAuthenticationOptions({
+    rpID: cfg.rpID,
+    challenge: isoBase64URL.toBuffer(challenge),
+    allowCredentials: [{ id: credential.id, ...(credential.transports ? { transports: credential.transports as AuthenticatorTransport[] } : {}) }],
+    userVerification: 'required',
+    timeout: 60_000
+  });
+}
+
+/**
+ * Checks an assertion against the requesting device's own key (H4: a passkey synced to another phone is useless
+ * without this device's token), the challenge, the configured origin and its host, with user verification.
+ * Throws on any failure; the caller stores `newCounter`.
+ */
+export async function verifyAssertion(cfg: MobileConfig, credential: StoredCredential, response: unknown, expectedChallenge: string): Promise<{ newCounter: number }> {
+  const parsed = AuthenticationJsonSchema.safeParse(response);
+  if (!parsed.success) throw new Error('malformed assertion');
+  if (parsed.data.id !== credential.id || parsed.data.rawId !== credential.id) throw new Error('assertion from another credential');
+  const v = await verifyAuthenticationResponse({
+    response: parsed.data as unknown as AuthenticationResponseJSON,
+    expectedChallenge,
+    expectedOrigin: cfg.origin,
+    expectedRPID: cfg.rpID,
+    requireUserVerification: true,
+    credential: { id: credential.id, publicKey: isoBase64URL.toBuffer(credential.publicKey), counter: credential.counter }
+  });
+  if (!v.verified) throw new Error('assertion not verified');
+  return { newCounter: v.authenticationInfo.newCounter };
+}
+
+/** The challenge the browser signed, read from `clientDataJSON`; null when the response is not shaped like one. Not a verification. */
+export function challengeOf(response: unknown): string | null {
+  const cdj = (response as { response?: { clientDataJSON?: unknown } } | null)?.response?.clientDataJSON;
+  if (typeof cdj !== 'string') return null;
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(cdj, 'base64url').toString('utf8'));
+    const challenge = (parsed as { challenge?: unknown } | null)?.challenge;
+    return typeof challenge === 'string' ? challenge : null;
+  } catch {
+    return null;
+  }
 }
