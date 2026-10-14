@@ -50,7 +50,24 @@ describe('keepStale', () => {
   });
   it('the peer coming back replaces the stale snapshot and drops a session gone meanwhile', () => {
     const { server, got } = setup();
-    server.set('unreachable'); server.set('open'); server.emit(snap(['r2', 'r3'], remote.ssh));
+    server.set('unreachable');
+    expect(lastSnapshot(got)!.sessions.map(x => [x.id, x.offline])).toContainEqual(['server:r1', true]);
+    server.set('open'); server.emit(snap(['r2', 'r3'], remote.ssh));
     expect(lastSnapshot(got)!.sessions.map(x => [x.id, x.offline])).toEqual([['local:a', undefined], ['server:r2', undefined], ['server:r3', undefined]]);
+  });
+  it('stays frozen while the peer is reconnected but has not sent its new snapshot', () => {
+    const { api, server, got } = setup();
+    server.set('unreachable'); server.set('open');
+    expect(lastSnapshot(got)!.sessions.map(x => [x.id, x.offline])).toEqual([['local:a', undefined], ['server:r1', true], ['server:r2', true]]);
+    expect(api.fleet!.sendTo('server', { type: 'snapshot.request' })).toBe(false);
+    server.emit(snap(['r1'], remote.ssh));
+    expect(lastSnapshot(got)!.sessions.map(x => [x.id, x.offline])).toEqual([['local:a', undefined], ['server:r1', undefined]]);
+  });
+  it('re-emits a preview received before the fall, qualified, for the stale peer', () => {
+    const { server, got } = setup();
+    server.emit({ type: 'session.preview', id: 'r1', lines: ['hello'] });
+    const before = got.length;
+    server.set('unreachable');
+    expect(got.slice(before).filter(m => m.type === 'session.preview')).toEqual([{ type: 'session.preview', id: 'server:r1', lines: ['hello'] }]);
   });
 });
