@@ -19,3 +19,12 @@ describe('groupSessions', () => {
   it('displays interleaved repositories group by group', () => { expect(displayOrder([a, c, b]).map(s => s.id)).toEqual(['a', 'b', 'c']); });
   it('shortens the home folder', () => { expect(tildePath('/home/u/ledge')).toBe('~/ledge'); expect(tildePath('/srv/x')).toBe('/srv/x'); });
 });
+
+describe('groupSessions across hosts', () => {
+  it('groups matching Git origins across hosts but not unrelated same-name folders', () => {
+    const a = fakeSession('a', { machineId: 'local', repoId: 'github.com/org/repo' });
+    const b = fakeSession('b', { machineId: 'server', cwd: '/other/repo', repoId: a.repoId });
+    expect(groupSessions([a, b])).toHaveLength(1);
+    expect(groupSessions([{ ...a, repoId: undefined }, { ...b, cwd: a.cwd, repoId: undefined }])).toHaveLength(2);
+  });
+});

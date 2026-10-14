@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
-import { createFleetClient } from '../src/daemon/fleet';
-import type { DaemonClient, DaemonStatus } from '../src/daemon/client';
-import { LOCAL_MACHINE, parseMachines, probeMachine, sshProblem } from '../src/daemon/machines';
-import { groupSessions } from '../src/surface/groups';
+import { createFleetClient } from '../src/fleet';
+import type { DaemonClient, DaemonStatus } from '../src/client';
+import { LOCAL_MACHINE, parseMachines, probeMachine, sshProblem } from '../src/machines';
 import { fakeSession } from './mockDaemon';
 
 const remote = { id: 'server', label: 'dev-server', url: 'ws://127.0.0.1:47832', ssh: 'dev-server' };
@@ -26,6 +25,13 @@ function setup() {
 const lastSnapshot = (got: ServerMessage[]) => got.filter(m => m.type === 'snapshot').at(-1)!;
 const lastHistory = (got: ServerMessage[]) => got.filter(m => m.type === 'chat.history').at(-1)!.turns;
 beforeEach(() => localStorage.clear());
+
+it('keeps its history and machines under the given prefix', () => {
+  const local = peer();
+  createFleetClient([LOCAL_MACHINE], () => local.client, { prefix: 'desktop' }).fleet!.configure([LOCAL_MACHINE, remote]);
+  expect(localStorage.getItem('desktop.machines')).toContain('dev-server');
+  expect(localStorage.getItem('ledge.machines')).toBeNull();
+});
 
 describe('multi-machine connections', () => {
   it('never mistakes an old local daemon answering an SSH URL for the remote host', () => {
@@ -82,12 +88,6 @@ describe('multi-machine connections', () => {
     expect(() => parseMachines([LOCAL_MACHINE, { ...remote, ssh: '-oProxyCommand=evil' }])).toThrow();
     expect(() => parseMachines([LOCAL_MACHINE, remote, { ...remote, id: 'duplicate-alias' }])).toThrow();
     expect(parseMachines([LOCAL_MACHINE, remote])).toHaveLength(2);
-  });
-  it('groups matching Git origins across hosts but not unrelated same-name folders', () => {
-    const a = fakeSession('a', { machineId: 'local', repoId: 'github.com/org/repo' });
-    const b = fakeSession('b', { machineId: 'server', cwd: '/other/repo', repoId: a.repoId });
-    expect(groupSessions([a, b])).toHaveLength(1);
-    expect(groupSessions([{ ...a, repoId: undefined }, { ...b, cwd: a.cwd, repoId: undefined }])).toHaveLength(2);
   });
 });
 

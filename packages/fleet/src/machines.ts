@@ -48,8 +48,8 @@ export function machineUrl(machine: MachineConfig, local: MachineConfig): string
   if (machine.ssh) url.pathname = `/ssh/${machine.ssh}`;
   return url.toString();
 }
-export function loadMachines(): MachineConfig[] {
-  try { return parseMachines(JSON.parse(localStorage.getItem('ledge.machines') ?? 'null')); } catch { return [LOCAL_MACHINE]; }
+export function loadMachines(prefix = 'ledge'): MachineConfig[] {
+  try { return parseMachines(JSON.parse(localStorage.getItem(`${prefix}.machines`) ?? 'null')); } catch { return [LOCAL_MACHINE]; }
 }
 type ProbeSocket = { close(): void; onclose: null | (() => void); onerror: null | (() => void); onmessage: null | ((ev: { data: unknown }) => void) };
 /** Opens `/ssh/<alias>` on the local daemon once and settles on the first snapshot, error or close. */
