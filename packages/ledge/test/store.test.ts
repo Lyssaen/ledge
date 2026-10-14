@@ -50,6 +50,12 @@ describe('Store', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/journal unreadable/);
   });
+  it('classifies requests of an older journal that have an id but no risk', async () => {
+    const pending = { id: 'p1-x', version: 1, kind: 'permission', tool: 'Bash', text: 'git push', source: 'hook' };
+    writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ sessions: [{ ...mk('old', 'waiting_permission'), pending }] }));
+    const s = new Store(); await s.load();
+    expect(s.get('old')!.pending).toMatchObject({ risk: 'high', riskReason: 'pushes' });
+  });
   it('drops journal entries that fail the schema instead of crashing', async () => {
     writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ sessions: [mk('ok'), { id: 'bad', state: 'sleeping' }] }));
     const s = new Store(); await s.load();

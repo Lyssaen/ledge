@@ -79,3 +79,17 @@ describe('Store.load identity', () => {
     expect(loaded.pendingSeq).toBe(1);
   });
 });
+
+describe('risk in request identity', () => {
+  it('classifies a new pending and reclassifies on a version bump', () => {
+    const a = reduce(base({ tool: 'codex' }), ev('PanePrompt', { kind: 'permission', text: 'ls', source: 'pane' }));
+    expect(a.pending).toMatchObject({ risk: 'high', riskReason: 'unknown' });
+    const b = reduce(a, ev('PermissionRequest', { tool: 'Bash', text: 'ls' }));
+    expect(b.pending).toMatchObject({ id: a.pending!.id, version: 2, risk: 'low', riskReason: 'read_only_command' });
+  });
+  it('keeps the risk when the same request is seen again', () => {
+    const a = reduce(base(), ev('PermissionRequest', { tool: 'Bash', text: 'git push' }));
+    const b = reduce(a, ev('PermissionRequest', { tool: 'Bash', text: 'git push', at: T2 }));
+    expect(b.pending).toMatchObject({ version: 1, risk: 'high', riskReason: 'pushes' });
+  });
+});

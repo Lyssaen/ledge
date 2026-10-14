@@ -2,9 +2,14 @@ import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { RecentSchema, SessionSchema, type Recent, type Session, type SessionEvent } from '@ledge/protocol';
 import { reduce } from './state.js';
-import { withIdentity } from './identify.js';
+import { withIdentity, withRisk } from './identify.js';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
+
+/** A journal from before the risk classifier has requests without a risk: they are classified on load. */
+function classified(s: Session): Session {
+  return s.pending && !s.pending.risk ? { ...s, pending: withRisk(s.pending, s.cwd) } : s;
+}
 
 export type StoreChange = { type: 'updated'; session: Session } | { type: 'removed'; id: string } | { type: 'recents'; recents: Recent[] };
 
@@ -33,7 +38,7 @@ export class Store {
     if (!Array.isArray(list)) { log('journal unreadable, starting empty: no sessions array'); return; }
     for (const item of list) {
       const r = SessionSchema.safeParse(item);
-      if (r.success) this.sessions.set(r.data.id, withIdentity(r.data, r.data.lastActivityAt));
+      if (r.success) this.sessions.set(r.data.id, classified(withIdentity(r.data, r.data.lastActivityAt)));
       else log(`journal entry dropped: ${r.error.issues[0]?.message ?? 'invalid'}`);
     }
     // Journals from before the launch form have no recents: they simply start empty.
