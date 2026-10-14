@@ -51,9 +51,10 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 textarea::placeholder, .ledge-field::placeholder { color: var(--muted-foreground); }
 /* The launch form's recent folders: rows that light up on hover like list rows. */
 .ledge-recent:hover { background: var(--sidebar-accent) !important; }
-details.ledge-terminal > summary { list-style: none; cursor: pointer; }
-details.ledge-terminal > summary::-webkit-details-marker { display: none; }
-details.ledge-terminal[open] > summary [data-caret] { transform: rotate(90deg); }
+/* The session's terminal strip (src/surface/TerminalBand.tsx): its dot breathes while the agent works. */
+.ledge-band:hover { filter: brightness(1.15); }
+.ledge-band-live { animation: ledge-pulse 1.6s ease-in-out infinite }
+@media (prefers-reduced-motion: reduce) { .ledge-band-live { animation: none } }
 /* A row's remove button shows on hover or keyboard focus of the row only (it stays in the tab order). */
 .ledge-row .ledge-row-dismiss { opacity: 0; transition: opacity 120ms ease; }
 .ledge-row:hover .ledge-row-dismiss, .ledge-row:focus-within .ledge-row-dismiss { opacity: 1; }

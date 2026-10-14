@@ -107,7 +107,8 @@ describe('<SessionView>', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Deny' })); expect(onDecide).toHaveBeenCalledWith('deny');
     fireEvent.click(screen.getByRole('button', { name: 'Approve' })); expect(onDecide).toHaveBeenLastCalledWith('accept');
     expect(screen.getByRole('checkbox', { name: 'Always for this session' })).toBeDisabled();
-    expect(screen.getByText('Do you want to proceed?')).toBeInTheDocument();
+    // The terminal strip says what waits; its lines show on hover or in reading mode.
+    expect(document.querySelector('[data-terminal-band]')).toHaveAttribute('data-tone', 'approval');
   });
   it('a plan request shows the whole plan, rendered and scrollable, above its decision', () => {
     const body = '# Add Red Banner\n\n1. Create banner.html with a red banner.\n2. Check it renders red.\n\n## Verification\n\n- banner.html exists';
@@ -226,25 +227,25 @@ describe('<SessionView>', () => {
     const idle = fakeSession('c', { state: 'idle' });
     it('renders the lines as received, one per row, in a monospace wrapping block', () => {
       const lines = ['❯ list the files', '', '● Bash(ls src)', '  ⎿  client.ts'];
-      const { container } = render(<SessionView {...base} session={idle} preview={lines} />);
+      const { container } = render(<SessionView {...base} session={idle} preview={lines} reading />);
       const pre = container.querySelector('pre[data-terminal]') as HTMLElement;
       expect([...pre.children].map(c => c.textContent)).toEqual(['❯ list the files', ' ', '● Bash(ls src)', '  ⎿  client.ts']);
       expect(pre).toHaveClass('mono'); expect(pre).toHaveClass('ledge-scroll');
       expect(pre).toHaveStyle({ whiteSpace: 'pre-wrap' });
     });
     it('follows the latest line on update, but not while the user has scrolled up to read', () => {
-      const { container, rerender } = render(<SessionView {...base} session={idle} preview={['a']} />);
+      const { container, rerender } = render(<SessionView {...base} session={idle} preview={['a']} reading />);
       const pre = container.querySelector('pre[data-terminal]') as HTMLElement;
       const g = geometry(pre, 600);
-      rerender(<SessionView {...base} session={idle} preview={['a', 'b']} />);
+      rerender(<SessionView {...base} session={idle} preview={['a', 'b']} reading />);
       expect(g.top).toBe(600);
       pre.scrollTop = 100; fireEvent.scroll(pre);
       g.height = 700;
-      rerender(<SessionView {...base} session={idle} preview={['a', 'b', 'c']} />);
+      rerender(<SessionView {...base} session={idle} preview={['a', 'b', 'c']} reading />);
       expect(g.top).toBe(100);
       pre.scrollTop = 500; fireEvent.scroll(pre);
       g.height = 800;
-      rerender(<SessionView {...base} session={idle} preview={['a', 'b', 'c', 'd']} />);
+      rerender(<SessionView {...base} session={idle} preview={['a', 'b', 'c', 'd']} reading />);
       expect(g.top).toBe(800);
     });
     it('the conversation follows its end on each new item, but not while the user has scrolled up to read', () => {
@@ -265,15 +266,39 @@ describe('<SessionView>', () => {
       rerender(<SessionView {...base} session={working} thread={[msg(1), msg(2), msg(3), msg(4)]} />);
       expect(g.top).toBe(800);
     });
-    it('opening the collapsed preview scrolls it to its last line', () => {
-      const { container } = render(<SessionView {...base} session={perm} />);
-      const details = container.querySelector('details.ledge-terminal') as HTMLDetailsElement;
-      expect(details.open).toBe(false);
+    it('compact view: a strip with the latest line, the last 8 lines on hover, reading mode on click', () => {
+      const onToggleReading = vi.fn();
+      const lines = ['❯ run the tests', '', ...Array.from({ length: 9 }, (_, i) => `  ✓ suite ${i + 1}`), '', '❯'];
+      const { container } = render(<SessionView {...base} session={fakeSession('w', { state: 'working' })} preview={lines} onToggleReading={onToggleReading} />);
+      const band = container.querySelector('[data-terminal-band]') as HTMLElement;
+      expect(band).toHaveAttribute('data-tone', 'working');
+      expect(band.querySelector('[data-band-text]')).toHaveTextContent(/^✓ suite 9$/); // the bare prompt and blanks are skipped
+      expect(container.querySelector('[data-terminal-peek]')).toBeNull();
+      fireEvent.mouseEnter(band);
+      const peek = container.querySelector('[data-terminal-peek]') as HTMLElement;
+      expect(peek).toHaveTextContent('suite 4'); expect(peek).not.toHaveTextContent('suite 3');
+      fireEvent.mouseLeave(band);
+      expect(container.querySelector('[data-terminal-peek]')).toBeNull();
+      fireEvent.click(band);
+      expect(onToggleReading).toHaveBeenCalledTimes(1);
+    });
+    it('the strip takes the state: an approval names the command, an error reads red', () => {
+      const { container, rerender } = render(<SessionView {...base} session={perm} />);
+      const band = () => container.querySelector('[data-terminal-band]') as HTMLElement;
+      expect(band()).toHaveAttribute('data-tone', 'approval');
+      expect(band().querySelector('[data-band-text]')).toHaveTextContent(`Waiting for your approval · ${perm.pending!.text.split('\n')[0]}`);
+      rerender(<SessionView {...base} session={fakeSession('e', { state: 'error' })} />);
+      expect(band()).toHaveAttribute('data-tone', 'error');
+    });
+    it('reading mode: the terminal alongside, folded into a rail and reopened on its last line', () => {
+      const { container } = render(<SessionView {...base} session={perm} reading />);
+      expect(container.querySelector('[data-terminal-band]')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Fold the terminal' }));
+      expect(container.querySelector('pre[data-terminal]')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Reopen the terminal' }));
       const pre = container.querySelector('pre[data-terminal]') as HTMLElement;
-      const g = geometry(pre, 900);
-      pre.scrollTop = 0; fireEvent.scroll(pre);
-      details.open = true; fireEvent(details, new Event('toggle'));
-      expect(g.top).toBe(900);
+      expect(pre).toHaveTextContent('Do you want to proceed?');
+      expect(container.querySelector('[data-terminal-rail]')).toBeNull();
     });
   });
   describe('remove from list', () => {

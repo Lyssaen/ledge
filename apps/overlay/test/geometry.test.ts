@@ -95,8 +95,8 @@ describe('island geometry', () => {
     const w = (mode: 'session' | 'reader', screenW: number) => layout({ bots: [], mode, screenH: H, screenW, reading: true, readerExpanded: true }).w;
     expect(w('session', 1920)).toBe(1152); expect(w('reader', 1920)).toBe(1152);
     expect(w('session', 2560)).toBe(1200); expect(w('reader', 3840)).toBe(1200);
-    expect(w('session', 1280)).toBe(768); expect(w('reader', 1280)).toBe(800);
-    expect(w('session', 800)).toBe(560);
+    expect(w('session', 1280)).toBe(800); expect(w('reader', 1280)).toBe(800);
+    expect(w('session', 800)).toBe(776); // the terminal sits alongside: as wide as the screen allows
     expect(w('session', 500)).toBe(480); // never narrower than the session view itself
     expect(layout({ bots: [], mode: 'session', screenH: H, screenW: 1920, sessionH: 500 }).w).toBe(SIZES.sessionW);
   });

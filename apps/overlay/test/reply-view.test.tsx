@@ -166,11 +166,13 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
     expect(container.querySelector('[data-reply-raw]')).toBeNull();
     expect(container.querySelectorAll('[data-kicker]').length).toBeGreaterThan(0);
   });
-  it('the terminal preview folds under the reply, and still opens in reading mode', () => {
+  it('the terminal is a strip under the reply, and shows whole alongside it in reading mode', () => {
     const { container, rerender } = render(<SessionView {...base} session={idle} />);
-    expect((container.querySelector('details.ledge-terminal') as HTMLDetailsElement).open).toBe(false);
+    expect(container.querySelector('[data-terminal-band]')).toHaveAttribute('data-tone', 'idle');
+    expect(container.querySelector('pre[data-terminal]')).toBeNull();
     rerender(<SessionView {...base} session={idle} reading />);
-    expect((container.querySelector('details.ledge-terminal') as HTMLDetailsElement).open).toBe(true);
+    expect(container.querySelector('[data-terminal-band]')).toBeNull();
+    expect(container.querySelector('pre[data-terminal]')).toHaveTextContent('112 passed');
   });
   it('a plain reply reads as prose under the default title; no reply keeps the view as before', () => {
     const plain = fakeSession('p', { state: 'idle', lastReply: { at, text: 'I created the folder as asked.' } });
@@ -180,7 +182,7 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
     expect(screen.getByText('Enter sends to the terminal as typed')).toBeInTheDocument();
     rerender(<SessionView {...base} session={fakeSession('n', { state: 'idle' })} />);
     expect(container.querySelector('[data-reply-card]')).toBeNull();
-    expect((container.querySelector('details.ledge-terminal') as HTMLDetailsElement).open).toBe(true);
+    expect(container.querySelector('[data-terminal-band]')).toHaveTextContent('Your turn · ⎿ 112 passed');
   });
   it('is not shown while something is asked or the agent works; shown for an ended session under "Session"', () => {
     const asked = { ...idle, state: 'waiting_permission' as const, pending: { kind: 'permission' as const, text: 'npm test', source: 'hook' as const } };

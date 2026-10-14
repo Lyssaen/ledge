@@ -168,6 +168,8 @@ for (const theme of ['dark', 'light'] as const) {
         await ready(page, 4);
         d.preview('pim', conversation);
         await openSession(page, 'landing-page, Pim, ouvrir');
+        // Reading mode: the terminal alongside the thread.
+        await layer(page, 'session').locator('[data-terminal-band]').click();
         const pre = layer(page, 'session').locator('pre[data-terminal]');
         await expect(pre).toBeVisible();
         await expect(pre).toContainText('Brewed for 42s');

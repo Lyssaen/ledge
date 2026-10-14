@@ -31,7 +31,7 @@ import { useSounds } from '../sounds/useSounds';
 import { createSilentPlayer, type SoundPlayer } from '../sounds/player';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { SessionList, EXPANDED_ROW_H, ASK_H, NOTICE_GAP, type ListNotice } from './SessionList';
-import { SessionView, measureSessionH, SESSION_HEADER_H } from './SessionView';
+import { SessionView, measureSessionH, SESSION_HEADER_H, READING_TERMINAL_H } from './SessionView';
 import { useI18n, type Lang } from '../i18n/lang';
 import { transition, MOTION, ms, enterDelay } from '../motion';
 import { focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, onTrayAction, focusOverlay, releaseFocus, isTauri, onForegroundCovered, setHotZone, openUrl } from '../tauri/bridge';
@@ -352,7 +352,10 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const helperRef = useRef<HTMLDivElement>(null);
   const helperContentH = useMeasuredHeight(helperRef, st.mode === 'helper', ps);
   const helperH = helperContentH ? helperContentH + SURFACE_CHROME_Y : 480;
-  const sessionH = !selected ? 480 : contentH ? SESSION_HEADER_H + contentH + (selected.source === 'hook_only' ? 0 : replyH) + SURFACE_CHROME_Y : measureSessionH(selected, st.reading);
+  // The bottom area holds the terminal strip and, unless read-only, the reply field. In reading mode the terminal sits
+  // alongside the thread: the view is at least tall enough for its lines.
+  const fitH = !selected ? 480 : contentH ? SESSION_HEADER_H + contentH + replyH + SURFACE_CHROME_Y : measureSessionH(selected, st.reading);
+  const sessionH = st.reading && shownPreview.length ? Math.max(fitH, SESSION_HEADER_H + READING_TERMINAL_H + SURFACE_CHROME_Y) : fitH;
   // Settings and help size themselves to their content too (their header is the 56 px DetailHeader).
   const settingsRef = useRef<HTMLDivElement>(null); const helpRef = useRef<HTMLDivElement>(null);
   const settingsH = useMeasuredHeight(settingsRef, st.mode === 'settings', ps);
@@ -634,7 +637,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       if (st.mode === 'session') { surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="session"] [data-reply]')?.focus(); return; }
       if (focused) { replyAfterOpen.current = true; openRow(focused.id); }
     },
-    onToggleDnd, onHelp: () => dispatch({ type: st.mode === 'help' ? 'back' : 'help' }), onTerminal: focusTab, onChooseOption: chooseOption
+    onToggleDnd, onHelp: () => dispatch({ type: st.mode === 'help' ? 'back' : 'help' }), onTerminal: focusTab, onChooseOption: chooseOption,
+    onToggleReading: () => dispatch({ type: 'reading', on: !st.reading })
   });
   const motion = growing ? MOTION.grow : MOTION.shrink;
   const delay = growing ? 0 : MOTION.shrink.delayMs;

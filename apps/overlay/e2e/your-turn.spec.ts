@@ -11,10 +11,10 @@ test('an idle session shows its last reply read like a plan; a chip fills the fi
   await expect(view.locator('[data-reply-title]')).toHaveText('Three reducer findings fixed, transitions covered by a table test');
   await expect(view.locator('[data-kicker]')).toHaveText(['What I did', 'Verified', 'Open question', 'Left to do']);
   await expect(view.locator('[data-item="done"]')).toHaveCount(6);
-  // The terminal preview folds under the reply.
+  // The terminal is a strip under the reply: its latest line, the reply keeps the room.
   d.preview('bix', ['● Bash(pnpm test --filter ledge)', '  ⎿  112 passed']);
-  await expect(view.locator('details.ledge-terminal')).toBeVisible();
-  await expect(view.locator('details.ledge-terminal')).not.toHaveAttribute('open');
+  await expect(view.locator('[data-terminal-band]')).toContainText('112 passed');
+  await expect(view.locator('pre[data-terminal]')).toHaveCount(0);
   const q = view.getByRole('group', { name: 'Question 1' });
   await q.getByRole('button', { name: 'Start clean' }).click();
   const field = view.getByRole('textbox', { name: 'Reply to Bix' });

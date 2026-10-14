@@ -10,6 +10,8 @@ export interface KeyboardOptions {
   onClose: () => void; onReplyFocus: () => void; onToggleDnd: () => void; onHelp: () => void;
   /** `o`: open the terminal tab of the focused row (list) or of the open session. */
   onTerminal?: (id: string) => void;
+  /** `t` in a session: reading mode, the terminal alongside the thread, and back. */
+  onToggleReading?: () => void;
   /** 1 to 9 in a session whose ask is a question: choose option N. */
   onChooseOption?: (n: number) => void;
   /** `i` in the new-session form: focus its first instruction. */
@@ -64,6 +66,7 @@ export function useKeyboard(o: KeyboardOptions) {
       else if (k === 'y' || k === 'n') { if (focused && isPending(focused)) { if (isYesNo(focused) || (c.mode === 'session' && needsReview(focused))) c.onDecide(focused.id, k === 'y' ? 'accept' : 'deny'); else c.onOpen(focused.id); } }
       else if (k === 'r') c.onReplyFocus();
       else if (k === 'o') { if (focused) c.onTerminal?.(focused.id); }
+      else if (k === 't' && c.mode === 'session') c.onToggleReading?.();
       else if (k === 'd') c.onToggleDnd();
       else if (k === 'Escape') c.onClose();
       else if (list && k === '/') c.onAsk?.();

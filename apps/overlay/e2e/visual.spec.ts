@@ -144,6 +144,8 @@ test('the session content and the terminal preview scroll with thin scrollbars t
   await openSession(page, 'landing-page, Pim, ouvrir');
   d.preview('pim', Array.from({ length: 30 }, (_, i) => `line ${i + 1}`));
   const view = layer(page, 'session');
+  // The terminal shows whole in reading mode, alongside the thread.
+  await view.locator('[data-terminal-band]').click();
   await expect(view.locator('pre')).toContainText('line 30');
   for (const sel of ['[data-scroll]', 'pre']) expect(await view.locator(sel).first().evaluate(el => getComputedStyle(el).scrollbarWidth)).toBe('thin');
   const pre = view.locator('pre');
