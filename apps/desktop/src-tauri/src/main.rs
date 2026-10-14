@@ -34,6 +34,7 @@ fn get_autostart(app: AppHandle) -> Option<bool> {
 }
 #[tauri::command]
 fn set_autostart(app: AppHandle, on: bool) -> Result<Option<bool>, String> {
+    if cfg!(debug_assertions) { return Ok(None); }
     let l = app.autolaunch();
     (if on { l.enable() } else { l.disable() }).map_err(|e| e.to_string())?;
     Ok(l.is_enabled().ok())
@@ -72,7 +73,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, e| match e.id().as_ref() {
             TRAY_QUIT => app.exit(0),
             TRAY_OPEN => show_main(app),
-            id => { let _ = app.emit("ledge://tray", TrayPayload { action: id.to_string() }); }
+            id => { show_main(app); let _ = app.emit("ledge://tray", TrayPayload { action: id.to_string() }); }
         })
         .on_tray_icon_event(|tray, e| {
             if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = e {
