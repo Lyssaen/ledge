@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { ServerMessage } from '@ledge/protocol';
+import type { Machines, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
 import { LOCAL_MACHINE } from '../src/machines';
 import type { DaemonClient, DaemonStatus } from '../src/client';
@@ -13,7 +13,7 @@ function peer() {
 }
 // A remote peer's snapshot must echo its ssh alias, or the fleet rejects it as an old local daemon.
 const snap = (ids: string[], sshAlias?: string): ServerMessage => ({ type: 'snapshot', ...(sshAlias ? { sshAlias } : {}), sessions: ids.map(id => fakeSession(id)), recents: [], daemon: { version: '0.4.0', install: 'npm', systemd: true, routing: true } });
-const machinesMsg = (list: { id: string; label: string; ssh?: string }[]) => ({ type: 'machines', machines: list }) as unknown as ServerMessage;
+const machinesMsg = (machines: Machines): ServerMessage => ({ type: 'machines', machines });
 const setSent = (p: { sent: unknown[] }) => p.sent.filter(m => (m as { type: string }).type === 'machines.set');
 function setup() {
   const local = peer(), server = peer(), extra = peer(); let creates = 0; const made: string[] = [];
@@ -41,6 +41,13 @@ describe('machines from the daemon', () => {
     local.emit(machinesMsg([{ id: 'local', label: 'Local' }, { id: 'server', label: 'dev-server', ssh: 'dev-server' }]));
     expect(api.fleet!.machines().map(m => m.id)).toEqual(['local', 'server']);
     expect(localStorage.getItem('ledge.machines')).toBeNull();
+  });
+  it('what goes to the daemon carries no url', () => {
+    const { api, local } = setup();
+    local.emit(machinesMsg([{ id: 'local', label: 'Local' }]));
+    api.fleet!.configure([LOCAL_MACHINE, remote]);
+    expect(local.sent.at(-1)).toEqual({ type: 'machines.set', machines: [{ id: 'local', label: 'Local' }, { id: 'server', label: 'dev-server', ssh: 'dev-server' }] });
+    expect(JSON.stringify(local.sent.at(-1))).not.toContain('url');
   });
   it('migrates a richer local list once, then clears the local key', () => {
     localStorage.setItem('ledge.machines', JSON.stringify([LOCAL_MACHINE, remote]));

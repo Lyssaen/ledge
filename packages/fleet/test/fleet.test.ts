@@ -91,7 +91,12 @@ describe('multi-machine connections', () => {
     expect(local.sent).toEqual([]); expect(server.sent).toHaveLength(1);
   });
   it('validates loopback connections, aliases and duplicate destinations', () => {
-    expect(() => parseMachines([LOCAL_MACHINE, { ...remote, url: 'ws://example.org:47831' }])).toThrow();
+    // The url is never read: a non-loopback local url is replaced by the pinned one, a remote url is dropped.
+    expect(parseMachines([{ ...LOCAL_MACHINE, url: 'ws://example.org:47831' }])[0]!.url).toBe(LOCAL_MACHINE.url);
+    expect(parseMachines([LOCAL_MACHINE, { ...remote, url: 'ws://example.org:47831' }])[1]!.url).toBeUndefined();
+    expect(parseMachines([{ id: 'local', label: 'Local' }])[0]!.url).toBe(LOCAL_MACHINE.url);
+    expect(() => parseMachines([{ ...LOCAL_MACHINE, ssh: 'x' }])).toThrow();
+    expect(() => parseMachines([LOCAL_MACHINE, { id: 'a', label: 'A' }])).toThrow();
     expect(() => parseMachines([LOCAL_MACHINE, { ...remote, ssh: '-oProxyCommand=evil' }])).toThrow();
     expect(() => parseMachines([LOCAL_MACHINE, remote, { ...remote, id: 'duplicate-alias' }])).toThrow();
     expect(parseMachines([LOCAL_MACHINE, remote])).toHaveLength(2);

@@ -1,12 +1,10 @@
-import { ChatTurnSchema, type ChatTurn, type ClientMessage, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
+import { ChatTurnSchema, type ChatTurn, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
 type Peer = { config: MachineConfig; client: DaemonClient; status: DaemonStatus; fresh: boolean; snapshot: Snapshot | null; previews: Map<string, string[]>; off: (() => void)[]; error?: string; restarting?: boolean };
-type Machine = { id: string; label: string; ssh?: string }; // lot 2 types it in @ledge/protocol
-const isMachinesMessage = (m: unknown): m is { type: 'machines'; machines: Machine[] } => !!m && typeof m === 'object' && (m as { type?: string }).type === 'machines' && Array.isArray((m as { machines?: unknown }).machines);
-const wire = (list: MachineConfig[]): Machine[] => list.map(({ id, label, ssh }) => ({ id, label, ...(ssh ? { ssh } : {}) }));
+const toWire = (list: MachineConfig[]): Machine[] => list.map(({ id, label, ssh }) => ({ id, label, ...(ssh ? { ssh } : {}) }));
 type Binding = { machine: string; raw: string };
 type PendingRoute = { qid: string; text: string; tool?: 'claude' | 'codex' | 'cursor'; coordinator: string };
 
@@ -107,15 +105,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   function receive(p: Peer, m: ServerMessage) {
     const machine = p.config.id;
     // The daemon's machine list is consumed here, never relayed; from anyone else (or with the option off) it is ignored.
-    const wireMsg: unknown = m; // the protocol does not know `machines` until lot 2
-    if (isMachinesMessage(wireMsg)) {
+    if (m.type === 'machines') {
       if (machine !== 'local' || !opts.machinesFromDaemon) return;
-      let next: MachineConfig[]; try { next = parseMachines(wireMsg.machines.map(x => x.id === 'local' ? { ...x, url: configs[0]!.url } : x)); } catch { return; }
+      let next: MachineConfig[]; try { next = parseMachines(m.machines); } catch { return; }
       if (source === 'local') {
         source = 'daemon';
         // First front connected wins: only a daemon list reduced to `local` takes the richer local one, once.
         const mine = loadMachines(prefix);
-        if (next.length === 1 && mine.length > 1) p.client.send({ type: 'machines.set', machines: wire(mine) } as never); // lot 2 types it
+        if (next.length === 1 && mine.length > 1) p.client.send({ type: 'machines.set', machines: toWire(mine) });
         try { localStorage.removeItem(MACHINES_KEY); } catch { /* ignore */ }
       }
       apply(next);
@@ -246,7 +243,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         // The permanent local client is also used by the app updater.
         if (next[0]!.url !== configs[0]!.url) throw new Error('The local daemon URL cannot change');
         // Daemon-sourced: ask the daemon and wait for its broadcast, which `receive` applies.
-        if (source === 'daemon') { peers.get('local')!.client.send({ type: 'machines.set', machines: wire(next) } as never); return; } // lot 2 types it
+        if (source === 'daemon') { peers.get('local')!.client.send({ type: 'machines.set', machines: toWire(next) }); return; }
         localStorage.setItem(MACHINES_KEY, JSON.stringify(next));
         apply(next);
       },
