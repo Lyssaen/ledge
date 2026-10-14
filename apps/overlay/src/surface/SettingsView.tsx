@@ -147,8 +147,9 @@ export function SettingsView(p: SettingsViewProps) {
   const tabLabel = { display: t.settings.tabDisplay, notifications: t.settings.tabNotifications, sounds: t.settings.tabSounds, mobile: t.settings.tabMobile, about: t.settings.tabAbout } as const;
   const about = p.about;
   const tabs = SETTINGS_TABS.filter(v => v === 'about' ? about : v === 'mobile' ? p.mobile : true);
-  const onMobileOpen = p.mobile?.onOpen; const mobileShown = tab === 'mobile' && p.visible;
-  useEffect(() => { if (mobileShown) onMobileOpen?.(); }, [mobileShown]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onMobileOpen = p.mobile?.onOpen; const mobileShown = tab === 'mobile' && p.visible; const mobileOnline = p.mobile?.online ?? true;
+  // Asked when the tab opens and again whenever the connection (re)opens while it is shown.
+  useEffect(() => { if (mobileShown && mobileOnline) onMobileOpen?.(); }, [mobileShown, mobileOnline]); // eslint-disable-line react-hooks/exhaustive-deps
   const { tabId, panelId } = tabIds('ledge-settings', tab);
   return (
     <div data-layer="settings" data-delay={enterDelay} inert={!p.visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: p.visible ? 1 : 0, pointerEvents: p.visible ? 'auto' : 'none', transition: transition([['opacity', p.visible ? 'fadeIn' : 'fadeOut', p.visible ? enterDelay : 0]]) }}>

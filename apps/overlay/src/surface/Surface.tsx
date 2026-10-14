@@ -630,7 +630,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               monitors={monitors} monitor={monitor} onMonitor={onMonitor} autostart={autostart} onAutostart={onAutostart}
               defaultTool={defaultTool} onDefaultTool={chooseDefaultTool} accent={accent} onAccent={onAccent}
               islandPosition={islandPosition} onIslandPosition={onIslandPosition} discreet={discreet} onDiscreet={onDiscreet}
-              mobile={{ state: mobile, pairing, pairError, now: Date.now, onOpen: () => { if (!unreachable) send({ type: 'devices' }); }, onPair: () => send({ type: 'pair.begin' }), onRevoke: id => send({ type: 'device.revoke', id }) }}
+              mobile={{ state: mobile, pairing, pairError, online: status === 'open', now: Date.now, onOpen: () => send({ type: 'devices' }), onPair: () => send({ type: 'pair.begin' }), onRevoke: id => send({ type: 'device.revoke', id }) }}
               about={update ? { app: update.state.app, daemon: update.state.daemon, latest: update.state.latest?.version ?? null, auto: update.auto, checkedAt: update.state.checkedAt, onAuto: update.setAuto, onCheck: update.checkNow } : undefined}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>

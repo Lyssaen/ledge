@@ -52,6 +52,12 @@ describe('<MobileSettings>', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove iPhone de Joffrey' }));
     expect(onRevoke).toHaveBeenCalledExactlyOnceWith('a');
   });
+  it('says so while the list loads or when the daemon is unreachable', () => {
+    const { rerender } = show({ state: null });
+    expect(screen.getByRole('status')).toHaveTextContent('Loading');
+    rerender({ state: null, online: false });
+    expect(screen.getByRole('status')).toHaveTextContent('unreachable');
+  });
   it('shows the reason when pairing is refused', () => {
     show({ pairError: 'locked' });
     expect(screen.getByRole('alert')).toHaveTextContent('Too many attempts');

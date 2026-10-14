@@ -9,6 +9,8 @@ export interface MobileSettingsProps {
   state: { devices: Device[]; origin: string | null; listening: boolean } | null;
   pairing: { code: string; expiresAt: string; url: string } | null;
   pairError?: PairErrorReason | null;
+  /** The daemon connection is open: the list is being requested; otherwise it is unavailable. */
+  online?: boolean;
   now: () => number;
   onPair(): void;
   onRevoke(id: string): void;
@@ -22,13 +24,13 @@ const hint = { fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)
 const grouped = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`;
 
 /** The Mobile tab: the paired phones, and the pairing code (QR and digits) with its countdown. */
-export function MobileSettings({ state, pairing, pairError, now, onPair, onRevoke }: MobileSettingsProps) {
+export function MobileSettings({ state, pairing, pairError, online = true, now, onPair, onRevoke }: MobileSettingsProps) {
   const { t } = useI18n();
   const m = t.settings.mobile;
   // The countdown and the "seen ago" labels move with the clock.
   const [, tick] = useState(0);
   useEffect(() => { const id = setInterval(() => tick(n => n + 1), 1000); return () => clearInterval(id); }, []);
-  if (!state) return null;
+  if (!state) return <div role="status" style={{ ...hint, padding: '12px 0' }}>{online ? m.loading : m.unavailable}</div>;
   const left = pairing ? Math.max(0, Math.ceil((Date.parse(pairing.expiresAt) - now()) / 1000)) : 0;
   const live = pairing !== null && left > 0;
   return (
@@ -44,7 +46,7 @@ export function MobileSettings({ state, pairing, pairError, now, onPair, onRevok
           </div>
         ) : !pairing || !live ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
-            <span style={{ ...hint, flexGrow: 1, color: pairError ? 'var(--warning)' : pairing ? 'var(--warning)' : 'var(--muted-foreground)' }} role={pairError ? 'alert' : undefined}>{pairError ? m.errors[pairError] : pairing ? m.expired : m.pairHint}</span>
+            <span style={{ ...hint, flexGrow: 1, color: pairError || pairing ? 'var(--warning)' : 'var(--muted-foreground)' }} role={pairError ? 'alert' : undefined}>{pairError ? m.errors[pairError] : pairing ? m.expired : m.pairHint}</span>
             <Button variant={pairing ? 'outline' : 'primary'} size="sm" onClick={onPair}>{pairing ? m.newCode : m.pair}</Button>
           </div>
         ) : (

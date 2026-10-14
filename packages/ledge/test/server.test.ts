@@ -844,6 +844,7 @@ describe('device commands', () => {
     expect(mine.closed).toEqual([4403]);
     expect(theirs.closed).toEqual([]);
     expect(devices.get(device.id)).toBeUndefined();
+    await expect(c.next('devices', 150)).rejects.toThrow(/timeout/); // exactly one update per change
     c.send({ type: 'device.revoke', id: device.id });
     expect(await c.next('error')).toMatchObject({ message: 'unknown device' });
     await c.close();

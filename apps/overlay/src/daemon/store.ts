@@ -20,11 +20,11 @@ export interface DaemonState {
   daemon: DaemonInfo | null;
   /** How many snapshots arrived (one per connection), so a reconnect after a restart is detectable. */
   snapshotSeq: number;
-  /** The daemon's last update.progress / update.failed message; `seq` tells two identical ones apart. */
   /** The paired phones, the https origin and whether the remote entry listens; null until the daemon answers `devices`. */
   mobile: { devices: Device[]; origin: string | null; listening: boolean } | null;
   /** The pairing code being shown (this PC asked for it), and the reason of the last refusal. */
   pairing: { code: string; expiresAt: string; url: string } | null; pairError: PairErrorReason | null;
+  /** The daemon's last update.progress / update.failed message; `seq` tells two identical ones apart. */
   lastUpdate: { msg: Extract<ServerMessage, { type: 'update.progress' | 'update.failed' }>; seq: number } | null;
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
