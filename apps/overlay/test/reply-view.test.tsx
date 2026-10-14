@@ -42,6 +42,14 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
     rerender(<SessionView {...base} session={fakeSession('p', { tool: 'codex', state: 'idle', lastReply: { text: plan, at } })} />);
     expect(container.querySelector('[data-item="done"]')).not.toBeNull();
   });
+  it('keeps a plain first line, here a link, in the reply under the thread, not only in the header above it', () => {
+    const url = 'https://claude.ai/artifact/AbCdEf0123456789xyzQrS';
+    const s = fakeSession('p', { state: 'idle', lastReply: { at, text: `J'ai documenté le mécanisme sur une page : ${url}\n\nLa page est privée.\n\nElle contient :\n- les deux entités` } });
+    const { container } = render(<SessionView {...base} session={s} thread={[]} />);
+    expect(container.querySelector('[data-reply-card]')).toHaveTextContent(`J'ai documenté le mécanisme sur une page : ${url}`);
+    expect(screen.getByRole('link', { name: url })).toHaveAttribute('href', url);
+    expect(screen.getByRole('heading', { level: 2 })).not.toHaveTextContent(url);
+  });
   it('opens a Markdown file cited in the structured reply without sending a reply', () => {
     const onDocument = vi.fn(); const onReply = vi.fn();
     const notes = fakeSession('n', { state: 'idle', lastReply: { at, text: '## Documents\n\n- [Lire le plan](docs/my plan.md)' } });
@@ -52,7 +60,9 @@ describe('<SessionView> your turn: the last reply read like a plan', () => {
   });
   it('shows the title, the meta line, the lead and the sections with their markers', () => {
     const { container } = render(<SessionView {...base} session={idle} />);
-    expect(screen.getByRole('heading', { level: 2, name: 'Three reducer findings fixed' })).toBeInTheDocument();
+    // The reply's heading opens its card; the view's title stays the state's.
+    expect(screen.getByRole('heading', { level: 3, name: 'Three reducer findings fixed' })).toHaveAttribute('data-reply-title');
+    expect(screen.getByRole('heading', { level: 2, name: 'Waiting for your instructions.' })).toBeInTheDocument();
     expect(container.querySelector('[data-eyebrow]')).toHaveTextContent('Your turn');
     expect(container.querySelector('[data-reply-meta]')).toHaveTextContent('Otto finished 20s ago');
     expect(container.querySelector('[data-reply-lead]')).toHaveTextContent('Steps 1 to 6 are done and green.');

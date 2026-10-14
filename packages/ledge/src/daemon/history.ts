@@ -30,7 +30,8 @@ export function handBack(text: string): { helperId: string; report: string } | u
   const m = HANDBACK.exec(text.trimStart());
   if (!m) return undefined;
   const lines = m[2]!.split('\n');
-  while (lines.length && (!lines[0]!.trim() || /^\s*\[[^\]]*\]/.test(lines[0]!))) lines.shift();
+  // The frame is at column zero, the report indented: a report that opens on a link (`  [page](url)`) is not a frame.
+  while (lines.length && (!lines[0]!.trim() || /^\[[^\]]*\]/.test(lines[0]!))) lines.shift();
   const indent = Math.min(...lines.filter(l => l.trim()).map(l => l.length - l.trimStart().length));
   return { helperId: m[1]!, report: lines.map(l => l.slice(Number.isFinite(indent) ? indent : 0)).join('\n').trim() };
 }

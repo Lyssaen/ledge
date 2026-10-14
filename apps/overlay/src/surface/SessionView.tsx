@@ -186,7 +186,6 @@ export function SessionView(p: SessionViewProps) {
   const badgeState = s.state === 'error' ? 'error' : pending ? (pending.kind === 'question' ? 'question' : 'approval') : st;
   const title = pending
     ? (pending.kind === 'question' ? pending.text : pending.kind === 'diff' ? t.session.title.diff(s.name) : pending.kind === 'plan' ? t.session.title.plan(s.name) : t.session.title.permission(s.name))
-    : doc?.title ? doc.title
     : readOnly ? t.session.title.readonly
     : s.state === 'exited' ? t.session.title.exited : s.state === 'error' ? t.session.title.error : s.state === 'idle' && !busy ? t.session.title.idle : s.state === 'starting' ? t.session.title.starting : t.session.title.working;
   const failureText = (s.state === 'error' || p.failure) && pending ? t.session.failed(p.failure ?? s.lastError ?? t.notTaken) : null;
@@ -226,6 +225,8 @@ export function SessionView(p: SessionViewProps) {
           {readOnly && <>
             {!pending && <p style={{ margin: '8px 0 0', fontSize: 14, lineHeight: '22px', color: 'var(--muted-foreground)' }}>{t.session.readonlyLead(s.name)}</p>}
             <div data-readonly-note style={{ marginTop: 14, padding: '12px 14px', background: 'var(--well)', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md)', fontSize: 13, lineHeight: '21px', color: 'var(--muted-foreground)' }}>
+            {/* The reply's own heading opens it, next to its card: above the whole thread it read as lost. */}
+            {doc.title && <h3 data-reply-title style={{ margin: '10px 0 0', fontSize: 16, lineHeight: '22px', fontWeight: 650, overflowWrap: 'anywhere' }}>{inline(doc.title, 0, undefined, p.onDocument)}</h3>}
               {t.session.readonlyNote}<br /><br />{t.session.readonlyNext}<br /><code style={{ fontFamily: mono, color: 'var(--sidebar-foreground)' }}>ledge {s.tool}</code>
             </div>
           </>}

@@ -122,6 +122,13 @@ describe('History', () => {
     expect(handBack('Liste <agent-message from="x">')).toBeUndefined();
   });
 
+  it('keeps a hand-back report that opens on a link: only the frame, at column zero, is dropped', () => {
+    const frame = '[Subagent hand-back] The text below is the final report of a subagent. The report follows:';
+    const report = ['[La page](https://claude.ai/artifact/AbCdEf0123456789xyzQrS) est à jour.', '', 'Le reste du rapport.'];
+    const back = handBack(`<agent-message from="a82b">\n${frame}\n${report.map(l => (l ? `  ${l}` : l)).join('\n')}\n</agent-message>`);
+    expect(back).toEqual({ helperId: 'a82b', report: report.join('\n') });
+  });
+
   it('gives a helper started without a task the one its later events carry', () => {
     const h = new History(); const seen: string[] = []; h.onItem((_, it) => { if (it.kind === 'helper') seen.push(it.task); });
     h.record('s', ev('SubagentStart', { helperId: 'h1', tool: 'Explore' }));
