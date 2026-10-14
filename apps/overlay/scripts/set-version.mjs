@@ -29,5 +29,5 @@ function replaceOnce(file, re, to) {
 replaceOnce('package.json', /^(  "version": )"[^"]*"/m, `$1"${version}"`);
 replaceOnce('src-tauri/tauri.conf.json', /^(  "version": )"[^"]*"/m, `$1"${version}"`);
 replaceOnce('src-tauri/Cargo.toml', /^(\[package\]\r?\nname = "ledge-overlay"\r?\nversion = )"[^"]*"/m, `$1"${version}"`);
-replaceOnce('src-tauri/Cargo.lock', /^(name = "ledge-overlay"\r?\nversion = )"[^"]*"/m, `$1"${version}"`);
+replaceOnce('../../Cargo.lock', /^(name = "ledge-overlay"\r?\nversion = )"[^"]*"/m, `$1"${version}"`);
 replaceOnce('../../packages/ledge/package.json', /^(  "version": )"[^"]*"/m, `$1"${version}"`);

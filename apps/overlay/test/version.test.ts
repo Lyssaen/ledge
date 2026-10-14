@@ -12,7 +12,7 @@ describe('version', () => {
     expect(pkg).toMatch(/^\d+\.\d+\.\d+$/);
     expect(JSON.parse(read('src-tauri/tauri.conf.json')).version).toBe(pkg);
     expect(read('src-tauri/Cargo.toml')).toMatch(new RegExp(`^\\[package\\]\\nname = "ledge-overlay"\\nversion = "${pkg}"`, 'm'));
-    expect(read('src-tauri/Cargo.lock')).toMatch(new RegExp(`^name = "ledge-overlay"\\nversion = "${pkg}"`, 'm'));
+    expect(read('../../Cargo.lock')).toMatch(new RegExp(`^name = "ledge-overlay"\\nversion = "${pkg}"`, 'm'));
   });
   it('is the same in the npm package of the daemon', () => {
     const pkg = JSON.parse(read('package.json')).version;
