@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { copy } from '../copy';
 import { ageLabel, filterItems, headline, requestsOf, type Filter, type InboxItem } from '../model/requests';
 import { href } from '../router';
 import { useMobile } from '../state/store';
+import { useNow } from '../useNow';
 import { Badge } from '../ui/Badge';
 import { Header } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
@@ -10,13 +11,6 @@ import { LostBanner } from '../ui/Notice';
 import { TabBar } from '../ui/TabBar';
 
 const FILTERS: Filter[] = ['all', 'permission', 'question'];
-
-/** Re-render each 15 s so ages stay honest without a new message. */
-export function useNow(): number {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t); }, []);
-  return now;
-}
 
 export const clock = (iso: string | null): string => iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
 

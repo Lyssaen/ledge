@@ -26,3 +26,8 @@ export function saveLastState(s: LastState, storage?: Storage): void {
 export function clearLastState(storage?: Storage): void {
   try { store(storage)?.removeItem(LAST_STATE_KEY); } catch { /* ignore */ }
 }
+
+/** Whether this phone holds a device token (it is paired). */
+export function hasToken(storage?: Storage): boolean {
+  try { return !!store(storage)?.getItem(TOKEN_KEY); } catch { return false; }
+}

@@ -61,7 +61,8 @@ for (const width of [320, 390, 430]) {
       await expect(page.getByRole('button', { name: 'Refuser' })).toBeDisabled();
       await expect(page.getByRole('button', { name: 'Autoriser une fois' })).toBeDisabled();
       await expect(page.getByText('Décisions depuis le téléphone : pas encore disponibles. Répondez sur le PC.')).toBeVisible();
-      await expect(page.getByText('~/', { exact: false }).first()).toBeVisible().catch(() => undefined);
+      await expect(page.getByText('Dossier')).toBeVisible();
+      await expect(page.getByText('/w/harness-assistant')).toBeVisible();
       await page.screenshot({ path: `e2e/shots/request-${width}.png` });
     });
 
@@ -104,6 +105,22 @@ for (const width of [320, 390, 430]) {
       await page.goto('/m/#/request/nope/nope');
       await expect(page.getByText('Cette demande n’attend plus de décision.')).toBeVisible();
       await page.screenshot({ path: `e2e/shots/gone-${width}.png` });
+    });
+
+    test('the settings icon opens the Connexion panel; pairing needs a confirmation', async ({ page }) => {
+      await fakeDaemon(page, [withPending('c', 'permission', 'pnpm test', 1)]);
+      await page.goto('/m/');
+      await page.getByRole('link', { name: 'Connexion du téléphone' }).click();
+      await expect(page.getByText('PC-Joffrey', { exact: true })).toBeVisible();
+      await expect(page.getByText('iPhone', { exact: true })).toBeVisible();
+      await expect(page.getByText('Code à six chiffres')).toHaveCount(0);
+      await page.goto('/m/#/pair');
+      await expect(page.getByRole('button', { name: 'Réappairer' })).toBeVisible();
+      await page.getByRole('button', { name: 'Réappairer' }).click();
+      await page.getByRole('button', { name: 'Oui, réappairer' }).click();
+      await expect(page.getByRole('heading', { level: 1, name: 'Votre PC, à portée de main' })).toBeVisible();
+      await page.getByRole('button', { name: 'Annuler' }).click();
+      await expect(page.getByRole('button', { name: 'Réappairer' })).toBeVisible();
     });
   });
 }

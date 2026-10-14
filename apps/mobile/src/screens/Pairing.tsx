@@ -23,13 +23,15 @@ const btn = 'mt-2 inline-flex min-h-12 items-center justify-center rounded-contr
 export interface PairingProps {
   /** Called when the person leaves the last step; the app then connects with the stored token. */
   onContinue(): void;
+  /** Set when a paired phone re-pairs on purpose: step 1 then offers a way out. */
+  onCancel?: () => void;
   /** Test seams. */
   request?: typeof requestChallenge;
   complete?: typeof completePairing;
   iosTab?: boolean;
 }
 
-export function Pairing({ onContinue, request = requestChallenge, complete = completePairing, iosTab = isIosBrowserTab() }: PairingProps) {
+export function Pairing({ onContinue, onCancel, request = requestChallenge, complete = completePairing, iosTab = isIosBrowserTab() }: PairingProps) {
   const [step, setStep] = useState(0);
   const [code, setCode] = useState('');
   const [failure, setFailure] = useState<PairFailure['reason'] | null>(null);
@@ -90,8 +92,8 @@ export function Pairing({ onContinue, request = requestChallenge, complete = com
     <main className="app" aria-labelledby="pair-title">
       <header className="flex-none px-side pt-2 pb-3">
         <div className="flex items-center justify-between">
-          {step === 1 || step === 2
-            ? <button type="button" className="-ml-2 inline-flex size-11 items-center justify-center rounded-control" aria-label={t.back} onClick={goBack}>
+          {step === 1 || step === 2 || (step === 0 && onCancel)
+            ? <button type="button" className="-ml-2 inline-flex size-11 items-center justify-center rounded-control" aria-label={step === 0 ? copy.connection.repairCancel : t.back} onClick={step === 0 ? onCancel : goBack}>
                 <svg className="size-5 fill-none stroke-fg [stroke-width:2]" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
               </button>
             : <span className="size-11" />}

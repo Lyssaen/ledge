@@ -39,7 +39,18 @@ export const copy = {
     notYet: 'Décisions depuis le téléphone : pas encore disponibles. Répondez sur le PC.',
     readOnlyHint: 'Cette session est en lecture seule.'
   },
-  gone: { header: 'Demande', title: 'Cette demande n’attend plus de décision.', body: 'Elle a été traitée, sur le PC ou ailleurs.', back: 'Retour aux demandes' },
+  gone: {
+    header: 'Demande', title: 'Cette demande n’attend plus de décision.', body: 'Elle a été traitée, sur le PC ou ailleurs.', back: 'Retour aux demandes',
+    staleTitle: 'Cette demande ne figure plus dans le dernier état connu.', staleBody: 'Reconnectez-vous pour vérifier si elle attend toujours une décision.'
+  },
+  loading: 'Chargement de la demande…',
+  connection: {
+    title: 'Connexion', back: 'Retour aux demandes', pc: 'PC', device: 'Ce téléphone', status: 'État',
+    repair: 'Réappairer', repairTitle: 'Réappairer ce téléphone ?',
+    repairBody: 'Vous allez repasser par le code affiché sur le PC. L’accès actuel reste valable jusqu’à la fin de l’appairage.',
+    repairConfirm: 'Oui, réappairer', repairCancel: 'Annuler', unknown: 'Inconnu',
+    status_: { online: 'Connecté', offline: 'Déconnecté', connecting: 'Connexion en cours…', unpaired: 'Non appairé' }
+  },
   pairing: {
     stepOf: (n: number) => `Connexion · ${n} / 4`,
     back: 'Étape précédente',

@@ -9,20 +9,30 @@ import { BackHeader } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { LostBanner } from '../ui/Notice';
 import { Gone } from './Gone';
-import { useNow } from './Inbox';
+import { useNow } from '../useNow';
 
 const btn = 'inline-flex min-h-12 flex-1 items-center justify-center rounded-control border border-line px-4 py-2.5 text-[13px] leading-[1.4] font-medium disabled:opacity-45';
 
 /** One request, read only: decisions from the phone arrive with lot 2. */
 export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId: string; pendingId: string; onReconnect: () => void }) {
-  const { sessions, previews, link } = useMobile();
+  const { sessions, previews, link, syncedAt } = useMobile();
   const now = useNow();
   const item = requestsOf(sessions).find(i => i.sessionId === sessionId && i.pendingId === pendingId);
-  if (!item) return <Gone />;
+  if (!item) {
+    // Nothing synced yet: the first snapshot is still on its way, so say nothing about the request.
+    if (syncedAt === null && link !== 'offline') {
+      return (
+        <>
+          <BackHeader title={copy.gone.header} backTo={href({ name: 'inbox' })} label={copy.detail.back} />
+          <main className="min-h-0 flex-1 px-side pt-7 text-[13px] text-muted" role="status">{copy.loading}</main>
+        </>
+      );
+    }
+    return <Gone stale={link === 'offline'} />;
+  }
   const session = sessions.find(s => s.id === sessionId)!;
   const lines = (previews[sessionId] ?? []).slice(-12);
   const offline = link === 'offline';
-  const isCommand = item.kind === 'permission' || item.kind === 'diff';
   return (
     <>
       <BackHeader title={copy.detail.heading[item.kind]} backTo={href({ name: 'inbox' })} label={copy.detail.back} />
@@ -40,8 +50,7 @@ export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId
           <h1 className="mt-2.5 text-[25px] leading-[1.25] font-semibold tracking-[-1px] [overflow-wrap:anywhere]">{item.kind === 'permission' ? copy.detail.commandTitle : headline(item)}</h1>
           {item.reason && <p className="mt-2.5 text-[13px] text-muted">{item.reason}</p>}
         </div>
-        {isCommand && item.text && <Command text={item.text} />}
-        {item.kind === 'plan' && item.text && <Command text={item.text} />}
+        {item.kind !== 'question' && item.text && <Command text={item.text} />}
         {item.options && item.options.length > 0 && (
           <ul aria-label={copy.detail.options} className="my-3.5 flex list-none flex-col gap-2 p-0">
             {item.options.map(o => <li key={o} className="rounded-control border border-line bg-surface px-3 py-3 text-[13px] [overflow-wrap:anywhere]">{o}</li>)}
