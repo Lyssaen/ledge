@@ -1,5 +1,7 @@
 import { cleanTopic, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
+import { identify } from './identify.js';
+
 export const HOOK_PRIORITY_MS = 2000;
 
 /**
@@ -20,7 +22,7 @@ const DIFF_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', '
 function pendingFor(ev: SessionEvent): Pending | undefined {
   if (ev.name === 'PermissionRequest') {
     const diff = !!ev.tool && DIFF_TOOLS.has(ev.tool);
-    return { kind: diff ? 'diff' : 'permission', text: ev.text ?? '', tool: ev.tool, source: 'hook' };
+    return { kind: diff ? 'diff' : 'permission', text: ev.text ?? '', tool: ev.tool, source: 'hook', ...(ev.reason ? { reason: ev.reason } : {}) };
   }
   if (ev.name === 'PreToolUse' && ev.tool && QUESTION_TOOLS.has(ev.tool)) {
     // The tool is kept only when it is not Claude's, so its PostToolUse can still be matched (see pendingTool).
@@ -38,11 +40,16 @@ function pendingFor(ev: SessionEvent): Pending | undefined {
   return undefined;
 }
 
+/** The request keeps its id, first sight and version when a richer description replaces it. */
+function keepIdentity(current: Pending, incoming: Pending): Pending {
+  return { ...incoming, ...(current.id ? { id: current.id } : {}), ...(current.version ? { version: current.version } : {}), ...(current.since ? { since: current.since } : {}) };
+}
+
 /** Richer wins: a hook pending is never replaced by a pane pending. */
 function mergePending(current: Pending | undefined, incoming: Pending): Pending {
   if (!current) return incoming;
   if (current.source === 'hook' && incoming.source === 'pane') return current;
-  if (incoming.source === 'hook' && current.source === 'pane') return incoming;
+  if (incoming.source === 'hook' && current.source === 'pane') return keepIdentity(current, incoming);
   // Two requesters (main agent, helpers) never merge: the first request keeps the card.
   if (current.helperId !== incoming.helperId) return current;
   // A permission/diff request over a richer hook pending (plan, question) keeps that kind.
@@ -183,7 +190,12 @@ function withTopic(s: Session, text: string, source: TopicSource | undefined): S
   return { ...next, title: sessionTitle(next) };
 }
 
+/** Gives requests their identity around the state machine; returns the same object when nothing changes. */
 export function reduce(s: Session, ev: SessionEvent): Session {
+  return identify(s, reduceEvent(s, ev), ev.at);
+}
+
+function reduceEvent(s: Session, ev: SessionEvent): Session {
   if (s.state === 'exited') return s;
   s = endCursorHelpers(s, ev);
   const at = ev.at;

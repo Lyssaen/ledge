@@ -71,11 +71,11 @@ describe('reduce: transition table', () => {
 describe('reduce: pending rules', () => {
   it('PermissionRequest sets a hook-sourced permission pending with the command text', () => {
     const next = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));
-    expect(next.pending).toEqual({ kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' });
+    expect(next.pending).toMatchObject({ kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' });
   });
   it('AskUserQuestion sets a question pending with options', () => {
     const next = reduce(session('working'), ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Which one?', options: ['Backfill', 'Shadow'] }));
-    expect(next.pending).toEqual({ kind: 'question', text: 'Which one?', options: ['Backfill', 'Shadow'], source: 'hook' });
+    expect(next.pending).toMatchObject({ kind: 'question', text: 'Which one?', options: ['Backfill', 'Shadow'], source: 'hook' });
   });
   it('ExitPlanMode sets a plan pending', () => {
     const next = reduce(session('working'), ev('PreToolUse', { tool: 'ExitPlanMode', text: 'Fix three findings' }));
@@ -225,19 +225,19 @@ describe('reduce: rulings', () => {
     const pending = { kind: 'plan', text: 'the plan', source: 'hook' } as const;
     const s = session('waiting_permission', { pending });
     const next = reduce(s, ev('Notification', { kind: 'permission', text: 'Do you want to proceed?' }));
-    expect(next.pending).toEqual(pending);
+    expect(next.pending).toMatchObject(pending);
     expect(next.lastHookAt).toBe(later(5000));
     expect(next.state).toBe('waiting_permission');
   });
   it('a PermissionRequest over a hook plan pending keeps kind plan', () => {
     const s = session('waiting_permission', { pending: { kind: 'plan', text: 'the plan', source: 'hook' } });
     const next = reduce(s, ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));
-    expect(next.pending).toEqual({ kind: 'plan', text: 'the plan', source: 'hook' });
+    expect(next.pending).toMatchObject({ kind: 'plan', text: 'the plan', source: 'hook' });
   });
   it('a PermissionRequest over a hook question pending keeps kind question', () => {
     const s = session('waiting_input', { pending: { kind: 'question', text: 'Which?', options: ['a'], source: 'hook' } });
     const next = reduce(s, ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));
-    expect(next.pending).toEqual({ kind: 'question', text: 'Which?', options: ['a'], source: 'hook' });
+    expect(next.pending).toMatchObject({ kind: 'question', text: 'Which?', options: ['a'], source: 'hook' });
     expect(next.state).toBe('waiting_input');
   });
   it('a late PaneGone after SessionEnd keeps exitCode and lastActivityAt', () => {
@@ -290,13 +290,13 @@ describe('reduce: post-tool events', () => {
   it('PostToolUse of another tool keeps a hook pending (a parallel tool finished)', () => {
     const s = session('waiting_permission', { pending: bashPerm });
     const next = reduce(s, ev('PostToolUse', { tool: 'Read' }));
-    expect(next.pending).toEqual(bashPerm);
+    expect(next.pending).toMatchObject(bashPerm);
     expect(next.state).toBe('waiting_permission');
     expect(next.lastHookAt).toBe(later(5000));
   });
   it('PostToolUse of AskUserQuestion does not clear a Bash permission', () => {
     const next = reduce(session('waiting_permission', { pending: bashPerm }), ev('PostToolUse', { tool: 'AskUserQuestion' }));
-    expect(next.pending).toEqual(bashPerm);
+    expect(next.pending).toMatchObject(bashPerm);
   });
   it('PostToolUse clears a pane-sourced pending whatever the tool (the tool ran, the prompt is gone)', () => {
     const s = session('waiting_permission', { pending: { kind: 'permission', text: 'Do you want to proceed?', source: 'pane' } });
@@ -403,13 +403,13 @@ describe('reduce: subagent isolation', () => {
   it('a helper PreToolUse does not clear the parent pending nor flip it to working', () => {
     const s = session('waiting_permission', { pending: parentPerm });
     const next = reduce(s, ev('PreToolUse', { tool: 'Read', helperId: 'a1' }));
-    expect(next.pending).toEqual(parentPerm);
+    expect(next.pending).toMatchObject(parentPerm);
     expect(next.state).toBe('waiting_permission');
   });
   it('a helper PostToolUse of the same tool does not clear the parent pending', () => {
     const s = session('waiting_permission', { pending: parentPerm });
     const next = reduce(s, ev('PostToolUse', { tool: 'Bash', helperId: 'a1' }));
-    expect(next.pending).toEqual(parentPerm);
+    expect(next.pending).toMatchObject(parentPerm);
     expect(next.state).toBe('waiting_permission');
   });
   it('a helper PreToolUse does not flip an idle parent to working', () => {
@@ -423,13 +423,13 @@ describe('reduce: subagent isolation', () => {
     const s = reduce(session('working'), ev('SubagentStart', { helperId: 'a1', tool: 'Explore' }));
     const next = reduce(s, ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist', helperId: 'a1', at: later(6000) }));
     expect(next.state).toBe('waiting_permission');
-    expect(next.pending).toEqual({ kind: 'permission', text: 'rm -rf dist', tool: 'Bash', source: 'hook', helperId: 'a1', parentState: 'working' });
+    expect(next.pending).toMatchObject({ kind: 'permission', text: 'rm -rf dist', tool: 'Bash', source: 'hook', helperId: 'a1', parentState: 'working' });
     expect(next.helpers[0]!.state).toBe('waiting_permission');
   });
   it('a helper PermissionRequest is ignored when the parent already has a hook pending', () => {
     const s = session('waiting_permission', { pending: parentPerm });
     const next = reduce(s, ev('PermissionRequest', { tool: 'Edit', text: 'a.ts', helperId: 'a1' }));
-    expect(next.pending).toEqual(parentPerm);
+    expect(next.pending).toMatchObject(parentPerm);
   });
   it('a second helper cannot replace the first helper pending', () => {
     const s = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'one', helperId: 'a1' }));
@@ -440,7 +440,7 @@ describe('reduce: subagent isolation', () => {
   it('a helper PermissionRequest replaces a pane-sourced pending (hook wins over pane)', () => {
     const s = session('waiting_permission', { pending: { kind: 'permission', text: 'Do you want to proceed?', source: 'pane' } });
     const next = reduce(s, ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));
-    expect(next.pending).toEqual({ kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook', helperId: 'a1', parentState: 'working' });
+    expect(next.pending).toMatchObject({ kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook', helperId: 'a1', parentState: 'working' });
   });
   it('the helper own PostToolUse clears its routed pending and the parent goes back to working', () => {
     const s = reduce(reduce(session('working'), ev('SubagentStart', { helperId: 'a1', tool: 'Explore' })), ev('PermissionRequest', { tool: 'Bash', text: 'npm test', helperId: 'a1' }));

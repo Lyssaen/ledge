@@ -14,6 +14,12 @@ let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'ledge-hook-')); process.env.LEDGE_HOME = home; delete process.env.LEDGE_SESSION; delete process.env.LEDGE_CODEX_SESSION; delete process.env.LEDGE_CODEX_HOOK_SESSION; });
 
 describe('mapClaudeHook', () => {
+  it('a Bash permission carries the tool description as reason', () => {
+    expect(mapClaudeHook('PermissionRequest', { session_id: 's', tool_name: 'Bash', tool_input: { command: 'pnpm test', description: 'Run the overlay tests' } }, at)!.event.reason).toBe('Run the overlay tests');
+  });
+  it('a permission without a Bash description has no reason', () => {
+    expect(mapClaudeHook('PermissionRequest', { session_id: 's', tool_name: 'Bash', tool_input: { command: 'ls' } }, at)!.event.reason).toBeUndefined();
+  });
   it('uses LEDGE_SESSION when set, else session_id', () => {
     process.env.LEDGE_SESSION = '7f3a';
     expect(mapClaudeHook('Stop', { session_id: 'uuid-1' }, at)?.id).toBe('7f3a');
@@ -22,7 +28,7 @@ describe('mapClaudeHook', () => {
   });
   it('maps PermissionRequest for Bash to a permission event with the command', () => {
     const m = mapClaudeHook('PermissionRequest', { session_id: 's', tool_name: 'Bash', tool_input: { command: 'npm test', description: 'Run tests' } }, at);
-    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', tool: 'Bash', text: 'npm test' });
+    expect(m?.event).toMatchObject({ name: 'PermissionRequest', at, source: 'hook', tool: 'Bash', text: 'npm test' });
   });
   it('maps PermissionRequest for Edit to the file path', () => {
     const m = mapClaudeHook('PermissionRequest', { session_id: 's', tool_name: 'Edit', tool_input: { file_path: '/w/src/a.ts' } }, at);
@@ -165,7 +171,7 @@ describe('mapHook codex', () => {
   });
   it('maps a Bash PermissionRequest to the command', () => {
     const m = mapHook('codex', 'PermissionRequest', codex({ tool_name: 'Bash', tool_input: { command: "printf '%s\\n' hi > hello.txt", description: 'Allow the requested shell command?' } }), at);
-    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', tool: 'Bash', text: "printf '%s\\n' hi > hello.txt" });
+    expect(m?.event).toMatchObject({ name: 'PermissionRequest', at, source: 'hook', tool: 'Bash', text: "printf '%s\\n' hi > hello.txt" });
   });
   it('maps an apply_patch PermissionRequest to the files it touches', () => {
     const command = '*** Begin Patch\n*** Update File: /home/dev/demo/README.md\n@@\n # demo\n+bye\n*** Add File: /home/dev/demo/b.txt\n+b\n*** End Patch';

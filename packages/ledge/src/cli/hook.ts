@@ -13,6 +13,13 @@ const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 const PROMPT_MAX = 500;
 const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, PROMPT_MAX) } : {}; };
 
+/** Claude's own words for what a Bash command is for (`tool_input.description`). */
+function bashReason(tool: string | undefined, input: unknown): { reason?: string } {
+  if (tool !== 'Bash') return {};
+  const reason = str((input as Payload | null | undefined)?.description);
+  return reason ? { reason } : {};
+}
+
 function describeTool(tool: string | undefined, input: unknown): string {
   const i = (input && typeof input === 'object' ? input : {}) as Payload;
   if (tool === 'Bash') return str(i.command) ?? '';
@@ -134,7 +141,7 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
       if (launched) return null;
       if (NON_TERMINAL_END_REASONS.has(str(p.reason) ?? '')) return null;
       return { name: 'SessionEnd', ...base, exitCode: null };
-    case 'PermissionRequest': return { name: 'PermissionRequest', ...base, tool, text: describeTool(tool, p.tool_input) };
+    case 'PermissionRequest': return { name: 'PermissionRequest', ...base, tool, text: describeTool(tool, p.tool_input), ...bashReason(tool, p.tool_input) };
     case 'PreToolUse': {
       if (tool && QUESTION_TOOLS.has(tool)) {
         const qs = ((p.tool_input as Payload | undefined)?.questions as Array<Payload> | undefined) ?? [];
@@ -142,7 +149,7 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
         const options = ((q?.options as Array<Payload> | undefined) ?? []).map(o => str(o.label) ?? '').filter(Boolean);
         return { name: 'PreToolUse', ...base, tool, text: str(q?.question) ?? '', options };
       }
-      return { name: 'PreToolUse', ...base, tool, text: describeTool(tool, p.tool_input) };
+      return { name: 'PreToolUse', ...base, tool, text: describeTool(tool, p.tool_input), ...bashReason(tool, p.tool_input) };
     }
     case 'Notification': {
       const type = str(p.notification_type) ?? '';
