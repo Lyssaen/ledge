@@ -1,0 +1,33 @@
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const root = resolve(__dirname, '..');
+const conf = JSON.parse(readFileSync(resolve(root, 'src-tauri/tauri.conf.json'), 'utf8'));
+const caps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/default.json'), 'utf8'));
+const island = JSON.parse(readFileSync(resolve(root, '../overlay/src-tauri/tauri.conf.json'), 'utf8'));
+const main = readFileSync(resolve(root, 'src-tauri/src/main.rs'), 'utf8');
+
+describe('Desktop Tauri config', () => {
+  it('is its own app, versioned with the island', () => {
+    expect(conf.identifier).toBe('be.paradow.ledge.desktop'); expect(conf.productName).toBe('Ledge Desktop');
+    expect(conf.version).toBe(island.version);
+    expect(conf.build.devUrl).toBe('http://localhost:1421');
+  });
+  it('has one decorated, resizable main window remembering its state', () => {
+    const w = conf.app.windows[0];
+    expect(w).toMatchObject({ label: 'main', decorations: true, resizable: true, width: 1280, height: 800, minWidth: 640, minHeight: 480 });
+    expect(w.transparent).not.toBe(true); expect(w.alwaysOnTop).not.toBe(true);
+    expect(caps.permissions).toContain('window-state:default');
+    expect(main).toContain('tauri_plugin_window_state::Builder');
+  });
+  it('shares the island CSP and the updater key, with its own manifest', () => {
+    expect(conf.app.security.csp).toBe(island.app.security.csp);
+    expect(conf.plugins.updater.pubkey).toBe(island.plugins.updater.pubkey);
+    expect(conf.plugins.updater.endpoints).toEqual(['https://github.com/Lyssaen/ledge/releases/latest/download/latest-desktop.json']);
+    expect(conf.plugins.updater.windows.installMode).toBe('passive');
+    expect(conf.bundle.createUpdaterArtifacts).toBe(true);
+    expect(conf.bundle.windows.nsis.installMode).toBe('currentUser');
+    expect(caps.permissions).toContain('updater:default'); expect(caps.permissions).toContain('process:allow-restart');
+    expect(main).toContain('tauri_plugin_updater::Builder::new().build()'); expect(main).toContain('tauri_plugin_process::init()');
+  });
+});

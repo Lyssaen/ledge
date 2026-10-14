@@ -1,0 +1,17 @@
+[package]
+name = "ledge-desktop"
+version = "0.5.2"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.6", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-window-state = "2"
+ledge-native = { path = "../../../crates/ledge-native" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
