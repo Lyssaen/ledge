@@ -1,6 +1,6 @@
-# Ledge on the phone (read-only)
+# Ledge on the phone
 
-Lot 1 of the phone access: an installable web app (PWA) that shows your agent sessions on your iPhone, from anywhere your tailnet reaches. **It is read-only**: the phone sees the sessions, their state and their pending requests, and cannot answer, type, launch or kill anything. Answering from the phone comes in a later lot.
+An installable web app (PWA) that shows your agent sessions on your iPhone, from anywhere your tailnet reaches, and (lot 2) lets you answer a pending permission, plan or question. It cannot launch, kill, interrupt or rename anything; notifications and free-text replies come in later lots.
 
 The whole path (Tailscale on Windows, the daemon in WSL2, the PWA on the phone) has been built and tested in WSL and in a browser. It has **not been validated on a real iPhone yet**: see [the feasibility report](spikes/2026-10-14-ledge-mobile-feasibility.md).
 
@@ -80,14 +80,37 @@ Risk policy, validated on 2026-10-14 without change:
 - Questions are answered without a device check, by option number only, and only while the daemon classifies them low risk. Free text from the phone is not supported yet.
 - The PC overlay decides without WebAuthn, as before.
 
-### Testing a decision on the iPhone (R4, pending on device)
+#### What asks for the device check, and why
+
+The rule is "when in doubt, ask": a request is low risk only if the daemon can prove it. Everything else asks for Face ID or the passcode before the phone can accept, because from a pocket you cannot judge it the way you would at the terminal. The reasons the phone names:
+
+- `pushes`: any `git push`. A push with `--force` (or `-f`, `--force-with-lease`), `--delete`/`-d`, `--mirror`, `--prune`, or any refspec starting with `+` or `:` (for example `git push origin :main`) is described as able to replace or delete the remote history, whichever refspec carries it.
+- `destroys` (`rm -r`, `git reset --hard`, `git clean`, `git branch -D`, `git checkout -- …`), `deploys`, `publishes` (`npm|pnpm|yarn publish`), `pipes_to_shell` (`curl … | sh`) and `network` (WebFetch, WebSearch).
+- `sensitive_path` and `writes_outside_folder`: a path outside the project folder, under `.git`, `.env*`, `~/.ssh` or `~/.ledge`, or with a `~`.
+- `script`: running `pnpm`, `npm`, `node`, `make`, `bash`, `python`, `./x`, and so on, since what they run is not visible in the command.
+- `plan`: accepting a plan.
+- `shell_syntax`, `unsafe_flag` and `unknown`: the stricter parsing rules. A command with a quote, a backslash, `$`, a backtick, a glob (`* ? [ ]`), braces, `;`, `&`, `|`, `<`, `>` or a control character is never low risk, because the shell may rewrite it before it runs and the words the daemon read are not what would execute (`ls "$(rm -rf x)"` reads like `ls`). Flags that run a program or write a file (`-exec`, `-delete`, `--output`, `-c`, ripgrep's `--pre`) and any command not on the small read-only list also ask.
+
+Low risk is deliberately narrow: `ls`, `pwd`, `cat`, `head`, `tail`, `wc`, `rg`, `grep`, `find`, a read-only `git` (`status`, `diff`, `log`, `show`, `rev-parse`, a plain `branch` listing) inside the project folder, a read inside the folder, an edit inside the folder that touches no sensitive path, and a question.
+
+The confirmation shows the command, what it will do, where it goes, and a button that opens the device check. The PC is asked for the challenge when the dialog opens, not on the tap, because iOS only allows the Face ID prompt directly from a tap. A challenge held for more than about a minute is dropped and a new one is fetched (one more tap), judged on the phone's own clock so a wrong phone clock cannot make it expire. Closing the dialog, cancelling Face ID, losing the link or a request that changed in the meantime sends nothing.
+
+#### What the phone says about delivery
+
+A decision is never queued and never resent. After a tap the request shows one of: sending, "receipt not confirmed" (the link dropped, state unknown: the phone only checks the result, it never sends again), applied, rejected with the reason, or unknown. If the request changed while you looked, the buttons wait until you have re-read it. A request handled elsewhere says so.
+
+Some of the phone's wording was written during implementation (for instance "J'ai relu la demande" on the re-read button, and the confirmation and delivery messages) and has not been reviewed by the user yet; the exact copy is in `apps/mobile/src/copy.ts`.
+
+### Testing a decision on the iPhone (R4, R5 and R8, pending on device)
 
 1. In a throwaway directory run `git init` then `git init --bare ../fake-remote.git` and `git remote add origin file://$PWD/../fake-remote.git`, with one commit. Nothing real is at risk.
 2. Start a Ledge Claude session there (`ledge claude`), with the phone paired and open on the session.
 3. Ask the agent to run `ls`: the phone offers Accept; tap it. Expect one accept, applied, no Face ID prompt.
 4. Ask the agent to run `git push --force origin HEAD`: the phone must ask for Face ID. Cancel it: nothing is typed and the PC prompt stays. Retry and confirm: the push goes to the fake remote only.
 5. Answer a question by tapping an option: applied, no Face ID prompt.
-6. Check `~/.ledge/daemon.log` for the operations and that no assertion or token appears in it.
+6. R5: tap "Allow once" on a `ls` request, then switch to airplane mode at once. Expect "receipt not confirmed", then, after reconnecting, the exact state (applied or not), and a single `ls` in the pane.
+7. R8: lock the phone for 10 minutes during an active session, then reopen the app: it reconnects by itself, refreshes, and checks any open operation.
+8. Check `~/.ledge/daemon.log` for the operations and that no assertion or token appears in it.
 
 ## Files
 
