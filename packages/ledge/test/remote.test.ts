@@ -201,6 +201,8 @@ describe('remote entry', () => {
     expect(done.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(await p.closed).toBe(1000);
     expect(devices.get(done.deviceId)?.name).toBe('iPhone de Joffrey');
+    // The overlay learns of the new device without asking.
+    expect((await pc.next('devices')).devices.map((d: { id: string }) => d.id)).toEqual([done.deviceId]);
     // Pairing messages go to the phone's socket only, never to local peers.
     await expect(pc.next('pair.challenge', 100)).rejects.toThrow(/timeout/);
     await expect(pc.next('pair.done', 100)).rejects.toThrow(/timeout/);

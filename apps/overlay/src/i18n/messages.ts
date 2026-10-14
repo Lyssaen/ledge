@@ -138,7 +138,17 @@ const fr = {
     answer: (opt: string) => `Répondre : ${opt}`, firstOption: 'première option'
   },
   settings: {
-    title: 'Votre Ledge', tabs: 'Sections des réglages', tabDisplay: 'Affichage', tabNotifications: 'Notifications', tabSounds: 'Sons', tabAbout: 'À propos', islandSize: 'Taille de l’île', islandSizeHint: 'L’île et ses compagnons en haut de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
+    title: 'Votre Ledge', tabs: 'Sections des réglages', tabDisplay: 'Affichage', tabNotifications: 'Notifications', tabSounds: 'Sons', tabMobile: 'Mobile', tabAbout: 'À propos', islandSize: 'Taille de l’île', islandSizeHint: 'L’île et ses compagnons en haut de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
+    mobile: {
+      title: 'Ledge sur le téléphone', hint: 'Suivez vos sessions depuis un téléphone, en lecture seule, par votre tailnet Tailscale.',
+      enable: 'Pour l’activer, lancez cette commande dans WSL :', docs: 'Voir docs/mobile.md',
+      pair: 'Appairer un téléphone', pairHint: 'Un code à usage unique, valable deux minutes.', newCode: 'Nouveau code',
+      qr: 'Code QR d’appairage', codeLabel: 'Code d’appairage', scan: 'Scannez le code QR avec le téléphone, ou saisissez le code.',
+      countdown: (s: number) => `Expire dans ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, expired: 'Code expiré',
+      devices: 'Téléphones appairés', none: 'Aucun téléphone appairé.', never: 'Jamais connecté', lastSeen: (ago: string) => `Vu il y a ${ago}`,
+      revoke: 'Retirer', revokeLabel: (name: string) => `Retirer ${name}`,
+      errors: { not_configured: 'L’accès mobile n’est pas activé.', no_window: 'Aucune fenêtre d’appairage ouverte.', invalid_code: 'Code invalide.', expired: 'Code expiré.', locked: 'Trop d’essais : réessayez plus tard.', webauthn_failed: 'La clé n’a pas pu être enregistrée.' } as Record<string, string>
+    },
     screen: 'Écran', screenHint: (w: number, h: number) => `L’île se pose en haut de cet écran (${w}\u00a0×\u00a0${h}).`, screenHintNone: 'L’île se pose en haut de l’écran principal.',
     islandPosition: 'Position de l’île', islandPositionHint: 'Au centre du bord supérieur, ou décalée au quart de l’écran pour laisser libres les titres et les onglets.', islandPositions: { center: 'Centre', left: 'À gauche', right: 'À droite' },
     discreet: 'Mode discret sous une fenêtre', discreetHint: 'Un simple trait quand une fenêtre maximisée occupe l’écran ; un survol la redéploie.',
@@ -343,7 +353,17 @@ const en: Messages = {
     answer: (opt: string) => `Answer: ${opt}`, firstOption: 'first option'
   },
   settings: {
-    title: 'Your Ledge', tabs: 'Settings sections', tabDisplay: 'Display', tabNotifications: 'Notifications', tabSounds: 'Sounds', tabAbout: 'About', islandSize: 'Island size', islandSizeHint: 'The island and its companions at the top of the screen.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
+    title: 'Your Ledge', tabs: 'Settings sections', tabDisplay: 'Display', tabNotifications: 'Notifications', tabSounds: 'Sounds', tabMobile: 'Mobile', tabAbout: 'About', islandSize: 'Island size', islandSizeHint: 'The island and its companions at the top of the screen.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
+    mobile: {
+      title: 'Ledge on the phone', hint: 'Follow your sessions from a phone, read-only, over your Tailscale tailnet.',
+      enable: 'To turn it on, run this command in WSL:', docs: 'See docs/mobile.md',
+      pair: 'Pair a phone', pairHint: 'A one-time code, valid for two minutes.', newCode: 'New code',
+      qr: 'Pairing QR code', codeLabel: 'Pairing code', scan: 'Scan the QR code with the phone, or type the code.',
+      countdown: (s: number) => `Expires in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, expired: 'Code expired',
+      devices: 'Paired phones', none: 'No phone paired.', never: 'Never connected', lastSeen: (ago: string) => `Seen ${ago} ago`,
+      revoke: 'Remove', revokeLabel: (name: string) => `Remove ${name}`,
+      errors: { not_configured: 'Mobile access is not turned on.', no_window: 'No pairing window is open.', invalid_code: 'Invalid code.', expired: 'Code expired.', locked: 'Too many attempts: try again later.', webauthn_failed: 'The key could not be registered.' } as Record<string, string>
+    },
     screen: 'Screen', screenHint: (w: number, h: number) => `The island sits at the top of this screen (${w}\u00a0×\u00a0${h}).`, screenHintNone: 'The island sits at the top of the primary screen.',
     islandPosition: 'Island position', islandPositionHint: 'Centred on the top edge, or a quarter of the way in to keep window titles and tabs clear.', islandPositions: { center: 'Centre', left: 'Left', right: 'Right' },
     discreet: 'Discreet under a window', discreetHint: 'A thin strip while a maximised window fills the screen; hovering brings the island back.',

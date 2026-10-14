@@ -97,7 +97,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
-  const { sessions: daemonSessions, byId, status, previews, lastError, recents, launcher, lastLaunched, lastListing, chat, chatLive } = useDaemon();
+  const { sessions: daemonSessions, byId, status, previews, lastError, recents, launcher, lastLaunched, lastListing, chat, chatLive, mobile, pairing, pairError } = useDaemon();
   // Everything indexed (digits, J/K, the handle, the coachmark row) follows the order the list displays: grouped by repository.
   const sessions = useMemo(() => displayOrder(daemonSessions), [daemonSessions]);
   const groups = useMemo(() => groupSessions(sessions), [sessions]);
@@ -630,6 +630,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               monitors={monitors} monitor={monitor} onMonitor={onMonitor} autostart={autostart} onAutostart={onAutostart}
               defaultTool={defaultTool} onDefaultTool={chooseDefaultTool} accent={accent} onAccent={onAccent}
               islandPosition={islandPosition} onIslandPosition={onIslandPosition} discreet={discreet} onDiscreet={onDiscreet}
+              mobile={{ state: mobile, pairing, pairError, now: Date.now, onOpen: () => { if (!unreachable) send({ type: 'devices' }); }, onPair: () => send({ type: 'pair.begin' }), onRevoke: id => send({ type: 'device.revoke', id }) }}
               about={update ? { app: update.state.app, daemon: update.state.daemon, latest: update.state.latest?.version ?? null, auto: update.auto, checkedAt: update.state.checkedAt, onAuto: update.setAuto, onCheck: update.checkNow } : undefined}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>

@@ -7,6 +7,7 @@ import { ISLAND_POSITIONS, type IslandPosition } from '../island';
 import { useI18n } from '../i18n/lang';
 import { LANGS, type Lang } from '../i18n/messages';
 import { Button } from '../ui/Button';
+import { MobileSettings, type MobileSettingsProps } from './MobileSettings';
 import { Tabs, tabIds } from '../ui/Tabs';
 import { CATEGORIES, FINISHED_VALUES, VOLUMES, type FinishedNotify, type SoundPrefs, type SoundPatch } from '../sounds/preferences';
 import { resolveMonitor, type MonitorInfo } from '../monitor';
@@ -40,6 +41,8 @@ export interface SettingsViewProps {
   accent?: string | null; onAccent?: (hex: string | null) => void;
   /** The About tab: both versions, the latest known release and the update check (absent: no tab). */
   about?: { app: string | null; daemon: DaemonInfo | null; latest: string | null; auto: boolean; checkedAt: number | null; onAuto: (on: boolean) => void; onCheck: () => void };
+  /** The Mobile tab: the daemon's device list and pairing code (absent: no tab). `onOpen` fires when the tab opens, to ask for the list. */
+  mobile?: MobileSettingsProps & { onOpen: () => void };
   /** The body's natural height, measured by the surface to size itself. */
   contentRef?: Ref<HTMLDivElement>;
 }
@@ -113,7 +116,7 @@ function AccentRow({ value, onChange }: { value: string | null; onChange?: (hex:
 }
 
 /** The settings sections, one tab each; the last one opened is remembered. */
-export const SETTINGS_TABS = ['display', 'notifications', 'sounds', 'about'] as const;
+export const SETTINGS_TABS = ['display', 'notifications', 'sounds', 'mobile', 'about'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 const TAB_KEY = 'ledge.settings.tab';
 const isTab = (v: unknown): v is SettingsTab => (SETTINGS_TABS as readonly unknown[]).includes(v);
@@ -139,11 +142,13 @@ export function SettingsView(p: SettingsViewProps) {
   const chosen = resolveMonitor(choice, monitors);
   const chosenValue = choice !== null && !monitors.some(m => m.id === choice) ? choice : chosen && !chosen.primary ? chosen.id : 'primary';
   const [storedTab, setTab] = useState<SettingsTab>(loadSettingsTab);
-  const tab: SettingsTab = storedTab === 'about' && !p.about ? 'display' : storedTab;
+  const tab: SettingsTab = (storedTab === 'about' && !p.about) || (storedTab === 'mobile' && !p.mobile) ? 'display' : storedTab;
   const chooseTab = (next: SettingsTab) => { setTab(next); saveSettingsTab(next); };
-  const tabLabel = { display: t.settings.tabDisplay, notifications: t.settings.tabNotifications, sounds: t.settings.tabSounds, about: t.settings.tabAbout } as const;
+  const tabLabel = { display: t.settings.tabDisplay, notifications: t.settings.tabNotifications, sounds: t.settings.tabSounds, mobile: t.settings.tabMobile, about: t.settings.tabAbout } as const;
   const about = p.about;
-  const tabs = SETTINGS_TABS.filter(v => v !== 'about' || about);
+  const tabs = SETTINGS_TABS.filter(v => v === 'about' ? about : v === 'mobile' ? p.mobile : true);
+  const onMobileOpen = p.mobile?.onOpen; const mobileShown = tab === 'mobile' && p.visible;
+  useEffect(() => { if (mobileShown) onMobileOpen?.(); }, [mobileShown]); // eslint-disable-line react-hooks/exhaustive-deps
   const { tabId, panelId } = tabIds('ledge-settings', tab);
   return (
     <div data-layer="settings" data-delay={enterDelay} inert={!p.visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: p.visible ? 1 : 0, pointerEvents: p.visible ? 'auto' : 'none', transition: transition([['opacity', p.visible ? 'fadeIn' : 'fadeOut', p.visible ? enterDelay : 0]]) }}>
@@ -187,6 +192,7 @@ export function SettingsView(p: SettingsViewProps) {
               <Segmented<FinishedNotify> name="ledge-finished" label={t.settings.finished} hint={t.settings.finishedHint} value={p.finished} onChange={p.onFinished}
                 options={FINISHED_VALUES.map(v => ({ value: v, label: { both: t.settings.finishedBoth, bubble: t.settings.finishedBubble, sound: t.settings.finishedSound, none: t.settings.finishedNone }[v], wide: v === 'both' }))} />
             </>}
+            {tab === 'mobile' && p.mobile && <MobileSettings {...p.mobile} />}
             {tab === 'about' && about && (() => {
               const mismatch = !!about.app && !!about.daemon && compareVersions(about.app, about.daemon.version) !== 0;
               const newer = !!about.latest && [about.app, about.daemon?.version].some(v => !!v && compareVersions(about.latest!, v) > 0);

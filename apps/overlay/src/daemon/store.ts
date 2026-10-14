@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { ChatTurn, DaemonInfo, Recent, ServerMessage, Session } from '@ledge/protocol';
+import type { ChatTurn, DaemonInfo, Device, PairErrorReason, Recent, ServerMessage, Session } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from '@ledge/client';
 
 /** The daemon's last `error` reply; `seq` tells two identical messages apart. */
@@ -21,11 +21,15 @@ export interface DaemonState {
   /** How many snapshots arrived (one per connection), so a reconnect after a restart is detectable. */
   snapshotSeq: number;
   /** The daemon's last update.progress / update.failed message; `seq` tells two identical ones apart. */
+  /** The paired phones, the https origin and whether the remote entry listens; null until the daemon answers `devices`. */
+  mobile: { devices: Device[]; origin: string | null; listening: boolean } | null;
+  /** The pairing code being shown (this PC asked for it), and the reason of the last refusal. */
+  pairing: { code: string; expiresAt: string; url: string } | null; pairError: PairErrorReason | null;
   lastUpdate: { msg: Extract<ServerMessage, { type: 'update.progress' | 'update.failed' }>; seq: number } | null;
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
 export type FolderListing = Omit<Extract<ServerMessage, { type: 'folder.listing' }>, 'type'> & { seq: number };
-const empty = (): DaemonState => ({ sessions: [], byId: new Map(), status: 'connecting', previews: new Map(), lastError: null, recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, lastUpdate: null });
+const empty = (): DaemonState => ({ sessions: [], byId: new Map(), status: 'connecting', previews: new Map(), lastError: null, recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, mobile: null, pairing: null, pairError: null, lastUpdate: null });
 let state: DaemonState = empty();
 const subs = new Set<() => void>();
 const emit = () => subs.forEach(f => f());
@@ -52,6 +56,14 @@ export const daemonStore = {
     if (m.type === 'session.launched') { state = { ...state, lastLaunched: { id: m.id, seq: (state.lastLaunched?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'folder.listing') { const { type: _, ...l } = m; state = { ...state, lastListing: { ...l, seq: (state.lastListing?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'update.progress' || m.type === 'update.failed') { state = { ...state, lastUpdate: { msg: m, seq: (state.lastUpdate?.seq ?? 0) + 1 } }; emit(); return; }
+    if (m.type === 'devices') {
+      // A device that was not there before consumes the pairing code: leave the pairing view.
+      const known = new Set(state.mobile?.devices.map(d => d.id));
+      const joined = state.mobile !== null && m.devices.some(d => !known.has(d.id));
+      state = { ...state, mobile: { devices: m.devices, origin: m.origin, listening: m.listening }, pairing: joined ? null : state.pairing }; emit(); return;
+    }
+    if (m.type === 'pair.code') { state = { ...state, pairing: { code: m.code, expiresAt: m.expiresAt, url: m.url }, pairError: null }; emit(); return; }
+    if (m.type === 'pair.error') { state = { ...state, pairing: null, pairError: m.reason }; emit(); return; }
     if (m.type === 'recents') { state = { ...state, recents: m.recents }; emit(); return; }
     const byId = new Map(state.byId); const previews = new Map(state.previews);
     let { recents, launcher, daemon, snapshotSeq } = state;

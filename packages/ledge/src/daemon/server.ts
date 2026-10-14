@@ -119,6 +119,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const devicesMessage = (m: MobileControl): ServerMessage => ({ type: 'devices', devices: m.devices.list(), ...m.state() });
+  // Every change to the device list (pairing, revocation) reaches the local peers once; remote peers drop `devices` in toRemote.
+  const unsubscribeDevices = opts.mobile?.devices.onChange(() => broadcast(devicesMessage(opts.mobile!)));
   const sendSnapshot = (peer: Peer) => {
     peer.send({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: opts.daemon } : {}) });
     for (const [id, lines] of previews) if (store.get(id)) peer.send({ type: 'session.preview', id, lines });
@@ -322,7 +324,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (!(await opts.mobile.devices.revoke(msg.id))) return peer.send({ type: 'error', id: msg.id, message: 'unknown device' });
         const closed = peers.closeDevice(msg.id, REMOTE_CLOSE.revoked);
         log(`revoked device ${msg.id} (${closed} open connection${closed === 1 ? '' : 's'} closed)`);
-        return broadcast(devicesMessage(opts.mobile));
+        return;
       }
       // The code goes to the PC that asked, never to a broadcast (and `toRemote` drops it anyway).
       case 'pair.begin': {
@@ -387,6 +389,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     preview,
     attach,
     peers,
-    close: () => new Promise(res => { unsubscribe(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
+    close: () => new Promise(res => { unsubscribe(); unsubscribeDevices?.(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
   };
 }
