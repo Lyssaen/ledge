@@ -16,7 +16,7 @@ export function RoomView({ sessions, grouping, selected, onSelect, onGrouping }:
         <span>{t.room.tableCount(groups.length)}</span>
       </div>
       <div className={`table-groups${grouping === 'all' ? ' single-table' : ''}`}>
-        {groups.map(g => <Table key={g.id} table={g} selected={selected} onSelect={onSelect} />)}
+        {groups.length ? groups.map(g => <Table key={g.id} table={g} selected={selected} onSelect={onSelect} />) : <p className="empty-sessions">{t.empty.none}</p>}
       </div>
     </section>
   );

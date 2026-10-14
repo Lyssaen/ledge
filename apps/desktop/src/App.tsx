@@ -11,6 +11,7 @@ import { RoomView } from './room/RoomView';
 import { tables } from './grouping/groups';
 import { OfflineNotice, LocalDownNotice } from './shell/OfflineNotice';
 import { StatusBar } from './shell/StatusBar';
+import { EmptyWorkspace } from './shell/EmptyWorkspace';
 import { useI18n } from './i18n/lang';
 
 function Shell({ client }: { client?: DaemonClient }) {
@@ -36,8 +37,9 @@ function Shell({ client }: { client?: DaemonClient }) {
         <Heading state={state} dispatch={dispatch} attentionCount={sessions.filter(needsAttention).length} />
         {localDown && <LocalDownNotice />}
         <OfflineNotice machines={machines} onRetry={id => fleet.retry(id)} />
-        {state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
-        {state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} attentionOnly={state.attentionOnly} />}
+        {sessions.length === 0 && <EmptyWorkspace />}
+        {sessions.length > 0 && state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
+        {sessions.length > 0 && state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} attentionOnly={state.attentionOnly} />}
         <StatusBar sessions={sessions} machines={machines} />
       </div>
     </main>

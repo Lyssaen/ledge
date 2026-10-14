@@ -19,6 +19,10 @@ test('eight agents: team grid, filter and selection survive a reload', async ({ 
 test('no session: the empty workspace', async ({ page }) => {
   await fakeDaemon(page, []);
   await page.goto('/');
+  // the default view is the meeting room: the empty workspace replaces it too
+  await expect(page.getByRole('button', { name: 'Meeting' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('Your team starts here')).toBeVisible();
+  await expect(page.locator('.table-group')).toHaveCount(0);
   await page.getByRole('button', { name: 'Team' }).click();
   await expect(page.getByText('Your team starts here')).toBeVisible();
 });

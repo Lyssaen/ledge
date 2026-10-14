@@ -63,6 +63,20 @@ describe('visible-ids dispatch', () => {
   });
 });
 
+describe('no session at all', () => {
+  it.each(['room', 'team'] as const)('the %s view shows the empty workspace', async (view) => {
+    const d = await createMockDaemon();
+    d.machines([{ id: 'local', label: 'Local' }]);
+    localStorage.clear(); if (view === 'team') localStorage.setItem('desktop.view', JSON.stringify({ view }));
+    const { unmount } = render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /Team/ })).toHaveAttribute('aria-pressed', String(view === 'team')));
+    expect(await screen.findByText('Your team starts here')).toBeInTheDocument();
+    expect(document.querySelector('.workspace-empty')).not.toBeNull();
+    expect(document.querySelector('.table-group, .session-grid')).toBeNull();
+    unmount(); await d.close();
+  });
+});
+
 describe('local daemon falls after its snapshot', () => {
   it('keeps the selection and lists the local sessions offline', async () => {
     const d = await createMockDaemon();

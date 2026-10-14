@@ -30,9 +30,10 @@ describe('TeamView', () => {
     expect(screen.getByText('Needs you', { selector: '.toolbar' })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /·/ })).toHaveLength(2);
   });
-  it('an empty list shows the empty workspace', () => {
-    render(<TeamView sessions={[]} selected={null} onSelect={() => {}} attentionOnly={false} />);
-    expect(screen.getByText('Your team starts here')).toBeInTheDocument();
+  it('a filter that empties the view says nothing is waiting', () => {
+    render(<TeamView sessions={[]} selected={null} onSelect={() => {}} attentionOnly />);
+    expect(screen.getByText('No requests waiting.')).toHaveClass('empty-sessions');
+    expect(screen.queryByText('Your team starts here')).toBeNull();
   });
 });
 

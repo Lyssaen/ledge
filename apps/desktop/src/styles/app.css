@@ -202,3 +202,9 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .offline-notice button { margin-left: auto; font: inherit; font-size: 10px; background: var(--sidebar-accent); color: var(--sidebar-foreground); border: 1px solid var(--input); border-radius: 6px; padding: 5px 9px; }
 .offline-notice.local-down { border-color: var(--danger-text); }
 .dot.offline-dot { background: var(--danger-text); }
+/* From the mockup's journeys.css and conversation.css: the empty workspace and an emptied view. */
+.workspace-empty { flex: 1; min-height: 450px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 35px 24px; }
+.workspace-empty h3 { font-size: 22px; font-weight: 550; margin: 22px 0 10px; }
+.workspace-empty p { font-size: 12px; line-height: 1.8; color: var(--muted-foreground); max-width: 380px; margin: 0 0 22px; }
+.workspace-empty .primary { font-size: 12px; padding: 12px 18px; }
+.empty-sessions { padding: 30px 12px; font-size: 12px; text-align: center; color: var(--muted-foreground); }

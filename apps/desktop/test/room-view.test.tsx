@@ -24,6 +24,11 @@ describe('RoomView', () => {
     await userEvent.click(screen.getByRole('button', { name: /nova/ }));
     expect(onSelect).toHaveBeenCalledWith('devbox:nova');
   });
+  it('a filter that empties the room says nothing is waiting', () => {
+    render(<RoomView sessions={[]} grouping="machine" selected={null} onSelect={() => {}} onGrouping={() => {}} />);
+    expect(screen.queryAllByRole('region')).toHaveLength(0);
+    expect(screen.getByText('No requests waiting.')).toHaveClass('empty-sessions');
+  });
   it('changing the select reports the grouping', async () => {
     const onGrouping = vi.fn();
     render(<RoomView sessions={eight} grouping="all" selected={null} onSelect={() => {}} onGrouping={onGrouping} />);

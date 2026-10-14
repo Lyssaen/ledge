@@ -23,7 +23,7 @@ const fr = {
       mine: 'Vos propres sessions, hors équipe.'
     }
   },
-  empty: { title: 'Votre équipe commence ici', text: 'Aucune session pour le moment. Choisissez un projet et confiez une première tâche à un agent.' },
+  empty: { title: 'Votre équipe commence ici', text: 'Aucune session pour le moment. Choisissez un projet et confiez une première tâche à un agent.', none: 'Aucune demande en attente.' },
   offline: {
     title: (name: string) => `${name} est déconnectée`,
     reconnecting: (name: string) => `Reconnexion à ${name}…`,
@@ -63,7 +63,7 @@ const en: typeof fr = {
       mine: 'Your own sessions, outside the team.'
     }
   },
-  empty: { title: 'Your team starts here', text: 'No sessions yet. Pick a project and give an agent a first task.' },
+  empty: { title: 'Your team starts here', text: 'No sessions yet. Pick a project and give an agent a first task.', none: 'No requests waiting.' },
   offline: {
     title: (name) => `${name} is disconnected`,
     reconnecting: (name) => `Reconnecting to ${name}…`,
