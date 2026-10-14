@@ -204,3 +204,28 @@ describe('session traffic through the fleet', () => {
     expect(got.length).toBe(n);
   });
 });
+
+describe('updating a remote daemon', () => {
+  it('sends to one machine only, and not to a machine that is not connected', () => {
+    const { client, local, server } = setup();
+    expect(client.fleet!.sendTo('server', { type: 'update.daemon', version: '0.5.0' })).toBe(true);
+    expect(server.sent).toEqual([{ type: 'update.daemon', version: '0.5.0' }]); expect(local.sent).toEqual([]);
+    server.set('unreachable');
+    expect(client.fleet!.sendTo('server', { type: 'update.daemon', version: '0.5.0' })).toBe(false);
+  });
+  it('gives each daemon message with its machine, and the daemon info with the machine', () => {
+    const { client, server } = setup();
+    const seen: Array<[string, string]> = []; client.fleet!.onMachineMessage((machine, m) => seen.push([machine, m.type]));
+    server.emit({ type: 'update.progress', version: '0.5.0', step: 'installing' });
+    expect(seen).toEqual([['server', 'update.progress']]);
+    expect(client.fleet!.machines().find(m => m.id === 'server')?.daemon).toMatchObject({ version: '0.4.0', install: 'npm' });
+  });
+  it('keeps quiet about the SSH bridge closing while the remote daemon restarts', () => {
+    const { got, server, snapshot } = setup();
+    server.emit({ type: 'update.progress', version: '0.5.0', step: 'restarting' });
+    server.emit({ type: 'error', message: 'SSH connection closed (1). Ledge daemon disconnected (1001)' });
+    server.set('connecting'); server.set('open'); server.emit({ ...snapshot, sshAlias: remote.ssh });
+    server.emit({ type: 'error', message: 'later failure' });
+    expect(got.filter(m => m.type === 'error').map(m => (m as { message: string }).message)).toEqual(['dev-server: later failure']);
+  });
+});

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { SshAliasSchema } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
-import { parseServerMessage, type Recent, type Session, type ServerMessage } from '@ledge/protocol';
+import { parseServerMessage, type ClientMessage, type DaemonInfo, type Recent, type Session, type ServerMessage } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
 
 const loopback = (value: string) => { try { const u = new URL(value); return u.protocol === 'ws:' && ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname) && !u.username && !u.password && u.pathname === '/' && !u.search && !u.hash; } catch { return false; } };
@@ -11,7 +11,7 @@ export const MachineConfigSchema = z.object({
   ssh: SshAliasSchema.optional()
 });
 export type MachineConfig = z.infer<typeof MachineConfigSchema>;
-export interface MachineState extends MachineConfig { status: DaemonStatus; ready: boolean; recents: Recent[]; sessions: Session[]; launcher: string[] | null; version?: string; error?: string }
+export interface MachineState extends MachineConfig { status: DaemonStatus; ready: boolean; recents: Recent[]; sessions: Session[]; launcher: string[] | null; version?: string; daemon?: DaemonInfo; error?: string }
 /** A one-off connection test: the remote Ledge answered with its snapshot, or the raw error SSH or the daemon gave. */
 export type ProbeResult = { ok: true; version?: string; sessions: number } | { ok: false; error: string };
 export interface Fleet {
@@ -29,6 +29,10 @@ export interface Fleet {
   turnMachine(qid: string): MachineState | undefined;
   documentMachine(id: string): string | undefined;
   localSnapshot(): Extract<ServerMessage, { type: 'snapshot' }> | null;
+  /** Sends to one machine; false when it is not connected (nothing sent). */
+  sendTo(machine: string, msg: ClientMessage): boolean;
+  /** Every daemon message, unqualified, with the machine it came from. */
+  onMachineMessage(fn: (machine: string, m: ServerMessage) => void): () => void;
 }
 export const LOCAL_MACHINE: MachineConfig = { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' };
 export function parseMachines(raw: unknown): MachineConfig[] {

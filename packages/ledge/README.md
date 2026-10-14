@@ -12,7 +12,7 @@ npm i -g @paradow/ledge && ledge setup
 
 ## Update
 
-From the Ledge island: the card in the list updates the daemon, then the Windows app. By hand:
+From the Ledge island: the card in the list updates the connected servers' daemons, then the WSL daemon, then the Windows app. By hand, on each machine:
 
 ```sh
 npm i -g @paradow/ledge@latest && systemctl --user restart ledge-daemon
