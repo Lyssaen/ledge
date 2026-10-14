@@ -16,3 +16,11 @@ test('Enter in the reply field sends session.reply; an error for that id restore
   await expect(field).toHaveValue('also run the linter');
   await expectMode(page, 'session');
 });
+
+test('accept sends the pending id and version', async ({ page }) => {
+  const d = await fakeDaemon(page, [session('a'), session('b', { name: 'Pim', state: 'waiting_permission', pending: { kind: 'permission', text: 'Run pnpm test', source: 'hook', id: 'p3-b', version: 2 } })]);
+  await ready(page, 2);
+  await expectMode(page, 'bubble');
+  await layer(page, 'bubble').getByRole('button', { name: 'Approve' }).click();
+  expect(await received(d.received, 'session.decide', m => m.id === 'b')).toEqual({ type: 'session.decide', id: 'b', decision: 'accept', pendingId: 'p3-b', pendingVersion: 2 });
+});

@@ -10,8 +10,8 @@ export type SessionChange =
 
 /** The session waits on a request (permission or input). */
 export const isPending = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input';
-/** The same request: same kind, text and helper. */
-export const sameRequest = (a: Session['pending'], b: Session['pending']) => !!a && !!b && a.kind === b.kind && a.text === b.text && a.helperId === b.helperId;
+/** The same request: the same id when both carry one, else same kind, text and helper. */
+export const sameRequest = (a: Session['pending'], b: Session['pending']) => !!a && !!b && (a.id !== undefined && b.id !== undefined ? a.id === b.id : a.kind === b.kind && a.text === b.text && a.helperId === b.helperId);
 /** The bot reads as working: its turn runs, or it rests while helpers (subagents) still work (the bot's `working`). */
 export const isBusy = (s: Session) => s.state === 'working' || (s.state === 'idle' && liveHelpers(s).length > 0);
 

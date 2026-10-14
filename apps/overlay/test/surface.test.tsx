@@ -46,6 +46,13 @@ describe('<Surface>', () => {
     expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
   });
 
+  it('approve names the identified request it decides', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => { mock.upsert(pim({ state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook', id: 'p3-b', version: 2 } })); await sleep(50); vi.advanceTimersByTime(540); });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.decide', id: 'b', decision: 'accept', pendingId: 'p3-b', pendingVersion: 2 }));
+  });
+
   it('after approve the bubble does not fold on the 900 ms timer alone, without the daemon confirmation', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(pimAsks()); await sleep(50); vi.advanceTimersByTime(540); });

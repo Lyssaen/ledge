@@ -46,4 +46,14 @@ describe('shared request helpers', () => {
     expect(sameRequest(q, { ...q, text: 'Other?' })).toBe(false);
     expect(sameRequest(undefined, q)).toBe(false);
   });
+  it('two pendings with the same text but different ids are different requests', () => {
+    const p = { kind: 'permission' as const, text: 'npm test', source: 'hook' as const };
+    expect(sameRequest({ ...p, id: 'p1-a' }, { ...p, id: 'p2-b' })).toBe(false);
+    expect(sameRequest({ ...p, id: 'p1-a', version: 1 }, { ...p, id: 'p1-a', version: 2 })).toBe(true);
+  });
+  it('without ids on both sides, the old rule applies', () => {
+    const p = { kind: 'permission' as const, text: 'npm test', source: 'hook' as const };
+    expect(sameRequest(p, { ...p })).toBe(true);
+    expect(sameRequest({ ...p, id: 'p1-a' }, { ...p })).toBe(true);
+  });
 });

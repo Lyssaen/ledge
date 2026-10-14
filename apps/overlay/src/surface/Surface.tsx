@@ -500,10 +500,12 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // Offline or read-only: every send/decision path (buttons and keys alike) is off, with the reason shown.
   const blockedFor = (s: Session | null | undefined): string | null => unreachable ? t.offline : s?.source === 'hook_only' ? t.readOnlyBlocked : s ? null : t.offline;
   const canDecide = (s: Session) => blockedFor(s) === null && !asks.inFlight.has(s.id);
+  /** The request a command answers, named when the daemon identified it, so a changed one is refused instead of answered. */
+  const identity = (s: Session | undefined) => s?.pending?.id !== undefined && s.pending.version !== undefined ? { pendingId: s.pending.id, pendingVersion: s.pending.version } : {};
   /** One decision command per request: false when blocked or already in flight. */
   const decide = (id: string, d: 'accept' | 'deny'): boolean => {
     if (blockedFor(byId.get(id)) !== null || !asks.begin(id)) return false;
-    send({ type: 'session.decide', id, decision: d }); sounds.user(d === 'accept' ? 'accept' : 'deny'); return true;
+    send({ type: 'session.decide', id, decision: d, ...identity(byId.get(id)) }); sounds.user(d === 'accept' ? 'accept' : 'deny'); return true;
   };
   /** A typed reply. A permission, diff or plan prompt takes Approve/Deny only (the field explains it); answering a
    *  question locks it like a decision. The draft is cleared on send and comes back if the daemon rejects it. */
@@ -512,7 +514,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     if (!s || blockedFor(s) !== null || (s.pending && s.pending.kind !== 'question')) return;
     if (s.pending && !asks.begin(id)) return;
     asks.replied(id, text);
-    send({ type: 'session.reply', id, text }); sounds.user('accept'); setDrafts(x => ({ ...x, [id]: '' })); dispatch({ type: 'typing', on: false });
+    send({ type: 'session.reply', id, text, ...identity(s) }); sounds.user('accept'); setDrafts(x => ({ ...x, [id]: '' })); dispatch({ type: 'typing', on: false });
   };
   const bubbleAck: BubbleAck = st.ack ? (st.ack.confirmed ? 'confirmed' : 'pending') : st.failed && st.failed === st.bubbleId ? 'failed' : null;
   // The coachmark sits 8 px under the panel, centred on it, clamped into the work area; the native frame extends to hold it.
@@ -604,7 +606,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
           onDecide={d => { if (st.bubbleId && !ctl.state().ack && decide(st.bubbleId, d)) dispatch({ type: 'decidedInBubble' }); }}
           onReply={t => {
             const id = st.bubbleId; if (!id || ctl.state().ack || blockedFor(byId.get(id)) !== null || !asks.begin(id)) return;
-            send({ type: 'session.reply', id, text: t }); sounds.user('accept'); dispatch({ type: 'decidedInBubble' });
+            send({ type: 'session.reply', id, text: t, ...identity(byId.get(id)) }); sounds.user('accept'); dispatch({ type: 'decidedInBubble' });
           }} theme={theme} />
         </div>
         <div data-panel style={{ position: 'absolute', inset: 0, zoom: ps, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>
