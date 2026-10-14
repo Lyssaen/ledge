@@ -1,6 +1,7 @@
 export * from './chat.js';
 export * from './documents.js';
 export * from './session.js';
+export * from './machines.js';
 export * from './messages.js';
 export * from './names.js';
 export * from './proposal.js';
