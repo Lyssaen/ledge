@@ -1,4 +1,4 @@
-import type { SessionEvent, Tool } from '@ledge/protocol';
+import { REPLY_MAX, REPLY_TRUNCATION_MARK, type SessionEvent, type Tool } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
@@ -34,12 +34,12 @@ function describeTool(tool: string | undefined, input: unknown): string {
 }
 
 /** The longest reply kept from a Stop hook: enough for a long report, never a whole transcript. */
-export const REPLY_MAX = 24_000;
+export { REPLY_MAX };
 /** The agent's last message (Claude Code 2.1: `last_assistant_message` on Stop), trimmed and capped. */
 function lastReply(p: Payload): string | undefined {
   const text = str(p.last_assistant_message)?.trim();
   if (!text) return undefined;
-  return text.length > REPLY_MAX ? `${text.slice(0, REPLY_MAX)}\n\n[…]` : text;
+  return text.length > REPLY_MAX ? `${text.slice(0, REPLY_MAX)}${REPLY_TRUNCATION_MARK}` : text;
 }
 
 /** SessionEnd reasons after which the same agent process keeps running (Claude Code 2.1). */

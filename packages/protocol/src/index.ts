@@ -6,3 +6,4 @@ export * from './names.js';
 export * from './topic.js';
 export * from './remote.js';
 export * from './operations.js';
+export * from './history.js';

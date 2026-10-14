@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { SessionSchema, ToolSchema } from './session.js';
+import { TurnSchema } from './history.js';
 import { ChatStepSchema, ChatTurnSchema } from './chat.js';
 import { AuthenticationJsonSchema, OperationIdSchema, OperationReasonSchema, OperationStatusSchema } from './operations.js';
 import { DeviceSchema, PairErrorSchema, RegistrationJsonSchema } from './remote.js';
@@ -50,6 +51,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
   /** Answer to the requester of a `session.launch`: the session exists (its `session.updated` is broadcast as usual). */
   z.object({ type: z.literal('session.launched'), id: z.string() }),
+  /** Answer to `session.history`: the session's thread, oldest first. */
+  z.object({ type: z.literal('session.turns'), id: z.string(), turns: z.array(TurnSchema) }),
   z.object({ type: z.literal('recents'), recents: z.array(RecentSchema) }),
   /** Answer to the requester of a `folder.list` or `folder.create`: `path` resolved (`~` expanded), `parent` null at the
    *  root, `entries` its subfolders by name (hidden ones left out). A failure keeps the asked path and says why in `error`,
@@ -97,7 +100,11 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('operation.status'), operationId: OperationIdSchema }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),
   z.object({ type: z.literal('session.kill'), id: z.string() }),
-  z.object({ type: z.literal('session.interrupt'), id: z.string() }),
+  z.object({ type: z.literal('session.interrupt'), id: z.string(), operationId: OperationIdSchema.optional() }),
+  /** The phone opens a session's thread: answered with `session.turns`. */
+  z.object({ type: z.literal('session.history'), id: z.string() }),
+  /** The phone has read the thread up to `seq` (0: nothing). */
+  z.object({ type: z.literal('session.read'), id: z.string(), seq: z.number().int().nonnegative() }),
   /** Removes a finished (exited) or read-only (hook_only) session from the list; refused for a live launcher session. */
   z.object({ type: z.literal('session.dismiss'), id: z.string() }),
   /** The user names the session's topic from the overlay (500 characters at most, the hook's prompt cap); an empty topic hands back to the automatic sources. */

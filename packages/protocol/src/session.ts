@@ -75,6 +75,8 @@ export const SessionSchema =z.object({
   exitCode: z.number().int().nullable().optional(),
   exitedAt: z.string().datetime().optional(),
   lastError: z.string().optional(),
-  source: z.enum(['launcher', 'hook_only'])
+  source: z.enum(['launcher', 'hook_only']),
+  /** The thread holds replies the phone has not read yet (`session.read` clears it). */
+  unread: z.boolean().optional()
 });
 export type Session = z.infer<typeof SessionSchema>;
