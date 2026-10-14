@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SessionSchema, ToolSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema } from './chat.js';
+import { DeviceSchema, PairErrorSchema, RegistrationJsonSchema } from './remote.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 
 export const PROTOCOL_PORT = 47831;
@@ -18,7 +19,8 @@ export const SessionEventSchema = z.object({
   /** The helper's description, once known (Claude Code: its `.meta.json`, written after SubagentStart). */
   task: z.string().optional(),
   /** PostToolUseFailure: the user interrupted the turn (Esc); Claude then waits for input with no Stop. */
-  interrupt: z.boolean().optional()
+  interrupt: z.boolean().optional(),
+  reason: z.string().max(500).optional()
 });
 export type SessionEvent = z.infer<typeof SessionEventSchema>;
 
@@ -62,7 +64,14 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('update.progress'), version: z.string(), step: z.enum(['installing', 'restarting']) }),
   /** Nothing was changed. `detail`: the useful end of npm's output; `command`: what the person can run instead. */
   z.object({ type: z.literal('update.failed'), version: z.string(), reason: UpdateFailureSchema, detail: z.string().optional(), command: z.string().optional() }),
-  z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional() })
+  z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional() }),
+  /** The remote entry: the phone is authenticated; then the pairing exchange and the device list. */
+  z.object({ type: z.literal('auth.ok'), deviceId: z.string(), deviceName: z.string(), pcName: z.string() }),
+  z.object({ type: z.literal('pair.code'), code: z.string().regex(/^\d{6}$/), expiresAt: z.string().datetime(), url: z.string() }),
+  z.object({ type: z.literal('pair.challenge'), options: z.record(z.unknown()), expiresAt: z.string().datetime() }),
+  z.object({ type: z.literal('pair.done'), token: z.string(), deviceId: z.string() }),
+  z.object({ type: z.literal('pair.error'), reason: PairErrorSchema }),
+  z.object({ type: z.literal('devices'), devices: z.array(DeviceSchema), origin: z.string().nullable(), listening: z.boolean() })
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 
@@ -94,7 +103,15 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** Starts a new conversation with Ledge: the day's turns are cleared and the next question opens a new harness session. */
   z.object({ type: z.literal('chat.reset') }),
   /** Installs `@paradow/ledge@version` and restarts the service (spec 2026-10-12 auto-update §6). */
-  z.object({ type: z.literal('update.daemon'), version: z.string().regex(SEMVER) })
+  z.object({ type: z.literal('update.daemon'), version: z.string().regex(SEMVER) }),
+  /** The remote entry: the phone's token, then pairing (begin on the PC, options + complete from the phone), the device list and the https origin. */
+  z.object({ type: z.literal('auth'), token: z.string().min(32).max(128) }),
+  z.object({ type: z.literal('pair.begin') }),
+  z.object({ type: z.literal('pair.options'), code: z.string().regex(/^\d{6}$/) }),
+  z.object({ type: z.literal('pair.complete'), code: z.string().regex(/^\d{6}$/), deviceName: z.string().min(1).max(60), webauthn: RegistrationJsonSchema }),
+  z.object({ type: z.literal('devices') }),
+  z.object({ type: z.literal('device.revoke'), id: z.string().min(1) }),
+  z.object({ type: z.literal('mobile.configure'), origin: z.string().url().refine(u => new URL(u).protocol === 'https:', 'https only').nullable() })
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
