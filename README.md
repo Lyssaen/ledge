@@ -78,7 +78,7 @@ Three principles shape the code:
 
 ## Components
 
-The repository is a pnpm workspace with three packages.
+The repository is a pnpm workspace with five packages.
 
 ### `packages/protocol`
 
@@ -86,7 +86,7 @@ Zod schemas shared by everything else: the session model, the hook-derived `Sess
 
 ### `packages/ledge` (WSL, Node 22, TypeScript)
 
-One binary, `ledge`, with seven commands. Source under `src/`:
+One binary, `ledge`, with eight commands. Source under `src/`:
 
 | Path | Role |
 | --- | --- |
@@ -97,6 +97,7 @@ One binary, `ledge`, with seven commands. Source under `src/`:
 | `cli/uninstall.ts` | `ledge uninstall [--purge]`: removes only Ledge's hook entries, the systemd unit and the `~/.local/bin/ledge` link. `--purge` also deletes `~/.ledge`. |
 | `cli/status.ts` | `ledge status`: one line per session from a fresh snapshot. |
 | `cli/attach.ts` | `ledge attach <id>`: renames the tab after the session and puts this terminal on its pane. What the overlay runs in a new Windows Terminal tab for a session it started itself. |
+| `cli/mobile.ts` | `ledge mobile enable --origin https://<machine>.<tailnet>.ts.net \| disable \| status`: turns the phone access on or off through `mobile.configure` and prints the `tailscale serve` command to run on Windows. See [docs/mobile.md](docs/mobile.md). |
 | `spawn.ts` | `spawnSession`: the tmux session that runs the agent (with `LEDGE_SESSION` and `LEDGE_NAME`) and the `starting` session record. Shared by the launcher and the daemon's `session.launch`. |
 | `daemon/index.ts` | `ledge daemon`: loads the journal, prunes sessions whose tmux session is gone, starts the server and the poller, writes `daemon.pid`, saves on SIGTERM/SIGINT. |
 | `daemon/store.ts` | In-memory session map with change listeners; applies events through the reducer and saves the journal 200 ms after the last change (atomic write). Also the twelve most recent folders, for the overlay's launch form, and `patch` for repo/branch fields that skip the reducer. |
@@ -104,6 +105,8 @@ One binary, `ledge`, with seven commands. Source under `src/`:
 | `daemon/git.ts` | One `git rev-parse` per session: repository name and path, checked-out branch, and whether `cwd` is a linked worktree. |
 | `daemon/poller.ts` | Every 1 s captures each live pane (200 lines), hashes it to detect activity, broadcasts a 30-line preview when it changed, runs the adapter's prompt detection on the last 60 lines, reads Claude Code's conversation title (`PaneTitle`), refreshes git fields on the life check (every 5 s), and drops exited sessions after 10 min. |
 | `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect (then `chat.history`), broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent with the login shell's environment (see `shell-path.ts`) and answers `session.launched`. `session.rename` sets the topic. Chat commands go to `chat/`. |
+| `daemon/peers.ts`, `daemon/remote/` | The remote entry for the phone: a second listener (`127.0.0.1:47832`, published by `tailscale serve`) that serves the PWA under `/m/` and one WebSocket at `/m/ws`. A socket reads only `auth`, `pair.options` and `pair.complete` until a known device token arrives; then it is a peer, which receives the allow-listed projection of the broadcasts (`project.ts`) and may run only the commands in `rights.ts` (`snapshot.request` in lot 1). |
+| `daemon/devices.ts`, `daemon/pairing.ts`, `daemon/webauthn.ts` | The paired phones (`devices.json`, token stored as a SHA-256 hash), the pairing window (six-digit code, 2 minutes, five attempts, one window at a time) and the WebAuthn registration check. `mobile/config.ts` reads and writes `mobile.json`. |
 | `daemon/folders.ts` | `resolveFolder` (`~` expanded, absolute, existing) and the folder browser's `listFolder` and `createFolder`, which answer with a `folder.listing`. |
 | `chat/` | Ask Ledge: `service.ts` keeps one conversation a day per harness (50 turns, 180 s cap), writes `~/.ledge/chat/context/`, and runs `claude.ts` (`claude -p --restricted`), `codex.ts` (`codex exec --sandbox read-only`) or `cursor.ts` (`cursor-agent -p --mode ask`). `LEDGE_CHAT=1` so Ledge's own hooks ignore the run; no API key is inherited. |
 | `adapters/` | One adapter per tool (`Adapter` in `types.ts`): prompt detection in the pane, `promptStillVisible`, key plans for accept/deny/reply/interrupt, and preview cleaning. `claude.ts`, `codex.ts` and `cursor.ts` are all implemented. Claude Code's adapter also answers a multi-question `AskUserQuestion` (one tab after another, then the review that has no footer). |
@@ -111,6 +114,14 @@ One binary, `ledge`, with seven commands. Source under `src/`:
 | `shell-path.ts` | The environment a login shell (`$SHELL -l`) starts with. Under systemd the daemon has the bare system environment: `claude` (`~/.local/bin`) does not resolve and no proxy variable is set; an agent launched from the overlay (or Ask Ledge) gets the terminal's on top of the daemon's, or the daemon's alone (logged) when the shell fails. |
 | `update/` | The daemon's half of the auto-update: `self.ts` (version, install kind `npm`/`git`/`unknown`, systemd or not, sent in the snapshot), `guard.ts` (refuses when a restart would close live sessions) and `run-update.ts` (`update.daemon`: `npm i -g @paradow/ledge@<version>`, then restarts the service, reporting `update.progress` or `update.failed`). |
 | `client.ts`, `names.ts`, `paths.ts`, `log.ts` | WebSocket client for the CLI modes, the list of 64 bot names, `~/.ledge` paths (`LEDGE_HOME` overrides), the daemon log. |
+
+### `packages/client`
+
+What the overlay and the phone share: the reconnecting daemon client (`createDaemonClient`, with an injectable socket and an optional first message for the token), the reply parser, the mascots (`BotShell`) and the session grouping.
+
+### `apps/mobile` (PWA, React + Vite)
+
+The phone app, served by the daemon under `/m/`. Four-step pairing with device verification, an authenticated connection with an offline state and reconnection when the app returns to the foreground, and an inbox with filters and a read-only request detail. It has no way to answer in lot 1. See [docs/mobile.md](docs/mobile.md). Tests: `pnpm --filter mobile test` (vitest) and `pnpm --filter mobile test:e2e` (Playwright).
 
 ### `apps/overlay` (Windows, Tauri 2 + React 19 + Tailwind 4)
 
@@ -129,6 +140,7 @@ The UI is plain web code under `src/`, developed and unit-tested in WSL; the Rus
 | `src/bots/` | The mascots: material, pose per state, halo in the state colour, breathing while waiting. |
 | `src/keyboard/` | Keyboard navigation (j/k, Alt ←/→ to the previous or next session, y/n, digits for a question's options, Esc) and the first-use coachmark. |
 | `src/update/` | The overlay's half of the auto-update: `machine.ts` (the pure update state machine, daemon first then app), `useUpdate.ts` (checks at startup and every 6 hours, drives the daemon and Tauri's updater), `bridge.ts` (the updater plugin, a no-op in a browser), `UpdateCard.tsx` (the card in the list), `prefs.ts`. The About tab of the settings shows both versions. |
+| `src/surface/MobileSettings.tsx` | The Mobile tab of the settings: paired phones, pairing code and QR with its countdown, removal. |
 | `src/i18n/` | One typed catalogue, French (default) and English, same keys enforced by the type checker. |
 | `src/tauri/bridge.ts` | The only file that calls `invoke`: `set_frame`, `set_outside_watch`, `focus_overlay`, `release_focus`, `focus_terminal`, `open_terminal`, `list_monitors`, `set_monitor`, plus the `ledge://outside-click` event and the `Ctrl+Alt+L` and `Ctrl+Alt+N` global shortcuts. Everything degrades to no-ops in a browser. |
 | `src-tauri/src/main.rs` | The Rust shell: a borderless, transparent, always-on-top window outside the taskbar; a thread that polls the cursor every 50 ms, reports it in the hot band along the top edge (10 px high, the island plus 40 px on each side) for the hover and the mascot's gaze, tells the page when a maximised or full-screen window holds the foreground on the island's monitor (the discreet strip) and, while a panel shows, emits a press of the mouse outside the window (`GetAsyncKeyState`); window placement at `(left, top)` in physical pixels against the top edge of the monitor's work area; focus hand-back to the previously active window; `focus_terminal` finds the Windows Terminal window whose title matches the bot's tab (Win32 `EnumWindows`); `open_terminal` opens a Windows Terminal tab running `ledge attach <id>` in WSL (`wt.exe -w 0 new-tab`). |
@@ -245,7 +257,14 @@ Clients to daemon:
 | `chat.ask { qid, text, tool? }` | overlay | Ask Ledge. `tool` is the overlay's default harness (`claude` when omitted). |
 | `chat.cancel { qid }` | overlay | Stop the running question. |
 | `chat.reset` | overlay | Clear the day's turns and start a new harness session on the next question. Refused while a question is running. |
-| `snapshot.request` | any | Ask for a fresh snapshot. |
+| `snapshot.request` | any | Ask for a fresh snapshot. The only command a phone may run (lot 1). |
+| `pair.begin` | overlay | Open the pairing window; the daemon answers `pair.code`. |
+| `pair.options { code }`, `pair.complete { code, deviceName, webauthn }` | phone (not yet authenticated) | Prove the code and get the WebAuthn registration options, then send the registration; answered with `pair.challenge`, `pair.done { token, deviceId }` or `pair.error`. |
+| `auth { token }` | phone | The first message of a phone socket; answered with `auth.ok`. |
+| `devices`, `device.revoke { id }` | overlay | List the paired phones, or remove one (its socket closes). |
+| `mobile.configure { origin }` | CLI | Set the https origin the phone reaches Ledge at, or `null` to turn the phone access off. |
+
+Remote entry, daemon to the phone or the overlay: `auth.ok { deviceId, deviceName, pcName }`, `pair.code { code, expiresAt, url }` (to the PC only), `pair.challenge`, `pair.done`, `pair.error { reason }` and `devices { devices, origin, listening }`. A phone receives only `snapshot` (without `launcher`, `recents` or `daemon`, and with `tmuxSession` blanked), `session.updated`, `session.removed`, `session.preview`, `error` and `auth.ok`.
 
 The server accepts connections with no `Origin` header (Node clients) or with the Tauri origins (`tauri://localhost`, `http://tauri.localhost`, the Vite dev server). Any other web page is refused.
 
@@ -292,6 +311,8 @@ WSL side, under `~/.ledge` (or `$LEDGE_HOME`):
 | `daemon.pid` | PID of the running daemon, removed on a clean stop. |
 | `chat.json` | The day's Ledge conversation: its date, harness session id and which tool it belongs to. A new day, a reset, or a change of harness starts a new one. |
 | `chat/context/` | Files the chat reads, rewritten before each question and deleted when it ends (`sessions.md`, `pane-*`, `reply-*`, `git-*`). |
+| `mobile.json` | The https origin the phone reaches Ledge at (and its host, the WebAuthn relying party). Absent: phone access is off. Mode 0600. |
+| `devices.json` | The paired phones: name, dates, WebAuthn public key and counter, and the SHA-256 of the device token (never the token). Mode 0600. |
 | `exit-<id>` | Transient: the agent's exit code, written by the launcher's wrapper and consumed by `ledge claude`. |
 
 `~/.config/systemd/user/ledge-daemon.service` runs the daemon with the real node binary (resolved through the fnm symlink) and the built CLI; rerun `ledge setup` after changing the node version or moving the repository, it rewrites the unit and restarts the service.
@@ -308,7 +329,10 @@ Windows side, the overlay keeps its preferences in the WebView's `localStorage`:
 
 ## Security and failure model
 
-- The daemon listens on the loopback only and refuses browser origins other than the overlay's. There is no authentication beyond that: anything running on the machine can talk to it, which is the accepted scope of a personal tool.
+- The local daemon listens on the loopback only and refuses browser origins other than the overlay's. There is no authentication beyond that: anything running on the machine can talk to it, which is the accepted scope of a personal tool.
+- The phone enters through a separate listener (`127.0.0.1:47832`) that is off until `ledge mobile enable`, and that only `tailscale serve` on Windows publishes, inside your tailnet (no Funnel). Its socket accepts only the configured origin and reads nothing but `auth` and the pairing messages until a device token is presented; it closes after 5 s without one (4408), on an unknown token (4401) and on revocation (4403).
+- Pairing needs the PC: the six-digit code is shown only on it, lives 2 minutes, is locked after five wrong attempts, and the phone must register a WebAuthn key (Face ID or passcode) inside that window. The token is returned once; the daemon keeps only its hash.
+- In lot 1 the phone is read-only: one allow-listed command (`snapshot.request`), and a projection of the broadcasts that hides the tmux session name, the launcher, the recent folders and the daemon details. Nothing can be answered, typed, launched or killed from it. This path is validated in WSL and in a browser; the iPhone validation (Tailscale serve, PWA install, WebAuthn in the installed app) is still pending, see [the feasibility report](docs/spikes/2026-10-14-ledge-mobile-feasibility.md).
 - A hook never blocks or fails the agent: 100 ms budget, every error swallowed and logged.
 - An answer is typed only if the prompt is on screen, and reported as taken only if the prompt then disappears. Nothing is retried automatically; the session goes to `error` and the overlay offers a retry.
 - A decision is locked in the overlay until the daemon confirms, rejects, or the connection drops, so a double click never sends two answers.
@@ -432,6 +456,7 @@ pnpm -r typecheck
 pnpm -r test                        # protocol, ledge (unit + tmux + end-to-end, needs tmux, no AI), overlay (vitest + jsdom)
 pnpm --filter overlay dev           # the UI alone on http://localhost:1420, against a daemon running in WSL
 pnpm --filter overlay test:e2e      # Playwright, chromium
+pnpm --filter mobile test:e2e       # Playwright, the phone app at 320, 390 and 430 px
 LEDGE_SCREENSHOTS=1 pnpm --filter overlay exec playwright test e2e/screenshots.spec.ts   # refresh docs/screens (see docs/tour.md)
 pnpm --filter overlay tauri dev     # Windows only
 ```
@@ -440,8 +465,10 @@ Layout:
 
 ```
 packages/protocol/   zod schemas, PROTOCOL_PORT, topic helpers, chat turns
+packages/client/      shared by the overlay and the phone: daemon client, reply parser, mascots, grouping
 packages/ledge/      src/cli, src/daemon, src/adapters, src/chat, test/ (fixtures/panes: captured dialogs)
 apps/overlay/        src/ (React), src-tauri/ (Rust shell), e2e/ (Playwright)
+apps/mobile/         the phone PWA (React + Vite), served by the daemon under /m/
 docs/                design specs, implementation plans, mockups, the approved prototype, and the tour with its captures
 ```
 
@@ -452,7 +479,7 @@ docs/                design specs, implementation plans, mockups, the approved p
 - Session topics, repository grouping and the Ledge chat: [spec](docs/superpowers/specs/2026-10-11-sessions-identity-and-chat-design.md), [plan](docs/superpowers/plans/2026-10-11-sessions-identity-and-chat.md) and [mockup](docs/mockups/ledge-sessions-chat.html).
 - Last-reply lists as real markdown lists: [spec](docs/superpowers/specs/2026-10-11-session-reply-lists-design.md).
 - Markdown document reader — **implemented in the overlay and WSL daemon**: [spec](docs/superpowers/specs/2026-10-11-markdown-reader-design.md), [implementation plan](docs/superpowers/plans/2026-10-11-markdown-reader.md), and [approved mockup](docs/mockups/ledge-reader-existing.html). Opens cited plans, designs and skills in the same 560 px panel, supports an 800 px expanded view, and returns to the conversation with its draft and scroll position preserved. Browser integration is tested; native Windows validation is still pending.
-- Ledge on the phone, a PWA to answer agents away from the PC — **V2 design approved on 2026-10-14; production app not implemented**: [approved design and prototype guide](docs/superpowers/specs/2026-10-14-ledge-mobile-design.md), [interactive gallery](docs/mockups/ledge-mobile/index.html), and [inbox preview](docs/mockups/ledge-mobile-inbox.png). Two tabs, contextual decisions, explicit delivery states and a guided pairing flow. Interactions are simulated; V1 and the original canvas export remain historical references.
+- Ledge on the phone, a PWA to answer agents away from the PC — **V2 design approved on 2026-10-14; lot 1 (read-only phone access) implemented, iPhone validation pending**: [approved design and prototype guide](docs/superpowers/specs/2026-10-14-ledge-mobile-design.md), [interactive gallery](docs/mockups/ledge-mobile/index.html), and [inbox preview](docs/mockups/ledge-mobile-inbox.png). Two tabs, contextual decisions, explicit delivery states and a guided pairing flow. Setup, pairing and security: [docs/mobile.md](docs/mobile.md); device checks: [feasibility report](docs/spikes/2026-10-14-ledge-mobile-feasibility.md). The mockup's interactions are simulated; V1 and the original canvas export remain historical references.
 - Starting a session from Ledge: [spec](docs/superpowers/specs/2026-10-10-launch-from-ledge-design.md) and [mockups](https://claude.ai/artifact/YBX4UV7Z2eBRNKAwNh3876)
 - Design canvas (mockups and playable prototype): https://claude.ai/artifact/57oDjsKdabQBmPgAXn15mc
 - Design system "Shadcn Red": https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV
