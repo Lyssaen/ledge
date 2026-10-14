@@ -4,7 +4,7 @@
 /* All UI colors come from Ledge's unchanged tokens.css snapshot. */
 :root { font-family: 'Geist', 'Segoe UI', system-ui, sans-serif; font-synthesis: none; color: var(--foreground); background: var(--background); --grow: cubic-bezier(.2,.8,.2,1); }
 * { box-sizing: border-box; }
-body { margin: 0; }
+body { margin: 0; line-height: normal; }
 button { font: inherit; cursor: pointer; color: inherit; border: 0; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--sidebar-primary); outline-offset: 3px; }
