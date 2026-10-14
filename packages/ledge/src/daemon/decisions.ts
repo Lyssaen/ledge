@@ -157,6 +157,8 @@ export async function runAnswer(peer: Peer, msg: SessionReply, deps: DecisionDep
       // A phone picks one of the options it was shown; free text arrives with lot 5.
       const n = /^[1-9]$/.test(msg.text) ? Number(msg.text) : 0;
       if (pending.kind !== 'question' || n === 0 || n > (pending.options?.length ?? 0)) throw new Refusal('unsupported');
+      // Questions are classified low today and carry no assertion: should that change, a phone must not slip through.
+      if (pending.risk !== 'low') throw new Refusal('forbidden');
     } else {
       if (pending.kind !== 'question') throw new Refusal('unsupported', `a ${pending.kind} prompt takes accept or deny, not a reply`);
       if (!/^[1-9]$/.test(msg.text.trim())) throw new Refusal('unsupported', FREE_TEXT);
@@ -193,11 +195,19 @@ export async function prepareDecide(peer: Peer, msg: DecidePrepare, deps: Decisi
   catch (e) { if (e instanceof Refusal) return refuse(e.reason); throw e; }
   const { session, pending } = found;
   if (pending.risk === 'low') return refuse('invalid');
-  const device = deps.devices?.get(peer.ctx.deviceId);
-  const cfg = deps.config();
-  if (!device?.credential || !cfg) return refuse('forbidden');
-  const { challenge, expiresAt } = deps.challenges.issue({ deviceId: device.id, sessionId: session.id, pendingId: pending.id, pendingVersion: pending.version, decision: 'accept' });
-  const options = await assertionOptions(cfg, device.credential, challenge);
+  let issued: { challenge: string; expiresAt: string; options: unknown };
+  try {
+    const device = deps.devices?.get(peer.ctx.deviceId);
+    const cfg = deps.config();
+    if (!device?.credential || !cfg) return refuse('forbidden');
+    const { challenge, expiresAt } = deps.challenges.issue({ deviceId: device.id, sessionId: session.id, pendingId: pending.id, pendingVersion: pending.version, decision: 'accept' });
+    issued = { challenge, expiresAt, options: await assertionOptions(cfg, device.credential, challenge) };
+  } catch (e) {
+    // Never leak exception text to a phone.
+    log(`decide.prepare ${msg.id} failed: ${(e as Error).message}`);
+    return refuse('forbidden');
+  }
+  const { expiresAt, options } = issued;
   peer.send({ type: 'decide.challenge', id: msg.id, pendingId: pending.id, pendingVersion: pending.version, decision: 'accept', options: options as unknown as Record<string, unknown>, expiresAt });
 }
 

@@ -3,7 +3,8 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { ClientMessage, Pending, Session } from '@ledge/protocol';
+import type { Pending, Session } from '@ledge/protocol';
+import { prepareDecide, type DecisionDeps } from '../src/daemon/decisions.js';
 import { Store } from '../src/daemon/store.js';
 import { startServer } from '../src/daemon/server.js';
 import { connect } from '../src/client.js';
@@ -24,7 +25,6 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
 });
 // The bottom of a Claude Code 2.x permission dialog.
 const PROMPT = 'x\n' + '─'.repeat(40) + '\n Bash command\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend';
-const DECISIONS: ReadonlySet<ClientMessage['type']> = new Set<ClientMessage['type']>(['snapshot.request', 'session.decide', 'session.reply', 'decide.prepare', 'operation.status']);
 
 /** A tmux whose panes are queues (the last entry stays), and whose captures can be held until the test releases them. */
 function fakeTmux(panes: Record<string, string[]>) {
@@ -77,7 +77,7 @@ let soft: ReturnType<typeof createSoftAuthenticator>; let deviceId: string;
 async function start(panes: string[] = [PROMPT, PROMPT, 'Running…']) {
   fake = fakeTmux({ 'ledge-a': panes });
   const mobile: MobileControl = { devices, pairing: createPairing({ config: () => cfg, devices }), state: () => ({ origin: cfg.origin, listening: true }), configure: async () => {} };
-  srv = await startServer({ store, tmux: fake.tmux, port: 0, mobile, remoteCommands: DECISIONS, verify: { attempts: 3, intervalMs: 20 }, agentEnv: async () => ({ ...process.env }) });
+  srv = await startServer({ store, tmux: fake.tmux, port: 0, mobile, verify: { attempts: 3, intervalMs: 20 }, agentEnv: async () => ({ ...process.env }) });
 }
 
 beforeEach(async () => {
@@ -189,6 +189,38 @@ describe('remote decisions', () => {
     q.send({ type: 'decide.prepare', id: 'a', pendingId: 'pA', pendingVersion: 1, decision: 'accept' });
     expect(await q.wait(x => x.type === 'error')).toEqual({ type: 'error', id: 'a', message: 'forbidden' });
     expect(p.sent.some(m => m.type === 'decide.challenge')).toBe(false);
+  });
+
+  it('a remote decide on a request without risk needs an assertion, and decide.prepare issues a challenge for it', async () => {
+    const { risk: _r, riskReason: _rr, ...unclassified } = high;
+    waiting(unclassified as Pending);
+    const p = phone(srv, deviceId);
+    const msg = decide();
+    p.send(msg);
+    expect(await p.result(msg.operationId)).toMatchObject({ status: 'rejected', reason: 'assertion_required' });
+    p.send({ type: 'decide.prepare', id: 'a', pendingId: 'pA', pendingVersion: 1, decision: 'accept' });
+    expect(await p.wait(m => m.type === 'decide.challenge')).toMatchObject({ id: 'a', pendingId: 'pA', pendingVersion: 1, decision: 'accept' });
+    expect(fake.sent).toEqual([]);
+  });
+
+  it('a remote reply to a question that is not low-risk is refused as forbidden', async () => {
+    waiting({ id: 'pA', version: 1, kind: 'question', text: 'Which?', options: ['Red', 'Blue'], risk: 'high', riskReason: 'unknown', source: 'hook' });
+    const p = phone(srv, deviceId);
+    const m = { type: 'session.reply', id: 'a', text: '1', pendingId: 'pA', pendingVersion: 1, operationId: randomUUID() };
+    p.send(m);
+    expect(await p.result(m.operationId)).toMatchObject({ status: 'rejected', reason: 'forbidden' });
+    expect(fake.sent).toEqual([]);
+  });
+
+  it('decide.prepare refuses as forbidden, without leaking the exception, when the challenge cannot be built', async () => {
+    waiting(high);
+    const sent: any[] = [];
+    const peer = { ctx: { kind: 'remote' as const, deviceId }, send: (m: unknown) => { sent.push(m); }, close() {} };
+    const deps: DecisionDeps = {
+      store, ops: { } as never, challenges: { issue: () => { throw new Error('secret internals'); } } as never, devices, config: () => cfg, inject: async () => {}
+    };
+    await prepareDecide(peer as never, { type: 'decide.prepare', id: 'a', pendingId: 'pA', pendingVersion: 1, decision: 'accept' }, deps);
+    expect(sent).toEqual([{ type: 'error', id: 'a', message: 'forbidden' }]);
   });
 
   it('a remote decide without its request or operation is invalid', async () => {

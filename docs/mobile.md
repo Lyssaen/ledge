@@ -66,7 +66,28 @@ tailscale serve --https=443 off     # on Windows
 
 It sees the session list, each session's state, its pending permission or question, the last reply and the terminal preview. It never receives the tmux session name, the launcher command, the recent folders or the daemon's version details.
 
-The daemon accepts one command from a phone, `snapshot.request`. Decisions, replies, interrupts, kills, launches, renames, folder commands, Ask Ledge, device management and `mobile.configure` are refused. The list is an explicit allow-list in the daemon, and a test pins it so that a later lot cannot widen it by accident.
+The daemon accepts five commands from a phone: `snapshot.request`, `session.decide`, `decide.prepare`, `operation.status` and `session.reply`. Interrupts, kills, launches, renames, folder commands, Ask Ledge, device management and `mobile.configure` are refused. The list is an explicit allow-list in the daemon (`MOBILE_COMMANDS`), and a test pins it so that a later lot cannot widen it by accident.
+
+### Decisions from the phone
+
+A phone names the request it answers (id and version) and an operation id. The daemon checks that the session still waits on exactly that request before typing anything, and replays the known result if the same operation arrives twice.
+
+Risk policy, validated on 2026-10-14 without change:
+
+- Accepting a request the daemon classifies as low risk (for example a read-only command inside the project) needs no further check.
+- Accepting anything else, or a request with no risk at all, needs a WebAuthn assertion from the paired phone. The phone first sends `decide.prepare` and receives a single-use challenge bound to its device, the session, the request, its version and the decision. The assertion is verified against the key stored at pairing, and the counter is updated.
+- Denying never needs an assertion.
+- Questions are answered without a device check, by option number only, and only while the daemon classifies them low risk. Free text from the phone is not supported yet.
+- The PC overlay decides without WebAuthn, as before.
+
+### Testing a decision on the iPhone (R4, pending on device)
+
+1. In a throwaway directory run `git init` then `git init --bare ../fake-remote.git` and `git remote add origin file://$PWD/../fake-remote.git`, with one commit. Nothing real is at risk.
+2. Start a Ledge Claude session there (`ledge claude`), with the phone paired and open on the session.
+3. Ask the agent to run `ls`: the phone offers Accept; tap it. Expect one accept, applied, no Face ID prompt.
+4. Ask the agent to run `git push --force origin HEAD`: the phone must ask for Face ID. Cancel it: nothing is typed and the PC prompt stays. Retry and confirm: the push goes to the fake remote only.
+5. Answer a question by tapping an option: applied, no Face ID prompt.
+6. Check `~/.ledge/daemon.log` for the operations and that no assertion or token appears in it.
 
 ## Files
 

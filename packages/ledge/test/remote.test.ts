@@ -252,12 +252,14 @@ describe('remote entry', () => {
     await pc.close();
   });
 
-  it('remote session.decide is forbidden in this lot and nothing is typed', async () => {
-    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } }));
+  it('over the real listener a phone may decide but not interrupt: decide reaches the checks, interrupt is forbidden', async () => {
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { id: 'pA', version: 1, kind: 'permission', text: 'git push --force', tool: 'Bash', source: 'hook' } }));
     const { p } = await authed();
     await p.next('snapshot');
-    await p.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    await p.send({ type: 'session.interrupt', id: 'a' });
     expect(await p.next('error')).toMatchObject({ message: 'forbidden' });
+    await p.send({ type: 'session.decide', id: 'a', decision: 'accept', pendingId: 'pA', pendingVersion: 1, operationId: '7b1e0c1e-8d2f-4c4a-9a51-0d6f3c1b2a90' });
+    expect(await p.next('operation.result')).toMatchObject({ status: 'rejected', reason: 'assertion_required' });
     expect(tmux.sent).toEqual([]);
     p.ws.close();
   });
