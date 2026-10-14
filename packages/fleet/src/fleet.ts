@@ -1,9 +1,12 @@
 import { ChatTurnSchema, type ChatTurn, type ClientMessage, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
-import { machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
+import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
 type Peer = { config: MachineConfig; client: DaemonClient; status: DaemonStatus; fresh: boolean; snapshot: Snapshot | null; previews: Map<string, string[]>; off: (() => void)[]; error?: string; restarting?: boolean };
+type Machine = { id: string; label: string; ssh?: string }; // lot 2 types it in @ledge/protocol
+const isMachinesMessage = (m: unknown): m is { type: 'machines'; machines: Machine[] } => !!m && typeof m === 'object' && (m as { type?: string }).type === 'machines' && Array.isArray((m as { machines?: unknown }).machines);
+const wire = (list: MachineConfig[]): Machine[] => list.map(({ id, label, ssh }) => ({ id, label, ...(ssh ? { ssh } : {}) }));
 type Binding = { machine: string; raw: string };
 type PendingRoute = { qid: string; text: string; tool?: 'claude' | 'codex' | 'cursor'; coordinator: string };
 
@@ -27,6 +30,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const turns = new Map<string, ChatTurn>(), bindings = new Map<string, Binding>();
   const documents = new Map<string, string>();
   const operations = new Map<string, string>();
+  let source: 'daemon' | 'local' = 'local';
   let routing: PendingRoute | null = null, resetAt = '', lastStatus: DaemonStatus = 'connecting';
   const emit = (m: ServerMessage) => messages.forEach(fn => fn(m));
   const day = () => new Date().toISOString().slice(0, 10);
@@ -88,8 +92,31 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       ...(raw.proposal ? { proposal: { ...raw.proposal, ...(raw.proposal.launchedId ? { launchedId: qualify(p.config.id, raw.proposal.launchedId) } : {}) } } : {}),
       ...(raw.relay ? { relay: { ...raw.relay, id: qualify(p.config.id, raw.relay.id) } } : {}) };
   }
+  /** Applies a confirmed list to the peers: no storage write, nothing for the overlay until `publish`. */
+  function apply(next: MachineConfig[]) {
+    configuring = true;
+    for (const [id, p] of peers) if (!next.some(c => c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); }
+    configs = next;
+    for (const c of configs) { const p = peers.get(c.id); if (p) p.config = c; else add(c); }
+    if (!peers.has(selected)) selected = 'local'; configuring = false; publish();
+  }
   function receive(p: Peer, m: ServerMessage) {
     const machine = p.config.id;
+    // The daemon's machine list is consumed here, never relayed; from anyone else (or with the option off) it is ignored.
+    const wireMsg: unknown = m; // the protocol does not know `machines` until lot 2
+    if (isMachinesMessage(wireMsg)) {
+      if (machine !== 'local' || !opts.machinesFromDaemon) return;
+      let next: MachineConfig[]; try { next = parseMachines(wireMsg.machines.map(x => x.id === 'local' ? { ...x, url: configs[0]!.url } : x)); } catch { return; }
+      if (source === 'local') {
+        source = 'daemon';
+        // First front connected wins: only a daemon list reduced to `local` takes the richer local one, once.
+        const mine = loadMachines(prefix);
+        if (next.length === 1 && mine.length > 1) p.client.send({ type: 'machines.set', machines: wire(mine) } as never); // lot 2 types it
+        try { localStorage.removeItem(MACHINES_KEY); } catch { /* ignore */ }
+      }
+      apply(next);
+      return;
+    }
     machineMessages.forEach(fn => fn(machine, m));
     // A daemon restarting for an update closes its SSH bridge: that error is the restart, not a failure to show.
     if (m.type === 'update.progress') p.restarting = m.step === 'restarting';
@@ -214,13 +241,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const next = parseMachines(raw);
         // The permanent local client is also used by the app updater.
         if (next[0]!.url !== configs[0]!.url) throw new Error('The local daemon URL cannot change');
+        // Daemon-sourced: ask the daemon and wait for its broadcast, which `receive` applies.
+        if (source === 'daemon') { peers.get('local')!.client.send({ type: 'machines.set', machines: wire(next) } as never); return; } // lot 2 types it
         localStorage.setItem(MACHINES_KEY, JSON.stringify(next));
-        configuring = true;
-        for (const [id, p] of peers) if (!next.some(c => c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); }
-        configs = next;
-        for (const c of configs) { const p = peers.get(c.id); if (p) p.config = c; else add(c); }
-        if (!peers.has(selected)) selected = 'local'; configuring = false; publish();
+        apply(next);
       },
+      machinesSource: () => source,
       probe: ssh => probeMachine(configs[0]!.url!, ssh),
       retry(id) { const p = peers.get(id); if (p && connected) p.client.connect(); },
       terminal(id) { const origin = splitId(id); const m = state.find(x => x.id === origin?.machine); return origin && m ? terminalCommand(m, origin.id) : null; },

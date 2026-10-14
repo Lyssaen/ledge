@@ -21,6 +21,8 @@ export interface Fleet {
   selected(): string;
   select(id: string): void;
   configure(config: MachineConfig[]): void;
+  /** Where the machine list comes from: the local daemon once it has sent one (`machinesFromDaemon`), else localStorage. */
+  machinesSource(): 'daemon' | 'local';
   /** Tests an SSH alias over its own connection, without touching the configured machines. */
   probe(ssh: string): Promise<ProbeResult>;
   /** Reconnects a machine now instead of waiting for the next backoff. */
