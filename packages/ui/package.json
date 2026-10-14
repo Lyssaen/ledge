@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
+    "./bots/poseFor": "./src/bots/poseFor.ts",
     "./bots/*": "./src/bots/*",
     "./sounds/*": "./src/sounds/*.ts",
     "./i18n/lang": "./src/i18n/lang.tsx",
