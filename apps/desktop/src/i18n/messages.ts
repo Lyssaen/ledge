@@ -41,9 +41,9 @@ const fr = {
   localDown: { title: 'Daemon local injoignable', text: 'Ledge ne peut pas joindre le daemon de cette machine. Tout est en lecture seule jusqu’à son retour.' },
   status: {
     sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
-    // A machine is feminine (« la machine »), as in the mockup: « Devbox connectée », « Devbox déconnectée ».
-    connected: (name: string) => `${name} connectée`,
-    disconnected: (name: string) => `${name} déconnectée`
+    // A machine is feminine (« la machine »), as in the mockup: « Devbox connectée », « Devbox déconnectée »; the local one is « Local connecté ».
+    connected: (name: string, isLocal = false) => isLocal ? `${name} connecté` : `${name} connectée`,
+    disconnected: (name: string, isLocal = false) => isLocal ? `${name} déconnecté` : `${name} déconnectée`
   },
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
   botReadOnly: 'Lecture seule',
@@ -91,8 +91,8 @@ const en: typeof fr = {
   localDown: { title: 'Local daemon unreachable', text: 'Ledge cannot reach the daemon on this machine. Everything is read-only until it is back.' },
   status: {
     sessions: (n) => `${n} ${plural(n, 'session', 'sessions')}`,
-    connected: (name) => `${name} connected`,
-    disconnected: (name) => `${name} disconnected`
+    connected: (name, _isLocal) => `${name} connected`,
+    disconnected: (name, _isLocal) => `${name} disconnected`
   },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },
   botReadOnly: 'Read-only',

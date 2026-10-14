@@ -79,9 +79,9 @@ describe('OfflineNotice and StatusBar', () => {
     expect(screen.getByText('Local connected')).toBeInTheDocument();
     expect(screen.getByText('Devbox disconnected')).toBeInTheDocument();
   });
-  it('in French, every machine is feminine, as in the mockup', () => {
+  it('in French, remote machines are feminine and local is masculine, as in the mockup', () => {
     render(<LangProvider lang="fr"><StatusBar sessions={eight} machines={[{ id: 'local', label: 'Local', status: 'open' }, { id: 'devbox', label: 'Devbox', status: 'unreachable' }, { id: 'edge', label: 'Edge', status: 'open' }] as never} /><OfflineNotice machines={[{ id: 'devbox', label: 'Devbox', status: 'unreachable' }] as never} onRetry={() => {}} /></LangProvider>);
-    expect(screen.getByText('Local connectée')).toBeInTheDocument();
+    expect(screen.getByText('Local connecté')).toBeInTheDocument();
     expect(screen.getByText('Edge connectée')).toBeInTheDocument();
     expect(screen.getByText('Devbox déconnectée')).toBeInTheDocument();
     expect(screen.getByText('Devbox est déconnectée')).toBeInTheDocument();
