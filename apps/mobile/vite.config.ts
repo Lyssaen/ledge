@@ -4,7 +4,10 @@ import tailwindcss from '@tailwindcss/vite';
 
 // Served by the daemon under /m/ (decision D12). The service worker is a second entry emitted at the root as
 // `sw.js` so its scope can cover /m/; the page entry and its assets go under assets/ (immutable, hashed).
+const build = String(Date.now());
+
 export default defineConfig({
+  define: { __BUILD__: JSON.stringify(build) },
   base: '/m/',
   plugins: [react(), tailwindcss()],
   clearScreen: false,

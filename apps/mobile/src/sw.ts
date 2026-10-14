@@ -12,7 +12,9 @@ interface Sw {
 }
 const sw = self as unknown as Sw;
 
-const CACHE = 'ledge-shell-v1';
+declare const __BUILD__: string;
+// One cache per build: activating a new worker drops the previous build's hashed assets.
+const CACHE = `ledge-shell-${__BUILD__}`;
 const scope = new URL('./', sw.location.href);
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/180.png', './icons/192.png', './icons/512.png'].map(p => new URL(p, scope).href);
 
