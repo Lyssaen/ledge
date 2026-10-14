@@ -1,0 +1,48 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+
+/* Design tokens of the Ledge mobile spec §7.1 (dark only). */
+@theme {
+  --color-bg: #0c0d0e;
+  --color-surface: #17191b;
+  --color-raised: #202326;
+  --color-fg: #f2f1ed;
+  --color-muted: #a2a6ab;
+  --color-attention: #edc479;
+  --color-ok: #a6d6bf;
+  --color-info: #a6c8f0;
+  --color-danger-fg: #f4a5a3;
+  --color-danger-bg: #301b1d;
+  --color-danger-btn: #8f3037;
+  --color-line: #ffffff14;
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --spacing-side: 18px;
+  --font-sans: 'Geist Variable', system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+}
+
+:root { color-scheme: dark; --space-side: 18px; }
+* { -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--color-bg); }
+body { font: 14px/1.5 var(--font-sans); color: var(--color-fg); }
+button, input, textarea, select { font: inherit; }
+button, a, summary { touch-action: manipulation; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--color-info); outline-offset: 4px; }
+
+/* The app column: 480 px at most, one dynamic viewport tall, clear of the notch and the home indicator. */
+.app {
+  max-width: 480px;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}

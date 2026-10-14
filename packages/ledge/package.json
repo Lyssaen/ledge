@@ -13,7 +13,7 @@
   "scripts": {
     "dev": "tsx src/cli/index.ts",
     "build": "tsup",
-    "prepublishOnly": "pnpm build",
+    "prepublishOnly": "pnpm --filter mobile build && pnpm build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

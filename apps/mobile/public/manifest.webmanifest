@@ -1,0 +1,13 @@
+{
+  "name": "Ledge",
+  "short_name": "Ledge",
+  "start_url": "/m/",
+  "scope": "/m/",
+  "display": "standalone",
+  "background_color": "#0c0d0e",
+  "theme_color": "#0c0d0e",
+  "icons": [
+    { "src": "/m/icons/192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/m/icons/512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
