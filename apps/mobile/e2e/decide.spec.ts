@@ -157,5 +157,53 @@ for (const width of [320, 390, 430]) {
       await expect(page.getByText('Session démarrée hors de Ledge : répondez dans le terminal.')).toBeVisible();
       await expect(page.getByRole('button', { name: /Autoriser|Refuser/ })).toHaveCount(0);
     });
+
+    for (const [status, reason, text] of [['failed', 'not_taken', 'Le terminal n’a pas confirmé. La demande est toujours en attente.'], ['rejected', 'busy', 'Une autre décision est en cours sur le PC.']] as const) {
+      test(`${status}/${reason}: retry only while the same request still waits`, async ({ page }) => {
+        const s = request(`r-${reason}`);
+        const d = await fakeDaemon(page, [s]);
+        await page.goto(`/m/#/request/r-${reason}/p-r-${reason}`);
+        await page.getByRole('button', { name: 'Autoriser une fois' }).click();
+        await expect.poll(() => decides(d.received).length).toBe(1);
+        d.send({ type: 'operation.result', operationId: decides(d.received)[0]!.operationId, status, reason });
+        await expect(page.getByText(text)).toBeVisible();
+        await page.getByRole('button', { name: 'Autoriser une fois' }).click();
+        await expect.poll(() => decides(d.received).length).toBe(2);
+        expect(decides(d.received)[1]!.operationId).not.toBe(decides(d.received)[0]!.operationId);
+        // the request leaves the PC: no new attempt is offered
+        d.upsert(handled(s));
+        d.send({ type: 'operation.result', operationId: decides(d.received)[1]!.operationId, status, reason });
+        await expect(page.getByText(text)).toBeVisible();
+        await expect(page.getByRole('button', { name: /Autoriser|Refuser/ })).toHaveCount(0);
+      });
+    }
+
+    test('a version bump during sending keeps the transmission, then the uncertain state, in front', async ({ page }) => {
+      const s = request('bump');
+      const d = await fakeDaemon(page, [s]);
+      d.onMessage(m => { if (m.type === 'session.decide') d.drop(); });
+      await page.goto('/m/#/request/bump/p-bump');
+      await page.getByRole('button', { name: 'Autoriser une fois' }).click();
+      await expect(page.getByText('Réception non confirmée')).toBeVisible();
+      d.upsert(request('bump', { version: 2, text: 'pnpm --filter overlay test --force' }));
+      await expect(page.getByText('pnpm --filter overlay test --force')).toBeVisible();
+      await expect(page.getByText('Réception non confirmée')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Reconnecter et vérifier' })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Autoriser une fois|J’ai relu/ })).toHaveCount(0);
+      expect(decides(d.received)).toHaveLength(1);
+    });
+
+    test('a version bump while the decision is in transit keeps "Transmission au PC…"', async ({ page }) => {
+      const s = request('bump2');
+      const d = await fakeDaemon(page, [s]);
+      await page.goto('/m/#/request/bump2/p-bump2');
+      await page.getByRole('button', { name: 'Autoriser une fois' }).click();
+      await expect(page.getByText('Transmission au PC…')).toBeVisible();
+      d.upsert(request('bump2', { version: 2, text: 'pnpm --filter overlay test --force' }));
+      await expect(page.getByText('pnpm --filter overlay test --force')).toBeVisible();
+      await expect(page.getByText('Transmission au PC…')).toBeVisible();
+      await expect(page.getByRole('button', { name: /Autoriser une fois|J’ai relu/ })).toHaveCount(0);
+      expect(decides(d.received)).toHaveLength(1);
+    });
   });
 }

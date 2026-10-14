@@ -1,3 +1,5 @@
+const unassessed = 'Impact non évalué';
+
 /** Every French string of the phone app lives here (decision D13). */
 export const copy = {
   appName: 'Ledge',
@@ -84,8 +86,7 @@ export const copy = {
       shell_syntax: 'Commande composée, difficile à vérifier',
       script: 'Exécute un script',
       plan: 'Un plan engage plusieurs actions',
-      unknown: 'Impact non évalué',
-      question: 'Impact non évalué', read_only_command: 'Impact non évalué', edit_inside_folder: 'Impact non évalué'
+      unknown: unassessed, question: unassessed, read_only_command: unassessed, edit_inside_folder: unassessed
     }
   },
   gone: {

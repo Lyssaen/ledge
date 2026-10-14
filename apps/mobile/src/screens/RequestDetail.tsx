@@ -101,7 +101,7 @@ export function RequestDetail({ sessionId, pendingId, onReconnect, onVerify }: {
         )}
         {offline && outcome.kind !== 'uncertain' && <div className="mt-4"><LostBanner detail={copy.link.lostDetail} onReconnect={onReconnect} /></div>}
       </main>
-      <DecisionFooter item={req} outcome={outcome} link={link} changed={changed} onReread={() => setSeen(req.pendingVersion)} onDecide={d => decide(req, d)} onVerify={onVerify ? () => onVerify(req) : undefined} onCheck={() => { if (link === 'online') mobileStore.checkOperations(); else onReconnect(); }} />
+      <DecisionFooter item={req} outcome={outcome} link={link} changed={changed} stillPending={item !== undefined && item.pendingVersion === seen} onReread={() => setSeen(req.pendingVersion)} onDecide={d => decide(req, d)} onVerify={onVerify ? () => onVerify(req) : undefined} onCheck={() => { if (link === 'online') mobileStore.checkOperations(); else onReconnect(); }} />
     </>
   );
 }

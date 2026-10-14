@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { copy } from '../copy';
+import { href } from '../router';
 import type { InboxItem } from '../model/requests';
 import type { Outcome } from '../model/requestOutcome';
 import type { Link } from '../state/store';
@@ -14,6 +15,8 @@ export interface DecisionFooterProps {
   link: Link;
   /** The request changed since the phone showed it: a decision needs a fresh reading first. */
   changed: boolean;
+  /** The same request (id and version) still waits on the PC: only then may a new attempt be offered. */
+  stillPending: boolean;
   onReread: () => void;
   onDecide: (decision: 'accept' | 'deny') => void;
   /** High-risk accept (device check, Task 10). Without it the button stays disabled. */
@@ -23,7 +26,7 @@ export interface DecisionFooterProps {
 }
 
 /** A decision is only ever one tap, sent now, never queued: this footer never offers one it could not honour. */
-export function DecisionFooter({ item, outcome, link, changed, onReread, onDecide, onVerify, onCheck }: DecisionFooterProps) {
+export function DecisionFooter({ item, outcome, link, changed, stillPending, onReread, onDecide, onVerify, onCheck }: DecisionFooterProps) {
   const [checking, setChecking] = useState(false);
   useEffect(() => {
     if (!checking) return;
@@ -36,7 +39,9 @@ export function DecisionFooter({ item, outcome, link, changed, onReread, onDecid
   if (item.readOnly) return wrap(hint(copy.decide.readOnly));
   if (item.kind === 'question') return wrap(hint(copy.decide.answerLater));
 
-  const live = link === 'online' && !changed;
+  const live = link === 'online' && !changed && stillPending;
+  // A decision in flight or of unknown delivery always comes first: a newer version never hides it.
+  const gated = changed && outcome.kind !== 'sending' && outcome.kind !== 'uncertain';
   const buttons = (enabled: boolean) => (
     <div className="flex gap-2.5">
       <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={btn}>{copy.decide.deny}</button>
@@ -47,7 +52,7 @@ export function DecisionFooter({ item, outcome, link, changed, onReread, onDecid
   );
   const linkHint = link === 'offline' ? copy.decide.offlineHint : link === 'connecting' ? copy.decide.connectingHint : copy.decide.hint;
 
-  if (changed) {
+  if (gated) {
     return wrap(<>
       <Notice title={copy.decide.changed} tone="warning" role="status" />
       {buttons(false)}
@@ -72,8 +77,14 @@ export function DecisionFooter({ item, outcome, link, changed, onReread, onDecid
       const r = outcome.reason;
       if (r === 'forbidden') return wrap(<Notice title={copy.decide.forbidden} tone="danger" role="alert" />);
       if (r === 'no_prompt') return wrap(<Notice title={copy.decide.noPrompt} tone="warning" role="alert" />);
-      if (r === 'stale' || r === 'changed') return wrap(<Notice title={copy.decide.changed} tone="warning" role="alert" />);
+      if (r === 'stale' || r === 'changed') {
+        return wrap(<>
+          <Notice title={copy.decide.changed} tone="warning" role="alert" />
+          <a href={href({ name: 'inbox' })} className={`${full} border-line bg-surface`}>{copy.result.back}</a>
+        </>);
+      }
       const text = r === 'busy' ? copy.decide.busy : r === 'not_taken' ? copy.decide.notTaken : copy.decide.failed;
+      if (!stillPending) return wrap(<Notice title={text} tone="warning" role="alert" />);
       return wrap(<><Notice title={text} tone="warning" role="alert" />{buttons(live)}{hint(linkHint)}</>);
     }
     default:
