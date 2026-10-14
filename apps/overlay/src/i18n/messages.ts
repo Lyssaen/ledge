@@ -235,10 +235,7 @@ const fr = {
   thread: {
     you: 'Vous', previousTurn: 'Tour précédent', noTime: 'Horodatage indisponible', loading: 'Le fil arrive…',
     empty: 'Le fil se remplit au prochain événement de l’agent.',
-    command: 'Commande', params: 'Paramètres', result: 'Résultat', error: 'Erreur',
-    noResult: 'Aucun résultat dans cette source. La réussite de cet appel est inconnue.',
-    running: 'En cours', failed: 'Échec', received: 'Résultat reçu', waiting: 'En attente du résultat', unknownState: 'État inconnu', noDuration: 'Durée indisponible',
-    file: { confirmed: 'Modification confirmée', writing: 'Écriture en cours', unconfirmed: 'Écriture non confirmée', add: 'ajouté', edit: 'modifié', delete: 'supprimé', write: 'écrit' },
+    liveLabel: 'Outil en cours',
     permission: 'Permission demandée', decided: { accept: 'Autorisée', deny: 'Refusée', unknown: 'Répondue dans le terminal' }, undecided: 'En attente de votre décision',
     cursorNote: 'Cette source ne transmet ni résultats ni messages intermédiaires.',
     helperOpen: 'Ouvrir la discussion', helperDone: 'Terminé', helperWorking: 'Au travail',
@@ -471,10 +468,7 @@ const en: Messages = {
   thread: {
     you: 'You', previousTurn: 'Previous turn', noTime: 'No timestamp', loading: 'Loading the thread…',
     empty: 'The thread fills up with the agent’s next event.',
-    command: 'Command', params: 'Parameters', result: 'Result', error: 'Error',
-    noResult: 'No result in this source. Whether this call succeeded is unknown.',
-    running: 'Running', failed: 'Failed', received: 'Result received', waiting: 'Waiting for the result', unknownState: 'Unknown state', noDuration: 'Duration unavailable',
-    file: { confirmed: 'Change confirmed', writing: 'Being written', unconfirmed: 'Write not confirmed', add: 'added', edit: 'edited', delete: 'deleted', write: 'written' },
+    liveLabel: 'Running tool',
     permission: 'Permission requested', decided: { accept: 'Allowed', deny: 'Denied', unknown: 'Answered in the terminal' }, undecided: 'Waiting for your decision',
     cursorNote: 'This source sends neither results nor intermediate messages.',
     helperOpen: 'Open the discussion', helperDone: 'Done', helperWorking: 'Working',

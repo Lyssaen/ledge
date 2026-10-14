@@ -31,6 +31,9 @@ construit à partir des faits que les harnais transmettent (hooks) et de leurs t
 - La discussion d'un sous-agent s'ouvre dans une autre vue, pas dans le fil.
 - Les fichiers se placent sous l'action qui les a modifiés, pas dans une section à part.
 - Une session `hook_only` reste en lecture seule : le fil se lit, rien ne s'envoie.
+- 14 octobre 2026 : les appels d'outils du tour courant ne sont plus des lignes dépliables mais une seule « ligne
+  vivante » (spinner, outil, cible abrégée, durée ; ✓/✕ tenu 500 ms à la fin) ; requête et résultat d'un appel ne sont
+  plus consultables dans le fil (voir `docs/ideas/2026-10-14-tools-display-mockups.md`).
 
 **Hors périmètre**
 - Le coût en tokens et l'usage (le harnais ne le transmet pas aux hooks).

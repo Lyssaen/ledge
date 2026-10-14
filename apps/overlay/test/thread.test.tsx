@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type { ThreadItem } from '@ledge/protocol';
 import { Thread } from '../src/surface/Thread';
 import { messagesFor } from '../src/i18n/lang';
@@ -28,37 +28,24 @@ describe('<Thread>', () => {
     expect(prev).toHaveTextContent('Old answer');
     expect(prev).not.toHaveAttribute('open');
     const kinds = [...container.querySelectorAll('[data-thread] > [data-item]')].map(e => e.getAttribute('data-item'));
-    expect(kinds).toEqual(['previous-turn', 'prompt', 'message', 'action', 'action', 'action', 'action', 'permission']);
+    expect(kinds).toEqual(['previous-turn', 'prompt', 'message', 'tools', 'permission']);
     expect(container.querySelector('[data-prompt]')).toHaveTextContent('You');
     expect(container.querySelector('[data-prompt]')).toHaveTextContent('Run the tests');
     expect(container.querySelector('[data-message]')).toHaveTextContent('Running them now.');
     expect(container).not.toHaveTextContent('Done.');
     expect(container.textContent).not.toMatch(/\b[2-9] (actions|files|questions)\b/); // no counters, anywhere
   });
-  it('unfolds an action with its command, result, state and duration; says what is missing', () => {
-    const { container } = render(<Thread session={fakeSession('a')} items={items} t={t} theme="dark" paused />);
-    const [ok, running, failed, silent] = [...container.querySelectorAll('[data-action]')];
-    expect(ok).toHaveAttribute('data-status', 'success');
-    fireEvent.click(ok!.querySelector('summary')!);
-    expect(ok).toHaveTextContent('Command');
-    expect(ok!.querySelector('[data-action-output]')).toHaveTextContent('12 passed');
-    expect(ok).toHaveTextContent('Result received');
-    expect(ok).toHaveTextContent('1s');
-    expect(running).toHaveAttribute('data-status', 'running');
-    expect(running).toHaveTextContent('Running');
-    const file = running!.querySelector('[data-file]')!;
-    expect(file).toHaveAttribute('data-confirmed', 'false');
-    expect(file).toHaveTextContent('/w/a.ts');
-    expect(file).toHaveTextContent('Being written');
-    fireEvent.click(file.querySelector('summary')!);
-    expect(file).toHaveTextContent('- a');
-    expect(failed).toHaveAttribute('data-status', 'failed');
-    fireEvent.click(failed!.querySelector('summary')!);
-    expect(failed).toHaveTextContent('Error');
-    expect(failed).toHaveTextContent('exit 1');
-    fireEvent.click(silent!.querySelector('summary')!);
-    expect(silent).toHaveTextContent('No result in this source.');
-    expect(silent).toHaveTextContent('Duration unavailable');
+  it('shows the running tool on one live line, keeps finished calls out of the thread and the permission with its decision', () => {
+    const { container } = render(<Thread session={fakeSession('a')} items={items} t={t} theme="dark" paused now={Date.UTC(2026, 9, 13, 10, 0, 20)} />);
+    const live = container.querySelectorAll('[data-live-tool]');
+    expect(live).toHaveLength(1);
+    expect(live[0]).toHaveTextContent('Edit');
+    expect(live[0]).toHaveTextContent('a.ts');
+    expect(live[0]!.querySelector('[data-spinner]')).toBeInTheDocument();
+    expect(live[0]!.querySelector('[data-elapsed]')).toHaveTextContent('7s');
+    expect(container.querySelector('[data-action]')).toBeNull();
+    expect(container).not.toHaveTextContent('12 passed');
+    expect(container).not.toHaveTextContent('exit 1');
     expect(container.querySelector('[data-permission]')).toHaveAttribute('data-decision', 'deny');
     expect(container.querySelector('[data-permission]')).toHaveTextContent('Denied');
   });
@@ -72,15 +59,5 @@ describe('<Thread>', () => {
     rerender(<Thread session={fakeSession('c', { tool: 'cursor' })} items={[]} t={t} theme="dark" paused />);
     expect(screen.getByText('The thread fills up with the agent’s next event.')).toBeInTheDocument();
     expect(container.querySelector('[data-thread][data-empty] [data-source-note]')).toHaveTextContent('neither results nor intermediate messages');
-  });
-  it('keys file rows by position: one action touching the same path twice renders both without a key clash', () => {
-    const errors: unknown[] = []; const orig = console.error; console.error = (...a: unknown[]) => { errors.push(a); };
-    try {
-      const tool = { kind: 'tool' as const, id: 'toolu_m', at: '2026-10-13T10:00:00.000Z', turn: 1, tool: 'MultiEdit', label: 'MultiEdit · a.ts', status: 'success' as const,
-        files: [{ path: '/w/a.ts', change: 'edit' as const, diff: '- a\n+ b' }, { path: '/w/a.ts', change: 'edit' as const, diff: '- c\n+ d' }] };
-      const { container } = render(<Thread session={fakeSession('a')} items={[{ kind: 'prompt', id: 'prompt-1', at: tool.at, turn: 1, text: 'go' }, tool]} t={t} theme="dark" paused />);
-      expect(container.querySelectorAll('[data-action] [data-file]').length).toBe(2);
-      expect(errors.filter(e => String((e as unknown[])[0]).includes('same key'))).toEqual([]);
-    } finally { console.error = orig; }
   });
 });

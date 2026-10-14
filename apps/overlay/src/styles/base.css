@@ -18,6 +18,8 @@ button, input { font-family: inherit; }
 /* The update card's running step, and the island's busy pip. */
 @keyframes ledge-spin { to { transform: rotate(360deg) } }
 @keyframes ledge-pulse { 50% { opacity: .35 } }
+/* The live tool line's outcome mark (src/surface/LiveToolLine.tsx) pops in where the spinner was. */
+@keyframes ledge-mark-in { from { transform: scale(.4); opacity: 0 } }
 .ledge-spin { animation: ledge-spin .9s linear infinite }
 @media (prefers-reduced-motion: reduce) { .ledge-spin { animation: none } }
 @keyframes ledge-drain { from { width: var(--ledge-from, 100%) } to { width: 0% } }

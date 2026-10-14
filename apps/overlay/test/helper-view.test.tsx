@@ -27,7 +27,8 @@ describe('<HelperView>', () => {
     expect(container).toHaveTextContent('Instruction');
     expect(container).toHaveTextContent('Review the reducer');
     expect(container.querySelector('[data-message]')).toHaveTextContent('Searching the callers.');
-    expect(container.querySelector('[data-action]')).toHaveTextContent('Grep · reduce(');
+    expect(container.querySelector('[data-live-tools]')).toBeNull(); // its Grep is done: no tool row is kept
+    expect(container).not.toHaveTextContent('reduce(');
     expect(container.querySelector('[data-report]')).toHaveTextContent('Final report');
     expect(container.querySelector('[data-report]')).toHaveTextContent('Three consumers, all in the daemon.');
     // The measured block holds the header and the body, so the panel is sized to both.

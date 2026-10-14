@@ -13,7 +13,7 @@ const thread = [
   { kind: 'tool', id: 'toolu_1', at: at(4), turn: 1, tool: 'Bash', label: 'Bash · pnpm test', input: 'pnpm test', status: 'running', files: [] }
 ];
 
-test('the session shows its thread, an action settles in place, a helper row opens its own view and comes back', async ({ page }) => {
+test('the session shows its thread, the live tool line marks its outcome and goes, a helper row opens its own view and comes back', async ({ page }) => {
   const d = await fakeDaemon(page, [session('a', { state: 'working' })]);
   await ready(page, 1);
   await page.keyboard.press('Control+Alt+L');
@@ -21,13 +21,16 @@ test('the session shows its thread, an action settles in place, a helper row ope
   await expectMode(page, 'session');
   expect(await received(d.received, 'session.thread', m => m.id === 'a')).toEqual({ type: 'session.thread', id: 'a' });
   d.emit({ type: 'session.thread', id: 'a', items: thread });
-  const action = page.locator('[data-layer="session"] [data-action]');
-  await expect(action).toHaveAttribute('data-status', 'running');
+  const live = page.locator('[data-layer="session"] [data-live-tool]');
+  await expect(live).toContainText('Bash');
+  await expect(live).toContainText('pnpm test');
+  await expect(live.locator('[data-spinner]')).toHaveCount(1);
   await expect(page.locator('[data-layer="session"] [data-prompt]')).toContainText('Lance les tests du reducer');
   d.emit({ type: 'session.thread.item', id: 'a', item: { ...thread[thread.length - 1], status: 'success', output: '12 passed', durationMs: 812 } });
-  await expect(action).toHaveAttribute('data-status', 'success');
-  await action.locator('summary').click();
-  await expect(action.locator('[data-action-output]')).toContainText('12 passed');
+  // The spinner turns into the outcome mark, held a moment; then the line leaves and the call's output is not kept.
+  await expect(live.locator('[data-mark]')).toHaveAttribute('data-mark', 'success');
+  await expect(live).toHaveCount(0);
+  await expect(page.locator('[data-layer="session"]')).not.toContainText('12 passed');
   // The browser clamps the offset to the content's height: read back what it kept.
   const scroll = page.locator('[data-layer="session"] [data-scroll]');
   const kept = await scroll.evaluate(el => { el.scrollTop = 40; return el.scrollTop; });

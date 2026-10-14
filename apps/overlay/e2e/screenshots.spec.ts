@@ -144,7 +144,7 @@ for (const theme of ['dark', 'light'] as const) {
         { kind: 'tool', id: 'toolu_1', at: at(4), turn: 1, tool: 'Edit', label: 'Edit · state.ts', status: 'success', durationMs: 120, files: [{ path: 'packages/ledge/src/daemon/state.ts', change: 'edit', diff: '- if (ev.name === "Stop") return s;\n+ if (ev.name === "Stop") return { ...s, state: "idle" };' }] },
         { kind: 'tool', id: 'toolu_2', at: at(5), turn: 1, tool: 'Bash', label: 'Bash · pnpm test', input: 'pnpm test', status: 'running', files: [] }
       ] });
-      await expect(layer(page, 'session').locator('[data-action]').last()).toHaveAttribute('data-status', 'running');
+      await expect(layer(page, 'session').locator('[data-live-tool]')).toContainText('pnpm test');
       await shoot(page, `session-thread-${theme}`);
       await layer(page, 'session').locator('[data-helper]').click();
       await expectMode(page, 'helper');

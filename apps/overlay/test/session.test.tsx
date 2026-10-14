@@ -13,12 +13,13 @@ describe('<SessionView>', () => {
     const thread = [
       { kind: 'prompt' as const, id: 'prompt-1', at: at(0), turn: 1, text: 'Review the reducer' },
       { kind: 'helper' as const, id: 'h1', at: at(1), turn: 1, task: 'find consumers', agentType: 'Explore', state: 'exited' as const },
-      { kind: 'tool' as const, id: 'toolu_1', at: at(2), turn: 1, tool: 'Bash', label: 'Bash · pnpm test', status: 'success' as const, files: [] }
+      { kind: 'tool' as const, id: 'toolu_1', at: at(2), turn: 1, tool: 'Bash', label: 'Bash · pnpm test', status: 'running' as const, files: [] }
     ];
     const onOpenHelper = vi.fn();
     const { container } = render(<SessionView {...base} session={fakeSession('a', { state: 'working', helpers: [] })} thread={thread} onOpenHelper={onOpenHelper} />);
     expect(container.querySelector('[data-prompt]')).toHaveTextContent('Review the reducer');
-    expect(container.querySelector('[data-action]')).toHaveTextContent('Bash · pnpm test');
+    expect(container.querySelector('[data-live-tool]')).toHaveTextContent('Bash');
+    expect(container.querySelector('[data-live-tool]')).toHaveTextContent('pnpm test');
     const row = screen.getByRole('button', { name: 'find consumers · Open the discussion' });
     expect(row).toHaveTextContent('Explore · Done');
     fireEvent.click(row);
