@@ -3,7 +3,7 @@ import { createDaemonClient, type DaemonClient, type DaemonStatus } from './clie
 import { machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
-type Peer = { config: MachineConfig; client: DaemonClient; status: DaemonStatus; fresh: boolean; snapshot: Snapshot | null; previews: Map<string, string[]>; off: (() => void)[]; error?: string };
+type Peer = { config: MachineConfig; client: DaemonClient; status: DaemonStatus; fresh: boolean; snapshot: Snapshot | null; previews: Map<string, string[]>; off: (() => void)[]; error?: string; restarting?: boolean };
 type Binding = { machine: string; raw: string };
 type PendingRoute = { qid: string; text: string; tool?: 'claude' | 'codex' | 'cursor'; coordinator: string };
 
@@ -11,6 +11,7 @@ type PendingRoute = { qid: string; text: string; tool?: 'claude' | 'codex' | 'cu
 export function createFleetClient(config: MachineConfig[], makeClient = createDaemonClient): DaemonClient {
   let configs = parseMachines(config), selected = configs[0]!.id, connected = false, configuring = false, state: MachineState[] = [];
   const peers = new Map<string, Peer>();
+  const machineMessages = new Set<(machine: string, m: ServerMessage) => void>();
   const messages = new Set<(m: ServerMessage) => void>(), statuses = new Set<(s: DaemonStatus) => void>(), listeners = new Set<() => void>();
   const turns = new Map<string, ChatTurn>(), bindings = new Map<string, Binding>();
   const documents = new Map<string, string>();
@@ -45,13 +46,13 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
    *  a (re)connection, a host joining or leaving, another host selected. A session's own update is relayed as itself
    *  (see `receive`): to the overlay a snapshot is a reconnection, which empties the threads and rebuilds the open view. */
   function refresh() {
-    state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: p.snapshot?.sessions ?? [], launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, error: p.error }; });
+    state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: p.snapshot?.sessions ?? [], launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, daemon: p.snapshot?.daemon, error: p.error }; });
     const next = status(); if (next !== lastStatus) { lastStatus = next; statuses.forEach(fn => fn(next)); }
     listeners.forEach(fn => fn());
   }
   function publish() {
     if (configuring) return;
-    state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: p.snapshot?.sessions ?? [], launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, error: p.error }; });
+    state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: p.snapshot?.sessions ?? [], launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, daemon: p.snapshot?.daemon, error: p.error }; });
     const primary = peers.get('local')?.snapshot;
     emit({ type: 'snapshot', sessions: [...peers.values()].filter(available).flatMap(p => p.snapshot!.sessions.map(s => session(p, s))), recents: available(peers.get(selected)) ? peers.get(selected)!.snapshot!.recents : [], launcher: primary?.launcher, daemon: primary?.daemon });
     for (const p of peers.values()) if (available(p)) for (const [id, lines] of p.previews) emit({ type: 'session.preview', id: qualify(p.config.id, id), lines });
@@ -75,9 +76,13 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   }
   function receive(p: Peer, m: ServerMessage) {
     const machine = p.config.id;
+    machineMessages.forEach(fn => fn(machine, m));
+    // A daemon restarting for an update closes its SSH bridge: that error is the restart, not a failure to show.
+    if (m.type === 'update.progress') p.restarting = m.step === 'restarting';
+    if (m.type === 'update.failed') p.restarting = false;
     if (m.type === 'snapshot') {
       if (p.config.ssh && m.sshAlias !== p.config.ssh) { p.error = 'Update the local Ledge daemon: SSH transport is unavailable'; p.client.close(); publish(); return; }
-      p.snapshot = m; p.fresh = true; p.error = undefined; p.previews.clear(); publish(); return;
+      p.snapshot = m; p.fresh = true; p.error = undefined; p.restarting = false; p.previews.clear(); publish(); return;
     }
     // A session's traffic is relayed as it came, qualified; a peer without a snapshot yet has nothing to relay against.
     if (m.type === 'session.updated') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: [...p.snapshot.sessions.filter(s => s.id !== m.session.id), m.session] }; if (available(p)) emit({ type: 'session.updated', session: session(p, m.session) }); refresh(); return; }
@@ -118,7 +123,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       else emit({ ...m, qid });
       return;
     }
-    if (m.type === 'error') { if (!p.fresh) { p.error = m.message; publish(); return; } operations.delete(machine); emit({ ...m, ...(m.id ? { id: qualify(machine, m.id) } : {}), message: configs.length > 1 ? `${p.config.label}: ${m.message}` : m.message }); return; }
+    if (m.type === 'error') { if (p.restarting) return; if (!p.fresh) { p.error = m.message; publish(); return; } operations.delete(machine); emit({ ...m, ...(m.id ? { id: qualify(machine, m.id) } : {}), message: configs.length > 1 ? `${p.config.label}: ${m.message}` : m.message }); return; }
     if (machine === 'local') emit(m);
   }
   function add(c: MachineConfig) {
@@ -207,7 +212,9 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       terminal(id) { const origin = splitId(id); const m = state.find(x => x.id === origin?.machine); return origin && m ? terminalCommand(m, origin.id) : null; },
       turnMachine(qid) { return state.find(m => m.id === bindings.get(qid)?.machine); },
       documentMachine(id) { return splitId(id)?.machine; },
-      localSnapshot: () => peers.get('local')?.snapshot ?? null
+      localSnapshot: () => peers.get('local')?.snapshot ?? null,
+      sendTo(machine, msg) { const p = peers.get(machine); if (!available(p)) return false; p!.client.send(msg); return true; },
+      onMachineMessage(fn) { machineMessages.add(fn); return () => { machineMessages.delete(fn); }; }
     }
   };
   publish();

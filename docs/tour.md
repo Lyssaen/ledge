@@ -115,15 +115,15 @@ Four tabs, the last one opened remembered. Display: language, the default harnes
 
 ## Updating
 
-When a newer release is out, a dot appears on the mascot and on the gear, and a card sits between the list's header and its rows. One click on "Mettre à jour" updates the WSL daemon first, then the Windows app. Your sessions keep running, and Ledge closes for about twenty seconds.
+When a newer release is out, a dot appears on the mascot and on the gear, and a card sits between the list's header and its rows. One click on "Mettre à jour" updates your connected servers first, one after the other, then the WSL daemon, then the Windows app. Your sessions keep running, and Ledge closes for about twenty seconds. A server that is the only one behind is enough for the card to show: it names the server and its version. A server running Ledge from a git clone is left to you.
 
 <img src="screens/update-available-dark.png" alt="The list with the update card: Ledge 0.3.0 is available, the release notes, Mettre à jour and Plus tard" width="408">
 
-While it runs, the card lists the four steps: the daemon updated, the daemon restarted with every session found again, the download, the install.
+While it runs, the card lists the steps: each server updated with every session found again, the daemon updated, the daemon restarted with every session found again, the download, the install.
 
 <img src="screens/update-running-dark.png" alt="The update card in progress: the first step running, three to come" width="408">
 
-If something stops it, the card says what and nothing else has changed. Here a restart would have closed live sessions, so Ledge refuses. The app is only updated after every session has come back.
+If something stops it, the card says what, and on which server, and nothing after it has changed. Here a restart would have closed live sessions, so Ledge refuses. The app is only updated after every session has come back.
 
 <img src="screens/update-failed-dark.png" alt="The update card after a failure: the sessions run in the daemon's service, a restart would close them" width="408">
 
