@@ -77,6 +77,16 @@ describe('no session at all', () => {
   });
 });
 
+describe('before the first snapshot', () => {
+  it('shows no empty workspace until the fleet has loaded', async () => {
+    localStorage.clear();
+    render(<App />);   // the socket never opens: no snapshot arrives
+    await new Promise(r => setTimeout(r, 300));
+    expect(screen.queryByText('Your team starts here')).toBeNull();
+    expect(document.querySelector('.workspace-empty')).toBeNull();
+  });
+});
+
 describe('local daemon falls after its snapshot', () => {
   it('keeps the selection and lists the local sessions offline', async () => {
     const d = await createMockDaemon();
