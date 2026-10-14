@@ -24,4 +24,7 @@ test('the local daemon down: a read-only alert', async ({ page }) => {
   local.close();
   await expect(page.getByRole('alert')).toContainText('Local daemon unreachable');
   await expect(page.locator('main')).toHaveAttribute('data-readonly', 'true');
+  // Its sessions stay on screen, frozen, rather than vanishing.
+  await expect(page.locator('.seat[data-offline="true"]')).toHaveCount(1);
+  await expect(page.locator('.seat .state')).toHaveText('Disconnected');
 });
