@@ -73,6 +73,6 @@ describe('connectRemote', () => {
     expect(FakeWs.all).toHaveLength(1);
     document.dispatchEvent(new Event('visibilitychange'));
     expect(FakeWs.all).toHaveLength(2);
-    expect(store.getState().link).toBe('offline');
+    expect(store.getState().link).toBe('connecting');
   });
 });

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import type { ServerMessage, Session } from '@ledge/protocol';
+import type { ClientMessage, ServerMessage, Session } from '@ledge/protocol';
+import { loadOps, opsReducer, saveOps, toCheck, type OpEvent, type OpState } from '../model/operations';
 import { clearLastState, DEVICE_KEY, loadLastState, saveLastState } from './persist';
 
 export type Link = 'unpaired' | 'connecting' | 'online' | 'offline';
@@ -10,12 +11,20 @@ export interface MobileState {
   syncedAt: string | null;
   device: { id: string; name: string } | null;
   pcName: string | null;
+  /** Decisions and replies made from this phone, and where each stands. */
+  ops: Record<string, OpState>;
 }
 export interface MobileStore {
   getState(): MobileState;
   subscribe(fn: () => void): () => void;
   apply(msg: ServerMessage): void;
   setLink(l: Link): void;
+  /** How messages reach the socket (set by the remote client). */
+  setSender(send: (m: ClientMessage) => void): void;
+  /** Send an operation now, only on an authenticated link: never queued, never retried. */
+  submit(op: OpState, msg: ClientMessage): boolean;
+  /** Feed the operations model (e.g. `resumed` on return to the foreground). */
+  dispatch(e: OpEvent): void;
   /** Forget the PC's data (token refused or revoked). */
   reset(): void;
 }
@@ -30,7 +39,8 @@ function loadDevice(storage?: Storage): MobileState['device'] {
 
 export function createMobileStore(storage?: Storage): MobileStore {
   const last = loadLastState(storage);
-  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null };
+  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage) };
+  let send: ((m: ClientMessage) => void) | null = null;
   const fns = new Set<() => void>();
   const set = (next: Partial<MobileState>, persist: boolean) => {
     state = { ...state, ...next };
@@ -38,17 +48,33 @@ export function createMobileStore(storage?: Storage): MobileStore {
     fns.forEach(f => f());
   };
   const now = () => new Date().toISOString();
+  const dispatch = (e: OpEvent) => {
+    const ops = opsReducer(state.ops, e);
+    if (ops === state.ops) return;
+    state = { ...state, ops };
+    saveOps(ops, storage);
+    fns.forEach(f => f());
+  };
   return {
     getState: () => state,
     subscribe: fn => { fns.add(fn); return () => { fns.delete(fn); }; },
-    setLink: l => { if (l !== state.link) set({ link: l }, false); },
-    reset: () => { clearLastState(storage); set({ link: 'unpaired', sessions: [], previews: {}, syncedAt: null, device: null, pcName: null }, false); },
+    setLink: l => { if (l !== state.link) { set({ link: l }, false); dispatch({ type: 'link', link: l }); } },
+    setSender: f => { send = f; },
+    dispatch,
+    submit: (op, msg) => {
+      if (state.link !== 'online' || !send) return false;
+      send(msg);
+      dispatch({ type: 'sent', op });
+      return true;
+    },
+    reset: () => { clearLastState(storage); saveOps({}, storage); set({ link: 'unpaired', sessions: [], previews: {}, syncedAt: null, device: null, pcName: null, ops: {} }, false); },
     apply: msg => {
       switch (msg.type) {
         case 'auth.ok': {
           const device = { id: msg.deviceId, name: msg.deviceName };
           try { (storage ?? globalThis.localStorage)?.setItem(DEVICE_KEY, JSON.stringify(device)); } catch { /* ignore */ }
           set({ link: 'online', device, pcName: msg.pcName }, true);
+          for (const operationId of toCheck(state.ops)) send?.({ type: 'operation.status', operationId });
           break;
         }
         case 'snapshot': {
@@ -71,6 +97,8 @@ export function createMobileStore(storage?: Storage): MobileStore {
         case 'session.preview':
           set({ previews: { ...state.previews, [msg.id]: msg.lines }, syncedAt: now() }, true);
           break;
+        case 'operation.received': dispatch({ type: 'received', operationId: msg.operationId }); break;
+        case 'operation.result': dispatch({ type: 'result', operationId: msg.operationId, status: msg.status, ...(msg.reason ? { reason: msg.reason } : {}) }); break;
         default: break;
       }
     }

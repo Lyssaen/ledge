@@ -18,15 +18,16 @@ export function connectRemote(o: { store: MobileStore; url?: string; storage?: S
     stopOn: [REMOTE_CLOSE.unauthenticated, REMOTE_CLOSE.revoked],
     onClose: code => { if (code === REMOTE_CLOSE.unauthenticated || code === REMOTE_CLOSE.revoked) unpair(); }
   });
+  o.store.setSender(m => client.send(m));
   client.onMessage(m => o.store.apply(m));
   client.onStatus(s => { if (s === 'unreachable' && read()) o.store.setLink('offline'); });
 
   const connect = () => {
     if (!read()) { o.store.setLink('unpaired'); return; }
-    if (o.store.getState().link === 'unpaired') o.store.setLink('connecting');
+    o.store.setLink('connecting');
     client.connect();
   };
-  const onVisible = () => { if (doc.visibilityState === 'visible') connect(); };
+  const onVisible = () => { if (doc.visibilityState === 'visible') { o.store.dispatch({ type: 'resumed' }); connect(); } };
   doc.addEventListener('visibilitychange', onVisible);
 
   connect();
