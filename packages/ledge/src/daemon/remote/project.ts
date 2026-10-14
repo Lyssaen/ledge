@@ -15,6 +15,10 @@ export function toRemote(msg: ServerMessage, _view: { deviceId: string }): Serve
     case 'session.preview':
     case 'error':
     case 'auth.ok':
+    // Sent to the asking peer only (never broadcast): the challenge for its own decision and the fate of its own operation.
+    case 'decide.challenge':
+    case 'operation.received':
+    case 'operation.result':
       return msg;
     // Pairing never goes through a peer: `pair.code` is the PC's secret (decision D5), and the remote entry writes
     // `pair.challenge`, `pair.done` and `pair.error` straight to the unauthenticated socket that asked.

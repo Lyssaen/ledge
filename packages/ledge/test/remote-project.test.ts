@@ -89,6 +89,14 @@ describe('toRemote', () => {
     ];
     for (const msg of pairing) expect(toRemote(msg, view)).toBeNull();
   });
+  it('passes the decision answers to the phone that asked: challenge, operation received and result', () => {
+    const decision: ServerMessage[] = [
+      { type: 'decide.challenge', id: 'a', pendingId: 'p1', pendingVersion: 1, decision: 'accept', options: { challenge: 'c' }, expiresAt: T0 },
+      { type: 'operation.received', operationId: '7b1e0c1e-8d2f-4c4a-9a51-0d6f3c1b2a90' },
+      { type: 'operation.result', operationId: '7b1e0c1e-8d2f-4c4a-9a51-0d6f3c1b2a90', status: 'rejected', reason: 'stale' }
+    ];
+    for (const msg of decision) expect(toRemote(msg, view)).toEqual(msg);
+  });
   it('does not change the message it projects', () => {
     const s = mk('a'); toRemote({ type: 'snapshot', sessions: [s] }, view);
     expect(s.tmuxSession).toBe('ledge-a');

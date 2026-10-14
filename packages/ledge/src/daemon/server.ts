@@ -19,9 +19,13 @@ import { readDocument } from './documents.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createPeers, type Peer, type PeerContext, type PeerSocket } from './peers.js';
 import { toRemote } from './remote/project.js';
-import { remoteMayRun } from './remote/rights.js';
+import { MOBILE_COMMANDS } from './remote/rights.js';
 import type { MobileControl } from './devices.js';
 import { PairError } from './pairing.js';
+import { OperationRegistry } from './operations.js';
+import { ChallengeStore } from './challenges.js';
+import { parseOrigin } from '../mobile/config.js';
+import { BUSY, NO_PROMPT, NOT_TAKEN, READ_ONLY, Refusal, operationStatus, prepareDecide, runAnswer, runDecide, type DecisionDeps } from './decisions.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -82,7 +86,9 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; mobile?: MobileControl }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; mobile?: MobileControl;
+  /** What an authenticated phone may send; the plan's closed list unless a test widens it. */
+  remoteCommands?: ReadonlySet<ClientMessage['type']> }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -149,7 +155,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         for (;;) {
           const pane = await tmux.capture(s.tmuxSession, UNTIL_LINES);
           if (pane !== null && step.until(pane)) break;
-          if (Date.now() >= end) throw new Error(NOT_TAKEN);
+          if (Date.now() >= end) throw new Refusal('not_taken', NOT_TAKEN);
           await new Promise(r => setTimeout(r, UNTIL_POLL_MS));
         }
       }
@@ -163,18 +169,28 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * stale pending (or a dialog the adapter cannot read) would get keys meant for something else and
    * the "prompt gone" check would then report success. A plan given as a function is built from that
    * same capture, so the keys match the dialog actually on screen.
+   * With `expected`, the request decided must still be that id in that version, checked under the lock once the
+   * capture is in, right before the plan is built and the first character typed.
    */
-  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean): Promise<void> {
+  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean, expected?: { id: string; version: number }): Promise<void> {
     const s = store.get(id);
-    if (!s) throw new Error(`unknown session ${id}`);
-    if (inFlight.has(id)) throw new Error('a decision is already in progress');
+    if (!s) throw new Refusal('stale', `unknown session ${id}`);
+    if (inFlight.has(id)) throw new Refusal('busy', BUSY);
     inFlight.add(id);
+    const checkExpected = () => {
+      if (!expected) return;
+      const cur = store.get(id)?.pending;
+      if (!cur || cur.id !== expected.id) throw new Refusal('stale');
+      if (cur.version !== expected.version) throw new Refusal('changed');
+    };
     try {
+      checkExpected();
       const adapter = adapterFor(s.tool);
       let before: string | null = null;
       if (requirePrompt) {
         before = s.tmuxSession ? await tmux.capture(s.tmuxSession, DETECT_LINES) : null;
-        if (before === null || !adapter.promptStillVisible(before.split('\n').slice(-5).join('\n'))) throw new Error(NO_PROMPT);
+        checkExpected();
+        if (before === null || !adapter.promptStillVisible(before.split('\n').slice(-5).join('\n'))) throw new Refusal('no_prompt', NO_PROMPT);
       }
       const plan = typeof planFor === 'function' ? planFor(before ?? '') : planFor;
       const decided = s.pending;
@@ -193,17 +209,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         : await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
       if (!stillTheSame()) return; // a newer prompt arrived meanwhile: leave it alone
       if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon' }); return; }
-      // The client gets an `error` reply for that id (via the caller's catch), so a retry from `error` reads as failed.
+      // The client gets an `error` reply for that id (or a phone `failed/not_taken`, decisions.ts), so a retry from `error` reads as failed.
       store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: NOT_TAKEN });
-      throw new Error(NOT_TAKEN);
+      throw new Refusal('not_taken', NOT_TAKEN);
     } finally { inFlight.delete(id); }
   }
 
-  const READ_ONLY = 'session started without ledge, read only';
-  const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
-  const NOT_TAKEN = 'the terminal did not take it';
   const NO_MOBILE = 'mobile not available';
-  const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
+
+  /** Decisions and answers, from the overlay or a phone (decisions.ts): identity, idempotence, device check, then this lock. */
+  const decisions: DecisionDeps = {
+    store, ops: new OperationRegistry(), challenges: new ChallengeStore(), devices: opts.mobile?.devices,
+    config: () => { const origin = opts.mobile?.state().origin; return origin ? parseOrigin(origin) : null; },
+    inject: injectAndVerify
+  };
+  const remoteCommands = opts.remoteCommands ?? MOBILE_COMMANDS;
 
   async function handle(peer: Peer, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
@@ -270,25 +290,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.unregister':
         store.apply(msg.id, { name: 'SessionEnd', at: now(), source: 'hook', exitCode: msg.exitCode });
         return;
-      case 'session.decide': {
-        const s = store.get(msg.id); if (!s) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
-        if (s.source === 'hook_only') return peer.send({ type: 'error', id: msg.id, message: READ_ONLY });
-        if (!s.pending) return peer.send({ type: 'error', id: msg.id, message: 'nothing to decide' });
-        const pending = s.pending; const adapter = adapterFor(s.tool);
-        return injectAndVerify(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true);
-      }
-      case 'session.reply': {
-        const s = store.get(msg.id); if (!s) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
-        if (s.source === 'hook_only') return peer.send({ type: 'error', id: msg.id, message: READ_ONLY });
-        // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
-        if (s.pending && s.pending.kind !== 'question') return peer.send({ type: 'error', id: msg.id, message: `a ${s.pending.kind} prompt takes accept or deny, not a reply` });
-        if (msg.text.trim() === '') return peer.send({ type: 'error', id: msg.id, message: 'empty reply' });
-        // The 2.x question dialog is a select: typed text then Enter would silently pick the highlighted option.
-        if (s.pending?.kind === 'question' && !/^[1-9]$/.test(msg.text.trim())) return peer.send({ type: 'error', id: msg.id, message: FREE_TEXT });
-        // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
-        const pending = s.pending; const adapter = adapterFor(s.tool);
-        return injectAndVerify(msg.id, pane => adapter.replyPlan(msg.text, pending, pane || undefined), !!pending);
-      }
+      case 'session.decide': return runDecide(peer, msg, decisions);
+      case 'session.reply': return runAnswer(peer, msg, decisions);
+      case 'decide.prepare': return prepareDecide(peer, msg, decisions);
+      case 'operation.status': return operationStatus(peer, msg, decisions);
       case 'session.interrupt': {
         const s = store.get(msg.id);
         if (s?.source === 'hook_only') return peer.send({ type: 'error', id: msg.id, message: READ_ONLY });
@@ -369,7 +374,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       let msg: ClientMessage;
       try { msg = parseClientMessage(JSON.parse(String(data))); }
       catch (e) { log(`invalid message: ${(e as Error).message}`); return peer.send({ type: 'error', message: 'invalid message' }); }
-      if (ctx.kind === 'remote' && !remoteMayRun(msg)) {
+      if (ctx.kind === 'remote' && !remoteCommands.has(msg.type)) {
         log(`remote ${ctx.deviceId} refused ${msg.type}`);
         return peer.send({ type: 'error', message: 'forbidden' });
       }
