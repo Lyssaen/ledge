@@ -52,9 +52,12 @@ describe('updateAtStartup', () => {
     expect(await updateAtStartup({ check, relaunch: async () => {}, version: async () => '0.5.2' })).toBe('installed');
     expect(install).toHaveBeenCalledOnce();
   });
-  it('records the attempt before downloading, so a crash during install is not retried either', async () => {
-    const broken = { version: '0.6.0', notes: '', downloadAndInstall: vi.fn(async () => { throw new Error('network'); }) };
-    expect(await updateAtStartup({ check: async () => broken, relaunch: async () => {}, version: async () => '0.5.2' })).toBe('failed');
-    expect(localStorage.getItem('desktop.update.attempted')).toBe('0.6.0');
+  it('retries on the next start an update whose download failed', async () => {
+    const install = vi.fn(async () => { throw new Error('network'); });
+    const check = async () => ({ version: '0.6.0', notes: '', downloadAndInstall: install });
+    expect(await updateAtStartup({ check, relaunch: async () => {}, version: async () => '0.5.2' })).toBe('failed');
+    expect(localStorage.getItem('desktop.update.attempted')).toBeNull();
+    expect(await updateAtStartup({ check, relaunch: async () => {}, version: async () => '0.5.2' })).toBe('failed');
+    expect(install).toHaveBeenCalledTimes(2);
   });
 });
