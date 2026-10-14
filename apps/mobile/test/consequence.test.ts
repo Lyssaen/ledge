@@ -13,6 +13,12 @@ describe('parsePushTarget', () => {
     expect(parsePushTarget('git push --force-with-lease origin main')?.force).toBe(true);
     expect(parsePushTarget('git push origin +main')).toEqual({ remote: 'origin', branch: 'main', force: true });
   });
+  it('deleting or mirroring pushes count as rewriting history, whichever refspec carries it', () => {
+    for (const cmd of ['git push origin :main', 'git push origin --delete main', 'git push -d origin main', 'git push --mirror origin', 'git push origin main :old', 'git push origin main +dev', 'git push --prune origin'])
+      expect(parsePushTarget(cmd)?.force, cmd).toBe(true);
+    expect(parsePushTarget('git push origin :main')).toEqual({ remote: 'origin', branch: 'main', force: true });
+    expect(parsePushTarget('git push origin main dev')?.force).toBe(false);
+  });
   it('takes the destination of a src:dst refspec and skips flag values', () => {
     expect(parsePushTarget('git push -o ci.skip origin HEAD:release')).toEqual({ remote: 'origin', branch: 'release', force: false });
     expect(parsePushTarget('git push -u origin main')).toEqual({ remote: 'origin', branch: 'main', force: false });

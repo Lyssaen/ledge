@@ -5,10 +5,11 @@ export interface PushTarget { remote: string; branch?: string; force: boolean }
 
 /** `-o`, `--repo` and friends take a value: it is not the remote. */
 const VALUE_FLAGS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec']);
-const FORCE_FLAGS = new Set(['-f', '--force', '--force-with-lease', '--force-if-includes']);
+/** Flags that can rewrite or remove remote history: a force push, a deletion, a mirror, a prune. */
+const FORCE_FLAGS = new Set(['-f', '--force', '--force-with-lease', '--force-if-includes', '--delete', '-d', '--mirror', '--prune']);
 
 /**
- * Reads a plain `git push`: the remote, the branch and whether it can rewrite history. `remote` is empty when the command
+ * Reads a plain `git push`: the remote, the branch and whether it can rewrite or delete remote history (`force`: force, delete, mirror, `:ref`). `remote` is empty when the command
  * names none (git then uses the configured one). Anything that is not a simple push gives `null`.
  */
 export function parsePushTarget(cmd: string): PushTarget | null {
@@ -26,12 +27,14 @@ export function parsePushTarget(cmd: string): PushTarget | null {
       if (FORCE_FLAGS.has(name)) force = true;
       else if (VALUE_FLAGS.has(name) && !a.includes('=')) i++;
     } else if (a.startsWith('-') && a.length > 1) {
-      if (a.slice(1).includes('f')) force = true;
+      if (/[fd]/.test(a.slice(1))) force = true;
       else if (VALUE_FLAGS.has(a)) i++;
     } else positional.push(a);
   }
-  const [remote = '', refspec] = positional;
-  if (refspec?.startsWith('+')) force = true;
+  const [remote = '', ...refspecs] = positional;
+  // Every refspec counts: `+x` forces, `:x` deletes.
+  if (refspecs.some(r => r.startsWith('+') || r.startsWith(':'))) force = true;
+  const refspec = refspecs[0];
   const branch = refspec?.replace(/^\+/, '').split(':').pop();
   return { remote, ...(branch ? { branch } : {}), force };
 }

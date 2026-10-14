@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
-import { confirmWithDevice, fetchChallenge, VerifyFailure, type DecideChallenge } from '../src/connection/verify';
+import { confirmWithDevice, fetchChallenge, VerifyFailure, type HeldChallenge } from '../src/connection/verify';
 import type { InboxItem } from '../src/model/requests';
 
 const item: InboxItem = { sessionId: 's', pendingId: 'p', pendingVersion: 2, kind: 'permission', filter: 'permission', task: 't', botName: 'Kai', tool: 'claude', repo: 'r', since: '2026-10-14T10:00:00Z', text: 'git push --force origin main', risk: 'high', riskReason: 'pushes', readOnly: false };
-const challenge = (over: Partial<DecideChallenge> = {}): DecideChallenge => ({ type: 'decide.challenge', id: 's', pendingId: 'p', pendingVersion: 2, decision: 'accept', options: { challenge: 'c' }, expiresAt: new Date(Date.now() + 60_000).toISOString(), ...over });
+const challenge = (over: Partial<HeldChallenge> = {}): HeldChallenge => ({ receivedAt: Date.now(), type: 'decide.challenge', id: 's', pendingId: 'p', pendingVersion: 2, decision: 'accept', options: { challenge: 'c' }, expiresAt: new Date(Date.now() + 60_000).toISOString(), ...over });
 
 function bus() {
   const fns = new Set<(m: ServerMessage) => void>();
@@ -80,11 +80,27 @@ describe('confirmWithDevice', () => {
     await expect(confirmWithDevice(item, challenge(), { startAuthentication: (async () => { throw new Error('boom'); }) as never, submit })).rejects.toMatchObject({ reason: 'webauthn_failed' });
     expect(submit).not.toHaveBeenCalled();
   });
-  it('an expired held challenge is refused without the device prompt', async () => {
+  it('a held challenge older than its minute on the phone clock is refused without the device prompt', async () => {
     const start = vi.fn();
     const submit = vi.fn(() => true);
-    await expect(confirmWithDevice(item, challenge({ expiresAt: new Date(Date.now() - 1).toISOString() }), { startAuthentication: start as never, submit })).rejects.toBeInstanceOf(VerifyFailure);
+    await expect(confirmWithDevice(item, challenge({ receivedAt: Date.now() - 56_000 }), { startAuthentication: start as never, submit })).rejects.toBeInstanceOf(VerifyFailure);
     expect(start).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+  });
+  it('judges expiry from the receipt, so a phone clock minutes ahead of the PC still works', async () => {
+    const b = bus();
+    const phone = 1_800_000_000_000;
+    const held = fetchChallenge(item, { ...b.deps, now: () => phone });
+    b.emit({ ...challenge(), expiresAt: new Date(phone - 10 * 60_000).toISOString() } as ServerMessage);
+    const c = await held;
+    expect(c.receivedAt).toBe(phone);
+    const submit = vi.fn(() => true);
+    await expect(confirmWithDevice(item, c, { startAuthentication: (async () => assertion) as never, submit, now: () => phone + 20_000 })).resolves.toBeDefined();
+    await expect(confirmWithDevice(item, c, { startAuthentication: (async () => assertion) as never, submit, now: () => phone + 56_000 })).rejects.toMatchObject({ reason: 'assertion_expired' });
+  });
+  it('does not submit when the request moved on while the device check was open', async () => {
+    const submit = vi.fn(() => true);
+    await expect(confirmWithDevice(item, challenge(), { startAuthentication: (async () => assertion) as never, submit, stillCurrent: () => false })).rejects.toMatchObject({ reason: 'changed' });
     expect(submit).not.toHaveBeenCalled();
   });
   it('a link that fell after the check rejects as offline', async () => {

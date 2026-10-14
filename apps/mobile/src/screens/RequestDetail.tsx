@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { tildePath } from '@ledge/client';
 import { copy } from '../copy';
 import { newOperationId } from '../model/operations';
@@ -45,6 +45,8 @@ export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId
   if (seen === null && item) setSeen(item.pendingVersion);
   const [choice, setChoice] = useState<number | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // A dialog closed by a lost link stays closed: it must not reopen and ask for a new challenge on reconnect.
+  useEffect(() => { if (link !== 'online') setConfirming(false); }, [link]);
   const last = useRef<InboxItem | undefined>(undefined);
   if (item) last.current = item;
   const outcome = outcomeFor({ sessionId, pendingId, ...(seen !== null ? { pendingVersion: seen } : {}) }, sessions, ops);

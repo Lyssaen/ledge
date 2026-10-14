@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startAuthentication as realStartAuthentication } from '@simplewebauthn/browser';
 import { copy } from '../copy';
-import { confirmWithDevice, fetchChallenge, VerifyFailure, type DecideChallenge } from '../connection/verify';
+import { confirmWithDevice, fetchChallenge, VerifyFailure, type HeldChallenge } from '../connection/verify';
 import { consequenceFor, parsePushTarget } from '../model/consequence';
 import type { InboxItem } from '../model/requests';
 import { mobileStore, type MobileStore } from '../state/store';
 import { Command } from '../ui/Command';
 import { Notice } from '../ui/Notice';
 
-type Phase = { s: 'loading' } | { s: 'ready'; challenge: DecideChallenge } | { s: 'asking'; challenge: DecideChallenge } | { s: 'error'; message: string };
+type Phase = { s: 'loading' } | { s: 'ready'; challenge: HeldChallenge } | { s: 'asking'; challenge: HeldChallenge } | { s: 'error'; message: string };
 
 const full = 'inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control border px-4 py-2.5 text-[13px] font-medium disabled:opacity-45';
 
@@ -37,6 +37,8 @@ export function RiskConfirm({ item, onClose, store = mobileStore, startAuthentic
   const latest = useRef(item);
   latest.current = item;
   const { sessionId, pendingId, pendingVersion } = item;
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   useEffect(() => {
     const d = ref.current;
@@ -58,7 +60,8 @@ export function RiskConfirm({ item, onClose, store = mobileStore, startAuthentic
     if (phase.s !== 'ready') return;
     const { challenge } = phase;
     // First call of the tap, before any await: the device check keeps the tap's user activation.
-    const result = confirmWithDevice(item, challenge, { startAuthentication, submit: (op, msg) => store.submit(op, msg) });
+    const result = confirmWithDevice(item, challenge, { startAuthentication, submit: (op, msg) => store.submit(op, msg),
+      stillCurrent: () => mounted.current && latest.current.sessionId === sessionId && latest.current.pendingId === pendingId && latest.current.pendingVersion === pendingVersion });
     setNote(null);
     setPhase({ s: 'asking', challenge });
     result.then(

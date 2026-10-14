@@ -68,8 +68,11 @@ describe('RiskConfirm', () => {
   it('an expired held challenge is not used: a new one is fetched and another tap is required', async () => {
     const start = vi.fn(async () => assertion);
     render(<RiskConfirm item={item()} onClose={() => {}} startAuthentication={start as never} />);
-    act(() => mobileStore.apply(challenge(new Date(Date.now() - 1000).toISOString())));
+    act(() => mobileStore.apply(challenge()));
     await flush();
+    // The held challenge is older than its minute on the phone clock.
+    const later = Date.now() + 58_000;
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(later);
     fireEvent.click(screen.getByRole('button', { name: 'Confirmer avec mon appareil' }));
     await flush();
     expect(start).not.toHaveBeenCalled();
@@ -79,6 +82,29 @@ describe('RiskConfirm', () => {
     act(() => mobileStore.apply(challenge()));
     await flush();
     expect(screen.getByRole('button', { name: 'Confirmer avec mon appareil' })).toBeEnabled();
+    expect(decides()).toHaveLength(0);
+    clock.mockRestore();
+  });
+  it('a phone clock far ahead of the PC does not expire a fresh challenge', async () => {
+    const start = vi.fn(async () => assertion);
+    render(<RiskConfirm item={item()} onClose={() => {}} startAuthentication={start as never} />);
+    act(() => mobileStore.apply(challenge(new Date(Date.now() - 10 * 60_000).toISOString())));
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer avec mon appareil' }));
+    await flush();
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(decides()).toHaveLength(1);
+  });
+  it('an assertion that resolves after the dialog was closed is not sent', async () => {
+    let finish: (a: typeof assertion) => void = () => {};
+    const start = vi.fn(() => new Promise<typeof assertion>(r => { finish = r; }));
+    const view = render(<RiskConfirm item={item()} onClose={() => {}} startAuthentication={start as never} />);
+    act(() => mobileStore.apply(challenge()));
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer avec mon appareil' }));
+    view.unmount();
+    finish(assertion);
+    await flush();
     expect(decides()).toHaveLength(0);
   });
   it('a refused prepare shows a message and offers a retry', async () => {
@@ -109,6 +135,16 @@ describe('a high-impact request in the detail', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(prepares()).toHaveLength(1);
     expect(decides()).toHaveLength(0);
+  });
+  it('a lost link closes the confirmation and it does not reopen or re-prepare on reconnect', () => {
+    render(<RequestDetail sessionId="s" pendingId="p" onReconnect={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Vérifier et autoriser' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    act(() => mobileStore.setLink('offline'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    act(() => mobileStore.setLink('online'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(prepares()).toHaveLength(1);
   });
 });
 
