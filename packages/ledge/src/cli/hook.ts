@@ -9,8 +9,8 @@ import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
 type Payload = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
-/** The longest first prompt sent as a topic candidate; the reducer cuts it to one line of TOPIC_MAX. */
-const PROMPT_MAX = 500;
+/** The longest prompt kept: the phone thread shows it whole, and the reducer cuts the topic candidate to one line of TOPIC_MAX. */
+const PROMPT_MAX = 4_000;
 const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, PROMPT_MAX) } : {}; };
 
 /** Claude's own words for what a Bash command is for (`tool_input.description`). */

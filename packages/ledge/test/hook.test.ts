@@ -408,9 +408,13 @@ describe('ledge hook (CLI)', () => {
 
 describe('prompts and the chat marker', () => {
   const at = '2026-10-11T10:00:00.000Z';
-  it('UserPromptSubmit carries the prompt, cut to 500 characters', () => {
-    const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(600) }, at);
-    expect(m?.event.name).toBe('UserPromptSubmit'); expect(m?.event.text).toHaveLength(500);
+  it('keeps a long prompt up to 4000 characters', () => {
+    const p = 'y'.repeat(3900);
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: p }, at)?.event.text).toBe(p);
+  });
+  it('UserPromptSubmit carries the prompt, cut to 4000 characters', () => {
+    const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(5000) }, at);
+    expect(m?.event.name).toBe('UserPromptSubmit'); expect(m?.event.text).toHaveLength(4000);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's' }, at)?.event.text).toBeUndefined();
   });
   it('Cursor beforeSubmitPrompt carries the prompt too', () => {

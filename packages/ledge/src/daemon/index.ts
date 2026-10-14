@@ -1,5 +1,6 @@
 import { writeFile, rm } from 'node:fs/promises';
 import { Store } from './store.js';
+import { HistoryStore } from './history.js';
 import { startServer, type ServerHandle } from './server.js';
 import { startPoller } from './poller.js';
 import { realTmux, type Tmux } from '../tmux.js';
@@ -60,6 +61,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   if (live) for (const s of store.all()) {
     if (s.tmuxSession && !live.has(s.tmuxSession)) store.remove(s.id);
   }
+  await new HistoryStore().prune(new Set(store.all().map(s => s.id)));
   const daemon = await daemonInfo();
   const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save() }));
   const devices = new DeviceStore();
