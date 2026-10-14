@@ -197,3 +197,11 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
   .room-info { font-size: 9px; } .statusbar { font-size: 7px; } .title-dim { display: none; } .toolbar { gap: 12px; }
 }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation: none !important; transition: none !important; } }
+.offline-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 15px 0; padding: 9px 12px; border: 1px solid var(--input); border-radius: 8px; background: var(--sidebar); font-size: 10px; }
+.offline-notice span { color: var(--muted-foreground); }
+.offline-notice button { margin-left: auto; font: inherit; font-size: 10px; background: var(--sidebar-accent); color: var(--sidebar-foreground); border: 1px solid var(--input); border-radius: 6px; padding: 5px 9px; }
+.offline-notice.local-down { border-color: var(--danger-text); }
+.connection { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; background: var(--muted-foreground); }
+.dot.green { background: var(--success); }
+.dot.offline-dot { background: var(--danger-text); }

@@ -61,4 +61,31 @@ describe('visible-ids dispatch', () => {
     expect(localStorage.getItem('desktop.selected')).toBe('devbox:nova');
     unmount(); await d.close();
   });
+  it('in the room view dispatches the ids in table order', async () => {
+    const d = await createMockDaemon();
+    d.upsert(fakeSession('a', { repoId: 'r/one', cwd: '/w/one' })); d.upsert(fakeSession('x', { repoId: 'r/two', cwd: '/w/two', startedAt: '2026-10-09T18:00:01.000Z' }));
+    d.upsert(fakeSession('b', { repoId: 'r/one', cwd: '/w/one', startedAt: '2026-10-09T18:00:02.000Z' }));
+    d.machines([{ id: 'local', label: 'Local' }]); seed('local:gone', { view: 'room', grouping: 'all' });
+    const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
+    const { unmount } = render(<App client={client} />);
+    await waitFor(() => expect(document.querySelectorAll('[data-session]')).toHaveLength(3));
+    const order = [...document.querySelectorAll('[data-session]')].map(b => b.getAttribute('data-session'));
+    await waitFor(() => expect(localStorage.getItem('desktop.selected')).toBe(order[0]));
+    expect(document.querySelector('[data-table="all"]')).not.toBeNull();
+    unmount(); await d.close();
+  });
+});
+
+class DeadSocket { onopen = null; onmessage: unknown = null; onclose: ((e: unknown) => void) | null = null; onerror: ((e: unknown) => void) | null = null; readyState = 3; constructor(public url: string) { setTimeout(() => { this.onerror?.({}); this.onclose?.({ code: 1006 }); }, 0); } send() {} close() {} }
+describe('local daemon down', () => {
+  it('shows the dedicated notice, keeps New session disabled and marks the view read-only', async () => {
+    seed('local:otto');
+    {
+      render(<App client={createDesktopFleet({ WebSocketImpl: DeadSocket })} />);
+      expect(screen.queryByText('Local daemon unreachable')).toBeNull();   // 'connecting' at boot never flashes it
+      await screen.findByText('Local daemon unreachable');
+      expect(screen.getByRole('main')).toHaveAttribute('data-readonly', 'true');
+      expect(screen.getByRole('button', { name: 'New session' })).toBeDisabled();
+    }
+  });
 });
