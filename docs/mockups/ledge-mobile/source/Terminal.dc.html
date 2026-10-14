@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Terminal en panneau</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+.scroll{overflow-y:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:none}.scroll::-webkit-scrollbar{display:none}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.bot .shell{fill:url(#sig);stroke:#859397;stroke-width:.8}.bot .visor{fill:#172124;stroke:#00000055;stroke-width:1}.bot .foot{fill:#273238}.bot .ant{stroke:#273238;stroke-width:2;stroke-linecap:round}.bot .lamp,.bot .eye{fill:var(--eye)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.live{width:8px;height:8px;border-radius:9999px;background:#60a5fa;animation:pulse 1.2s ease-in-out infinite}
+.sq{width:44px;height:36px;display:grid;place-items:center;border-radius:8px;border:1px solid #ffffff26;background:transparent;color:#fafafa;font:500 13px/16px 'Geist',system-ui,sans-serif;cursor:pointer}
+.sq:hover{background:#262626}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; overflow: hidden;">
+  <svg width="0" height="0" style="position: absolute;" aria-hidden="true"><defs><linearGradient id="sig" x1=".2" y1="0" x2=".75" y2="1"><stop stop-color="#34434b"></stop><stop offset="1" stop-color="#273238"></stop></linearGradient></defs></svg>
+
+  <header style="display: flex; align-items: center; gap: 8px; padding: 52px 8px 10px; border-bottom: 1px solid #ffffff1a;">
+    <span style="width: 44px; height: 44px;"></span>
+    <svg class="bot" width="36" height="36" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #90c7f2;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="43" width="6" height="12" rx="3"></rect><rect class="eye" x="55" y="43" width="6" height="12" rx="3"></rect></svg>
+    <div style="display: flex; flex-direction: column;">
+      <span style="font-weight: 600;">Bix</span>
+      <span style="font-size: 12px; line-height: 16px; color: #a1a1a1;">Au travail · harness-assistant</span>
+    </div>
+  </header>
+  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 16px;">
+    <div style="max-width: 290px; padding: 10px 14px; border-radius: 18px 18px 4px 18px; background: #262626;">Oui, fusionne</div>
+  </div>
+
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.55);"></div>
+
+  <section role="dialog" aria-modal="true" aria-labelledby="term-title" style="position: absolute; left: 0; right: 0; bottom: 0; height: 78%; display: flex; flex-direction: column; border-radius: 24px 24px 0 0; background: #0a0a0a; border-top: 1px solid #ffffff26;">
+    <span aria-hidden="true" style="align-self: center; width: 40px; height: 5px; margin-top: 10px; border-radius: 9999px; background: #ffffff40;"></span>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #ffffff1a;">
+      <span class="live" aria-hidden="true"></span>
+      <h2 id="term-title" style="margin: 0; flex-grow: 1; font-size: 16px; line-height: 20px; font-weight: 600;">Terminal de Bix</h2>
+      <button type="button" class="sq" aria-label="Texte plus petit" onClick="{{ smaller }}">A−</button>
+      <button type="button" class="sq" aria-label="Texte plus grand" onClick="{{ bigger }}">A+</button>
+      <a href="Thread.dc.html" class="sq" aria-label="Fermer le terminal"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px;"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></a>
+    </div>
+    <div class="scroll" style="flex-grow: 1; overflow: auto; padding: 14px 16px;">
+      <pre class="mono" style="margin: 0; font-size: {{ size }}; line-height: 1.55; color: #d4d4d4; white-space: pre;">&gt; Oui, fusionne
+
+● Bash(git checkout main &amp;&amp; git merge --no-ff wait-badge)
+  ⎿ Switched to branch 'main'
+    Merge made by the 'ort' strategy.
+     apps/overlay/src/surface/SessionList.tsx | 41 ++++++
+     packages/ledge/src/daemon/state.ts       | 28 ++++
+     packages/protocol/src/session.ts         |  6 +
+     apps/overlay/src/i18n/messages.ts        | 21 +++
+     4 files changed, 96 insertions(+)
+
+● Bash(git push origin main)
+  ⎿ To github.com:Paradow-dev/ledge.git
+       851fac7..3e1c9a0  main -&gt; main
+
+● C'est fusionné et poussé. Je relance la CI.
+
+✻ Watching… (14s · esc to interrupt)</pre>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px 34px; border-top: 1px solid #ffffff1a;">
+      <span style="flex-grow: 1; font-size: 12px; line-height: 16px; color: #a1a1a1;">Lecture seule. Glissez de côté pour les lignes longues, pincez pour zoomer.</span>
+      <button type="button" style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid #ffffff26; background: transparent; color: #fafafa; font: 500 14px/20px 'Geist', system-ui, sans-serif; cursor: pointer;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px;"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>Interrompre</button>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { size: 11 };
+  }
+  renderVals() {
+    const s = this.state.size;
+    return {
+      size: s + 'px',
+      smaller: () => this.setState({ size: Math.max(9, s - 1) }),
+      bigger: () => this.setState({ size: Math.min(16, s + 1) }),
+    };
+  }
+}
+</script>
+</body>
+</html>

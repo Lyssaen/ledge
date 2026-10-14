@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>PC en veille</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+.scroll{overflow-y:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:none}.scroll::-webkit-scrollbar{display:none}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.badge{font-size:12px;line-height:16px;font-weight:600;padding:2px 8px;border-radius:6px;white-space:nowrap}
+.bot .shell{fill:url(#sig);stroke:#859397;stroke-width:.8}.bot .visor{fill:#172124;stroke:#00000055;stroke-width:1}.bot .foot{fill:#273238}.bot .ant{stroke:#273238;stroke-width:2;stroke-linecap:round}.bot .lamp,.bot .eye{fill:var(--eye)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:56px;padding:0 16px;border-radius:12px;font:600 16px/20px 'Geist',system-ui,sans-serif;box-sizing:border-box}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:52px;color:#a1a1a1;font:500 11px/14px 'Geist',system-ui,sans-serif;background:none;border:0;position:relative;cursor:pointer}
+.tab-on{color:#fafafa}
+</style>
+</helmet>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; overflow: hidden;">
+  <svg width="0" height="0" style="position: absolute;" aria-hidden="true"><defs><linearGradient id="sig" x1=".2" y1="0" x2=".75" y2="1"><stop stop-color="#34434b"></stop><stop offset="1" stop-color="#273238"></stop></linearGradient></defs></svg>
+
+  <header style="display: flex; align-items: flex-end; justify-content: space-between; padding: 56px 20px 12px;">
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.025em;">À traiter</h1>
+      <p style="margin: 0; font-size: 13px; color: #a1a1a1;">Dernier état connu · 22:14</p>
+    </div>
+    <span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid #ffffff1a; border-radius: 9999px; font-size: 12px; color: #a1a1a1;"><span style="width: 8px; height: 8px; border-radius: 9999px; background: #737373;"></span>PC-Desan</span>
+  </header>
+
+  <main class="scroll" style="flex-grow: 1; display: flex; flex-direction: column; gap: 16px; padding: 4px 16px 16px;">
+    <section role="status" style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 16px; border: 1px solid #ffffff26; background: #0a0a0a;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #fbbf24;"><path d="M12 20h.01"></path><path d="M8.5 16.43a5 5 0 0 1 7 0"></path><path d="M5 12.86a10 10 0 0 1 5.17-2.69"></path><path d="M19 12.86a10 10 0 0 0-1.86-1.43"></path><path d="M2 8.82a15 15 0 0 1 4.18-2.65"></path><path d="M22 8.82a15 15 0 0 0-11.29-3.76"></path><path d="m2 2 20 20"></path></svg>
+        <strong style="font-size: 15px;">PC-Desan ne répond plus</strong>
+      </div>
+      <p style="margin: 0; color: #d4d4d4;">Le PC est sans doute en veille depuis 22:14. Ledge n'envoie aucune décision plus tard à votre place : une demande peut avoir changé entre-temps.</p>
+      <button type="button" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border-radius: 10px; border: 1px solid #ffffff26; background: transparent; color: #fafafa; font: 500 14px/20px 'Geist', system-ui, sans-serif; cursor: pointer;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>Réessayer</button>
+    </section>
+
+    <article aria-disabled="true" style="display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 20px; background: #0f0f0f; border: 1px dashed #ffffff26; opacity: 0.55;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <svg class="bot" width="36" height="36" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #a3aaa9;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="43" width="6" height="12" rx="3"></rect><rect class="eye" x="55" y="43" width="6" height="12" rx="3"></rect></svg>
+        <div style="display: flex; flex-direction: column; flex-grow: 1;">
+          <span style="font-weight: 600;">Otto</span>
+          <span style="font-size: 12px; line-height: 16px; color: #a1a1a1;">harness-assistant · vu à 22:12</span>
+        </div>
+        <span class="badge" style="color: #a1a1a1; background: #262626;">Hors ligne</span>
+      </div>
+      <h2 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em;">Lancer les tests de l'overlay</h2>
+      <code class="mono" style="display: block; padding: 12px; border-radius: 10px; background: #0a0a0a; border: 1px solid #ffffff1a; font-size: 14px; line-height: 20px;">pnpm test --filter overlay</code>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+        <button type="button" class="btn" disabled style="border: 1px solid #ffffff26; background: transparent; color: #fafafa;">Refuser</button>
+        <button type="button" class="btn" disabled style="border: 0; background: #262626; color: #a1a1a1;">Autoriser</button>
+      </div>
+    </article>
+  </main>
+
+  <nav aria-label="Navigation principale" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 6px 8px 30px; border-top: 1px solid #ffffff1a; background: #000;">
+    <a href="Inbox.dc.html" class="tab tab-on" aria-current="page"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 24px; height: 24px;"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>À traiter</a>
+    <a href="Agents.dc.html" class="tab"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 24px; height: 24px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Agents</a>
+    <button type="button" class="tab"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 24px; height: 24px;"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>Demander à Ledge</button>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
