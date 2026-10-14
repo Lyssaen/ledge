@@ -17,6 +17,9 @@ import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
 import { readDocument } from './documents.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
+import { createPeers, type Peer, type PeerContext, type PeerSocket } from './peers.js';
+import { toRemote } from './remote/project.js';
+import { remoteMayRun } from './remote/rights.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -41,10 +44,19 @@ export function originAllowed(origin: string | undefined): boolean {
   return origin === undefined || ALLOWED_ORIGINS.includes(origin);
 }
 
+/**
+ * Headers a reverse proxy (`tailscale serve` and the like) adds. The local port is never published (decision D3): an upgrade
+ * carrying one of them is refused. A refusal on top of the origin check, never a proof of identity.
+ */
+export const FORWARDED_HEADERS: readonly string[] = ['tailscale-user-login', 'x-forwarded-for', 'forwarded'];
+
 export interface ServerHandle {
   port: number; close(): Promise<void>; broadcast(msg: ServerMessage): void;
   /** Remembers a session's terminal preview and broadcasts it; a client that connects later gets it after the snapshot. */
   preview(id: string, lines: string[]): void;
+  /** Registers a socket accepted elsewhere (the remote entry) as a peer: sends it the projected snapshot and wires its messages. */
+  attach(socket: PeerSocket, ctx: PeerContext): void;
+  peers: ReturnType<typeof createPeers>;
 }
 
 /**
@@ -76,6 +88,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const wss = new WebSocketServer({
     host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT,
     verifyClient: ({ req }: { req: IncomingMessage }) => {
+      const forwarded = FORWARDED_HEADERS.find(h => req.headers[h] !== undefined);
+      if (forwarded) { log(`refused a forwarded connection (${forwarded}) on the local port`); return false; }
       const ok = originAllowed(req.headers.origin);
       if (!ok) log(`refused a connection from origin ${String(req.headers.origin)}`);
       return ok;
@@ -84,8 +98,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   await new Promise<void>((res, rej) => { wss.once('listening', res); wss.once('error', rej); });
   const port = (wss.address() as { port: number }).port;
 
-  const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
-  const broadcast = (msg: ServerMessage) => { for (const c of wss.clients) send(c, msg); };
+  const peers = createPeers();
+  const broadcast = (msg: ServerMessage) => peers.broadcast(msg);
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -99,10 +113,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); }
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
-  const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: opts.daemon } : {}) });
-    for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
-    send(ws, { type: 'chat.history', turns: chat.history() });
+  const sendSnapshot = (peer: Peer) => {
+    peer.send({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: opts.daemon } : {}) });
+    for (const [id, lines] of previews) if (store.get(id)) peer.send({ type: 'session.preview', id, lines });
+    peer.send({ type: 'chat.history', turns: chat.history() });
   };
   const preview = (id: string, lines: string[]) => {
     if (!store.get(id)) return;
@@ -182,14 +196,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const NOT_TAKEN = 'the terminal did not take it';
   const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
 
-  async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
+  async function handle(peer: Peer, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case 'document.read': {
         const session = msg.sessionId ? store.get(msg.sessionId) : undefined;
-        if (msg.sessionId && !session) return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'session_missing' });
-        return send(ws, await readDocument(msg, { cwd: session?.cwd, home: opts.home ?? process.env.HOME ?? '' }));
+        if (msg.sessionId && !session) return peer.send({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'session_missing' });
+        return peer.send(await readDocument(msg, { cwd: session?.cwd, home: opts.home ?? process.env.HOME ?? '' }));
       }
-      case 'snapshot.request': return sendSnapshot(ws);
+      case 'snapshot.request': return sendSnapshot(peer);
       case 'session.register': {
         let incoming = msg.session;
         const existing = store.get(incoming.id);
@@ -220,13 +234,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.upsert(session);
         store.touchRecent(session.cwd, session.project, session.startedAt);
         log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
-        return send(ws, { type: 'session.launched', id: session.id });
+        return peer.send({ type: 'session.launched', id: session.id });
       }
-      case 'folder.list': return send(ws, await listFolder(msg.path, opts.home));
+      case 'folder.list': return peer.send(await listFolder(msg.path, opts.home));
       case 'folder.create': {
         const listing = await createFolder(msg.parent, msg.name, opts.home);
         if (!listing.error) log(`created folder ${listing.path}`);
-        return send(ws, listing);
+        return peer.send(listing);
       }
       case 'session.event': {
         const before = store.get(msg.id);
@@ -240,7 +254,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.rename': {
-        if (!store.get(msg.id)) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
+        if (!store.get(msg.id)) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
         store.apply(msg.id, { name: 'Renamed', at: now(), source: 'daemon', text: msg.topic });
         return;
       }
@@ -248,41 +262,41 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.apply(msg.id, { name: 'SessionEnd', at: now(), source: 'hook', exitCode: msg.exitCode });
         return;
       case 'session.decide': {
-        const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
-        if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
-        if (!s.pending) return send(ws, { type: 'error', id: msg.id, message: 'nothing to decide' });
+        const s = store.get(msg.id); if (!s) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
+        if (s.source === 'hook_only') return peer.send({ type: 'error', id: msg.id, message: READ_ONLY });
+        if (!s.pending) return peer.send({ type: 'error', id: msg.id, message: 'nothing to decide' });
         const pending = s.pending; const adapter = adapterFor(s.tool);
         return injectAndVerify(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true);
       }
       case 'session.reply': {
-        const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
-        if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
+        const s = store.get(msg.id); if (!s) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
+        if (s.source === 'hook_only') return peer.send({ type: 'error', id: msg.id, message: READ_ONLY });
         // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
-        if (s.pending && s.pending.kind !== 'question') return send(ws, { type: 'error', id: msg.id, message: `a ${s.pending.kind} prompt takes accept or deny, not a reply` });
-        if (msg.text.trim() === '') return send(ws, { type: 'error', id: msg.id, message: 'empty reply' });
+        if (s.pending && s.pending.kind !== 'question') return peer.send({ type: 'error', id: msg.id, message: `a ${s.pending.kind} prompt takes accept or deny, not a reply` });
+        if (msg.text.trim() === '') return peer.send({ type: 'error', id: msg.id, message: 'empty reply' });
         // The 2.x question dialog is a select: typed text then Enter would silently pick the highlighted option.
-        if (s.pending?.kind === 'question' && !/^[1-9]$/.test(msg.text.trim())) return send(ws, { type: 'error', id: msg.id, message: FREE_TEXT });
+        if (s.pending?.kind === 'question' && !/^[1-9]$/.test(msg.text.trim())) return peer.send({ type: 'error', id: msg.id, message: FREE_TEXT });
         // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
         const pending = s.pending; const adapter = adapterFor(s.tool);
         return injectAndVerify(msg.id, pane => adapter.replyPlan(msg.text, pending, pane || undefined), !!pending);
       }
       case 'session.interrupt': {
         const s = store.get(msg.id);
-        if (s?.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
+        if (s?.source === 'hook_only') return peer.send({ type: 'error', id: msg.id, message: READ_ONLY });
         if (!s?.tmuxSession) return;
         await tmux.sendKeys(s.tmuxSession, adapterFor(s.tool).interruptKeys());
         return;
       }
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;
-        if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
+        if (s.source === 'hook_only') return peer.send({ type: 'error', id: msg.id, message: READ_ONLY });
         if (s.tmuxSession) await tmux.killSession(s.tmuxSession);
         store.apply(msg.id, { name: 'PaneGone', at: now(), source: 'daemon' });
         return;
       }
       case 'session.dismiss': {
-        const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
-        if (s.state !== 'exited' && s.source !== 'hook_only') return send(ws, { type: 'error', id: msg.id, message: 'the session is still running, kill it first' });
+        const s = store.get(msg.id); if (!s) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
+        if (s.state !== 'exited' && s.source !== 'hook_only') return peer.send({ type: 'error', id: msg.id, message: 'the session is still running, kill it first' });
         // Removal broadcasts session.removed, drops the remembered preview and is saved to the journal.
         // A dismissed hook_only session that is in fact still alive comes back on its next hook (the
         // hook-before-register path in session.event recreates it): acceptable, it is still running.
@@ -292,8 +306,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
       // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
       case 'update.daemon':
-        if (!opts.updater) return send(ws, { type: 'update.failed', version: msg.version, reason: 'no-systemd' });
-        return opts.updater.update(msg.version, broadcast, m => send(ws, m));
+        if (!opts.updater) return peer.send({ type: 'update.failed', version: msg.version, reason: 'no-systemd' });
+        return opts.updater.update(msg.version, broadcast, m => peer.send(m));
       case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast, msg.tool);
       case 'chat.cancel': return chat.cancel(msg.qid);
       case 'chat.reset': return chat.reset(broadcast);
@@ -302,25 +316,46 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
   }
 
-  wss.on('connection', ws => {
-    ws.on('error', e => log(`socket error: ${e.message}`));
-    sendSnapshot(ws);
-    ws.on('message', data => {
+  /** A local peer gets every message as before; a remote one only what `toRemote` lets through. */
+  function peerFor(socket: PeerSocket, ctx: PeerContext): Peer {
+    const write = (msg: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg)); };
+    return {
+      ctx,
+      send: ctx.kind === 'local' ? write : msg => { const m = toRemote(msg, { deviceId: ctx.deviceId }); if (m) write(m); },
+      close: code => socket.close(code)
+    };
+  }
+
+  function attach(socket: PeerSocket, ctx: PeerContext): void {
+    const peer = peerFor(socket, ctx);
+    const remove = peers.add(peer);
+    socket.on('close', remove);
+    socket.on('error', (e: Error) => log(`socket error: ${e.message}`));
+    sendSnapshot(peer);
+    socket.on('message', (data: unknown) => {
       let msg: ClientMessage;
       try { msg = parseClientMessage(JSON.parse(String(data))); }
-      catch (e) { log(`invalid message: ${(e as Error).message}`); return send(ws, { type: 'error', message: 'invalid message' }); }
-      handle(ws, msg).catch(e => {
-        if (msg.type === 'document.read') return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
+      catch (e) { log(`invalid message: ${(e as Error).message}`); return peer.send({ type: 'error', message: 'invalid message' }); }
+      if (ctx.kind === 'remote' && !remoteMayRun(msg)) {
+        log(`remote ${ctx.deviceId} refused ${msg.type}`);
+        return peer.send({ type: 'error', message: 'forbidden' });
+      }
+      handle(peer, msg).catch(e => {
+        if (msg.type === 'document.read') return peer.send({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
         log(`${msg.type} failed: ${(e as Error).message}`);
-        send(ws, { type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message });
+        peer.send({ type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message });
       });
     });
-  });
+  }
+
+  wss.on('connection', ws => attach(ws, { kind: 'local' }));
 
   return {
     port,
     broadcast,
     preview,
+    attach,
+    peers,
     close: () => new Promise(res => { unsubscribe(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
   };
 }

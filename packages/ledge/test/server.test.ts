@@ -7,7 +7,7 @@ import { connect as tcp } from 'node:net';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
-import { startServer, ALLOWED_ORIGINS, launchArgs, resolveFolder } from '../src/daemon/server.js';
+import { startServer, ALLOWED_ORIGINS, FORWARDED_HEADERS, launchArgs, resolveFolder } from '../src/daemon/server.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
@@ -44,10 +44,10 @@ beforeEach(async () => {
 });
 afterEach(async () => { await srv.close(); });
 
-/** Opens a raw WebSocket with the given Origin; resolves with 'open' or the HTTP status of the refusal. */
-function handshake(port: number, origin?: string): Promise<'open' | number> {
+/** Opens a raw WebSocket with the given Origin and extra headers; resolves with 'open' or the HTTP status of the refusal. */
+function handshake(port: number, origin?: string, headers: Record<string, string> = {}): Promise<'open' | number> {
   return new Promise(res => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}`, origin ? { origin } : {});
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, { ...(origin ? { origin } : {}), headers });
     ws.once('open', () => { ws.terminate(); res('open'); });
     ws.once('unexpected-response', (_req, r) => { res(r.statusCode ?? 0); ws.terminate(); });
     ws.once('error', () => {});
@@ -93,6 +93,15 @@ describe('server: origin check', () => {
   });
   it('accepts a Node client that sends no Origin', async () => {
     expect(await handshake(srv.port)).toBe('open');
+  });
+  it('refuses a forwarded upgrade on the local port', async () => {
+    expect(await handshake(srv.port, undefined, { 'x-forwarded-for': '100.64.0.2' })).toBe(401);
+    expect(await handshake(srv.port, undefined, { 'tailscale-user-login': 'me@example.com' })).toBe(401);
+  });
+  it('refuses every forwarding header, even from the overlay origin, and logs it', async () => {
+    expect(FORWARDED_HEADERS).toEqual(['tailscale-user-login', 'x-forwarded-for', 'forwarded']);
+    expect(await handshake(srv.port, 'tauri://localhost', { forwarded: 'for=100.64.0.2' })).toBe(401);
+    expect(readFileSync(join(process.env.LEDGE_HOME!, 'daemon.log'), 'utf8')).toContain('refused a forwarded connection (forwarded)');
   });
 });
 
