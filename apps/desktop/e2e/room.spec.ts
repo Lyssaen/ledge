@@ -6,7 +6,8 @@ test('the room groups the eight agents and keeps its grouping across a reload', 
   await page.goto('/');
   await expect(page.locator('.table-group')).toHaveCount(1);
   await expect(page.locator('.table-group')).toHaveAttribute('data-participants', '8');
-  await expect(page.locator('.view-heading p')).toHaveText('2 requests waiting');
+  await expect(page.locator('.view-heading h2')).toHaveText('The meeting room');
+  await expect(page.locator('.attention-count')).toHaveText('2');
   await page.locator('#table-grouping').selectOption('jira');
   await expect(page.locator('.table-group')).toHaveCount(3);
   await expect.poll(() => page.locator('.table-group').evaluateAll(els => els.map(e => e.getAttribute('data-table')))).toEqual(['LEDGE-42', 'WEB-18', 'unassigned']);

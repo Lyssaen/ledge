@@ -6,8 +6,9 @@ test('eight agents: team grid, filter and selection survive a reload', async ({ 
   await page.goto('/');
   await page.getByRole('button', { name: 'Team' }).click();
   await expect(page.locator('.session-card')).toHaveCount(8);
-  await expect(page.locator('.toolbar')).toHaveText('Whole team · 8');
-  await expect(page.locator('.section-label')).toHaveText(['ledge', 'website']);
+  await expect(page.locator('.view-heading h2')).toHaveText('The team');
+  await expect(page.locator('.toolbar > span').first()).toHaveText('All participants · 8');
+  await expect(page.locator('.section-label b')).toHaveText(['ledge', 'website']);
   await page.locator('#attention').click();
   await expect(page.locator('.session-card')).toHaveCount(2);
   await page.locator('.session-card', { hasText: 'Luna' }).click();

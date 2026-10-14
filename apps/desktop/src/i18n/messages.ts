@@ -3,12 +3,19 @@ import type { BotState } from '@ledge/ui/bots/poseFor';
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 
 const fr = {
-  app: { title: 'Votre équipe, à votre façon.' },
-  views: { team: 'Équipe', room: 'Réunion' },
+  heading: {
+    team: { title: 'L’équipe', subtitle: 'Ce que chacun fait, et ce qui attend votre réponse.' },
+    room: { title: 'La salle de travail', subtitle: 'Des tables par machine ou par story, avec les mêmes sessions.' }
+  },
+  views: { label: 'Vue des sessions', team: 'Équipe', room: 'Réunion' },
   attention: { filter: 'À votre attention' },
   newSession: 'Nouvelle session',
-  team: { all: (n: number) => `Toute l’équipe · ${n}`, attention: 'À votre attention' },
+  team: {
+    all: (n: number) => `Tous les participants · ${n}`, attention: (n: number) => `À votre attention · ${n}`, byProject: 'Par projet',
+    participants: (n: number) => `${n} ${plural(n, 'PARTICIPANT', 'PARTICIPANTS')}`
+  },
   room: {
+    hints: { all: 'Tous les participants autour d’une seule table.', machine: 'Une table par machine, tous projets confondus.', jira: 'Clés détectées dans les branches et sujets · sans connexion Jira.' },
     grouping: 'Regrouper les tables',
     groupings: { all: 'Toutes ensemble', machine: 'Par machine', jira: 'Par story Jira' },
     tables: { all: 'Toute l’équipe', unassigned: 'Sans story identifiée', ambiguous: 'À clarifier', mine: 'Mon espace', unknownMachine: 'Machine inconnue' },
@@ -26,6 +33,8 @@ const fr = {
   empty: { title: 'Votre équipe commence ici', text: 'Aucune session pour le moment. Choisissez un projet et confiez une première tâche à un agent.', none: 'Aucune demande en attente.' },
   offline: {
     title: (name: string) => `${name} est déconnectée`,
+    badge: 'Déconnectée',
+    machine: 'Machine déconnectée',
     text: 'Les sessions distantes affichent leur dernier état connu. Les échanges reprendront après la reconnexion ; les sessions locales restent disponibles.',
     retry: 'Réessayer'
   },
@@ -44,12 +53,19 @@ const fr = {
 };
 
 const en: typeof fr = {
-  app: { title: 'Your team, your way.' },
-  views: { team: 'Team', room: 'Meeting' },
+  heading: {
+    team: { title: 'The team', subtitle: 'What everyone is doing, and what is waiting for your answer.' },
+    room: { title: 'The meeting room', subtitle: 'Tables by machine or by story, with the same sessions.' }
+  },
+  views: { label: 'Session view', team: 'Team', room: 'Meeting' },
   attention: { filter: 'Needs you' },
   newSession: 'New session',
-  team: { all: (n) => `Whole team · ${n}`, attention: 'Needs you' },
+  team: {
+    all: (n) => `All participants · ${n}`, attention: (n) => `Needs you · ${n}`, byProject: 'By project',
+    participants: (n) => `${n} ${plural(n, 'PARTICIPANT', 'PARTICIPANTS')}`
+  },
   room: {
+    hints: { all: 'Everyone around a single table.', machine: 'One table per machine, all projects together.', jira: 'Keys detected in branches and subjects · no Jira connection.' },
     grouping: 'Group the tables',
     groupings: { all: 'All together', machine: 'By machine', jira: 'By Jira story' },
     tables: { all: 'Whole team', unassigned: 'No story identified', ambiguous: 'To clarify', mine: 'My space', unknownMachine: 'Unknown machine' },
@@ -67,6 +83,8 @@ const en: typeof fr = {
   empty: { title: 'Your team starts here', text: 'No sessions yet. Pick a project and give an agent a first task.', none: 'No requests waiting.' },
   offline: {
     title: (name) => `${name} is disconnected`,
+    badge: 'Disconnected',
+    machine: 'Machine disconnected',
     text: 'Remote sessions show their last known state. Conversations resume once it reconnects; local sessions stay available.',
     retry: 'Retry'
   },

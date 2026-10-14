@@ -15,6 +15,7 @@ export function RoomView({ sessions, grouping, selected, onSelect, onGrouping }:
         </select>
         <span>{t.room.tableCount(groups.length)}</span>
       </div>
+      <p className="grouping-hint">{t.room.hints[grouping]}</p>
       <div className={`table-groups${grouping === 'all' ? ' single-table' : ''}`}>
         {groups.length ? groups.map(g => <Table key={g.id} table={g} selected={selected} onSelect={onSelect} />) : <p className="empty-sessions">{t.empty.none}</p>}
       </div>

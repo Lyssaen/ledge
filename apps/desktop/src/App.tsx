@@ -38,8 +38,10 @@ function Shell({ client }: { client?: DaemonClient }) {
         {localDown && <LocalDownNotice />}
         <OfflineNotice machines={machines} onRetry={id => fleet.retry(id)} />
         {sessions.length === 0 && <EmptyWorkspace />}
-        {sessions.length > 0 && state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
-        {sessions.length > 0 && state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} attentionOnly={state.attentionOnly} />}
+        {sessions.length > 0 && <div className="view-body">
+          {state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
+          {state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} attentionOnly={state.attentionOnly} />}
+        </div>}
         <StatusBar sessions={sessions} machines={machines} />
       </div>
     </main>

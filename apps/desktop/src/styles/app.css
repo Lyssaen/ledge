@@ -213,3 +213,8 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .workspace-empty p { font-size: 12px; line-height: 1.8; color: var(--muted-foreground); max-width: 380px; margin: 0 0 22px; }
 .workspace-empty .primary { font-size: 12px; padding: 12px 18px; }
 .empty-sessions { padding: 30px 12px; font-size: 12px; text-align: center; color: var(--muted-foreground); }
+
+/* From the mockup's journeys.css: a session whose machine is disconnected. */
+.state.offline { color: var(--warning); }
+.session-card.offline .avatar, .seat.offline .avatar { opacity: .55; }
+.session-card.offline { border-style: dashed; }

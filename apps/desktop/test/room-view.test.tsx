@@ -17,11 +17,32 @@ describe('RoomView', () => {
     expect(screen.getByText('1 request waiting')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /nova|luna|rio/ }).every(b => b.dataset.offline === 'true')).toBe(true);
     expect(screen.getByRole('button', { name: /otto/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Everyone around a single table.')).toHaveClass('grouping-hint');
+  });
+  it('a seat: avatar disc, raised hand, name and a coloured state badge', () => {
+    render(<RoomView sessions={eight} grouping="all" selected="local:otto" onSelect={() => {}} onGrouping={() => {}} />);
+    const otto = screen.getByRole('button', { name: 'otto, Your approval, Local' });
+    expect(otto).toHaveClass('seat', 'selected');
+    expect(otto.querySelector(':scope > .avatar svg')).not.toBeNull();
+    expect(otto.querySelector(':scope > .raised.waiting_permission')).toHaveTextContent('!');
+    expect(otto.querySelector(':scope > .person-name')).toHaveTextContent('otto');
+    expect(otto.querySelector(':scope > .state.waiting_permission')).toHaveTextContent('Your approval');
+    expect(otto.querySelector('.seat-machine')).toBeNull();
+    const nova = screen.getByRole('button', { name: 'nova, Machine disconnected, Devbox' });
+    expect(nova).toHaveClass('seat', 'offline');
+    expect(nova.querySelector('.state.offline')).toHaveTextContent('Disconnected');
+    expect(screen.getByRole('button', { name: /pim/ }).querySelector('.state.working')).toHaveTextContent('Working');
+  });
+  it('by Jira story every seat names its machine, and the hint says the keys are only detected', () => {
+    render(<RoomView sessions={eight} grouping="jira" selected={null} onSelect={() => {}} onGrouping={() => {}} />);
+    expect(screen.getByText('Keys detected in branches and subjects · no Jira connection.')).toHaveClass('grouping-hint');
+    expect([...document.querySelectorAll('.seat')].map(s => s.querySelector('.seat-machine')?.textContent)).toEqual(eight.map(s => s.machineName));
   });
   it('by machine makes two tables and a frozen seat still selects', async () => {
     const onSelect = vi.fn();
     render(<RoomView sessions={eight} grouping="machine" selected={null} onSelect={onSelect} onGrouping={() => {}} />);
     expect(screen.getAllByRole('region').map(r => r.getAttribute('data-table'))).toEqual(['local', 'devbox']);
+    expect(screen.getByText('One table per machine, all projects together.')).toHaveClass('grouping-hint');
     await userEvent.click(screen.getByRole('button', { name: /nova/ }));
     expect(onSelect).toHaveBeenCalledWith('devbox:nova');
   });
