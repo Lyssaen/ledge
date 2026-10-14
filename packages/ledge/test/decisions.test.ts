@@ -295,6 +295,20 @@ describe('remote decisions', () => {
     expect(store.get('a')!.pending).toMatchObject({ id: 'pA' });
   });
 
+  it('the final result reaches a new socket of the same device when the first one died mid-injection', async () => {
+    waiting(low);
+    const a = phone(srv, deviceId);
+    const release = fake.hold();
+    const msg = decide();
+    a.send(msg);
+    await a.wait(m => m.type === 'operation.received');
+    const b = phone(srv, deviceId);
+    const other = phone(srv, 'someone-else');
+    release();
+    expect(await b.result(msg.operationId)).toMatchObject({ status: 'applied' });
+    expect(other.sent.filter(m => m.type === 'operation.result')).toEqual([]);
+  });
+
   it('a revocation after the first character lets the injection finish, and the result stays readable', async () => {
     waiting(low);
     const p = phone(srv, deviceId);

@@ -27,7 +27,7 @@ export function outcomeFor(target: OutcomeTarget, sessions: Session[], ops: Reco
     switch (o.phase) {
       case 'sending': case 'received': return { kind: 'sending' };
       case 'applied': return { kind: 'applied', ...(o.decision ? { decision: o.decision } : {}), ...(o.text !== undefined && o.kind !== 'decide' ? { answer: o.text } : {}) };
-      case 'rejected': return { kind: 'rejected', reason: o.reason ?? 'invalid' };
+      case 'rejected': if (!same && (o.reason === 'stale' || o.reason === 'changed')) return { kind: 'handledElsewhere' }; return { kind: 'rejected', reason: o.reason ?? 'invalid' };
       case 'failed': return { kind: 'failed', reason: o.reason ?? 'invalid' };
       case 'uncertain': return { kind: 'uncertain' };
       case 'unknown': return { kind: 'unknown', stillPending: sameVersion };

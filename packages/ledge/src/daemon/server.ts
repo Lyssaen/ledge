@@ -220,6 +220,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** Decisions and answers, from the overlay or a phone (decisions.ts): identity, idempotence, device check, then this lock. */
   const decisions: DecisionDeps = {
     store, ops: new OperationRegistry(), challenges: new ChallengeStore(), devices: opts.mobile?.devices,
+    peersOf: deviceId => peers.all().filter(p => p.ctx.kind === 'remote' && p.ctx.deviceId === deviceId),
     config: () => { const origin = opts.mobile?.state().origin; return origin ? parseOrigin(origin) : null; },
     inject: injectAndVerify
   };

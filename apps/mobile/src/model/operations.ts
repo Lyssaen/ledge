@@ -1,4 +1,4 @@
-import type { OperationReason, OperationStatus } from '@ledge/protocol';
+import type { ClientMessage, OperationReason, OperationStatus } from '@ledge/protocol';
 import type { Link } from '../state/store';
 
 /** Where a phone-made operation stands. `uncertain`: the connection was lost before its outcome was known. */
@@ -67,6 +67,21 @@ export function opsReducer(s: Record<string, OpState>, e: OpEvent): Record<strin
 /** Operations whose outcome must be asked of the daemon (`operation.status`); never to be sent again. */
 export function toCheck(s: Record<string, OpState>): string[] {
   return Object.values(s).filter(o => o.phase === 'uncertain').map(o => o.operationId);
+}
+
+/** Double-send guard: a new operation, and no live or applied one already answers the same request. */
+export function isNew(s: Record<string, OpState>, op: OpState): boolean {
+  if (s[op.operationId]) return false;
+  if (op.pendingId === undefined) return true;
+  return !Object.values(s).some(o => o.sessionId === op.sessionId && o.pendingId === op.pendingId && o.pendingVersion === op.pendingVersion
+    && (o.phase === 'sending' || o.phase === 'received' || o.phase === 'uncertain' || o.phase === 'applied'));
+}
+
+/** The outgoing message and the tracked operation must describe the same thing. */
+export function matches(op: OpState, msg: ClientMessage): boolean {
+  if (msg.type === 'session.decide') return op.kind === 'decide' && msg.operationId === op.operationId && msg.id === op.sessionId && msg.pendingId === op.pendingId && msg.pendingVersion === op.pendingVersion && msg.decision === op.decision;
+  if (msg.type === 'session.reply') return op.kind !== 'decide' && msg.operationId === op.operationId && msg.id === op.sessionId && msg.pendingId === op.pendingId && msg.pendingVersion === op.pendingVersion && msg.text === op.text;
+  return false;
 }
 
 export const newOperationId = (): string => crypto.randomUUID();

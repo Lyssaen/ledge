@@ -34,6 +34,8 @@ export interface DecisionDeps {
   challenges: ChallengeStore;
   devices?: DeviceStore;
   config(): MobileConfig | null;
+  /** Live remote peers of a device: the final result of its operation goes to all of them, not only to the socket that asked. */
+  peersOf?(deviceId: string): Peer[];
   /** `injectAndVerify`: takes the session lock, re-checks `expected` and builds the plan before the first character. */
   inject(id: string, planFor: (pane: string) => KeyPlan, requirePrompt: boolean, expected?: { id: string; version: number }): Promise<void>;
 }
@@ -68,6 +70,11 @@ function requestFor(store: Store, id: string, pendingId: string, pendingVersion:
 async function operate(peer: Peer, msg: SessionDecide | SessionReply, deps: DecisionDeps, body: () => Promise<void>): Promise<void> {
   const opId = msg.operationId;
   const local = peer.ctx.kind === 'local';
+  const notify = (m: ServerMessage) => {
+    const to = new Set<Peer>([peer]);
+    if (peer.ctx.kind === 'remote') for (const p of deps.peersOf?.(peer.ctx.deviceId) ?? []) to.add(p);
+    for (const p of to) p.send(m);
+  };
   if (opId) {
     const begun = deps.ops.begin(opId, ownerOf(peer), fingerprint(msg));
     if (begun.kind === 'conflict') {
@@ -77,7 +84,7 @@ async function operate(peer: Peer, msg: SessionDecide | SessionReply, deps: Deci
       return;
     }
     if (begun.kind === 'replay') return peer.send(resultOf(begun.record));
-    peer.send({ type: 'operation.received', operationId: opId });
+    notify({ type: 'operation.received', operationId: opId });
   }
   try {
     await body();
@@ -85,11 +92,11 @@ async function operate(peer: Peer, msg: SessionDecide | SessionReply, deps: Deci
     const reason: OperationReason = e instanceof Refusal ? e.reason : 'not_taken';
     const status = statusOf(reason);
     log(`${msg.type} ${msg.id} ${status} (${reason}): ${(e as Error).message}`);
-    if (opId) peer.send(resultOf(deps.ops.finish(opId, status, reason)));
+    if (opId) notify(resultOf(deps.ops.finish(opId, status, reason)));
     if (local) peer.send({ type: 'error', id: msg.id, message: (e as Error).message });
     return;
   }
-  if (opId) peer.send(resultOf(deps.ops.finish(opId, 'applied')));
+  if (opId) notify(resultOf(deps.ops.finish(opId, 'applied')));
 }
 
 /** Raised from inside the plan builder, under the lock and before the first character: a phone revoked meanwhile types nothing. */

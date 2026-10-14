@@ -101,6 +101,12 @@ describe('outcomeFor', () => {
     expect(outcomeFor(t, [], { [id2]: op(id2, { pendingId: 'other', phase: 'applied' }) })).toEqual({ kind: 'handledElsewhere' });
   });
 
+  it('a stale or changed rejection of a request that is gone reads as handled elsewhere', () => {
+    expect(outcomeFor(t, [sessionWith()], { [id1]: op(id1, { phase: 'rejected', reason: 'stale' }) })).toEqual({ kind: 'handledElsewhere' });
+    expect(outcomeFor(t, [sessionWith()], { [id1]: op(id1, { phase: 'rejected', reason: 'changed' }) })).toEqual({ kind: 'handledElsewhere' });
+    expect(outcomeFor(t, [sessionWith('p1')], { [id1]: op(id1, { phase: 'rejected', reason: 'stale' }) })).toEqual({ kind: 'rejected', reason: 'stale' });
+  });
+
   it('a request that moved to a new version is changed; the same one is idle', () => {
     expect(outcomeFor(t, [sessionWith('p1', 3)], {})).toEqual({ kind: 'changed' });
     expect(outcomeFor(t, [sessionWith('p1', 2)], {})).toEqual({ kind: 'idle' });
@@ -113,6 +119,7 @@ describe('outcomeFor', () => {
 });
 
 describe('store operations', () => {
+  const dec = (operationId: string) => ({ type: 'session.decide', id: 'a', decision: 'accept', pendingId: 'p1', pendingVersion: 2, operationId }) as const;
   const online = () => { const st = createMobileStore(); const out: unknown[] = []; st.setSender(m => out.push(m)); st.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'i', pcName: 'PC' }); out.length = 0; return { st, out }; };
 
   it('submit sends only while online and tracks the operation', () => {
@@ -129,7 +136,7 @@ describe('store operations', () => {
   it('never sends or queues a decision while not online', () => {
     const { st, out } = online();
     st.setLink('offline');
-    const msg = { type: 'session.decide', id: 'a', decision: 'deny', operationId: id2 } as const;
+    const msg = { type: 'session.decide', id: 'a', decision: 'deny', pendingId: 'p1', pendingVersion: 2, operationId: id2 } as const;
     expect(st.submit(op(id2), msg)).toBe(false);
     st.setLink('connecting');
     expect(st.submit(op(id2), msg)).toBe(false);
@@ -140,7 +147,7 @@ describe('store operations', () => {
 
   it('a drop makes the open operation uncertain; auth.ok asks its status and never resends', () => {
     const { st, out } = online();
-    st.submit(op(id1), { type: 'session.decide', id: 'a', decision: 'accept', operationId: id1 });
+    st.submit(op(id1), dec(id1));
     out.length = 0;
     st.setLink('offline'); st.setLink('connecting');
     expect(st.getState().ops[id1]!.phase).toBe('uncertain');
@@ -152,7 +159,7 @@ describe('store operations', () => {
 
   it('operations survive a reload, open ones as uncertain, and only 50 finished are kept', () => {
     const { st } = online();
-    st.submit(op(id1), { type: 'session.decide', id: 'a', decision: 'accept', operationId: id1 });
+    st.submit(op(id1), dec(id1));
     for (let i = 0; i < 55; i++) {
       const id = `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
       st.dispatch({ type: 'sent', op: op(id) });
@@ -164,9 +171,41 @@ describe('store operations', () => {
     expect(Object.keys(loadOps())).toHaveLength(51);
   });
 
+  it('refuses a double send of the same request or id, and a message that disagrees with its operation', () => {
+    const { st, out } = online();
+    expect(st.submit(op(id1), dec(id1))).toBe(true);
+    expect(st.submit(op(id1), dec(id1))).toBe(false);
+    expect(st.submit(op(id2), dec(id2))).toBe(false); // same request, still sending
+    st.apply({ type: 'operation.result', operationId: id1, status: 'applied' });
+    expect(st.submit(op(id2), dec(id2))).toBe(false); // same request, applied
+    expect(st.submit(op('33333333-3333-4333-8333-333333333333', { pendingId: 'p9' }), dec('33333333-3333-4333-8333-333333333333'))).toBe(false); // disagreeing
+    expect(out).toHaveLength(1);
+  });
+
+  it('a rejected request may be tried again', () => {
+    const { st } = online();
+    st.submit(op(id1), dec(id1));
+    st.apply({ type: 'operation.result', operationId: id1, status: 'rejected', reason: 'busy' });
+    expect(st.submit(op(id2), dec(id2))).toBe(true);
+  });
+
+  it('a status answer received keeps the operation checkable on the next resume', () => {
+    const { st, out } = online();
+    st.submit(op(id1), dec(id1));
+    st.dispatch({ type: 'resumed' });
+    st.apply({ type: 'operation.result', operationId: id1, status: 'received' });
+    expect(st.getState().ops[id1]!.phase).toBe('received');
+    st.dispatch({ type: 'resumed' });
+    expect(toCheck(st.getState().ops)).toEqual([id1]);
+    out.length = 0;
+    st.setLink('connecting');
+    st.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'i', pcName: 'PC' });
+    expect(out).toEqual([{ type: 'operation.status', operationId: id1 }]);
+  });
+
   it('unpairing forgets the operations', () => {
     const { st } = online();
-    st.submit(op(id1), { type: 'session.decide', id: 'a', decision: 'accept', operationId: id1 });
+    st.submit(op(id1), dec(id1));
     st.reset();
     expect(st.getState().ops).toEqual({});
   });
@@ -191,7 +230,7 @@ describe('remote client foreground', () => {
     const client = connectRemote({ store, url: 'wss://pc/m/ws', WebSocketImpl: Ws as never });
     const first = Ws.all[0]!; first.open();
     first.push({ type: 'auth.ok', deviceId: 'd', deviceName: 'i', pcName: 'PC' });
-    expect(store.submit(op(id1), { type: 'session.decide', id: 'a', decision: 'accept', operationId: id1 })).toBe(true);
+    expect(store.submit(op(id1), { type: 'session.decide', id: 'a', decision: 'accept', pendingId: 'p1', pendingVersion: 2, operationId: id1 })).toBe(true);
     document.dispatchEvent(new Event('visibilitychange'));
     expect(store.getState().link).toBe('connecting');
     expect(store.getState().ops[id1]!.phase).toBe('uncertain');

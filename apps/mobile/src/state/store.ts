@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { ClientMessage, ServerMessage, Session } from '@ledge/protocol';
-import { loadOps, opsReducer, saveOps, toCheck, type OpEvent, type OpState } from '../model/operations';
+import { isNew, loadOps, matches, opsReducer, saveOps, toCheck, type OpEvent, type OpState } from '../model/operations';
 import { clearLastState, DEVICE_KEY, loadLastState, saveLastState } from './persist';
 
 export type Link = 'unpaired' | 'connecting' | 'online' | 'offline';
@@ -63,6 +63,7 @@ export function createMobileStore(storage?: Storage): MobileStore {
     dispatch,
     submit: (op, msg) => {
       if (state.link !== 'online' || !send) return false;
+      if (!matches(op, msg) || !isNew(state.ops, op)) return false;
       send(msg);
       dispatch({ type: 'sent', op });
       return true;
