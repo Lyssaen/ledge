@@ -1,4 +1,4 @@
-# Builds the Windows installer and publishes it on the GitHub release of a `v*` tag.
+# Builds the two Windows installers (Ledge and Ledge Desktop, with their manifests latest.json / latest-desktop.json) and publishes them on the GitHub release of a `v*` tag.
 # The tag is annotated: its subject is the release title, its body the release notes. The install block and the
 # SHA-256 of the installer are appended. Re-running on an existing release replaces the asset and the notes.
 # The tag (vMAJOR.MINOR.PATCH) is the version: it is stamped into the build, whatever the repository says.
@@ -37,7 +37,7 @@ jobs:
       - run: sudo apt-get install -y tmux
       - run: pnpm install --frozen-lockfile
       - name: Stamp the version from the tag
-        run: node apps/overlay/scripts/set-version.mjs "$VERSION_TAG"
+        run: node scripts/set-version.mjs "$VERSION_TAG"
       - run: pnpm --filter @ledge/protocol test
       # The launch tests attach to real tmux sessions: tmux refuses to attach without a TERM, which the runner leaves unset.
       - run: pnpm --filter @paradow/ledge test
@@ -85,7 +85,6 @@ jobs:
       # and the package before anything is built, so the release never ships the version left in the repository.
       - name: Stamp the version from the tag
         run: node scripts/set-version.mjs $env:VERSION_TAG
-        working-directory: apps/overlay
       - name: Typecheck the overlay
         run: pnpm --filter overlay typecheck
       - name: Build the installer
@@ -94,6 +93,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build
         working-directory: apps/overlay
+      - name: Typecheck Ledge Desktop
+        run: pnpm --filter desktop typecheck
+      # Same updater key as the island: Desktop's tauri.conf.json carries the same public key.
+      - name: Build Ledge Desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build
+        working-directory: apps/desktop
       - name: Rust tests
         run: cargo test --workspace
       - name: Publish
@@ -103,9 +111,19 @@ jobs:
           TAG: ${{ env.VERSION_TAG }}
         run: |
           $version = $env:TAG -replace '^v', ''
-          $exe = Get-ChildItem "target/release/bundle/nsis/*_$($version)_*-setup.exe" | Select-Object -First 1
-          if (-not $exe) { throw "No installer for $version under bundle/nsis" }
+          # Two installers share target/: the globs must not overlap ("Ledge Desktop_..." sorts before "Ledge_...").
+          $exe = Get-ChildItem "target/release/bundle/nsis/Ledge_$($version)_*-setup.exe" | Select-Object -First 1
+          if (-not $exe) { throw "No island installer for $version under bundle/nsis" }
+          $desktopSrc = Get-ChildItem "target/release/bundle/nsis/Ledge Desktop_$($version)_*-setup.exe" | Select-Object -First 1
+          if (-not $desktopSrc) { throw "No Desktop installer for $version under bundle/nsis" }
+          if (-not (Test-Path "$($desktopSrc.FullName).sig")) { throw "No updater signature next to $($desktopSrc.Name)" }
+          # GitHub turns the space of an uploaded asset name into a dot: name the file as the asset so the manifest url matches.
+          $desktopName = "Ledge.Desktop_$($version)_x64-setup.exe"
+          $desktopExe = Join-Path $desktopSrc.DirectoryName $desktopName
+          Copy-Item $desktopSrc.FullName $desktopExe -Force
+          Copy-Item "$($desktopSrc.FullName).sig" "$desktopExe.sig" -Force
           $sha = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
+          $desktopSha = (Get-FileHash $desktopExe -Algorithm SHA256).Hash.ToLower()
           # actions/checkout leaves a lightweight tag on the commit: fetch the annotated one back before reading it.
           git fetch --force origin "refs/tags/$($env:TAG):refs/tags/$($env:TAG)"
           $title = (git tag -l --format='%(contents:subject)' $env:TAG).Trim()
@@ -116,32 +134,43 @@ jobs:
           **Install**
           1. In WSL: `npm i -g @paradow/ledge@__VERSION__` (or let Ledge do it: the island offers the update).
           2. Quit Ledge from the tray, then run `__EXE__` over the previous install.
+          3. Ledge Desktop (optional, same version): run `__DESKTOP_EXE__`.
 
           The installer is not code-signed: Windows SmartScreen may warn on first launch ("More info" > "Run anyway").
 
-          SHA-256: `__SHA__`
+          SHA-256: `__SHA__` (Ledge), `__DESKTOP_SHA__` (Ledge Desktop)
           '@
-          $notes = $body + ($install -replace '__VERSION__', $version -replace '__EXE__', $exe.Name -replace '__SHA__', $sha)
+          $notes = $body + ($install -replace '__VERSION__', $version -replace '__EXE__', $exe.Name -replace '__DESKTOP_EXE__', $desktopName -replace '__SHA__', $sha -replace '__DESKTOP_SHA__', $desktopSha)
           Set-Content -Path notes.md -Value $notes -Encoding utf8
           $sig = "$($exe.FullName).sig"
           if (-not (Test-Path $sig)) { throw "No updater signature next to $($exe.Name)" }
           # The updater manifest carries the tag's own notes, without the install block.
           Set-Content -Path release-notes.md -Value $body -Encoding utf8
-          node apps/overlay/scripts/latest-json.mjs $env:TAG $exe.FullName release-notes.md | Set-Content -Path latest.json -Encoding utf8
+          node scripts/latest-json.mjs $env:TAG $exe.FullName release-notes.md | Set-Content -Path latest.json -Encoding utf8
+          node scripts/latest-json.mjs $env:TAG $desktopExe release-notes.md | Set-Content -Path latest-desktop.json -Encoding utf8
+          $assets = @($exe.FullName, "$($exe.FullName).sig", $desktopExe, "$desktopExe.sig", 'latest.json', 'latest-desktop.json')
           gh release view $env:TAG *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $env:TAG $exe.FullName latest.json --clobber
+            gh release upload $env:TAG @assets --clobber
             gh release edit $env:TAG --title $title --notes-file notes.md
           } else {
-            gh release create $env:TAG $exe.FullName latest.json --title $title --notes-file notes.md
+            gh release create $env:TAG @assets --title $title --notes-file notes.md
           }
       - name: Show the updater manifest
         if: env.PUBLISH != 'true'
         run: |
           $version = $env:VERSION_TAG -replace '^v', ''
-          $exe = Get-ChildItem "target/release/bundle/nsis/*_$($version)_*-setup.exe" | Select-Object -First 1
-          if (-not $exe) { throw "No installer for $version under bundle/nsis" }
+          $exe = Get-ChildItem "target/release/bundle/nsis/Ledge_$($version)_*-setup.exe" | Select-Object -First 1
+          if (-not $exe) { throw "No island installer for $version under bundle/nsis" }
           if (-not (Test-Path "$($exe.FullName).sig")) { throw "No updater signature next to $($exe.Name)" }
+          $desktopSrc = Get-ChildItem "target/release/bundle/nsis/Ledge Desktop_$($version)_*-setup.exe" | Select-Object -First 1
+          if (-not $desktopSrc) { throw "No Desktop installer for $version under bundle/nsis" }
+          if (-not (Test-Path "$($desktopSrc.FullName).sig")) { throw "No updater signature next to $($desktopSrc.Name)" }
+          $desktopExe = Join-Path $desktopSrc.DirectoryName "Ledge.Desktop_$($version)_x64-setup.exe"
+          Copy-Item $desktopSrc.FullName $desktopExe -Force
+          Copy-Item "$($desktopSrc.FullName).sig" "$desktopExe.sig" -Force
           Set-Content -Path release-notes.md -Value "Dry run for $env:VERSION_TAG" -Encoding utf8
-          node apps/overlay/scripts/latest-json.mjs $env:VERSION_TAG $exe.FullName release-notes.md | Set-Content -Path latest.json -Encoding utf8
+          node scripts/latest-json.mjs $env:VERSION_TAG $exe.FullName release-notes.md | Set-Content -Path latest.json -Encoding utf8
+          node scripts/latest-json.mjs $env:VERSION_TAG $desktopExe release-notes.md | Set-Content -Path latest-desktop.json -Encoding utf8
           Get-Content latest.json
+          Get-Content latest-desktop.json

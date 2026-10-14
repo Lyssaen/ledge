@@ -454,7 +454,7 @@ Then:
 
 ```sh
 pnpm -r typecheck
-pnpm -r test                        # protocol, ledge (unit + tmux + end-to-end, needs tmux, no AI), overlay (vitest + jsdom)
+pnpm test                           # pnpm -r test, then the release scripts' tests; protocol, ledge (unit + tmux + end-to-end, needs tmux, no AI), overlay (vitest + jsdom)
 pnpm --filter overlay dev           # the UI alone on http://localhost:1420, against a daemon running in WSL
 pnpm --filter overlay test:e2e      # Playwright, chromium
 LEDGE_SCREENSHOTS=1 pnpm --filter overlay exec playwright test e2e/screenshots.spec.ts   # refresh docs/screens (see docs/tour.md)
@@ -470,8 +470,16 @@ packages/ui/         shared React UI: mascots, i18n, accent, scale, motion, soun
 packages/fleet/      shared multi-machine daemon client (fleet)
 crates/ledge-native/ shared Rust: terminal focus/open, URL opening, autostart marker
 apps/overlay/        src/ (React), src-tauri/ (Rust shell), e2e/ (Playwright)
+apps/desktop/        src/ (React), src-tauri/ (Rust shell): Ledge Desktop
+scripts/ test/       release scripts (set-version, latest-json) and their tests
 docs/                design specs, implementation plans, mockups, the approved prototype, and the tour with its captures
 ```
+
+### Ledge Desktop
+
+`apps/desktop` is the full-window companion app (team and meeting views, tray, updater). Run it with `pnpm --filter desktop dev` (UI) or `pnpm --filter desktop tauri dev` (Windows only), against a daemon in WSL.
+Its installer, `Ledge.Desktop_<version>_x64-setup.exe`, is published on the same release as the island's, with its own updater manifest (`latest-desktop.json`).
+Both apps, the three crates and the npm package always carry the same version: `pnpm version:set <x.y.z>` stamps all of them, and the release workflow does it from the tag.
 
 ## Design documents
 
