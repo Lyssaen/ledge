@@ -7,7 +7,7 @@ import { relativeTime } from '../format';
 import { transition } from '../motion';
 import { useI18n, type Messages } from '../i18n/lang';
 import { inline } from './ReplyCard';
-import { groupSessions } from './groups';
+import { groupSessions } from '@ledge/client';
 import type { DocumentReference } from '../documents/references';
 
 export const CHAT_HEADER_H = 56;

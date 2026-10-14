@@ -2,8 +2,7 @@ import { useId, useRef, type CSSProperties, type JSX } from 'react';
 import type { Tool } from '@ledge/protocol';
 import { MOTION, ms } from '../motion';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
-import { materialFor } from './material';
-import { seedHash, type BotState } from './poseFor';
+import { BotShell, materialFor, seedHash, type BotState } from '@ledge/client';
 import { useBotMotion, useBotNod, BOT_MOTION, useBotVisibility } from './useBotMotion';
 import { useI18n } from '../i18n/lang';
 
@@ -56,12 +55,6 @@ const SHINE: Record<Tool, string> = {
   codex: 'M25 32Q35 19 51 22',
   cursor: 'M27 41 34 24Q35 23 37 25'
 };
-
-function Shell({ tool, fill }: { tool: Tool; fill: string }) {
-  if (tool === 'codex') return <ellipse className="shell" cx="48" cy="49" rx="32" ry="31" fill={fill} />;
-  if (tool === 'cursor') return <path className="shell" d="M23 77 Q14 78 17 66 L30 22 Q33 12 42 20 L79 54 Q88 63 77 67 L58 71 46 83 Q40 88 36 80 L32 73Z" fill={fill} />;
-  return <rect className="shell" x="15" y="22" width="66" height="56" rx="20" fill={fill} />;
-}
 
 /**
  * Session mascot: one persistent SVG whose layers (shell, pose, gaze, eyes, accessories) stay mounted
@@ -167,7 +160,7 @@ export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly 
                     <rect x="29" y="75" width="13" height="8" rx="4" />
                     <rect x="54" y="75" width="13" height="8" rx="4" />
                   </g>
-                  <Shell tool={tool} fill={`url(#${gradientId})`} />
+                  <BotShell tool={tool} fill={`url(#${gradientId})`} />
                   <path className="shine" d={SHINE[tool]} />
                   <rect className="visor" x="25" y="35" width="47" height="29" rx="13" />
                   <path className="reflection" d="M39 37H60Q68 37 69 44H28Q29 37 39 37" />

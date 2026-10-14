@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import type { Helper, Pending, Session } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
-import { botState, liveHelpers, poseFor, type BotState } from '../bots/poseFor';
+import { botState, liveHelpers, poseFor, type BotState, parseReply } from '@ledge/client';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Kbd } from '../ui/Kbd';
@@ -10,7 +10,6 @@ import { relativeTime, toolName } from '../format';
 import { transition } from '../motion';
 import { useI18n, type Messages } from '../i18n/lang';
 import { canDismiss } from './SessionList';
-import { parseReply } from '../reply/parse';
 import { BranchChip } from '../ui/BranchChip';
 import { ReplyCard, inline } from './ReplyCard';
 import type { DocumentReference } from '../documents/references';

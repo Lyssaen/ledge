@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useDocumentReader } from '../src/documents/useDocumentReader';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
-import type { DaemonClient } from '../src/daemon/client';
+import type { DaemonClient } from '@ledge/client';
 
 function client() {
   const sent: ClientMessage[] = []; const listeners = new Set<(message: ServerMessage) => void>();

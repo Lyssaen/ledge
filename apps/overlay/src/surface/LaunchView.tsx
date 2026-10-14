@@ -4,7 +4,7 @@ import { FolderBrowser, type FolderRequest } from './FolderBrowser';
 import { NAMES, pickName, type Recent, type Session, type Tool } from '@ledge/protocol';
 import { loadDefaultTool, TOOLS } from '../defaultTool';
 import { Bot } from '../bots/Bot';
-import { poseFor } from '../bots/poseFor';
+import { poseFor } from '@ledge/client';
 import { Button } from '../ui/Button';
 import { Kbd } from '../ui/Kbd';
 import { Icon, ICONS } from '../ui/icons';

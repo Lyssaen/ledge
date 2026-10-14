@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import type { DaemonStatus } from '../src/daemon/client';
+import type { DaemonStatus } from '@ledge/client';
 import { useSounds } from '../src/sounds/useSounds';
 import { DEFAULT_SOUNDS, VOLUME_GAIN, resetSoundPrefsForTests } from '../src/sounds/preferences';
 

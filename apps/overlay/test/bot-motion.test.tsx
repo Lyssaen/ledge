@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fakeSession } from './mockDaemon';
 import { Bot } from '../src/bots/Bot';
-import { botState, poseFor } from '../src/bots/poseFor';
+import { botState, poseFor } from '@ledge/client';
 import { useMotionPreferences } from '../src/motionPreferences';
 
 type Props = ComponentProps<typeof Bot>;

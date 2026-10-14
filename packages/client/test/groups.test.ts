@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { displayOrder, groupSessions, headersBefore, tildePath } from '../src/surface/groups';
-import { fakeSession } from './mockDaemon';
+import { displayOrder, groupSessions, headersBefore, tildePath } from '../src/groups';
+import { fakeSession } from './fakeSession';
 
 const a = fakeSession('a', { repo: 'ledge', repoPath: '/home/u/ledge', cwd: '/home/u/ledge', branch: 'main' });
 const b = fakeSession('b', { repo: 'ledge', repoPath: '/home/u/ledge', cwd: '/home/u/ledge/.claude/worktrees/x', branch: 'worktree-x', worktree: true });

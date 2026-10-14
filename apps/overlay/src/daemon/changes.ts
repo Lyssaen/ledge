@@ -1,5 +1,5 @@
 import type { Session } from '@ledge/protocol';
-import { liveHelpers } from '../bots/poseFor';
+import { liveHelpers } from '@ledge/client';
 
 export type SessionChange =
   | { kind: 'joined'; id: string }

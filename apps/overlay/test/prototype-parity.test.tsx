@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, within, renderHook } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import type { ClientMessage, Session } from '@ledge/protocol';
-import type { DaemonClient } from '../src/daemon/client';
+import { type DaemonClient, type BotState } from '@ledge/client';
 import { daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
 import { Bot } from '../src/bots/Bot';
@@ -11,7 +11,6 @@ import { useMotionPreferences } from '../src/motionPreferences';
 import { useMeasuredHeight } from '../src/surface/useMeasuredHeight';
 import { SURFACE_CHROME_Y } from '../src/surface/geometry';
 import { Badge, BADGE } from '../src/ui/Badge';
-import type { BotState } from '../src/bots/poseFor';
 import { fakeSession } from './mockDaemon';
 
 /* The parity scenarios drive the surface from the daemon store directly with a recording client, so the fake clock is

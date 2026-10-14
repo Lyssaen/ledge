@@ -1,4 +1,4 @@
-import type { BotState } from '../bots/poseFor';
+import type { BotState } from '@ledge/client';
 import { transition } from '../motion';
 import { useI18n } from '../i18n/lang';
 /** Calm, static status labels: no badge pulses. `fg` is the state's colour (text, the handle tick); the badge's

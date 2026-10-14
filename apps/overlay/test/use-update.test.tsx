@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { createMockDaemon, fakeSession } from './mockDaemon';
-import { createDaemonClient } from '../src/daemon/client';
+import { createDaemonClient } from '@ledge/client';
 import { attachClient, daemonStore } from '../src/daemon/store';
 import { useUpdate, withinMs } from '../src/update/useUpdate';
 

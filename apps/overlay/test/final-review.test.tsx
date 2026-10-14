@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ClientMessage, Session } from '@ledge/protocol';
-import type { DaemonClient } from '../src/daemon/client';
+import type { DaemonClient } from '@ledge/client';
 import { daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
 import { Button } from '../src/ui/Button';

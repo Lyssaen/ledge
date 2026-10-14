@@ -2,7 +2,7 @@ import type { Tool } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
 import { ResidentMascot, type ResidentGesture } from '../bots/ResidentMascot';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { BotState } from '../bots/poseFor';
+import type { BotState } from '@ledge/client';
 import { BADGE } from '../ui/Badge';
 import { transition } from '../motion';
 import { ISLAND, SIZES, islandOrder, type Slot } from './geometry';

@@ -258,7 +258,7 @@ describe('<Surface> under Tauri', () => {
     if (opts.tauri) enterTauri();
     vi.resetModules();
     const [{ Surface }, { createDaemonClient }, { attachClient, daemonStore }] = await Promise.all([
-      import('../src/surface/Surface'), import('../src/daemon/client'), import('../src/daemon/store')
+      import('../src/surface/Surface'), import('@ledge/client'), import('../src/daemon/store')
     ]);
     daemonStore.reset(); mock = await createMockDaemon();
     if (opts.launcher) mock.extras.launcher = opts.launcher;

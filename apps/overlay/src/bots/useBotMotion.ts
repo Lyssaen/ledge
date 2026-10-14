@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
-import { seedHash, type BotState } from './poseFor';
+import { seedHash, type BotState } from '@ledge/client';
 
 /** Spec section 6/7 microgesture timings (real time, independent of VITE_LEDGE_MOTION: callers disable motion instead). */
 export const BOT_MOTION = {

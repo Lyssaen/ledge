@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SessionList, rowHint } from '../src/surface/SessionList';
-import { displayOrder } from '../src/surface/groups';
+import { displayOrder } from '@ledge/client';
 import { fakeSession } from './mockDaemon';
 
 const sessions = [

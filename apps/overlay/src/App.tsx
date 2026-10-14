@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PROTOCOL_PORT } from '@ledge/protocol';
-import { createDaemonClient } from './daemon/client';
+import { createDaemonClient } from '@ledge/client';
 import { attachClient } from './daemon/store';
 import { Surface } from './surface/Surface';
 import { useUpdate } from './update/useUpdate';

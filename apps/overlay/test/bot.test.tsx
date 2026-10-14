@@ -1,8 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import { fakeSession } from './mockDaemon';
-import { botState, poseFor, type BotState } from '../src/bots/poseFor';
-import { materialFor } from '../src/bots/material';
+import { botState, poseFor, type BotState, materialFor } from '@ledge/client';
 import { Bot } from '../src/bots/Bot';
 
 // ms() scales by VITE_LEDGE_MOTION (0 in tests) through a lookup vi.stubEnv does not reach; a test can unscale it.

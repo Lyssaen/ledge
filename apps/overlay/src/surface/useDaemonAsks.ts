@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session } from '@ledge/protocol';
 import type { DaemonError } from '../daemon/store';
-import type { DaemonStatus } from '../daemon/client';
+import type { DaemonStatus } from '@ledge/client';
 import type { SurfaceEvent } from './machine';
 import { useI18n } from '../i18n/lang';
 import { changeOf, isBusy, isPending, sameRequest, type SessionChange } from '../daemon/changes';

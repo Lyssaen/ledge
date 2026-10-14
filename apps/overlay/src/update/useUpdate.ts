@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import type { DaemonClient } from '../daemon/client';
+import type { DaemonClient } from '@ledge/client';
 import { daemonStore } from '../daemon/store';
 import { appVersion, checkForUpdate, relaunchApp, type AvailableUpdate } from './bridge';
 import { cardView, gearPip, initialUpdate, pipTone, reduceUpdate, type CardView, type PipTone, type UpdateEvent, type UpdateState } from './machine';

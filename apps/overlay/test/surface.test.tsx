@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from './mockDaemon';
-import { createDaemonClient } from '../src/daemon/client';
+import { createDaemonClient } from '@ledge/client';
 import { attachClient, daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
 import { DEFAULT_SOUNDS, resetSoundPrefsForTests } from '../src/sounds/preferences';

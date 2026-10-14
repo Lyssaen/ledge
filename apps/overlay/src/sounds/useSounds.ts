@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { SessionChange } from '../daemon/changes';
-import type { DaemonStatus } from '../daemon/client';
+import type { DaemonStatus } from '@ledge/client';
 import { foregroundIsTerminal } from '../tauri/bridge';
 import { decideSound } from './decide';
 import type { Cue } from './cues';

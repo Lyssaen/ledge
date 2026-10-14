@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { ChatTurn, DaemonInfo, Recent, ServerMessage, Session } from '@ledge/protocol';
-import type { DaemonClient, DaemonStatus } from './client';
+import type { DaemonClient, DaemonStatus } from '@ledge/client';
 
 /** The daemon's last `error` reply; `seq` tells two identical messages apart. */
 export interface DaemonError { id?: string; message: string; seq: number }

@@ -13,6 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@ledge/client": "workspace:*",
     "@ledge/protocol": "workspace:*",
     "@tauri-apps/api": "^2.6.0",
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",

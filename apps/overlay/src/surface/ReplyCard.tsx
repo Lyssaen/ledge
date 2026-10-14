@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { Block, Item, ReplyDoc, Section } from '../reply/parse';
+import type { Block, Item, ReplyDoc, Section } from '@ledge/client';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
 import { transition } from '../motion';

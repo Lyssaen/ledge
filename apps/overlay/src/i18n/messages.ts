@@ -1,5 +1,5 @@
 import type { SoundCategory } from '../sounds/preferences';
-import type { BotState } from '../bots/poseFor';
+import type { BotState } from '@ledge/client';
 
 /**
  * Every user-visible string of the overlay, aria-labels and tooltips included, in French (the default) and English.

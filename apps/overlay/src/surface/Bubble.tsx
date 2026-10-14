@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type Ref } from 'react';
 import type { Session } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
 import { ResidentMascot } from '../bots/ResidentMascot';
-import { botState, poseFor } from '../bots/poseFor';
+import { botState, poseFor } from '@ledge/client';
 import { Button } from '../ui/Button';
 import { transition } from '../motion';
 import { SIZES } from './geometry';

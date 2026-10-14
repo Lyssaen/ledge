@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DocumentContent, DocumentErrorCode, ServerMessage } from '@ledge/protocol';
-import type { DaemonClient, DaemonStatus } from '../daemon/client';
+import type { DaemonClient, DaemonStatus } from '@ledge/client';
 import type { DocumentReference } from './references';
 
 export type DocumentOrigin = { kind: 'session'; sessionId: string } | { kind: 'chat' };

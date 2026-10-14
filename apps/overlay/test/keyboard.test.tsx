@@ -5,7 +5,7 @@ import WebSocket from 'ws';
 import { useKeyboard } from '../src/keyboard/useKeyboard';
 import { SessionList } from '../src/surface/SessionList';
 import { Surface } from '../src/surface/Surface';
-import { createDaemonClient } from '../src/daemon/client';
+import { createDaemonClient } from '@ledge/client';
 import { attachClient, daemonStore } from '../src/daemon/store';
 import { createMockDaemon, fakeSession } from './mockDaemon';
 import { setFrame } from '../src/tauri/bridge';
