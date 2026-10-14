@@ -61,5 +61,12 @@ export function createMotionPreferences(prefix: string) {
   return { loadReduced, saveReduced, useMotionPreferences };
 }
 
-const island = createMotionPreferences('ledge');
-export const useMotionPreferences = island.useMotionPreferences;
+export type MotionPreferencesHook = () => { reduced: boolean; app: boolean; setReduced(value: boolean): void };
+
+/** Neutral until an app registers its own: OS preference + env, no storage key, nothing to persist. */
+const useNeutralMotionPreferences: MotionPreferencesHook = () => ({ reduced: useOsReducedMotion() || envReduced(), app: false, setReduced() {} });
+let resolveDefault: MotionPreferencesHook = useNeutralMotionPreferences;
+/** An app registers its store here (the island: `ledge.reducedMotion`): a mascot with no `reducedMotion` prop reads it. */
+export function setDefaultMotionPreferences(hook: MotionPreferencesHook): void { resolveDefault = hook; }
+/** What the shared mascots read; call it only at render, after the app has registered. */
+export function useDefaultMotionPreferences(): ReturnType<MotionPreferencesHook> { return resolveDefault(); }

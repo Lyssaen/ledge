@@ -6,7 +6,9 @@ import { resolve } from 'node:path';
 import { fakeSession } from './fixtures';
 import { Bot } from '../src/bots/Bot';
 import { botState, poseFor } from '../src/bots/poseFor';
-import { useMotionPreferences } from '../src/motionPreferences';
+import { createMotionPreferences } from '../src/motionPreferences';
+
+const { useMotionPreferences } = createMotionPreferences('ledge');
 
 type Props = ComponentProps<typeof Bot>;
 const base: Props = { tool: 'claude', state: 'working', pose: 1, size: 32, theme: 'dark', seed: 'session-a', reducedMotion: false };

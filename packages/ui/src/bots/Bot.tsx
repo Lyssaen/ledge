@@ -1,7 +1,7 @@
 import { useId, useRef, type CSSProperties, type JSX } from 'react';
 import type { Tool } from '@ledge/protocol';
 import { MOTION, ms } from '../motion';
-import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
+import { useDefaultMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { materialFor } from './material';
 import { seedHash, type BotState } from './poseFor';
 import { useBotMotion, useBotNod, BOT_MOTION, useBotVisibility } from './useBotMotion';
@@ -20,7 +20,7 @@ export interface BotProps {
   readOnly?: boolean;
   /** Connection lost / stale: keep the known expression, freeze motion, lower opacity. */
   frozen?: boolean;
-  /** Effective app preference; defaults to useMotionPreferences(). The OS preference always wins. */
+  /** Effective app preference; defaults to the app's registered store. The OS preference always wins. */
   reducedMotion?: boolean;
   /** Inactive layer / paused view: freeze every animation in place without the frozen styling. */
   paused?: boolean;
@@ -71,7 +71,7 @@ function Shell({ tool, fill }: { tool: Tool; fill: string }) {
 export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly = false, frozen = false, paused = false, reducedMotion, askKey, nodKey, className }: BotProps): JSX.Element {
   const ref = useRef<SVGSVGElement>(null);
   const gradientId = `bot-shell-${useId().replace(/[^A-Za-z0-9_-]/g, '')}`;
-  const prefs = useMotionPreferences();
+  const prefs = useDefaultMotionPreferences();
   const osReduced = useOsReducedMotion();
   const reduced = osReduced || (reducedMotion ?? prefs.reduced);
   const simplified = size <= 20;
