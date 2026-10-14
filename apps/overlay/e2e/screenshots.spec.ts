@@ -124,7 +124,7 @@ for (const theme of ['dark', 'light'] as const) {
       await ready(page, 4);
       d.preview('otto', conversation);
       await openSession(page, 'harness-assistant, Otto, ouvrir');
-      await expect(layer(page, 'session').getByText('pnpm test --filter overlay')).toBeVisible();
+      await expect(layer(page, 'session').getByText('pnpm test --filter overlay', { exact: true })).toBeVisible();
       await shoot(page, `session-permission-${theme}`);
     });
 
