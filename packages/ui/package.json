@@ -16,8 +16,9 @@
     "./bots/*": "./src/bots/*",
     "./sounds/*": "./src/sounds/*.ts",
     "./i18n/lang": "./src/i18n/lang.tsx",
+    "./i18n/copy": "./src/i18n/copy.tsx",
     "./styles/*": "./src/styles/*",
-    "./test/*": "./test/*"
+    "./test/*": "./test/*.ts"
   },
   "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit" },
   "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" },
