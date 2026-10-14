@@ -13,6 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@ledge/fleet": "workspace:*",
     "@ledge/protocol": "workspace:*",
     "@ledge/ui": "workspace:*",
     "@tauri-apps/api": "^2.6.0",

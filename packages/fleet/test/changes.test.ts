@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { changeOf, isPending, sameRequest } from '../src/daemon/changes';
-import { isPending as asksIsPending } from '../src/surface/useDaemonAsks';
+import { changeOf, sameRequest } from '../src/changes';
 import { fakeSession } from './mockDaemon';
 
 const s = (extra = {}) => fakeSession('a', extra);
@@ -39,8 +38,7 @@ describe('changeOf', () => {
 });
 
 describe('shared request helpers', () => {
-  it('live in changes.ts, re-exported unchanged by useDaemonAsks', () => {
-    expect(asksIsPending).toBe(isPending);
+  it('sameRequest compares kind and text', () => {
     const q = { kind: 'question' as const, text: 'Which?', source: 'hook' as const };
     expect(sameRequest(q, { ...q })).toBe(true);
     expect(sameRequest(q, { ...q, text: 'Other?' })).toBe(false);

@@ -1,4 +1,5 @@
-import type { Helper, Session, SessionState } from '@ledge/protocol';
+import type { Session, SessionState } from '@ledge/protocol';
+import { liveHelpers } from '@ledge/fleet/changes';
 
 /** The expression a bot shows. `readonly` is only a fallback for an unknown expression, never a replacement for a known one. */
 export type BotState = 'starting' | 'working' | 'question' | 'approval' | 'idle' | 'done' | 'error' | 'readonly';
@@ -13,8 +14,8 @@ const FROM_SESSION: Record<SessionState, BotState> = {
   error: 'error'
 };
 
-/** The helpers (subagents) still running under a session: working, or waiting on a request of their own. */
-export const liveHelpers = (session: Session): Helper[] => session.helpers.filter(h => h.state !== 'exited' && h.state !== 'idle');
+/** The helpers (subagents) still running under a session; defined in the fleet, re-exported for the bots' importers. */
+export { liveHelpers };
 
 /**
  * Exited always reads as `done` (still, eyes closed); a nonzero exit code belongs to the badge and text.

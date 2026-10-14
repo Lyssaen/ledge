@@ -2,8 +2,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession, T0 } from './mockDaemon';
-import { createDaemonClient } from '../src/daemon/client';
-import { daemonStore, attachClient } from '../src/daemon/store';
+import { createDaemonClient } from '../src/client';
+import { daemonStore, attachClient } from '../src/store';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 let mock: Awaited<ReturnType<typeof createMockDaemon>>;
