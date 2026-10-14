@@ -7,6 +7,18 @@ const s = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: 'O
 const pend = (extra: Partial<NonNullable<Session['pending']>> = {}) => ({ id: 'p1', version: 1, since: T, kind: 'permission' as const, text: 'pnpm test', source: 'hook' as const, ...extra });
 
 describe('requestsOf', () => {
+  it('reads the risk; a missing one is high (spec §4)', () => {
+    const [a, b, c] = requestsOf([
+      s('a', { pending: pend({ id: 'a', risk: 'low', riskReason: 'read_only_command', since: '2026-10-14T09:00:00.000Z' }) }),
+      s('b', { pending: pend({ id: 'b', risk: 'high', riskReason: 'pushes', since: '2026-10-14T09:01:00.000Z' }) }),
+      s('c', { pending: pend({ id: 'c', since: '2026-10-14T09:02:00.000Z' }) })
+    ]);
+    expect(a).toMatchObject({ risk: 'low', riskReason: 'read_only_command' });
+    expect(b).toMatchObject({ risk: 'high', riskReason: 'pushes' });
+    expect(c).toMatchObject({ risk: 'high' });
+    expect(c).not.toHaveProperty('riskReason');
+  });
+
   it('lists the oldest request first and skips pendings without id', () => {
     const items = requestsOf([
       s('new', { pending: pend({ id: 'n', since: '2026-10-14T10:05:00.000Z' }) }),

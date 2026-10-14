@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { copy } from '../copy';
 import type { ReactNode } from 'react';
 
-const tones = { plain: 'border-line bg-surface', warning: 'border-attention/15 bg-attention/[0.045]' } as const;
+const tones = { plain: 'border-line bg-surface', warning: 'border-attention/15 bg-attention/[0.045]', danger: 'border-danger-fg/15 bg-danger-bg' } as const;
 export function Notice({ title, tone = 'plain', children, role }: { title: string; tone?: keyof typeof tones; children?: ReactNode; role?: 'alert' | 'status' }) {
   return (
     <div role={role} className={`rounded-control border p-3.5 text-xs leading-[1.65] ${tones[tone]}`}>

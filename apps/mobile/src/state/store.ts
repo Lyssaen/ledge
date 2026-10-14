@@ -23,6 +23,8 @@ export interface MobileStore {
   setSender(send: (m: ClientMessage) => void): void;
   /** Send an operation now, only on an authenticated link: never queued, never retried. */
   submit(op: OpState, msg: ClientMessage): boolean;
+  /** Ask the daemon where every uncertain operation ended up (`operation.status`); never resends a decision. */
+  checkOperations(): void;
   /** Feed the operations model (e.g. `resumed` on return to the foreground). */
   dispatch(e: OpEvent): void;
   /** Forget the PC's data (token refused or revoked). */
@@ -61,6 +63,7 @@ export function createMobileStore(storage?: Storage): MobileStore {
     setLink: l => { if (l !== state.link) { set({ link: l }, false); dispatch({ type: 'link', link: l }); } },
     setSender: f => { send = f; },
     dispatch,
+    checkOperations: () => { if (state.link === 'online') for (const operationId of toCheck(state.ops)) send?.({ type: 'operation.status', operationId }); },
     submit: (op, msg) => {
       if (state.link !== 'online' || !send) return false;
       if (!matches(op, msg) || !isNew(state.ops, op)) return false;

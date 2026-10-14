@@ -1,6 +1,6 @@
-import type { Pending, Session, Tool } from '@ledge/protocol';
+import type { Pending, RiskReason, Session, Tool } from '@ledge/protocol';
 
-/** One request waiting on the PC, as the inbox and the detail show it. Lot 2 adds `risk` and `riskReason` here. */
+/** One request waiting on the PC, as the inbox and the detail show it. */
 export interface InboxItem {
   sessionId: string;
   pendingId: string;
@@ -18,6 +18,9 @@ export interface InboxItem {
   text: string;
   reason?: string;
   options?: string[];
+  /** `high` needs a device check before it can be accepted. Anything not clearly `low` is `high` (spec §4). */
+  risk: 'low' | 'high';
+  riskReason?: RiskReason;
   /** Sessions only seen through hooks cannot be answered from here. */
   readOnly: boolean;
 }
@@ -37,6 +40,7 @@ export function requestsOf(sessions: Session[]): InboxItem[] {
       ...(s.branch ? { branch: s.branch } : {}), ...(s.worktree ? { worktree: true } : {}),
       since: p.since ?? s.lastActivityAt, text: p.text,
       ...(p.reason ? { reason: p.reason } : {}), ...(p.options ? { options: p.options } : {}),
+      risk: p.risk === 'low' ? 'low' : 'high', ...(p.riskReason ? { riskReason: p.riskReason } : {}),
       readOnly: s.source === 'hook_only'
     });
   }

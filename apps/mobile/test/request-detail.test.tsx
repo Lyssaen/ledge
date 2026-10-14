@@ -14,13 +14,20 @@ describe('RequestDetail with no matching request', () => {
   });
   it('says the request is gone once a snapshot without it has arrived', () => {
     show();
+    act(() => { mobileStore.apply({ type: 'snapshot', sessions: [] }); mobileStore.setLink('online'); });
+    expect(screen.getByRole('heading', { name: 'Déjà traitée sur le PC' })).toBeInTheDocument();
+    expect(screen.getByText('Cette demande a été résolue ailleurs. Aucune nouvelle décision n’a été envoyée.')).toBeInTheDocument();
+  });
+  it('stays neutral while connecting, whatever the cache says', () => {
+    show();
     act(() => mobileStore.apply({ type: 'snapshot', sessions: [] }));
-    expect(screen.getByText('Cette demande n’attend plus de décision.')).toBeInTheDocument();
+    expect(screen.getByText('Chargement de la demande…')).toBeInTheDocument();
+    expect(screen.queryByText('Déjà traitée sur le PC')).toBeNull();
   });
   it('does not assert it was handled when offline on a stale cache', () => {
     show();
     act(() => { mobileStore.apply({ type: 'snapshot', sessions: [] }); mobileStore.setLink('offline'); });
-    expect(screen.queryByText('Cette demande n’attend plus de décision.')).toBeNull();
+    expect(screen.queryByText('Déjà traitée sur le PC')).toBeNull();
     expect(screen.getByText(/dernier état connu/)).toBeInTheDocument();
   });
 });

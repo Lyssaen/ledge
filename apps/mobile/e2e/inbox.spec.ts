@@ -10,7 +10,7 @@ const withPending = (id: string, kind: 'permission' | 'question' | 'plan' | 'dif
   return session(id, {
     state: kind === 'question' ? 'waiting_input' : 'waiting_permission', name: ['Otto', 'Nova', 'Kai', 'Bix', 'Pim'][id.length % 5]!, topic: `Tâche de la session ${id}`,
     repo: 'harness-assistant', branch: 'session-search', lastActivityAt: since,
-    pending: { id: `p-${id}`, version: 1, since, kind, text, source: 'hook', ...(kind === 'question' ? { options: ['Sombre · Signal', 'Clair · Galet'] } : { reason: 'Vérifier le badge après la modification de la liste.' }) },
+    pending: { id: `p-${id}`, version: 1, since, kind, text, source: 'hook', risk: 'low', ...(kind === 'question' ? { options: ['Sombre · Signal', 'Clair · Galet'] } : { reason: 'Vérifier le badge après la modification de la liste.' }) },
     ...extra
   });
 };
@@ -58,9 +58,9 @@ for (const width of [320, 390, 430]) {
       await expect(pre).toContainText('affiche la durée');
       await noOverflow(page);
       expect(await pre.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
-      await expect(page.getByRole('button', { name: 'Refuser' })).toBeDisabled();
-      await expect(page.getByRole('button', { name: 'Autoriser une fois' })).toBeDisabled();
-      await expect(page.getByText('Décisions depuis le téléphone : pas encore disponibles. Répondez sur le PC.')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Refuser' })).toBeEnabled();
+      await expect(page.getByRole('button', { name: 'Autoriser une fois' })).toBeEnabled();
+      await expect(page.getByText('La décision sera transmise immédiatement au PC.')).toBeVisible();
       await expect(page.getByText('Dossier')).toBeVisible();
       await expect(page.getByText('/w/harness-assistant')).toBeVisible();
       await page.screenshot({ path: `e2e/shots/request-${width}.png` });
@@ -99,11 +99,11 @@ for (const width of [320, 390, 430]) {
       await page.goto('/m/#/request/g/p-g');
       await expect(page.getByRole('button', { name: 'Refuser' })).toBeVisible();
       d.upsert(session('g', { state: 'working', lastActivityAt: T0 }));
-      await expect(page.getByText('Cette demande n’attend plus de décision.')).toBeVisible();
+      await expect(page.getByText('Déjà traitée sur le PC')).toBeVisible();
       await page.getByRole('link', { name: 'Retour aux demandes' }).last().click();
       await expect(page.getByText('Vous êtes à jour')).toBeVisible();
       await page.goto('/m/#/request/nope/nope');
-      await expect(page.getByText('Cette demande n’attend plus de décision.')).toBeVisible();
+      await expect(page.getByText('Déjà traitée sur le PC')).toBeVisible();
       await page.screenshot({ path: `e2e/shots/gone-${width}.png` });
     });
 

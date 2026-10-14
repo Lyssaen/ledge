@@ -35,12 +35,61 @@ export const copy = {
     ago: (age: string) => `Il y a ${age}`,
     context: 'Contexte du terminal',
     options: 'Réponses proposées',
-    deny: 'Refuser', allow: 'Autoriser une fois',
-    notYet: 'Décisions depuis le téléphone : pas encore disponibles. Répondez sur le PC.',
-    readOnlyHint: 'Cette session est en lecture seule.'
+    runsInProject: 'Exécution dans le projet',
+    runsInProjectBody: 'Le script de test du dépôt sera exécuté avec les permissions de cette session. Il peut modifier des fichiers ou accéder au réseau.',
+    destination: 'Destination'
+  },
+  decide: {
+    deny: 'Refuser', allow: 'Autoriser une fois', verify: 'Vérifier et autoriser',
+    hint: 'La décision sera transmise immédiatement au PC.',
+    offlineHint: 'Aucune décision ne sera envoyée hors connexion.',
+    connectingHint: 'Connexion en cours…',
+    readOnly: 'Session démarrée hors de Ledge : répondez dans le terminal.',
+    answerLater: 'Répondre depuis le téléphone : pas encore disponible. Répondez sur le PC.',
+    sending: 'Transmission au PC…', sendingBody: 'En attente de confirmation du terminal.',
+    uncertain: 'Réception non confirmée',
+    uncertainBody: 'La connexion a été perdue pendant l’envoi. La décision a peut-être été reçue. Vérifiez son état avant de recommencer.',
+    check: 'Reconnecter et vérifier', checking: 'Vérification…',
+    changed: 'La demande a été mise à jour. Relisez-la avant de décider.',
+    reread: 'J’ai relu la demande',
+    unknown: 'État de la décision inconnu',
+    unknownPending: 'La demande attend toujours une décision sur le PC. Vous pouvez la reprendre ci-dessous.',
+    unknownGone: 'La demande n’attend plus de décision sur le PC. Vérifiez le terminal pour connaître son état.',
+    busy: 'Une autre décision est en cours sur le PC.',
+    notTaken: 'Le terminal n’a pas confirmé. La demande est toujours en attente.',
+    noPrompt: 'Le terminal n’affiche plus la demande. Ouvrez-le sur le PC.',
+    forbidden: 'Ce téléphone n’est plus autorisé.',
+    failed: 'La décision n’a pas pu être transmise.'
+  },
+  result: {
+    header: 'Demande traitée',
+    allowed: 'Autorisation prise en compte', denied: 'Refus pris en compte', answered: 'Réponse prise en compte',
+    body: 'Le terminal a reçu votre décision.',
+    final: 'Une décision transmise ne peut pas être annulée.',
+    back: 'Retour aux demandes'
+  },
+  risk: {
+    badge: 'Impact élevé',
+    body: 'Cette action peut avoir des effets difficiles à annuler. Une vérification sur votre appareil sera demandée avant de l’autoriser.',
+    reasons: {
+      pushes: 'Publie des modifications sur un dépôt distant',
+      destroys: 'Peut supprimer des fichiers ou des données',
+      deploys: 'Peut déployer vers un environnement',
+      publishes: 'Peut publier un paquet ou une version',
+      pipes_to_shell: 'Exécute du code téléchargé',
+      network: 'Accède au réseau',
+      writes_outside_folder: 'Écrit hors du dossier du projet',
+      sensitive_path: 'Touche un fichier sensible',
+      unsafe_flag: 'Utilise une option risquée',
+      shell_syntax: 'Commande composée, difficile à vérifier',
+      script: 'Exécute un script',
+      plan: 'Un plan engage plusieurs actions',
+      unknown: 'Impact non évalué',
+      question: 'Impact non évalué', read_only_command: 'Impact non évalué', edit_inside_folder: 'Impact non évalué'
+    }
   },
   gone: {
-    header: 'Demande', title: 'Cette demande n’attend plus de décision.', body: 'Elle a été traitée, sur le PC ou ailleurs.', back: 'Retour aux demandes',
+    header: 'Demande', title: 'Déjà traitée sur le PC', body: 'Cette demande a été résolue ailleurs. Aucune nouvelle décision n’a été envoyée.', back: 'Retour aux demandes',
     staleTitle: 'Cette demande ne figure plus dans le dernier état connu.', staleBody: 'Reconnectez-vous pour vérifier si elle attend toujours une décision.'
   },
   loading: 'Chargement de la demande…',

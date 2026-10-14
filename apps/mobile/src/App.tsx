@@ -23,7 +23,7 @@ export function App({ onPaired, onReconnect = () => {} }: { onPaired?: () => voi
       {route.name === 'connection' || route.name === 'pair'
         ? <Connection onRepair={() => { setRepairing(true); navigate({ name: 'pair' }); }} />
         : route.name === 'request'
-        ? <RequestDetail sessionId={route.sessionId} pendingId={route.pendingId} onReconnect={onReconnect} />
+        ? <RequestDetail key={`${route.sessionId}/${route.pendingId}`} sessionId={route.sessionId} pendingId={route.pendingId} onReconnect={onReconnect} />
         : <Inbox onReconnect={onReconnect} />}
     </div>
   );
