@@ -691,6 +691,26 @@ describe('server', () => {
       expect((await other.next('recents')).recents).toEqual([{ cwd: join(home(), 'api-gateway'), project: 'api-gateway', lastAt: s.startedAt }]);
       c.close(); other.close();
     });
+    it('Claude Code gets its session id from the launch, so its transcript is known without hooks; a resume keeps its own', async () => {
+      mkdirSync(join(home(), 'my_app.v2'));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'my_app.v2'), prompt: 'plan it' });
+      const launched = await c.next('session.launched');
+      const cmd = tmux.created[0]!.command;
+      expect(cmd[0]).toBe('claude'); expect(cmd[1]).toBe('--session-id');
+      const uuid = cmd[2]!;
+      expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      expect(cmd.slice(3)).toEqual(['plan it']);
+      const s = store.get(launched.id)!;
+      expect(s.agentSessionId).toBe(uuid);
+      const dir = join(home(), 'my_app.v2').replace(/[^a-zA-Z0-9]/g, '-');
+      expect(s.transcriptPath).toMatch(new RegExp(`/projects/${dir}/${uuid}\\.jsonl$`));
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'my_app.v2'), continue: true });
+      const resumed = await c.next('session.launched');
+      expect(tmux.created[1]!.command).toEqual(['claude', '--continue']);
+      expect(store.get(resumed.id)!.transcriptPath).toBeUndefined();
+      c.close();
+    });
     it('picks a free name when none is given or the wanted one is live, and never a live id', async () => {
       mkdirSync(join(home(), 'p'));
       store.upsert(mk('a', { name: 'Otto' })); store.upsert(mk('b', { name: 'Pim', state: 'exited' }));

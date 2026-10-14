@@ -2,6 +2,7 @@ import type { SessionEvent, Tool } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
+import { codexPlan } from '../daemon/transcript.js';
 import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
@@ -32,7 +33,10 @@ function describeTool(tool: string | undefined, input: unknown): string {
 export const REPLY_MAX = 24_000;
 /** The agent's last message (Claude Code 2.1: `last_assistant_message` on Stop), trimmed and capped. */
 function lastReply(p: Payload): string | undefined {
-  const text = str(p.last_assistant_message)?.trim();
+  return cap(str(p.last_assistant_message)?.trim());
+}
+
+function cap(text: string | undefined): string | undefined {
   if (!text) return undefined;
   return text.length > REPLY_MAX ? `${text.slice(0, REPLY_MAX)}\n\n[…]` : text;
 }
@@ -41,9 +45,9 @@ function lastReply(p: Payload): string | undefined {
 export const INPUT_MAX = 8_000;
 
 /** The tool's input, strings capped, or nothing when the harness gave no object. */
-export function trimInput(input: unknown): Record<string, unknown> | undefined {
+export function trimInput(input: unknown, max = INPUT_MAX): Record<string, unknown> | undefined {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
-  const trim = (v: unknown): unknown => typeof v === 'string' ? v.slice(0, INPUT_MAX)
+  const trim = (v: unknown): unknown => typeof v === 'string' ? v.slice(0, max)
     : Array.isArray(v) ? v.map(trim)
     : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, trim(x)])) : v;
   return trim(input) as Record<string, unknown>;
@@ -134,7 +138,8 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
   const agentId = str(p.agent_id) || undefined;
   const base = { at, source: 'hook' as const, ...(agentId ? { helperId: agentId } : {}) };
   const toolUseId = str(p.tool_use_id) || undefined;
-  const toolInput = trimInput(p.tool_input);
+  // A plan is read whole before it is approved: it is capped like a reply, not like a tool input.
+  const toolInput = trimInput(p.tool_input, tool === 'ExitPlanMode' ? REPLY_MAX : INPUT_MAX);
   const call = { ...(toolUseId ? { toolUseId } : {}), ...(toolInput ? { toolInput } : {}) };
   const transcript = str(p.transcript_path) ? { transcriptPath: str(p.transcript_path)! } : {};
   const duration = typeof p.duration_ms === 'number' && p.duration_ms >= 0 ? { durationMs: p.duration_ms } : {};
@@ -168,8 +173,12 @@ function mapEvent(eventName: string, p: Payload, at: string, launched: boolean):
     case 'SessionStart': return { name: 'SessionStart', ...base };
     case 'UserPromptSubmit': return { name: 'UserPromptSubmit', ...base, ...promptText(p), ...transcript };
     case 'Stop': {
-      const text = lastReply(p);
-      return { name: 'Stop', ...base, ...(text ? { text } : {}), ...transcript };
+      // Codex in Plan mode stops with a null last message: the plan of that turn, read from its rollout, is the reply.
+      const turnId = str(p.turn_id); const path = str(p.transcript_path);
+      const said = lastReply(p);
+      const plan = said ? undefined : turnId && path ? cap(codexPlan(path, turnId)) : undefined;
+      const text = said ?? plan;
+      return { name: 'Stop', ...base, ...(plan ? { kind: 'plan' as const } : {}), ...(text ? { text } : {}), ...transcript };
     }
     case 'SessionEnd':
       // Under the launcher, the exit belongs to session.unregister (real exit code) and PaneGone:

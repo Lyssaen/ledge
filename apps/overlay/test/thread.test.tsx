@@ -21,19 +21,29 @@ const items: ThreadItem[] = [
 ];
 
 describe('<Thread>', () => {
-  it('folds the previous turn, shows the current one in order and leaves the current reply to the card', () => {
+  it('shows the whole conversation as one thread, oldest first, nothing folded, and leaves the current reply to the card', () => {
     const { container } = render(<Thread session={fakeSession('a')} items={items} t={t} theme="dark" paused />);
-    const prev = container.querySelector('[data-previous-turn]')!;
-    expect(prev).toHaveTextContent('Previous turn');
-    expect(prev).toHaveTextContent('Old answer');
-    expect(prev).not.toHaveAttribute('open');
-    const kinds = [...container.querySelectorAll('[data-thread] > [data-item]')].map(e => e.getAttribute('data-item'));
-    expect(kinds).toEqual(['previous-turn', 'prompt', 'message', 'tools', 'permission']);
+    expect(container.querySelector('details')).toBeNull(); // no turn to unfold
+    expect(container).not.toHaveTextContent('Previous turn');
+    const rows = [...container.querySelectorAll('[data-thread] > [data-item]')];
+    expect(rows.map(e => e.getAttribute('data-item'))).toEqual(['prompt', 'reply', 'prompt', 'message', 'permission', 'tools']);
+    expect(rows[0]).toHaveTextContent('Old ask');
+    expect(rows[1]).toHaveTextContent('Old answer'); // an earlier answer reads in place, like a message
     expect(container.querySelector('[data-prompt]')).toHaveTextContent('You');
-    expect(container.querySelector('[data-prompt]')).toHaveTextContent('Run the tests');
+    expect(rows[2]).toHaveTextContent('Run the tests');
     expect(container.querySelector('[data-message]')).toHaveTextContent('Running them now.');
     expect(container).not.toHaveTextContent('Done.');
     expect(container.textContent).not.toMatch(/\b[2-9] (actions|files|questions)\b/); // no counters, anywhere
+  });
+  it('shows the current reply in the thread when no card stands for it, and keeps the live tool line last of the whole thread', () => {
+    const running = items.concat({ kind: 'prompt', id: 'prompt-3', at: at(20), turn: 3, text: 'And now?' },
+      { kind: 'tool', id: 'toolu_9', at: at(21), turn: 3, tool: 'Bash', label: 'Bash · ls', status: 'running', files: [] },
+      { kind: 'message', id: 'msg-9', at: at(22), turn: 3, text: 'Listing.' });
+    const { container } = render(<Thread session={fakeSession('a')} items={running} t={t} theme="dark" paused hideCurrentReply={false} />);
+    const kinds = [...container.querySelectorAll('[data-thread] > [data-item]')].map(e => e.getAttribute('data-item'));
+    expect(kinds).toEqual(['prompt', 'reply', 'prompt', 'message', 'permission', 'reply', 'prompt', 'message', 'tools']);
+    expect(container.querySelectorAll('[data-live-tool]')).toHaveLength(1);
+    expect(container.querySelector('[data-live-tool]')).toHaveTextContent('ls');
   });
   it('shows the running tool on one live line, keeps finished calls out of the thread and the permission with its decision', () => {
     const { container } = render(<Thread session={fakeSession('a')} items={items} t={t} theme="dark" paused now={Date.UTC(2026, 9, 13, 10, 0, 20)} />);
@@ -48,6 +58,18 @@ describe('<Thread>', () => {
     expect(container).not.toHaveTextContent('exit 1');
     expect(container.querySelector('[data-permission]')).toHaveAttribute('data-decision', 'deny');
     expect(container.querySelector('[data-permission]')).toHaveTextContent('Denied');
+  });
+  it('keeps the live tool line last in the turn, under what the agent said after the call started', () => {
+    // The agent speaks while a tool still runs (or a permission is asked): the thread stays chronological, tool line last.
+    const turn: ThreadItem[] = [
+      { kind: 'prompt', id: 'p', at: at(0), turn: 1, text: 'Fix it' },
+      { kind: 'tool', id: 'toolu_a', at: at(1), turn: 1, tool: 'Bash', label: 'Bash · pnpm test', status: 'running', files: [] },
+      { kind: 'message', id: 'm', at: at(2), turn: 1, text: 'Tests are running.' },
+      { kind: 'permission', id: 'perm', at: at(3), turn: 1, tool: 'Bash', text: 'rm -rf dist' }
+    ];
+    const { container } = render(<Thread session={fakeSession('a')} items={turn} t={t} theme="dark" paused />);
+    const kinds = [...container.querySelectorAll('[data-thread] > [data-item]')].map(e => e.getAttribute('data-item'));
+    expect(kinds).toEqual(['prompt', 'message', 'permission', 'tools']);
   });
   it('tells what a Cursor session cannot show and what an empty thread waits for', () => {
     const { container, rerender } = render(<Thread session={fakeSession('c', { tool: 'cursor' })} items={items.slice(2, 3)} t={t} theme="dark" paused />);

@@ -145,7 +145,10 @@ const PLAN_ASK = /^Ready to build\?$/;
 const PLAN_OPTION = /^(?:→\s*)?\d+\.\s+(.+?)\s+\([^)]*\)$/;
 const REVISE = /Describe how to revise the plan\b/;
 
-function parsePlan(lines: string[]): { title: string; options: string[] } | null {
+/** Lines with their blank edges dropped and the runs of blank lines inside kept to one. */
+const tidy = (lines: string[]) => lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+
+function parsePlan(lines: string[]): { title: string; options: string[]; body?: string } | null {
   const box = squareBox(lines);
   if (!box) return null;
   const ask = box.findIndex(l => PLAN_ASK.test(l));
@@ -154,7 +157,12 @@ function parsePlan(lines: string[]): { title: string; options: string[] } | null
   if (!options.length) return null;
   const head = box.findIndex(l => l === 'Suggested Plan');
   const title = head < 0 ? '' : box.slice(head + 1).find(l => l !== '') ?? '';
-  return { title: title || 'Ready to build?', options };
+  // The plan is the box from its header down to "Saved to …" (or the rule above the ask). Its header out of the pane
+  // means its start scrolled away: no body rather than half a plan. The file it is saved to is not read: the pane
+  // shows its path cut by the box (no leading slash, ellipsed when long), and the box is what the user approves.
+  const end = head < 0 ? -1 : box.findIndex((l, i) => i > head && (/^Saved to /.test(l) || /^─{5,}/.test(l)));
+  const body = head < 0 ? '' : tidy(box.slice(head + 1, end < 0 ? ask : end));
+  return { title: title || 'Ready to build?', options, ...(body ? { body } : {}) };
 }
 
 // After n or Esc the dialog becomes a one-line field over the command; an empty Enter skips it:
@@ -194,7 +202,7 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   const q = parseQuestion(lines);
   if (q) return { kind: 'question', text: q.question, options: q.options };
   const plan = parsePlan(lines);
-  if (plan) return { kind: 'plan', text: plan.title, options: plan.options };
+  if (plan) return { kind: 'plan', text: plan.title, options: plan.options, ...(plan.body ? { body: plan.body } : {}) };
   const d = parseDialog(lines);
   return d ? { kind: 'permission', text: dialogText(d) } : null;
 }

@@ -30,13 +30,14 @@ function pendingFor(ev: SessionEvent): Pending | undefined {
     return { kind: 'question', text: ev.text ?? '', options: ev.options, ...details(ev), source: 'hook', ...(ev.tool !== 'AskUserQuestion' ? { tool: ev.tool } : {}) };
   }
   if (ev.name === 'PreToolUse' && ev.tool === 'ExitPlanMode') {
-    return { kind: 'plan', text: ev.text ?? '', source: 'hook' };
+    const plan = ev.toolInput?.plan;
+    return { kind: 'plan', text: ev.text ?? '', ...(typeof plan === 'string' && plan.trim() ? { body: plan } : {}), source: 'hook' };
   }
   if (ev.name === 'Notification' && ev.kind === 'permission') {
     return { kind: 'permission', text: ev.text ?? '', source: 'hook' };
   }
   if (ev.name === 'PanePrompt') {
-    return { kind: ev.kind ?? 'permission', text: ev.text ?? '', options: ev.options, ...details(ev), source: 'pane' };
+    return { kind: ev.kind ?? 'permission', text: ev.text ?? '', ...(ev.body ? { body: ev.body } : {}), options: ev.options, ...details(ev), source: 'pane' };
   }
   return undefined;
 }
@@ -197,6 +198,8 @@ export function reduce(s: Session, ev: SessionEvent): Session {
   const lastHookAt = s.lastHookAt;
   if (ev.name === 'SubagentStart' || ev.name === 'SubagentStop') return ev.helperId ? reduceHelper(s, { ...ev, helperId: ev.helperId }) : s;
   if (ev.helperId && ev.source === 'hook' && ev.name !== 'SessionEnd') return reduceHelper(s, { ...ev, helperId: ev.helperId });
+  // The transcript a hook names is the live one (it follows /clear and --resume): it replaces the one the launch implied.
+  if (ev.source === 'hook' && ev.transcriptPath && ev.transcriptPath !== s.transcriptPath) s = { ...s, transcriptPath: ev.transcriptPath };
 
   switch (ev.name) {
     case 'SessionEnd':
@@ -229,7 +232,7 @@ export function reduce(s: Session, ev: SessionEvent): Session {
     }
     case 'Stop': {
       // The turn's last message rides on the hook; a Stop without one keeps what the last Stop said.
-      const lastReply = ev.text ? { text: ev.text, at } : s.lastReply;
+      const lastReply = ev.text ? { text: ev.text, at, ...(ev.kind === 'plan' ? { plan: true } : {}) } : s.lastReply;
       if (s.pending?.helperId) return underHelper(s, 'idle', at, { lastReply });
       return { ...s, state: 'idle', pending: undefined, lastReply, lastHookAt: at, lastActivityAt: at };
     }
@@ -251,7 +254,9 @@ export function reduce(s: Session, ev: SessionEvent): Session {
     case 'PanePrompt': {
       if (s.pending?.source === 'hook') return s;
       if (hooksReportPrompts(s) && lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
-      const pending = mergePending(s.pending, pendingFor(ev)!);
+      let pending = mergePending(s.pending, pendingFor(ev)!);
+      // Codex asks "Implement this plan?" under the plan it just proposed: its last reply is what to review.
+      if (pending.kind === 'plan' && !pending.body && s.tool === 'codex' && s.lastReply) pending = { ...pending, body: s.lastReply.text };
       if (s.pending && samePending(s.pending, pending)) return s;
       const state = pending.kind === 'question' ? 'waiting_input' : 'waiting_permission';
       return { ...s, state, pending, lastActivityAt: at };

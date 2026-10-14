@@ -5,6 +5,7 @@ import type { Tmux } from '../tmux.js';
 import { adapterFor as defaultAdapterFor, buildPreview, PREVIEW_CAPTURE_LINES } from '../adapters/index.js';
 import { log } from '../log.js';
 import { gitInfo as defaultGitInfo } from './git.js';
+import { claudePlan } from './transcript.js';
 
 export { PREVIEW_LINES } from '../adapters/index.js';
 /** Prompt detection reads more than the preview: a dialog with a long diff or many options is taller than 30 lines. */
@@ -77,7 +78,7 @@ export function startPoller(opts: {
       // Unchanged pane: re-apply a remembered prompt only if nothing is pending (a hook may have
       // shadowed it inside the priority window). The reducer keeps no-ops identical.
       const m = matches.get(s.id);
-      if (m && !store.get(s.id)?.pending) store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options, ...(m.optionDetails ? { optionDetails: m.optionDetails } : {}) });
+      if (m && !store.get(s.id)?.pending) store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options, ...(m.optionDetails ? { optionDetails: m.optionDetails } : {}), ...withBody(s, m) });
       rested(s.id, t);
       return;
     }
@@ -96,7 +97,13 @@ export function startPoller(opts: {
     const m = adapter.detectPrompt(pane);
     if (!m) { matches.delete(s.id); rested(s.id, t); return; }
     matches.set(s.id, m);
-    store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options, ...(m.optionDetails ? { optionDetails: m.optionDetails } : {}) });
+    store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options, ...(m.optionDetails ? { optionDetails: m.optionDetails } : {}), ...withBody(s, m) });
+  }
+
+  /** A plan read in the pane carries its text when the pane shows it (Cursor); Claude Code's is read from its transcript. */
+  function withBody(s: Session, m: NonNullable<ReturnType<ReturnType<typeof defaultAdapterFor>['detectPrompt']>>): { body?: string } {
+    const body = m.body ?? (m.kind === 'plan' && s.tool === 'claude' && s.transcriptPath ? claudePlan(s.transcriptPath) : undefined);
+    return body ? { body } : {};
   }
 
   /** A pane at rest for REST_MS reports it; the reducer decides what that ends (and keeps no-ops identical). */

@@ -262,7 +262,8 @@ const question = (text: string, options: Option[] | null, core = text, ref?: str
   };
 };
 
-export function parseReply(text: string): ReplyDoc {
+/** `plan`: the reply proposes what to do (Codex Plan mode), so a "Changes" or "Check" heading names work not done yet. */
+export function parseReply(text: string, opts: { plan?: boolean } = {}): ReplyDoc {
   const raw = tokenize(text);
   let title: string | undefined;
   let lead: string | undefined;
@@ -275,7 +276,7 @@ export function parseReply(text: string): ReplyDoc {
   let cur: Section = { kind: 'other', blocks: [] };
   const push = () => { if (cur.blocks.length || cur.title) sections.push(cur); };
   for (const b of raw) {
-    if (b.type === 'h') { push(); cur = { kind: kindOf(b.text), title: b.text, blocks: [] }; }
+    if (b.type === 'h') { push(); const kind = kindOf(b.text); cur = { kind: opts.plan && (kind === 'done' || kind === 'verified') ? 'other' : kind, title: b.text, blocks: [] }; }
     else cur.blocks.push(b);
   }
   push();

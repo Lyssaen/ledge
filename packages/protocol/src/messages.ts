@@ -18,6 +18,8 @@ export const SessionEventSchema = z.object({
   /** Each option's description, by index ('' when it has none); left out when no option has one. */
   optionDetails: z.array(z.string()).optional(),
   kind: z.enum(['question', 'permission', 'plan', 'diff']).optional(),
+  /** PanePrompt: what to review in full before deciding (a plan read in the terminal), when `text` is its summary. */
+  body: z.string().optional(),
   exitCode: z.number().int().nullable().optional(),
   helperId: z.string().optional(),
   /** The helper's description, once known (Claude Code: its `.meta.json`, written after SubagentStart). */

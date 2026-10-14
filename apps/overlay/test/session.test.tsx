@@ -8,25 +8,64 @@ const q = fakeSession('b', { name: 'Pim', tool: 'codex', state: 'waiting_input',
 const base = { preview: ['● Bash(npm test)', 'Do you want to proceed?'], visible: true, reading: false, draft: '', onDraft: () => {}, onBack: () => {}, onClose: () => {}, onDecide: () => {}, onReply: () => {}, onInterrupt: () => {}, onKill: () => {}, onFocus: () => {}, onToggleReading: () => {} };
 
 describe('<SessionView>', () => {
-  it('renders the thread under the helpers and opens a helper on click, finished ones included', () => {
+  it('renders the thread under the helpers, opens a helper on click and drops it once it ends', () => {
     const at = (s: number) => new Date(Date.UTC(2026, 9, 13, 10, 0, s)).toISOString();
     const thread = [
       { kind: 'prompt' as const, id: 'prompt-1', at: at(0), turn: 1, text: 'Review the reducer' },
-      { kind: 'helper' as const, id: 'h1', at: at(1), turn: 1, task: 'find consumers', agentType: 'Explore', state: 'exited' as const },
-      { kind: 'tool' as const, id: 'toolu_1', at: at(2), turn: 1, tool: 'Bash', label: 'Bash · pnpm test', status: 'running' as const, files: [] }
+      { kind: 'helper' as const, id: 'h1', at: at(1), turn: 1, task: 'find consumers', agentType: 'Explore', state: 'working' as const },
+      { kind: 'helper' as const, id: 'h2', at: at(2), turn: 1, task: 'review task 1', agentType: 'general-purpose', state: 'working' as const },
+      { kind: 'tool' as const, id: 'toolu_1', at: at(3), turn: 1, tool: 'Bash', label: 'Bash · pnpm test', status: 'running' as const, files: [] },
+      { kind: 'message' as const, id: 'msg-1', at: at(4), turn: 1, text: 'Tests are running.' }
     ];
     const onOpenHelper = vi.fn();
-    const { container } = render(<SessionView {...base} session={fakeSession('a', { state: 'working', helpers: [] })} thread={thread} onOpenHelper={onOpenHelper} />);
+    const { container, rerender } = render(<SessionView {...base} session={fakeSession('a', { state: 'working', helpers: [] })} thread={thread} onOpenHelper={onOpenHelper} />);
     expect(container.querySelector('[data-prompt]')).toHaveTextContent('Review the reducer');
     expect(container.querySelector('[data-live-tool]')).toHaveTextContent('Bash');
     expect(container.querySelector('[data-live-tool]')).toHaveTextContent('pnpm test');
     const row = screen.getByRole('button', { name: 'find consumers · Open the discussion' });
-    expect(row).toHaveTextContent('Explore · Done');
+    expect(row).toHaveTextContent('Explore · Working');
     fireEvent.click(row);
     expect(onOpenHelper).toHaveBeenCalledWith('h1');
     // The thread comes before the reply card and the ask fold.
     const helpersEl = container.querySelector('[data-helpers]')!; const threadEl = container.querySelector('[data-thread]')!;
     expect(helpersEl.compareDocumentPosition(threadEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // h1 ends: its row leaves, h2 stays; the live tool line is still the turn's last line, under what the agent said.
+    rerender(<SessionView {...base} session={fakeSession('a', { state: 'working', helpers: [] })} thread={thread.map(i => (i.id === 'h1' ? { ...i, state: 'exited' as const } : i))} onOpenHelper={onOpenHelper} />);
+    expect([...container.querySelectorAll('[data-helper]')].map(e => e.getAttribute('data-helper-id'))).toEqual(['h2']);
+    expect([...container.querySelectorAll('[data-thread] > [data-item]')].map(e => e.getAttribute('data-item'))).toEqual(['prompt', 'message', 'tools']);
+  });
+  it('the current answer stays readable while a request waits: in the thread, in its place, above the decision; once only otherwise', () => {
+    const at = (n: number) => new Date(Date.UTC(2026, 9, 13, 10, 0, n)).toISOString();
+    const thread = [
+      { kind: 'prompt' as const, id: 'prompt-1', at: at(0), turn: 1, text: 'Plan the banner' },
+      { kind: 'tool' as const, id: 'toolu_1', at: at(1), turn: 1, tool: 'Read', label: 'Read · a', status: 'running' as const, files: [] },
+      { kind: 'reply' as const, id: 'reply-1', at: at(2), turn: 1, text: 'Here is the plan: two steps.' }
+    ];
+    const lastReply = { text: 'Here is the plan: two steps.', at: at(2) };
+    const waiting = fakeSession('a', { state: 'waiting_permission', lastReply, pending: { kind: 'plan', text: 'Implement this plan?', source: 'pane' } });
+    const { container, rerender } = render(<SessionView {...base} session={waiting} thread={thread} />);
+    const kinds = [...container.querySelectorAll('[data-thread] > [data-item]')].map(e => e.getAttribute('data-item'));
+    expect(kinds).toEqual(['prompt', 'reply', 'tools']);
+    const answer = container.querySelector('[data-reply-item]')!;
+    expect(answer).toHaveTextContent('Here is the plan: two steps.');
+    expect(answer.compareDocumentPosition(container.querySelector('[data-ask]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // No request: the reply card shows it, the thread does not repeat it.
+    rerender(<SessionView {...base} session={fakeSession('a', { state: 'idle', lastReply })} thread={thread} />);
+    expect(container.querySelector('[data-reply-item]')).toBeNull();
+    expect(container.querySelectorAll('[data-reply-meta]')).toHaveLength(1);
+  });
+  it('a plan that is the current answer shows once, in its card, without the terminal hint (Codex Plan mode)', () => {
+    const at = (n: number) => new Date(Date.UTC(2026, 9, 14, 8, 5, n)).toISOString();
+    const body = '# Add a README\n\n## Changes\n\n- Add **Usage**';
+    const thread = [
+      { kind: 'prompt' as const, id: 'prompt-3', at: at(0), turn: 3, text: 'Revise the plan' },
+      { kind: 'reply' as const, id: 'reply-3', at: at(3), turn: 3, text: body }
+    ];
+    const waiting = fakeSession('a', { tool: 'codex', state: 'waiting_permission', lastReply: { text: body, at: at(3) }, pending: { kind: 'plan', text: 'Implement this plan?', body, source: 'pane' } });
+    const { container } = render(<SessionView {...base} session={waiting} thread={thread} />);
+    expect(container.querySelector('[data-reply-item]')).toBeNull();
+    expect(container.querySelector('[data-plan] h1')).toHaveTextContent('Add a README');
+    expect(container.querySelector('[data-ask]')).not.toHaveTextContent('terminal preview');
   });
   it('shows no counters under the title once a reply arrived', () => {
     const reply = { text: '## Done\n- [x] a\n- [x] b\n\n## Questions\n1. Which one?\n   - A\n   - B', at: '2026-10-09T18:05:00.000Z' };
@@ -69,6 +108,23 @@ describe('<SessionView>', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Approve' })); expect(onDecide).toHaveBeenLastCalledWith('accept');
     expect(screen.getByRole('checkbox', { name: 'Always for this session' })).toBeDisabled();
     expect(screen.getByText('Do you want to proceed?')).toBeInTheDocument();
+  });
+  it('a plan request shows the whole plan, rendered and scrollable, above its decision', () => {
+    const body = '# Add Red Banner\n\n1. Create banner.html with a red banner.\n2. Check it renders red.\n\n## Verification\n\n- banner.html exists';
+    const plan = fakeSession('p', { state: 'waiting_permission', pending: { kind: 'plan', text: '# Add Red Banner', body, source: 'hook' } });
+    const onDecide = vi.fn();
+    const { container } = render(<SessionView {...base} session={plan} onDecide={onDecide} />);
+    const shown = container.querySelector('[data-plan]') as HTMLElement;
+    expect(shown).toBeInTheDocument();
+    expect(shown.querySelector('h1')).toHaveTextContent('Add Red Banner');
+    expect(shown.querySelectorAll('li')).toHaveLength(3);
+    expect(shown).toHaveTextContent('Check it renders red.');
+    expect(shown).toHaveStyle({ overflowY: 'auto' });
+    // The fold that holds the card leaves room for the plan box.
+    const fold = container.querySelector('[data-ask]') as HTMLElement;
+    expect(parseInt(fold.style.maxHeight, 10)).toBeGreaterThan(parseInt(shown.style.maxHeight, 10));
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(onDecide).toHaveBeenCalledWith('accept');
   });
   it('shows a question with options and answers by number; Other is off for a tool that cannot take free text (Codex)', () => {
     const onReply = vi.fn();
@@ -189,6 +245,24 @@ describe('<SessionView>', () => {
       pre.scrollTop = 500; fireEvent.scroll(pre);
       g.height = 800;
       rerender(<SessionView {...base} session={idle} preview={['a', 'b', 'c', 'd']} />);
+      expect(g.top).toBe(800);
+    });
+    it('the conversation follows its end on each new item, but not while the user has scrolled up to read', () => {
+      const at = (n: number) => new Date(Date.UTC(2026, 9, 13, 10, 0, n)).toISOString();
+      const msg = (n: number) => ({ kind: 'message' as const, id: `m${n}`, at: at(n), turn: 1, text: `line ${n}` });
+      const working = fakeSession('w', { state: 'working' });
+      const { container, rerender } = render(<SessionView {...base} session={working} thread={[msg(1)]} />);
+      const scroll = container.querySelector('[data-layer="session"] [data-scroll]') as HTMLElement;
+      const g = geometry(scroll, 600);
+      rerender(<SessionView {...base} session={working} thread={[msg(1), msg(2)]} />);
+      expect(g.top).toBe(600);
+      scroll.scrollTop = 100; fireEvent.scroll(scroll);
+      g.height = 700;
+      rerender(<SessionView {...base} session={working} thread={[msg(1), msg(2), msg(3)]} />);
+      expect(g.top).toBe(100); // reading the history: left where it is
+      scroll.scrollTop = 500; fireEvent.scroll(scroll); // back at the end
+      g.height = 800;
+      rerender(<SessionView {...base} session={working} thread={[msg(1), msg(2), msg(3), msg(4)]} />);
       expect(g.top).toBe(800);
     });
     it('opening the collapsed preview scrolls it to its last line', () => {

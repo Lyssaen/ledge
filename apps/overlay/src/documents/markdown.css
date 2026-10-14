@@ -15,6 +15,12 @@
 .ledge-document th,.ledge-document td { border:1px solid var(--sidebar-border); padding:5px 9px; }
 .ledge-document hr { border:0; border-top:1px solid var(--sidebar-border); margin:24px 0; }
 .ledge-document a { color:var(--sidebar-primary); cursor:pointer; text-decoration:underline; }
+/* A plan under review, inside the session's request card: compact. */
+[data-plan] .ledge-document { padding:12px 14px; font-size:13px; line-height:20px; }
+[data-plan] .ledge-document h1 { font-size:16px; line-height:22px; margin:0 0 10px; }
+[data-plan] .ledge-document h2 { font-size:14px; line-height:20px; margin:16px 0 8px; }
+[data-plan] .ledge-document h3 { font-size:13px; line-height:20px; margin:14px 0 6px; }
+[data-plan] .ledge-document > :last-child { margin-bottom:0; }
 .ledge-document-image { color:var(--muted-foreground); font-style:italic; }
 .ledge-outline { position:absolute; z-index:2; top:8px; left:12px; right:12px; max-height:min(72%,560px); overflow:hidden; display:flex; flex-direction:column; background:var(--notch); border:1px solid var(--sidebar-border); border-radius:14px; box-shadow:0 16px 42px #0005; }
 .ledge-outline-header { min-height:52px; display:flex; align-items:center; gap:10px; padding:0 12px 0 18px; border-bottom:1px solid var(--sidebar-border); }

@@ -40,14 +40,20 @@ export function helperThread(items: ThreadItem[], helperId: string): { helper?: 
   return { ...(helper ? { helper } : {}), items: withoutEcho(own.filter(i => i.kind !== 'reply').sort(byTime), report), ...(report ? { report } : {}) };
 }
 
-/** The rows under the title: the current turn's helpers, finished ones kept (their thread stays readable); live state
- *  from the session when it has it. Without a thread, today's live helpers. */
+/** A helper that ended, failed or was interrupted no longer works: it leaves the rows under the title. */
+const ENDED: ReadonlySet<Helper['state']> = new Set(['exited', 'error', 'idle']);
+
+/** The rows under the title: the current turn's helpers still at work, in the order they started, one row each; live
+ *  state from the session when it has it. A helper is gone once either side says it ended, and with its session. Without
+ *  a thread, today's live helpers. */
 export function helperRows(session: Session, items?: ThreadItem[]): HelperRow[] {
-  if (!items) return liveHelpers(session).map(h => ({ id: h.id, kind: h.kind, task: h.task, state: h.state }));
+  if (session.state === 'exited') return [];
+  if (!items) return liveHelpers(session).filter(h => !ENDED.has(h.state)).map(h => ({ id: h.id, kind: h.kind, task: h.task, state: h.state }));
   const last = turns(items).at(-1);
   if (!last) return [];
-  return last.items.filter((i): i is HelperItem => i.kind === 'helper').map(h => {
+  return last.items.filter((i): i is HelperItem => i.kind === 'helper' && i.state !== 'exited').flatMap(h => {
     const live = session.helpers.find(x => x.id === h.id);
-    return { id: h.id, kind: h.agentType ?? live?.kind ?? '', task: h.task || live?.task || '', state: live?.state ?? h.state };
+    const state = live?.state ?? h.state;
+    return ENDED.has(state) ? [] : [{ id: h.id, kind: h.agentType ?? live?.kind ?? '', task: h.task || live?.task || '', state }];
   });
 }

@@ -63,14 +63,34 @@ describe('turns', () => {
     expect(helperThread(h.filter(i => i.id !== 'report-h1'), 'h1').items.map(i => i.id)).toEqual(['msg-a1', 'msg-a2']); // no report yet: the message stays
   });
 
-  it('lists the current turn helpers, finished ones included, with the live state when the session knows it', () => {
+  it('lists the current turn helpers still at work, with the live state when the session knows it', () => {
     const s = fakeSession('a', { helpers: [{ id: 'h2', kind: 'general-purpose', task: 'review task 1', state: 'waiting_permission' }] });
     expect(helperRows(s, items)).toEqual([
-      { id: 'h1', kind: 'Explore', task: 'find consumers', state: 'exited' },
       { id: 'h2', kind: 'general-purpose', task: 'review task 1', state: 'waiting_permission' }
     ]);
     // Without a thread: today's live helpers (exited and idle left out).
     const live = fakeSession('b', { helpers: [{ id: 'x', kind: 'Explore', task: 'a', state: 'exited' }, { id: 'y', kind: 'Explore', task: 'b', state: 'working' }] });
     expect(helperRows(live).map(r => r.id)).toEqual(['y']);
+  });
+  it('drops a helper from the list as soon as it ends, keeping the others in their order, one row each', () => {
+    const turn: ThreadItem[] = [
+      { kind: 'prompt', id: 'prompt-1', at: at(0), turn: 1, text: 'Audit' },
+      { kind: 'helper', id: 'a', at: at(1), turn: 1, task: 'scan a', agentType: 'Explore', state: 'working' },
+      { kind: 'helper', id: 'b', at: at(2), turn: 1, task: 'scan b', agentType: 'Explore', state: 'working' },
+      { kind: 'helper', id: 'c', at: at(3), turn: 1, task: 'scan c', agentType: 'Explore', state: 'working' },
+      { kind: 'helper', id: 'd', at: at(4), turn: 1, task: 'scan d', agentType: 'Explore', state: 'working' },
+      { kind: 'tool', id: 't1', at: at(5), turn: 1, helperId: 'a', tool: 'Grep', label: 'Grep', status: 'running', files: [] },
+      { kind: 'tool', id: 't2', at: at(6), turn: 1, helperId: 'b', tool: 'Grep', label: 'Grep', status: 'success', files: [] }
+    ];
+    const helpers = (state: Record<string, 'working' | 'exited' | 'error' | 'idle'>) =>
+      Object.entries(state).map(([id, st]) => ({ id, kind: 'Explore', task: `scan ${id}`, state: st }));
+    const s = fakeSession('a', { state: 'working', helpers: helpers({ a: 'working', b: 'working', c: 'working', d: 'working' }) });
+    expect(helperRows(s, turn).map(r => r.id)).toEqual(['a', 'b', 'c', 'd']);
+    // b ends (its row in the thread says so), c fails, d is interrupted: only a stays.
+    const ended = turn.map(i => (i.id === 'b' ? { ...i, state: 'exited' as const } : i));
+    const after = fakeSession('a', { state: 'working', helpers: helpers({ a: 'working', b: 'working', c: 'error', d: 'idle' }) });
+    expect(helperRows(after, ended).map(r => r.id)).toEqual(['a']);
+    // A session that is over has no helper at work, whatever the last word of each was.
+    expect(helperRows(fakeSession('a', { state: 'exited', helpers: helpers({ a: 'working' }) }), turn)).toEqual([]);
   });
 });

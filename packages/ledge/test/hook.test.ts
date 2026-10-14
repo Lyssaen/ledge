@@ -24,6 +24,12 @@ describe('mapClaudeHook', () => {
     const m = mapClaudeHook('PermissionRequest', { session_id: 's', tool_name: 'Bash', tool_input: { command: 'npm test', description: 'Run tests' } }, at);
     expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', tool: 'Bash', text: 'npm test', toolInput: { command: 'npm test', description: 'Run tests' } });
   });
+  it('keeps a long plan whole for review: ExitPlanMode is capped like a reply, not like a tool input', () => {
+    const plan = `# Plan\n${'step\n'.repeat(INPUT_MAX / 4)}`;
+    const m = mapClaudeHook('PreToolUse', { session_id: 's', tool_name: 'ExitPlanMode', tool_input: { plan } }, at);
+    expect(m?.event.text).toBe('# Plan');
+    expect(m?.event.toolInput).toEqual({ plan });
+  });
   it('maps PermissionRequest for Edit to the file path', () => {
     const m = mapClaudeHook('PermissionRequest', { session_id: 's', tool_name: 'Edit', tool_input: { file_path: '/w/src/a.ts' } }, at);
     expect(m?.event.text).toBe('/w/src/a.ts');
@@ -200,6 +206,11 @@ describe('mapHook codex', () => {
   it('maps Stop with its last message, and a null one to a bare Stop', () => {
     expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: 'Created `hello.txt`.' }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook', text: 'Created `hello.txt`.' });
     expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: null }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook' });
+  });
+  it('maps the Stop of a Plan mode turn, whose last message is null, to the plan the rollout holds for that turn', () => {
+    const rollout = join(home, 'rollout.jsonl');
+    writeFileSync(rollout, JSON.stringify({ timestamp: at, type: 'event_msg', payload: { type: 'item_completed', turn_id: 't1', item: { type: 'Plan', id: 't1-plan', text: '# Add a README\n\n- one file\n' } } }) + '\n');
+    expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: null, transcript_path: rollout }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook', kind: 'plan', text: '# Add a README\n\n- one file', transcriptPath: rollout });
   });
   it('maps Interrupt (Esc on a turn or on an approval) to an interrupted tool run: Codex waits, no Stop follows', () => {
     expect(mapHook('codex', 'Interrupt', codex({}), at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', interrupt: true });

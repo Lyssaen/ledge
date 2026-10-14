@@ -7,7 +7,7 @@ const earlier = Array.from({ length: 24 }, (_, i) => ({ kind: 'message', id: `ms
 const thread = [
   ...earlier,
   { kind: 'prompt', id: 'prompt-1', at: at(0), turn: 1, text: 'Lance les tests du reducer' },
-  { kind: 'helper', id: 'h1', at: at(1), turn: 1, task: 'find the reducer consumers', agentType: 'Explore', state: 'exited' },
+  { kind: 'helper', id: 'h1', at: at(1), turn: 1, task: 'find the reducer consumers', agentType: 'Explore', state: 'working' },
   { kind: 'message', id: 'msg-a1', at: at(2), turn: 1, helperId: 'h1', text: 'Searching the callers of reduce().' },
   { kind: 'reply', id: 'report-h1', at: at(3), turn: 1, helperId: 'h1', text: 'Three consumers, all in the daemon.' },
   { kind: 'tool', id: 'toolu_1', at: at(4), turn: 1, tool: 'Bash', label: 'Bash · pnpm test', input: 'pnpm test', status: 'running', files: [] }

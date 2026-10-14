@@ -8,8 +8,8 @@ import { LOCAL_MACHINE } from '../src/daemon/machines';
 import { Surface } from '../src/surface/Surface';
 import { fakeSession } from './mockDaemon';
 
-/* An open session must survive the daemon's traffic in place: the same DOM nodes, a folded turn the user unfolded still
-   unfolded. A view rebuilt from scratch on every message blinks and forgets what was open. */
+/* An open session must survive the daemon's traffic in place: the same DOM nodes, the earlier conversation included.
+   A view rebuilt from scratch on every message blinks and loses where the user was reading. */
 const layer = () => document.querySelector('[data-layer="session"]') as HTMLElement;
 const at = (s: number) => `2026-10-09T18:00:${String(s).padStart(2, '0')}.000Z`;
 const items: ThreadItem[] = [
@@ -33,30 +33,28 @@ function peer() {
 beforeEach(() => { vi.useFakeTimers(); localStorage.clear(); daemonStore.reset(); });
 afterEach(() => { vi.useRealTimers(); });
 
-/** Opens Otto, receives its thread, unfolds the previous turn and the tool row; returns what must stay put. */
+/** Opens Otto and receives its thread; returns what must stay put: the view and the first turn's rows. */
 function openAndUnfold(client: DaemonClient, deliverThread: () => void) {
   render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
   fireEvent.click(screen.getByRole('button', { name: /Otto .*open/ }));
   deliverThread();
   const root = layer();
-  const previous = root.querySelector('[data-previous-turn]') as HTMLDetailsElement;
-  const action = root.querySelector('[data-action]') as HTMLDetailsElement | null;
-  expect(previous).toBeTruthy();
-  previous.open = true;
-  if (action) action.open = true;
-  return { root, previous, action };
+  const first = root.querySelector('[data-prompt]') as HTMLElement;
+  const answer = root.querySelector('[data-reply-item]') as HTMLElement;
+  expect(first).toHaveTextContent('first ask');
+  expect(answer).toHaveTextContent('first answer');
+  return { root, first, answer };
 }
-function expectStill({ root, previous, action }: ReturnType<typeof openAndUnfold>) {
+function expectStill({ root, first, answer }: ReturnType<typeof openAndUnfold>) {
   expect(layer()).toBe(root);
-  expect(root.querySelector('[data-previous-turn]')).toBe(previous);
-  expect(previous.open).toBe(true);
-  if (action) { expect(root.querySelector('[data-action]')).toBe(action); expect(action.open).toBe(true); }
+  expect(root.querySelector('[data-prompt]')).toBe(first);
+  expect(root.querySelector('[data-reply-item]')).toBe(answer);
   expect(root.getAttribute('inert')).toBeNull();
   expect(root.querySelector('[data-thread]')).toBeTruthy();
 }
 
 describe('an open session stays put under daemon traffic', () => {
-  it('direct daemon: keeps its DOM and an unfolded previous turn through updates, thread items and previews', () => {
+  it('direct daemon: keeps its DOM, the earlier turn included, through updates, thread items and previews', () => {
     const client: DaemonClient = { connect() {}, close() {}, send() {}, status: () => 'open', onMessage: () => () => {}, onStatus: () => () => {} };
     const a = fakeSession('a');
     act(() => { daemonStore.setStatus('open'); daemonStore.apply({ type: 'snapshot', sessions: [a] }); });

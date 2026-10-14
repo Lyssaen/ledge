@@ -8,6 +8,7 @@ import { Kbd } from '../ui/Kbd';
 import { Icon, ICONS } from '../ui/icons';
 import { relativeTime, toolName } from '../format';
 import { transition } from '../motion';
+import { MarkdownDocument } from '../documents/MarkdownDocument';
 import { useI18n, type Messages } from '../i18n/lang';
 import { canDismiss } from './SessionList';
 import { parseReply } from '../reply/parse';
@@ -33,7 +34,10 @@ export function measureSessionH(s: Session, reading: boolean): number {
   return SESSION_HEADER_H + 90 + ask + reply + (reading ? 400 : 240) + 96;
 }
 /** The cap the request block grows to (its content is always shorter): only the fold animation uses it. */
-export const askMaxH = (p: Pending) => (p.kind === 'question' ? 160 + (p.options?.length ?? 0) * 72 + detailsH(p) * 1.5 : 360);
+export const askMaxH = (p: Pending) => (p.kind === 'question' ? 160 + (p.options?.length ?? 0) * 72 + detailsH(p) * 1.5 : 360 + (p.body ? PLAN_MAX_H : 0));
+/** A plan to review scrolls in its own box under this height, its decision kept in view below it. */
+const PLAN_MAX_H = 320;
+const noop = () => {};
 /** What the options' descriptions add: a 16px line per ~55 characters, plus the gap above each one. */
 function detailsH(p: Pending): number {
   return (p.optionDetails ?? []).reduce((h, d) => (d ? h + 2 + Math.ceil(d.length / 55) * 16 : h), 0);
@@ -150,13 +154,28 @@ export function SessionView(p: SessionViewProps) {
   if (termFor.current !== s.id) { termFor.current = s.id; stuck.current = true; }
   const toBottom = () => { const el = termRef.current; if (el) el.scrollTop = el.scrollHeight; };
   useLayoutEffect(() => { if (stuck.current) toBottom(); }, [p.preview, visible, p.reading]);
+  // The conversation reads the same way: it opens on its end and follows each new item, unless the user scrolled up to
+  // read the history; back at the end, it follows again. Content that grows on its own (a card unfolding) is followed too.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const atEnd = useRef(true);
+  const endFor = useRef(s.id);
+  if (endFor.current !== s.id) { endFor.current = s.id; atEnd.current = true; }
+  const toEnd = () => { const el = scrollRef.current; if (el && atEnd.current) el.scrollTop = el.scrollHeight; };
+  useLayoutEffect(toEnd, [p.thread, s.lastReply, s.pending, visible, p.reading]);
+  useLayoutEffect(() => {
+    const el = scrollRef.current?.firstElementChild;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(toEnd);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // A permission, diff or plan prompt takes Approve/Deny only: the daemon would refuse a typed reply.
   const promptOnly = !!pending && pending.kind !== 'question';
   const replyOff = blocked !== null || promptOnly;
   const sendDraft = () => { if (!replyOff && p.draft.trim()) p.onReply(p.draft); };
   // The agent's last message, read like a plan, while it waits for the next instruction.
   const reply = shownReply(s);
-  const doc = useMemo(() => (reply ? parseReply(reply.text) : null), [reply?.text]); // eslint-disable-line react-hooks/exhaustive-deps
+  const doc = useMemo(() => (reply ? parseReply(reply.text, { plan: reply.plan }) : null), [reply?.text, reply?.plan]); // eslint-disable-line react-hooks/exhaustive-deps
   const replyField = useRef<HTMLTextAreaElement>(null);
   const questions = doc?.questions.length ?? 0;
   const hint = blocked ?? (promptOnly ? t.session.hintPrompt(pending!.kind)
@@ -183,7 +202,7 @@ export function SessionView(p: SessionViewProps) {
         <Button variant="ghost" size="icon" aria-label={t.session.close} title={t.session.close} onClick={p.onClose} style={{ width: 32, height: 32, flexShrink: 0, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.close} /></Button>
       </div>
 
-      <div data-scroll className="ledge-scroll" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      <div ref={scrollRef} data-scroll onScroll={e => { const el = e.currentTarget; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4; }} className="ledge-scroll" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         <div ref={p.contentRef} data-session-content style={{ display: 'flex', flexDirection: 'column', padding: '18px 16px 16px', fontSize: p.reading ? 14 : undefined, lineHeight: p.reading ? '21px' : undefined }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
             <span data-eyebrow style={{ fontSize: 11, lineHeight: '16px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted-foreground)' }}>{eyebrow}</span>
@@ -192,7 +211,8 @@ export function SessionView(p: SessionViewProps) {
           <h2 style={{ margin: 0, fontSize: 18, lineHeight: '26px', fontWeight: 650, letterSpacing: '-0.01em', overflowWrap: 'anywhere' }}>{title}</h2>
           {rows.length > 0 && <HelpersTree parent={s} helpers={rows} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
           {p.thread !== undefined
-            ? <Thread session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} />
+            // The current answer is the card below when there is one, or the plan the request shows; otherwise (a request waits) it reads in the thread.
+            ? <Thread session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} hideCurrentReply={!!(reply && doc) || (!!pending?.body && pending.body === s.lastReply?.text)} />
             : <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '12px 0 0' }}>{t.thread.loading}</p>}
           {reply && doc && <>
             <span data-reply-meta style={{ marginTop: 6, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
@@ -216,12 +236,16 @@ export function SessionView(p: SessionViewProps) {
               <div style={{ paddingTop: 14 }}>
                 <section style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14, background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
                   <h3 style={{ margin: 0, fontSize: 14, lineHeight: '20px', fontWeight: 650, overflowWrap: 'anywhere' }}>{shown.kind === 'permission' ? t.session.runIn(s.project) : t.session.reviewIn(s.project)}</h3>
-                  <div style={well}>{shown.text}</div>
+                  {shown.body
+                    ? <div data-plan className="ledge-scroll" style={{ maxHeight: PLAN_MAX_H, overflowY: 'auto', overscrollBehavior: 'contain', background: 'var(--sidebar)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', userSelect: 'text' }}>
+                        <MarkdownDocument text={shown.body} onDocument={p.onDocument ?? noop} onHeadings={noop} />
+                      </div>
+                    : <div style={well}>{shown.text}</div>}
                   {shown.kind === 'permission'
                     ? <label className="ledge-check" title={t.session.alwaysWhy} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, lineHeight: '18px', color: 'var(--muted-foreground)', cursor: 'not-allowed', opacity: 0.7 }}>
                         <input type="checkbox" disabled aria-describedby="ledge-always-why" style={{ margin: 0, width: 15, height: 15 }} />{t.session.always}
                       </label>
-                    : <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.session.reviewHint}</span>}
+                    : !shown.body && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.session.reviewHint}</span>}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
                     <Button variant="outline" disabled={decideOff} onClick={() => p.onDecide('deny')}>{t.session.deny}</Button>
                     <Button variant="primary" disabled={decideOff} onClick={() => p.onDecide('accept')} aria-keyshortcuts="Y">{t.session.allow}<span aria-hidden="true" style={{ display: 'inline-flex' }}><Kbd accent>Y</Kbd></span></Button>

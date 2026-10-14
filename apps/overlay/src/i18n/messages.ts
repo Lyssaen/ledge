@@ -234,7 +234,7 @@ const fr = {
     pip: { new: (v: string) => `Ledge ${v} est prêt`, busy: 'Mise à jour en cours…', bad: 'La mise à jour a échoué', ok: 'Ledge est à jour' }
   },
   thread: {
-    you: 'Vous', previousTurn: 'Tour précédent', noTime: 'Horodatage indisponible', loading: 'Le fil arrive…',
+    you: 'Vous', loading: 'Le fil arrive…',
     empty: 'Le fil se remplit au prochain événement de l’agent.',
     liveLabel: 'Outil en cours',
     permission: 'Permission demandée', decided: { accept: 'Autorisée', deny: 'Refusée', unknown: 'Répondue dans le terminal' }, undecided: 'En attente de votre décision',
@@ -468,7 +468,7 @@ const en: Messages = {
     pip: { new: (v: string) => `Ledge ${v} is ready`, busy: 'Update in progress…', bad: 'The update failed', ok: 'Ledge is up to date' }
   },
   thread: {
-    you: 'You', previousTurn: 'Previous turn', noTime: 'No timestamp', loading: 'Loading the thread…',
+    you: 'You', loading: 'Loading the thread…',
     empty: 'The thread fills up with the agent’s next event.',
     liveLabel: 'Running tool',
     permission: 'Permission requested', decided: { accept: 'Allowed', deny: 'Denied', unknown: 'Answered in the terminal' }, undecided: 'Waiting for your decision',

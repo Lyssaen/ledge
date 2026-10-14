@@ -137,7 +137,7 @@ for (const theme of ['dark', 'light'] as const) {
       await received(d.received, 'session.thread', m => m.id === 'pim');
       d.emit({ type: 'session.thread', id: 'pim', items: [
         { kind: 'prompt', id: 'prompt-1', at: at(0), turn: 1, text: 'Corrige le reducer et relance les tests.' },
-        { kind: 'helper', id: 'h1', at: at(1), turn: 1, task: 'find the reducer consumers', agentType: 'Explore', state: 'exited' },
+        { kind: 'helper', id: 'h1', at: at(1), turn: 1, task: 'find the reducer consumers', agentType: 'Explore', state: 'working' },
         { kind: 'message', id: 'msg-h1', at: at(1.5), turn: 1, helperId: 'h1', text: 'Searching the callers of reduce().' },
         { kind: 'reply', id: 'report-h1', at: at(2), turn: 1, helperId: 'h1', text: 'Three consumers, all in the daemon.' },
         { kind: 'message', id: 'msg-1', at: at(3), turn: 1, text: 'Je corrige la transition puis je relance la suite.' },

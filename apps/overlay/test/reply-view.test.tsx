@@ -34,6 +34,14 @@ const idle = fakeSession('r', { state: 'idle', lastReply: { text, at } });
 const base = { preview: ['● Bash(pnpm test)', '  ⎿  112 passed'], visible: true, reading: false, draft: '', onDraft: () => {}, onBack: () => {}, onClose: () => {}, onDecide: () => {}, onReply: () => {}, onInterrupt: () => {}, onKill: () => {}, onFocus: () => {}, onToggleReading: () => {}, now };
 
 describe('<SessionView> your turn: the last reply read like a plan', () => {
+  it('a proposed plan (refused, not run) shows no ticked item', () => {
+    const plan = '# Add a README\n\n## Changes\n\n- Add README.md\n\n## Check\n\n- It renders';
+    const { container, rerender } = render(<SessionView {...base} session={fakeSession('p', { tool: 'codex', state: 'idle', lastReply: { text: plan, at, plan: true } })} />);
+    expect(container.querySelector('[data-item="done"], [data-item="verified"]')).toBeNull();
+    expect(container.querySelector('[data-reply-card]')).toHaveTextContent('Add README.md');
+    rerender(<SessionView {...base} session={fakeSession('p', { tool: 'codex', state: 'idle', lastReply: { text: plan, at } })} />);
+    expect(container.querySelector('[data-item="done"]')).not.toBeNull();
+  });
   it('opens a Markdown file cited in the structured reply without sending a reply', () => {
     const onDocument = vi.fn(); const onReply = vi.fn();
     const notes = fakeSession('n', { state: 'idle', lastReply: { at, text: '## Documents\n\n- [Lire le plan](docs/my plan.md)' } });

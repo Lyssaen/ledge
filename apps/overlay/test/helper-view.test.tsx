@@ -37,6 +37,18 @@ describe('<HelperView>', () => {
     fireEvent.click(container.querySelector('[data-back]')!);
     expect(onBack).toHaveBeenCalled();
   });
+  it('keeps the helper\'s live tool line under what the helper said after the call started', () => {
+    const live: ThreadItem[] = [
+      { kind: 'prompt', id: 'prompt-1', at: at(0), turn: 1, text: 'Review the reducer' },
+      { kind: 'helper', id: 'h3', at: at(1), turn: 1, task: 'scan the logs', agentType: 'Explore', state: 'working' },
+      { kind: 'message', id: 'msg-b1', at: at(2), turn: 1, helperId: 'h3', text: 'Looking at the logs.' },
+      { kind: 'tool', id: 'toolu_6', at: at(3), turn: 1, helperId: 'h3', tool: 'Grep', label: 'Grep · ERROR', status: 'running', files: [] },
+      { kind: 'message', id: 'msg-b2', at: at(4), turn: 1, helperId: 'h3', text: 'Still searching.' }
+    ];
+    const { container } = render(<HelperView session={fakeSession('a')} helperId="h3" items={live} visible onBack={() => {}} onClose={() => {}} theme="dark" paused />);
+    const kinds = [...container.querySelectorAll('[data-thread] > [data-item]')].map(e => e.getAttribute('data-item'));
+    expect(kinds).toEqual(['message', 'message', 'tools']);
+  });
   it('says a working helper is still waiting for its report, and survives an unknown helper', () => {
     const { container, rerender } = render(<HelperView session={fakeSession('a')} helperId="h2" items={items} visible onBack={() => {}} onClose={() => {}} theme="dark" paused />);
     expect(container).toHaveTextContent('Working');

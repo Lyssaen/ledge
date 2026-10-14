@@ -37,6 +37,11 @@ PaneGone fires 2s after tmux loses the pane. Should a session that comes back in
 `;
 
 describe('parseReply', () => {
+  it('a proposed plan reads its "Changes" and "Check" as what is to do, never as done or verified', () => {
+    const plan = '# Add a README\n\n## Changes\n\n- Add README.md\n\n## Check\n\n- It renders\n\n## Open questions\n\nWhich title?';
+    expect(parseReply(plan).sections.map(s => s.kind)).toEqual(['done', 'verified', 'questions']);
+    expect(parseReply(plan, { plan: true }).sections.map(s => s.kind)).toEqual(['other', 'other', 'questions']);
+  });
   it('reads the title, the lead and the sections of a structured report', () => {
     const d = parseReply(report);
     expect(d.structured).toBe(true);

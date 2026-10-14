@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { agentMessages, tailLines, TAIL_BYTES } from '../src/daemon/transcript.js';
+import { agentMessages, claudePlan, claudeTranscriptPath, codexPlan, tailLines, TAIL_BYTES } from '../src/daemon/transcript.js';
 
 let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ledge-')); });
@@ -60,5 +60,44 @@ describe('agentMessages', () => {
       { id: 'a1', at: '2026-10-13T10:00:01.000Z', text: 'Searching the callers of reduce().' },
       { id: 'a3', at: '2026-10-13T10:00:03.000Z', text: 'Three consumers.' }
     ]);
+  });
+});
+
+describe('codexPlan', () => {
+  const plan = (turn: string, text: string) => JSON.stringify({ timestamp: '2026-10-14T08:03:51.956Z', type: 'event_msg', payload: { type: 'item_completed', thread_id: 'th', turn_id: turn, item: { type: 'Plan', id: `${turn}-plan`, text } } });
+  it('gives the plan the turn proposed (Codex sends its Stop without a last message), never an older turn\'s', () => {
+    const p = join(dir, 'plan.jsonl');
+    writeFileSync(p, [
+      plan('t1', '# Old plan\n'),
+      JSON.stringify({ timestamp: '2026-10-14T08:03:51.960Z', type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '<proposed_plan>\n# New plan\n</proposed_plan>' }] } }),
+      plan('t2', '# New plan\n\n## Changes\n\n- Add README.md\n')
+    ].join('\n') + '\n');
+    expect(codexPlan(p, 't2')).toBe('# New plan\n\n## Changes\n\n- Add README.md');
+    expect(codexPlan(p, 't3')).toBeUndefined();
+    expect(codexPlan(join(dir, 'missing.jsonl'), 't2')).toBeUndefined();
+  });
+});
+
+describe('Claude Code transcript without hooks', () => {
+  it('lives under the projects folder, named after the cwd with every non alphanumeric character a dash', () => {
+    expect(claudeTranscriptPath('/home/jde/.ledge/my_app', 'u-1', { HOME: '/home/jde' })).toBe('/home/jde/.claude/projects/-home-jde--ledge-my-app/u-1.jsonl');
+    expect(claudeTranscriptPath('/w/p', 'u-1', { HOME: '/home/jde', CLAUDE_CONFIG_DIR: '/cfg/claude' })).toBe('/cfg/claude/projects/-w-p/u-1.jsonl');
+    // Claude Code shortens a folder name over 200 characters with a hash of its own: no guess.
+    expect(claudeTranscriptPath(`/${'a'.repeat(210)}`, 'u-1', { HOME: '/home/jde' })).toBeUndefined();
+  });
+  const entry = (type: string, content: unknown[], extra: Record<string, unknown> = {}) => JSON.stringify({ type, uuid: `${type}-${Math.random()}`, timestamp: '2026-10-14T09:00:00.000Z', message: { role: type, content }, ...extra });
+  const exit = (id: string, plan: string) => entry('assistant', [{ type: 'tool_use', id, name: 'ExitPlanMode', input: { plan, planFilePath: '/p.md' } }]);
+  it('the plan waiting for approval is the last ExitPlanMode call that has no result yet', () => {
+    const p = join(dir, 'claude-plan.jsonl');
+    writeFileSync(p, [
+      exit('toolu_1', '# Old plan'),
+      entry('user', [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'User rejected' }]),
+      exit('toolu_2', '# New plan\n\n1. Add README.md'),
+      JSON.stringify({ ...JSON.parse(exit('toolu_3', '# A helper plan')), isSidechain: true })
+    ].join('\n') + '\n');
+    expect(claudePlan(p)).toBe('# New plan\n\n1. Add README.md');
+    writeFileSync(p, [exit('toolu_1', '# Old plan'), entry('user', [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ok' }])].join('\n') + '\n');
+    expect(claudePlan(p)).toBeUndefined();
+    expect(claudePlan(join(dir, 'none.jsonl'))).toBeUndefined();
   });
 });
