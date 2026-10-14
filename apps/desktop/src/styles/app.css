@@ -201,7 +201,4 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .offline-notice span { color: var(--muted-foreground); }
 .offline-notice button { margin-left: auto; font: inherit; font-size: 10px; background: var(--sidebar-accent); color: var(--sidebar-foreground); border: 1px solid var(--input); border-radius: 6px; padding: 5px 9px; }
 .offline-notice.local-down { border-color: var(--danger-text); }
-.connection { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; }
-.dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; background: var(--muted-foreground); }
-.dot.green { background: var(--success); }
 .dot.offline-dot { background: var(--danger-text); }
