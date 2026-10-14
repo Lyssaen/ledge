@@ -80,6 +80,16 @@ describe('classify', () => {
     [{ kind: 'diff', tool: 'Write', text: '~/.bashrc' }, 'high', 'sensitive_path'],
     [{ kind: 'diff', tool: 'Write', text: 'a.ts\nb.ts' }, 'high', 'unknown'],
     [{ kind: 'diff', tool: 'Write', text: 'a,b.ts' }, 'high', 'unknown'],
+    [{ kind: 'permission', tool: 'Bash', text: 'cat -- -/../../../home/u/.ssh/id_ed25519' }, 'high', 'sensitive_path'],
+    [{ kind: 'permission', tool: 'Bash', text: 'grep -r key -- -/../..' }, 'high', 'sensitive_path'],
+    [{ kind: 'permission', tool: 'Bash', text: 'ls -- -/..' }, 'high', 'sensitive_path'],
+    [{ kind: 'permission', tool: 'Bash', text: 'git diff --no-index -- -/../../x a' }, 'high', 'sensitive_path'],
+    [{ kind: 'permission', tool: 'Bash', text: 'cat -- src/a.ts' }, 'low', 'read_only_command'],
+    [{ kind: 'permission', tool: 'Bash', text: 'grep -f/home/u/.ssh/id_ed25519 -r .' }, 'high', 'sensitive_path'],
+    [{ kind: 'permission', tool: 'Bash', text: 'rg -f/etc/shadow .' }, 'high', 'sensitive_path'],
+    [{ kind: 'permission', tool: 'Bash', text: 'git diff -O/etc/passwd' }, 'high', 'sensitive_path'],
+    [{ kind: 'permission', tool: 'Bash', text: 'git log --pretty=oneline' }, 'low', 'read_only_command'],
+    [{ kind: 'permission', tool: 'Bash', text: 'rg --pre-glob=x y' }, 'high', 'unsafe_flag'],
     [{ kind: 'question', text: 'Quel thème ?' }, 'low', 'question'],
     [{ kind: 'plan', text: 'Plan' }, 'high', 'plan']
   ])('%o → %s/%s', (input, risk, reason) => {

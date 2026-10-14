@@ -33,7 +33,9 @@ const PUBLISHES = /\b(npm|pnpm|yarn)\s+publish\b/;
 const PIPES_TO_SHELL = /\b(curl|wget)\b[^\n]*\|\s*(sudo\s+)?(ba|z|da)?sh\b/;
 /** Anything the shell could rewrite before the command runs (quotes, escapes, expansions, globs, braces, control characters) is out of reach of the word checks below. */
 const SHELL_SYNTAX = /[;&|<>`'"\\$*?[\]{}\x00-\x1f\x7f]/;
-const FORBIDDEN_FLAG = /^(--output|--pre|--hostname-bin|--ext-diff$|--textconv$|-c$|-exec$|-execdir$|-ok$|-okdir$|-delete$|-fprint|-fls$)/;
+const FORBIDDEN_FLAG = /^(--output|--hostname-bin|--ext-diff$|--textconv$|-c$|-exec$|-execdir$|-ok$|-okdir$|-delete$|-fprint|-fls$)/;
+/** ripgrep runs a program for `--pre`/`--pre-glob`; other tools have harmless `--pre…` options such as git's `--pretty`. */
+const RG_FORBIDDEN_FLAG = /^--pre/;
 const READ_ONLY = new Set(['ls', 'pwd', 'cat', 'head', 'tail', 'wc', 'rg', 'grep', 'find']);
 const GIT_READ_ONLY = new Set(['status', 'diff', 'log', 'show', 'rev-parse']);
 const GIT_BRANCH_FLAGS = new Set(['-a', '-v', '--list', '--show-current']);
@@ -50,9 +52,14 @@ function classifyShell(command: string, cwd: string): RiskVerdict {
   const first = words[0];
   if (!first || first.includes('=')) return high('unknown');
   const args = words.slice(1);
-  if (args.some(a => FORBIDDEN_FLAG.test(a))) return high('unsafe_flag');
-  const operand = (a: string): string => (a.startsWith('-') ? a.slice(a.indexOf('=') + 1 || a.length) : a);
-  if (args.some(a => { const v = operand(a); return v !== '' && (isSensitive(cwd, v) || !inside(cwd, v)); })) return high('sensitive_path');
+  const beforeDashes = args.includes('--') ? args.slice(0, args.indexOf('--')) : args;
+  if (args.some(a => FORBIDDEN_FLAG.test(a)) || (first === 'rg' && beforeDashes.some(a => RG_FORBIDDEN_FLAG.test(a)))) return high('unsafe_flag');
+  // After a bare `--` every word is an operand, even one that starts with a dash.
+  const dd = args.indexOf('--');
+  const bad = (v: string): boolean => v !== '' && (isSensitive(cwd, v) || !inside(cwd, v));
+  const flagBad = (a: string): boolean => a.includes('/') || a.includes('~') || bad(a.slice(a.indexOf('=') + 1 || a.length));
+  const checked = args.some((a, i) => dd !== -1 && i > dd ? a.startsWith('-') || bad(a) : a.startsWith('-') ? flagBad(a) : bad(a));
+  if (checked) return high('sensitive_path');
   if (READ_ONLY.has(first)) return low('read_only_command');
   if (first === 'git') {
     const sub = args[0];
