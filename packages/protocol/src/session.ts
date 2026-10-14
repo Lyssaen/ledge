@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RiskSchema, RiskReasonSchema } from './operations.js';
 
 export const ToolSchema = z.enum(['claude', 'codex', 'cursor']);
 export type Tool = z.infer<typeof ToolSchema>;
@@ -17,6 +18,9 @@ export const PendingSchema = z.object({
   text: z.string(),
   tool: z.string().optional(),
   options: z.array(z.string()).optional(),
+  /** How dangerous accepting it blindly would be, and why (absent from journals written before). */
+  risk: RiskSchema.optional(),
+  riskReason: RiskReasonSchema.optional(),
   source: z.enum(['hook', 'pane']),
   /** Set when the request comes from a helper (subagent): it is routed through its parent. */
   helperId: z.string().optional(),

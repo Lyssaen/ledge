@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SessionSchema, ToolSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema } from './chat.js';
+import { AuthenticationJsonSchema, OperationIdSchema, OperationReasonSchema, OperationStatusSchema } from './operations.js';
 import { DeviceSchema, PairErrorSchema, RegistrationJsonSchema } from './remote.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 
@@ -71,6 +72,9 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('pair.challenge'), options: z.record(z.unknown()), expiresAt: z.string().datetime() }),
   z.object({ type: z.literal('pair.done'), token: z.string(), deviceId: z.string() }),
   z.object({ type: z.literal('pair.error'), reason: PairErrorSchema }),
+  z.object({ type: z.literal('decide.challenge'), id: z.string(), pendingId: z.string(), pendingVersion: z.number().int().positive(), decision: z.literal('accept'), options: z.record(z.unknown()), expiresAt: z.string().datetime() }),
+  z.object({ type: z.literal('operation.received'), operationId: OperationIdSchema }),
+  z.object({ type: z.literal('operation.result'), operationId: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional() }),
   z.object({ type: z.literal('devices'), devices: z.array(DeviceSchema), origin: z.string().nullable(), listening: z.boolean() })
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
@@ -84,8 +88,13 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
    *  and list it. Both are answered with a `folder.listing`. */
   z.object({ type: z.literal('folder.list'), path: z.string().optional() }),
   z.object({ type: z.literal('folder.create'), parent: z.string().min(1), name: z.string().min(1) }),
-  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1) }),
-  z.object({ type: z.literal('session.decide'), id: z.string(), decision: z.enum(['accept', 'deny']) }),
+  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1), operationId: OperationIdSchema.optional(), pendingId: z.string().optional(), pendingVersion: z.number().int().positive().optional() }),
+  /** Local callers send `id` and `decision` only. A phone also names the request it saw (`pendingId`, `pendingVersion`), its operation, and for a high-risk accept a device check (`assertion`). */
+  z.object({ type: z.literal('session.decide'), id: z.string(), decision: z.enum(['accept', 'deny']), pendingId: z.string().optional(), pendingVersion: z.number().int().positive().optional(), operationId: OperationIdSchema.optional(), assertion: AuthenticationJsonSchema.optional() }),
+  /** The phone asks for a device-check challenge before accepting a request; answered with `decide.challenge`, or an `error` whose message is an OperationReason. */
+  z.object({ type: z.literal('decide.prepare'), id: z.string(), pendingId: z.string(), pendingVersion: z.number().int().positive(), decision: z.literal('accept') }),
+  /** Where did my operation end up (after a lost connection)? Answered with `operation.result`. */
+  z.object({ type: z.literal('operation.status'), operationId: OperationIdSchema }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),
   z.object({ type: z.literal('session.kill'), id: z.string() }),
   z.object({ type: z.literal('session.interrupt'), id: z.string() }),
