@@ -1083,9 +1083,25 @@ describe('machines list', () => {
     expect(gotC.find(m => m.type === 'machines')).toEqual({ type: 'machines', machines: [{ id: 'local', label: 'Local' }] });
     a.close(); b.close(); c.close(); await s.close();
   });
+  it('refuses a /ssh/ client with an invalid alias at the upgrade and keeps serving', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, ssh: async () => {} });
+    const bad = new WebSocket(`ws://127.0.0.1:${s.port}/ssh/bad%20alias!`, { headers: { origin: 'tauri://localhost' } });
+    const err = await new Promise<Error>(r => bad.on('error', r));
+    expect(err.message).toContain('401'); // verifyClient already rejects it, so the handler's 1008 branch is a defensive backstop
+    const a = await open(s.port); const gotA = collect(a);
+    await until(() => gotA.some(m => m.type === 'snapshot'));
+    a.close(); await s.close();
+  });
+  it('logs once when machines.json exists but is invalid', async () => {
+    const f = join(process.env.LEDGE_HOME!, 'machines.json'); writeFileSync(f, '{"trunc');
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, machinesFile: f });
+    await s.close();
+    const text = readFileSync(join(process.env.LEDGE_HOME!, 'daemon.log'), 'utf8');
+    expect(text.match(/machines\.json is invalid/g)).toHaveLength(1);
+  });
   it('ssh clients neither receive machines nor may set them', async () => {
-    const remote: unknown[] = [];
-    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, ssh: async (ws, _alias, _env) => { ws.on('message', d => { const m = JSON.parse(String(d)); if (m.type === 'machines.set') remote.push(m); }); } });
+    // The real chain (serveSsh/bridge) drops machines frames: see ssh-transport.test.ts. Here the daemon side only.
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, ssh: async () => {} });
     const r = await open(s.port, '/ssh/dev-server'); const gotR = collect(r);
     const a = await open(s.port); const gotA = collect(a);
     await until(() => gotA.some(m => m.type === 'machines'));

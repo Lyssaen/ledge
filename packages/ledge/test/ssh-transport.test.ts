@@ -67,6 +67,31 @@ describe('SSH application transport', () => {
     await until(() => got.length === 2); expect(got[1]?.message).toBe('snapshot.request');
     ws.close(); await until(() => child.exitCode !== null || child.signalCode !== null);
   });
+  it('bridge drops the daemon machines frame and a front machines.set, staying up', async () => {
+    const { wss, port } = await wsServer(), input = new PassThrough(), output = new PassThrough();
+    const got: unknown[] = []; let text = ''; output.on('data', b => { text += String(b); });
+    wss.on('connection', ws => { ws.send(JSON.stringify({ type: 'snapshot', sessions: [] })); ws.send(JSON.stringify({ type: 'machines', machines: [{ id: 'local', label: 'Local' }] })); ws.send(JSON.stringify({ type: 'error', message: 'after' })); ws.on('message', b => got.push(JSON.parse(String(b)))); });
+    const done = bridge({ input, output, port });
+    await until(() => text.includes('after')); expect(text).not.toContain('machines');
+    input.write('{"type":"machines.set","machines":[{"id":"local","label":"Local"}]}\n{"type":"snapshot.request"}\n');
+    await until(() => got.length === 1); expect(got).toEqual([{ type: 'snapshot.request' }]);
+    input.end(); await done;
+  });
+  it('serveSsh drops a remote machines frame and a front machines.set, link stays up', async () => {
+    const { wss, port } = await wsServer(); let child!: ChildProcessWithoutNullStreams;
+    wss.on('connection', ws => serveSsh(ws, 'server', { spawn: () => {
+      child = spawn(process.execPath, ['--input-type=module', '-e', `console.log(JSON.stringify({type:'snapshot',sessions:[]})); console.log(JSON.stringify({type:'machines',machines:[{id:'local',label:'Local'}]})); process.stdin.setEncoding('utf8'); process.stdin.on('data',data=>{for(const l of data.trim().split('\\n')){const m=JSON.parse(l);console.log(JSON.stringify({type:'error',message:m.type}));}});`]);
+      cleanup.push(() => { child.kill('SIGKILL'); }); return child;
+    } }));
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`), got: { type: string; message?: string }[] = [];
+    ws.on('message', b => got.push(JSON.parse(String(b)))); cleanup.push(() => ws.terminate());
+    await until(() => got.length >= 1); expect(got[0]).toMatchObject({ type: 'snapshot' });
+    ws.send(JSON.stringify({ type: 'machines.set', machines: [{ id: 'local', label: 'Local' }] }));
+    ws.send(JSON.stringify({ type: 'snapshot.request' }));
+    await until(() => got.some(m => m.type === 'error'));
+    expect(got.map(m => m.type)).toEqual(['snapshot', 'error']); expect(got[1]?.message).toBe('snapshot.request');
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+  });
   it('reports a missing remote bridge without marking the host ready', async () => {
     const { wss, port } = await wsServer();
     wss.on('connection', ws => serveSsh(ws, 'server', { spawn: () => spawn(process.execPath, ['-e', 'console.error("ledge: command not found"); process.exit(127)']) }));

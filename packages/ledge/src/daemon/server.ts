@@ -384,7 +384,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (req.url?.startsWith('/ssh/')) {
       if (remoteClients.size >= 20) { ws.close(1013, 'Too many remote connections'); return; }
       remoteClients.add(ws); ws.once('close', () => remoteClients.delete(ws));
-      const alias = SshAliasSchema.parse(req.url.slice(5));
+      const parsed = SshAliasSchema.safeParse(req.url.slice(5));
+      if (!parsed.success) { ws.close(1008, 'Invalid SSH alias'); remoteClients.delete(ws); return; }
+      const alias = parsed.data;
       void agentEnv().then(env => { if (ws.readyState === WebSocket.OPEN) (opts.ssh ?? serveSsh)(ws, alias, { env }); })
         .catch(e => { send(ws, { type: 'error', message: (e as Error).message }); ws.close(1011); });
       return;
