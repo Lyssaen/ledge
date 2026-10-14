@@ -12,6 +12,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { createDaemonUpdater } from '../src/update/run-update.js';
+import { DeviceStore, type MobileControl } from '../src/daemon/devices.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
@@ -790,5 +791,68 @@ describe('update.daemon', () => {
     await expect(a.next('update.failed', 200)).rejects.toThrow(/timeout/);
     release();
     await a.close(); await b.close();
+  });
+});
+
+describe('device commands', () => {
+  const cred = { id: 'c', publicKey: 'pk', counter: 0 };
+  const withMobile = async () => {
+    const devices = new DeviceStore({ path: join(process.env.LEDGE_HOME!, 'devices.json') });
+    const configured: (string | null)[] = [];
+    const mobile: MobileControl = { devices, state: () => ({ origin: 'https://pc.tail.ts.net', listening: true }), configure: async o => { configured.push(o); } };
+    await srv.close();
+    srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env }), mobile });
+    return { devices, configured };
+  };
+  const fakeRemote = () => {
+    const handlers: Record<string, ((...a: any[]) => void)[]> = {}; const closed: number[] = [];
+    const sock = {
+      readyState: 1, closed, send() {}, on(ev: string, fn: (...a: any[]) => void) { (handlers[ev] ??= []).push(fn); return sock; },
+      close(code?: number) { closed.push(code ?? 1000); for (const h of handlers.close ?? []) h(); }
+    };
+    return sock;
+  };
+
+  it('without mobile, the three commands answer an error', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    for (const m of [{ type: 'devices' }, { type: 'device.revoke', id: 'x' }, { type: 'mobile.configure', origin: null }] as const) {
+      c.send(m);
+      expect(await c.next('error')).toMatchObject({ message: 'mobile not available' });
+    }
+    await c.close();
+  });
+  it('lists devices with the origin and listening state', async () => {
+    const { devices } = await withMobile();
+    const { device } = await devices.create('iPhone', cred);
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'devices' });
+    expect(await c.next('devices')).toEqual({ type: 'devices', devices: [expect.objectContaining({ id: device.id, name: 'iPhone', hasKey: true })], origin: 'https://pc.tail.ts.net', listening: true });
+    await c.close();
+  });
+  it("device.revoke closes that device's open sockets with 4403 and tells local peers", async () => {
+    const { devices } = await withMobile();
+    const { device } = await devices.create('iPhone', cred);
+    const other = await devices.create('iPad', cred);
+    const mine = fakeRemote(); const theirs = fakeRemote();
+    srv.attach(mine, { kind: 'remote', deviceId: device.id });
+    srv.attach(theirs, { kind: 'remote', deviceId: other.device.id });
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'device.revoke', id: device.id });
+    const m = await c.next('devices');
+    expect(m.devices.map((d: { id: string }) => d.id)).toEqual([other.device.id]);
+    expect(mine.closed).toEqual([4403]);
+    expect(theirs.closed).toEqual([]);
+    expect(devices.get(device.id)).toBeUndefined();
+    c.send({ type: 'device.revoke', id: device.id });
+    expect(await c.next('error')).toMatchObject({ message: 'unknown device' });
+    await c.close();
+  });
+  it('mobile.configure hands the origin to the control and broadcasts the new state', async () => {
+    const { configured } = await withMobile();
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'mobile.configure', origin: 'https://pc.tail.ts.net' });
+    await c.next('devices');
+    expect(configured).toEqual(['https://pc.tail.ts.net']);
+    await c.close();
   });
 });

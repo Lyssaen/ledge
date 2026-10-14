@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { PROTOCOL_PORT, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { PROTOCOL_PORT, REMOTE_CLOSE, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
@@ -20,6 +20,7 @@ import type { createDaemonUpdater } from '../update/run-update.js';
 import { createPeers, type Peer, type PeerContext, type PeerSocket } from './peers.js';
 import { toRemote } from './remote/project.js';
 import { remoteMayRun } from './remote/rights.js';
+import type { MobileControl } from './devices.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -77,7 +78,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater> }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; mobile?: MobileControl }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -113,6 +114,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); }
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
+  const devicesMessage = (m: MobileControl): ServerMessage => ({ type: 'devices', devices: m.devices.list(), ...m.state() });
   const sendSnapshot = (peer: Peer) => {
     peer.send({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: opts.daemon } : {}) });
     for (const [id, lines] of previews) if (store.get(id)) peer.send({ type: 'session.preview', id, lines });
@@ -194,6 +196,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const READ_ONLY = 'session started without ledge, read only';
   const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
   const NOT_TAKEN = 'the terminal did not take it';
+  const NO_MOBILE = 'mobile not available';
   const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
 
   async function handle(peer: Peer, msg: ClientMessage): Promise<void> {
@@ -308,6 +311,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'update.daemon':
         if (!opts.updater) return peer.send({ type: 'update.failed', version: msg.version, reason: 'no-systemd' });
         return opts.updater.update(msg.version, broadcast, m => peer.send(m));
+      case 'devices':
+        return peer.send(opts.mobile ? devicesMessage(opts.mobile) : { type: 'error', message: NO_MOBILE });
+      case 'device.revoke': {
+        if (!opts.mobile) return peer.send({ type: 'error', message: NO_MOBILE });
+        if (!(await opts.mobile.devices.revoke(msg.id))) return peer.send({ type: 'error', id: msg.id, message: 'unknown device' });
+        const closed = peers.closeDevice(msg.id, REMOTE_CLOSE.revoked);
+        log(`revoked device ${msg.id} (${closed} open connection${closed === 1 ? '' : 's'} closed)`);
+        return broadcast(devicesMessage(opts.mobile));
+      }
+      case 'mobile.configure':
+        if (!opts.mobile) return peer.send({ type: 'error', message: NO_MOBILE });
+        await opts.mobile.configure(msg.origin);
+        return broadcast(devicesMessage(opts.mobile));
       case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast, msg.tool);
       case 'chat.cancel': return chat.cancel(msg.qid);
       case 'chat.reset': return chat.reset(broadcast);
