@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -270,7 +270,8 @@ describe('remote entry', () => {
     await remote.close();
     expect(await p.closed).toBe(1001);
     expect(await silent.closed).toBe(1001);
-    expect(srv.peers.all().filter(x => x.ctx.kind === 'remote')).toEqual([]);
+    // The client sees the close frame before the server socket emits its own 'close' (which removes the peer): wait for it.
+    await vi.waitFor(() => expect(srv.peers.all().filter(x => x.ctx.kind === 'remote')).toEqual([]));
   });
 });
 

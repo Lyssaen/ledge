@@ -131,10 +131,12 @@ test('confirm sends decide.prepare then one decide with an assertion', async ({ 
 });
 
 test('a challenge that expired while held is not used: a new one is requested and another tap is required', async ({ page }) => {
-  const { d } = await setup(page, 'old', 1500);
+  // The minute is counted on the phone from the receipt: move the phone clock instead of waiting.
+  await page.addInitScript(() => { const real = Date.now.bind(Date); (window as unknown as { __skew: number }).__skew = 0; Date.now = () => real() + (window as unknown as { __skew: number }).__skew; });
+  const { d } = await setup(page, 'old');
   await page.getByRole('button', { name: 'Vérifier et autoriser' }).click();
   await expect(page.getByRole('button', { name: 'Confirmer avec mon appareil' })).toBeEnabled();
-  await page.waitForTimeout(1700);
+  await page.evaluate(() => { (window as unknown as { __skew: number }).__skew = 58_000; });
   await page.getByRole('button', { name: 'Confirmer avec mon appareil' }).click();
   await expect(page.getByText('La vérification a expiré. Recommencez.')).toBeVisible();
   expect(of(d.received, 'decide.prepare')).toHaveLength(2);
