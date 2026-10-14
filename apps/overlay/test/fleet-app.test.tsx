@@ -21,8 +21,11 @@ describe('the island and the daemon machines list', () => {
     d.machines([{ id: 'local', label: 'Local' }]);
     await until(() => d.received.some(m => m.type === 'machines.set'));
     expect(d.received.find(m => m.type === 'machines.set')).toEqual({ type: 'machines.set', machines: [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Devbox', ssh: 'dev-server' }] });
-    expect(localStorage.getItem('ledge.machines')).toBeNull();
+    expect(localStorage.getItem('ledge.machines')).not.toBeNull(); // kept until the daemon confirms
     expect(api.fleet!.machinesSource()).toBe('daemon');
+    d.machines([{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Devbox', ssh: 'dev-server' }]);
+    await until(() => localStorage.getItem('ledge.machines') === null);
+    expect(api.fleet!.machines().map(m => m.id)).toEqual(['local', 'dev']);
     api.close();
   });
 });

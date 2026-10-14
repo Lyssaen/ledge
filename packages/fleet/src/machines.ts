@@ -33,7 +33,7 @@ export interface Fleet {
 export const LOCAL_MACHINE: MachineConfig = { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' };
 /** The shared list rules live in the protocol; the fleet only pins the local URL (spec §5.1). */
 export function parseMachines(raw: unknown): MachineConfig[] {
-  const list = MachinesSchema.parse(Array.isArray(raw) ? raw.map(m => { const { url: _url, ...rest } = (m ?? {}) as Record<string, unknown>; return rest; }) : raw);
+  const list = MachinesSchema.parse(Array.isArray(raw) ? raw.map(m => { const rest = { ...(m ?? {}) } as Record<string, unknown>; delete rest.url; return rest; }) : raw);
   return list.map((m, i) => i === 0 ? { ...m, url: LOCAL_MACHINE.url } : m);
 }
 export function machineUrl(machine: MachineConfig, local: MachineConfig): string {

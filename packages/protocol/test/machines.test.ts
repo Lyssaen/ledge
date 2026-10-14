@@ -5,6 +5,7 @@ const local = { id: 'local', label: 'Local' };
 const dev = { id: 'dev', label: 'Devbox', ssh: 'dev-server' };
 
 describe('machines schema', () => {
+  it('rejects an empty list', () => { expect(MachinesSchema.safeParse([]).success).toBe(false); });
   it('accepts the local machine first then ssh aliases', () => {
     expect(MachinesSchema.parse([local, dev])).toEqual([local, dev]);
     expect(MachinesSchema.parse([{ id: 'local', label: '  Local  ' }])[0]!.label).toBe('Local');

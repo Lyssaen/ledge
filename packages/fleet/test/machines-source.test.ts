@@ -1,23 +1,23 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { Machines, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
-import { LOCAL_MACHINE } from '../src/machines';
+import { LOCAL_MACHINE, loadMachines } from '../src/machines';
 import type { DaemonClient, DaemonStatus } from '../src/client';
 import { fakeSession } from './mockDaemon';
 
 const remote = { id: 'server', label: 'dev-server', url: 'ws://127.0.0.1:47832', ssh: 'dev-server' };
 function peer() {
-  const sent: unknown[] = []; let onMsg = (_: ServerMessage) => {}; let onSt = (_: DaemonStatus) => {}; let status: DaemonStatus = 'connecting'; let connects = 0;
-  const client: DaemonClient = { connect() { connects++; }, close() {}, send(m) { sent.push(m); }, status: () => status, onMessage(fn) { onMsg = fn; return () => {}; }, onStatus(fn) { onSt = fn; return () => {}; } };
-  return { client, sent, connects: () => connects, set(s: DaemonStatus) { status = s; onSt(s); }, emit(m: ServerMessage) { onMsg(m); } };
+  const sent: unknown[] = []; let onMsg = (_: ServerMessage) => {}; let onSt = (_: DaemonStatus) => {}; let status: DaemonStatus = 'connecting'; let connects = 0, closes = 0;
+  const client: DaemonClient = { connect() { connects++; }, close() { closes++; }, send(m) { sent.push(m); }, status: () => status, onMessage(fn) { onMsg = fn; return () => {}; }, onStatus(fn) { onSt = fn; return () => {}; } };
+  return { client, sent, connects: () => connects, closes: () => closes, set(s: DaemonStatus) { status = s; onSt(s); }, emit(m: ServerMessage) { onMsg(m); } };
 }
 // A remote peer's snapshot must echo its ssh alias, or the fleet rejects it as an old local daemon.
 const snap = (ids: string[], sshAlias?: string): ServerMessage => ({ type: 'snapshot', ...(sshAlias ? { sshAlias } : {}), sessions: ids.map(id => fakeSession(id)), recents: [], daemon: { version: '0.4.0', install: 'npm', systemd: true, routing: true } });
 const machinesMsg = (machines: Machines): ServerMessage => ({ type: 'machines', machines });
 const setSent = (p: { sent: unknown[] }) => p.sent.filter(m => (m as { type: string }).type === 'machines.set');
-function setup() {
+function setup(initial = [LOCAL_MACHINE]) {
   const local = peer(), server = peer(), extra = peer(); let creates = 0; const made: string[] = [];
-  const api = createFleetClient([LOCAL_MACHINE], o => { creates++; made.push(o.url); return o.url === LOCAL_MACHINE.url ? local.client : o.url.endsWith('/ssh/dev-server') ? server.client : extra.client; }, { machinesFromDaemon: true });
+  const api = createFleetClient(initial, o => { creates++; made.push(o.url); return o.url === LOCAL_MACHINE.url ? local.client : o.url.endsWith('/ssh/dev-server') ? server.client : extra.client; }, { machinesFromDaemon: true });
   const got: ServerMessage[] = []; api.onMessage(m => got.push(m));
   api.connect(); local.set('open'); local.emit(snap(['a']));
   return { api, local, server, extra, got, made, creates: () => creates };
@@ -49,13 +49,15 @@ describe('machines from the daemon', () => {
     expect(local.sent.at(-1)).toEqual({ type: 'machines.set', machines: [{ id: 'local', label: 'Local' }, { id: 'server', label: 'dev-server', ssh: 'dev-server' }] });
     expect(JSON.stringify(local.sent.at(-1))).not.toContain('url');
   });
-  it('migrates a richer local list once, then clears the local key', () => {
+  it('migrates a richer local list, clearing the local key only once the daemon confirms', () => {
     localStorage.setItem('ledge.machines', JSON.stringify([LOCAL_MACHINE, remote]));
     const { local } = setup();
     local.emit(machinesMsg([{ id: 'local', label: 'Local' }]));
     expect(setSent(local)).toHaveLength(1);
+    expect(localStorage.getItem('ledge.machines')).not.toBeNull(); // kept until the daemon confirms
+    local.emit(machinesMsg([{ id: 'local', label: 'Local' }, { id: 'server', label: 'dev-server', ssh: 'dev-server' }]));
     expect(localStorage.getItem('ledge.machines')).toBeNull();
-    local.emit(machinesMsg([{ id: 'local', label: 'Local' }])); // a second plain list migrates nothing more
+    local.emit(machinesMsg([{ id: 'local', label: 'Local' }])); // once cleared, a plain list migrates nothing more
     expect(setSent(local)).toHaveLength(1);
   });
   it('the first front connected wins: a daemon list already filled leaves the local one aside', () => {
@@ -96,6 +98,78 @@ describe('machines from the daemon', () => {
     expect(api.fleet!.machinesSource()).toBe('local');
     expect(api.fleet!.machines().map(m => m.id)).toEqual(['local']);
     expect(got.length).toBe(n);
+  });
+});
+
+describe('migration of a stored list (the island starts from it)', () => {
+  const today = new Date().toISOString().slice(0, 10), at = `${today}T10:00:00.000Z`;
+  const stored = () => localStorage.setItem('ledge.machines', JSON.stringify([LOCAL_MACHINE, remote]));
+  const start = () => { const s = setup(loadMachines()); s.server.set('open'); s.server.emit(snap([], remote.ssh)); return s; };
+  const daemonLocalOnly = machinesMsg([{ id: 'local', label: 'Local' }]);
+  const wireList = [{ id: 'local', label: 'Local' }, { id: 'server', label: 'dev-server', ssh: 'dev-server' }];
+  it('the daemon\'s bare local neither tears the peer down nor clears the stored list; machines.set carries the list', () => {
+    stored(); const { api, local, server } = start();
+    local.emit(daemonLocalOnly);
+    expect(server.closes()).toBe(0);
+    expect(localStorage.getItem('ledge.machines')).not.toBeNull();
+    expect(api.fleet!.machines().map(m => m.id)).toEqual(['local', 'server']);
+    expect(setSent(local)).toEqual([{ type: 'machines.set', machines: wireList }]);
+    expect(JSON.stringify(setSent(local))).not.toContain('url');
+    local.emit(daemonLocalOnly); // a reconnect after a failed write resends
+    expect(setSent(local)).toHaveLength(2);
+  });
+  it('the confirming broadcast clears the stored list and keeps the same peer', () => {
+    stored(); const { api, local, server, made } = start();
+    const connects = server.connects();
+    local.emit(daemonLocalOnly);
+    local.emit(machinesMsg(wireList));
+    expect(localStorage.getItem('ledge.machines')).toBeNull();
+    expect(api.fleet!.machines().map(m => m.id)).toEqual(['local', 'server']);
+    expect(server.closes()).toBe(0); expect(server.connects()).toBe(connects);
+    expect(made.filter(u => u.endsWith('/ssh/dev-server'))).toHaveLength(1);
+  });
+  it('a chat bound to the remote survives the migration', () => {
+    stored();
+    localStorage.setItem('ledge.fleet.history', JSON.stringify({ day: today, turns: [{ qid: 'q1', question: 'q', askedAt: at, steps: [], answer: 'a', answeredAt: at, machineId: 'server' }], bindings: [['q1', { machine: 'server', raw: 'q1' }]], resetAt: '' }));
+    const { api, local, server, got } = start();
+    local.emit(daemonLocalOnly);
+    local.emit(machinesMsg(wireList));
+    server.emit({ type: 'chat.history', turns: [{ qid: 'q1', question: 'q', askedAt: at, steps: [], answer: 'a', answeredAt: at }] });
+    const last = (got.filter(m => m.type === 'chat.history').at(-1) as Extract<ServerMessage, { type: 'chat.history' }>).turns;
+    expect(last.map(t => t.qid)).toEqual(['q1']);
+    expect(api.fleet!.turnMachine('q1')?.id).toBe('server');
+    api.send({ type: 'session.relay', qid: 'q1' });
+    expect(server.sent.at(-1)).toEqual({ type: 'session.relay', qid: 'q1' });
+    expect(got.some(m => m.type === 'error' && (m as { message: string }).message === 'Unknown conversation destination')).toBe(false);
+  });
+});
+
+describe('configure and old daemons', () => {
+  it('in daemon mode configure throws while the local socket is closed, and sends nothing', () => {
+    const { api, local } = setup();
+    local.emit(machinesMsg([{ id: 'local', label: 'Local' }]));
+    local.set('unreachable');
+    expect(() => api.fleet!.configure([LOCAL_MACHINE, remote])).toThrow(expect.objectContaining({ name: 'DaemonOffline' }));
+    expect(setSent(local)).toHaveLength(0);
+  });
+  it('a daemon that never sends machines keeps the source local and configure applies locally', () => {
+    const { api, local } = setup();
+    local.emit({ type: 'session.removed', id: 'zzz' });
+    expect(api.fleet!.machinesSource()).toBe('local');
+    api.fleet!.configure([LOCAL_MACHINE, remote]);
+    expect(JSON.parse(localStorage.getItem('ledge.machines')!).map((m: { id: string }) => m.id)).toEqual(['local', 'server']);
+    expect(api.fleet!.machines().map(m => m.id)).toEqual(['local', 'server']);
+    expect(setSent(local)).toHaveLength(0);
+  });
+});
+
+describe('loadMachines with a tunnel-era list', () => {
+  it('drops every stored url and pins the local one', () => {
+    localStorage.setItem('ledge.machines', JSON.stringify([{ id: 'local', label: 'Local', url: 'ws://127.0.0.1:1' }, { id: 'server', label: 's', url: 'ws://127.0.0.1:47833', ssh: 'dev-server' }]));
+    const list = loadMachines();
+    expect(list.map(m => m.id)).toEqual(['local', 'server']);
+    expect(list[0]!.url).toBe(LOCAL_MACHINE.url);
+    expect(list[1]).toEqual({ id: 'server', label: 's', ssh: 'dev-server' });
   });
 });
 

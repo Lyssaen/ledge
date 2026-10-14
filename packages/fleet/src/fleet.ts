@@ -108,13 +108,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'machines') {
       if (machine !== 'local' || !opts.machinesFromDaemon) return;
       let next: MachineConfig[]; try { next = parseMachines(m.machines); } catch { return; }
-      if (source === 'local') {
-        source = 'daemon';
-        // First front connected wins: only a daemon list reduced to `local` takes the richer local one, once.
-        const mine = loadMachines(prefix);
-        if (next.length === 1 && mine.length > 1) p.client.send({ type: 'machines.set', machines: toWire(mine) });
-        try { localStorage.removeItem(MACHINES_KEY); } catch { /* ignore */ }
-      }
+      const mine = next.length === 1 ? loadMachines(prefix) : [];
+      source = 'daemon';
+      // First front connected wins: only a daemon list reduced to `local` takes the richer local one. Nothing is applied and the
+      // stored list is kept until the daemon broadcasts the confirmed list, so peers and bindings stay put and a failed write is retried on reconnect.
+      if (next.length === 1 && mine.length > 1) { p.client.send({ type: 'machines.set', machines: toWire(mine) }); return; }
+      try { localStorage.removeItem(MACHINES_KEY); } catch { /* ignore */ }
       apply(next);
       return;
     }
@@ -240,10 +239,13 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       select(id) { if (!peers.has(id)) return; selected = id; publish(); },
       configure(raw) {
         const next = parseMachines(raw);
-        // The permanent local client is also used by the app updater.
-        if (next[0]!.url !== configs[0]!.url) throw new Error('The local daemon URL cannot change');
-        // Daemon-sourced: ask the daemon and wait for its broadcast, which `receive` applies.
-        if (source === 'daemon') { peers.get('local')!.client.send({ type: 'machines.set', machines: toWire(next) }); return; }
+        // (parseMachines pins the local url, so the permanent local client, also used by the app updater, cannot change.)
+        // Daemon-sourced: ask the daemon and wait for its broadcast, which `receive` applies. A closed socket would drop the request silently.
+        if (source === 'daemon') {
+          const local = peers.get('local')!.client;
+          if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
+          local.send({ type: 'machines.set', machines: toWire(next) }); return;
+        }
         localStorage.setItem(MACHINES_KEY, JSON.stringify(next));
         apply(next);
       },
