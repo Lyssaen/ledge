@@ -17,6 +17,9 @@ export async function updateAtStartup(deps: StartupUpdateDeps = {}): Promise<Sta
     if (!u) return 'none';
     const from = await (deps.version ?? appVersion)();
     if (from) set('desktop.update.from', from);
+    // A manifest ahead of the installed binary would otherwise reinstall on every start: one attempt per version.
+    if (get('desktop.update.attempted') === u.version && from !== u.version) return 'skipped';
+    set('desktop.update.attempted', u.version);
     await u.downloadAndInstall(() => {});
     await (deps.relaunch ?? relaunchApp)();
     return 'installed';

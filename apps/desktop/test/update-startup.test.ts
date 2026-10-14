@@ -39,4 +39,22 @@ describe('updateAtStartup', () => {
   it('outside the app (browser, tests) the real bridge finds nothing to install', async () => {
     expect(await updateAtStartup()).toBe('none');
   });
+  it('remembers the version it installs and does not reinstall it when the binary still is not that version', async () => {
+    const { check, install } = release('0.6.0'); const relaunch = vi.fn(async () => {});
+    expect(await updateAtStartup({ check, relaunch, version: async () => '0.5.2' })).toBe('installed');
+    expect(localStorage.getItem('desktop.update.attempted')).toBe('0.6.0');
+    expect(await updateAtStartup({ check, relaunch, version: async () => '0.5.2' })).toBe('skipped');
+    expect(install).toHaveBeenCalledOnce(); expect(relaunch).toHaveBeenCalledOnce();
+  });
+  it('still installs a newer release than the one attempted before', async () => {
+    localStorage.setItem('desktop.update.attempted', '0.6.0');
+    const { check, install } = release('0.7.0');
+    expect(await updateAtStartup({ check, relaunch: async () => {}, version: async () => '0.5.2' })).toBe('installed');
+    expect(install).toHaveBeenCalledOnce();
+  });
+  it('records the attempt before downloading, so a crash during install is not retried either', async () => {
+    const broken = { version: '0.6.0', notes: '', downloadAndInstall: vi.fn(async () => { throw new Error('network'); }) };
+    expect(await updateAtStartup({ check: async () => broken, relaunch: async () => {}, version: async () => '0.5.2' })).toBe('failed');
+    expect(localStorage.getItem('desktop.update.attempted')).toBe('0.6.0');
+  });
 });
