@@ -195,7 +195,7 @@ paramètre et que les deux fronts ne se marchent pas dessus s'ils partageaient u
 | `desktop.panel` | largeur en % du panneau de conversation, agrandi ou non |
 | `desktop.drafts` | brouillon par id qualifié, et celui du chat Ledge ; purgé quand la session est retirée |
 | `desktop.thread` | sections repliées et position de lecture par id qualifié |
-| `desktop.theme`, `desktop.lang`, `desktop.accent`, `desktop.scale`, `desktop.motion` | Affichage |
+| `desktop.theme`, `desktop.lang`, `desktop.accent`, `desktop.handleScale`, `desktop.panelScale`, `desktop.reducedMotion` | Affichage |
 | `desktop.tool` | harnais par défaut du formulaire de lancement |
 | `desktop.sounds`, `desktop.notify`, `desktop.dnd` | Sons, mode d'alerte à la fin d'une tâche, Ne pas déranger |
 | `desktop.update.*` | mêmes clés que l'île (`auto`, `dismissed`, `checkedAt`, `from`) |

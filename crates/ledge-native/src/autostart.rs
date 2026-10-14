@@ -1,5 +1,5 @@
 /// The marker left once launch at login was switched on by default, so a later "off" in Settings sticks across restarts
-/// and upgrades. It lives in the app's config dir (`%APPDATA%\be.paradow.ledge`).
+/// and upgrades. It lives in the app's config dir (`%APPDATA%\<app identifier>`; the island's is `be.paradow.ledge`).
 pub const MARKER: &str = "autostart-default";
 
 /// Whether this start should switch launch at login on: the first start of an installed build only.

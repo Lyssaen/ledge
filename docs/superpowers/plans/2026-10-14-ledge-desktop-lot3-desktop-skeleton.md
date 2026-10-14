@@ -1005,7 +1005,7 @@ mod tests {
 
 `windows/hooks.nsh` : copie de celui de l'île (il utilise `${PRODUCTNAME}` et `${BUNDLEID}`, donc nettoie les bonnes clés).
 
-- [ ] **Step 4: Run** : `pnpm --filter desktop test tauri-config` → PASS. Puis **en CI** après la tâche 9 (le workflow build Desktop seulement après la tâche 9), ou sur Windows : `cd apps/desktop && pnpm tauri build` → `src-tauri/target/release/bundle/nsis/Ledge Desktop_0.5.2_x64-setup.exe` ; `cargo test --workspace` à la racine.
+- [ ] **Step 4: Run** : `pnpm --filter desktop test tauri-config` → PASS. Puis **en CI** après la tâche 9 (le workflow build Desktop seulement après la tâche 9), ou sur Windows : `cd apps/desktop && pnpm tauri build` → `target/release/bundle/nsis/Ledge Desktop_0.5.2_x64-setup.exe` ; `cargo test --workspace` à la racine.
 
 - [ ] **Step 5: Commit** : `git add Cargo.toml apps/desktop && git commit -m "feat(desktop): Tauri app with tray, window state and updater"`
 
@@ -1162,7 +1162,7 @@ it('refuses to touch anything when one file lacks a single version line', () => 
           pnpm tauri build
 ```
 
-et dans l'étape Publish : localiser `apps/desktop/src-tauri/target/release/bundle/nsis/Ledge Desktop_$($version)_x64-setup.exe`, le copier en `Ledge.Desktop_$($version)_x64-setup.exe` (et son `.sig`), `node scripts/latest-json.mjs $env:VERSION_TAG "Ledge.Desktop_${version}_x64-setup.exe" notes.md latest-desktop.json`, uploader les deux exe, les deux `.sig` et les deux manifestes avec `--clobber`. Le bloc d'installation de la release note gagne une seconde ligne pour Desktop (`__DESKTOP_EXE__/__DESKTOP_SHA__`). `cargo test --workspace` déjà en place (lot 1). Chemins `set-version.mjs` : `node scripts/set-version.mjs` depuis la racine dans les deux jobs. Dry run : « Show the updater manifest » affiche aussi `latest-desktop.json`.
+et dans l'étape Publish : localiser `target/release/bundle/nsis/Ledge Desktop_$($version)_x64-setup.exe`, le copier en `Ledge.Desktop_$($version)_x64-setup.exe` (et son `.sig`), `node scripts/latest-json.mjs $env:VERSION_TAG "Ledge.Desktop_${version}_x64-setup.exe" notes.md latest-desktop.json`, uploader les deux exe, les deux `.sig` et les deux manifestes avec `--clobber`. Le bloc d'installation de la release note gagne une seconde ligne pour Desktop (`__DESKTOP_EXE__/__DESKTOP_SHA__`). `cargo test --workspace` déjà en place (lot 1). Chemins `set-version.mjs` : `node scripts/set-version.mjs` depuis la racine dans les deux jobs. Dry run : « Show the updater manifest » affiche aussi `latest-desktop.json`.
 
 `README.md` : section « Ledge Desktop » (3 lignes : `pnpm --filter desktop dev` + daemon, installeur `Ledge.Desktop_x.y.z_x64-setup.exe` sur la même release, mêmes versions).
 

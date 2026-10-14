@@ -22,7 +22,7 @@ export function useOsReducedMotion(): boolean {
   return useSyncExternalStore(subscribeOs, osSnapshot, () => false);
 }
 
-/** One store per key prefix: the island keeps `ledge.reducedMotion`, Desktop gets `desktop.reducedMotion` (spec §7). */
+/** One store per key prefix: the island keeps `ledge.reducedMotion`, Desktop gets `desktop.reducedMotion` (spec §7, the key is `<prefix>.reducedMotion`). */
 export function createMotionPreferences(prefix: string) {
   const KEY = `${prefix}.reducedMotion`;
   function loadReduced(): boolean {
