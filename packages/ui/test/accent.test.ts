@@ -32,6 +32,11 @@ describe('accent persistence', () => {
     expect(localStorage.getItem('ledge.accent')).toBeNull();
     expect(loadAccent()).toBeNull();
   });
+  it('keeps each prefix apart', () => {
+    saveAccent('#336699', 'desktop');
+    expect(loadAccent()).toBeNull();
+    expect(loadAccent('desktop')).toBe('#336699');
+  });
   it('a stored garbage value is treated as unset', () => {
     localStorage.setItem('ledge.accent', 'blue');
     expect(loadAccent()).toBeNull();

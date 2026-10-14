@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@ledge/protocol": "workspace:*",
+    "@ledge/ui": "workspace:*",
     "@tauri-apps/api": "^2.6.0",
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",
     "@tauri-apps/plugin-process": "^2.4.0",
