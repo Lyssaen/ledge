@@ -47,6 +47,8 @@ export type TopicSource = z.infer<typeof TopicSourceSchema>;
 export const SessionSchema =z.object({
   /** Origin is annotated by the overlay, never used as an unqualified session id on the wire. */
   machineId: z.string().optional(), machineName: z.string().optional(), repoId: z.string().optional(),
+  /** Annotated by the fleet when its machine is unreachable and the last snapshot is kept (keepStale, spec 2026-10-14 §6). */
+  offline: z.boolean().optional(),
   id: z.string().min(1),
   name: z.string().min(1),
   tool: ToolSchema,

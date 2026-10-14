@@ -33,6 +33,13 @@ it('keeps its history and machines under the given prefix', () => {
   expect(localStorage.getItem('ledge.machines')).toBeNull();
 });
 
+it('writes the fleet history under the given prefix', () => {
+  const local = peer();
+  createFleetClient([LOCAL_MACHINE], () => local.client, { prefix: 'desktop' }).connect(); // connect() persists the history
+  expect(localStorage.getItem('desktop.fleet.history')).not.toBeNull();
+  expect(localStorage.getItem('ledge.fleet.history')).toBeNull();
+});
+
 describe('multi-machine connections', () => {
   it('never mistakes an old local daemon answering an SSH URL for the remote host', () => {
     const { client, server, snapshot, got, local } = setup();
