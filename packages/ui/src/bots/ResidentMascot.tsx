@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { useI18n } from '../i18n/lang';
+import { useUiCopy } from '../i18n/copy';
 
 export type ResidentGesture = 'blink' | 'curious' | 'hello' | 'boop' | 'happy' | 'look' | 'stretch' | 'tap' | 'pulse' | 'nod' | 'yawn' | 'sleep';
 
@@ -23,7 +23,7 @@ const clamp = (n: number, range: number) => Math.max(-range, Math.min(range, n))
 
 /** A vector portrait with independent gaze, pose, antenna and hand layers. It belongs to Ledge, not an agent tool. */
 export function ResidentMascot({ size, theme, paused = false, frozen = false, reducedMotion = false, dnd = false, pointer = null, center, gestureKey, gestureKind = 'hello', boopKey }: ResidentMascotProps) {
-  const { t } = useI18n();
+  const t = useUiCopy();
   const [gesture, setGesture] = useState<ResidentGesture | null>(null);
   const [hovered, setHovered] = useState(false);
   const clearRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -83,6 +83,6 @@ export function ResidentMascot({ size, theme, paused = false, frozen = false, re
       <g className="resident-gaze"><g className="resident-blink"><g className="resident-eyes"><rect x="35" y="44" width="6" height="12" rx="3" /><rect x="55" y="44" width="6" height="12" rx="3" /></g><path className="resident-smile" d="M34 51q4-8 8 0m12 0q4-8 8 0" /><path className="resident-sleep" d="M34 50q4 4 8 0m12 0q4 4 8 0" /></g></g>
       <ellipse className="resident-hand" cx="78" cy="63" rx="5" ry="8" />
     </g></g>
-    <title>{frozen ? t.resident.offline : t.resident.name}</title>
+    <title>{frozen ? t.residentOffline : t.residentName}</title>
   </svg>;
 }

@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import './fixtures';
 import { Bot, type BotProps } from '../src/bots/Bot';
 
 const base: BotProps = { tool: 'claude', state: 'working', pose: 1, size: 32, theme: 'dark', seed: 'session-a', reducedMotion: false };

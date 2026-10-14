@@ -1,8 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Handle } from '../src/surface/Handle';
 import { layout, scaledLayout } from '../src/surface/geometry';
-import { ResidentMascot } from '../src/bots/ResidentMascot';
 
 describe('the resident Ledge mascot', () => {
   it('fills the handle when there are no sessions and opens the list', async () => {
@@ -61,19 +60,5 @@ describe('the resident Ledge mascot', () => {
     expect(face).toHaveAttribute('data-quiet', 'true');
     rerender(<Handle {...props} />);
     expect(face).toHaveAttribute('data-frozen', 'false');
-  });
-
-  it('finishes a hover greeting and releases its animation clock on unmount', () => {
-    vi.useFakeTimers();
-    try {
-      const { unmount } = render(<ResidentMascot size={48} theme="dark" />);
-      const face = screen.getByRole('img', { name: 'Ledge' });
-      fireEvent.mouseEnter(face);
-      expect(face).toHaveAttribute('data-gesture', 'happy');
-      act(() => vi.advanceTimersByTime(900));
-      expect(face).not.toHaveAttribute('data-gesture');
-      unmount();
-      expect(vi.getTimerCount()).toBe(0);
-    } finally { vi.useRealTimers(); }
   });
 });

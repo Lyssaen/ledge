@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
-import { fakeSession } from './mockDaemon';
+import { fakeSession } from './fixtures';
 import { botState, poseFor, type BotState } from '../src/bots/poseFor';
 import { materialFor } from '../src/bots/material';
 import { Bot } from '../src/bots/Bot';

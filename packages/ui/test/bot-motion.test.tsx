@@ -3,7 +3,7 @@ import { render, act, renderHook, cleanup } from '@testing-library/react';
 import { StrictMode, type ComponentProps } from 'react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fakeSession } from './mockDaemon';
+import { fakeSession } from './fixtures';
 import { Bot } from '../src/bots/Bot';
 import { botState, poseFor } from '../src/bots/poseFor';
 import { useMotionPreferences } from '../src/motionPreferences';

@@ -5,7 +5,7 @@ import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { materialFor } from './material';
 import { seedHash, type BotState } from './poseFor';
 import { useBotMotion, useBotNod, BOT_MOTION, useBotVisibility } from './useBotMotion';
-import { useI18n } from '../i18n/lang';
+import { useUiCopy } from '../i18n/copy';
 
 export interface BotProps {
   tool: Tool;
@@ -78,7 +78,7 @@ export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly 
   const expr = EXPRESSIONS[state];
   /** Halo in the state colour (bots.css): every live state; never a finished or read-only session. */
   const halo = !readOnly && state !== 'done' && state !== 'readonly';
-  const { t } = useI18n();
+  const t = useUiCopy();
   const h = seedHash(seed);
   // The working hop (spec §6): the only ambient motion kept at ≤ 20 px, so the handle shows progress. Height in screen px,
   // converted to SVG units so a 12 px bot lifts 2 px and a 48 px bot 5.8 px; period 3.6–4.4 s, offset per bot like breathing.

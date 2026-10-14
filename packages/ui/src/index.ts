@@ -6,3 +6,7 @@ export * from './sounds/cues';
 export * from './sounds/player';
 export * from './i18n/lang';
 export * from './bots/poseFor';
+export * from './bots/Bot';
+export * from './bots/ResidentMascot';
+export * from './bots/material';
+export * from './bots/useBotMotion';
