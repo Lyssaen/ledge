@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { attachClient, createDaemonClient, createFleetClient, loadMachines, LOCAL_MACHINE, useDaemon, useMachines, type DaemonClient, type DaemonStatus, type Fleet, type MachineState } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 
-const LOCAL_URL = LOCAL_MACHINE.url ?? 'ws://127.0.0.1:47831';
+const LOCAL_URL = LOCAL_MACHINE.url!;
 
 /** Desktop keeps a fallen machine's last sessions on screen (keepStale) and trusts the daemon's machine list (spec §6, §5.3).
  *  `url` and `WebSocketImpl` are test hooks: `parseMachines` pins local to LOCAL_MACHINE.url, so the override goes through `makeClient`. */
@@ -21,8 +21,17 @@ const defaultClient = (): DaemonClient => (singleton ??= createDesktopFleet());
 
 export interface FleetView { sessions: Session[]; machines: MachineState[]; status: DaemonStatus; fleet: Fleet; client: DaemonClient; localDown: boolean }
 
+/** One attach/connect per client however many components use it: the first consumer starts it, the last one stops it. */
+const consumers = new WeakMap<DaemonClient, { count: number; detach: () => void }>();
+function acquire(client: DaemonClient): () => void {
+  let entry = consumers.get(client);
+  if (!entry) { entry = { count: 0, detach: () => {} }; consumers.set(client, entry); }
+  if (entry.count++ === 0) { const off = attachClient(client); client.connect(); entry.detach = () => { off(); client.close(); }; }
+  return () => { const e = consumers.get(client)!; if (--e.count === 0) e.detach(); };
+}
+
 export function useFleet(client: DaemonClient = defaultClient()): FleetView {
-  useEffect(() => { const off = attachClient(client); client.connect(); return () => { off(); client.close(); }; }, [client]);
+  useEffect(() => acquire(client), [client]);
   const daemon = useDaemon();
   const machines = useMachines(client);
   // Only a settled failure counts: the first machine starts as 'connecting', which must not flash the notice at boot.
