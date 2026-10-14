@@ -26,14 +26,15 @@ const fr = {
   empty: { title: 'Votre équipe commence ici', text: 'Aucune session pour le moment. Choisissez un projet et confiez une première tâche à un agent.', none: 'Aucune demande en attente.' },
   offline: {
     title: (name: string) => `${name} est déconnectée`,
-    reconnecting: (name: string) => `Reconnexion à ${name}…`,
+    text: 'Les sessions distantes affichent leur dernier état connu. Les échanges reprendront après la reconnexion ; les sessions locales restent disponibles.',
     retry: 'Réessayer'
   },
   localDown: { title: 'Daemon local injoignable', text: 'Ledge ne peut pas joindre le daemon de cette machine. Tout est en lecture seule jusqu’à son retour.' },
   status: {
     sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
-    connected: (name: string) => `${name} connecté`,
-    unreachable: (name: string) => `${name} injoignable`
+    // A machine is feminine (« la machine »), as in the mockup: « Devbox connectée », « Devbox déconnectée ».
+    connected: (name: string) => `${name} connectée`,
+    disconnected: (name: string) => `${name} déconnectée`
   },
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
   botReadOnly: 'Lecture seule',
@@ -66,14 +67,14 @@ const en: typeof fr = {
   empty: { title: 'Your team starts here', text: 'No sessions yet. Pick a project and give an agent a first task.', none: 'No requests waiting.' },
   offline: {
     title: (name) => `${name} is disconnected`,
-    reconnecting: (name) => `Reconnecting to ${name}…`,
+    text: 'Remote sessions show their last known state. Conversations resume once it reconnects; local sessions stay available.',
     retry: 'Retry'
   },
   localDown: { title: 'Local daemon unreachable', text: 'Ledge cannot reach the daemon on this machine. Everything is read-only until it is back.' },
   status: {
     sessions: (n) => `${n} ${plural(n, 'session', 'sessions')}`,
     connected: (name) => `${name} connected`,
-    unreachable: (name) => `${name} unreachable`
+    disconnected: (name) => `${name} disconnected`
   },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },
   botReadOnly: 'Read-only',

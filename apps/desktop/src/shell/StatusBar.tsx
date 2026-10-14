@@ -7,7 +7,7 @@ export function StatusBar({ sessions, machines }: { sessions: Session[]; machine
   return (
     <footer className="statusbar">
       <span>{t.status.sessions(sessions.length)}{machines.map(m => (
-        <span key={m.id} className="connection"><i className={`dot ${m.status === 'unreachable' ? 'offline-dot' : 'green'}`} aria-hidden="true" />{m.status === 'unreachable' ? t.status.unreachable(m.label) : t.status.connected(m.label)}</span>
+        <span key={m.id} className="connection"><i className={`dot ${m.status === 'unreachable' ? 'offline-dot' : 'green'}`} aria-hidden="true" />{m.status === 'unreachable' ? t.status.disconnected(m.label) : t.status.connected(m.label)}</span>
       ))}</span>
     </footer>
   );

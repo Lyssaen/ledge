@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { RoomView } from '../src/room/RoomView';
 import { OfflineNotice } from '../src/shell/OfflineNotice';
 import { StatusBar } from '../src/shell/StatusBar';
+import { LangProvider } from '../src/i18n/lang';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 
 const eight = ['otto', 'nova', 'pim', 'bix', 'luna', 'milo', 'echo', 'rio'].map((n, i) => fakeSession(`${i % 3 === 1 ? 'devbox' : 'local'}:${n}`, { name: n, machineId: i % 3 === 1 ? 'devbox' : 'local', machineName: i % 3 === 1 ? 'Devbox' : 'Local', state: i === 0 ? 'waiting_permission' : 'working', offline: i % 3 === 1 }));
@@ -43,6 +44,9 @@ describe('OfflineNotice and StatusBar', () => {
     const onRetry = vi.fn();
     render(<OfflineNotice machines={machines} onRetry={onRetry} />);
     expect(screen.getByText('Devbox is disconnected')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveClass('connection-notice');
+    expect(screen.getByText(/Remote sessions show their last known state/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /settings/i })).toBeNull();
     expect(screen.queryByText(/Local is disconnected/)).toBeNull();
     expect(screen.queryByText(/Edge is disconnected/)).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -52,6 +56,15 @@ describe('OfflineNotice and StatusBar', () => {
     render(<StatusBar sessions={eight} machines={[{ id: 'local', label: 'Local', status: 'open' }, { id: 'devbox', label: 'Devbox', status: 'unreachable' }] as never} />);
     expect(screen.getByText(/8 sessions/)).toBeInTheDocument();
     expect(screen.getByText('Local connected')).toBeInTheDocument();
-    expect(screen.getByText('Devbox unreachable')).toBeInTheDocument();
+    expect(screen.getByText('Devbox disconnected')).toBeInTheDocument();
+  });
+  it('in French, every machine is feminine, as in the mockup', () => {
+    render(<LangProvider lang="fr"><StatusBar sessions={eight} machines={[{ id: 'local', label: 'Local', status: 'open' }, { id: 'devbox', label: 'Devbox', status: 'unreachable' }, { id: 'edge', label: 'Edge', status: 'open' }] as never} /><OfflineNotice machines={[{ id: 'devbox', label: 'Devbox', status: 'unreachable' }] as never} onRetry={() => {}} /></LangProvider>);
+    expect(screen.getByText('Local connectée')).toBeInTheDocument();
+    expect(screen.getByText('Edge connectée')).toBeInTheDocument();
+    expect(screen.getByText('Devbox déconnectée')).toBeInTheDocument();
+    expect(screen.getByText('Devbox est déconnectée')).toBeInTheDocument();
+    expect(screen.getByText('Les sessions distantes affichent leur dernier état connu. Les échanges reprendront après la reconnexion ; les sessions locales restent disponibles.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Réessayer' })).toHaveClass('settings-button');
   });
 });

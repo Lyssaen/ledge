@@ -197,11 +197,16 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
   .room-info { font-size: 9px; } .statusbar { font-size: 7px; } .title-dim { display: none; } .toolbar { gap: 12px; }
 }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation: none !important; transition: none !important; } }
-.offline-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 15px 0; padding: 9px 12px; border: 1px solid var(--input); border-radius: 8px; background: var(--sidebar); font-size: 10px; }
-.offline-notice span { color: var(--muted-foreground); }
-.offline-notice button { margin-left: auto; font: inherit; font-size: 10px; background: var(--sidebar-accent); color: var(--sidebar-foreground); border: 1px solid var(--input); border-radius: 6px; padding: 5px 9px; }
-.offline-notice.local-down { border-color: var(--danger-text); }
-.dot.offline-dot { background: var(--danger-text); }
+/* From the mockup's journeys.css and settings.css: the offline notice and the disconnected dot. */
+.connection-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 13px 22px; border-top: 1px solid var(--sidebar-border); border-bottom: 1px solid var(--sidebar-border); background: var(--well); font-size: 11px; }
+.connection-notice > div { flex: 1; min-width: 180px; }
+.connection-notice strong { color: var(--warning); font-weight: 600; }
+.connection-notice p { margin: 5px 0 0; font-size: 10px; line-height: 1.6; color: var(--muted-foreground); }
+.offline-dot { background: var(--warning); }
+.settings-button { padding: 8px 11px; background: transparent; border: 1px solid var(--input); border-radius: 6px; font-size: 10px; }
+.settings-button:hover { background: var(--sidebar-accent); }
+/* Desktop only: the local daemon itself is down (spec §6). */
+.connection-notice.local-down strong { color: var(--danger-text); }
 /* From the mockup's journeys.css and conversation.css: the empty workspace and an emptied view. */
 .workspace-empty { flex: 1; min-height: 450px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 35px 24px; }
 .workspace-empty h3 { font-size: 22px; font-weight: 550; margin: 22px 0 10px; }
