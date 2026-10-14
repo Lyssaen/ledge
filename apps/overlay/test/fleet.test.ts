@@ -175,3 +175,32 @@ describe('connection test', () => {
     ['something odd', 'other'],
   ] as const)('explains %s as %s', (raw, kind) => { expect(sshProblem(raw)).toBe(kind); });
 });
+
+describe('session traffic through the fleet', () => {
+  it('relays a session update, a removal and the recents as themselves, never as a fresh snapshot', () => {
+    const { client, got, local, server } = setup();
+    const before = got.filter(m => m.type === 'snapshot').length;
+    local.emit({ type: 'session.updated', session: fakeSession('same', { state: 'idle' }) });
+    server.emit({ type: 'session.updated', session: fakeSession('other', { name: 'Pim' }) });
+    local.emit({ type: 'recents', recents: [{ cwd: '/w/x', project: 'x', lastAt: '2026-10-09T18:00:00.000Z' }] });
+    server.emit({ type: 'recents', recents: [] }); // not the selected machine: its recents stay out of the list
+    server.emit({ type: 'session.removed', id: 'other' });
+    expect(got.filter(m => m.type === 'snapshot').length).toBe(before);
+    expect(got.slice(-4)).toEqual([
+      { type: 'session.updated', session: expect.objectContaining({ id: 'local:same', state: 'idle', machineId: 'local' }) },
+      { type: 'session.updated', session: expect.objectContaining({ id: 'server:other', name: 'Pim', machineId: 'server' }) },
+      { type: 'recents', recents: [{ cwd: '/w/x', project: 'x', lastAt: '2026-10-09T18:00:00.000Z' }] },
+      { type: 'session.removed', id: 'server:other' }
+    ]);
+    // The fleet's own inventory followed anyway.
+    expect(client.fleet!.machines().find(m => m.id === 'server')!.sessions.map(s => s.id)).toEqual(['same']);
+    expect(client.fleet!.machines().find(m => m.id === 'local')!.sessions[0]).toMatchObject({ state: 'idle' });
+    expect(client.fleet!.machines().find(m => m.id === 'local')!.recents).toHaveLength(1);
+  });
+  it('a peer without a snapshot yet keeps its updates to itself until its snapshot publishes them', () => {
+    const { got, extra } = setup();
+    const n = got.length;
+    extra.emit({ type: 'session.updated', session: fakeSession('early') });
+    expect(got.length).toBe(n);
+  });
+});

@@ -41,6 +41,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const available = (p: Peer | undefined): boolean => !!p && p.status === 'open' && p.fresh && !!p.snapshot;
   const status = (): DaemonStatus => [...peers.values()].some(available) ? 'open' : [...peers.values()].some(p => p.status === 'connecting') ? 'connecting' : 'unreachable';
   const session = (p: Peer, s: Session): Session => ({ ...s, id: qualify(p.config.id, s.id), machineId: p.config.id, machineName: p.config.label });
+  /** The fleet's own inventory and status follow every change. Only `publish` tells the overlay the whole picture again:
+   *  a (re)connection, a host joining or leaving, another host selected. A session's own update is relayed as itself
+   *  (see `receive`): to the overlay a snapshot is a reconnection, which empties the threads and rebuilds the open view. */
+  function refresh() {
+    state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: p.snapshot?.sessions ?? [], launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, error: p.error }; });
+    const next = status(); if (next !== lastStatus) { lastStatus = next; statuses.forEach(fn => fn(next)); }
+    listeners.forEach(fn => fn());
+  }
   function publish() {
     if (configuring) return;
     state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: p.snapshot?.sessions ?? [], launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, error: p.error }; });
@@ -71,9 +79,10 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (p.config.ssh && m.sshAlias !== p.config.ssh) { p.error = 'Update the local Ledge daemon: SSH transport is unavailable'; p.client.close(); publish(); return; }
       p.snapshot = m; p.fresh = true; p.error = undefined; p.previews.clear(); publish(); return;
     }
-    if (m.type === 'session.updated') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: [...p.snapshot.sessions.filter(s => s.id !== m.session.id), m.session] }; publish(); return; }
-    if (m.type === 'session.removed') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: p.snapshot.sessions.filter(s => s.id !== m.id) }; p.previews.delete(m.id); emit({ ...m, id: qualify(machine, m.id) }); publish(); return; }
-    if (m.type === 'recents') { if (p.snapshot) p.snapshot = { ...p.snapshot, recents: m.recents }; publish(); return; }
+    // A session's traffic is relayed as it came, qualified; a peer without a snapshot yet has nothing to relay against.
+    if (m.type === 'session.updated') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: [...p.snapshot.sessions.filter(s => s.id !== m.session.id), m.session] }; if (available(p)) emit({ type: 'session.updated', session: session(p, m.session) }); refresh(); return; }
+    if (m.type === 'session.removed') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: p.snapshot.sessions.filter(s => s.id !== m.id) }; p.previews.delete(m.id); emit({ ...m, id: qualify(machine, m.id) }); refresh(); return; }
+    if (m.type === 'recents') { if (p.snapshot) p.snapshot = { ...p.snapshot, recents: m.recents }; if (machine === selected && available(p)) emit(m); refresh(); return; }
     if (m.type === 'session.preview') { p.previews.set(m.id, m.lines); if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.thread' || m.type === 'session.thread.item') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.launched') { operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
