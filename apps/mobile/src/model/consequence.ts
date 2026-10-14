@@ -1,0 +1,64 @@
+import { copy } from '../copy';
+import type { InboxItem } from './requests';
+
+export interface PushTarget { remote: string; branch?: string; force: boolean }
+
+/** `-o`, `--repo` and friends take a value: it is not the remote. */
+const VALUE_FLAGS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec']);
+const FORCE_FLAGS = new Set(['-f', '--force', '--force-with-lease', '--force-if-includes']);
+
+/**
+ * Reads a plain `git push`: the remote, the branch and whether it can rewrite history. `remote` is empty when the command
+ * names none (git then uses the configured one). Anything that is not a simple push gives `null`.
+ */
+export function parsePushTarget(cmd: string): PushTarget | null {
+  const tokens = cmd.trim().split(/\s+/);
+  if (tokens[0] !== 'git') return null;
+  const at = tokens.indexOf('push');
+  if (at < 1) return null;
+  let force = false;
+  const positional: string[] = [];
+  const args = tokens.slice(at + 1);
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (a.startsWith('--')) {
+      const name = a.split('=')[0]!;
+      if (FORCE_FLAGS.has(name)) force = true;
+      else if (VALUE_FLAGS.has(name) && !a.includes('=')) i++;
+    } else if (a.startsWith('-') && a.length > 1) {
+      if (a.slice(1).includes('f')) force = true;
+      else if (VALUE_FLAGS.has(a)) i++;
+    } else positional.push(a);
+  }
+  const [remote = '', refspec] = positional;
+  if (refspec?.startsWith('+')) force = true;
+  const branch = refspec?.replace(/^\+/, '').split(':').pop();
+  return { remote, ...(branch ? { branch } : {}), force };
+}
+
+export interface Consequence { title: string; body: string; destination?: string }
+
+/** What a high-impact request will do if accepted, in words. `null` for a low-risk one. */
+export function consequenceFor(item: InboxItem): Consequence | null {
+  if (item.risk === 'low') return null;
+  const c = copy.consequence;
+  const reason = item.riskReason ?? (item.kind === 'plan' ? 'plan' : 'unknown');
+  if (reason === 'pushes') {
+    const t = parsePushTarget(item.text);
+    const destination = t?.remote ? (t.branch ? `${t.remote}/${t.branch}` : t.remote) : c.configuredRemote;
+    return t?.force
+      ? { title: c.forceTitle, body: c.forceBody(t.remote ? destination : undefined), destination }
+      : { title: c.pushTitle, body: c.pushBody, destination };
+  }
+  switch (reason) {
+    case 'destroys': case 'deploys': case 'publishes': case 'pipes_to_shell': case 'network':
+    case 'writes_outside_folder': case 'sensitive_path': case 'script': case 'plan': {
+      const [title, body] = c[reason];
+      return { title, body };
+    }
+    default: {
+      const [title, body] = c.unknown;
+      return { title, body };
+    }
+  }
+}

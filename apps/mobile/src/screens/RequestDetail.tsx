@@ -11,7 +11,10 @@ import { Command } from '../ui/Command';
 import { BackHeader } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { LostBanner, Notice } from '../ui/Notice';
+import { consequenceFor } from '../model/consequence';
 import { DecisionFooter } from './DecisionFooter';
+import { QuestionForm, answer } from './QuestionForm';
+import { RiskConfirm } from './RiskConfirm';
 import { Gone } from './Gone';
 import { Result } from './Result';
 import { useNow } from '../useNow';
@@ -33,13 +36,15 @@ const Loading = () => (
 );
 
 /** One request: read it, then decide it from the phone (or see what became of it). */
-export function RequestDetail({ sessionId, pendingId, onReconnect, onVerify }: { sessionId: string; pendingId: string; onReconnect: () => void; onVerify?: (item: InboxItem) => void }) {
+export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId: string; pendingId: string; onReconnect: () => void }) {
   const { sessions, previews, link, syncedAt, ops } = useMobile();
   const now = useNow();
   const item = requestsOf(sessions).find(i => i.sessionId === sessionId && i.pendingId === pendingId);
   // The version the phone showed first: a decision always names it, and a newer one must be read again.
   const [seen, setSeen] = useState<number | null>(null);
   if (seen === null && item) setSeen(item.pendingVersion);
+  const [choice, setChoice] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const last = useRef<InboxItem | undefined>(undefined);
   if (item) last.current = item;
   const outcome = outcomeFor({ sessionId, pendingId, ...(seen !== null ? { pendingVersion: seen } : {}) }, sessions, ops);
@@ -57,8 +62,11 @@ export function RequestDetail({ sessionId, pendingId, onReconnect, onVerify }: {
     return <Gone stale={link === 'offline' || outcome.kind !== 'handledElsewhere'} item={last.current} />;
   }
   const changed = item !== undefined && seen !== null && item.pendingVersion !== seen;
+  const sameVersion = item !== undefined && item.pendingVersion === seen;
   const session = sessions.find(s => s.id === sessionId);
   const req = shown;
+  const answerable = req.kind === 'question' && req.risk === 'low' && !req.readOnly && (req.options?.length ?? 0) > 0;
+  const consequence = req.kind !== 'question' ? consequenceFor(req) : null;
   const lines = (previews[sessionId] ?? []).slice(-12);
   const offline = link === 'offline';
   return (
@@ -79,18 +87,18 @@ export function RequestDetail({ sessionId, pendingId, onReconnect, onVerify }: {
           {req.reason && <p className="mt-2.5 text-[13px] text-muted">{req.reason}</p>}
         </div>
         {req.kind !== 'question' && req.text && <Command text={req.text} />}
-        {req.kind !== 'question' && req.risk === 'high' && (
-          <Notice title={(req.riskReason && copy.risk.reasons[req.riskReason]) || copy.risk.reasons.unknown} tone="danger"><p>{copy.risk.body}</p></Notice>
-        )}
+        {consequence && <Notice title={consequence.title} tone="danger"><p>{consequence.body}</p></Notice>}
         {req.kind === 'permission' && req.risk === 'low' && <Notice title={copy.detail.runsInProject}><p className="text-muted">{copy.detail.runsInProjectBody}</p></Notice>}
-        {req.options && req.options.length > 0 && (
-          <ul aria-label={copy.detail.options} className="my-3.5 flex list-none flex-col gap-2 p-0">
-            {req.options.map(o => <li key={o} className="rounded-control border border-line bg-surface px-3 py-3 text-[13px] [overflow-wrap:anywhere]">{o}</li>)}
-          </ul>
+        {req.options && req.options.length > 0 && (answerable
+          ? <QuestionForm options={req.options} value={choice} onChange={setChoice} disabled={outcome.kind === 'sending' || outcome.kind === 'uncertain'} />
+          : <ul aria-label={copy.detail.options} className="my-3.5 flex list-none flex-col gap-2 p-0">
+              {req.options.map(o => <li key={o} className="rounded-control border border-line bg-surface px-3 py-3 text-[13px] [overflow-wrap:anywhere]">{o}</li>)}
+            </ul>
         )}
         <dl className="my-[18px] grid grid-cols-[74px_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-xs">
           <dt className="text-muted">{copy.detail.folder}</dt><dd className="m-0 [overflow-wrap:anywhere]"><code className="font-mono text-[.9em]">{tildePath(session?.cwd ?? '')}</code></dd>
           {req.branch && <><dt className="text-muted">{copy.detail.branch}</dt><dd className="m-0 [overflow-wrap:anywhere]"><code className="font-mono text-[.9em]">{req.branch}</code></dd></>}
+          {consequence?.destination && <><dt className="text-muted">{copy.detail.destination}</dt><dd className="m-0 [overflow-wrap:anywhere]"><code className="font-mono text-[.9em]">{consequence.destination}</code></dd></>}
           <dt className="text-muted">{copy.detail.asked}</dt><dd className="m-0">{copy.detail.ago(ageLabel(req.since, now))}</dd>
         </dl>
         {lines.length > 0 && (
@@ -101,7 +109,8 @@ export function RequestDetail({ sessionId, pendingId, onReconnect, onVerify }: {
         )}
         {offline && outcome.kind !== 'uncertain' && <div className="mt-4"><LostBanner detail={copy.link.lostDetail} onReconnect={onReconnect} /></div>}
       </main>
-      <DecisionFooter item={req} outcome={outcome} link={link} changed={changed} stillPending={item !== undefined && item.pendingVersion === seen} onReread={() => setSeen(req.pendingVersion)} onDecide={d => decide(req, d)} onVerify={onVerify ? () => onVerify(req) : undefined} onCheck={() => { if (link === 'online') mobileStore.checkOperations(); else onReconnect(); }} />
+      <DecisionFooter item={req} outcome={outcome} link={link} changed={changed} stillPending={item !== undefined && item.pendingVersion === seen} onReread={() => { setSeen(req.pendingVersion); setChoice(null); setConfirming(false); }} onDecide={d => decide(req, d)} onVerify={() => setConfirming(true)} choice={choice} onAnswer={() => { if (choice !== null) answer(req, choice); }} onCheck={() => { if (link === 'online') mobileStore.checkOperations(); else onReconnect(); }} />
+      {confirming && item !== undefined && sameVersion && link === 'online' && <RiskConfirm item={item} onClose={() => setConfirming(false)} />}
     </>
   );
 }

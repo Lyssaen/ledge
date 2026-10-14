@@ -21,12 +21,15 @@ export interface DecisionFooterProps {
   onDecide: (decision: 'accept' | 'deny') => void;
   /** High-risk accept (device check, Task 10). Without it the button stays disabled. */
   onVerify?: (() => void) | undefined;
+  /** A question: the option chosen (none yet) and how to send it. */
+  choice?: number | null;
+  onAnswer?: (() => void) | undefined;
   /** Reconnect and ask the daemon where an uncertain decision ended up. */
   onCheck: () => void;
 }
 
 /** A decision is only ever one tap, sent now, never queued: this footer never offers one it could not honour. */
-export function DecisionFooter({ item, outcome, link, changed, stillPending, onReread, onDecide, onVerify, onCheck }: DecisionFooterProps) {
+export function DecisionFooter({ item, outcome, link, changed, stillPending, onReread, onDecide, onVerify, choice = null, onAnswer, onCheck }: DecisionFooterProps) {
   const [checking, setChecking] = useState(false);
   useEffect(() => {
     if (!checking) return;
@@ -37,12 +40,15 @@ export function DecisionFooter({ item, outcome, link, changed, stillPending, onR
   const hint = (t: string) => <p className="text-center text-[10px] text-muted">{t}</p>;
 
   if (item.readOnly) return wrap(hint(copy.decide.readOnly));
-  if (item.kind === 'question') return wrap(hint(copy.decide.answerLater));
+  const answerable = item.kind === 'question' && item.risk === 'low' && (item.options?.length ?? 0) > 0 && onAnswer !== undefined;
+  if (item.kind === 'question' && !answerable) return wrap(hint(copy.decide.answerLater));
 
   const live = link === 'online' && !changed && stillPending;
   // A decision in flight or of unknown delivery always comes first: a newer version never hides it.
   const gated = changed && outcome.kind !== 'sending' && outcome.kind !== 'uncertain';
-  const buttons = (enabled: boolean) => (
+  const buttons = (enabled: boolean) => answerable ? (
+    <button type="button" disabled={!enabled || choice === null} onClick={() => onAnswer?.()} className={`${full} border-transparent bg-fg text-[#121415]`}>{copy.decide.send}</button>
+  ) : (
     <div className="flex gap-2.5">
       <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={btn}>{copy.decide.deny}</button>
       {item.risk === 'high'
@@ -50,7 +56,7 @@ export function DecisionFooter({ item, outcome, link, changed, stillPending, onR
         : <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={`${btn} border-transparent bg-fg text-[#121415]`}>{copy.decide.allow}</button>}
     </div>
   );
-  const linkHint = link === 'offline' ? copy.decide.offlineHint : link === 'connecting' ? copy.decide.connectingHint : copy.decide.hint;
+  const linkHint = link === 'offline' ? copy.decide.offlineHint : link === 'connecting' ? copy.decide.connectingHint : answerable ? copy.decide.answerHint : copy.decide.hint;
 
   if (gated) {
     return wrap(<>
@@ -82,6 +88,11 @@ export function DecisionFooter({ item, outcome, link, changed, stillPending, onR
           <Notice title={copy.decide.changed} tone="warning" role="alert" />
           <a href={href({ name: 'inbox' })} className={`${full} border-line bg-surface`}>{copy.result.back}</a>
         </>);
+      }
+      if (r === 'assertion_expired' || r === 'assertion_invalid') {
+        const text = r === 'assertion_expired' ? copy.decide.assertionExpired : copy.decide.assertionInvalid;
+        if (!stillPending) return wrap(<Notice title={text} tone="warning" role="alert" />);
+        return wrap(<><Notice title={text} tone="warning" role="alert" />{buttons(live)}{hint(linkHint)}</>);
       }
       const text = r === 'busy' ? copy.decide.busy : r === 'not_taken' ? copy.decide.notTaken : copy.decide.failed;
       if (!stillPending) return wrap(<Notice title={text} tone="warning" role="alert" />);

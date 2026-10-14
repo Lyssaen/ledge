@@ -25,6 +25,10 @@ export interface MobileStore {
   submit(op: OpState, msg: ClientMessage): boolean;
   /** Ask the daemon where every uncertain operation ended up (`operation.status`); never resends a decision. */
   checkOperations(): void;
+  /** Send a request that is not an operation (a challenge request), on an authenticated link only. */
+  send(msg: ClientMessage): boolean;
+  /** Every server message, as it arrives (used to await a reply to a request). */
+  listen(fn: (msg: ServerMessage) => void): () => void;
   /** Feed the operations model (e.g. `resumed` on return to the foreground). */
   dispatch(e: OpEvent): void;
   /** Forget the PC's data (token refused or revoked). */
@@ -44,6 +48,7 @@ export function createMobileStore(storage?: Storage): MobileStore {
   let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage) };
   let send: ((m: ClientMessage) => void) | null = null;
   const fns = new Set<() => void>();
+  const listeners = new Set<(msg: ServerMessage) => void>();
   const set = (next: Partial<MobileState>, persist: boolean) => {
     state = { ...state, ...next };
     if (persist) saveLastState(state, storage);
@@ -63,6 +68,12 @@ export function createMobileStore(storage?: Storage): MobileStore {
     setLink: l => { if (l !== state.link) { set({ link: l }, false); dispatch({ type: 'link', link: l }); } },
     setSender: f => { send = f; },
     dispatch,
+    send: msg => {
+      if (state.link !== 'online' || !send) return false;
+      send(msg);
+      return true;
+    },
+    listen: fn => { listeners.add(fn); return () => { listeners.delete(fn); }; },
     checkOperations: () => { if (state.link === 'online') for (const operationId of toCheck(state.ops)) send?.({ type: 'operation.status', operationId }); },
     submit: (op, msg) => {
       if (state.link !== 'online' || !send) return false;
@@ -73,6 +84,7 @@ export function createMobileStore(storage?: Storage): MobileStore {
     },
     reset: () => { clearLastState(storage); saveOps({}, storage); set({ link: 'unpaired', sessions: [], previews: {}, syncedAt: null, device: null, pcName: null, ops: {} }, false); },
     apply: msg => {
+      listeners.forEach(f => f(msg));
       switch (msg.type) {
         case 'auth.ok': {
           const device = { id: msg.deviceId, name: msg.deviceName };

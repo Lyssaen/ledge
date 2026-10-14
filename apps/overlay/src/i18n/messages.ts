@@ -140,7 +140,7 @@ const fr = {
   settings: {
     title: 'Votre Ledge', tabs: 'Sections des réglages', tabDisplay: 'Affichage', tabNotifications: 'Notifications', tabSounds: 'Sons', tabMobile: 'Mobile', tabAbout: 'À propos', islandSize: 'Taille de l’île', islandSizeHint: 'L’île et ses compagnons en haut de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
     mobile: {
-      title: 'Ledge sur le téléphone', hint: 'Suivez vos sessions depuis un téléphone, en lecture seule, par votre tailnet Tailscale.',
+      title: 'Ledge sur le téléphone', hint: 'Suivez vos sessions, décidez et répondez depuis un téléphone, par votre tailnet Tailscale.',
       enable: 'Pour l’activer, lancez cette commande dans WSL :', docs: 'Voir docs/mobile.md',
       pair: 'Appairer un téléphone', pairHint: 'Un code à usage unique, valable deux minutes.', newCode: 'Nouveau code',
       loading: 'Chargement…', unavailable: 'Ledge est injoignable : la liste reviendra à la reconnexion.',
@@ -356,7 +356,7 @@ const en: Messages = {
   settings: {
     title: 'Your Ledge', tabs: 'Settings sections', tabDisplay: 'Display', tabNotifications: 'Notifications', tabSounds: 'Sounds', tabMobile: 'Mobile', tabAbout: 'About', islandSize: 'Island size', islandSizeHint: 'The island and its companions at the top of the screen.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
     mobile: {
-      title: 'Ledge on the phone', hint: 'Follow your sessions from a phone, read-only, over your Tailscale tailnet.',
+      title: 'Ledge on the phone', hint: 'Follow your sessions, decide and reply from a phone, over your Tailscale tailnet.',
       enable: 'To turn it on, run this command in WSL:', docs: 'See docs/mobile.md',
       pair: 'Pair a phone', pairHint: 'A one-time code, valid for two minutes.', newCode: 'New code',
       loading: 'Loading…', unavailable: 'Ledge is unreachable: the list will come back on reconnect.',

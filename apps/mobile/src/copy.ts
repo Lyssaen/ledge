@@ -1,5 +1,3 @@
-const unassessed = 'Impact non évalué';
-
 /** Every French string of the phone app lives here (decision D13). */
 export const copy = {
   appName: 'Ledge',
@@ -48,6 +46,10 @@ export const copy = {
     connectingHint: 'Connexion en cours…',
     readOnly: 'Session démarrée hors de Ledge : répondez dans le terminal.',
     answerLater: 'Répondre depuis le téléphone : pas encore disponible. Répondez sur le PC.',
+    answerHint: 'La réponse sera transmise immédiatement au PC.',
+    send: 'Envoyer ma réponse',
+    assertionExpired: 'La vérification a expiré. Recommencez.',
+    assertionInvalid: 'La vérification n’a pas été acceptée par le PC.',
     sending: 'Transmission au PC…', sendingBody: 'En attente de confirmation du terminal.',
     uncertain: 'Réception non confirmée',
     uncertainBody: 'La connexion a été perdue pendant l’envoi. La décision a peut-être été reçue. Vérifiez son état avant de recommencer.',
@@ -70,24 +72,42 @@ export const copy = {
     final: 'Une décision transmise ne peut pas être annulée.',
     back: 'Retour aux demandes'
   },
+  question: { legend: 'Choisir une réponse' },
+  confirm: {
+    label: (title: string) => `Confirmer : ${title}`,
+    title: 'Autoriser cette commande ?', titleForce: 'Autoriser ce push forcé ?',
+    close: 'Fermer la confirmation',
+    note: 'Une vérification sur votre appareil sera demandée. Elle confirme votre identité, pas la sûreté de la commande.',
+    go: 'Confirmer avec mon appareil', back: 'Revenir à la demande',
+    preparing: 'Préparation de la vérification…',
+    asking: 'Vérification en cours sur cet appareil…',
+    cancelled: 'Vérification annulée. Rien n’a été envoyé.',
+    expired: 'La vérification a expiré. Recommencez.',
+    failed: 'La vérification de l’appareil n’a pas abouti. Rien n’a été envoyé. Réessayez.',
+    prepareFailed: 'La vérification n’a pas pu être préparée. Rien n’a été envoyé.',
+    retry: 'Réessayer',
+    offline: 'Connexion au PC perdue. Rien n’a été envoyé.',
+    context: (bot: string, task: string, repo: string) => `${bot} · ${task} · ${repo}`
+  },
+  consequence: {
+    forceTitle: 'Peut remplacer l’historique distant',
+    forceBody: (dest?: string) => `Les commits présents sur ${dest ?? 'le dépôt distant'} peuvent être écrasés. Les autres personnes travaillant sur cette branche peuvent être affectées.`,
+    pushTitle: 'Publie sur un dépôt distant',
+    pushBody: 'Les modifications seront visibles par les personnes qui ont accès à ce dépôt.',
+    configuredRemote: 'le dépôt distant configuré',
+    destroys: ['Supprime des fichiers ou des modifications', 'Des fichiers ou des modifications non enregistrées peuvent être perdus.'],
+    deploys: ['Modifie un déploiement ou une infrastructure', 'Un environnement en service peut changer ou devenir indisponible.'],
+    publishes: ['Publie un paquet', 'Une version publiée peut déjà avoir été téléchargée et ne se retire pas toujours.'],
+    pipes_to_shell: ['Exécute un script téléchargé', 'Le code téléchargé s’exécute sans avoir été lu, avec les permissions de cette session.'],
+    network: ['Accède au réseau', 'La commande peut envoyer ou recevoir des données sur le réseau.'],
+    writes_outside_folder: ['Écrit hors du dossier de la session', 'La commande peut modifier des fichiers en dehors du dossier de cette session.'],
+    sensitive_path: ['Touche un fichier sensible', 'Ce fichier peut contenir des secrets ou une configuration sensible.'],
+    script: ['Exécute un script du dépôt', 'Il s’exécute avec les permissions de cette session et peut modifier des fichiers ou accéder au réseau.'],
+    plan: ['Valide un plan : l’agent passera à l’exécution', 'Après votre accord, l’agent exécute le plan sans redemander chaque étape.'],
+    unknown: ['Commande que Ledge ne sait pas analyser', 'Ledge ne peut pas dire ce que cette commande fera. Lisez-la attentivement avant de confirmer.']
+  },
   risk: {
-    badge: 'Impact élevé',
-    body: 'Cette action peut avoir des effets difficiles à annuler. Une vérification sur votre appareil sera demandée avant de l’autoriser.',
-    reasons: {
-      pushes: 'Publie des modifications sur un dépôt distant',
-      destroys: 'Peut supprimer des fichiers ou des données',
-      deploys: 'Peut déployer vers un environnement',
-      publishes: 'Peut publier un paquet ou une version',
-      pipes_to_shell: 'Exécute du code téléchargé',
-      network: 'Accède au réseau',
-      writes_outside_folder: 'Écrit hors du dossier du projet',
-      sensitive_path: 'Touche un fichier sensible',
-      unsafe_flag: 'Utilise une option risquée',
-      shell_syntax: 'Commande composée, difficile à vérifier',
-      script: 'Exécute un script',
-      plan: 'Un plan engage plusieurs actions',
-      unknown: unassessed, question: unassessed, read_only_command: unassessed, edit_inside_folder: unassessed
-    }
+    badge: 'Impact élevé'
   },
   gone: {
     header: 'Demande', title: 'Déjà traitée sur le PC', body: 'Cette demande a été résolue ailleurs. Aucune nouvelle décision n’a été envoyée.', back: 'Retour aux demandes',
