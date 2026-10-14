@@ -5,11 +5,14 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+use tauri_plugin_window_state::StateFlags;
 
 const TRAY_OPEN: &str = "open";
 const TRAY_NEW: &str = "new";
 const TRAY_DND: &str = "dnd";
 const TRAY_QUIT: &str = "quit";
+/// Passed by the login item: the app starts in the tray, its window hidden.
+const MINIMIZED: &str = "--minimized";
 
 #[derive(Clone, Serialize)]
 struct TrayPayload { action: String }
@@ -85,6 +88,9 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Whether this launch asked to stay in the tray (the login item's argument).
+fn launched_minimized<I: IntoIterator<Item = String>>(args: I) -> bool { args.into_iter().any(|a| a == MINIMIZED) }
+
 /// Switched on once by an installed build, as the island does; the marker (written only after a successful
 /// enable, so a failure is retried next start) remembers the user's later choice.
 fn default_autostart(app: &tauri::App) {
@@ -100,12 +106,20 @@ fn main() {
     tauri::Builder::default()
         // First, so a second launch exits before anything else starts; it brings this one forward instead.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
-        .plugin(tauri_plugin_window_state::Builder::new().build())
-        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        // Visibility is the launch's choice (setup below), never the restored state's.
+        .plugin(tauri_plugin_window_state::Builder::new().with_state_flags(StateFlags::all() & !StateFlags::VISIBLE).build())
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![MINIMIZED])))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![focus_terminal, foreground_is_terminal, open_terminal, open_url, get_autostart, set_autostart, set_tray_labels])
-        .setup(|app| { build_tray(app)?; default_autostart(app); Ok(()) })
+        .setup(|app| {
+            build_tray(app)?;
+            default_autostart(app);
+            // The window is created hidden and the window-state plugin has already put it back in place: show it now,
+            // without a flash at the default size, unless the login item launched us into the tray.
+            if !launched_minimized(std::env::args()) { show_main(app.handle()); }
+            Ok(())
+        })
         // Close hides to the tray (spec 4.4).
         .on_window_event(|w, e| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = e { api.prevent_close(); let _ = w.hide(); }
@@ -116,10 +130,16 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::tray_title;
+    use super::{launched_minimized, tray_title};
     #[test]
     fn the_tray_tells_a_dev_build_from_an_installed_one() {
         assert_eq!(tray_title("0.5.2", false), "Ledge Desktop 0.5.2");
         assert_eq!(tray_title("0.5.2", true), "Ledge Desktop 0.5.2 (dev)");
+    }
+    #[test]
+    fn only_the_login_item_starts_in_the_tray() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(launched_minimized(args(&["ledge-desktop.exe", "--minimized"])));
+        assert!(!launched_minimized(args(&["ledge-desktop.exe"])));
     }
 }

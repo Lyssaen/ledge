@@ -20,6 +20,14 @@ describe('Desktop Tauri config', () => {
     expect(caps.permissions).toContain('window-state:default');
     expect(main).toContain('tauri_plugin_window_state::Builder');
   });
+  it('starts hidden and shows itself after the window state is restored, unless launched minimized', () => {
+    expect(conf.app.windows[0].visible).toBe(false);
+    expect(main).toContain('const MINIMIZED: &str = "--minimized";');
+    expect(main).toContain('tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![MINIMIZED]))');
+    expect(main.slice(main.indexOf('.setup('))).toMatch(/if !launched_minimized\(std::env::args\(\)\) \{ show_main\(app\.handle\(\)\); \}/);
+    // the restored state must not show the window itself: the launch decides
+    expect(main).toContain('with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)');
+  });
   it('runs a single instance: a second launch shows the first one, the plugin registered first', () => {
     const builder = main.slice(main.indexOf('tauri::Builder::default()'));
     expect(builder.indexOf('.plugin(')).toBe(builder.indexOf('.plugin(tauri_plugin_single_instance::init('));
