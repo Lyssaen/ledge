@@ -20,6 +20,12 @@ describe('Desktop Tauri config', () => {
     expect(caps.permissions).toContain('window-state:default');
     expect(main).toContain('tauri_plugin_window_state::Builder');
   });
+  it('runs a single instance: a second launch shows the first one, the plugin registered first', () => {
+    const builder = main.slice(main.indexOf('tauri::Builder::default()'));
+    expect(builder.indexOf('.plugin(')).toBe(builder.indexOf('.plugin(tauri_plugin_single_instance::init('));
+    expect(builder).toMatch(/tauri_plugin_single_instance::init\(\|app, _args, _cwd\| show_main\(app\)\)/);
+    expect(readFileSync(resolve(root, 'src-tauri/Cargo.toml'), 'utf8')).toMatch(/^tauri-plugin-single-instance = "2"$/m);
+  });
   it('shares the island CSP and the updater key, with its own manifest', () => {
     expect(conf.app.security.csp).toBe(island.app.security.csp);
     expect(conf.plugins.updater.pubkey).toBe(island.plugins.updater.pubkey);

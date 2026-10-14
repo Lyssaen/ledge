@@ -98,6 +98,8 @@ fn default_autostart(app: &tauri::App) {
 
 fn main() {
     tauri::Builder::default()
+        // First, so a second launch exits before anything else starts; it brings this one forward instead.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_updater::Builder::new().build())
