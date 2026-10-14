@@ -43,7 +43,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (!t.answeredAt && !t.error) t.error = 'Connection interrupted';
         turns.set(t.qid, t);
       }
-      for (const [qid, b] of saved.bindings ?? []) if (turns.has(qid) && configs.some(c => c.id === b.machine) && typeof b.raw === 'string') bindings.set(qid, b);
+      for (const [qid, b] of saved.bindings ?? []) if (turns.has(qid) && (opts.machinesFromDaemon || configs.some(c => c.id === b.machine)) && typeof b.raw === 'string') bindings.set(qid, b);
       resetAt = typeof saved.resetAt === 'string' ? saved.resetAt : '';
     }
   } catch { /* No usable previous conversation. */ }
@@ -98,7 +98,11 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     for (const [id, p] of peers) if (!next.some(c => c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); }
     configs = next;
     for (const c of configs) { const p = peers.get(c.id); if (p) p.config = c; else add(c); }
-    if (!peers.has(selected)) selected = 'local'; configuring = false; publish();
+    if (!peers.has(selected)) selected = 'local';
+    // Daemon-sourced bindings are kept through the restore (the list is unknown until the daemon speaks), then pruned against the confirmed list.
+    const gone = source === 'daemon' ? [...bindings].filter(([, b]) => !configs.some(c => c.id === b.machine)) : [];
+    for (const [qid] of gone) bindings.delete(qid);
+    configuring = false; publish(); if (gone.length) history();
   }
   function receive(p: Peer, m: ServerMessage) {
     const machine = p.config.id;

@@ -91,3 +91,30 @@ describe('machines from the daemon', () => {
     expect(got.length).toBe(n);
   });
 });
+
+describe('conversation bindings across a restart in daemon mode', () => {
+  const today = new Date().toISOString().slice(0, 10), at = `${today}T10:00:00.000Z`;
+  const persist = () => localStorage.setItem('ledge.fleet.history', JSON.stringify({ day: today, turns: [{ qid: 'q1', question: 'q', askedAt: at, steps: [], answer: 'a', answeredAt: at, machineId: 'server' }], bindings: [['q1', { machine: 'server', raw: 'q1' }]], resetAt: '' }));
+  const history = (): ServerMessage => ({ type: 'chat.history', turns: [{ qid: 'q1', question: 'server:q1', askedAt: at, steps: [], answer: 'a', answeredAt: at }] });
+  const histories = (got: ServerMessage[]) => got.filter(m => m.type === 'chat.history') as Extract<ServerMessage, { type: 'chat.history' }>[];
+  it('a remote binding survives the restart once the daemon confirms the machine', () => {
+    persist();
+    const { api, local, server, got } = setup();
+    local.emit(machinesMsg([{ id: 'local', label: 'Local' }, { id: 'server', label: 'dev-server', ssh: 'dev-server' }]));
+    server.set('open'); server.emit(snap([], remote.ssh)); server.emit(history());
+    expect(histories(got).at(-1)!.turns.map(t => t.qid)).toEqual(['q1']);
+    expect(api.fleet!.turnMachine('q1')?.id).toBe('server');
+    api.send({ type: 'session.relay', qid: 'q1' });
+    expect(server.sent.at(-1)).toEqual({ type: 'session.relay', qid: 'q1' });
+  });
+  it('a binding whose machine the daemon no longer lists is pruned', () => {
+    persist();
+    const { api, local, got } = setup();
+    const err = () => (got.filter(m => m.type === 'error').at(-1) as { message: string } | undefined)?.message;
+    api.send({ type: 'session.relay', qid: 'q1' });
+    expect(err()).toBe('server is offline'); // the binding is kept until the daemon answers
+    local.emit(machinesMsg([{ id: 'local', label: 'Local' }]));
+    api.send({ type: 'session.relay', qid: 'q1' });
+    expect(err()).toBe('Unknown conversation destination');
+  });
+});
