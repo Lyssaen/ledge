@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import type { Device } from '@ledge/protocol';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
+import type { Pairing } from './pairing.js';
 
 /** The WebAuthn key registered during pairing (decision D5). */
 export interface StoredCredential { id: string; publicKey: string; counter: number; transports?: string[] }
@@ -110,9 +111,11 @@ export class DeviceStore {
   }
 }
 
-/** What the daemon exposes to its local commands; the pairing flow joins it in task 8. */
+/** What the daemon exposes to its local commands: the https origin and the remote entry's state, the paired devices, the pairing window. */
 export interface MobileControl {
   state(): { origin: string | null; listening: boolean };
+  /** Saves the origin (`null` turns mobile access off) and starts, restarts or stops the remote entry accordingly. */
   configure(origin: string | null): Promise<void>;
   devices: DeviceStore;
+  pairing: Pairing;
 }

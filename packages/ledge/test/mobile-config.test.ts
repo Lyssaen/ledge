@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, statSync, existsSync } from 'node:fs';
+import { mkdtempSync, statSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseOrigin, loadMobileConfig, saveMobileConfig } from '../src/mobile/config.js';
@@ -28,5 +28,14 @@ describe('mobile config', () => {
     await saveMobileConfig(cfg, p); await saveMobileConfig(null, p);
     expect(existsSync(p)).toBe(false);
     expect(await loadMobileConfig(p)).toBeNull();
+  });
+  it('logs a broken file once, without its content, and loads null', async () => {
+    writeFileSync(p, '{"origin":"https://pc.t.ts.net/\nforged | line"');
+    expect(await loadMobileConfig(p)).toBeNull();
+    writeFileSync(p, JSON.stringify({ origin: 'http://pc.t.ts.net' }));
+    expect(await loadMobileConfig(p)).toBeNull();
+    const lines = readFileSync(paths().log, 'utf8').trim().split('\n');
+    expect(lines).toHaveLength(2);
+    for (const l of lines) expect(l).toContain('mobile.json unreadable, mobile access stays off');
   });
 });

@@ -13,6 +13,7 @@ import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { createDaemonUpdater } from '../src/update/run-update.js';
 import { DeviceStore, type MobileControl } from '../src/daemon/devices.js';
+import { createPairing } from '../src/daemon/pairing.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
@@ -799,7 +800,7 @@ describe('device commands', () => {
   const withMobile = async () => {
     const devices = new DeviceStore({ path: join(process.env.LEDGE_HOME!, 'devices.json') });
     const configured: (string | null)[] = [];
-    const mobile: MobileControl = { devices, state: () => ({ origin: 'https://pc.tail.ts.net', listening: true }), configure: async o => { configured.push(o); } };
+    const mobile: MobileControl = { devices, pairing: createPairing({ config: () => null, devices }), state: () => ({ origin: 'https://pc.tail.ts.net', listening: true }), configure: async o => { configured.push(o); } };
     await srv.close();
     srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env }), mobile });
     return { devices, configured };

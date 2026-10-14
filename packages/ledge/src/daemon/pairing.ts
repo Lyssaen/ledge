@@ -4,7 +4,7 @@ import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/ser
 import type { MobileConfig } from '../mobile/config.js';
 import type { DeviceStore } from './devices.js';
 import { registrationOptions, verifyRegistration } from './webauthn.js';
-import { log } from '../log.js';
+import { log, quote } from '../log.js';
 
 export class PairError extends Error {
   constructor(readonly reason: PairErrorReason) { super(`pairing: ${reason}`); this.name = 'PairError'; }
@@ -88,7 +88,7 @@ export function createPairing(deps: { config: () => MobileConfig | null; devices
       try {
         credential = await verifyRegistration(cfg, response, challenge);
       } catch (e) {
-        log(`pairing: key registration refused: ${(e as Error).message}`);
+        log(`pairing: key registration refused: ${quote((e as Error).message)}`);
         throw new PairError('webauthn_failed');
       }
       if (win !== w) throw new PairError('no_window');

@@ -73,15 +73,21 @@ describe('toRemote', () => {
     expect(toRemote({ type: 'devices', devices: [], origin: null, listening: false }, view)).toBeNull();
     expect(toRemote({ type: 'chat.history', turns: [] }, view)).toBeNull();
   });
-  it('passes session updates without their terminal name, and removals, previews, errors, auth and pairing as they are', () => {
+  it('passes session updates without their terminal name, and removals, previews, errors and auth as they are', () => {
     const upd = toRemote({ type: 'session.updated', session: mk('a') }, view) as Extract<ServerMessage, { type: 'session.updated' }>;
     expect(upd.session).toEqual({ ...mk('a'), tmuxSession: null });
     const same: ServerMessage[] = [
       { type: 'session.removed', id: 'a' }, { type: 'session.preview', id: 'a', lines: ['x'] }, { type: 'error', message: 'forbidden' },
-      { type: 'auth.ok', deviceId: 'd1', deviceName: 'iPhone', pcName: 'pc' }, { type: 'pair.challenge', options: {}, expiresAt: T0 },
-      { type: 'pair.done', token: 't', deviceId: 'd1' }, { type: 'pair.error', reason: 'expired' }
+      { type: 'auth.ok', deviceId: 'd1', deviceName: 'iPhone', pcName: 'pc' }
     ];
     for (const msg of same) expect(toRemote(msg, view)).toEqual(msg);
+  });
+  it('drops every pairing message: the live code never reaches a phone, the rest is sent on the pre-auth socket only', () => {
+    const pairing: ServerMessage[] = [
+      { type: 'pair.code', code: '482913', expiresAt: T0, url: 'https://pc/m/#/pair' }, { type: 'pair.challenge', options: {}, expiresAt: T0 },
+      { type: 'pair.done', token: 't', deviceId: 'd1' }, { type: 'pair.error', reason: 'expired' }
+    ];
+    for (const msg of pairing) expect(toRemote(msg, view)).toBeNull();
   });
   it('does not change the message it projects', () => {
     const s = mk('a'); toRemote({ type: 'snapshot', sessions: [s] }, view);
@@ -159,6 +165,12 @@ describe('server: a remote peer', () => {
     await sock.next('snapshot');
     sock.receive({ type: 'snapshot.request' });
     expect(Object.keys(await sock.next('snapshot')).sort()).toEqual(['sessions', 'type']);
+  });
+  it('attaching a socket that already closed sends nothing and adds no peer', () => {
+    const sock = fakeSocket(); (sock as { readyState: number }).readyState = 3;
+    srv.attach(sock, { kind: 'remote', deviceId: 'd1' });
+    expect(sock.sent).toEqual([]);
+    expect(srv.peers.all()).toEqual([]);
   });
   it('a peer leaves the broadcast list when its socket closes, and closeDevice closes it with the given code', async () => {
     const a = fakeSocket(); srv.attach(a, { kind: 'remote', deviceId: 'd1' });

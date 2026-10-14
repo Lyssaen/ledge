@@ -1,5 +1,6 @@
 import { readFile, writeFile, rename, rm, chmod } from 'node:fs/promises';
 import { paths } from '../paths.js';
+import { log, quote } from '../log.js';
 
 export interface MobileConfig { origin: string; rpID: string }
 
@@ -14,13 +15,18 @@ export function parseOrigin(input: string): MobileConfig {
   return { origin: u.origin, rpID: u.hostname };
 }
 
+/** A missing file means mobile access is off. A broken one too, and it is logged: the daemon loads it once, at startup. */
 export async function loadMobileConfig(path: string = paths().mobile): Promise<MobileConfig | null> {
   let raw: string;
   try { raw = await readFile(path, 'utf8'); } catch { return null; }
   try {
     const j = JSON.parse(raw) as { origin?: unknown };
-    return typeof j.origin === 'string' ? parseOrigin(j.origin) : null;
-  } catch { return null; }
+    if (typeof j.origin !== 'string') throw new Error('no origin');
+    return parseOrigin(j.origin);
+  } catch (e) {
+    log(`mobile.json unreadable, mobile access stays off: ${quote((e as Error).message)}`);
+    return null;
+  }
 }
 
 /** Written atomically, readable by its owner only. `null` removes the file. */

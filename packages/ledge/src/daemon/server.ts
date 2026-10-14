@@ -21,6 +21,7 @@ import { createPeers, type Peer, type PeerContext, type PeerSocket } from './pee
 import { toRemote } from './remote/project.js';
 import { remoteMayRun } from './remote/rights.js';
 import type { MobileControl } from './devices.js';
+import { PairError } from './pairing.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -55,7 +56,10 @@ export interface ServerHandle {
   port: number; close(): Promise<void>; broadcast(msg: ServerMessage): void;
   /** Remembers a session's terminal preview and broadcasts it; a client that connects later gets it after the snapshot. */
   preview(id: string, lines: string[]): void;
-  /** Registers a socket accepted elsewhere (the remote entry) as a peer: sends it the projected snapshot and wires its messages. */
+  /**
+   * Registers a socket accepted elsewhere (the remote entry) as a peer: sends it the projected snapshot and wires its messages.
+   * Such a socket stays owned by the listener that accepted it: `close()` ends the local sockets only.
+   */
   attach(socket: PeerSocket, ctx: PeerContext): void;
   peers: ReturnType<typeof createPeers>;
 }
@@ -320,6 +324,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         log(`revoked device ${msg.id} (${closed} open connection${closed === 1 ? '' : 's'} closed)`);
         return broadcast(devicesMessage(opts.mobile));
       }
+      // The code goes to the PC that asked, never to a broadcast (and `toRemote` drops it anyway).
+      case 'pair.begin': {
+        if (!opts.mobile) return peer.send({ type: 'pair.error', reason: 'not_configured' });
+        let win;
+        try { win = opts.mobile.pairing.begin(); }
+        catch (e) { if (e instanceof PairError) return peer.send({ type: 'pair.error', reason: e.reason }); throw e; }
+        log('pairing window opened');
+        return peer.send({ type: 'pair.code', ...win });
+      }
       case 'mobile.configure':
         if (!opts.mobile) return peer.send({ type: 'error', message: NO_MOBILE });
         await opts.mobile.configure(msg.origin);
@@ -343,6 +356,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   }
 
   function attach(socket: PeerSocket, ctx: PeerContext): void {
+    // The remote entry attaches after authenticating: the phone may have gone in between, and a closed socket never emits 'close' again.
+    if (socket.readyState !== WebSocket.OPEN) return;
     const peer = peerFor(socket, ctx);
     const remove = peers.add(peer);
     socket.on('close', remove);
