@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
-import { guessDeviceName, isIosBrowserTab, PairFailure, pairDevice, savePairing, type PairSocket } from '../src/connection/pair';
+import { guessDeviceName, isIosBrowserTab, PairFailure, completePairing, requestChallenge, savePairing, type PairSocket } from '../src/connection/pair';
 import { Pairing } from '../src/screens/Pairing';
 import { copy } from '../src/copy';
 import { DEVICE_KEY, TOKEN_KEY } from '../src/state/persist';
@@ -17,43 +17,68 @@ function fakeSocket(replies: Record<string, unknown>[]) {
   };
   return { socket, sent, isClosed: () => closed };
 }
-const deps = (socket: PairSocket, startRegistration = vi.fn().mockResolvedValue(REG)) =>
-  ({ open: () => Promise.resolve(socket), startRegistration: startRegistration as never, deviceName: 'iPhone' });
+const CH = { type: 'pair.challenge', options: { challenge: 'abc' }, expiresAt: '2099-01-01T00:00:00.000Z' };
+const held = async (replies: Record<string, unknown>[]) => {
+  const f = fakeSocket(replies);
+  const ch = await requestChallenge('123456', () => Promise.resolve(f.socket));
+  return { f, ch };
+};
+const cdeps = (startRegistration = vi.fn().mockResolvedValue(REG)) => ({ startRegistration: startRegistration as never, deviceName: 'iPhone' });
 
 beforeEach(() => localStorage.clear());
 
-describe('pairDevice', () => {
-  it('pairs: options, registration, complete, then returns the token and device', async () => {
-    const f = fakeSocket([{ type: 'pair.challenge', options: { challenge: 'abc' }, expiresAt: 'x' }, { type: 'pair.done', token: 'tok', deviceId: 'dev-9' }]);
+describe('pairing phases', () => {
+  it('pairs: options held, then registration and complete, then returns the token and device', async () => {
+    const { f, ch } = await held([CH, { type: 'pair.done', token: 'tok', deviceId: 'dev-9' }]);
+    expect(f.sent).toEqual([{ type: 'pair.options', code: '123456' }]);
+    expect(f.isClosed()).toBe(false);
     const reg = vi.fn().mockResolvedValue(REG);
-    const r = await pairDevice('123456', deps(f.socket, reg));
+    const r = await completePairing('123456', ch, cdeps(reg));
     expect(r).toEqual({ token: 'tok', deviceId: 'dev-9' });
     expect(reg).toHaveBeenCalledWith({ optionsJSON: { challenge: 'abc' } });
-    expect(f.sent).toEqual([{ type: 'pair.options', code: '123456' }, { type: 'pair.complete', code: '123456', deviceName: 'iPhone', webauthn: REG }]);
+    expect(f.sent[1]).toEqual({ type: 'pair.complete', code: '123456', deviceName: 'iPhone', webauthn: REG });
     expect(f.isClosed()).toBe(true);
     savePairing(r, 'iPhone');
     expect(localStorage.getItem(TOKEN_KEY)).toBe('tok');
     expect(JSON.parse(localStorage.getItem(DEVICE_KEY)!)).toEqual({ id: 'dev-9', name: 'iPhone' });
   });
 
-  it('maps pair.error reasons to failures', async () => {
+  it('calls startRegistration synchronously, before any socket await (iOS user activation)', async () => {
+    const { ch } = await held([CH, { type: 'pair.done', token: 'tok', deviceId: 'd' }]);
+    const reg = vi.fn().mockResolvedValue(REG);
+    const p = completePairing('123456', ch, cdeps(reg));
+    expect(reg).toHaveBeenCalledTimes(1);
+    await p;
+  });
+
+  it('maps pair.error reasons to failures and closes the socket', async () => {
     for (const reason of ['invalid_code', 'expired', 'locked', 'no_window'] as const) {
       const f = fakeSocket([{ type: 'pair.error', reason }]);
-      await expect(pairDevice('000000', deps(f.socket))).rejects.toMatchObject({ reason });
+      await expect(requestChallenge('000000', () => Promise.resolve(f.socket))).rejects.toMatchObject({ reason });
       expect(f.isClosed()).toBe(true);
     }
   });
 
-  it('fails with webauthn_failed when the device verification is refused, and with the daemon reason on complete', async () => {
-    const challenge = { type: 'pair.challenge', options: {}, expiresAt: 'x' };
-    const refused = vi.fn().mockRejectedValue(new DOMException('no', 'NotAllowedError'));
-    await expect(pairDevice('123456', deps(fakeSocket([challenge]).socket, refused))).rejects.toMatchObject({ reason: 'webauthn_failed' });
-    await expect(pairDevice('123456', deps(fakeSocket([challenge, { type: 'pair.error', reason: 'webauthn_failed' }]).socket))).rejects.toBeInstanceOf(PairFailure);
+  it('fails with webauthn_failed when the device check is refused, and with the daemon reason on complete', async () => {
+    const a = await held([CH]);
+    await expect(completePairing('123456', a.ch, cdeps(vi.fn().mockRejectedValue(new DOMException('no', 'NotAllowedError'))))).rejects.toMatchObject({ reason: 'webauthn_failed' });
+    expect(a.f.isClosed()).toBe(true);
+    const b = await held([CH, { type: 'pair.error', reason: 'expired' }]);
+    await expect(completePairing('123456', b.ch, cdeps())).rejects.toMatchObject({ reason: 'expired' });
+  });
+
+  it('refuses an expired challenge without calling the device check', async () => {
+    const { f, ch } = await held([CH]);
+    const reg = vi.fn();
+    await expect(completePairing('123456', ch, { ...cdeps(reg), now: () => Date.parse('2100-01-01') })).rejects.toMatchObject({ reason: 'expired' });
+    expect(reg).not.toHaveBeenCalled(); expect(f.isClosed()).toBe(true);
   });
 
   it('fails with network when the socket cannot open or drops', async () => {
-    await expect(pairDevice('123456', { ...deps(fakeSocket([]).socket), open: () => Promise.reject(new Error('x')) })).rejects.toMatchObject({ reason: 'network' });
-    await expect(pairDevice('123456', deps(fakeSocket([]).socket))).rejects.toMatchObject({ reason: 'network' });
+    await expect(requestChallenge('123456', () => Promise.reject(new Error('x')))).rejects.toMatchObject({ reason: 'network' });
+    await expect(requestChallenge('123456', () => Promise.resolve(fakeSocket([]).socket))).rejects.toMatchObject({ reason: 'network' });
+    const { ch } = await held([CH]);
+    await expect(completePairing('123456', ch, cdeps())).rejects.toMatchObject({ reason: 'network' });
   });
 });
 
@@ -88,27 +113,46 @@ describe('Pairing screen', () => {
     expect(screen.getByText(copy.pairing.install.body)).toBeInTheDocument();
   });
 
-  it('sends only at six digits, keeps the typed code on error, then reaches the done step', async () => {
+  it('asks the PC at the sixth digit, verifies from a second tap, keeps the code on error, then reaches the done step', async () => {
     const onContinue = vi.fn();
-    const pair = vi.fn().mockRejectedValueOnce(new PairFailure('invalid_code')).mockResolvedValueOnce({ token: 'tok', deviceId: 'd' });
-    render(createElement(Pairing, { onContinue, pair, iosTab: false }));
+    const ch = { socket: { send: vi.fn(), receive: vi.fn(), close: vi.fn() }, options: {}, expiresAt: Date.now() + 60_000 };
+    const request = vi.fn().mockRejectedValueOnce(new PairFailure('invalid_code')).mockResolvedValue(ch);
+    const complete = vi.fn().mockResolvedValue({ token: 'tok', deviceId: 'd' });
+    render(createElement(Pairing, { onContinue, request, complete, iosTab: false }));
     goToCode();
     const input = screen.getByLabelText(copy.pairing.codeLabel) as HTMLInputElement;
     expect(input).toHaveAttribute('autocomplete', 'one-time-code');
     expect(input).toHaveAttribute('inputmode', 'numeric');
-    const send = screen.getByRole('button', { name: copy.pairing.steps[2].button });
     fireEvent.change(input, { target: { value: '12a34' } });
-    expect(input.value).toBe('1234'); expect(send).toBeDisabled();
+    expect(input.value).toBe('1234');
+    expect(screen.getByRole('button', { name: copy.pairing.steps[2].button })).toBeDisabled();
+    expect(request).not.toHaveBeenCalled();
     fireEvent.change(input, { target: { value: '123456' } });
-    expect(send).toBeEnabled();
-    fireEvent.click(send);
     expect(await screen.findByRole('alert')).toHaveTextContent(copy.pairing.errors.invalid_code);
     expect(input.value).toBe('123456');
     fireEvent.click(screen.getByRole('button', { name: copy.pairing.steps[2].button }));
+    const verify = await screen.findByRole('button', { name: copy.pairing.verify });
+    expect(complete).not.toHaveBeenCalled();
+    fireEvent.click(verify);
+    expect(complete).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Vous êtes connecté' })).toBeInTheDocument());
-    expect(pair).toHaveBeenCalledTimes(2);
     expect(localStorage.getItem(TOKEN_KEY)).toBe('tok');
     fireEvent.click(screen.getByRole('button', { name: 'Continuer' }));
     expect(onContinue).toHaveBeenCalled();
+  });
+
+  it('goes back to asking for a challenge when the held one fails, and clears the error when stepping back', async () => {
+    const ch = { socket: { send: vi.fn(), receive: vi.fn(), close: vi.fn() }, options: {}, expiresAt: Date.now() + 60_000 };
+    const request = vi.fn().mockResolvedValue(ch);
+    const complete = vi.fn().mockRejectedValue(new PairFailure('expired'));
+    render(createElement(Pairing, { onContinue: vi.fn(), request, complete, iosTab: false }));
+    goToCode();
+    fireEvent.change(screen.getByLabelText(copy.pairing.codeLabel), { target: { value: '123456' } });
+    fireEvent.click(await screen.findByRole('button', { name: copy.pairing.verify }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(copy.pairing.errors.expired);
+    expect(screen.getByRole('button', { name: copy.pairing.steps[2].button })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: copy.pairing.back }));
+    fireEvent.click(screen.getByRole('button', { name: copy.pairing.steps[1].button }));
+    expect(screen.queryByRole('alert')?.textContent ?? '').toBe('');
   });
 });

@@ -14,38 +14,59 @@ export interface PairSocket {
   close(): void;
 }
 
-export interface PairDeps {
-  open(): Promise<PairSocket>;
+/** Phase A result: the daemon accepted the code and the pre-auth socket is held open until the window expires. */
+export interface PairChallenge { socket: PairSocket; options: Record<string, unknown>; expiresAt: number }
+
+export interface CompleteDeps {
   startRegistration: typeof StartRegistration;
   deviceName: string;
+  now?: () => number;
 }
 
 const NAME_MAX = 60;
 
-export async function pairDevice(code: string, deps: PairDeps): Promise<{ token: string; deviceId: string }> {
-  let socket: PairSocket;
-  try { socket = await deps.open(); } catch { throw new PairFailure('network'); }
-  const ask = async (msg: Record<string, unknown>): Promise<Record<string, unknown>> => {
-    let reply: Record<string, unknown>;
-    try { socket.send(msg); reply = await socket.receive(); } catch { throw new PairFailure('network'); }
-    if (reply.type === 'pair.error') {
-      const reason = PairErrorSchema.safeParse(reply.reason);
-      throw new PairFailure(reason.success ? reason.data : 'webauthn_failed');
-    }
-    return reply;
-  };
-  try {
-    const challenge = await ask({ type: 'pair.options', code });
-    if (challenge.type !== 'pair.challenge' || typeof challenge.options !== 'object' || challenge.options === null) throw new PairFailure('network');
-    let webauthn: RegistrationJson;
-    try { webauthn = await deps.startRegistration({ optionsJSON: challenge.options as never }) as unknown as RegistrationJson; }
-    catch { throw new PairFailure('webauthn_failed'); }
-    const done = await ask({ type: 'pair.complete', code, deviceName: deps.deviceName.slice(0, NAME_MAX) || 'Navigateur', webauthn });
-    if (done.type !== 'pair.done' || typeof done.token !== 'string' || typeof done.deviceId !== 'string') throw new PairFailure('network');
-    return { token: done.token, deviceId: done.deviceId };
-  } finally {
-    try { socket.close(); } catch { /* already closed */ }
+async function ask(socket: PairSocket, msg: Record<string, unknown>): Promise<Record<string, unknown>> {
+  let reply: Record<string, unknown>;
+  try { socket.send(msg); reply = await socket.receive(); } catch { throw new PairFailure('network'); }
+  if (reply.type === 'pair.error') {
+    const reason = PairErrorSchema.safeParse(reply.reason);
+    throw new PairFailure(reason.success ? reason.data : 'webauthn_failed');
   }
+  return reply;
+}
+
+/** Phase A: open the socket, send the code, hold the socket and the challenge. Closes the socket on any failure. */
+export async function requestChallenge(code: string, open: () => Promise<PairSocket>): Promise<PairChallenge> {
+  let socket: PairSocket;
+  try { socket = await open(); } catch { throw new PairFailure('network'); }
+  try {
+    const reply = await ask(socket, { type: 'pair.options', code });
+    if (reply.type !== 'pair.challenge' || typeof reply.options !== 'object' || reply.options === null) throw new PairFailure('network');
+    const expiresAt = typeof reply.expiresAt === 'string' ? Date.parse(reply.expiresAt) : NaN;
+    return { socket, options: reply.options as Record<string, unknown>, expiresAt };
+  } catch (e) { try { socket.close(); } catch { /* gone */ } throw e; }
+}
+
+/**
+ * Phase B: must be called straight from a tap. `startRegistration` runs before any await, so the browser still sees the
+ * user activation (WebKit refuses navigator.credentials.create without it). Always closes the held socket.
+ */
+export function completePairing(code: string, challenge: PairChallenge, deps: CompleteDeps): Promise<{ token: string; deviceId: string }> {
+  const { socket } = challenge;
+  if ((deps.now ?? Date.now)() >= challenge.expiresAt) {
+    try { socket.close(); } catch { /* gone */ }
+    return Promise.reject(new PairFailure('expired'));
+  }
+  const registration = deps.startRegistration({ optionsJSON: challenge.options as never });
+  return (async () => {
+    try {
+      let webauthn: RegistrationJson;
+      try { webauthn = await registration as unknown as RegistrationJson; } catch { throw new PairFailure('webauthn_failed'); }
+      const done = await ask(socket, { type: 'pair.complete', code, deviceName: deps.deviceName.slice(0, NAME_MAX) || 'Navigateur', webauthn });
+      if (done.type !== 'pair.done' || typeof done.token !== 'string' || typeof done.deviceId !== 'string') throw new PairFailure('network');
+      return { token: done.token, deviceId: done.deviceId };
+    } finally { try { socket.close(); } catch { /* already closed */ } }
+  })();
 }
 
 export function guessDeviceName(ua: string): string {

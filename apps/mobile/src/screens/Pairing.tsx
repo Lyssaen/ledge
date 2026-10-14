@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { startRegistration } from '@simplewebauthn/browser';
 import { copy } from '../copy';
-import { guessDeviceName, isIosBrowserTab, openPairSocket, PairFailure, pairDevice, savePairing } from '../connection/pair';
+import { completePairing, guessDeviceName, isIosBrowserTab, openPairSocket, PairFailure, requestChallenge, savePairing, type PairChallenge } from '../connection/pair';
 
 const t = copy.pairing;
 
@@ -23,41 +23,75 @@ const btn = 'mt-2 inline-flex min-h-12 items-center justify-center rounded-contr
 export interface PairingProps {
   /** Called when the person leaves the last step; the app then connects with the stored token. */
   onContinue(): void;
-  /** Test seam. */
-  pair?: typeof pairDevice;
+  /** Test seams. */
+  request?: typeof requestChallenge;
+  complete?: typeof completePairing;
   iosTab?: boolean;
 }
 
-export function Pairing({ onContinue, pair = pairDevice, iosTab = isIosBrowserTab() }: PairingProps) {
+export function Pairing({ onContinue, request = requestChallenge, complete = completePairing, iosTab = isIosBrowserTab() }: PairingProps) {
   const [step, setStep] = useState(0);
   const [code, setCode] = useState('');
   const [failure, setFailure] = useState<PairFailure['reason'] | null>(null);
   const [busy, setBusy] = useState(false);
-  const inFlight = useRef(false);
+  const [challenge, setChallenge] = useState<PairChallenge | null>(null);
+  const held = useRef<PairChallenge | null>(null);
+  const attempt = useRef(0);
   const s = t.steps[step]!;
 
-  const submit = async () => {
-    if (code.length !== 6 || inFlight.current) return;
-    inFlight.current = true; setBusy(true); setFailure(null);
-    const deviceName = guessDeviceName(navigator.userAgent);
+  const drop = () => { attempt.current++; try { held.current?.socket.close(); } catch { /* gone */ } held.current = null; setChallenge(null); setBusy(false); };
+  useEffect(() => () => { attempt.current++; try { held.current?.socket.close(); } catch { /* gone */ } }, []);
+
+  /** Phase A: the code is complete, ask the PC for the device challenge and hold the socket. */
+  const ask = async (c: string) => {
+    drop();
+    const mine = attempt.current;
+    setBusy(true); setFailure(null);
     try {
-      const r = await pair(code, { open: () => openPairSocket(), startRegistration, deviceName });
-      savePairing(r, deviceName);
-      setStep(3);
+      const ch = await request(c, () => openPairSocket());
+      if (mine !== attempt.current) { ch.socket.close(); return; }
+      held.current = ch; setChallenge(ch);
     } catch (e) {
-      setFailure(e instanceof PairFailure ? e.reason : 'network');
-    } finally { inFlight.current = false; setBusy(false); }
+      if (mine === attempt.current) setFailure(e instanceof PairFailure ? e.reason : 'network');
+    } finally { if (mine === attempt.current) setBusy(false); }
   };
 
+  /** Phase B: runs from the tap itself, so the device check keeps its user activation. */
+  const verify = () => {
+    const ch = held.current;
+    if (!ch) return;
+    const mine = attempt.current;
+    const deviceName = guessDeviceName(navigator.userAgent);
+    setBusy(true); setFailure(null);
+    complete(code, ch, { startRegistration, deviceName }).then(r => {
+      if (mine !== attempt.current) return;
+      savePairing(r, deviceName);
+      held.current = null; setChallenge(null); setStep(3);
+    }, e => {
+      if (mine !== attempt.current) return;
+      // The held socket is closed by now: back to phase A (the typed code stays, tap again).
+      held.current = null; setChallenge(null);
+      setFailure(e instanceof PairFailure ? e.reason : 'network');
+    }).finally(() => { if (mine === attempt.current) setBusy(false); });
+  };
+
+  const onCode = (v: string) => {
+    const digits = v.replace(/\D/g, '').slice(0, 6);
+    setCode(digits);
+    if (digits === code) return;
+    if (digits.length === 6) void ask(digits); else { drop(); setFailure(null); }
+  };
+  const goBack = () => { drop(); setFailure(null); setStep(step - 1); };
+
   const showNext = step !== 1 || !iosTab;
-  const next = () => { if (step === 2) void submit(); else if (step === 3) onContinue(); else setStep(step + 1); };
+  const next = () => { if (step === 2) { if (challenge) verify(); else if (code.length === 6) void ask(code); } else if (step === 3) onContinue(); else setStep(step + 1); };
 
   return (
     <main className="app" aria-labelledby="pair-title">
       <header className="flex-none px-side pt-2 pb-3">
         <div className="flex items-center justify-between">
           {step === 1 || step === 2
-            ? <button type="button" className="-ml-2 inline-flex size-11 items-center justify-center rounded-control" aria-label={t.back} onClick={() => setStep(step - 1)}>
+            ? <button type="button" className="-ml-2 inline-flex size-11 items-center justify-center rounded-control" aria-label={t.back} onClick={goBack}>
                 <svg className="size-5 fill-none stroke-fg [stroke-width:2]" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
               </button>
             : <span className="size-11" />}
@@ -95,8 +129,8 @@ export function Pairing({ onContinue, pair = pairDevice, iosTab = isIosBrowserTa
             <label htmlFor="pair-code" className="mt-3 mb-2 block text-xs text-muted">{t.codeLabel}</label>
             <input
               id="pair-code" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="000000"
-              value={code} disabled={busy}
-              onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              value={code} readOnly={busy}
+              onChange={e => onCode(e.target.value)}
               className="w-full rounded-control border border-line bg-surface p-4 text-center font-mono text-[26px] tracking-[12px] text-fg"
             />
             <p className="mt-2.5 text-xs text-muted">{t.codeHint}</p>
@@ -113,7 +147,7 @@ export function Pairing({ onContinue, pair = pairDevice, iosTab = isIosBrowserTa
       {showNext && (
         <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg px-side pt-3 pb-4">
           <button type="button" id="pair-next" className={`${btn} bg-fg text-[#121415] disabled:opacity-50`} disabled={step === 2 && (code.length !== 6 || busy)} onClick={next}>
-            {busy ? t.pending : s.button}
+            {busy ? t.pending : step === 2 && challenge ? t.verify : s.button}
           </button>
         </footer>
       )}

@@ -21,6 +21,7 @@ export const copy = {
     codeLabel: 'Code à six chiffres',
     codeHint: 'Code valable 2 minutes.',
     pending: 'Vérification…',
+    verify: 'Vérifier avec cet appareil',
     privacy: { title: 'Réseau privé', body: 'Vous pourrez retirer l’accès de ce téléphone depuis Réglages → Mobile sur le PC.' },
     done: { title: 'Accès confirmé', body: 'Vos demandes et conversations sont disponibles tant que le PC et Tailscale sont connectés.' },
     errors: {

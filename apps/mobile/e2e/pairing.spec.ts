@@ -52,12 +52,11 @@ for (const width of [320, 390, 430]) {
     await input.fill('12345');
     await expect(send).toBeDisabled();
     await input.fill('000000');
-    await send.click();
     await expect(page.getByRole('alert')).toContainText('Code non reconnu');
     await expect(input).toHaveValue('000000');
 
     await input.fill('481203');
-    await send.click();
+    await page.getByRole('button', { name: 'Vérifier avec cet appareil' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Vous êtes connecté' })).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem('ledge.mobile.token'))).toBe(TOKEN);
     const { scrollWidth, innerWidth } = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth }));
