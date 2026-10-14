@@ -63,7 +63,7 @@ for (const width of [320, 390, 430]) {
     expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
 
     await page.getByRole('button', { name: 'Continuer' }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Ledge sur le téléphone' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'À traiter' })).toBeVisible();
     await expect.poll(() => received.some(m => m.type === 'auth' && m.token === TOKEN)).toBe(true);
     expect(received.find(m => m.type === 'pair.complete')).toMatchObject({ deviceName: 'Navigateur', webauthn: { type: 'public-key' } });
   });

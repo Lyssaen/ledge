@@ -1,22 +1,24 @@
 import { useEffect, useState } from 'react';
-import { copy } from './copy';
+import { navigate, useRoute } from './router';
+import { Inbox } from './screens/Inbox';
 import { Pairing } from './screens/Pairing';
+import { RequestDetail } from './screens/RequestDetail';
 import { useMobile, mobileStore } from './state/store';
 
-export function App({ onPaired }: { onPaired?: () => void }) {
+export function App({ onPaired, onReconnect = () => {} }: { onPaired?: () => void; onReconnect?: () => void }) {
   const { link } = useMobile();
+  const route = useRoute();
   // Once pairing has started it stays up through its last step, even after the token is stored and the link moves on.
   const [pairing, setPairing] = useState(false);
   useEffect(() => { if (link === 'unpaired') setPairing(true); }, [link]);
-  if (pairing || link === 'unpaired') {
-    return <Pairing onContinue={() => { setPairing(false); mobileStore.setLink('connecting'); onPaired?.(); }} />;
+  if (pairing || link === 'unpaired' || route.name === 'pair') {
+    return <Pairing onContinue={() => { setPairing(false); navigate({ name: 'inbox' }); mobileStore.setLink('connecting'); onPaired?.(); }} />;
   }
   return (
-    <main className="app">
-      <header className="px-side pt-4 pb-[18px]">
-        <h1 className="text-[29px] leading-[1.15] font-semibold tracking-[-1px]">{copy.shellTitle}</h1>
-        <p className="mt-2 text-[13px] text-muted">{copy.shellSubtitle}</p>
-      </header>
-    </main>
+    <div className="app">
+      {route.name === 'request'
+        ? <RequestDetail sessionId={route.sessionId} pendingId={route.pendingId} onReconnect={onReconnect} />
+        : <Inbox onReconnect={onReconnect} />}
+    </div>
   );
 }

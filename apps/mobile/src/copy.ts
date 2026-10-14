@@ -1,8 +1,45 @@
 /** Every French string of the phone app lives here (decision D13). */
 export const copy = {
   appName: 'Ledge',
-  shellTitle: 'Ledge sur le téléphone',
-  shellSubtitle: 'Connexion au PC en cours de mise en place.',
+  inbox: {
+    title: 'À traiter',
+    subtitle: (n: number) => n === 0 ? 'Toutes les demandes ont été traitées.' : n === 1 ? '1 demande. Choisissez par où commencer.' : `${n} demandes. Choisissez par où commencer.`,
+    filtersLabel: 'Filtrer les demandes',
+    filters: { all: 'Tout', permission: 'Autorisations', question: 'Questions' },
+    oldestFirst: 'LES PLUS ANCIENNES D’ABORD',
+    examine: 'Examiner',
+    lastKnown: 'Dernier état connu',
+    upToDate: 'Vous êtes à jour',
+    upToDateHint: 'Aucune demande n’attend de décision.',
+    emptyFilter: 'Aucune demande dans ce filtre',
+    emptyFilterHint: 'Les autres demandes restent dans « Tout ».',
+    offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
+  },
+  nav: { label: 'Navigation principale', inbox: 'À traiter' },
+  link: {
+    online: 'connecté', offline: 'déconnecté', settings: 'Connexion du téléphone',
+    lostTitle: 'Connexion au PC perdue',
+    lostBody: 'Le PC, le réseau ou Tailscale est indisponible. Les demandes ci-dessous peuvent avoir changé.',
+    lostDetail: 'Dernier état connu. Reconnectez-vous pour vérifier si cette demande attend toujours une décision.',
+    lastKnownAt: (t: string) => `Dernier état connu · ${t}`,
+    reconnect: 'Reconnecter et actualiser',
+    reconnecting: 'Reconnexion…'
+  },
+  kind: { permission: 'Autorisation', question: 'Question', plan: 'Plan', diff: 'Modification' },
+  tools: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' },
+  detail: {
+    back: 'Retour aux demandes',
+    heading: { permission: 'Une autorisation', question: 'Une question', plan: 'Un plan', diff: 'Des modifications' },
+    commandTitle: 'Commande à autoriser',
+    folder: 'Dossier', branch: 'Branche', asked: 'Demandé',
+    ago: (age: string) => `Il y a ${age}`,
+    context: 'Contexte du terminal',
+    options: 'Réponses proposées',
+    deny: 'Refuser', allow: 'Autoriser une fois',
+    notYet: 'Décisions depuis le téléphone : pas encore disponibles. Répondez sur le PC.',
+    readOnlyHint: 'Cette session est en lecture seule.'
+  },
+  gone: { header: 'Demande', title: 'Cette demande n’attend plus de décision.', body: 'Elle a été traitée, sur le PC ou ailleurs.', back: 'Retour aux demandes' },
   pairing: {
     stepOf: (n: number) => `Connexion · ${n} / 4`,
     back: 'Étape précédente',
