@@ -5,19 +5,23 @@ import { Bot } from '../bots/Bot';
 import { botState, poseFor } from '../bots/poseFor';
 import { turns } from '../thread/turns';
 import { LiveToolLine } from './LiveToolLine';
+import { ThreadMarkdown } from '../documents/MarkdownDocument';
+import type { DocumentReference } from '../documents/references';
 
 export interface ThreadProps {
   session: Session; items: ThreadItem[]; t: Messages; theme: 'dark' | 'light';
   paused: boolean; frozen?: boolean; reducedMotion?: boolean; now?: number;
   /** The main view shows the current reply as the card below the thread; the helper view shows it as its report. */
   hideCurrentReply?: boolean;
+  /** Opens a Markdown document an agent's message links to; without it such links stay text. */
+  onDocument?: (ref: DocumentReference) => void;
 }
 
 const mono = { fontFamily: 'var(--font-mono, ui-monospace, monospace)' } as const;
 const pre = { ...mono, margin: 0, padding: '8px 10px', fontSize: 11, lineHeight: '17px', whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const, background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', maxHeight: 220, overflow: 'auto' };
 const muted = { fontSize: 11, lineHeight: '16px', color: 'var(--muted-foreground)' } as const;
 
-function Item({ item, session, t, theme, paused, frozen, reducedMotion }: { item: ThreadItem } & Omit<ThreadProps, 'items' | 'hideCurrentReply' | 'now'>) {
+function Item({ item, session, t, theme, paused, frozen, reducedMotion, onDocument }: { item: ThreadItem } & Omit<ThreadProps, 'items' | 'hideCurrentReply' | 'now'>) {
   switch (item.kind) {
     case 'prompt': return (
       <div data-item="prompt" data-prompt style={{ margin: '0 0 0 18px', padding: '10px 12px', background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
@@ -29,7 +33,7 @@ function Item({ item, session, t, theme, paused, frozen, reducedMotion }: { item
     case 'reply': return (
       <div data-item={item.kind} {...(item.kind === 'message' ? { 'data-message': '' } : { 'data-reply-item': '' })} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '14px 0 10px' }}>
         <Bot seed={`${session.id}:msg`} tool={session.tool} state={botState(session)} pose={poseFor(session.id, session.state)} size={20} theme={theme} paused={paused} frozen={frozen} reducedMotion={reducedMotion} />
-        <p style={{ margin: 0, flex: 1, minWidth: 0, fontSize: 13, lineHeight: '20px', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}><strong style={{ fontWeight: 600 }}>{session.name}</strong> {item.text}</p>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: '20px', overflowWrap: 'anywhere' }}><strong style={{ fontWeight: 600 }}>{session.name}</strong> <ThreadMarkdown text={item.text} onDocument={onDocument} /></div>
       </div>);
     case 'permission': return (
       <div data-item="permission" data-permission data-decision={item.decision ?? 'pending'} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
@@ -55,7 +59,7 @@ export function Thread(p: ThreadProps) {
   const rows: ReactNode[] = [];
   for (const turn of all) for (const it of turn.items) {
     if (it.kind === 'tool' || (hideCurrentReply && it.kind === 'reply' && turn === current)) continue;
-    rows.push(<Item key={it.id} item={it} session={session} t={t} theme={p.theme} paused={p.paused} frozen={p.frozen} reducedMotion={p.reducedMotion} />);
+    rows.push(<Item key={it.id} item={it} session={session} t={t} theme={p.theme} paused={p.paused} frozen={p.frozen} reducedMotion={p.reducedMotion} onDocument={p.onDocument} />);
   }
   // The current turn's calls are one live line, under everything said so far: the running tool, then its mark.
   if (current.items.some(it => it.kind === 'tool')) rows.push(<LiveToolLine key="live-tools" items={current.items} t={t} now={p.now} paused={p.paused} reducedMotion={p.reducedMotion} />);

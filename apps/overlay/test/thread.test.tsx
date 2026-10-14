@@ -82,4 +82,20 @@ describe('<Thread>', () => {
     expect(screen.getByText('The thread fills up with the agent’s next event.')).toBeInTheDocument();
     expect(container.querySelector('[data-thread][data-empty] [data-source-note]')).toHaveTextContent('neither results nor intermediate messages');
   });
+  it('renders an agent\'s Markdown: bold, italic, struck, highlight, headings, lists and code, never raw HTML', () => {
+    const text = '## Résumé\n\nC\'est **fait**, *vite* et ~~mal~~ ==surligné==, voir `a == b`.\n\n- un\n- deux\n\n```\nx == y\n```\n\n<b>brut</b>';
+    const { container } = render(<Thread session={fakeSession('a')} items={[{ kind: 'message', id: 'm', at: at(0), turn: 1, text }]} t={t} theme="dark" paused />);
+    const md = container.querySelector('[data-message] [data-markdown]')!;
+    expect(md.querySelector('h2')).toHaveTextContent('Résumé');
+    expect(md.querySelector('strong')).toHaveTextContent('fait');
+    expect(md.querySelector('em')).toHaveTextContent('vite');
+    expect(md.querySelector('del')).toHaveTextContent('mal');
+    expect(md.querySelectorAll('mark')).toHaveLength(1);
+    expect(md.querySelector('mark')).toHaveTextContent('surligné');
+    expect(md.querySelector('p code')).toHaveTextContent('a == b');
+    expect(md.querySelectorAll('li')).toHaveLength(2);
+    expect(md.querySelector('pre')).toHaveTextContent('x == y');
+    expect(md.querySelector('b')).toBeNull();
+    expect(container.querySelector('[data-message]')).toHaveTextContent(fakeSession('a').name);
+  });
 });

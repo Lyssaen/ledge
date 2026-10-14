@@ -212,7 +212,7 @@ export function SessionView(p: SessionViewProps) {
           {rows.length > 0 && <HelpersTree parent={s} helpers={rows} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
           {p.thread !== undefined
             // The current answer is the card below when there is one, or the plan the request shows; otherwise (a request waits) it reads in the thread.
-            ? <Thread session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} hideCurrentReply={!!(reply && doc) || (!!pending?.body && pending.body === s.lastReply?.text)} />
+            ? <Thread session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} onDocument={p.onDocument} hideCurrentReply={!!(reply && doc) || (!!pending?.body && pending.body === s.lastReply?.text)} />
             : <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '12px 0 0' }}>{t.thread.loading}</p>}
           {reply && doc && <>
             <span data-reply-meta style={{ marginTop: 6, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
