@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
-import type { ChatProposal, ChatRelay, Session } from '@ledge/protocol';
+import type { ChatProposal, ChatRelay, ServerMessage, Session } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
@@ -15,6 +15,8 @@ import type { Tmux } from '../src/tmux.js';
 import { createDaemonUpdater } from '../src/update/run-update.js';
 import { History } from '../src/daemon/history.js';
 import { until } from './helpers.js';
+import { paths } from '../src/paths.js';
+import { writeMachines } from '../src/daemon/machines.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
@@ -496,25 +498,25 @@ describe('server', () => {
     it('a client that connects later gets the last preview right after the snapshot', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim' }));
       srv.preview('a', ['old']); srv.preview('a', ['● latest']);
-      const r = await recorder(); await r.until(2);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'session.preview', 'chat.history']);
-      expect(r.got[1]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
+      const r = await recorder(); await r.until(3);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'session.preview', 'chat.history']);
+      expect(r.got[2]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
       r.ws.terminate();
     });
     it('a snapshot.request gets the previews again after the snapshot', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']);
-      const r = await recorder(); await r.until(2);
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(6);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'session.preview', 'chat.history', 'snapshot', 'session.preview', 'chat.history']);
+      const r = await recorder(); await r.until(3);
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(8);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'session.preview', 'chat.history', 'snapshot', 'machines', 'session.preview', 'chat.history']);
       r.ws.terminate();
     });
     it('a removed session drops its preview; a preview for an unknown session is ignored', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']); srv.preview('ghost', ['boo']);
       store.remove('a');
       const r = await recorder(); await r.until(1); await new Promise(res => setTimeout(res, 50));
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'chat.history']);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'chat.history']);
       store.upsert(mk('a'));
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(5); await new Promise(res => setTimeout(res, 50));
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(6); await new Promise(res => setTimeout(res, 50));
       expect(r.got.filter(m => m.type === 'session.preview')).toEqual([]);
       r.ws.terminate();
     });
@@ -999,5 +1001,92 @@ describe('session thread (spec 2026-10-13 §5)', () => {
     c.send({ type: 'session.thread', id: 'nope' });
     expect(await c.next('session.thread', 2000)).toEqual({ type: 'session.thread', id: 'nope', items: [] });
     c.close(); await server.close();
+  });
+});
+
+// Messages are recorded from the moment the socket is created: a snapshot can land while the test awaits a second connection.
+const inbox = new WeakMap<WebSocket, ServerMessage[]>();
+const open = (port: number, path = '') => new Promise<WebSocket>(r => {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`, { headers: { origin: 'tauri://localhost' } });
+  const got: ServerMessage[] = []; inbox.set(ws, got); ws.on('message', d => got.push(JSON.parse(String(d))));
+  ws.on('open', () => r(ws));
+});
+const collect = (ws: WebSocket) => inbox.get(ws)!;
+const dev = { id: 'dev', label: 'Devbox', ssh: 'dev-server' };
+
+describe('machines list', () => {
+  it('follows the snapshot, defaulting to local', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const ws = await open(s.port); const got = collect(ws);
+    await until(() => got.some(m => m.type === 'machines'));
+    expect(got.map(m => m.type).slice(0, 2)).toEqual(['snapshot', 'machines']);
+    expect(got.find(m => m.type === 'machines')).toEqual({ type: 'machines', machines: [{ id: 'local', label: 'Local' }] });
+    ws.close(); await s.close();
+  });
+  it('machines.set is validated, written, and broadcast to every local client', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const a = await open(s.port), b = await open(s.port); const gotA = collect(a), gotB = collect(b);
+    await until(() => gotB.some(m => m.type === 'machines'));
+    a.send(JSON.stringify({ type: 'machines.set', machines: [{ id: 'local', label: 'Local' }, dev] }));
+    await until(() => gotB.filter(m => m.type === 'machines').length === 2);
+    expect(gotB.at(-1)).toEqual({ type: 'machines', machines: [{ id: 'local', label: 'Local' }, dev] });
+    expect(gotA.at(-1)).toEqual(gotB.at(-1));
+    expect(JSON.parse(readFileSync(paths().machines, 'utf8'))).toEqual([{ id: 'local', label: 'Local' }, dev]);
+    a.close(); b.close(); await s.close();
+  });
+  it('an invalid list is refused with an error, nothing written nor broadcast', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const a = await open(s.port), b = await open(s.port); const gotA = collect(a), gotB = collect(b);
+    await until(() => gotB.some(m => m.type === 'machines'));
+    a.send(JSON.stringify({ type: 'machines.set', machines: [dev, { id: 'local', label: 'Local' }] }));
+    a.send(JSON.stringify({ type: 'machines.set', machines: [{ id: 'local', label: 'Local' }, dev, { ...dev, id: 'dev2' }] }));
+    await until(() => gotA.filter(m => m.type === 'error').length === 2);
+    expect(gotB.filter(m => m.type === 'machines')).toHaveLength(1);
+    expect(existsSync(paths().machines)).toBe(false);
+    a.close(); b.close(); await s.close();
+  });
+  it('a second front connecting after a set sees the daemon list, not its own', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const a = await open(s.port); collect(a);
+    a.send(JSON.stringify({ type: 'machines.set', machines: [{ id: 'local', label: 'Local' }, dev] }));
+    await until(() => existsSync(paths().machines));
+    const b = await open(s.port); const gotB = collect(b);
+    await until(() => gotB.some(m => m.type === 'machines'));
+    expect(gotB.find(m => m.type === 'machines')).toEqual({ type: 'machines', machines: [{ id: 'local', label: 'Local' }, dev] });
+    a.close(); b.close(); await s.close();
+  });
+  it('is read back from the file at start', async () => {
+    writeMachines([{ id: 'local', label: 'Local' }, dev]);
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const ws = await open(s.port); const got = collect(ws);
+    await until(() => got.some(m => m.type === 'machines'));
+    expect(got.find(m => m.type === 'machines')).toEqual({ type: 'machines', machines: [{ id: 'local', label: 'Local' }, dev] });
+    ws.close(); await s.close();
+  });
+  it('a failing write leaves the list unchanged, nothing broadcast, and reports the error to the sender', async () => {
+    const bad = join(process.env.LEDGE_HOME!, 'missing-dir', 'machines.json');
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, machinesFile: bad });
+    const a = await open(s.port), b = await open(s.port); const gotA = collect(a), gotB = collect(b);
+    await until(() => gotB.some(m => m.type === 'machines'));
+    a.send(JSON.stringify({ type: 'machines.set', machines: [{ id: 'local', label: 'Local' }, dev] }));
+    await until(() => gotA.some(m => m.type === 'error'));
+    expect(gotB.filter(m => m.type === 'machines')).toHaveLength(1);
+    const c = await open(s.port); const gotC = collect(c);
+    await until(() => gotC.some(m => m.type === 'machines'));
+    expect(gotC.find(m => m.type === 'machines')).toEqual({ type: 'machines', machines: [{ id: 'local', label: 'Local' }] });
+    a.close(); b.close(); c.close(); await s.close();
+  });
+  it('ssh clients neither receive machines nor may set them', async () => {
+    const remote: unknown[] = [];
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, ssh: async (ws, _alias, _env) => { ws.on('message', d => { const m = JSON.parse(String(d)); if (m.type === 'machines.set') remote.push(m); }); } });
+    const r = await open(s.port, '/ssh/dev-server'); const gotR = collect(r);
+    const a = await open(s.port); const gotA = collect(a);
+    await until(() => gotA.some(m => m.type === 'machines'));
+    r.send(JSON.stringify({ type: 'machines.set', machines: [{ id: 'local', label: 'Local' }, dev] }));
+    a.send(JSON.stringify({ type: 'snapshot.request' }));
+    await until(() => gotA.filter(m => m.type === 'machines').length === 2);
+    expect(gotR.some(m => m.type === 'machines')).toBe(false);
+    expect(existsSync(paths().machines)).toBe(false);
+    r.close(); a.close(); await s.close();
   });
 });
