@@ -33,7 +33,7 @@ there is reused). Any console error or page error fails the spec. The first run 
 
 ```
 pnpm --filter overlay tauri dev
-pnpm --filter overlay tauri build    # NSIS installer in src-tauri/target/release/bundle
+pnpm --filter overlay tauri build    # NSIS installer in <repo root>/target/release/bundle
 ```
 
 Needs Windows with Rust (stable MSVC), Node, pnpm and WebView2.

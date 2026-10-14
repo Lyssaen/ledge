@@ -576,12 +576,10 @@ mod tests {
         assert!(!desktop_class(""));
     }
 
-
     #[test] fn the_tray_tells_a_dev_build_from_an_installed_one() {
         assert_eq!(tray_title("0.1.0", false), "Ledge 0.1.0");
         assert_eq!(tray_title("0.1.0", true), "Ledge 0.1.0 (dev)");
     }
-
 
     #[test] fn the_chosen_monitor_is_used_while_plugged_in_else_the_primary() {
         let ids: Vec<String> = ["\\\\.\\DISPLAY1", "\\\\.\\DISPLAY2"].iter().map(|s| s.to_string()).collect();
@@ -590,7 +588,6 @@ mod tests {
         assert_eq!(choose(Some("\\\\.\\DISPLAY3"), &ids, 0), 0); // unplugged: back to the primary
         assert_eq!(choose(Some("#1"), &["#0".to_string(), "#1".to_string()], 0), 1); // unnamed monitors go by index
     }
-
 
     const AREA: Area = Area { x: 0, y: 0, w: 2880, h: 1548, scale: 1.5 };
     const LEFT_TASKBAR: Area = Area { x: 72, y: 0, w: 1848, h: 1080, scale: 1.0 };

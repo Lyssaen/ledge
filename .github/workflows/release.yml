@@ -79,7 +79,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/overlay/src-tauri
+          workspaces: .
       - run: pnpm install --frozen-lockfile
       # The tag is the version: written into the Tauri config (tray line, exe file version, installer name), the crate
       # and the package before anything is built, so the release never ships the version left in the repository.
@@ -95,8 +95,7 @@ jobs:
         run: pnpm tauri build
         working-directory: apps/overlay
       - name: Rust tests
-        run: cargo test
-        working-directory: apps/overlay/src-tauri
+        run: cargo test --workspace
       - name: Publish
         if: env.PUBLISH == 'true'
         env:
@@ -104,7 +103,7 @@ jobs:
           TAG: ${{ env.VERSION_TAG }}
         run: |
           $version = $env:TAG -replace '^v', ''
-          $exe = Get-ChildItem "apps/overlay/src-tauri/target/release/bundle/nsis/*_$($version)_*-setup.exe" | Select-Object -First 1
+          $exe = Get-ChildItem "target/release/bundle/nsis/*_$($version)_*-setup.exe" | Select-Object -First 1
           if (-not $exe) { throw "No installer for $version under bundle/nsis" }
           $sha = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
           # actions/checkout leaves a lightweight tag on the commit: fetch the annotated one back before reading it.
@@ -140,7 +139,7 @@ jobs:
         if: env.PUBLISH != 'true'
         run: |
           $version = $env:VERSION_TAG -replace '^v', ''
-          $exe = Get-ChildItem "apps/overlay/src-tauri/target/release/bundle/nsis/*_$($version)_*-setup.exe" | Select-Object -First 1
+          $exe = Get-ChildItem "target/release/bundle/nsis/*_$($version)_*-setup.exe" | Select-Object -First 1
           if (-not $exe) { throw "No installer for $version under bundle/nsis" }
           if (-not (Test-Path "$($exe.FullName).sig")) { throw "No updater signature next to $($exe.Name)" }
           Set-Content -Path release-notes.md -Value "Dry run for $env:VERSION_TAG" -Encoding utf8
