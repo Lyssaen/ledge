@@ -63,6 +63,36 @@ describe('visible-ids dispatch', () => {
   });
 });
 
+describe('local daemon falls after its snapshot', () => {
+  it('keeps the selection and lists the local sessions offline', async () => {
+    const d = await createMockDaemon();
+    d.upsert(fakeSession('a')); d.upsert(fakeSession('b', { startedAt: '2026-10-09T18:00:01.000Z' })); d.machines([{ id: 'local', label: 'Local' }]);
+    seed('local:b');
+    const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
+    const { unmount } = render(<App client={client} />);
+    await waitFor(() => expect(document.querySelectorAll('[data-session]')).toHaveLength(2));
+    await d.close();
+    await waitFor(() => expect(screen.getByRole('main')).toHaveAttribute('data-readonly', 'true'));
+    expect([...document.querySelectorAll('[data-session]')].map(b => [b.getAttribute('data-session'), b.getAttribute('data-offline')])).toEqual([['local:a', 'true'], ['local:b', 'true']]);
+    await new Promise(r => setTimeout(r, 100));
+    expect(localStorage.getItem('desktop.selected')).toBe('local:b');
+    unmount();
+  });
+  it('does not prune a selection the attention filter hides once its session goes offline', async () => {
+    const d = await createMockDaemon();
+    d.upsert(fakeSession('a', { state: 'waiting_input' })); d.machines([{ id: 'local', label: 'Local' }]);
+    seed('local:a', { attentionOnly: true });
+    const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
+    const { unmount } = render(<App client={client} />);
+    await waitFor(() => expect(document.querySelectorAll('[data-session]')).toHaveLength(1));
+    await d.close();
+    await waitFor(() => expect(screen.getByRole('main')).toHaveAttribute('data-readonly', 'true'));
+    await new Promise(r => setTimeout(r, 100));
+    expect(localStorage.getItem('desktop.selected')).toBe('local:a');
+    unmount();
+  });
+});
+
 class DeadSocket { onopen = null; onmessage: unknown = null; onclose: ((e: unknown) => void) | null = null; onerror: ((e: unknown) => void) | null = null; readyState = 3; constructor(public url: string) { setTimeout(() => { this.onerror?.({}); this.onclose?.({ code: 1006 }); }, 0); } send() {} close() {} }
 describe('local daemon down', () => {
   it('shows the dedicated notice, keeps New session disabled and marks the view read-only', async () => {

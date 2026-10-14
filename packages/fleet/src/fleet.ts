@@ -11,7 +11,7 @@ type PendingRoute = { qid: string; text: string; tool?: 'claude' | 'codex' | 'cu
 export interface FleetOptions {
   /** Storage key prefix: `ledge` (island) or `desktop` (spec §7). */
   prefix?: string;
-  /** Keep the last snapshot of a fallen remote peer published, sessions flagged `offline` (spec §6). Off: today's behaviour. */
+  /** Keep the last snapshot of a fallen peer (local or remote) published, sessions flagged `offline` (spec §6). Off: today's behaviour. */
   keepStale?: boolean;
   /** Trust the local daemon's `machines` list once it sends one (spec §5.3). Off: localStorage only. */
   machinesFromDaemon?: boolean;
@@ -54,8 +54,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   }
   const available = (p: Peer | undefined): boolean => !!p && p.status === 'open' && p.fresh && !!p.snapshot;
   const status = (): DaemonStatus => [...peers.values()].some(available) ? 'open' : [...peers.values()].some(p => p.status === 'connecting') ? 'connecting' : 'unreachable';
-  /** keepStale: a fallen remote peer keeps its last snapshot, flagged offline. The local peer is never frozen (spec §6). */
-  const stale = (p: Peer | undefined): boolean => !!opts.keepStale && !!p && p.config.id !== 'local' && !available(p) && !!p.snapshot;
+  /** keepStale: a fallen peer, the local one included, keeps its last snapshot, flagged offline (spec §6). */
+  const stale = (p: Peer | undefined): boolean => !!opts.keepStale && !!p && !available(p) && !!p.snapshot;
   const session = (p: Peer, s: Session): Session => ({ ...s, id: qualify(p.config.id, s.id), machineId: p.config.id, machineName: p.config.label, ...(stale(p) ? { offline: true } : {}) });
   const stateSessions = (p: Peer): Session[] => stale(p) ? p.snapshot!.sessions.map(s => ({ ...s, offline: true })) : p.snapshot?.sessions ?? [];
   /** The fleet's own inventory and status follow every change. Only `publish` tells the overlay the whole picture again:

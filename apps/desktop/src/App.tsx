@@ -27,8 +27,9 @@ function Shell({ client }: { client?: DaemonClient }) {
   const shown = state.view === 'room' ? tables(visible, state.grouping, t).flatMap(g => g.sessions) : groupSessions(visible).flatMap(g => g.sessions);
   // The ids the screen lists, in display order. Held back until a machine has delivered its first snapshot: before it `sessions` is [] and the
   // selection restored from storage would be wiped (spec §9.1).
+  // While the local daemon is down its sessions are frozen (offline) and the view is read-only: nothing is pruned.
   const key = shown.map(s => s.id).join('\n');
-  useEffect(() => { if (ready) dispatch({ type: 'visible', ids: key ? key.split('\n') : [] }); }, [ready, key, dispatch]);
+  useEffect(() => { if (ready && !localDown) dispatch({ type: 'visible', ids: key ? key.split('\n') : [] }); }, [ready, localDown, key, dispatch]);
   return (
     <main className="app" data-readonly={localDown ? 'true' : undefined}>
       <div className="content">

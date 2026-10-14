@@ -40,13 +40,22 @@ describe('keepStale', () => {
     expect(s.sessions.map(x => x.id)).toEqual(['local:a']);
     expect(s.sessions.every(x => !('offline' in x))).toBe(true);
   });
-  it('the local peer is never frozen: its fall empties everything and the fleet is unreachable', () => {
+  it('a fallen local peer is frozen like a remote one: its sessions stay published, flagged offline', () => {
     const { api, local, got } = setup();
     local.set('unreachable');
-    expect(lastSnapshot(got)!.sessions.map(x => x.id)).toEqual(['server:r1', 'server:r2']);
-    expect(api.fleet!.machines().find(m => m.id === 'local')?.status).toBe('unreachable');
+    expect(lastSnapshot(got)!.sessions.map(x => [x.id, x.offline])).toEqual([['local:a', true], ['server:r1', undefined], ['server:r2', undefined]]);
+    const machine = api.fleet!.machines().find(m => m.id === 'local');
+    expect(machine?.status).toBe('unreachable');
+    expect(machine?.sessions.map(x => [x.id, x.offline])).toEqual([['a', true]]);
     expect(api.status()).toBe('open'); // the remote peer still answers
     expect(api.fleet!.sendTo('local', { type: 'snapshot.request' })).toBe(false);
+  });
+  it('without the option a fallen local peer still drops its sessions', () => {
+    const { local, got } = setup({ keepStale: false });
+    local.set('unreachable');
+    const s = lastSnapshot(got)!;
+    expect(s.sessions.map(x => x.id)).toEqual(['server:r1', 'server:r2']);
+    expect(s.sessions.every(x => !('offline' in x))).toBe(true);
   });
   it('the peer coming back replaces the stale snapshot and drops a session gone meanwhile', () => {
     const { server, got } = setup();
