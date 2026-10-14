@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { parseClientMessage, type ClientMessage, type DaemonInfo, type Recent, type ServerMessage, type Session } from '@ledge/protocol';
+import { parseClientMessage, type ClientMessage, type DaemonInfo, type Machines, type Recent, type ServerMessage, type Session } from '@ledge/protocol';
 
 export async function createMockDaemon(opts: { port?: number } = {}) {
   const wss = new WebSocketServer({ host: '127.0.0.1', port: opts.port ?? 0 });
@@ -23,6 +23,8 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     upsert(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); },
     remove(id: string) { sessions.delete(id); bc({ type: 'session.removed', id }); },
     preview(id: string, lines: string[]) { bc({ type: 'session.preview', id, lines }); },
+    /** The daemon's machines list (spec 2026-10-14 §5.2), pushed to every client. */
+    machines(list: Machines) { bc({ type: 'machines', machines: list }); },
     recents(recents: Recent[]) { extras.recents = recents; bc({ type: 'recents', recents }); },
     /** Answers the last requester's `session.launch`: the new session is broadcast, then `session.launched` is replied. */
     launched(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); last?.send(JSON.stringify({ type: 'session.launched', id: s.id })); },
