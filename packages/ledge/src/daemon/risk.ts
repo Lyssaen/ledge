@@ -18,7 +18,7 @@ const inside = (cwd: string, p: string): boolean => {
 };
 
 function isSensitive(cwd: string, p: string): boolean {
-  if (/^~[\\/]\.(ssh|ledge)(?:[\\/]|$)/.test(p)) return true;
+  if (p.includes('~')) return true;
   const full = resolve(cwd, p);
   const segs = full.split(sep);
   if (segs.includes('.git') || segs.some(s => s.startsWith('.env'))) return true;
@@ -31,8 +31,9 @@ const DESTROYS = [/\brm\s+-\w*[rRf]/, /\bgit\s+reset\s+--hard\b/, /\bgit\s+clean
 const DEPLOYS = [/\bdeploy\b/, /\bterraform\s+apply\b/, /\bkubectl\s+(apply|delete)\b/];
 const PUBLISHES = /\b(npm|pnpm|yarn)\s+publish\b/;
 const PIPES_TO_SHELL = /\b(curl|wget)\b[^\n]*\|\s*(sudo\s+)?(ba|z|da)?sh\b/;
-const SHELL_SYNTAX = /[\n;&|<>`]|\$\(|\$\{|"[^"]*[$`][^"]*"|'[^']*[$`][^']*'/;
-const FORBIDDEN_FLAG = /^(--output|--pre|--ext-diff$|--textconv$|-c$|-exec$|-execdir$|-ok$|-okdir$|-delete$|-fprint|-fls$)/;
+/** Anything the shell could rewrite before the command runs (quotes, escapes, expansions, globs, braces, control characters) is out of reach of the word checks below. */
+const SHELL_SYNTAX = /[;&|<>`'"\\$*?[\]{}\x00-\x1f\x7f]/;
+const FORBIDDEN_FLAG = /^(--output|--pre|--hostname-bin|--ext-diff$|--textconv$|-c$|-exec$|-execdir$|-ok$|-okdir$|-delete$|-fprint|-fls$)/;
 const READ_ONLY = new Set(['ls', 'pwd', 'cat', 'head', 'tail', 'wc', 'rg', 'grep', 'find']);
 const GIT_READ_ONLY = new Set(['status', 'diff', 'log', 'show', 'rev-parse']);
 const GIT_BRANCH_FLAGS = new Set(['-a', '-v', '--list', '--show-current']);
@@ -45,12 +46,13 @@ function classifyShell(command: string, cwd: string): RiskVerdict {
   if (PUBLISHES.test(command)) return high('publishes');
   if (PIPES_TO_SHELL.test(command)) return high('pipes_to_shell');
   if (SHELL_SYNTAX.test(command)) return high('shell_syntax');
-  const words = command.trim().split(/\s+/).filter(Boolean);
+  const words = command.trim().split(/ +/).filter(Boolean);
   const first = words[0];
   if (!first || first.includes('=')) return high('unknown');
   const args = words.slice(1);
   if (args.some(a => FORBIDDEN_FLAG.test(a))) return high('unsafe_flag');
-  if (args.some(a => a.startsWith('~') || (a.startsWith('/') && !inside(cwd, a)))) return high('sensitive_path');
+  const operand = (a: string): string => (a.startsWith('-') ? a.slice(a.indexOf('=') + 1 || a.length) : a);
+  if (args.some(a => { const v = operand(a); return v !== '' && (isSensitive(cwd, v) || !inside(cwd, v)); })) return high('sensitive_path');
   if (READ_ONLY.has(first)) return low('read_only_command');
   if (first === 'git') {
     const sub = args[0];
@@ -69,7 +71,7 @@ export function classify(input: RiskInput): RiskVerdict {
   if (kind === 'diff') {
     const t = text.trim();
     const paths = t === '' || t === 'patch' ? [] : t.split(', ').map(p => p.trim()).filter(Boolean);
-    if (paths.length === 0) return high('unknown');
+    if (paths.length === 0 || paths.some(p => /[,\n\r]/.test(p))) return high('unknown');
     if (paths.some(p => isSensitive(cwd, p))) return high('sensitive_path');
     if (paths.some(p => !inside(cwd, p))) return high('writes_outside_folder');
     return low('edit_inside_folder');
@@ -77,6 +79,7 @@ export function classify(input: RiskInput): RiskVerdict {
   if (kind !== 'permission') return high('unknown');
   if (tool === 'Read') {
     const p = text.trim();
+    if (p === '') return high('unknown');
     if (isSensitive(cwd, p)) return high('sensitive_path');
     return inside(cwd, p) ? low('read_only_command') : high('unknown');
   }

@@ -28,5 +28,6 @@ export function identify(before: Session, after: Session, at: string): Session {
   if (before.pending?.id === p.id && pendingKey(before.pending) !== pendingKey(p)) {
     return { ...after, pending: withRisk({ ...p, version: (before.pending.version ?? 1) + 1 }, after.cwd) };
   }
+  if (!p.risk) return { ...after, pending: withRisk(p, after.cwd) };
   return after;
 }

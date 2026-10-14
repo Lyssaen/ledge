@@ -92,4 +92,13 @@ describe('risk in request identity', () => {
     const b = reduce(a, ev('PermissionRequest', { tool: 'Bash', text: 'git push', at: T2 }));
     expect(b.pending).toMatchObject({ version: 1, risk: 'high', riskReason: 'pushes' });
   });
+  it('a hook pending replacing a pane pending with the same content keeps its risk', () => {
+    const a = reduce(base(), ev('PanePrompt', { kind: 'permission', text: 'ls', source: 'pane' }));
+    const b = reduce(a, ev('PermissionRequest', { tool: 'Bash', text: 'ls' }));
+    expect(b.pending!.risk).toBe('low');
+  });
+  it('classifies an identified pending that lacks a risk', () => {
+    const s = base({ state: 'waiting_permission', pending: { id: 'p1-x', version: 1, kind: 'permission', tool: 'Bash', text: 'git push', source: 'hook' } });
+    expect(identify(s, { ...s }, T1).pending).toMatchObject({ risk: 'high', riskReason: 'pushes' });
+  });
 });

@@ -144,7 +144,7 @@ describe('server', () => {
   });
 
   it('logs a helper permission that is not routed because the parent already has a pending', async () => {
-    const pending = { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook', id: 'p1-x', version: 1, since: T0 } as const;
+    const pending = { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook', id: 'p1-x', version: 1, since: T0, risk: 'high', riskReason: 'script' } as const;
     store.upsert(mk('a', { state: 'waiting_permission', pending }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.event', id: 'a', event: { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Edit', text: 'a.ts', helperId: 'h1' } });
@@ -162,7 +162,7 @@ describe('server', () => {
       await new Promise(r => setTimeout(r, 50));
       await c.close();
     };
-    const helperPending = { kind: 'permission', text: 'one', tool: 'Bash', source: 'hook', helperId: 'h1', parentState: 'working', id: 'p1-x', version: 1, since: T0 } as const;
+    const helperPending = { kind: 'permission', text: 'one', tool: 'Bash', source: 'hook', helperId: 'h1', parentState: 'working', id: 'p1-x', version: 1, since: T0, risk: 'high', riskReason: 'unknown' } as const;
     it('a main-thread request while a helper holds the card', async () => {
       store.upsert(mk('a', { state: 'waiting_permission', pending: helperPending }));
       await send({ name: 'PermissionRequest', tool: 'Write', text: 'b.ts' });

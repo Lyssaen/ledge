@@ -42,7 +42,7 @@ function pendingFor(ev: SessionEvent): Pending | undefined {
 
 /** The request keeps its id, first sight and version when a richer description replaces it. */
 function keepIdentity(current: Pending, incoming: Pending): Pending {
-  return { ...incoming, ...(current.id ? { id: current.id } : {}), ...(current.version ? { version: current.version } : {}), ...(current.since ? { since: current.since } : {}) };
+  return { ...incoming, ...(current.id ? { id: current.id } : {}), ...(current.version ? { version: current.version } : {}), ...(current.since ? { since: current.since } : {}), ...(current.risk ? { risk: current.risk, riskReason: current.riskReason } : {}) };
 }
 
 /** Richer wins: a hook pending is never replaced by a pane pending. */
