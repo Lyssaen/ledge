@@ -93,8 +93,15 @@ describe('server: origin check', () => {
     expect(await handshake(srv.port, 'null')).toBe(401);
   });
   it('accepts every allowlisted overlay origin', async () => {
-    expect(ALLOWED_ORIGINS).toEqual(['tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420']);
+    expect(ALLOWED_ORIGINS).toEqual(['tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420', 'http://localhost:1421', 'http://127.0.0.1:1421']);
     for (const o of ALLOWED_ORIGINS) expect(await handshake(srv.port, o)).toBe('open');
+  });
+  it('accepts the Desktop dev origin on 1421 only', async () => {
+    expect(await handshake(srv.port, 'http://localhost:1421')).toBe('open');
+    expect(await handshake(srv.port, 'http://127.0.0.1:1421')).toBe('open');
+    expect(await handshake(srv.port, 'http://localhost:1422')).not.toBe('open');
+    expect(await handshake(srv.port, 'http://evil:1421')).not.toBe('open');
+    expect(ALLOWED_ORIGINS).toContain('http://localhost:1421');
   });
   it('accepts a Node client that sends no Origin', async () => {
     expect(await handshake(srv.port)).toBe('open');

@@ -39,7 +39,9 @@ export { resolveFolder };
  * sends Origin, so any web page is refused; Node clients (hook, launcher, status) send none and pass.
  */
 export const ALLOWED_ORIGINS: readonly string[] = [
-  'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420'
+  'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420',
+  // Desktop's Vite dev server (spec 2026-10-14 §5.4)
+  'http://localhost:1421', 'http://127.0.0.1:1421'
 ];
 
 export function originAllowed(origin: string | undefined): boolean {
