@@ -165,6 +165,38 @@ describe('the Machines section', () => {
     expect(f.configured).toEqual([]);
   });
 
+  it('shows a probe result only for the alias it ran against (stale answers dropped)', async () => {
+    const { f } = show();
+    await fill('Nas', 'nas');
+    await userEvent.click(screen.getByRole('button', { name: 'Test the connection' }));
+    await userEvent.type(aliasBox(), '2');
+    expect(screen.queryByRole('status')).toBeNull();
+    await act(async () => f.probes[0]!.answer({ ok: true, version: '0.5.2', sessions: 2 }));
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('does not bring a previous draft’s probe line back after cancel and reopen', async () => {
+    const { f } = show();
+    await fill('Nas', 'nas');
+    await userEvent.click(screen.getByRole('button', { name: 'Test the connection' }));
+    await act(async () => f.probes[0]!.answer({ ok: true, version: '0.5.2', sessions: 2 }));
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await fill('Nas', 'nas');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('refuses editing a machine into another machine’s alias', async () => {
+    const three = [local, devbox, machine('nas', { daemon: info })];
+    const { f } = show(three);
+    await userEvent.click(within(screen.getByRole('article', { name: 'Devbox' })).getByRole('button', { name: 'Edit' }));
+    await userEvent.clear(aliasBox());
+    await userEvent.type(aliasBox(), 'nas');
+    await save();
+    expect(screen.getByRole('alert')).toHaveTextContent('This alias is already added.');
+    expect(f.configured).toEqual([]);
+  });
+
   it('reconnects a disconnected machine now', async () => {
     const { f } = show([local, machine('devbox', { status: 'unreachable', ready: false })]);
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));

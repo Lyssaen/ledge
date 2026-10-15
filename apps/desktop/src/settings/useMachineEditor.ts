@@ -6,7 +6,7 @@ export type MachineFleet = Pick<Fleet, 'configure' | 'probe' | 'retry' | 'onMach
 export type SaveOutcome = 'saved' | 'offline' | 'timeout' | 'refused';
 export const SAVE_TIMEOUT_MS = 10_000;
 export interface ProbeState { key: string; alias: string; result: ProbeResult | null }
-export interface MachineEditor { saving: boolean; save(next: MachineConfig[]): Promise<SaveOutcome>; probing: ProbeState | null; probe(key: string, alias: string): void }
+export interface MachineEditor { saving: boolean; save(next: MachineConfig[]): Promise<SaveOutcome>; probing: ProbeState | null; probe(key: string, alias: string): void; clearProbe(): void }
 
 /**
  * Saving waits for the daemon (spec §5.3): `configure` sends `machines.set`, and the save is done only when the fleet's
@@ -56,5 +56,8 @@ export function useMachineEditor(fleet: MachineFleet, machines: readonly Machine
       .then(result => { if (mounted.current && probeToken.current === mine) setProbing({ key, alias, result }); });
   }, [fleet]);
 
-  return { saving, save, probing, probe };
+  /** Forgets the shown result and drops any answer still on its way. */
+  const clearProbe = useCallback(() => { probeToken.current++; setProbing(null); }, []);
+
+  return { saving, save, probing, probe, clearProbe };
 }

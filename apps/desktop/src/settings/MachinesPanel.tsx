@@ -26,7 +26,7 @@ export function MachinesPanel({ machines, fleet, localDown, saveTimeoutMs }: Mac
     ? <p className="settings-note" role="status">{editor.probing.result ? probeText(editor.probing.result) : c.probing(editor.probing.alias)}</p>
     : null);
   const setDraft = (patch: Partial<MachineDraft>) => setForm(f => (f ? { ...f, draft: { ...f.draft, ...patch } } : f));
-  const openForm = (editing: string | null, draft: MachineDraft) => { setForm({ editing, draft }); setFormError(null); setFeedback(null); setRemoval(null); };
+  const openForm = (editing: string | null, draft: MachineDraft) => { editor.clearProbe(); setForm({ editing, draft }); setFormError(null); setFeedback(null); setRemoval(null); };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -35,7 +35,7 @@ export function MachinesPanel({ machines, fleet, localDown, saveTimeoutMs }: Mac
     if (problem) { setFormError(c.errors[problem]); return; }
     setFormError(null);
     const outcome = await editor.save(withDraft(list, form.draft, form.editing));
-    if (outcome === 'saved') { setForm(null); setFeedback({ text: c.saved(form.draft.label.trim()), error: false }); }
+    if (outcome === 'saved') { editor.clearProbe(); setForm(null); setFeedback({ text: c.saved(form.draft.label.trim()), error: false }); }
     else setFormError(failure(outcome));
   };
   const remove = async (m: MachineState) => {
@@ -48,7 +48,7 @@ export function MachinesPanel({ machines, fleet, localDown, saveTimeoutMs }: Mac
     const ssh = form.draft.ssh.trim();
     if (!ALIAS.test(ssh)) { setFormError(c.errors.invalid); return; }
     setFormError(null);
-    editor.probe('draft', ssh);
+    editor.probe(`draft:${ssh}`, ssh);
   };
   const editingLabel = form?.editing ? machines.find(m => m.id === form.editing)?.label ?? '' : '';
 
@@ -87,10 +87,10 @@ export function MachinesPanel({ machines, fleet, localDown, saveTimeoutMs }: Mac
           <label>{c.alias}<input name="ssh" aria-label={c.alias} required maxLength={64} spellCheck={false} value={form.draft.ssh} placeholder="my-server" onChange={e => setDraft({ ssh: e.target.value })} /><small>{c.aliasHint}</small></label>
           <details><summary>{c.before}</summary><ol>{c.checklist.map(item => <li key={item}>{item}</li>)}</ol></details>
           {formError && <p className="setting-error" role="alert">{formError}</p>}
-          {probeLine('draft')}
+          {probeLine(`draft:${form.draft.ssh.trim()}`)}
           <div className="settings-actions">
             <button type="button" className="settings-button" disabled={frozen || probeBusy} onClick={testDraft}>{c.probe}</button>
-            <button type="button" className="settings-button" disabled={editor.saving} onClick={() => { setForm(null); setFormError(null); }}>{c.cancel}</button>
+            <button type="button" className="settings-button" disabled={editor.saving} onClick={() => { editor.clearProbe(); setForm(null); setFormError(null); }}>{c.cancel}</button>
             <button type="submit" className="primary" disabled={frozen}>{editor.saving ? c.saving : c.save}</button>
           </div>
           <p className="settings-note">{c.optional}</p>
