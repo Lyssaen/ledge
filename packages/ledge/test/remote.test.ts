@@ -102,6 +102,23 @@ describe('remote entry', () => {
     return { p, device, token };
   };
 
+  it('caps the sockets waiting for auth: extra upgrades get 503, logged once per burst; an authenticated one frees its slot', async () => {
+    const capped = await startRemoteListener({ server: srv, config: cfg, devices, pairing, port: 0, staticDir, authTimeoutMs: 5000, pcName: 'pc', maxPreAuth: 2 });
+    try {
+      const { token } = await devices.create('iPhone', cred);
+      const a = phone(capped.port, { origin }); const b = phone(capped.port, { origin });
+      await Promise.all([a.opened, b.opened]);
+      expect(await upgradeStatus(capped.port, { origin })).toBe(503);
+      expect(await upgradeStatus(capped.port, { origin })).toBe(503);
+      expect(await upgradeStatus(capped.port, { origin })).toBe(503);
+      expect(logText().match(/too many sockets waiting for auth/g)).toHaveLength(1);
+      // Authenticated, a socket is a peer: its slot goes to the next phone.
+      await a.send({ type: 'auth', token }); await a.next('auth.ok');
+      expect(await upgradeStatus(capped.port, { origin })).toBe(101);
+      b.ws.close(); await b.closed;
+      await vi.waitFor(() => expect(logText()).toMatch(/3 upgrades refused while 2 sockets waited for auth/));
+    } finally { await capped.close(); }
+  });
   it('serves the PWA under /m/ with security headers; 404 elsewhere; no traversal', async () => {
     const r = await fetch(`${base}/m/`);
     expect(r.status).toBe(200);

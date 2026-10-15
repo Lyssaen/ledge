@@ -20,6 +20,8 @@ const MAX_PAIR_ERRORS = 3;
 const MAX_PAYLOAD = 64 * 1024;
 /** How long a socket closed by `close()` gets to finish its close handshake before it is cut. */
 const CLOSE_GRACE_MS = 1000;
+/** Sockets waiting for their token at once, like the overlay's SSH bridges: a flood cannot hold every pairing slot open. */
+const MAX_PRE_AUTH = 20;
 const GOING_AWAY = 1001;
 const INTERNAL_ERROR = 1011;
 
@@ -39,12 +41,24 @@ function from(req: IncomingMessage): string {
  */
 export async function startRemoteListener(o: {
   server: ServerHandle; config: MobileConfig; devices: DeviceStore; pairing: Pairing;
-  port?: number; host?: string; staticDir?: string; authTimeoutMs?: number; pcName?: string;
+  port?: number; host?: string; staticDir?: string; authTimeoutMs?: number; pcName?: string; maxPreAuth?: number;
 }): Promise<RemoteListener> {
   const { server, config, devices, pairing } = o;
   const staticDir = o.staticDir ?? fileURLToPath(new URL('../mobile/', import.meta.url));
   const authTimeoutMs = o.authTimeoutMs ?? AUTH_TIMEOUT_MS;
   const pcName = o.pcName ?? hostname();
+  const maxPreAuth = o.maxPreAuth ?? MAX_PRE_AUTH;
+  /** Upgrades accepted and not yet authenticated (or closed); `refused` counts the upgrades turned away since the cap was hit. */
+  let waiting = 0; let refused = 0;
+  /** Takes a pre-auth slot; the returned function gives it back, once. The burst ends (and is summed up) when no socket waits. */
+  const takeSlot = () => {
+    waiting++;
+    let held = true;
+    return () => {
+      if (!held) return; held = false; waiting--;
+      if (waiting === 0 && refused > 0) { log(`remote: ${refused} upgrade${refused === 1 ? '' : 's'} refused while ${maxPreAuth} sockets waited for auth`); refused = 0; }
+    };
+  };
   // Kept here so `authenticate` stays synchronous up to the attach; refreshed after a pairing, which is what makes the keys.
   let vapidKey: string | null = (await loadVapid())?.publicKey ?? null;
 
@@ -62,19 +76,28 @@ export async function startRemoteListener(o: {
       socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
       return;
     }
-    wss.handleUpgrade(req, socket, head, ws => accept(ws, from(req)));
+    if (waiting >= maxPreAuth) {
+      // Once per burst, not per attempt: a flood must not flood the log too.
+      if (refused++ === 0) log(`remote upgrade refused from ${from(req)}: too many sockets waiting for auth (${maxPreAuth})`);
+      socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+      return;
+    }
+    const release = takeSlot();
+    // A handshake that never completes gives its slot back with the TCP socket.
+    socket.once('close', release);
+    wss.handleUpgrade(req, socket, head, ws => accept(ws, from(req), release));
   });
 
-  function accept(ws: WebSocket, who: string): void {
+  function accept(ws: WebSocket, who: string, release: () => void): void {
     let preAuth = true;
     let pairErrors = 0;
     let timer: NodeJS.Timeout | undefined;
-    const shut = (code: number) => { preAuth = false; clearTimeout(timer); ws.close(code); };
+    const shut = (code: number) => { preAuth = false; release(); clearTimeout(timer); ws.close(code); };
     const arm = (ms: number) => { clearTimeout(timer); timer = setTimeout(() => { log(`remote socket from ${who} closed: no auth in time`); shut(REMOTE_CLOSE.timeout); }, ms); };
     arm(authTimeoutMs);
     /** Pairing answers go to this socket only, never through a peer (`toRemote` drops them). */
     const send = (m: ServerMessage) => { if (preAuth && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };
-    ws.on('close', () => { preAuth = false; clearTimeout(timer); });
+    ws.on('close', () => { preAuth = false; release(); clearTimeout(timer); });
     ws.on('error', (e: Error) => log(`remote socket error from ${who}: ${quote(e.message)}`));
 
     const failed = (e: unknown) => {
@@ -89,7 +112,7 @@ export async function startRemoteListener(o: {
       const device = devices.byToken(token);
       if (!device) { log(`remote auth refused from ${who}`); return shut(REMOTE_CLOSE.unauthenticated); }
       // Synchronous from here to attach: no message can slip between the pre-auth reader and the server's.
-      preAuth = false; clearTimeout(timer); ws.off('message', onMessage);
+      preAuth = false; release(); clearTimeout(timer); ws.off('message', onMessage);
       devices.touch(device.id).catch(e => log(`last connection of ${device.id} not saved: ${quote((e as Error).message)}`));
       ws.send(JSON.stringify({ type: 'auth.ok', deviceId: device.id, deviceName: device.name, pcName, ...(vapidKey ? { vapidPublicKey: vapidKey } : {}) } satisfies ServerMessage));
       log(`remote ${device.id} connected from ${who}`);
