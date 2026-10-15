@@ -61,6 +61,18 @@ describe('TeamView', () => {
 });
 
 describe('Heading', () => {
+  it('Talk to Ledge sits before New session and says when the chat is open', async () => {
+    const onOpen = vi.fn();
+    const { rerender } = render(<Heading state={{ ...DEFAULT_VIEW, view: 'team' }} dispatch={vi.fn()} attentionCount={0} chat={{ open: false, onOpen }} />);
+    const trigger = screen.getByRole('button', { name: 'Talk to Ledge' });
+    expect(trigger).toHaveAttribute('data-open-ledge', 'heading');
+    expect(trigger).toHaveAttribute('aria-pressed', 'false');
+    expect(trigger.nextElementSibling).toHaveTextContent('New session');
+    await userEvent.click(trigger);
+    expect(onOpen).toHaveBeenCalledOnce();
+    rerender(<Heading state={{ ...DEFAULT_VIEW, view: 'team' }} dispatch={vi.fn()} attentionCount={0} chat={{ open: true, onOpen }} />);
+    expect(screen.getByRole('button', { name: 'Talk to Ledge' })).toHaveAttribute('aria-pressed', 'true');
+  });
   it('shows the title, the attention count and toggles the view and the filter', async () => {
     const dispatch = vi.fn();
     render(<Heading state={{ ...DEFAULT_VIEW, view: 'team' }} dispatch={dispatch} attentionCount={2} />);

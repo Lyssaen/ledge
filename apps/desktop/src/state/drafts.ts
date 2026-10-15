@@ -1,6 +1,6 @@
 import { isRecord, readJson, writeJson } from './storage';
 
-/** One draft per qualified session id (spec §9.1), plus `ledge` for the resident's own composer in a later lot. */
+/** One draft per qualified session id (spec §9.1), plus `ledge` for the chat with Ledge (spec §9.3). */
 export type Drafts = Readonly<Record<string, string>>;
 export const DRAFTS_KEY = 'desktop.drafts';
 export const DRAFT_MAX = 10_000;

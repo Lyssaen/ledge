@@ -21,6 +21,9 @@ import { useConversations } from './conversation/useConversations';
 import { useLaunch } from './launch/useLaunch';
 import { LaunchScreen } from './launch/LaunchScreen';
 import { clearLaunch } from './launch/form';
+import { useChat } from './chat/useChat';
+import { ChatPane } from './chat/ChatPane';
+import { CHAT_ID } from './chat/turns';
 import { onTrayAction } from './tauri/bridge';
 
 function Shell({ client }: { client?: DaemonClient }) {
@@ -43,8 +46,10 @@ function Shell({ client }: { client?: DaemonClient }) {
   const [panel, setPanel] = useStored(loadPanel, savePanel);
   // Bound to the conversation pane. `ready` is the Shell's `opened` (first snapshot received), never a bare connection.
   const conversations = useConversations(fleetClient, sessions, machines, ready);
-  // The resident (`ledge`) gets its own panel in a later lot; a lost selection is replaced by the first visible session (lot 3 reducer).
-  const selected = state.selected && state.selected !== 'ledge' ? sessions.find(s => s.id === state.selected) ?? null : null;
+  // The chat with Ledge (`ledge`) is not a session: its own pane (lot 6). A lost selection is replaced by the first visible session (lot 3 reducer).
+  const selected = state.selected && state.selected !== CHAT_ID ? sessions.find(s => s.id === state.selected) ?? null : null;
+  const chat = useChat(fleetClient, fleet, machines, localDown);
+  const chatOpen = state.selected === CHAT_ID;
   // « Agrandir » folds back when the view or the attention filter changes (mockup conversation.js).
   const scope = `${state.view}|${state.attentionOnly}`;
   const lastScope = useRef(scope);
@@ -58,8 +63,8 @@ function Shell({ client }: { client?: DaemonClient }) {
   const onLaunched = useCallback((id: string) => { clearLaunch(); setCreated(id); }, []);
   const launch = useLaunch(fleet, machines, onLaunched);
   const launching = launch.flow.stage !== 'closed';
-  // Read-only while the local daemon is down (spec §6): every machine, remote ones too, is reached through it.
-  const canLaunch = !localDown;
+  // Read-only while the local daemon is down (spec §6); one action at a time: not while a chat card waits for its machine (decision 10).
+  const canLaunch = !localDown && chat.card === null;
   const opener = useRef<'heading' | 'empty'>('heading');
   const { open: openFlow } = launch;
   // An open screen keeps the opener it was opened from (the tray's « new » is then a no-op). A launched session the fleet
@@ -100,6 +105,22 @@ function Shell({ client }: { client?: DaemonClient }) {
   // Choosing another session before the new one's conversation shows drops the pending focus.
   const pick = (id: string) => { replyFor.current = null; dispatch({ type: 'select', id }); };
 
+  // Opening the chat puts the cursor in its composer once the pane is on screen, in its thread when the composer is frozen.
+  const chatFocus = useRef(false);
+  useEffect(() => {
+    if (!chatFocus.current) return;
+    const pane = document.querySelector<HTMLElement>('#conversation-pane[data-ledge-chat]');
+    if (!pane) return;
+    chatFocus.current = false;
+    const field = document.getElementById('ledge-chat-reply') as HTMLTextAreaElement | null;
+    (field && !field.disabled ? field : pane.querySelector<HTMLElement>('.thread-scroll'))?.focus({ preventScroll: true });
+  });
+  const openChat = () => { replyFor.current = null; chatFocus.current = true; dispatch({ type: 'select', id: CHAT_ID }); };
+  // A session named by Ledge: its conversation, cursor in its reply (lot 5 focus effect); the attention filter goes off so it shows.
+  const openSession = (id: string) => { dispatch({ type: 'attention', on: false }); pick(id); replyFor.current = id; };
+  const chatEntry = { open: chatOpen, onOpen: openChat };
+  const empty = (ready || localDown) && sessions.length === 0;
+
   // Closing without a new session (Back to sessions, Cancel) gives the focus back to the button that opened the screen.
   const wasLaunching = useRef(false);
   useEffect(() => {
@@ -114,16 +135,19 @@ function Shell({ client }: { client?: DaemonClient }) {
     <main className="app" data-readonly={localDown ? 'true' : undefined}>
       <div className="content">
         {launching ? <LaunchScreen launch={launch} machines={machines} fleet={fleet} notices={<>{localDown && <LocalDownNotice role="status" />}{offline}</>} /> : <>
-          <Heading state={state} dispatch={dispatch} attentionCount={sessions.filter(needsAttention).length} onNewSession={canLaunch ? () => openLaunch('heading') : undefined} />
-          {localDown && <LocalDownNotice />}
-          {offline}
-          {(ready || localDown) && sessions.length === 0 && <EmptyWorkspace onNewSession={canLaunch ? () => openLaunch('empty') : undefined} />}
-          {sessions.length > 0 && <SplitView selectedId={selected?.id ?? null} panel={panel} onPanel={setPanel}
-            list={<>
-              {state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={pick} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
-              {state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={pick} attentionOnly={state.attentionOnly} />}
-            </>}
-            pane={selected ? <ConversationPane session={selected} client={fleetClient} api={conversations} expanded={panel.expanded} onExpand={on => setPanel(p => ({ ...p, expanded: on }))} /> : null} />}
+          <Heading state={state} dispatch={dispatch} attentionCount={sessions.filter(needsAttention).length} chat={chatEntry} onNewSession={canLaunch ? () => openLaunch('heading') : undefined} />
+          {localDown && <LocalDownNotice />}{offline}
+          {empty && !chatOpen && <EmptyWorkspace chat={chatEntry} onNewSession={canLaunch ? () => openLaunch('empty') : undefined} />}
+          {(sessions.length > 0 || (empty && chatOpen)) && <SplitView panel={panel} onPanel={setPanel} selectedId={chatOpen ? CHAT_ID : selected?.id ?? null}
+            list={sessions.length === 0
+              ? <div className="central ledge-chat-empty"><EmptyWorkspace chat={chatEntry} onNewSession={canLaunch ? () => openLaunch('empty') : undefined} /></div>
+              : <>
+                {state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={pick} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
+                {state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={pick} attentionOnly={state.attentionOnly} />}
+              </>}
+            pane={chatOpen
+              ? <ChatPane chat={chat} api={conversations} sessions={sessions} machines={machines} localDown={localDown} expanded={panel.expanded} onExpand={on => setPanel(p => ({ ...p, expanded: on }))} onOpenSession={openSession} />
+              : selected ? <ConversationPane session={selected} client={fleetClient} api={conversations} expanded={panel.expanded} onExpand={on => setPanel(p => ({ ...p, expanded: on }))} /> : null} />}
         </>}
         <StatusBar sessions={sessions} machines={machines} />
       </div>
