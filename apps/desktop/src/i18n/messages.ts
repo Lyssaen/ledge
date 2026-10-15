@@ -1,4 +1,5 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
+import type { Availability, LaunchProblem } from '../launch/form';
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 
@@ -30,7 +31,70 @@ const fr = {
       mine: 'Vos propres sessions, hors équipe.'
     }
   },
-  empty: { title: 'Votre équipe commence ici', text: 'Aucune session pour le moment. Choisissez un projet et confiez une première tâche à un agent.', none: 'Aucune demande en attente.' },
+  empty: { start: 'Démarrer une session', title: 'Votre équipe commence ici', text: 'Aucune session pour le moment. Choisissez un projet et confiez une première tâche à un agent.', none: 'Aucune demande en attente.' },
+  launch: {
+    title: 'Nouvelle session',
+    subtitle: 'Un projet, un agent et une première consigne.',
+    back: 'Retour aux sessions',
+    cancel: 'Annuler le démarrage',
+    form: 'Paramètres de la nouvelle session',
+    machine: 'Machine',
+    machineName: (label: string, remote: boolean) => `${label} · ${remote ? 'SSH' : 'WSL'}`,
+    availability: { ready: '', connecting: ' · connexion…', unreachable: ' · déconnectée' } as Record<Availability, string>,
+    project: 'Projet',
+    custom: 'Autre dossier…',
+    folder: 'Dossier de travail',
+    folderPlaceholder: '/chemin/du/projet',
+    folderHint: 'Dossier sur la machine choisie : chemin absolu (/…) ou commençant par ~.',
+    agent: 'Agent',
+    prompt: 'Première consigne',
+    promptPlaceholder: 'Que souhaitez-vous confier à cet agent ?',
+    footnote: 'L’agent démarre dans tmux sur la machine choisie.',
+    submit: 'Démarrer la session',
+    someDown: (names: string[], target: string) => `${names.join(', ')} ${names.length > 1 ? 'sont déconnectées' : 'est déconnectée'}. Vous pouvez démarrer une session sur ${target}.`,
+    noneReady: 'Aucune machine n’est connectée. Rétablissez une connexion pour démarrer une session.',
+    invalid: {
+      machine: 'Choisissez une machine connectée.',
+      cwd: 'Indiquez un dossier absolu (/…) ou commençant par ~.',
+      prompt: 'Écrivez une première consigne.'
+    } as Record<LaunchProblem, string>,
+    summary: { machine: 'Machine', agent: 'Agent', folder: 'Dossier' },
+    starting: {
+      label: 'Démarrage de la session',
+      title: 'Démarrage de votre agent',
+      text: (machine: string) => `Préparation de la session sur ${machine}…`,
+      connected: 'Connexion à la machine',
+      folder: 'Dossier de travail sélectionné',
+      tool: (name: string) => `Démarrage de ${name}`
+    },
+    failed: {
+      label: 'Échec du lancement',
+      title: 'L’agent n’a pas pu démarrer',
+      daemon: (why: string) => `Le daemon a refusé : ${why}`,
+      offline: (machine: string) => `La machine ${machine} n’est pas connectée : rien n’a été envoyé.`,
+      lost: (machine: string) => `La connexion à ${machine} a été perdue pendant le démarrage. La session a peut-être démarré : vérifiez la liste avant de réessayer.`,
+      timeout: 'Le daemon n’a pas répondu à temps. Aucune nouvelle session n’a été confirmée.',
+      edit: 'Modifier les paramètres',
+      retry: 'Réessayer',
+      kept: 'Votre consigne est conservée.'
+    },
+    browse: {
+      button: 'Parcourir…',
+      title: (machine: string) => `Dossiers sur ${machine}`,
+      close: 'Fermer',
+      path: 'Chemin du dossier',
+      up: 'Dossier parent',
+      open: (name: string) => `Ouvrir ${name}`,
+      empty: 'Aucun sous-dossier.',
+      loading: 'Chargement…',
+      newFolder: 'Nouveau dossier',
+      newFolderName: 'Nom du nouveau dossier',
+      create: 'Créer',
+      choose: 'Choisir ce dossier',
+      failed: (why: string) => `Impossible : ${why}`,
+      offline: (machine: string) => `La machine ${machine} n’est pas connectée : les dossiers ne peuvent pas être listés.`
+    }
+  },
   offline: {
     title: (name: string) => `${name} est déconnectée`,
     badge: 'Déconnectée',
@@ -150,7 +214,70 @@ const en: typeof fr = {
       mine: 'Your own sessions, outside the team.'
     }
   },
-  empty: { title: 'Your team starts here', text: 'No sessions yet. Pick a project and give an agent a first task.', none: 'No requests waiting.' },
+  empty: { start: 'Start a session', title: 'Your team starts here', text: 'No sessions yet. Pick a project and give an agent a first task.', none: 'No requests waiting.' },
+  launch: {
+    title: 'New session',
+    subtitle: 'A project, an agent and a first instruction.',
+    back: 'Back to sessions',
+    cancel: 'Cancel launch',
+    form: 'New session settings',
+    machine: 'Machine',
+    machineName: (label: string, remote: boolean) => `${label} · ${remote ? 'SSH' : 'WSL'}`,
+    availability: { ready: '', connecting: ' · connecting…', unreachable: ' · disconnected' },
+    project: 'Project',
+    custom: 'Other folder…',
+    folder: 'Working folder',
+    folderPlaceholder: '/path/to/project',
+    folderHint: 'A folder on the chosen machine: an absolute path (/…) or one starting with ~.',
+    agent: 'Agent',
+    prompt: 'First instruction',
+    promptPlaceholder: 'What would you like this agent to do?',
+    footnote: 'The agent starts in tmux on the chosen machine.',
+    submit: 'Start the session',
+    someDown: (names: string[], target: string) => `${names.join(', ')} ${names.length > 1 ? 'are' : 'is'} disconnected. You can start a session on ${target}.`,
+    noneReady: 'No machine is connected. Restore a connection to start a session.',
+    invalid: {
+      machine: 'Choose a connected machine.',
+      cwd: 'Enter an absolute folder (/…) or one starting with ~.',
+      prompt: 'Write a first instruction.'
+    },
+    summary: { machine: 'Machine', agent: 'Agent', folder: 'Folder' },
+    starting: {
+      label: 'Starting the session',
+      title: 'Starting your agent',
+      text: (machine: string) => `Preparing the session on ${machine}…`,
+      connected: 'Connected to the machine',
+      folder: 'Working folder selected',
+      tool: (name: string) => `Starting ${name}`
+    },
+    failed: {
+      label: 'Launch failed',
+      title: 'The agent could not start',
+      daemon: (why: string) => `The daemon refused: ${why}`,
+      offline: (machine: string) => `${machine} is not connected: nothing was sent.`,
+      lost: (machine: string) => `The connection to ${machine} was lost during the start. The session may have started: check the list before retrying.`,
+      timeout: 'The daemon did not answer in time. No new session was confirmed.',
+      edit: 'Edit settings',
+      retry: 'Retry',
+      kept: 'Your instruction is kept.'
+    },
+    browse: {
+      button: 'Browse…',
+      title: (machine: string) => `Folders on ${machine}`,
+      close: 'Close',
+      path: 'Folder path',
+      up: 'Parent folder',
+      open: (name: string) => `Open ${name}`,
+      empty: 'No subfolders.',
+      loading: 'Loading…',
+      newFolder: 'New folder',
+      newFolderName: 'New folder name',
+      create: 'Create',
+      choose: 'Choose this folder',
+      failed: (why: string) => `Could not: ${why}`,
+      offline: (machine: string) => `${machine} is not connected: the folders cannot be listed.`
+    }
+  },
   offline: {
     title: (name) => `${name} is disconnected`,
     badge: 'Disconnected',

@@ -274,3 +274,18 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .conversation-rename-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
 .conversation-rename small { font-size: 9px; color: var(--muted-foreground); }
 .conversation-note { margin: 8px 0 0; font-size: 10px; color: var(--muted-foreground); }
+
+/* Folder browser under the launch form's folder field (spec §9.2; not in the mockup). */
+.folder-browser { margin: -12px 0 22px; border: 1px solid var(--input); border-radius: 6px; background: var(--well); font-size: 12px; }
+.folder-browser-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--sidebar-border); }
+.folder-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px 12px; border-bottom: 1px solid var(--sidebar-border); font-family: ui-monospace, monospace; font-size: 11px; overflow-wrap: anywhere; }
+.folder-crumbs button { background: transparent; padding: 2px 4px; color: var(--muted-foreground); font: inherit; }
+.folder-crumbs [aria-current] { padding: 2px 4px; font-weight: 600; }
+.folder-list { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; padding: 6px; scrollbar-width: thin; }
+.folder-list[aria-busy=true] { opacity: .6; }
+.folder-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-radius: 5px; background: transparent; text-align: left; font-size: 12px; }
+.folder-row:hover, .folder-row:focus-visible { background: var(--sidebar-accent); }
+.folder-hint { padding: 8px; color: var(--muted-foreground); }
+.folder-new { display: flex; gap: 8px; padding: 2px 8px; }
+.folder-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--sidebar-border); }
+.folder-error { margin: 0; padding: 0 12px 10px; color: var(--danger-text); }
