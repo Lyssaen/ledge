@@ -34,6 +34,8 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     reply(m: ServerMessage) { last?.send(JSON.stringify(m)); },
     /** A launch refused: an `error` with no id, to the last requester. */
     refuse(message: string) { last?.send(JSON.stringify({ type: 'error', message })); },
+    /** Any daemon message, to every client (the chat's steps, answers and history in Desktop's tests). */
+    push(m: ServerMessage) { bc(m); },
     /** Cuts every open socket, as a daemon restart does; the client reconnects and gets a fresh snapshot. */
     dropClients: async () => { for (const c of wss.clients) c.terminate(); },
     close: () => new Promise<void>(r => { for (const c of wss.clients) c.terminate(); wss.close(() => r()); })
