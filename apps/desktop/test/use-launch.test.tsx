@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { MachineState } from '@ledge/fleet';
 import { useLaunch } from '../src/launch/useLaunch';
+import { DROP_GRACE_MS } from '../src/launch/flow';
 import type { LaunchRequest } from '../src/launch/form';
 import { fakeFleet, machine } from './launch-helpers';
 
@@ -102,6 +103,23 @@ describe('useLaunch', () => {
     act(() => api().retry());
     act(() => f.emit('devbox', { type: 'session.launched', id: 'ari' }));
     expect(launched).toHaveBeenCalledWith('devbox:ari');
+  });
+  it('the SSH bridge\'s error then the machine\'s drop is a lost connection, not a refusal', () => {
+    const { f, api, hook, start } = setup();
+    start();
+    act(() => f.emit('devbox', { type: 'error', message: 'SSH connection closed (255). Connection reset by peer' }));
+    hook.rerender({ ms: [machine('local'), machine('devbox', { ready: false, status: 'connecting' })] });
+    expect(api().flow).toMatchObject({ stage: 'failed', error: { kind: 'lost' } });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it('a refusal no drop follows at once stays a refusal', () => {
+    const { f, api, hook, start } = setup();
+    start();
+    act(() => f.emit('devbox', { type: 'error', message: 'no such folder: ~/w/api' }));
+    act(() => vi.advanceTimersByTime(DROP_GRACE_MS));
+    expect(vi.getTimerCount()).toBe(0);
+    hook.rerender({ ms: [machine('local'), machine('devbox', { ready: false, status: 'connecting' })] });
+    expect(api().flow).toMatchObject({ stage: 'failed', error: { kind: 'daemon', message: 'no such folder: ~/w/api' } });
   });
   it('stops listening and clears its timer when unmounted', () => {
     const { f, hook, start } = setup();

@@ -36,6 +36,29 @@ describe('launch flow', () => {
     expect(step(starting, { type: 'unsent' }).flow).toMatchObject({ stage: 'failed', error: { kind: 'offline' }, late: {} });
     expect(step(starting, { type: 'dropped', machine: 'devbox' }).flow).toMatchObject({ stage: 'failed', error: { kind: 'lost' }, late: {} });
   });
+  it('a refusal right before that machine\'s drop is a lost connection: the SSH bridge reports its exit, then closes', () => {
+    const r = step(starting, { type: 'refused', machine: 'devbox', message: 'SSH connection closed (255).' });
+    expect(r.watchDrop).toBe(1);
+    expect(r.flow).toMatchObject({ stage: 'failed', error: { kind: 'daemon' } });
+    expect(step(r.flow, { type: 'dropped', machine: 'local' }).flow).toBe(r.flow);
+    expect(step(r.flow, { type: 'dropped', machine: 'devbox' }).flow).toMatchObject({ stage: 'failed', error: { kind: 'lost' }, request: req });
+    // Leaving the failure ends the window.
+    expect(step(r.flow, { type: 'edit' }).flow.dropMayFollow).toBe(false);
+    expect(step(r.flow, { type: 'close' }).flow.dropMayFollow).toBe(false);
+  });
+  it('a refusal no drop follows stays a refusal, even if the machine drops later', () => {
+    const refused = step(starting, { type: 'refused', machine: 'devbox', message: 'no such folder: ~/w/api' }).flow;
+    expect(step(refused, { type: 'settled', attempt: 0 }).flow).toBe(refused);   // another attempt's window
+    const settled = step(refused, { type: 'settled', attempt: 1 }).flow;
+    expect(step(settled, { type: 'dropped', machine: 'devbox' }).flow)
+      .toMatchObject({ stage: 'failed', error: { kind: 'daemon', message: 'no such folder: ~/w/api' } });
+    // A timeout or an unsent request opens no window: only a refusal can be the bridge's report.
+    const timedOut = step(starting, { type: 'timeout', attempt: 1 });
+    expect(timedOut.watchDrop).toBeUndefined();
+    expect(step(timedOut.flow, { type: 'dropped', machine: 'devbox' }).flow.error).toEqual({ kind: 'timeout' });
+    const retried = step(step(refused, { type: 'retry' }).flow, { type: 'unsent' }).flow;
+    expect(step(retried, { type: 'dropped', machine: 'devbox' }).flow.error).toEqual({ kind: 'offline' });
+  });
   it('times out only the attempt it was armed for, and the answer it owes is skipped', () => {
     expect(step(starting, { type: 'timeout', attempt: 0 }).flow).toBe(starting);
     const failed = step(starting, { type: 'timeout', attempt: 1 }).flow;

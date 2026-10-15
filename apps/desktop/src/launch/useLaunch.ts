@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { qualify, type Fleet, type MachineState } from '@ledge/fleet';
-import { LAUNCH_TIMEOUT_MS, START, step, type Flow, type FlowEvent } from './flow';
+import { DROP_GRACE_MS, LAUNCH_TIMEOUT_MS, START, step, type Flow, type FlowEvent } from './flow';
 import type { LaunchRequest } from './form';
 
 /** The two fleet calls a launch needs: it talks to the chosen machine only (spec §9.2), never through the selected one. */
@@ -12,14 +12,21 @@ export function useLaunch(fleet: LaunchFleet, machines: MachineState[], onLaunch
   const [flow, setFlow] = useState<Flow>(START);
   const current = useRef<Flow>(START);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Ends the window in which a drop turns the last refusal into a lost connection. */
+  const grace = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deps = useRef({ fleet, onLaunched });
   useEffect(() => { deps.current = { fleet, onLaunched }; });
 
   const fire = useCallback(function fire(e: FlowEvent): void {
-    const { flow: next, send, launched } = step(current.current, e);
+    const { flow: next, send, launched, watchDrop } = step(current.current, e);
     if (next === current.current) return;
     current.current = next;
     setFlow(next);
+    if (!next.dropMayFollow && grace.current) { clearTimeout(grace.current); grace.current = null; }
+    if (watchDrop !== undefined) {
+      if (grace.current) clearTimeout(grace.current);
+      grace.current = setTimeout(() => { grace.current = null; fire({ type: 'settled', attempt: watchDrop }); }, DROP_GRACE_MS);
+    }
     if (next.stage !== 'starting' && timer.current) { clearTimeout(timer.current); timer.current = null; }
     if (send) {
       if (timer.current) clearTimeout(timer.current);
@@ -41,7 +48,7 @@ export function useLaunch(fleet: LaunchFleet, machines: MachineState[], onLaunch
   const down = machines.filter(m => !m.ready).map(m => m.id).join('\n');
   useEffect(() => { if (down) for (const id of down.split('\n')) fire({ type: 'dropped', machine: id }); }, [down, fire]);
 
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(() => () => { for (const t of [timer, grace]) if (t.current) clearTimeout(t.current); }, []);
 
   const open = useCallback(() => fire({ type: 'open' }), [fire]);
   const close = useCallback(() => fire({ type: 'close' }), [fire]);
