@@ -74,4 +74,12 @@ describe('launch flow', () => {
     expect(step(failed, { type: 'close' }).flow).toMatchObject({ stage: 'closed', late: {} });
     expect(step(START, { type: 'close' }).flow).toBe(START);
   });
+  it('a machine named like an Object.prototype member starts with no debt', () => {
+    const odd = step(run([{ type: 'open' }]), { type: 'start', request: { ...req, machine: 'constructor' } }).flow;
+    const s = step(odd, { type: 'launched', machine: 'constructor', id: 'constructor:a' });
+    expect(s.launched).toBe('constructor:a');
+    const closed = step(odd, { type: 'close' }).flow;
+    expect(closed.late.constructor).toBe(1);
+    expect(step(closed, { type: 'dropped', machine: 'toString' }).flow).toBe(closed);
+  });
 });

@@ -7,7 +7,7 @@ export type LaunchError = { kind: 'daemon'; message: string } | { kind: 'offline
 export type LaunchStage = 'closed' | 'form' | 'starting' | 'failed';
 export interface Flow {
   stage: LaunchStage;
-  /** The request being started or that failed (Retry sends it again); null on the form. */
+  /** The request being started or that failed (Retry sends it again); kept when Edit returns to the form, null once the screen is closed or freshly opened. */
   request: LaunchRequest | null;
   error: LaunchError | null;
   /** Bumped on every send: a timeout only fails the attempt it was armed for. */
@@ -15,10 +15,11 @@ export interface Flow {
   /** Answers still owed by cancelled or timed-out attempts, per machine. This assumes the daemon answers in order on one
    *  connection, so the next ones from that machine are theirs: skipped, never taken for a newer attempt's. The daemon
    *  actually handles messages concurrently (server.ts:396-405), so answers may come back out of order. The worst case
-   *  is then that the abandoned attempt's session gets selected instead of the retry's; both sessions exist. */
+   *  is then that the abandoned attempt's session gets selected instead of the retry's; both sessions exist. Likewise, an abandoned attempt that is never answered makes the retry's real answer get
+   *  eaten as the late one; the retry then times out, the debt returns and this repeats until the connection drops. */
   late: Record<string, number>;
 }
-export const START: Flow = { stage: 'closed', request: null, error: null, attempt: 0, late: {} };
+export const START: Flow = { stage: 'closed', request: null, error: null, attempt: 0, late: Object.create(null) };
 
 export type FlowEvent =
   | { type: 'open' } | { type: 'close' } | { type: 'edit' }
@@ -27,9 +28,11 @@ export type FlowEvent =
   | { type: 'timeout'; attempt: number } | { type: 'dropped'; machine: string };
 export interface Step { flow: Flow; send?: LaunchRequest; launched?: string }
 
-const owe = (late: Record<string, number>, machine: string) => ({ ...late, [machine]: (late[machine] ?? 0) + 1 });
+/** Null-prototype maps: a machine named `constructor` or `__proto__` owes nothing until it really owes. */
+const debts = (src: Record<string, number>): Record<string, number> => Object.assign(Object.create(null), src);
+const owe = (late: Record<string, number>, machine: string) => { const next = debts(late); next[machine] = (late[machine] ?? 0) + 1; return next; };
 function settle(late: Record<string, number>, machine: string, all = false): Record<string, number> {
-  const next = { ...late };
+  const next = debts(late);
   const left = all ? 0 : (late[machine] ?? 0) - 1;
   if (left > 0) next[machine] = left; else delete next[machine];
   return next;
