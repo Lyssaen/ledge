@@ -85,19 +85,33 @@ function QuestionCard({ pending, onReply, disabled, freeText, t }: { pending: Pe
 
 const HELPER_STATE: Record<Helper['state'], BotState> = { starting: 'starting', working: 'working', waiting_input: 'question', waiting_permission: 'approval', idle: 'idle', exited: 'done', error: 'error' };
 
-/** Spec 2026-10-13 §6: the current turn's helpers under the title, 20 px bots in a tree whose last branch ends in └; each
- *  row opens the helper's own thread. */
-function HelpersTree({ parent, helpers, t, theme, paused, frozen, reducedMotion, onOpen }: { parent: Session; helpers: HelperRow[]; t: Messages; theme: 'dark' | 'light'; paused: boolean; frozen?: boolean; reducedMotion?: boolean; onOpen?: (id: string) => void }) {
+/** Over the reply field, the tree keeps this many helpers, the latest; the older ones fold into a "+N more" line. */
+const HELPERS_SHOWN = 4;
+
+/** Spec 2026-10-13 §6: the current turn's helpers, 20 px bots in a tree; each row opens the helper's own thread. `up`
+ *  (over the reply field): the tree grows from the field, opens on ┌ and keeps the latest helpers, the newest just above
+ *  the field. `down` (under the title, a read-only session that has no field): its last branch ends in └. */
+function HelpersTree({ parent, helpers, direction, t, theme, paused, frozen, reducedMotion, onOpen }: { parent: Session; helpers: HelperRow[]; direction: 'up' | 'down'; t: Messages; theme: 'dark' | 'light'; paused: boolean; frozen?: boolean; reducedMotion?: boolean; onOpen?: (id: string) => void }) {
+  const up = direction === 'up';
+  const hidden = up ? Math.max(0, helpers.length - HELPERS_SHOWN) : 0;
+  const shown = helpers.slice(hidden);
+  const branch = { color: 'var(--muted-foreground)', width: 14, flexShrink: 0 } as const;
   return (
-    <ul data-helpers aria-label={t.session.helpers} style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {helpers.map((h, i) => {
-        const st = HELPER_STATE[h.state]; const seed = `${parent.id}:${h.id}`; const last = i === helpers.length - 1;
+    <ul data-helpers data-direction={direction} aria-label={t.session.helpers} style={{ listStyle: 'none', margin: up ? 0 : '10px 0 0', padding: up ? '2px 0 4px 2px' : 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {hidden > 0 && (
+        <li data-helpers-more style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
+          <span aria-hidden="true" data-branch className="mono" style={branch}>┌</span><span>{t.session.helpersMore(hidden)}</span>
+        </li>
+      )}
+      {shown.map((h, i) => {
+        const st = HELPER_STATE[h.state]; const seed = `${parent.id}:${h.id}`; const last = i === shown.length - 1;
         const stateLabel = h.state === 'exited' ? t.thread.helperDone : t.botLabel[st];
+        const mark = up ? (i === 0 && !hidden ? '┌' : '├') : last ? '└' : '├';
         return (
           <li key={h.id} style={{ minWidth: 0 }}>
             <button type="button" data-helper data-helper-id={h.id} data-last={last ? 'true' : undefined} aria-label={`${h.task} · ${t.thread.helperOpen}`} onClick={() => onOpen?.(h.id)}
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0, padding: 0, background: 'none', border: 0, textAlign: 'left', font: 'inherit', fontSize: 12, lineHeight: '16px', color: 'var(--sidebar-foreground)', cursor: 'pointer', borderRadius: 4 }}>
-              <span aria-hidden="true" className="mono" style={{ width: 14, flexShrink: 0, color: 'var(--muted-foreground)' }}>{last ? '└' : '├'}</span>
+              <span aria-hidden="true" data-branch className="mono" style={branch}>{mark}</span>
               <Bot seed={seed} tool={parent.tool} state={st} pose={poseFor(seed, st)} size={20} theme={theme} paused={paused} frozen={frozen} reducedMotion={reducedMotion} />
               <span data-helper-task style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.task}</span>
               <span style={{ flexShrink: 0, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{h.kind} · {stateLabel}</span>
@@ -216,7 +230,7 @@ export function SessionView(p: SessionViewProps) {
             {readOnly ? <Badge state="readonly" tone={badgeState} caps /> : <Badge state={badgeState} caps />}
           </div>
           <h2 style={{ margin: 0, fontSize: 18, lineHeight: '26px', fontWeight: 650, letterSpacing: '-0.01em', overflowWrap: 'anywhere' }}>{title}</h2>
-          {rows.length > 0 && <HelpersTree parent={s} helpers={rows} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
+          {readOnly && rows.length > 0 && <HelpersTree parent={s} helpers={rows} direction="down" t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
           {p.thread !== undefined
             // The current answer is the card below when there is one, or the plan the request shows; otherwise (a request waits) it reads in the thread.
             ? <Thread session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} onDocument={p.onDocument} hideCurrentReply={!!(reply && doc) || (!!pending?.body && pending.body === s.lastReply?.text)} />
@@ -274,6 +288,8 @@ export function SessionView(p: SessionViewProps) {
       {/* A session started without Ledge cannot be written to: the mockup drops the reply area, the note above says why. */}
       {!readOnly && (
         <div data-reply-area style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px 10px', borderTop: rule }}>
+          {/* The helpers stay in view over the field, whatever the thread's scroll. */}
+          {rows.length > 0 && <HelpersTree parent={s} helpers={rows} direction="up" t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
             <textarea ref={replyField} data-reply rows={1} className="ledge-field" placeholder={t.session.replyPlaceholder(s.name)} aria-label={t.session.replyLabel(s.name)} aria-describedby="ledge-reply-hint" value={p.draft}
               onChange={e => p.onDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDraft(); } }}

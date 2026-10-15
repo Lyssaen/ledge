@@ -351,11 +351,13 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const replyH = useMeasuredHeight(sessionReplyRef, st.mode === 'session', ps);
   const helperRef = useRef<HTMLDivElement>(null);
   const helperContentH = useMeasuredHeight(helperRef, st.mode === 'helper', ps);
-  const helperH = helperContentH ? helperContentH + SURFACE_CHROME_Y : 480;
   // The bottom area holds the terminal strip and, unless read-only, the reply field. In reading mode the terminal sits
   // alongside the thread: the view is at least tall enough for its lines.
   const fitH = !selected ? 480 : contentH ? SESSION_HEADER_H + contentH + replyH + SURFACE_CHROME_Y : measureSessionH(selected, st.reading);
   const sessionH = st.reading && shownPreview.length ? Math.max(fitH, SESSION_HEADER_H + READING_TERMINAL_H + SURFACE_CHROME_Y) : fitH;
+  // A helper opens from its row over the reply field, at the bottom of the session: its view keeps at least the
+  // session's height, so the panel never shrinks away from under the pointer that just clicked (which would fold it).
+  const helperH = Math.max(helperContentH ? helperContentH + SURFACE_CHROME_Y : 480, sessionH);
   // Settings and help size themselves to their content too (their header is the 56 px DetailHeader).
   const settingsRef = useRef<HTMLDivElement>(null); const helpRef = useRef<HTMLDivElement>(null);
   const settingsH = useMeasuredHeight(settingsRef, st.mode === 'settings', ps);

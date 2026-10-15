@@ -93,7 +93,7 @@ const fr = {
       starting: 'La session se prépare.', working: 'Concentré sur sa tâche.', idle: 'En attente de vos instructions.',
       error: 'La session a rencontré un problème.', exited: 'Cette session est terminée.'
     },
-    helpers: 'Sous-agents',
+    helpers: 'Sous-agents', helpersMore: (n: number) => `+${n} ${plural(n, 'autre', 'autres')}`,
     readonlyLead: (name: string) => `${name} a été lancé sans le lanceur Ledge.`,
     readonlyNote: 'Son état reste visible. Pour répondre à cette session, retrouvez son terminal d’origine.',
     readonlyNext: 'Pour une prochaine session interactive :',
@@ -331,7 +331,7 @@ const en: Messages = {
       starting: 'The session is starting.', working: 'Focused on its task.', idle: 'Waiting for your instructions.',
       error: 'The session ran into a problem.', exited: 'This session has ended.'
     },
-    helpers: 'Subagents',
+    helpers: 'Subagents', helpersMore: (n: number) => `+${n} more`,
     readonlyLead: (name: string) => `${name} was started without the Ledge launcher.`,
     readonlyNote: 'Its state stays visible. To answer this session, go back to its own terminal.',
     readonlyNext: 'For your next interactive session:',

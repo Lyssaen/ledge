@@ -1,5 +1,6 @@
-import { test, expect, expectMode, received, ready } from './fixtures';
+import { test, expect, expectMode, received, ready, layer, surface } from './fixtures';
 import { fakeDaemon, session } from './daemon';
+import { openList, restInside } from './scenarios';
 
 const at = (s: number) => new Date(Date.now() - 60_000 + s * 1000).toISOString();
 // Enough earlier messages for the session view to overflow, so there is a position to come back to.
@@ -43,4 +44,24 @@ test('the session shows its thread, the live tool line marks its outcome and goe
   await expectMode(page, 'session');
   await expect.poll(() => scroll.evaluate(el => el.scrollTop)).toBe(kept);
   await expect(page.locator('[data-layer="session"] [data-helper]')).toBeFocused();
+});
+
+test('a helper row clicked with the mouse over the reply field opens its view, which keeps the panel open under the pointer', async ({ page }) => {
+  const d = await fakeDaemon(page, [session('a', { state: 'working' })]);
+  await ready(page, 1);
+  await openList(page);
+  await layer(page, 'list').getByRole('button', { name: /, open$/ }).first().click();
+  await expectMode(page, 'session');
+  await restInside(page);
+  await received(d.received, 'session.thread', m => m.id === 'a');
+  // A short helper thread: its own view is shorter than the session, whose helper row sits low, over the reply field.
+  d.emit({ type: 'session.thread', id: 'a', items: thread.slice(earlier.length, earlier.length + 3) });
+  const row = layer(page, 'session').locator('[data-helper]');
+  const before = (await surface(page).boundingBox())!.height;
+  await row.click();
+  await expectMode(page, 'helper');
+  // Past the leave timer (500 ms) and the resize: the pointer is still over the panel, which has not shrunk under it.
+  await page.waitForTimeout(1200);
+  await expectMode(page, 'helper');
+  expect((await surface(page).boundingBox())!.height).toBeGreaterThanOrEqual(before - 1);
 });

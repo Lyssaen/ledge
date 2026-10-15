@@ -26,9 +26,12 @@ describe('<SessionView>', () => {
     expect(row).toHaveTextContent('Explore · Working');
     fireEvent.click(row);
     expect(onOpenHelper).toHaveBeenCalledWith('h1');
-    // The thread comes before the reply card and the ask fold.
+    // The helpers sit over the reply field, out of the scrolling thread, so a long thread never hides them.
     const helpersEl = container.querySelector('[data-helpers]')!; const threadEl = container.querySelector('[data-thread]')!;
-    expect(helpersEl.compareDocumentPosition(threadEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(threadEl.compareDocumentPosition(helpersEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.querySelector('[data-scroll]')).not.toContainElement(helpersEl as HTMLElement);
+    expect(container.querySelector('[data-reply-area]')).toContainElement(helpersEl as HTMLElement);
+    expect(helpersEl.compareDocumentPosition(container.querySelector('[data-reply]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // h1 ends: its row leaves, h2 stays; the live tool line is still the turn's last line, under what the agent said.
     rerender(<SessionView {...base} session={fakeSession('a', { state: 'working', helpers: [] })} thread={thread.map(i => (i.id === 'h1' ? { ...i, state: 'exited' as const } : i))} onOpenHelper={onOpenHelper} />);
     expect([...container.querySelectorAll('[data-helper]')].map(e => e.getAttribute('data-helper-id'))).toEqual(['h2']);
@@ -73,7 +76,7 @@ describe('<SessionView>', () => {
     expect(container.textContent).not.toMatch(/\d+ (done|question)/);
     expect(container.querySelector('[data-thread][data-empty]')).toBeInTheDocument();
   });
-  it('lists the live helpers under the title and keeps an idle parent "in progress" while one works', () => {
+  it('lists the live helpers over the reply field and keeps an idle parent "in progress" while one works', () => {
     const helpers = [
       { id: 'h0', kind: 'Explore', task: 'find reducer consumers', state: 'exited' as const },
       { id: 'h1', kind: 'general-purpose', task: 'review task 1', state: 'working' as const },
@@ -93,10 +96,30 @@ describe('<SessionView>', () => {
     expect(rows[1]!.querySelector('[data-helper-task]')).toBeEmptyDOMElement();
     expect(rows[1]).toHaveTextContent('Explore · Needs your approval');
     expect(rows[1]).toHaveAttribute('data-last', 'true');
+    // The tree grows up from the field: it opens on ┌, every other row branches off ├ towards the field below.
+    expect([...tree.querySelectorAll('[data-branch]')].map(e => e.textContent)).toEqual(['┌', '├']);
     expect(tree.querySelectorAll('svg')).toHaveLength(2);
     rerender(<SessionView {...base} session={fakeSession('a', { state: 'idle', helpers: helpers.map(h => ({ ...h, state: 'exited' as const })) })} />);
     expect(screen.queryByRole('list', { name: 'Subagents' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Waiting for your instructions.');
+  });
+  it('keeps the four latest helpers over the field and folds the older ones into a "+N more" line', () => {
+    const helpers = Array.from({ length: 6 }, (_, i) => ({ id: `h${i}`, kind: 'Explore', task: `task ${i}`, state: 'working' as const }));
+    render(<SessionView {...base} session={fakeSession('a', { state: 'working', helpers })} />);
+    const tree = screen.getByRole('list', { name: 'Subagents' });
+    expect([...tree.querySelectorAll('[data-helper]')].map(e => e.getAttribute('data-helper-id'))).toEqual(['h2', 'h3', 'h4', 'h5']);
+    expect(tree.querySelector('[data-helpers-more]')).toHaveTextContent('+2 more');
+    expect([...tree.querySelectorAll('[data-branch]')].map(e => e.textContent)).toEqual(['┌', '├', '├', '├', '├']);
+  });
+  it('a read-only session has no reply field: its helpers stay under the title, top-down', () => {
+    const helpers = [
+      { id: 'h1', kind: 'Explore', task: 'one', state: 'working' as const },
+      { id: 'h2', kind: 'Explore', task: 'two', state: 'working' as const }
+    ];
+    const { container } = render(<SessionView {...base} session={fakeSession('a', { state: 'working', source: 'hook_only', helpers })} />);
+    const tree = screen.getByRole('list', { name: 'Subagents' });
+    expect(container.querySelector('[data-scroll]')).toContainElement(tree);
+    expect([...tree.querySelectorAll('[data-branch]')].map(e => e.textContent)).toEqual(['├', '└']);
   });
   it('shows a permission card and sends the decision', () => {
     const onDecide = vi.fn();
