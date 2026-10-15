@@ -1,13 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, type SyntheticEvent } from 'react';
+import { useMemo, type SyntheticEvent } from 'react';
 import type { Session, ThreadItem } from '@ledge/protocol';
 import { useI18n } from '../i18n/lang';
 import { toggled } from '../state/threadPrefs';
 import { threadBlocks, type Block } from './blocks';
 import { RequestBlock } from './Request';
+import { useReadingPosition } from './useReadingPosition';
 import type { Conversations } from './useConversations';
-
-const SAVE_MS = 250;
-const END_SLACK = 24;
 
 function BlockView({ block: b, name, open, onToggle }: { block: Block; name: string; open: boolean; onToggle: (e: SyntheticEvent<HTMLDetailsElement>) => void }) {
   const { t } = useI18n();
@@ -34,49 +32,9 @@ export function Thread({ session, items, api }: { session: Session; items: Threa
   const c = t.conversation.thread;
   const blocks = useMemo(() => (items ? threadBlocks(items) : []), [items]);
   const open = api.pref(session.id).open;
-  const scroller = useRef<HTMLElement>(null);
-  const restored = useRef(false);
-  const atEnd = useRef(true);
-  const pending = useRef<number | null | undefined>(undefined);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const latest = useRef(api);
-  latest.current = api;
   const loaded = items !== undefined;
-
-  const flush = () => {
-    clearTimeout(timer.current);
-    if (pending.current === undefined) return;
-    latest.current.setPref(session.id, { scroll: pending.current });
-    pending.current = undefined;
-  };
-  // Leaving the session (the pane remounts the thread per session) saves where the reader was.
-  useEffect(() => () => flush(), []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (!el || restored.current) return;
-    if (!loaded) { atEnd.current = true; el.scrollTop = el.scrollHeight; return; }
-    const at = latest.current.pref(session.id).scroll;
-    el.scrollTop = at ?? el.scrollHeight;
-    atEnd.current = at === null;
-    restored.current = true;
-  }, [loaded, session.id]);
-
   const tail = `${blocks.length}|${items?.at(-1)?.id ?? ''}|${session.pending?.text ?? ''}|${session.lastReply?.at ?? ''}`;
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (el && (restored.current || !loaded) && atEnd.current) el.scrollTop = el.scrollHeight;
-  }, [tail]);
-
-  const onScroll = () => {
-    const el = scroller.current;
-    // Never record a position while the partial fallback is shown (the collapsed content would clamp it).
-    if (!el || !restored.current || !loaded) return;
-    atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < END_SLACK;
-    pending.current = atEnd.current ? null : Math.round(el.scrollTop);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(flush, SAVE_MS);
-  };
+  const { ref: scroller, onScroll } = useReadingPosition(session.id, api, loaded, tail);
   const onToggle = (fold: string) => (e: SyntheticEvent<HTMLDetailsElement>) =>
     api.setPref(session.id, { open: toggled(open, fold, e.currentTarget.open) });
   const started = new Date(session.startedAt).toLocaleString(lang, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
