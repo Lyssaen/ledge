@@ -51,6 +51,7 @@ export function mentionable(turn: ChatTurn, sessions: readonly Session[]): Map<s
 }
 
 export type Inline = { kind: 'text'; text: string } | { kind: 'strong'; text: string } | { kind: 'code'; text: string } | { kind: 'session'; id: string; name: string };
+const TRAIL = /[\s:,.;!?]+$/;
 const MARKS = /\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\([^)\s]*\)/g;
 
 /** Inline marks of an answer: bold (a session link when `names` knows it), code, and markdown links kept as their text only
@@ -65,8 +66,11 @@ export function inline(text: string, names: ReadonlyMap<string, string>): Inline
   for (const m of text.matchAll(MARKS)) {
     if (m.index > at) push({ kind: 'text', text: text.slice(at, m.index) });
     if (m[1] !== undefined) {
-      const id = names.get(m[1]);
-      push(id ? { kind: 'session', id, name: m[1] } : { kind: 'strong', text: m[1] });
+      // `**Otto:**` / `**Otto ,**`: the name is looked up without its trailing punctuation, which stays in the text.
+      const name = m[1].replace(TRAIL, '');
+      const id = names.get(name);
+      if (id) { push({ kind: 'session', id, name }); if (name.length < m[1].length) push({ kind: 'text', text: m[1].slice(name.length) }); }
+      else push({ kind: 'strong', text: m[1] });
     } else if (m[2] !== undefined) push({ kind: 'code', text: m[2] });
     else push({ kind: 'text', text: m[3]! });
     at = m.index + m[0].length;

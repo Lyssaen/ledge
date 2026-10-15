@@ -72,6 +72,14 @@ describe('inline', () => {
       { kind: 'text', text: ', see the doc.' }
     ]);
   });
+  it('a known name with trailing punctuation inside the bold is still a session link; the punctuation stays as text', () => {
+    expect(inline('**Otto:** waits. **Otto :** too, **Otto,** and **Pim:**', names)).toEqual([
+      { kind: 'session', id: 'local:otto', name: 'Otto' }, { kind: 'text', text: ': waits. ' },
+      { kind: 'session', id: 'local:otto', name: 'Otto' }, { kind: 'text', text: ' : too, ' },
+      { kind: 'session', id: 'local:otto', name: 'Otto' }, { kind: 'text', text: ', and ' },
+      { kind: 'strong', text: 'Pim:' }
+    ]);
+  });
   it('plain text stays one piece', () => {
     expect(inline('Nothing special', names)).toEqual([{ kind: 'text', text: 'Nothing special' }]);
   });
