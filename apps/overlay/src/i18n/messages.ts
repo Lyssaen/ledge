@@ -1,6 +1,7 @@
 import type { SoundCategory } from '../sounds/preferences';
 import type { BotState } from '@ledge/client';
 import type { SshProblem } from '../daemon/machines';
+import type { OperationReason } from '@ledge/protocol';
 
 /**
  * Every user-visible string of the overlay, aria-labels and tooltips included, in French (the default) and English.
@@ -45,6 +46,15 @@ const fr = {
   unreachable: 'daemon injoignable, nouvelle tentative',
   lost: 'La connexion a été perdue avant la réponse du terminal',
   notTaken: 'Le terminal ne l’a pas pris en compte',
+  /** Why the daemon refused a decision or a reply, by the code it sends back (`error { message }`). */
+  refusal: {
+    stale: 'Cette demande n’attend plus de réponse', changed: 'La demande a changé, relisez-la avant de décider',
+    assertion_required: 'Une vérification est nécessaire', assertion_invalid: 'La vérification n’a pas été acceptée', assertion_expired: 'La vérification a expiré',
+    not_taken: 'Le terminal ne l’a pas pris en compte', no_prompt: 'Aucune demande visible dans le terminal, ouvrez l’onglet',
+    read_only: 'Lecture seule : lancée sans Ledge, répondez dans son terminal', busy: 'Une décision est déjà en cours', forbidden: 'Action refusée',
+    conflict: 'Cette action entre en conflit avec une autre déjà envoyée', agent_busy: 'L’agent est occupé, réessayez quand il sera disponible',
+    unsupported: 'Cet agent ne prend pas cette réponse, répondez dans son terminal', invalid: 'Réponse refusée : vérifiez-la'
+  } as Record<OperationReason, string>,
   list: {
     summary: (n: number, waiting: number) => n === 0 ? 'Aucune session' : `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} ${plural(waiting, 'demande', 'demandes')} pour vous` : 'tout est à jour'}`,
     dnd: 'Ne pas déranger', settings: 'Réglages', collapse: 'Replier', help: 'Raccourcis clavier', newSession: 'Nouvelle session',
@@ -294,6 +304,14 @@ const en: Messages = {
   unreachable: 'daemon unreachable, retrying',
   lost: 'The connection dropped before the terminal answered',
   notTaken: 'The terminal did not take it',
+  refusal: {
+    stale: 'This request is no longer waiting for an answer', changed: 'The request changed, read it again before deciding',
+    assertion_required: 'A verification is required', assertion_invalid: 'The verification was not accepted', assertion_expired: 'The verification expired',
+    not_taken: 'The terminal did not take it', no_prompt: 'No prompt visible in the terminal, open the tab',
+    read_only: 'Read only: started without Ledge, answer in its terminal', busy: 'A decision is already in progress', forbidden: 'Not allowed',
+    conflict: 'This action conflicts with another one already sent', agent_busy: 'The agent is busy, try again when it is available',
+    unsupported: 'This agent does not take that answer, answer in its terminal', invalid: 'Answer refused: check it'
+  } as Record<OperationReason, string>,
   list: {
     summary: (n: number, waiting: number) => n === 0 ? 'No sessions' : `${n} ${plural(n, 'session', 'sessions')} · ${waiting ? `${waiting} waiting for you` : 'nothing waiting'}`,
     dnd: 'Do not disturb', settings: 'Settings', collapse: 'Collapse', help: 'Keyboard shortcuts', newSession: 'New session',

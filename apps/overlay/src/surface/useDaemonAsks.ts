@@ -84,8 +84,11 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
     const id = lastError?.id; if (!id) return;
     const text = replies.current.get(id);
     if (text !== undefined) { replies.current.delete(id); onRejected.current?.(id, text); }
-    if (lock.current.has(id)) fail(id, lastError.message);
-    else setFailures(f => (f[id] === lastError.message ? f : { ...f, [id]: lastError.message }));
+    // A refusal code (`stale`, `changed`…) is shown in words; any other message as the daemon wrote it.
+    const refusals: Record<string, string> = msg.current.refusal;
+    const why = Object.hasOwn(refusals, lastError.message) ? refusals[lastError.message]! : lastError.message;
+    if (lock.current.has(id)) fail(id, why);
+    else setFailures(f => (f[id] === why ? f : { ...f, [id]: why }));
   }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A dropped connection leaves every decision in flight unresolved: unlock them; the next snapshot tells what happened.

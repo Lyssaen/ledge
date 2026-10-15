@@ -33,6 +33,15 @@ describe('useDaemonAsks decision lock', () => {
     expect(h.dispatch).toHaveBeenCalledWith({ type: 'decisionFailed', id: 'a' });
   });
 
+  it('a refusal code is shown in words, not as the bare code', () => {
+    const h = setup();
+    act(() => { h.result.current.begin('a'); });
+    h.rerender({ sessions: [asking()], status: 'open', lastError: { id: 'a', message: 'changed', seq: 1 } });
+    expect(h.result.current.failures.a).toBe('The request changed, read it again before deciding');
+    h.rerender({ sessions: [asking()], status: 'open', lastError: { id: 'a', message: 'stale', seq: 2 } });
+    expect(h.result.current.failures.a).toBe('This request is no longer waiting for an answer');
+  });
+
   it('lock releases on disconnect', () => {
     const h = setup();
     act(() => { h.result.current.begin('a'); });
