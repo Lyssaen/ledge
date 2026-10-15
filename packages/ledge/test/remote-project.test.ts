@@ -18,7 +18,7 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
 });
 const R: Recent = { cwd: '/w/harness-assistant', project: 'harness-assistant', lastAt: T0 };
 const D: DaemonInfo = { version: '0.4.0', install: 'npm', systemd: true };
-const view = { deviceId: 'd1' };
+const view = { deviceId: 'd1', unread: () => false };
 
 const chatDone: ServerMessage = { type: 'chat.done', qid: 'q', text: 'hi', at: T0 };
 const docContent = { type: 'document.content', requestId: 'r', path: '/w/a.md', text: '# A' } as unknown as ServerMessage;
@@ -66,6 +66,16 @@ describe('toRemote', () => {
     expect(Object.keys(m).sort()).toEqual(['sessions', 'type']);
     expect((m as any).sessions[0].tmuxSession).toBeNull();
   });
+  it("marks each session with the device's own unread, in snapshots and updates", () => {
+    const mine = { deviceId: 'd1', unread: (id: string) => id === 'b' };
+    const snap = toRemote({ type: 'snapshot', sessions: [mk('a'), mk('b')] }, mine) as Extract<ServerMessage, { type: 'snapshot' }>;
+    expect(snap.sessions.map(s => [s.id, s.unread])).toEqual([['a', false], ['b', true]]);
+    expect((toRemote({ type: 'session.updated', session: mk('b') }, mine) as Extract<ServerMessage, { type: 'session.updated' }>).session.unread).toBe(true);
+  });
+  it('passes a session thread to the phone that asked', () => {
+    const turns: ServerMessage = { type: 'session.turns', id: 'a', turns: [{ seq: 1, at: T0, kind: 'reply', text: 'Done.' }] };
+    expect(toRemote(turns, view)).toEqual(turns);
+  });
   it('drops chat, document, folder, update, recents and launched messages for a remote peer', () => {
     for (const msg of [chatDone, docContent, folderListing, updateProgress, recents, launched]) expect(toRemote(msg, view)).toBeNull();
   });
@@ -75,7 +85,7 @@ describe('toRemote', () => {
   });
   it('passes session updates without their terminal name, and removals, previews, errors and auth as they are', () => {
     const upd = toRemote({ type: 'session.updated', session: mk('a') }, view) as Extract<ServerMessage, { type: 'session.updated' }>;
-    expect(upd.session).toEqual({ ...mk('a'), tmuxSession: null });
+    expect(upd.session).toEqual({ ...mk('a'), tmuxSession: null, unread: false });
     const same: ServerMessage[] = [
       { type: 'session.removed', id: 'a' }, { type: 'session.preview', id: 'a', lines: ['x'] }, { type: 'error', message: 'forbidden' },
       { type: 'auth.ok', deviceId: 'd1', deviceName: 'iPhone', pcName: 'pc' }
@@ -104,14 +114,14 @@ describe('toRemote', () => {
 });
 
 describe('remote rights', () => {
-  it('a remote peer may run decisions from lot 2 on, never local-only commands', () => {
-    for (const t of ['snapshot.request', 'session.decide', 'decide.prepare', 'operation.status', 'session.reply'] as const) expect(MOBILE_COMMANDS.has(t)).toBe(true);
-    for (const t of ['session.interrupt', 'document.read', 'session.launch', 'folder.create', 'update.daemon', 'device.revoke', 'pair.begin', 'mobile.configure', 'session.kill', 'session.dismiss', 'session.rename', 'session.event', 'chat.ask'] as const)
+  it('a remote peer may run decisions from lot 2 on and the thread and interruption from lot 3 on, never local-only commands', () => {
+    for (const t of ['snapshot.request', 'session.decide', 'decide.prepare', 'operation.status', 'session.reply', 'session.history', 'session.read', 'session.interrupt'] as const) expect(MOBILE_COMMANDS.has(t)).toBe(true);
+    for (const t of ['document.read', 'session.launch', 'folder.create', 'update.daemon', 'device.revoke', 'pair.begin', 'mobile.configure', 'session.kill', 'session.dismiss', 'session.rename', 'session.event', 'chat.ask'] as const)
       expect(MOBILE_COMMANDS.has(t as never)).toBe(false);
   });
   it('pre-auth and mobile lists are the closed sets of the plan', () => {
     expect([...PRE_AUTH]).toEqual(['auth', 'pair.options', 'pair.complete']);
-    expect([...MOBILE_COMMANDS].sort()).toEqual(['decide.prepare', 'operation.status', 'session.decide', 'session.reply', 'snapshot.request']);
+    expect([...MOBILE_COMMANDS].sort()).toEqual(['decide.prepare', 'operation.status', 'session.decide', 'session.history', 'session.interrupt', 'session.read', 'session.reply', 'snapshot.request']);
   });
 });
 
@@ -147,7 +157,7 @@ describe('server: a remote peer', () => {
     srv.preview('a', ['line']);
     const sock = fakeSocket(); srv.attach(sock, { kind: 'remote', deviceId: 'd1' });
     const snap = await sock.next('snapshot');
-    expect(snap).toEqual({ type: 'snapshot', sessions: [{ ...mk('a'), tmuxSession: null }] });
+    expect(snap).toEqual({ type: 'snapshot', sessions: [{ ...mk('a'), tmuxSession: null, unread: false }] });
     expect(await sock.next('session.preview')).toEqual({ type: 'session.preview', id: 'a', lines: ['line'] });
     expect(sock.sent.map(m => m.type)).toEqual(['snapshot', 'session.preview']);
   });
@@ -160,13 +170,20 @@ describe('server: a remote peer', () => {
     await sock.next('session.removed');
     expect(sock.sent.some(m => m.type === 'recents')).toBe(false);
   });
-  it('a remote session.interrupt is refused as forbidden and nothing is typed', async () => {
+  it('a remote session.interrupt reaches the interrupt code: without an operation it is invalid and nothing is typed', async () => {
     store.upsert(mk('a', { state: 'working' }));
     const sock = fakeSocket(); srv.attach(sock, { kind: 'remote', deviceId: 'd1' });
     sock.receive({ type: 'session.interrupt', id: 'a' });
+    expect(await sock.next('error')).toMatchObject({ id: 'a', message: 'invalid' });
+    expect(tmux.sent).toEqual([]);
+  });
+  it('a local-only command from a remote peer is refused as forbidden and logged', async () => {
+    store.upsert(mk('a', { state: 'working' }));
+    const sock = fakeSocket(); srv.attach(sock, { kind: 'remote', deviceId: 'd1' });
+    sock.receive({ type: 'session.kill', id: 'a' });
     expect(await sock.next('error')).toMatchObject({ message: 'forbidden' });
     expect(tmux.sent).toEqual([]);
-    expect(readFileSync(join(process.env.LEDGE_HOME!, 'daemon.log'), 'utf8')).toContain('remote d1 refused session.interrupt');
+    expect(readFileSync(join(process.env.LEDGE_HOME!, 'daemon.log'), 'utf8')).toContain('remote d1 refused session.kill');
   });
   it('a remote session.decide reaches the decision code: without its request it is invalid, not forbidden', async () => {
     store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } }));

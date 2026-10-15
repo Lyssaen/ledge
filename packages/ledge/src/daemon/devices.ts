@@ -10,7 +10,8 @@ import type { Pairing } from './pairing.js';
 export interface StoredCredential { id: string; publicKey: string; counter: number; transports?: string[] }
 
 /** Only the SHA-256 of the token is kept (decision D6): a stolen file does not open a session. */
-export interface DeviceRecord { id: string; name: string; tokenHash: string; createdAt: string; lastSeenAt?: string; credential: StoredCredential }
+/** `read`: per session, the last thread turn this device has read (absent: none). */
+export interface DeviceRecord { id: string; name: string; tokenHash: string; createdAt: string; lastSeenAt?: string; credential: StoredCredential; read?: Record<string, number> }
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 
@@ -78,6 +79,21 @@ export class DeviceStore {
   async setCounter(id: string, counter: number): Promise<void> {
     const r = this.get(id); if (!r) return;
     r.credential = { ...r.credential, counter };
+    await this.save();
+  }
+
+  /** The device has read the session's thread up to `seq`. Not announced: only that device's view changes. */
+  async setRead(deviceId: string, sessionId: string, seq: number): Promise<void> {
+    const r = this.get(deviceId); if (!r) return;
+    r.read = { ...r.read, [sessionId]: seq };
+    await this.save();
+  }
+
+  /** A session gone for good: its read marks go with it (a new thread under the same id starts unread from 1). */
+  async forgetRead(sessionId: string): Promise<void> {
+    const hit = this.records.filter(r => r.read && sessionId in r.read);
+    if (!hit.length) return;
+    for (const r of hit) { const { [sessionId]: _, ...rest } = r.read!; r.read = rest; }
     await this.save();
   }
 

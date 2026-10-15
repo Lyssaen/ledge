@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TurnSchema, type Session, type SessionEvent, type Turn } from '@ledge/protocol';
@@ -114,14 +114,21 @@ export class HistoryStore {
     await this.flush();
   }
 
-  /** Drops the threads of sessions that no longer exist. */
+  /**
+   * Drops the threads of sessions that no longer exist and the leftovers of an interrupted compaction, and closes an
+   * existing folder to its owner. A file that cannot be removed is logged and skipped: it never stops the daemon.
+   */
   async prune(keep: ReadonlySet<string>): Promise<void> {
     await this.flush();
     const wanted = new Set([...keep].map(fileName));
     let names: string[];
     try { names = await readdir(this.dir); } catch { return; }
+    try { await chmod(this.dir, 0o700); } catch (e) { log(`history folder not restricted: ${(e as Error).message}`); }
     for (const name of names) {
-      if (name.endsWith('.jsonl') && !wanted.has(name)) await rm(join(this.dir, name), { force: true });
+      const stale = name.endsWith('.jsonl.tmp') || (name.endsWith('.jsonl') && !wanted.has(name));
+      if (!stale) continue;
+      try { await rm(join(this.dir, name), { force: true }); }
+      catch (e) { log(`history ${name} not pruned: ${(e as Error).message}`); }
     }
     this.counters.clear();
   }

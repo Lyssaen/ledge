@@ -217,7 +217,7 @@ describe('remote decisions', () => {
     const sent: any[] = [];
     const peer = { ctx: { kind: 'remote' as const, deviceId }, send: (m: unknown) => { sent.push(m); }, close() {} };
     const deps: DecisionDeps = {
-      store, ops: { } as never, challenges: { issue: () => { throw new Error('secret internals'); } } as never, devices, config: () => cfg, inject: async () => {}
+      store, ops: { } as never, challenges: { issue: () => { throw new Error('secret internals'); } } as never, devices, config: () => cfg, inject: async () => {}, interrupt: async () => {}
     };
     await prepareDecide(peer as never, { type: 'decide.prepare', id: 'a', pendingId: 'pA', pendingVersion: 1, decision: 'accept' }, deps);
     expect(sent).toEqual([{ type: 'error', id: 'a', message: 'forbidden' }]);
@@ -350,7 +350,7 @@ describe('remote decisions', () => {
     expect(fake.sent).toEqual([['text', 'ledge-a', '2']]);
   });
 
-  it('a remote reply to a permission is unsupported, and a reply without a request is forbidden', async () => {
+  it('a remote reply to a permission is unsupported, and an instruction to an agent waiting on a request is agent_busy', async () => {
     waiting(low);
     const p = phone(srv, deviceId);
     const toPermission = { type: 'session.reply', id: 'a', text: '1', pendingId: 'pA', pendingVersion: 1, operationId: randomUUID() };
@@ -358,7 +358,7 @@ describe('remote decisions', () => {
     expect(await p.result(toPermission.operationId)).toMatchObject({ status: 'rejected', reason: 'unsupported' });
     const free = { type: 'session.reply', id: 'a', text: 'hello', operationId: randomUUID() };
     p.send(free);
-    expect(await p.result(free.operationId)).toMatchObject({ status: 'rejected', reason: 'forbidden' });
+    expect(await p.result(free.operationId)).toMatchObject({ status: 'rejected', reason: 'agent_busy' });
     expect(fake.sent).toEqual([]);
   });
 

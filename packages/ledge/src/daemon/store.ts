@@ -11,6 +11,9 @@ function classified(s: Session): Session {
   return s.pending && !s.pending.risk ? { ...s, pending: withRisk(s.pending, s.cwd) } : s;
 }
 
+/** Sees every applied event with the session before and after it, before the change is announced. */
+export type ApplyObserver = (id: string, event: SessionEvent, before: Session, after: Session) => void;
+
 export type StoreChange = { type: 'updated'; session: Session } | { type: 'removed'; id: string } | { type: 'recents'; recents: Recent[] };
 
 /** How many folders the launch form remembers. */
@@ -20,6 +23,8 @@ export class Store {
   private sessions = new Map<string, Session>();
   private recentList: Recent[] = [];
   private listeners = new Set<(c: StoreChange) => void>();
+  private observers = new Set<ApplyObserver>();
+  private failedLoad = false;
   private timer: NodeJS.Timeout | null = null;
   private saving: Promise<void> = Promise.resolve();
   private readonly journalPath: string;
@@ -28,14 +33,24 @@ export class Store {
     this.journalPath = opts.journalPath ?? paths().journal;
   }
 
+  /**
+   * True when `load` found a journal it could not read and started empty: the sessions it held are unknown, so nothing
+   * kept per session (history) may be pruned against this empty list.
+   */
+  get loadFailed(): boolean { return this.failedLoad; }
+
   async load(): Promise<void> {
     let raw: string;
-    try { raw = await readFile(this.journalPath, 'utf8'); } catch { return; }
+    try { raw = await readFile(this.journalPath, 'utf8'); }
+    catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') { this.failedLoad = true; log(`journal unreadable, starting empty: ${(e as Error).message}`); }
+      return;
+    }
     if (!raw.trim()) return;
     let parsed: unknown;
-    try { parsed = JSON.parse(raw); } catch (e) { log(`journal unreadable, starting empty: ${(e as Error).message}`); return; }
+    try { parsed = JSON.parse(raw); } catch (e) { this.failedLoad = true; log(`journal unreadable, starting empty: ${(e as Error).message}`); return; }
     const list = (parsed as { sessions?: unknown[] })?.sessions;
-    if (!Array.isArray(list)) { log('journal unreadable, starting empty: no sessions array'); return; }
+    if (!Array.isArray(list)) { this.failedLoad = true; log('journal unreadable, starting empty: no sessions array'); return; }
     for (const item of list) {
       const r = SessionSchema.safeParse(item);
       if (r.success) this.sessions.set(r.data.id, classified(withIdentity(r.data, r.data.lastActivityAt)));
@@ -76,6 +91,7 @@ export class Store {
     const cur = this.sessions.get(id);
     if (!cur) return undefined;
     const next = reduce(cur, event);
+    for (const o of this.observers) { try { o(id, event, cur, next); } catch (e) { log(`apply observer failed: ${(e as Error).message}`); } }
     if (next === cur) return cur;
     this.sessions.set(id, next);
     this.emit({ type: 'updated', session: next });
@@ -85,6 +101,12 @@ export class Store {
   remove(id: string): void {
     if (!this.sessions.delete(id)) return;
     this.emit({ type: 'removed', id });
+  }
+
+  /** Called on every `apply`, even one that changes nothing, before listeners hear of the change. */
+  onApply(observer: ApplyObserver): () => void {
+    this.observers.add(observer);
+    return () => this.observers.delete(observer);
   }
 
   onChange(listener: (c: StoreChange) => void): () => void {

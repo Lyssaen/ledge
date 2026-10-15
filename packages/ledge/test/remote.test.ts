@@ -212,7 +212,7 @@ describe('remote entry', () => {
     expect(await again.next('auth.ok')).toEqual({ type: 'auth.ok', deviceId: done.deviceId, deviceName: 'iPhone de Joffrey', pcName: 'pc' });
     const snap = await again.next('snapshot');
     expect(Object.keys(snap).sort()).toEqual(['sessions', 'type']);
-    expect(snap.sessions).toEqual([{ ...mk('a'), tmuxSession: null }]);
+    expect(snap.sessions).toEqual([{ ...mk('a'), tmuxSession: null, unread: false }]);
     expect(again.got.map(m => m.type).slice(0, 2)).toEqual(['auth.ok', 'snapshot']);
     expect(devices.get(done.deviceId)?.lastSeenAt).toBeDefined();
     await pc.close(); again.ws.close();
@@ -252,12 +252,14 @@ describe('remote entry', () => {
     await pc.close();
   });
 
-  it('over the real listener a phone may decide but not interrupt: decide reaches the checks, interrupt is forbidden', async () => {
+  it('over the real listener a phone reaches the decision and interrupt checks, never a local-only command', async () => {
     store.upsert(mk('a', { state: 'waiting_permission', pending: { id: 'pA', version: 1, kind: 'permission', text: 'git push --force', tool: 'Bash', source: 'hook' } }));
     const { p } = await authed();
     await p.next('snapshot');
-    await p.send({ type: 'session.interrupt', id: 'a' });
+    await p.send({ type: 'session.kill', id: 'a' });
     expect(await p.next('error')).toMatchObject({ message: 'forbidden' });
+    await p.send({ type: 'session.interrupt', id: 'a', operationId: '0c9f4a52-3d1e-4b7a-8f60-2a4b6c8d0e13' });
+    expect(await p.next('operation.result')).toMatchObject({ status: 'rejected', reason: 'agent_busy' });
     await p.send({ type: 'session.decide', id: 'a', decision: 'accept', pendingId: 'pA', pendingVersion: 1, operationId: '7b1e0c1e-8d2f-4c4a-9a51-0d6f3c1b2a90' });
     expect(await p.next('operation.result')).toMatchObject({ status: 'rejected', reason: 'assertion_required' });
     expect(tmux.sent).toEqual([]);

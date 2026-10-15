@@ -61,7 +61,14 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   if (live) for (const s of store.all()) {
     if (s.tmuxSession && !live.has(s.tmuxSession)) store.remove(s.id);
   }
-  await new HistoryStore().prune(new Set(store.all().map(s => s.id)));
+  // One history for the startup prune and for the server. A journal that could not be read lists no session: pruning
+  // against it would erase every thread, so the prune waits for a readable one.
+  const history = new HistoryStore();
+  if (store.loadFailed) log('history prune skipped: the session journal could not be read');
+  else {
+    try { await history.prune(new Set(store.all().map(s => s.id))); }
+    catch (e) { log(`history prune failed: ${(e as Error).message}`); }
+  }
   const daemon = await daemonInfo();
   const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save() }));
   const devices = new DeviceStore();
@@ -69,7 +76,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   // The remote entry attaches its phones to the server, which needs the control for its device commands: started after both exist.
   let handle: ServerHandle | undefined;
   const mobile = mobileControl({ config: await loadMobileConfig(), devices, server: () => handle!, remotePort: opts.remotePort });
-  const server = handle = await startServer({ store, tmux, port: opts.port, daemon, updater, mobile });
+  const server = handle = await startServer({ store, history, tmux, port: opts.port, daemon, updater, mobile });
   await mobile.start();
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
   await writeFile(paths().pid, String(process.pid));
@@ -77,7 +84,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {
     process.off('SIGTERM', onSignal); process.off('SIGINT', onSignal);
-    poller.stop(); await mobile.stop(); await server.close(); await store.save(); await rm(paths().pid, { force: true }); log('daemon stopped');
+    poller.stop(); await mobile.stop(); await server.close(); await store.save(); await history.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
   })();
   const onSignal = () => { stop().finally(() => process.exit(0)); };
   process.once('SIGTERM', onSignal);

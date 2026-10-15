@@ -25,7 +25,8 @@ import { PairError } from './pairing.js';
 import { OperationRegistry } from './operations.js';
 import { ChallengeStore } from './challenges.js';
 import { parseOrigin } from '../mobile/config.js';
-import { BUSY, NO_PROMPT, NOT_TAKEN, READ_ONLY, Refusal, operationStatus, prepareDecide, runAnswer, runDecide, type DecisionDeps } from './decisions.js';
+import { BUSY, NO_PROMPT, NOT_TAKEN, READ_ONLY, Refusal, operationStatus, prepareDecide, runAnswer, runDecide, runInterrupt, type DecisionDeps, type Thread } from './decisions.js';
+import { HistoryStore, turnFromEvent } from './history.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -87,9 +88,12 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
 export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; mobile?: MobileControl;
+  /** Each session's thread; the daemon passes the instance it pruned at startup. */
+  history?: HistoryStore;
   /** What an authenticated phone may send; the plan's closed list unless a test widens it. */
   remoteCommands?: ReadonlySet<ClientMessage['type']> }): Promise<ServerHandle> {
   const { store, tmux } = opts;
+  const history = opts.history ?? new HistoryStore();
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
   // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
@@ -115,13 +119,42 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
   const titles = new Map<string, string>();
+  /** How long a phone's instruction waits for its prompt hook to come back with the same text. */
+  const PHONE_PROMPT_MS = 30_000;
+  /** Spaces as the adapters type them (newlines flattened) and as the hook reports them (trimmed). */
+  const promptKey = (text: string) => text.replace(/\s+/g, ' ').trim();
+  const phonePrompts = new Map<string, { text: string; ms: number }>();
+  const thread: Thread = {
+    record: (id, turn) => { history.next(id, { ...turn, at: now() }); },
+    expectPrompt: (id, text) => { phonePrompts.set(id, { text: promptKey(text), ms: Date.now() }); },
+    dropPrompt: id => { phonePrompts.delete(id); }
+  };
+  /**
+   * Every applied event (hooks, the poller, the daemon's own) writes its turn before the change is announced, so the
+   * unread a phone receives already counts it. A prompt matching a phone's recent instruction is the phone's.
+   */
+  const recordTurn = (id: string, ev: SessionEvent, before: Session | undefined, after: Session | undefined) => {
+    const turn = turnFromEvent(ev, before, after);
+    if (!turn) return;
+    if (turn.kind === 'prompt') {
+      const sent = phonePrompts.get(id);
+      if (sent && Date.now() - sent.ms > PHONE_PROMPT_MS) phonePrompts.delete(id);
+      else if (sent && sent.text === promptKey(turn.text ?? '')) { phonePrompts.delete(id); turn.source = 'phone'; }
+    }
+    history.next(id, { ...turn, at: ev.at });
+  };
+  const unobserve = store.onApply(recordTurn);
   const unsubscribe = store.onChange(c => {
     if (c.type === 'recents') return broadcast({ type: 'recents', recents: c.recents });
     if (c.type === 'updated' && c.session.tmuxSession && titles.get(c.session.id) !== c.session.title) {
       titles.set(c.session.id, c.session.title);
       tmux.setOption(c.session.tmuxSession, '@ledge_title', c.session.title).catch(e => log(`tab title not set for ${c.session.id}: ${(e as Error).message}`));
     }
-    if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); }
+    if (c.type === 'removed') {
+      previews.delete(c.id); titles.delete(c.id); phonePrompts.delete(c.id);
+      history.remove(c.id).catch(e => log(`history of ${c.id} not removed: ${(e as Error).message}`));
+      opts.mobile?.devices.forgetRead(c.id).catch(e => log(`read marks of ${c.id} not removed: ${(e as Error).message}`));
+    }
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const devicesMessage = (m: MobileControl): ServerMessage => ({ type: 'devices', devices: m.devices.list(), ...m.state() });
@@ -222,7 +255,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     store, ops: new OperationRegistry(), challenges: new ChallengeStore(), devices: opts.mobile?.devices,
     peersOf: deviceId => peers.all().filter(p => p.ctx.kind === 'remote' && p.ctx.deviceId === deviceId),
     config: () => { const origin = opts.mobile?.state().origin; return origin ? parseOrigin(origin) : null; },
-    inject: injectAndVerify
+    inject: injectAndVerify,
+    interrupt: s => tmux.sendKeys(s.tmuxSession!, adapterFor(s.tool).interruptKeys()),
+    thread
   };
   const remoteCommands = opts.remoteCommands ?? MOBILE_COMMANDS;
 
@@ -278,7 +313,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           const taken = store.all().map(s => s.name);
           const cwd = msg.cwd ?? '';
           const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
-          store.upsert(reduce(base, msg.event));
+          const after = reduce(base, msg.event);
+          recordTurn(msg.id, msg.event, undefined, after);
+          store.upsert(after);
         } else store.apply(msg.id, msg.event);
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
         return;
@@ -295,12 +332,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.reply': return runAnswer(peer, msg, decisions);
       case 'decide.prepare': return prepareDecide(peer, msg, decisions);
       case 'operation.status': return operationStatus(peer, msg, decisions);
-      case 'session.interrupt': {
+      case 'session.interrupt': return runInterrupt(peer, msg, decisions);
+      case 'session.history': {
+        if (!store.get(msg.id)) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
+        return peer.send({ type: 'session.turns', id: msg.id, turns: await history.read(msg.id) });
+      }
+      case 'session.read': {
+        // Read marks are a phone's: the overlay has no unread.
+        if (peer.ctx.kind !== 'remote') return;
+        if (!store.get(msg.id)) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
+        // Never past the last turn: a reply still to come stays unread.
+        await opts.mobile?.devices.setRead(peer.ctx.deviceId, msg.id, Math.min(msg.seq, history.lastSeq(msg.id)));
         const s = store.get(msg.id);
-        if (s?.source === 'hook_only') return peer.send({ type: 'error', id: msg.id, message: READ_ONLY });
-        if (!s?.tmuxSession) return;
-        await tmux.sendKeys(s.tmuxSession, adapterFor(s.tool).interruptKeys());
-        return;
+        return s ? peer.send({ type: 'session.updated', session: s }) : undefined;
       }
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;
@@ -353,12 +397,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
   }
 
+  /** The thread holds a reply after the last turn this device read. */
+  const unread = (deviceId: string, sessionId: string) => history.lastReplySeq(sessionId) > (opts.mobile?.devices.get(deviceId)?.read?.[sessionId] ?? 0);
+
   /** A local peer gets every message as before; a remote one only what `toRemote` lets through. */
   function peerFor(socket: PeerSocket, ctx: PeerContext): Peer {
     const write = (msg: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg)); };
     return {
       ctx,
-      send: ctx.kind === 'local' ? write : msg => { const m = toRemote(msg, { deviceId: ctx.deviceId }); if (m) write(m); },
+      send: ctx.kind === 'local' ? write : msg => { const m = toRemote(msg, { deviceId: ctx.deviceId, unread: sid => unread(ctx.deviceId, sid) }); if (m) write(m); },
       close: code => socket.close(code)
     };
   }
@@ -395,6 +442,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     preview,
     attach,
     peers,
-    close: () => new Promise(res => { unsubscribe(); unsubscribeDevices?.(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
+    close: () => new Promise(res => { unobserve(); unsubscribe(); unsubscribeDevices?.(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
   };
 }

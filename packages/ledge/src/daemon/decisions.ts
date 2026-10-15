@@ -1,4 +1,4 @@
-import type { ClientMessage, OperationReason, Pending, ServerMessage, Session } from '@ledge/protocol';
+import type { ClientMessage, OperationReason, Pending, ServerMessage, Session, Turn } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Peer } from './peers.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
@@ -13,12 +13,24 @@ export type SessionDecide = Extract<ClientMessage, { type: 'session.decide' }>;
 export type SessionReply = Extract<ClientMessage, { type: 'session.reply' }>;
 export type DecidePrepare = Extract<ClientMessage, { type: 'decide.prepare' }>;
 export type OperationStatusMsg = Extract<ClientMessage, { type: 'operation.status' }>;
+export type SessionInterrupt = Extract<ClientMessage, { type: 'session.interrupt' }>;
 
 export const READ_ONLY = 'session started without ledge, read only';
 export const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
 export const NOT_TAKEN = 'the terminal did not take it';
 export const BUSY = 'a decision is already in progress';
 const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
+/** The longest instruction a phone may type into an agent's input line. */
+export const MESSAGE_MAX = 4_000;
+
+/** What decisions write to a session's thread (server.ts numbers and dates the turn). */
+export interface Thread {
+  record(id: string, turn: Omit<Turn, 'seq' | 'at'>): void;
+  /** A phone's instruction is about to be typed: the next prompt with this text is the phone's. */
+  expectPrompt(id: string, text: string): void;
+  /** Nothing was typed after all. */
+  dropPrompt(id: string): void;
+}
 
 /**
  * Why a decision was not carried out. `reason` is what a phone reads in `operation.result`; `message` is what a local
@@ -38,10 +50,16 @@ export interface DecisionDeps {
   peersOf?(deviceId: string): Peer[];
   /** `injectAndVerify`: takes the session lock, re-checks `expected` and builds the plan before the first character. */
   inject(id: string, planFor: (pane: string) => KeyPlan, requirePrompt: boolean, expected?: { id: string; version: number }): Promise<void>;
+  /** Sends the agent's interrupt keys once. */
+  interrupt(session: Session): Promise<void>;
+  thread?: Thread;
 }
 
 /** Whose operations these are: a phone reads only its own (and conflicts with any other). */
 const ownerOf = (peer: Peer) => peer.ctx.kind === 'remote' ? `device:${peer.ctx.deviceId}` : 'local';
+
+/** Where a turn was decided: a remote peer is a phone, a local one is this PC (overlay, CLI). */
+const sourceOf = (peer: Peer) => peer.ctx.kind === 'remote' ? 'phone' as const : 'pc' as const;
 
 const resultOf = (r: OperationRecord): ServerMessage => ({ type: 'operation.result', operationId: r.id, status: r.status, ...(r.reason ? { reason: r.reason } : {}) });
 
@@ -67,7 +85,7 @@ function requestFor(store: Store, id: string, pendingId: string, pendingVersion:
  * or another owner a `conflict`). `operation.*` is sent only when the client named an operation; a local client still
  * gets `error { id }` on any failure (D10).
  */
-async function operate(peer: Peer, msg: SessionDecide | SessionReply, deps: DecisionDeps, body: () => Promise<void>): Promise<void> {
+async function operate(peer: Peer, msg: SessionDecide | SessionReply | SessionInterrupt, deps: DecisionDeps, body: () => Promise<void>): Promise<void> {
   const opId = msg.operationId;
   const local = peer.ctx.kind === 'local';
   const notify = (m: ServerMessage) => {
@@ -138,7 +156,8 @@ export async function runDecide(peer: Peer, msg: SessionDecide, deps: DecisionDe
       if (s.source === 'hook_only') throw new Refusal('read_only', READ_ONLY);
       if (!s.pending) throw new Refusal('stale', 'nothing to decide');
       const pending = s.pending; const adapter = adapterFor(s.tool);
-      return deps.inject(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true);
+      await deps.inject(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true);
+      return recordDecision(peer, msg, pending, deps);
     }
     const { session, pending } = requestFor(deps.store, msg.id, msg.pendingId, msg.pendingVersion!);
     // Only a phone proves who it is; the overlay on this PC decides without WebAuthn. A missing risk counts as high.
@@ -146,19 +165,29 @@ export async function runDecide(peer: Peer, msg: SessionDecide, deps: DecisionDe
       await checkAssertion(peer.ctx.deviceId, msg, session.id, pending, deps);
     }
     const adapter = adapterFor(session.tool);
-    return deps.inject(msg.id, pane => { stillPaired(peer, deps); return adapter.keysFor(msg.decision, pending, pane); }, true, { id: pending.id, version: pending.version });
+    await deps.inject(msg.id, pane => { stillPaired(peer, deps); return adapter.keysFor(msg.decision, pending, pane); }, true, { id: pending.id, version: pending.version });
+    recordDecision(peer, msg, pending, deps);
   });
+}
+
+function recordDecision(peer: Peer, msg: SessionDecide, pending: Pending, deps: DecisionDeps): void {
+  deps.thread?.record(msg.id, { kind: 'decision', decision: msg.decision, source: sourceOf(peer), ...(pending.id ? { pendingId: pending.id } : {}) });
+}
+
+/** An option picked by its number is written to the thread by its label. */
+function recordAnswer(peer: Peer, msg: SessionReply, pending: Pending, deps: DecisionDeps): void {
+  const n = /^[1-9]$/.test(msg.text.trim()) ? Number(msg.text.trim()) : 0;
+  const text = pending.options?.[n - 1] ?? msg.text;
+  deps.thread?.record(msg.id, { kind: 'answer', text, source: sourceOf(peer), ...(pending.id ? { pendingId: pending.id } : {}) });
 }
 
 export async function runAnswer(peer: Peer, msg: SessionReply, deps: DecisionDeps): Promise<void> {
   const remote = peer.ctx.kind === 'remote';
   if ((remote && !msg.operationId) || namesRequestHalfway(msg)) return peer.send({ type: 'error', id: msg.id, message: 'invalid' });
+  // From a phone, text that names no request is an instruction to an idle agent.
+  if (remote && msg.pendingId === undefined) return runMessage(peer, msg, deps);
   return operate(peer, msg, deps, async () => {
-    if (msg.pendingId === undefined) {
-      // Free text to the input line from a phone comes with lot 3.
-      if (remote) throw new Refusal('forbidden');
-      return legacyReply(msg, deps);
-    }
+    if (msg.pendingId === undefined) return legacyReply(peer, msg, deps);
     const { session, pending } = requestFor(deps.store, msg.id, msg.pendingId, msg.pendingVersion!);
     if (remote) {
       // A phone picks one of the options it was shown; free text arrives with lot 5.
@@ -171,12 +200,74 @@ export async function runAnswer(peer: Peer, msg: SessionReply, deps: DecisionDep
       if (!/^[1-9]$/.test(msg.text.trim())) throw new Refusal('unsupported', FREE_TEXT);
     }
     const adapter = adapterFor(session.tool);
-    return deps.inject(msg.id, pane => { stillPaired(peer, deps); return adapter.replyPlan(msg.text, pending, pane || undefined); }, true, { id: pending.id, version: pending.version });
+    await deps.inject(msg.id, pane => { stillPaired(peer, deps); return adapter.replyPlan(msg.text, pending, pane || undefined); }, true, { id: pending.id, version: pending.version });
+    recordAnswer(peer, msg, pending, deps);
+  });
+}
+
+/** Free to take an instruction: idle, with nothing waiting on an answer. */
+const takesInstruction = (s: Session | undefined) => s?.state === 'idle' && !s.pending;
+
+/**
+ * A phone's instruction (`session.reply` without a request): typed into the input line of an idle agent, once per
+ * operation. A busy agent refuses it (`agent_busy`): nothing is typed and nothing is kept for later. Its prompt hook,
+ * matched on the text within 30 s, makes the `prompt` turn the phone's.
+ */
+export async function runMessage(peer: Peer, msg: SessionReply, deps: DecisionDeps): Promise<void> {
+  if (!msg.operationId) return peer.send({ type: 'error', id: msg.id, message: 'invalid' });
+  return operate(peer, msg, deps, async () => {
+    const s = deps.store.get(msg.id);
+    if (!s) throw new Refusal('stale', 'unknown session');
+    if (s.source === 'hook_only') throw new Refusal('read_only', READ_ONLY);
+    if (msg.text.trim() === '' || msg.text.length > MESSAGE_MAX) throw new Refusal('invalid');
+    if (!takesInstruction(s)) throw new Refusal('agent_busy');
+    const adapter = adapterFor(s.tool);
+    try {
+      // Checked again under the lock, right before the first character.
+      await deps.inject(msg.id, () => {
+        stillPaired(peer, deps);
+        if (!takesInstruction(deps.store.get(msg.id))) throw new Refusal('agent_busy');
+        deps.thread?.expectPrompt(msg.id, msg.text);
+        return adapter.replyPlan(msg.text, undefined, undefined);
+      }, false);
+    } catch (e) {
+      // `not_taken`: the text may have reached the agent anyway, its prompt then stays the phone's.
+      if (!(e instanceof Refusal && e.reason === 'not_taken')) deps.thread?.dropPrompt(msg.id);
+      throw e;
+    }
+  });
+}
+
+/**
+ * Interrupts the agent. From a phone it is an operation (D9): only a working agent is interrupted, and the keys go out
+ * once per `operationId` (two Ctrl-C quit Cursor Agent). `applied` as soon as the keys are sent: their effect cannot
+ * be checked. A local client without an operation does what it did before.
+ */
+export async function runInterrupt(peer: Peer, msg: SessionInterrupt, deps: DecisionDeps): Promise<void> {
+  const remote = peer.ctx.kind === 'remote';
+  if (remote && !msg.operationId) return peer.send({ type: 'error', id: msg.id, message: 'invalid' });
+  const send = async (s: Session) => {
+    await deps.interrupt(s);
+    deps.thread?.record(s.id, { kind: 'interrupt', source: sourceOf(peer) });
+  };
+  if (!msg.operationId) {
+    const s = deps.store.get(msg.id);
+    if (s?.source === 'hook_only') return peer.send({ type: 'error', id: msg.id, message: READ_ONLY });
+    if (!s?.tmuxSession) return;
+    return send(s);
+  }
+  return operate(peer, msg, deps, async () => {
+    const s = deps.store.get(msg.id);
+    if (!s) throw new Refusal('stale', 'unknown session');
+    if (s.source === 'hook_only' || !s.tmuxSession) throw new Refusal('read_only', READ_ONLY);
+    if (remote && s.state !== 'working') throw new Refusal('agent_busy');
+    stillPaired(peer, deps);
+    await send(s);
   });
 }
 
 /** A local reply that does not name a request: what it did before (D10). */
-function legacyReply(msg: SessionReply, deps: DecisionDeps): Promise<void> {
+async function legacyReply(peer: Peer, msg: SessionReply, deps: DecisionDeps): Promise<void> {
   const s = deps.store.get(msg.id);
   if (!s) throw new Refusal('stale', 'unknown session');
   if (s.source === 'hook_only') throw new Refusal('read_only', READ_ONLY);
@@ -187,7 +278,9 @@ function legacyReply(msg: SessionReply, deps: DecisionDeps): Promise<void> {
   if (s.pending?.kind === 'question' && !/^[1-9]$/.test(msg.text.trim())) throw new Refusal('unsupported', FREE_TEXT);
   // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
   const pending = s.pending; const adapter = adapterFor(s.tool);
-  return deps.inject(msg.id, pane => adapter.replyPlan(msg.text, pending, pane || undefined), !!pending);
+  await deps.inject(msg.id, pane => adapter.replyPlan(msg.text, pending, pane || undefined), !!pending);
+  // Text typed into the input line comes back as the agent's prompt hook: only an answer is written here.
+  if (pending) recordAnswer(peer, msg, pending, deps);
 }
 
 /**
