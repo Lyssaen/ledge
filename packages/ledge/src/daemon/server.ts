@@ -12,7 +12,7 @@ import { pickName } from '../names.js';
 import { spawnSession } from '../spawn.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
 import { loginShellEnv } from '../shell-path.js';
-import { log } from '../log.js';
+import { log, quote } from '../log.js';
 import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
 import { readDocument } from './documents.js';
@@ -542,8 +542,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       handle(peer, msg).catch(e => {
         if (msg.type === 'document.read') return peer.send({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
-        log(`${msg.type} failed: ${(e as Error).message}`);
-        peer.send({ type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message });
+        log(`${msg.type} failed: ${quote((e as Error).message)}`);
+        // A phone never reads the exception text (a path, a library's detail): it is in the log.
+        peer.send({ type: 'error', id: 'id' in msg ? msg.id : undefined, message: ctx.kind === 'remote' ? 'failed' : (e as Error).message });
       });
     });
   }

@@ -990,6 +990,18 @@ describe('device commands', () => {
       await vi.waitFor(() => expect(sent).toContainEqual({ type: 'error', message: 'mobile not available' }));
     }
   });
+  it('a failure answered to a phone carries a generic message, never the exception text', async () => {
+    const { devices } = await withMobile();
+    const { device } = await devices.create('iPhone', cred);
+    vi.spyOn(devices, 'setPush').mockRejectedValueOnce(new Error("EACCES: permission denied, open '/home/u/.ledge/devices.json.tmp'"));
+    const sent: any[] = []; const handlers: Record<string, ((...a: any[]) => void)[]> = {};
+    const sock = { readyState: 1, send: (d: string) => sent.push(JSON.parse(d)), on(ev: string, fn: (...a: any[]) => void) { (handlers[ev] ??= []).push(fn); return sock; }, close() {} };
+    srv.attach(sock as never, { kind: 'remote', deviceId: device.id });
+    const subscription = { endpoint: 'https://web.push.apple.com/s/1', keys: { p256dh: 'p', auth: 'a' } };
+    for (const h of handlers.message ?? []) h(JSON.stringify({ type: 'push.subscribe', subscription }));
+    await vi.waitFor(() => expect(sent).toContainEqual({ type: 'error', message: 'failed' }));
+    expect(JSON.stringify(sent)).not.toContain('EACCES');
+  });
   it('lists devices with the origin and listening state', async () => {
     const { devices } = await withMobile();
     const { device } = await devices.create('iPhone', cred);
