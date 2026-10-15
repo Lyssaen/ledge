@@ -68,6 +68,25 @@ describe('talking to Ledge from the Shell', () => {
     expect(localStorage.getItem('desktop.selected')).toBe('local:otto');
   });
 
+  it('re-clicking the trigger while the chat is open puts the cursor back in its composer, and nothing steals focus later', async () => {
+    const user = userEvent.setup();
+    const d = await boot({ sessions: [fakeSession('otto', { name: 'Otto', project: 'ledge', cwd: '/w/ledge', state: 'working' })] });
+    await waitFor(() => expect(document.querySelector('[data-session="local:otto"]')).not.toBeNull());
+    await user.click(heading());
+    await waitFor(() => expect(reply()).toHaveFocus());
+    const thread = document.querySelector<HTMLElement>('#conversation-pane .thread-scroll')!;
+    await user.click(thread);
+    expect(thread).toHaveFocus();
+    await user.click(heading());
+    expect(reply()).toHaveFocus();
+    // Elsewhere again, then background traffic re-renders the Shell: the focus stays where the person put it.
+    await user.click(thread);
+    expect(thread).toHaveFocus();
+    d.upsert(fakeSession('otto', { name: 'Otto', project: 'ledge', cwd: '/w/ledge', state: 'idle' }));
+    await waitFor(() => expect(document.querySelector('[data-session="local:otto"] [data-state]')).toHaveAttribute('data-state', 'idle'));
+    expect(thread).toHaveFocus();
+  });
+
   it('the empty workspace offers Ledge too; the chat opens beside it', async () => {
     const user = userEvent.setup();
     const d = await boot();

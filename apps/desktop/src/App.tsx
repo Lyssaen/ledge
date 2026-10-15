@@ -26,6 +26,14 @@ import { ChatPane } from './chat/ChatPane';
 import { CHAT_ID } from './chat/turns';
 import { onTrayAction } from './tauri/bridge';
 
+/** The chat's composer, or its thread when the composer is frozen (local daemon down). */
+function focusChat() {
+  const pane = document.querySelector<HTMLElement>('#conversation-pane[data-ledge-chat]');
+  if (!pane) return;
+  const field = document.getElementById('ledge-chat-reply') as HTMLTextAreaElement | null;
+  (field && !field.disabled ? field : pane.querySelector<HTMLElement>('.thread-scroll'))?.focus({ preventScroll: true });
+}
+
 function Shell({ client }: { client?: DaemonClient }) {
   const [state, dispatch] = useViewState();
   const { sessions, machines, fleet, localDown, client: fleetClient } = useFleet(client);
@@ -106,16 +114,21 @@ function Shell({ client }: { client?: DaemonClient }) {
   const pick = (id: string) => { replyFor.current = null; dispatch({ type: 'select', id }); };
 
   // Opening the chat puts the cursor in its composer once the pane is on screen, in its thread when the composer is frozen.
+  // The flag lives for one render: the one the selection change causes. Re-clicking while the chat is already selected changes
+  // nothing in the state (no render), so it focuses at once and never arms the flag: an armed flag would steal the focus on a
+  // later fleet-driven render.
   const chatFocus = useRef(false);
   useEffect(() => {
     if (!chatFocus.current) return;
-    const pane = document.querySelector<HTMLElement>('#conversation-pane[data-ledge-chat]');
-    if (!pane) return;
     chatFocus.current = false;
-    const field = document.getElementById('ledge-chat-reply') as HTMLTextAreaElement | null;
-    (field && !field.disabled ? field : pane.querySelector<HTMLElement>('.thread-scroll'))?.focus({ preventScroll: true });
+    if (chatOpen) focusChat();
   });
-  const openChat = () => { replyFor.current = null; chatFocus.current = true; dispatch({ type: 'select', id: CHAT_ID }); };
+  const openChat = () => {
+    replyFor.current = null;
+    if (chatOpen) { chatFocus.current = false; focusChat(); return; }
+    chatFocus.current = true;
+    dispatch({ type: 'select', id: CHAT_ID });
+  };
   // A session named by Ledge: its conversation, cursor in its reply (lot 5 focus effect); the attention filter goes off so it shows.
   const openSession = (id: string) => { dispatch({ type: 'attention', on: false }); pick(id); replyFor.current = id; };
   const chatEntry = { open: chatOpen, onOpen: openChat };
