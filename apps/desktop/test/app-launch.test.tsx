@@ -110,6 +110,19 @@ describe('launching from the Shell', () => {
     d.launched(fakeSession('ari', { name: 'Ari' }));
     await waitFor(() => expect(localStorage.getItem('desktop.selected')).toBe('local:ari'));
   });
+
+  it('a launched session the fleet never lists does not keep the focus from coming back later', async () => {
+    const user = userEvent.setup();
+    const d = await boot();
+    await user.click(await screen.findByRole('button', { name: 'Start a session' }));
+    await fillAndStart(user);
+    await waitFor(() => expect(launches(d)).toHaveLength(1));
+    d.reply({ type: 'session.launched', id: 'ghost' });   // it died at once: never listed
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Starting the session' })).toBeNull());
+    await user.click(screen.getByRole('button', { name: 'Start a session' }));
+    await user.click(screen.getByRole('button', { name: 'Back to sessions' }));
+    expect(screen.getByRole('button', { name: 'Start a session' })).toHaveFocus();
+  });
 });
 
 // The local daemon never answers: everything is read-only (spec §6).

@@ -62,10 +62,11 @@ function Shell({ client }: { client?: DaemonClient }) {
   const canLaunch = !localDown;
   const opener = useRef<'heading' | 'empty'>('heading');
   const { open: openFlow } = launch;
-  // An open screen keeps the opener it was opened from (the tray's « new » is then a no-op).
+  // An open screen keeps the opener it was opened from (the tray's « new » is then a no-op). A launched session the fleet
+  // never listed (it died at once) is forgotten: it would otherwise block the focus return and the next selection.
   const openLaunch = useCallback((from: 'heading' | 'empty') => {
     if (launching) return;
-    opener.current = from; openFlow();
+    opener.current = from; setCreated(null); openFlow();
   }, [launching, openFlow]);
   // Tray « Nouvelle session » (main.rs shows the window first). Ignored while read-only; an open screen is left as it is
   // (`open` is a no-op unless closed). « Ne pas déranger » and the tray labels' language come with lot 7.

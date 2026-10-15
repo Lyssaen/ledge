@@ -30,6 +30,8 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     recents(recents: Recent[]) { extras.recents = recents; bc({ type: 'recents', recents }); },
     /** Answers the last requester's `session.launch`: the new session is broadcast, then `session.launched` is replied. */
     launched(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); last?.send(JSON.stringify({ type: 'session.launched', id: s.id })); },
+    /** Any reply to the last requester alone, e.g. a `session.launched` for a session that is never listed. */
+    reply(m: ServerMessage) { last?.send(JSON.stringify(m)); },
     /** A launch refused: an `error` with no id, to the last requester. */
     refuse(message: string) { last?.send(JSON.stringify({ type: 'error', message })); },
     /** Cuts every open socket, as a daemon restart does; the client reconnects and gets a fresh snapshot. */
