@@ -25,6 +25,17 @@ describe('push sender', () => {
     await make(send).notify(payload());
     expect(send).not.toHaveBeenCalled();
   });
+  it('sends nothing while mobile access is disabled', async () => {
+    await devices.setPush(id, sub());
+    const send = vi.fn().mockResolvedValue({});
+    let origin: string | null = null;
+    const sender = createPushSender({ devices, vapid: async () => vapid, env: async () => ({}), send, enabled: () => origin !== null });
+    await sender.notify(payload());
+    expect(send).not.toHaveBeenCalled();
+    origin = 'https://pc.t.ts.net';
+    await sender.notify(payload());
+    expect(send).toHaveBeenCalledTimes(1);
+  });
   it('sends the payload with the push options', async () => {
     await devices.setPush(id, sub());
     const send = vi.fn().mockResolvedValue({});

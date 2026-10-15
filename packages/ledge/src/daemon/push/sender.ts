@@ -8,11 +8,13 @@ import { pushEndpointAllowed, type Vapid } from './vapid.js';
 /**
  * Posts a notification to every subscribed phone. Failures are logged, never raised and never retried; a subscription the
  * push service says is gone (404, 410) is dropped. `env` is the login shell's, which is where the proxy lives under systemd.
+ * `enabled`: false while mobile access is disabled (`ledge mobile disable`), and then nothing is sent.
  */
-export function createPushSender(o: { devices: DeviceStore; vapid: () => Promise<Vapid | null>; env: () => Promise<NodeJS.ProcessEnv>; send?: typeof webpush.sendNotification }): { notify(p: PushPayload): Promise<void> } {
+export function createPushSender(o: { devices: DeviceStore; vapid: () => Promise<Vapid | null>; env: () => Promise<NodeJS.ProcessEnv>; send?: typeof webpush.sendNotification; enabled?: () => boolean }): { notify(p: PushPayload): Promise<void> } {
   const send = o.send ?? webpush.sendNotification;
   return {
     async notify(p) {
+      if (o.enabled && !o.enabled()) return;
       const targets = o.devices.list().map(d => o.devices.get(d.id)).filter(r => !!r?.push);
       if (!targets.length) return;
       const vapid = await o.vapid();

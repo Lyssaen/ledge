@@ -82,7 +82,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const mobile = mobileControl({ config: await loadMobileConfig(), devices, server: () => handle!, remotePort: opts.remotePort });
   const server = handle = await startServer({ store, history, tmux, port: opts.port, daemon, updater, mobile });
   await mobile.start();
-  const sender = createPushSender({ devices, vapid: loadVapid, env: async () => ({ ...process.env, ...(await loginShellEnv()) }) });
+  const sender = createPushSender({ devices, vapid: loadVapid, env: async () => ({ ...process.env, ...(await loginShellEnv()) }), enabled: () => mobile.state().origin !== null });
   const pushGate = createPushGate(60_000);
   const offPush = store.onApply((id, _ev, before, after) => {
     if (before === after) return;
