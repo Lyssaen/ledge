@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ThreadItem } from '@ledge/protocol';
 import { turns, helperThread, helperRows } from '../src/thread/turns';
-import { fakeSession } from './mockDaemon';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 
 const at = (s: number) => new Date(Date.UTC(2026, 9, 13, 10, 0, s)).toISOString();
 const items: ThreadItem[] = [
