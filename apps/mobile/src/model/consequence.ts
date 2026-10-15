@@ -41,6 +41,15 @@ export function parsePushTarget(cmd: string): PushTarget | null {
 
 export interface Consequence { title: string; body: string; destination?: string }
 
+/**
+ * What a low-risk request will do, when it is worth saying: an edit inside the session's folder. A read-only command
+ * or a question needs no warning; a high-risk request has its consequence instead.
+ */
+export function lowRiskNoticeFor(item: InboxItem): Consequence | null {
+  if (item.risk !== 'low' || item.riskReason !== 'edit_inside_folder') return null;
+  return { title: copy.detail.editsInProject, body: copy.detail.editsInProjectBody };
+}
+
 /** What a high-impact request will do if accepted, in words. `null` for a low-risk one. */
 export function consequenceFor(item: InboxItem): Consequence | null {
   if (item.risk === 'low') return null;

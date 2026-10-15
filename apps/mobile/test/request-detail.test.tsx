@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
+import type { Session } from '@ledge/protocol';
 import { RequestDetail } from '../src/screens/RequestDetail';
 import { mobileStore } from '../src/state/store';
 
@@ -29,5 +30,26 @@ describe('RequestDetail with no matching request', () => {
     act(() => { mobileStore.apply({ type: 'snapshot', sessions: [] }); mobileStore.setLink('offline'); });
     expect(screen.queryByText('Déjà traitée sur le PC')).toBeNull();
     expect(screen.getByText(/dernier état connu/)).toBeInTheDocument();
+  });
+});
+
+describe('RequestDetail of a low-risk permission', () => {
+  const waiting = (text: string, riskReason: 'read_only_command' | 'edit_inside_folder', tool = 'Bash'): Session => ({
+    id: 's', name: 'Kai', tool: 'claude', cwd: '/w/site', project: 'site', title: 'Kai', tmuxSession: 'ledge-s', state: 'waiting_permission', helpers: [],
+    startedAt: '2026-10-14T10:00:00Z', lastActivityAt: '2026-10-14T10:00:00Z', source: 'launcher',
+    pending: { id: 'p', version: 1, since: '2026-10-14T10:00:00Z', kind: 'permission', text, tool, source: 'hook', risk: 'low', riskReason }
+  } as Session);
+  it('a read-only command shows no consequence at all', () => {
+    show();
+    act(() => { mobileStore.apply({ type: 'snapshot', sessions: [waiting('ls', 'read_only_command')] }); mobileStore.setLink('online'); });
+    expect(screen.getByText('ls')).toBeInTheDocument();
+    expect(screen.queryByText(/script de test/)).toBeNull();
+    expect(screen.queryByText(/accéder au réseau/)).toBeNull();
+  });
+  it('an edit inside the folder says the file there will change, nothing about tests or the network', () => {
+    show();
+    act(() => { mobileStore.apply({ type: 'snapshot', sessions: [waiting('/w/site/a.ts', 'edit_inside_folder', 'Edit')] }); mobileStore.setLink('online'); });
+    expect(screen.getByText('Modification dans le projet')).toBeInTheDocument();
+    expect(screen.queryByText(/script de test/)).toBeNull();
   });
 });

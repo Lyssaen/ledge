@@ -46,8 +46,8 @@ export const copy = {
     ago: (age: string) => `Il y a ${age}`,
     context: 'Contexte du terminal',
     options: 'Réponses proposées',
-    runsInProject: 'Exécution dans le projet',
-    runsInProjectBody: 'Le script de test du dépôt sera exécuté avec les permissions de cette session. Il peut modifier des fichiers ou accéder au réseau.',
+    editsInProject: 'Modification dans le projet',
+    editsInProjectBody: 'Le fichier sera modifié dans le dossier de cette session, et nulle part ailleurs.',
     destination: 'Destination'
   },
   decide: {

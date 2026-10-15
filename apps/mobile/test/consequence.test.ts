@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RiskReason } from '@ledge/protocol';
-import { consequenceFor, parsePushTarget } from '../src/model/consequence';
+import { consequenceFor, lowRiskNoticeFor, parsePushTarget } from '../src/model/consequence';
 import type { InboxItem } from '../src/model/requests';
 
 const item = (over: Partial<InboxItem>): InboxItem => ({ sessionId: 's', pendingId: 'p', pendingVersion: 1, kind: 'permission', filter: 'permission', task: 't', botName: 'Kai', tool: 'claude', repo: 'r', since: '2026-10-14T10:00:00Z', text: '', risk: 'high', readOnly: false, ...over });
@@ -54,4 +54,13 @@ describe('consequenceFor', () => {
     expect(consequenceFor(item({}))?.title).toBe('Commande que Ledge ne sait pas analyser');
     expect(consequenceFor(item({ kind: 'plan' }))?.title).toBe('Valide un plan : l’agent passera à l’exécution');
   });
+});
+
+describe('lowRiskNoticeFor', () => {
+  it('says nothing for a read-only command or a question', () => {
+    expect(lowRiskNoticeFor(item({ risk: 'low', riskReason: 'read_only_command', text: 'ls' }))).toBeNull();
+    expect(lowRiskNoticeFor(item({ kind: 'question', risk: 'low', riskReason: 'question' }))).toBeNull();
+  });
+  it('names the edit inside the folder', () => expect(lowRiskNoticeFor(item({ risk: 'low', riskReason: 'edit_inside_folder' }))?.title).toBe('Modification dans le projet'));
+  it('is null for a high-risk request: the consequence speaks for it', () => expect(lowRiskNoticeFor(item({ risk: 'high', riskReason: 'script' }))).toBeNull());
 });

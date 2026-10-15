@@ -11,7 +11,7 @@ import { Command } from '../ui/Command';
 import { BackHeader } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { LostBanner, Notice } from '../ui/Notice';
-import { consequenceFor } from '../model/consequence';
+import { consequenceFor, lowRiskNoticeFor } from '../model/consequence';
 import { DecisionFooter } from './DecisionFooter';
 import { checkFreeAnswer } from '../model/freeAnswer';
 import { QuestionForm, answer, answerOther } from './QuestionForm';
@@ -75,6 +75,7 @@ export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId
   const free = checkFreeAnswer(otherText);
   const choosingOther = canOther && choice === (req.options?.length ?? 0);
   const consequence = req.kind !== 'question' ? consequenceFor(req) : null;
+  const lowNotice = lowRiskNoticeFor(req);
   const lines = (previews[sessionId] ?? []).slice(-12);
   const offline = link === 'offline';
   return (
@@ -96,7 +97,7 @@ export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId
         </div>
         {req.kind !== 'question' && req.text && <Command text={req.text} />}
         {consequence && <Notice title={consequence.title} tone="danger"><p>{consequence.body}</p></Notice>}
-        {req.kind === 'permission' && req.risk === 'low' && <Notice title={copy.detail.runsInProject}><p className="text-muted">{copy.detail.runsInProjectBody}</p></Notice>}
+        {lowNotice && <Notice title={lowNotice.title}><p className="text-muted">{lowNotice.body}</p></Notice>}
         {req.options && req.options.length > 0 && (answerable
           ? <QuestionForm options={req.options} value={choice} onChange={setChoice} botName={req.botName} other={canOther ? { text: otherText, onText: setOtherText, problem: free.problem } : undefined} disabled={outcome.kind === 'sending' || outcome.kind === 'uncertain'} />
           : <ul aria-label={copy.detail.options} className="my-3.5 flex list-none flex-col gap-2 p-0">
