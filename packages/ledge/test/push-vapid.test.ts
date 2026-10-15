@@ -94,7 +94,7 @@ describe('VAPID keys', () => {
 describe('push endpoints', () => {
   it('only the known push services are allowed', () => {
     for (const e of ['https://web.push.apple.com/x', 'https://fcm.googleapis.com/fcm/send/x', 'https://updates.push.services.mozilla.com/wpush/v2/x', 'https://db5p.notify.windows.com/x']) expect(pushEndpointAllowed(e)).toBe(true);
-    for (const e of ['https://attacker.example/x', 'http://web.push.apple.com/x', 'https://push.apple.com.evil.example/x', 'https://evilfcm.googleapis.com/x', 'https://127.0.0.1/x', 'nope']) expect(pushEndpointAllowed(e)).toBe(false);
+    for (const e of ['https://attacker.example/x', 'http://web.push.apple.com/x', 'https://push.apple.com.evil.example/x', 'https://evilfcm.googleapis.com/x', 'https://127.0.0.1/x', 'https://web.push.apple.com:8443/x', 'nope']) expect(pushEndpointAllowed(e)).toBe(false);
   });
 });
 

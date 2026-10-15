@@ -13,7 +13,7 @@ export const PUSH_HOSTS: readonly RegExp[] = [/\.push\.apple\.com$/, /^fcm\.goog
 export function pushEndpointAllowed(endpoint: string): boolean {
   let u: URL;
   try { u = new URL(endpoint); } catch { return false; }
-  return u.protocol === 'https:' && PUSH_HOSTS.some(re => re.test(u.hostname));
+  return u.protocol === 'https:' && u.port === '' && PUSH_HOSTS.some(re => re.test(u.hostname));
 }
 
 /** A missing or unreadable file is "no keys yet": `ensureVapid` makes them. */

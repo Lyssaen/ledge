@@ -7,7 +7,10 @@ import { realTmux, type Tmux } from '../tmux.js';
 import { ensureLedgeDir, paths } from '../paths.js';
 import { log, quote } from '../log.js';
 import { DeviceStore, type MobileControl } from './devices.js';
-import { ensureVapid } from './push/vapid.js';
+import { ensureVapid, loadVapid } from './push/vapid.js';
+import { pushFor } from './push/triggers.js';
+import { createPushSender } from './push/sender.js';
+import { loginShellEnv } from '../shell-path.js';
 import { createPairing } from './pairing.js';
 import { startRemoteListener, type RemoteListener } from './remote/listener.js';
 import { loadMobileConfig, parseOrigin, saveMobileConfig, type MobileConfig } from '../mobile/config.js';
@@ -79,13 +82,19 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const mobile = mobileControl({ config: await loadMobileConfig(), devices, server: () => handle!, remotePort: opts.remotePort });
   const server = handle = await startServer({ store, history, tmux, port: opts.port, daemon, updater, mobile });
   await mobile.start();
+  const sender = createPushSender({ devices, vapid: loadVapid, env: async () => ({ ...process.env, ...(await loginShellEnv()) }) });
+  const offPush = store.onApply((id, _ev, before, after) => {
+    if (before === after) return;
+    const p = pushFor(before, after, store.all().map(s => (s.id === id ? after : s)));
+    if (p) sender.notify(p).catch(e => log(`push not sent: ${(e as Error).message}`));
+  });
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
   await writeFile(paths().pid, String(process.pid));
   log(`daemon started on ${server.port} with ${store.all().length} sessions`);
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {
     process.off('SIGTERM', onSignal); process.off('SIGINT', onSignal);
-    poller.stop(); await mobile.stop(); await server.close(); await store.save(); await history.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
+    offPush(); poller.stop(); await mobile.stop(); await server.close(); await store.save(); await history.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
   })();
   const onSignal = () => { stop().finally(() => process.exit(0)); };
   process.once('SIGTERM', onSignal);
