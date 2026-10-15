@@ -118,6 +118,7 @@ describe('the chat while the local daemon is down', () => {
     expect(reply()).toBeDisabled();
     expect(reply()).toHaveValue('Kept draft');
     for (const b of within(screen.getByRole('group', { name: 'Suggestions for Ledge' })).getAllByRole('button')) expect(b).toBeDisabled();
+    for (const b of screen.getAllByRole('button', { name: /New session|Start a session/ })) expect(b).toBeDisabled();
     expect(screen.getAllByRole('alert')).toHaveLength(1);
     expect(heading()).toHaveAttribute('aria-current', 'true');
     expect(localStorage.getItem('desktop.selected')).toBe('ledge');
