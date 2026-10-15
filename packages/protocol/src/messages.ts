@@ -4,6 +4,7 @@ import { TurnSchema } from './history.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema } from './chat.js';
 import { AuthenticationJsonSchema, OperationIdSchema, OperationReasonSchema, OperationStatusSchema } from './operations.js';
 import { DeviceSchema, PairErrorSchema, RegistrationJsonSchema } from './remote.js';
+import { PushSubscriptionSchema } from './push.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
 import { SshAliasSchema } from './ssh.js';
@@ -94,7 +95,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('update.failed'), version: z.string(), reason: UpdateFailureSchema, detail: z.string().optional(), command: z.string().optional() }),
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional() }),
   /** The remote entry: the phone is authenticated; then the pairing exchange and the device list. */
-  z.object({ type: z.literal('auth.ok'), deviceId: z.string(), deviceName: z.string(), pcName: z.string() }),
+  z.object({ type: z.literal('auth.ok'), deviceId: z.string(), deviceName: z.string(), pcName: z.string(), vapidPublicKey: z.string().optional() }),
   z.object({ type: z.literal('pair.code'), code: z.string().regex(/^\d{6}$/), expiresAt: z.string().datetime(), url: z.string() }),
   z.object({ type: z.literal('pair.challenge'), options: z.record(z.unknown()), expiresAt: z.string().datetime() }),
   z.object({ type: z.literal('pair.done'), token: z.string(), deviceId: z.string() }),
@@ -156,6 +157,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('pair.begin') }),
   z.object({ type: z.literal('pair.options'), code: z.string().regex(/^\d{6}$/) }),
   z.object({ type: z.literal('pair.complete'), code: z.string().regex(/^\d{6}$/), deviceName: z.string().min(1).max(60), webauthn: RegistrationJsonSchema }),
+  /** The phone's Web Push subscription (lot 4), kept on its device; `push.unsubscribe` removes it. */
+  z.object({ type: z.literal('push.subscribe'), subscription: PushSubscriptionSchema }),
+  z.object({ type: z.literal('push.unsubscribe') }),
   z.object({ type: z.literal('devices') }),
   z.object({ type: z.literal('device.revoke'), id: z.string().min(1) }),
   z.object({ type: z.literal('mobile.configure'), origin: z.string().url().refine(u => new URL(u).protocol === 'https:', 'https only').nullable() })
