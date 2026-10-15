@@ -61,7 +61,10 @@ export const daemonStore = {
       case 'snapshot':
         byId.clear(); for (const s of m.sessions) byId.set(s.id, s); for (const id of previews.keys()) if (!byId.has(id)) previews.delete(id);
         recents = m.recents ?? []; launcher = m.launcher ?? null;
-        daemon = m.daemon ?? null; snapshotSeq += 1; threads.clear();
+        daemon = m.daemon ?? null; snapshotSeq += 1;
+        // A session frozen by keepStale (spec 2026-10-14 §6) keeps the thread already received: its machine cannot be
+        // asked again, and Desktop reads it while it is offline. Every other thread is asked again after a snapshot.
+        for (const id of [...threads.keys()]) if (!byId.get(id)?.offline) threads.delete(id);
         break;
       case 'session.updated': byId.set(m.session.id, m.session); break;
       case 'session.removed': byId.delete(m.id); previews.delete(m.id); threads.delete(m.id); break;

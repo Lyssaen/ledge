@@ -157,4 +157,30 @@ describe('daemon client + store', () => {
     daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('b')] });
     expect(daemonStore.getState().threads.size).toBe(0);
   });
+
+  it('keeps the thread of a session frozen by keepStale across fleet snapshots, until it comes back live (R10)', () => {
+    daemonStore.reset();
+    const at = '2026-10-13T10:00:00.000Z';
+    const item = { kind: 'prompt' as const, id: 'p1', at, turn: 1, text: 'Vérifie le tunnel' };
+    daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('devbox:nova'), fakeSession('local:otto')] });
+    daemonStore.apply({ type: 'session.thread', id: 'devbox:nova', items: [item] });
+    daemonStore.apply({ type: 'session.thread', id: 'local:otto', items: [item] });
+    // Devbox falls: the fleet republishes its sessions frozen; only live threads are dropped (they are asked again).
+    daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('devbox:nova', { offline: true }), fakeSession('local:otto')] });
+    expect([...daemonStore.getState().threads.keys()]).toEqual(['devbox:nova']);
+    daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('devbox:nova', { offline: true }), fakeSession('local:otto')] });
+    expect(daemonStore.getState().threads.get('devbox:nova')).toEqual([item]);
+    // Devbox is back: its fresh snapshot replaces the frozen one, thread included.
+    daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('devbox:nova'), fakeSession('local:otto')] });
+    expect(daemonStore.getState().threads.size).toBe(0);
+  });
+
+  it('drops the frozen thread of a session the fleet no longer publishes', () => {
+    daemonStore.reset();
+    const at = '2026-10-13T10:00:00.000Z';
+    daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('devbox:nova', { offline: true })] });
+    daemonStore.apply({ type: 'session.thread', id: 'devbox:nova', items: [{ kind: 'prompt', id: 'p1', at, turn: 1, text: 'x' }] });
+    daemonStore.apply({ type: 'snapshot', sessions: [] });   // the machine was removed from the list
+    expect(daemonStore.getState().threads.size).toBe(0);
+  });
 });
