@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, configure, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import WebSocket from 'ws';
 import type { Session } from '@ledge/protocol';
@@ -7,6 +7,13 @@ import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
 import { recent } from './launch-helpers';
+
+// Every wait here rides a real WebSocket (connect, snapshot, machines, then the launch round trip) inside jsdom. Testing
+// Library's 1 s default and vitest's 5 s test limit are too tight when parallel workers starve the CPU: the first test of the
+// file, which also pays the cold module load, failed after ~2 s on `findByRole('button', { name: 'Start a session' })`
+// because the fleet was not ready yet. The waits still return as soon as the condition holds; only the give-up point moves.
+configure({ asyncUtilTimeout: 5000 });
+vi.setConfig({ testTimeout: 20000 });
 
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
