@@ -183,6 +183,56 @@ const fr = {
       valueText: (n: number) => `Conversation : ${n} % de la largeur`,
       title: 'Glisser pour ajuster la largeur · flèches gauche et droite au clavier'
     }
+  },
+  chat: {
+    trigger: 'Parler à Ledge',
+    label: 'Parler à Ledge',
+    eyebrow: 'PARLER À LEDGE',
+    identity: (sessions: number, projects: number) => `${sessions} ${plural(sessions, 'session', 'sessions')} · ${projects} ${plural(projects, 'projet', 'projets')}`,
+    purpose: 'Faites le point sur vos projets ou préparez votre prochaine tâche.',
+    reset: 'Nouvelle conversation',
+    thread: 'Historique avec Ledge',
+    welcome: { title: 'De quoi avez-vous besoin ?', text: 'Retrouvez les demandes en attente et le contexte de votre équipe.' },
+    starters: { label: 'Suggestions pour Ledge', items: ['Qui a besoin de moi ?', 'Fais le point sur les projets', 'Préparer une nouvelle session'] as readonly string[] },
+    author: 'Ledge',
+    thinking: 'Ledge cherche…',
+    step: { sessions: 'Relit les sessions', pane: (name: string) => `Lit le terminal de ${name}`, reply: (name: string) => `Lit la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => `Lit ${path}` },
+    source: { sessions: 'les sessions', pane: (name: string) => `le terminal de ${name}`, reply: (name: string) => `la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => path },
+    sourcesNone: 'aucune lecture',
+    sourcesLine: (list: string, time: string) => `Sources : ${list} · ${time}`,
+    stop: 'Annuler',
+    stopLabel: 'Annuler la question en cours',
+    stopped: 'Question annulée.',
+    error: (why: string) => `Ledge n’a pas pu répondre : ${why}`,
+    choose: (name: string) => `Sur ${name}.`,
+    choices: 'Machines proposées',
+    clarification: 'Vous pouvez aussi répondre par écrit.',
+    destination: (name: string) => `Destination : ${name}`,
+    unavailable: 'déconnectée',
+    links: 'Sessions citées',
+    open: (name: string) => `Ouvrir ${name}`,
+    readonly: 'Lecture seule : le daemon local ne répond pas. L’historique avec Ledge reste lisible.',
+    frozen: (names: string) => `${names} : connexion perdue. Ledge s’appuie sur le dernier état connu de ces machines.`,
+    composer: {
+      label: 'Parler à Ledge',
+      placeholder: 'Posez votre question à Ledge…',
+      send: 'Envoyer ↑',
+      hint: 'Ctrl / ⌘ + Entrée pour envoyer',
+      busy: 'Ledge répond… Vous pouvez préparer la suite.',
+      refused: 'Ledge n’a pas pris cette question. Réessayez dans un instant.',
+      readonly: 'Lecture seule : le daemon local ne répond pas.'
+    },
+    card: {
+      label: 'Session proposée', folder: 'Dossier', tool: 'Harnais', byDefault: (tool: string) => `${tool} · par défaut`, prompt: 'Instruction', noPrompt: 'Aucune, session vide',
+      launch: 'Lancer la session', launching: 'Lancement…', retry: 'Réessayer', orRephrase: 'ou reformulez votre demande', orFolder: 'ou indiquez un autre dossier',
+      failed: (why: string) => `Échec du lancement : ${why}`, started: (name: string) => `${name} a démarré`, startedUnknown: 'Session démarrée'
+    },
+    relay: {
+      label: 'Instruction à envoyer', session: 'Session', instruction: 'Instruction',
+      send: 'Envoyer', sending: 'Envoi…', cancel: 'Annuler', retry: 'Réessayer', orRephrase: 'ou reformulez votre demande',
+      queued: 'travaille ; l’instruction partira dès qu’il aura fini', sentTo: 'Envoyé à', failed: (why: string) => `Échec de l’envoi : ${why}`,
+      pill: { yours: 'à vous', working: 'travaille', waiting: 'attend votre réponse', stopped: 'arrêtée' }
+    }
   }
 };
 
@@ -364,6 +414,56 @@ const en: typeof fr = {
       label: 'Conversation width',
       valueText: (n: number) => `Conversation: ${n}% of the width`,
       title: 'Drag to adjust the width · left and right arrows on the keyboard'
+    }
+  },
+  chat: {
+    trigger: 'Talk to Ledge',
+    label: 'Talk to Ledge',
+    eyebrow: 'TALK TO LEDGE',
+    identity: (sessions, projects) => `${sessions} ${plural(sessions, 'session', 'sessions')} · ${projects} ${plural(projects, 'project', 'projects')}`,
+    purpose: 'Check where your projects stand or prepare your next task.',
+    reset: 'New conversation',
+    thread: 'History with Ledge',
+    welcome: { title: 'What do you need?', text: 'Find the waiting requests and your team’s context.' },
+    starters: { label: 'Suggestions for Ledge', items: ['Who needs me?', 'Give me a status of the projects', 'Prepare a new session'] },
+    author: 'Ledge',
+    thinking: 'Ledge is looking…',
+    step: { sessions: 'Reads the sessions', pane: name => `Reads ${name}'s terminal`, reply: name => `Reads ${name}'s last reply`, git: name => `git in ${name}'s folder`, repo: path => `Reads ${path}` },
+    source: { sessions: 'the sessions', pane: name => `${name}'s terminal`, reply: name => `${name}'s last reply`, git: name => `git in ${name}'s folder`, repo: path => path },
+    sourcesNone: 'nothing read',
+    sourcesLine: (list, time) => `Sources: ${list} · ${time}`,
+    stop: 'Cancel',
+    stopLabel: 'Cancel the current question',
+    stopped: 'Question cancelled.',
+    error: why => `Ledge could not answer: ${why}`,
+    choose: name => `On ${name}.`,
+    choices: 'Suggested machines',
+    clarification: 'You can also answer in writing.',
+    destination: name => `Destination: ${name}`,
+    unavailable: 'disconnected',
+    links: 'Sessions mentioned',
+    open: name => `Open ${name}`,
+    readonly: 'Read-only: the local daemon does not answer. The history with Ledge stays readable.',
+    frozen: names => `${names}: connection lost. Ledge relies on the last known state of these machines.`,
+    composer: {
+      label: 'Talk to Ledge',
+      placeholder: 'Ask Ledge your question…',
+      send: 'Send ↑',
+      hint: 'Ctrl / ⌘ + Enter to send',
+      busy: 'Ledge is answering… You can prepare what comes next.',
+      refused: 'Ledge did not take this question. Try again in a moment.',
+      readonly: 'Read-only: the local daemon does not answer.'
+    },
+    card: {
+      label: 'Proposed session', folder: 'Folder', tool: 'Harness', byDefault: tool => `${tool} · default`, prompt: 'Instruction', noPrompt: 'None, empty session',
+      launch: 'Start the session', launching: 'Starting…', retry: 'Retry', orRephrase: 'or rephrase your request', orFolder: 'or give me another folder',
+      failed: why => `Could not start: ${why}`, started: name => `${name} has started`, startedUnknown: 'Session started'
+    },
+    relay: {
+      label: 'Instruction to send', session: 'Session', instruction: 'Instruction',
+      send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',
+      queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: why => `Could not send: ${why}`,
+      pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
     }
   }
 };
