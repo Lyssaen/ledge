@@ -39,6 +39,8 @@ jobs:
       - name: Stamp the version from the tag
         run: node apps/overlay/scripts/set-version.mjs "$VERSION_TAG"
       - run: pnpm --filter @ledge/protocol test
+      - run: pnpm --filter @ledge/client test
+      - run: pnpm --filter mobile test
       # The launch tests attach to real tmux sessions: tmux refuses to attach without a TERM, which the runner leaves unset.
       - run: pnpm --filter @paradow/ledge test
         env:

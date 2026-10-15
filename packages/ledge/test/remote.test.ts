@@ -192,7 +192,6 @@ describe('remote entry', () => {
   });
 
   it('a pre-auth message that fails its schema closes with 4401', async () => {
-    srv.broadcast({ type: 'session.removed', id: 'x' });
     const p = phone(remote.port, { origin });
     await p.send({ type: 'pair.complete', code: CODE, deviceName: 'x'.repeat(61), webauthn: {} });
     expect(await p.closed).toBe(4401);

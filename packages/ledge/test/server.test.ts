@@ -507,7 +507,7 @@ describe('server', () => {
     it('a client that connects later gets the last preview right after the snapshot', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim' }));
       srv.preview('a', ['old']); srv.preview('a', ['● latest']);
-      const r = await recorder(); await r.until(2);
+      const r = await recorder(); await r.until(3);
       expect(r.got.map(m => m.type)).toEqual(['snapshot', 'session.preview', 'chat.history']);
       expect(r.got[1]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
       r.ws.terminate();
