@@ -66,7 +66,7 @@ tailscale serve --https=443 off     # on Windows
 
 It sees the session list grouped by repository (with an unread mark when an agent replied since you last opened its thread), each session's state, its pending permission or question, the thread (your prompts, the agent's replies, the decisions taken, from the phone or the PC) and the terminal preview. Tool actions and their outputs stay on the PC. It never receives the tmux session name, the launcher command, the recent folders or the daemon's version details.
 
-The daemon accepts eight commands from a phone: `snapshot.request`, `session.decide`, `decide.prepare`, `operation.status`, `session.reply`, `session.history`, `session.read` and `session.interrupt`. Kills, launches, renames, folder commands, Ask Ledge, device management and `mobile.configure` are refused. The list is an explicit allow-list in the daemon (`MOBILE_COMMANDS`), and a test pins it so that a later lot cannot widen it by accident.
+The daemon accepts ten commands from a phone: `snapshot.request`, `session.decide`, `decide.prepare`, `operation.status`, `session.reply`, `session.history`, `session.read`, `session.interrupt`, `push.subscribe` and `push.unsubscribe`. Kills, launches, renames, folder commands, Ask Ledge, device management and `mobile.configure` are refused. The list is an explicit allow-list in the daemon (`MOBILE_COMMANDS`), and a test pins it so that a later lot cannot widen it by accident.
 
 ### Threads, instructions, terminal and interrupt
 
@@ -126,7 +126,7 @@ Some of the phone's wording was written during implementation (for instance "J'a
 5. Answer a question by tapping an option: applied, no Face ID prompt.
 6. R5: tap "Allow once" on a `ls` request, then switch to airplane mode at once. Expect "receipt not confirmed", then, after reconnecting, the exact state (applied or not), and a single `ls` in the pane.
 7. R8: lock the phone for 10 minutes during an active session, then reopen the app: it reconnects by itself, refreshes, and checks any open operation.
-8. Check `~/.ledge/daemon.log` for the operations and that no assertion or token appears in it.
+8. Check `~/.ledge/daemon.log`: one `operation <id> <type> <session> <status> (<reason>) from device <id>` line per finished operation, and no assertion, token or typed text in it.
 9. R10: have a real Claude Code session ask an `AskUserQuestion` (for instance "Ask me which theme to use, with three options"). On the phone choose "Autre réponse", type a sentence with the soft keyboard, send. Expect the agent to receive the text word for word, then the next question or the end of the dialogue. Try a trailing line break (the phone refuses it) and 2001 characters (refused). Then open a Codex and a Cursor Agent question: "Autre réponse" must be absent.
 
 ## Notifications
