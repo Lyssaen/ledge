@@ -13,7 +13,8 @@ import { MobileBot } from '../ui/MobileBot';
 import { LostBanner, Notice } from '../ui/Notice';
 import { consequenceFor } from '../model/consequence';
 import { DecisionFooter } from './DecisionFooter';
-import { QuestionForm, answer } from './QuestionForm';
+import { checkFreeAnswer } from '../model/freeAnswer';
+import { QuestionForm, answer, answerOther } from './QuestionForm';
 import { RiskConfirm } from './RiskConfirm';
 import { Gone } from './Gone';
 import { Result } from './Result';
@@ -37,13 +38,14 @@ const Loading = () => (
 
 /** One request: read it, then decide it from the phone (or see what became of it). */
 export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId: string; pendingId: string; onReconnect: () => void }) {
-  const { sessions, previews, link, syncedAt, ops, live } = useMobile();
+  const { sessions, previews, link, syncedAt, ops, live, capabilities } = useMobile();
   const now = useNow();
   const item = requestsOf(sessions).find(i => i.sessionId === sessionId && i.pendingId === pendingId);
   // The version the phone showed first: a decision always names it, and a newer one must be read again.
   const [seen, setSeen] = useState<number | null>(null);
   if (seen === null && item) setSeen(item.pendingVersion);
   const [choice, setChoice] = useState<number | null>(null);
+  const [otherText, setOtherText] = useState('');
   const [confirming, setConfirming] = useState(false);
   // A dialog closed by a lost link stays closed: it must not reopen and ask for a new challenge on reconnect.
   useEffect(() => { if (link !== 'online') setConfirming(false); }, [link]);
@@ -69,6 +71,9 @@ export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId
   const session = sessions.find(s => s.id === sessionId);
   const req = shown;
   const answerable = req.kind === 'question' && req.risk === 'low' && !req.readOnly && (req.options?.length ?? 0) > 0;
+  const canOther = answerable && capabilities?.[req.tool]?.freeTextAnswer === true;
+  const free = checkFreeAnswer(otherText);
+  const choosingOther = canOther && choice === (req.options?.length ?? 0);
   const consequence = req.kind !== 'question' ? consequenceFor(req) : null;
   const lines = (previews[sessionId] ?? []).slice(-12);
   const offline = link === 'offline';
@@ -93,7 +98,7 @@ export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId
         {consequence && <Notice title={consequence.title} tone="danger"><p>{consequence.body}</p></Notice>}
         {req.kind === 'permission' && req.risk === 'low' && <Notice title={copy.detail.runsInProject}><p className="text-muted">{copy.detail.runsInProjectBody}</p></Notice>}
         {req.options && req.options.length > 0 && (answerable
-          ? <QuestionForm options={req.options} value={choice} onChange={setChoice} disabled={outcome.kind === 'sending' || outcome.kind === 'uncertain'} />
+          ? <QuestionForm options={req.options} value={choice} onChange={setChoice} botName={req.botName} other={canOther ? { text: otherText, onText: setOtherText, problem: free.problem } : undefined} disabled={outcome.kind === 'sending' || outcome.kind === 'uncertain'} />
           : <ul aria-label={copy.detail.options} className="my-3.5 flex list-none flex-col gap-2 p-0">
               {req.options.map(o => <li key={o} className="rounded-control border border-line bg-surface px-3 py-3 text-[13px] [overflow-wrap:anywhere]">{o}</li>)}
             </ul>
@@ -112,7 +117,7 @@ export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId
         )}
         {offline && outcome.kind !== 'uncertain' && <div className="mt-4"><LostBanner detail={copy.link.lostDetail} onReconnect={onReconnect} /></div>}
       </main>
-      <DecisionFooter item={req} outcome={outcome} link={link} changed={changed} stillPending={item !== undefined && item.pendingVersion === seen} onReread={() => { setSeen(req.pendingVersion); setChoice(null); setConfirming(false); }} onDecide={d => decide(req, d)} onVerify={() => setConfirming(true)} choice={choice} onAnswer={() => { if (choice !== null) answer(req, choice); }} onCheck={() => { if (link === 'online') mobileStore.checkOperations(); else onReconnect(); }} />
+      <DecisionFooter item={req} outcome={outcome} link={link} changed={changed} stillPending={item !== undefined && item.pendingVersion === seen} onReread={() => { setSeen(req.pendingVersion); setChoice(null); setConfirming(false); }} onDecide={d => decide(req, d)} onVerify={() => setConfirming(true)} choice={choice} answerBlocked={choosingOther ? free.problem !== null : choice !== null && choice >= (req.options?.length ?? 0)} onAnswer={() => { if (choosingOther) { if (free.problem === null) answerOther(req, free.text); } else if (choice !== null && choice < (req.options?.length ?? 0)) answer(req, choice); }} onCheck={() => { if (link === 'online') mobileStore.checkOperations(); else onReconnect(); }} />
       {confirming && item !== undefined && sameVersion && link === 'online' && <RiskConfirm item={item} onClose={() => setConfirming(false)} />}
     </>
   );

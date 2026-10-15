@@ -24,12 +24,14 @@ export interface DecisionFooterProps {
   /** A question: the option chosen (none yet) and how to send it. */
   choice?: number | null;
   onAnswer?: (() => void) | undefined;
+  /** The chosen answer cannot be sent yet (a free answer that is empty or not typable). */
+  answerBlocked?: boolean;
   /** Reconnect and ask the daemon where an uncertain decision ended up. */
   onCheck: () => void;
 }
 
 /** A decision is only ever one tap, sent now, never queued: this footer never offers one it could not honour. */
-export function DecisionFooter({ item, outcome, link, changed, stillPending, onReread, onDecide, onVerify, choice = null, onAnswer, onCheck }: DecisionFooterProps) {
+export function DecisionFooter({ item, outcome, link, changed, stillPending, onReread, onDecide, onVerify, choice = null, onAnswer, answerBlocked = false, onCheck }: DecisionFooterProps) {
   const [checking, setChecking] = useState(false);
   useEffect(() => {
     if (!checking) return;
@@ -47,7 +49,7 @@ export function DecisionFooter({ item, outcome, link, changed, stillPending, onR
   // A decision in flight or of unknown delivery always comes first: a newer version never hides it.
   const gated = changed && outcome.kind !== 'sending' && outcome.kind !== 'uncertain';
   const buttons = (enabled: boolean) => answerable ? (
-    <button type="button" disabled={!enabled || choice === null} onClick={() => onAnswer?.()} className={`${full} border-transparent bg-fg text-[#121415]`}>{copy.decide.send}</button>
+    <button type="button" disabled={!enabled || choice === null || answerBlocked} onClick={() => onAnswer?.()} className={`${full} border-transparent bg-fg text-[#121415]`}>{copy.decide.send}</button>
   ) : (
     <div className="flex gap-2.5">
       <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={btn}>{copy.decide.deny}</button>
@@ -94,7 +96,7 @@ export function DecisionFooter({ item, outcome, link, changed, stillPending, onR
         if (!stillPending) return wrap(<Notice title={text} tone="warning" role="alert" />);
         return wrap(<><Notice title={text} tone="warning" role="alert" />{buttons(live)}{hint(linkHint)}</>);
       }
-      const text = r === 'busy' ? copy.decide.busy : r === 'not_taken' ? copy.decide.notTaken : copy.decide.failed;
+      const text = r === 'invalid' && item.kind === 'question' ? copy.decide.otherInvalid : r === 'unsupported' ? copy.decide.otherUnsupported : r === 'busy' ? copy.decide.busy : r === 'not_taken' ? copy.decide.notTaken : copy.decide.failed;
       if (!stillPending) return wrap(<Notice title={text} tone="warning" role="alert" />);
       return wrap(<><Notice title={text} tone="warning" role="alert" />{buttons(live)}{hint(linkHint)}</>);
     }

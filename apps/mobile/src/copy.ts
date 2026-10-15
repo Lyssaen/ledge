@@ -59,6 +59,8 @@ export const copy = {
     answerLater: 'Répondre depuis le téléphone : pas encore disponible. Répondez sur le PC.',
     answerHint: 'La réponse sera transmise immédiatement au PC.',
     send: 'Envoyer ma réponse',
+    otherInvalid: 'Le PC n’a pas accepté cette réponse. Corrigez-la, elle tient sur une ligne de 2000 caractères au plus.',
+    otherUnsupported: 'Cet agent ne peut pas recevoir de réponse libre depuis le téléphone. Choisissez une option ou répondez sur le PC.',
     assertionExpired: 'La vérification a expiré. Recommencez.',
     assertionInvalid: 'La vérification n’a pas été acceptée par le PC.',
     sending: 'Transmission au PC…', sendingBody: 'En attente de confirmation du terminal.',
@@ -128,7 +130,14 @@ export const copy = {
     fail: 'L’interruption n’a pas été transmise. Vérifiez le terminal sur le PC.',
     uncertain: 'Réception non confirmée : vérifiez le terminal avant de recommencer.'
   },
-  question: { legend: 'Choisir une réponse' },
+  question: {
+    legend: 'Choisir une réponse',
+    other: 'Autre réponse',
+    fieldLabel: (bot: string) => `Votre réponse à ${bot}`,
+    placeholder: 'Précisez votre choix…',
+    long: (max: number) => `La réponse est trop longue (${max} caractères au plus).`,
+    untypable: 'La réponse doit tenir sur une ligne, sans saut de ligne ni caractère de contrôle.'
+  },
   confirm: {
     label: (title: string) => `Confirmer : ${title}`,
     title: 'Autoriser cette commande ?', titleForce: 'Autoriser ce push forcé ?',

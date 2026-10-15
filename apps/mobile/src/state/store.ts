@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { ClientMessage, ServerMessage, Session, Turn } from '@ledge/protocol';
+import type { CapabilitiesByTool, ClientMessage, ServerMessage, Session, Turn } from '@ledge/protocol';
 import { isNew, loadOps, matches, opsReducer, saveOps, toCheck, type OpEvent, type OpState } from '../model/operations';
 import { setBadge } from '../push/handlers';
 import { requestsOf } from '../model/requests';
@@ -21,6 +21,8 @@ export interface MobileState {
   vapidPublicKey: string | null;
   /** The subscription this phone holds was made for another PC key: notifications must be enabled again (needs a tap). */
   pushStale: boolean;
+  /** What each tool can answer, from the snapshot (memory only); null from a PC that does not say: nothing extended is offered. */
+  capabilities: CapabilitiesByTool | null;
   /** True once this connection's snapshot has arrived: until then a persisted state is only the last one seen. */
   live: boolean;
 }
@@ -56,7 +58,7 @@ function loadDevice(storage?: Storage): MobileState['device'] {
 
 export function createMobileStore(storage?: Storage): MobileStore {
   const last = loadLastState(storage);
-  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage), turns: last?.turns ?? {}, vapidPublicKey: null, pushStale: false, live: false };
+  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage), turns: last?.turns ?? {}, vapidPublicKey: null, pushStale: false, capabilities: null, live: false };
   let send: ((m: ClientMessage) => void) | null = null;
   const fns = new Set<() => void>();
   const listeners = new Set<(msg: ServerMessage) => void>();
@@ -94,7 +96,7 @@ export function createMobileStore(storage?: Storage): MobileStore {
       return true;
     },
     setPushStale: stale => { if (stale !== state.pushStale) set({ pushStale: stale }, false); },
-    reset: () => { clearLastState(storage); saveOps({}, storage); set({ link: 'unpaired', sessions: [], previews: {}, syncedAt: null, device: null, pcName: null, ops: {}, turns: {}, vapidPublicKey: null, pushStale: false, live: false }, false); },
+    reset: () => { clearLastState(storage); saveOps({}, storage); set({ link: 'unpaired', sessions: [], previews: {}, syncedAt: null, device: null, pcName: null, ops: {}, turns: {}, vapidPublicKey: null, pushStale: false, capabilities: null, live: false }, false); },
     apply: msg => {
       listeners.forEach(f => f(msg));
       switch (msg.type) {
@@ -110,7 +112,7 @@ export function createMobileStore(storage?: Storage): MobileStore {
           const previews = Object.fromEntries(Object.entries(state.previews).filter(([id]) => ids.has(id)));
           const turns = Object.fromEntries(Object.entries(state.turns).filter(([id]) => ids.has(id)));
           const dropped = Object.keys(turns).length !== Object.keys(state.turns).length;
-          set({ sessions: msg.sessions, previews, turns, syncedAt: now(), live: true }, true);
+          set({ sessions: msg.sessions, previews, turns, syncedAt: now(), capabilities: msg.capabilities ?? null, live: true }, true);
           void setBadge(requestsOf(msg.sessions).length);
           if (dropped) saveTurns(turns, storage);
           break;

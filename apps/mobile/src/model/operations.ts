@@ -12,6 +12,8 @@ export interface OpState {
   kind: 'decide' | 'answer' | 'message' | 'interrupt';
   decision?: 'accept' | 'deny';
   text?: string;
+  /** An answer typed in free text (`session.reply { other: true }`), not an option number. */
+  other?: boolean;
   phase: Phase;
   reason?: OperationReason;
   startedAt: string;
@@ -88,7 +90,7 @@ export function matches(op: OpState, msg: ClientMessage): boolean {
   if (msg.type === 'session.reply') {
     // An answer names its request; an instruction ('message') names none.
     const kindOk = op.kind === 'answer' ? op.pendingId !== undefined : op.kind === 'message' && op.pendingId === undefined && op.pendingVersion === undefined;
-    return kindOk && msg.operationId === op.operationId && msg.id === op.sessionId && msg.pendingId === op.pendingId && msg.pendingVersion === op.pendingVersion && msg.text === op.text;
+    return kindOk && msg.operationId === op.operationId && msg.id === op.sessionId && msg.pendingId === op.pendingId && msg.pendingVersion === op.pendingVersion && msg.text === op.text && (msg.other ?? false) === (op.other ?? false);
   }
   if (msg.type === 'session.interrupt') return op.kind === 'interrupt' && op.pendingId === undefined && msg.operationId === op.operationId && msg.id === op.sessionId;
   return false;
