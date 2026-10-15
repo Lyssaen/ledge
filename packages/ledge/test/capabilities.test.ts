@@ -22,7 +22,11 @@ const tmux: Tmux = {
 };
 
 let srv: Awaited<ReturnType<typeof startServer>> | undefined;
-afterEach(async () => { await srv?.close(); srv = undefined; });
+const home = process.env.LEDGE_HOME;
+afterEach(async () => {
+  await srv?.close(); srv = undefined;
+  if (home === undefined) delete process.env.LEDGE_HOME; else process.env.LEDGE_HOME = home;
+});
 
 describe('adapter capabilities', () => {
   it('every adapter declares a valid capability set; Codex and Cursor Agent give no free answer', () => {

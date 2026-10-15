@@ -11,6 +11,13 @@ export const CapabilitiesSchema = z.object({
 });
 export type Capabilities = z.infer<typeof CapabilitiesSchema>;
 
+/**
+ * What a free answer may not carry, so that it is one line typed as shown: line breaks, control characters that could
+ * drive the terminal (C0 such as ESC, CR, LF, tab; DEL; C1 such as CSI), line/paragraph separators, bidi overrides and
+ * isolates, and zero-width characters.
+ */
+export const UNTYPABLE = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/;
+
 /** An adapter that cannot give any extended answer. */
 export const NO_CAPABILITIES: Capabilities = { freeTextAnswer: false };
 

@@ -1,4 +1,4 @@
-import type { Pending } from '@ledge/protocol';
+import { UNTYPABLE, type Pending } from '@ledge/protocol';
 import type { Adapter, KeyPlan, PanePromptMatch } from './types.js';
 
 // Claude Code 2.x draws a dialog at the bottom of the pane, without a box:
@@ -99,7 +99,7 @@ function parseDialog(pane: string): Dialog | null {
     const m = lines[i]!.match(OPTION);
     if (m && m[1] === '1') { first = i; break; }
   }
-  if (first < 0) return null;
+  if (first < 0) first = 0;
   const { options, details } = optionsBetween(lines, first, footer);
 
   // The question is the block of text right above option 1 (wrapped lines joined).
@@ -295,13 +295,18 @@ function freeTextPlan(text: string, pane: string | undefined): KeyPlan {
   return [...(focused(pane!) ? [] : digit(i + 1)), { until: focused }, { text }, { keys: ['Enter'] }];
 }
 
-/** The number of the option that has the cursor (❯) in the live dialog at the bottom of `pane`, or null: never a ❯ quoted in the chat above. */
+/**
+ * The number of the option that has the cursor (❯) in the live dialog at the bottom of `pane`, or null. Only the options
+ * block is read, from option 1 down: never a ❯ quoted in the chat above. A dialog taller than `pane` has its option 1
+ * cut off; everything above its footer is then options, which are read from the top of `pane`.
+ */
 function cursorOption(pane: string): number | null {
   const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
   const end = dialogEnd(lines);
+  if (end < 0) return null;
   let first = end - 1;
   while (first >= 0 && lines[first]!.match(OPTION)?.[1] !== '1') first--;
-  if (end < 0 || first < 0) return null;
+  if (first < 0) first = 0;
   for (let i = first; i < end; i++) {
     const m = lines[i]!.match(OPTION);
     if (m && lines[i]!.trimStart().startsWith('❯')) return Number(m[1]);
@@ -309,8 +314,6 @@ function cursorOption(pane: string): number | null {
   return null;
 }
 
-/** What a phone's free answer may not carry: line breaks, and any control character that could drive the terminal (ESC, C1). */
-const UNTYPABLE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 
 /** A phone's free answer, typed as is (never read as an option number) into the question's "Type something." row. */
 function otherPlan(text: string, _pending: Pending, pane: string): KeyPlan {

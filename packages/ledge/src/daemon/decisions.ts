@@ -1,4 +1,4 @@
-import type { ClientMessage, OperationReason, Pending, ServerMessage, Session } from '@ledge/protocol';
+import { UNTYPABLE, type ClientMessage, type OperationReason, type Pending, type ServerMessage, type Session } from '@ledge/protocol';
 import type { Note } from './history.js';
 import type { Store } from './store.js';
 import type { Peer } from './peers.js';
@@ -25,8 +25,6 @@ export const FREE_TEXT = 'free-text answers are not supported yet, answer in the
 export const MESSAGE_MAX = 4_000;
 /** The longest free answer (Other) a phone may type into a question. */
 export const OTHER_MAX = 2_000;
-/** A free answer is one line: no line break, and no control character that could drive the terminal (ESC, C0, C1). */
-const UNTYPABLE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 
 /** The free answer as it will be typed (trimmed), or null when it is empty, too long or not one plain line. */
 function freeAnswer(text: string): string | null {

@@ -440,7 +440,7 @@ describe('free answers (Other)', () => {
     await start([fx('claude2-question')]);
     asTool('claude');
     const p = phone(srv, deviceId);
-    const bad = ['   ', 'line one\nline two', 'a\r', 'x'.repeat(OTHER_MAX + 1), 'red\u001b[2J', 'tab\tbed', 'ctrl-c\u0003', 'c1\u009b', 'sep arator'];
+    const bad = ['   ', 'line one\nline two', 'a\r', 'x'.repeat(OTHER_MAX + 1), 'red\u001b[2J', 'tab\tbed', 'ctrl-c\u0003', 'c1\u009b', 'sep\u2028arator', 'bidi\u202eevil', 'iso\u2068late', 'zero\u200bwidth', 'bom\ufeff'];
     for (const text of bad) {
       const m = other(text);
       p.send(m);

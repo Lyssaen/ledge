@@ -259,10 +259,27 @@ describe('claude adapter: a phone\'s free answer (Other)', () => {
     expect(textSteps(plan)).toEqual([{ text: 'Vert pomme' }, { keys: ['Enter'] }]);
     expect((plan[0] as { until: (p: string) => boolean }).until(tail(fx('claude2-question-other-focused'), 30))).toBe(true);
   });
+  it('a dialog taller than the wait\'s capture: the free field is still seen once it has the cursor', () => {
+    // 40 description lines under option 1 put it more than 30 lines above the footer.
+    const tall = (n: string) => fx(n).replace('     Choose red as your preferred color.', Array.from({ length: 40 }, (_, k) => `     red, reason ${k + 1}`).join('\n'));
+    const plan = claudeAdapter.otherPlan!('Vert pomme', hook, tall('claude2-question'));
+    expect(textSteps(plan)).toEqual([{ text: '3' }, { text: 'Vert pomme' }, { keys: ['Enter'] }]);
+    const wait = plan[1] as { until: (p: string) => boolean };
+    expect(tail(tall('claude2-question-other-focused'), 60).includes('1. Red')).toBe(true);
+    expect(tail(tall('claude2-question-other-focused'), 30).includes('1. Red')).toBe(false);
+    expect(wait.until(tail(tall('claude2-question-other-focused'), 30))).toBe(true);
+    expect(wait.until(tail(tall('claude2-question'), 30))).toBe(false);
+  });
+  it('a ❯ 3. quoted in the chat above the dialog is not the free field', () => {
+    const quoted = fx('claude2-question').replace('✻ Brewed for 2s', '❯ 3. Type something.\n✻ Brewed for 2s');
+    const plan = claudeAdapter.otherPlan!('Vert pomme', hook, quoted);
+    expect(textSteps(plan)[0]).toEqual({ text: '3' });
+    expect((plan[1] as { until: (p: string) => boolean }).until(tail(quoted, 30))).toBe(false);
+  });
   it('refuses a dialog without a free field, and text that could drive the terminal', () => {
     expect(() => claudeAdapter.otherPlan!('Green', hook, fx('claude2-question-multi-review'))).toThrow(/answer in the terminal/);
     expect(() => claudeAdapter.otherPlan!('Green', hook, fx('claude2-permission-bash'))).toThrow(/answer in the terminal/);
-    for (const bad of ['a\nb', 'a\rb', 'a\u001b[2Jb', 'a\tb', 'a\u0003', 'a\u009bb', 'a b', '', '   '])
+    for (const bad of ['a\nb', 'a\rb', 'a\u001b[2Jb', 'a\tb', 'a\u0003', 'a\u009bb', 'a\u2028b', 'a\u202eb', 'a\u2066b', 'a\u200bb', 'a\ufeffb', '', '   '])
       expect(() => claudeAdapter.otherPlan!(bad, hook, fx('claude2-question'))).toThrow();
   });
 });
