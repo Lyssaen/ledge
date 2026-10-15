@@ -17,10 +17,11 @@ import { SplitView } from './conversation/SplitView';
 import { ConversationPane } from './conversation/ConversationPane';
 import { useStored } from './state/useStored';
 import { loadPanel, savePanel } from './state/panel';
+import { useConversations } from './conversation/useConversations';
 
 function Shell({ client }: { client?: DaemonClient }) {
   const [state, dispatch] = useViewState();
-  const { sessions, machines, fleet, localDown } = useFleet(client);
+  const { sessions, machines, fleet, localDown, client: fleetClient } = useFleet(client);
   const { t } = useI18n();
   // Open once, for good: the daemon has sent its machine list (it follows the first snapshot; until then only local is known), some machine has delivered a snapshot and every machine has settled (ready, or unreachable after its
   // first attempt). The fleet publishes empty snapshots earlier, and local can be ready before a remote's first one, so
@@ -36,6 +37,8 @@ function Shell({ client }: { client?: DaemonClient }) {
   const key = shown.map(s => s.id).join('\n');
   useEffect(() => { if (ready && !localDown) dispatch({ type: 'visible', ids: key ? key.split('\n') : [] }); }, [ready, localDown, key, dispatch]);
   const [panel, setPanel] = useStored(loadPanel, savePanel);
+  // Passed to the conversation pane in a later task. `ready` is the Shell's `opened` (first snapshot received), never a bare connection.
+  useConversations(fleetClient, sessions, machines, ready);
   // The resident (`ledge`) gets its own panel in a later lot; a lost selection is replaced by the first visible session (lot 3 reducer).
   const selected = state.selected && state.selected !== 'ledge' ? sessions.find(s => s.id === state.selected) ?? null : null;
   // « Agrandir » folds back when the view or the attention filter changes (mockup conversation.js).
