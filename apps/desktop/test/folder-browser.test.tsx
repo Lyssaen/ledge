@@ -61,7 +61,7 @@ describe('FolderBrowser', () => {
   it('sends a navigation path unchanged, spaces included, and accepts its listing', async () => {
     const { f, reply } = setup();
     reply(listing('/w', [' x ']));
-    await userEvent.click(screen.getByRole('button', { name: 'Open  x ' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Open x' }));
     expect(f.sent.at(-1)!.msg).toEqual({ type: 'folder.list', path: '/w/ x ' });
     reply(listing('/w/ x ', ['y']));
     expect(screen.queryByText('Loading…')).toBeNull();
