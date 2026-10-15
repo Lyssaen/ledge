@@ -7,7 +7,7 @@ export const DEFAULT_PANEL: PanelState = { width: 38, expanded: false };
 export const PANEL_STEP = 2;
 const PANE_MIN_PX = 320, LIST_MIN_PX = 288, MAX_PCT = 70, UNMEASURED: Bounds = { min: 25, max: 70 };
 
-/** The conversation's share of the body, in % (mockup split-view.js): at least 320 px of conversation, 280 px of
+/** The conversation's share of the body, in % (mockup split-view.js): at least 320 px of conversation, 288 px of
  *  sessions plus the 8 px handle, at most 70 %. A body not measured yet gets 25–70; a narrow one keeps min ≤ max. */
 export function panelBounds(width: number): Bounds {
   if (!Number.isFinite(width) || width <= 0) return UNMEASURED;

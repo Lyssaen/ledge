@@ -13,6 +13,10 @@ import { OfflineNotice, LocalDownNotice } from './shell/OfflineNotice';
 import { StatusBar } from './shell/StatusBar';
 import { EmptyWorkspace } from './shell/EmptyWorkspace';
 import { useI18n } from './i18n/lang';
+import { SplitView } from './conversation/SplitView';
+import { ConversationPane } from './conversation/ConversationPane';
+import { useStored } from './state/useStored';
+import { loadPanel, savePanel } from './state/panel';
 
 function Shell({ client }: { client?: DaemonClient }) {
   const [state, dispatch] = useViewState();
@@ -31,6 +35,17 @@ function Shell({ client }: { client?: DaemonClient }) {
   // While the local daemon is down its sessions are frozen (offline) and the view is read-only: nothing is pruned.
   const key = shown.map(s => s.id).join('\n');
   useEffect(() => { if (ready && !localDown) dispatch({ type: 'visible', ids: key ? key.split('\n') : [] }); }, [ready, localDown, key, dispatch]);
+  const [panel, setPanel] = useStored(loadPanel, savePanel);
+  // The resident (`ledge`) gets its own panel in a later lot; a lost selection is replaced by the first visible session (lot 3 reducer).
+  const selected = state.selected && state.selected !== 'ledge' ? sessions.find(s => s.id === state.selected) ?? null : null;
+  // « Agrandir » folds back when the view or the attention filter changes (mockup conversation.js).
+  const scope = `${state.view}|${state.attentionOnly}`;
+  const lastScope = useRef(scope);
+  useEffect(() => {
+    if (lastScope.current === scope) return;
+    lastScope.current = scope;
+    setPanel(p => (p.expanded ? { ...p, expanded: false } : p));
+  }, [scope, setPanel]);
   return (
     <main className="app" data-readonly={localDown ? 'true' : undefined}>
       <div className="content">
@@ -38,10 +53,12 @@ function Shell({ client }: { client?: DaemonClient }) {
         {localDown && <LocalDownNotice />}
         <OfflineNotice machines={machines} onRetry={id => fleet.retry(id)} />
         {(ready || localDown) && sessions.length === 0 && <EmptyWorkspace />}
-        {sessions.length > 0 && <div className="view-body">
-          {state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
-          {state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} attentionOnly={state.attentionOnly} />}
-        </div>}
+        {sessions.length > 0 && <SplitView panel={panel} onPanel={setPanel}
+          list={<>
+            {state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
+            {state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} attentionOnly={state.attentionOnly} />}
+          </>}
+          pane={selected ? <ConversationPane session={selected} expanded={panel.expanded} onExpand={on => setPanel(p => ({ ...p, expanded: on }))} /> : null} />}
         <StatusBar sessions={sessions} machines={machines} />
       </div>
     </main>
