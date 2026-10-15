@@ -123,6 +123,20 @@ describe('launching from the Shell', () => {
     await user.click(screen.getByRole('button', { name: 'Back to sessions' }));
     expect(screen.getByRole('button', { name: 'Start a session' })).toHaveFocus();
   });
+
+  it('the local daemon falling while the launch screen is open shows its notice as a status, not an alert (R3)', async () => {
+    const user = userEvent.setup();
+    const d = await boot();
+    await user.click(await screen.findByRole('button', { name: 'Start a session' }));
+    daemons.splice(daemons.indexOf(d), 1);
+    await d.close();
+    const notice = (await screen.findByText('Local daemon unreachable')).closest('[role]')!;
+    expect(notice).toHaveAttribute('role', 'status');
+    // Still on the launch screen, the notice among its own notices (between its heading and its scrolled body).
+    expect(screen.getByRole('heading', { level: 2, name: 'New session' })).toBeInTheDocument();
+    expect(document.querySelector('.settings-heading ~ .local-down')).toBe(notice);
+    expect(screen.queryAllByRole('alert').filter(a => a.textContent?.includes('Local daemon unreachable'))).toEqual([]);
+  });
 });
 
 // The local daemon never answers: everything is read-only (spec §6).
