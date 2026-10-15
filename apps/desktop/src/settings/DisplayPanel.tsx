@@ -24,13 +24,19 @@ export function DisplayPanel({ lang, onLang }: { lang: Lang; onLang(lang: Lang):
   const [scale, setScale] = useState<UiScale>(loadUiScale);
   // undefined while asking Windows; null when launch at login is not offered (browser, dev build).
   const [autostart, setAuto] = useState<boolean | null | undefined>(undefined);
+  // A change Windows did not make (`setAutostart` answers null): said, the previous state kept, a retry possible.
+  const [autostartFailed, setAutostartFailed] = useState(false);
   useEffect(() => { let live = true; void getAutostart().then(v => { if (live) setAuto(v); }); return () => { live = false; }; }, []);
 
   return (
     <>
       <h3>{c.title}</h3>
       <Toggle label={c.autostart} hint={autostart === null ? c.autostartMissing : c.autostartHint} checked={autostart === true} disabled={autostart == null}
-        onChange={on => { setAuto(on); void setAutostart(on).then(v => setAuto(v)); }} />
+        error={autostartFailed ? c.autostartFailed : undefined}
+        onChange={on => {
+          const before = autostart; setAuto(on);
+          void setAutostart(on).then(v => { setAutostartFailed(v === null); setAuto(v ?? before); });
+        }} />
       <SelectRow label={c.tool} hint={c.toolHint} value={tool} options={TOOLS.map(v => [v, TOOL_NAMES[v]] as const)}
         onChange={v => { setTool(v); saveTool(v); }} />
       <SelectRow label={c.lang} hint={c.langHint} value={lang} options={LANGS.map(l => [l, c.langs[l]] as const)} onChange={onLang} />

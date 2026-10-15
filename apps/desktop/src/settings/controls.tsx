@@ -1,8 +1,8 @@
 /** A settings switch: the whole row is the label, the checkbox carries `role="switch"` (mockup settings.js `toggle`). */
-export function Toggle({ label, hint, checked, onChange, disabled }: { label: string; hint: string; checked: boolean; onChange(on: boolean): void; disabled?: boolean }) {
+export function Toggle({ label, hint, checked, onChange, disabled, error }: { label: string; hint: string; checked: boolean; onChange(on: boolean): void; disabled?: boolean; error?: string }) {
   return (
     <label className="setting-row">
-      <span><strong>{label}</strong><small>{hint}</small></span>
+      <span><strong>{label}</strong><small>{hint}</small>{error && <small className="setting-error" role="alert">{error}</small>}</span>
       <input type="checkbox" role="switch" aria-label={label} checked={checked} disabled={disabled} onChange={e => onChange(e.target.checked)} />
       <span className="setting-switch" aria-hidden="true" />
     </label>

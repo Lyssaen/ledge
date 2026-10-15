@@ -125,7 +125,7 @@ const fr = {
     tabs: { display: 'Affichage', machines: 'Machines', notifications: 'Notifications', sounds: 'Sons', about: 'À propos' },
     display: {
       title: 'Votre application',
-      autostart: 'Lancer au démarrage', autostartHint: 'Avec votre session Windows.', autostartMissing: 'Disponible dans l’application installée.',
+      autostart: 'Lancer au démarrage', autostartHint: 'Avec votre session Windows.', autostartMissing: 'Disponible dans l’application installée.', autostartFailed: 'Impossible de modifier le lancement au démarrage.',
       tool: 'Harnais par défaut', toolHint: 'Pour les nouvelles sessions et le chat Ledge.',
       lang: 'Langue', langHint: 'S’applique tout de suite, menu de la zone de notification compris.', langs: { fr: 'Français', en: 'English' } as Record<Lang, string>,
       scale: 'Échelle de l’interface', scaleHint: 'Taille du texte et des contrôles de Desktop.', auto: 'Auto',
@@ -236,7 +236,8 @@ const fr = {
         offline: 'Le daemon local n’est pas connecté : rien n’a été envoyé.',
         timeout: 'Le daemon ne répond plus.'
       } as Record<UpdateFailure | 'offline' | 'timeout', string>,
-      timeoutCommand: 'systemctl --user status ledge-daemon'
+      timeoutCommand: 'systemctl --user status ledge-daemon',
+      manualUnknown: 'Ledge ne sait pas comment votre daemon a été installé : mettez-le à jour vous-même.'
     }
   },
   status: {
@@ -525,7 +526,7 @@ const en: typeof fr = {
     tabs: { display: 'Display', machines: 'Machines', notifications: 'Notifications', sounds: 'Sounds', about: 'About' },
     display: {
       title: 'Your app',
-      autostart: 'Launch at start-up', autostartHint: 'With your Windows session.', autostartMissing: 'Available in the installed app.',
+      autostart: 'Launch at start-up', autostartHint: 'With your Windows session.', autostartMissing: 'Available in the installed app.', autostartFailed: 'Could not change launch at start-up.',
       tool: 'Default harness', toolHint: 'For new sessions and the Ledge chat.',
       lang: 'Language', langHint: 'Applies at once, the notification area menu included.', langs: { fr: 'Français', en: 'English' },
       scale: 'Interface scale', scaleHint: 'Size of Desktop’s text and controls.', auto: 'Auto',
@@ -636,7 +637,8 @@ const en: typeof fr = {
         offline: 'The local daemon is not connected: nothing was sent.',
         timeout: 'The daemon is not answering.'
       },
-      timeoutCommand: 'systemctl --user status ledge-daemon'
+      timeoutCommand: 'systemctl --user status ledge-daemon',
+      manualUnknown: 'Ledge cannot tell how your daemon was installed: update it yourself.'
     }
   },
   status: {

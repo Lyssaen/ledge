@@ -50,7 +50,7 @@ export function AboutPanel({ machines, updater, daemon }: { machines: readonly M
       </div>
       {daemon.offer === 'manual' && local?.daemon && (
         <div className="settings-note">
-          <p>{c.failed[local.daemon.install === 'git' ? 'git-install' : 'no-systemd']}</p>
+          <p>{local.daemon.install === 'git' ? c.failed['git-install'] : local.daemon.install === 'unknown' ? c.manualUnknown : c.failed['no-systemd']}</p>
           {local.daemon.manual && <code>{local.daemon.manual}</code>}
         </div>
       )}

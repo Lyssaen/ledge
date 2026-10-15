@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { LangProvider } from '../src/i18n/lang';
 import { AboutPanel } from '../src/settings/AboutPanel';
 import { createUpdater, type Updater } from '../src/update/store';
 import type { AvailableUpdate } from '../src/update/bridge';
@@ -78,6 +79,21 @@ describe('About', () => {
     expect(screen.queryByRole('button', { name: 'Update the daemon' })).toBeNull();
     expect(screen.getByText('Your daemon runs from a git clone: update it yourself.')).toBeInTheDocument();
     expect(screen.getByText('cd ~/ledge && git pull && pnpm install && pnpm build')).toBeInTheDocument();
+  });
+
+  it('never says "no systemd" for an install it cannot identify (parked T7)', async () => {
+    const updater = await started(async () => release());
+    const unknown = [machine('local', { daemon: { version: '0.5.1', install: 'unknown', systemd: true } })];
+    const { unmount } = render(<AboutPanel machines={unknown} updater={updater} daemon={{ ...idle, offer: 'manual' }} />);
+    expect(screen.getByText('Ledge cannot tell how your daemon was installed: update it yourself.')).toBeInTheDocument();
+    expect(screen.queryByText(/does not run as a service/)).toBeNull();
+    unmount();
+    const { unmount: gone } = render(<LangProvider lang="fr"><AboutPanel machines={unknown} updater={updater} daemon={{ ...idle, offer: 'manual' }} /></LangProvider>);
+    expect(screen.getByText('Ledge ne sait pas comment votre daemon a été installé : mettez-le à jour vous-même.')).toBeInTheDocument();
+    gone();
+    // an npm daemon without systemd still gets the systemd text
+    render(<AboutPanel machines={[machine('local', { daemon: { version: '0.5.1', install: 'npm', systemd: false } })]} updater={updater} daemon={{ ...idle, offer: 'manual' }} />);
+    expect(screen.getByText('The daemon does not run as a service: it cannot restart itself.')).toBeInTheDocument();
   });
 
   it('shows the download progress', async () => {
