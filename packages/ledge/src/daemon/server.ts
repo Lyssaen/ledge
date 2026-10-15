@@ -437,11 +437,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (peer.ctx.kind !== 'remote') return peer.send({ type: 'error', message: 'push is for paired phones' });
         // The daemon posts to this endpoint: only the known push services are accepted.
         if (!pushEndpointAllowed(msg.subscription.endpoint)) return peer.send({ type: 'error', message: 'unsupported push service' });
-        return opts.mobile?.devices.setPush(peer.ctx.deviceId, msg.subscription);
+        if (!opts.mobile) return peer.send({ type: 'error', message: NO_MOBILE });
+        return opts.mobile.devices.setPush(peer.ctx.deviceId, msg.subscription);
       }
       case 'push.unsubscribe': {
         if (peer.ctx.kind !== 'remote') return peer.send({ type: 'error', message: 'push is for paired phones' });
-        return opts.mobile?.devices.setPush(peer.ctx.deviceId, null);
+        if (!opts.mobile) return peer.send({ type: 'error', message: NO_MOBILE });
+        return opts.mobile.devices.setPush(peer.ctx.deviceId, null);
       }
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;

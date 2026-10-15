@@ -979,6 +979,17 @@ describe('device commands', () => {
     }
     await c.close();
   });
+  it('without mobile, a push subscription from a remote peer is answered with an error, not dropped', async () => {
+    const sent: any[] = []; const handlers: Record<string, ((...a: any[]) => void)[]> = {};
+    const sock = { readyState: 1, send: (d: string) => sent.push(JSON.parse(d)), on(ev: string, fn: (...a: any[]) => void) { (handlers[ev] ??= []).push(fn); return sock; }, close() {} };
+    srv.attach(sock as never, { kind: 'remote', deviceId: 'd1' });
+    const subscription = { endpoint: 'https://web.push.apple.com/s/1', keys: { p256dh: 'p', auth: 'a' } };
+    for (const m of [{ type: 'push.subscribe', subscription }, { type: 'push.unsubscribe' }]) {
+      sent.length = 0;
+      for (const h of handlers.message ?? []) h(JSON.stringify(m));
+      await vi.waitFor(() => expect(sent).toContainEqual({ type: 'error', message: 'mobile not available' }));
+    }
+  });
   it('lists devices with the origin and listening state', async () => {
     const { devices } = await withMobile();
     const { device } = await devices.create('iPhone', cred);
