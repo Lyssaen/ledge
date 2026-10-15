@@ -28,6 +28,13 @@ describe('Desktop Tauri config', () => {
     // the restored state must not show the window itself: the launch decides
     expect(main).toContain('with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)');
   });
+  it('lets sound cues play before any click, with the island\'s WebView2 flags (WebView2 defaults kept)', () => {
+    const args: string = conf.app.windows[0].additionalBrowserArgs;
+    expect(args).toBe(island.app.windows[0].additionalBrowserArgs);
+    expect(args).toContain('--autoplay-policy=no-user-gesture-required');
+    // setting the property replaces wry's defaults: they must be repeated
+    expect(args).toContain('--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection');
+  });
   it('runs a single instance: a second launch shows the first one, the plugin registered first', () => {
     const builder = main.slice(main.indexOf('tauri::Builder::default()'));
     expect(builder.indexOf('.plugin(')).toBe(builder.indexOf('.plugin(tauri_plugin_single_instance::init('));

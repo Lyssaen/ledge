@@ -5,7 +5,7 @@
   "identifier": "be.paradow.ledge.desktop",
   "build": { "beforeDevCommand": "pnpm dev", "devUrl": "http://localhost:1421", "beforeBuildCommand": "pnpm build", "frontendDist": "../dist" },
   "app": {
-    "windows": [{ "label": "main", "title": "Ledge Desktop", "width": 1280, "height": 800, "minWidth": 640, "minHeight": 480, "decorations": true, "resizable": true, "visible": false }],
+    "windows": [{ "label": "main", "title": "Ledge Desktop", "width": 1280, "height": 800, "minWidth": 640, "minHeight": 480, "decorations": true, "resizable": true, "visible": false, "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required" }],
     "security": { "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src ipc: http://ipc.localhost ws://127.0.0.1:47831", "devCsp": null }
   },
   "bundle": {
