@@ -31,6 +31,14 @@ describe('desktop.launch', () => {
     clearLaunch();
     expect(localStorage.getItem(LAUNCH_KEY)).toBeNull();
   });
+  it('follows the default harness from Settings until a harness is chosen in the form (final review M1)', () => {
+    saveLaunch({ machine: 'devbox', cwd: '~/w/api', tool: 'claude', prompt: 'Go' });   // the default, never chosen
+    localStorage.setItem(TOOL_KEY, JSON.stringify('codex'));
+    expect(loadLaunch()).toEqual({ machine: 'devbox', cwd: '~/w/api', tool: 'codex', prompt: 'Go' });
+    saveLaunch({ machine: 'devbox', cwd: '~/w/api', tool: 'cursor', prompt: 'Go' });   // chosen: kept over the default
+    localStorage.setItem(TOOL_KEY, JSON.stringify('claude'));
+    expect(loadLaunch().tool).toBe('cursor');
+  });
   it('reads a corrupted value field by field and never touches other keys', () => {
     localStorage.setItem('desktop.view', '{"view":"team"}');
     for (const raw of ['{', '[1,2]', '"x"', 'null']) { localStorage.setItem(LAUNCH_KEY, raw); expect(loadLaunch()).toEqual(emptyDraft()); }

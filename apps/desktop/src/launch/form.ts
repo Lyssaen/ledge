@@ -39,7 +39,11 @@ export function loadLaunch(): LaunchDraft {
     prompt: typeof raw.prompt === 'string' && raw.prompt.length <= PROMPT_MAX ? raw.prompt : ''
   };
 }
-export function saveLaunch(d: LaunchDraft): void { writeJson(LAUNCH_KEY, d); }
+/** The harness is kept only when it differs from the default: one never chosen follows a later change in Settings (final review M1). */
+export function saveLaunch(d: LaunchDraft): void {
+  const { tool, ...rest } = d;
+  writeJson(LAUNCH_KEY, tool === loadTool() ? rest : d);
+}
 /** Only a launch that succeeded forgets the form. */
 export function clearLaunch(): void {
   try { localStorage.removeItem(LAUNCH_KEY); } catch { /* storage unavailable: nothing to forget */ }

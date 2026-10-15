@@ -106,6 +106,17 @@ describe('launch form', () => {
     expect(screen.getByRole('button', { name: 'open' })).toBeInTheDocument();
     expect(stored()).toMatchObject({ prompt: 'Keep me' });
   });
+  it('shows the default harness changed in Settings when the kept form never chose one (final review M1)', async () => {
+    const { view } = await open();
+    await userEvent.type(prompt(), 'Keep me');
+    expect(screen.getByRole('radio', { name: 'Claude Code' })).toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to sessions' }));
+    localStorage.setItem(TOOL_KEY, JSON.stringify('codex'));   // Settings › Display › default harness
+    view.unmount();
+    await open();
+    expect(prompt()).toHaveValue('Keep me');
+    expect(screen.getByRole('radio', { name: 'Codex' })).toBeChecked();
+  });
   it('opens on the defaults when desktop.launch is corrupted', async () => {
     localStorage.setItem(LAUNCH_KEY, '{');
     await open();
