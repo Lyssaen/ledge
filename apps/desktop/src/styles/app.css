@@ -331,3 +331,49 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .launch-error { font-size: 12px; }
 @media (max-width: 570px) { .launch-form, .launch-progress { padding: 22px 18px; } .launch-fields { grid-template-columns: 1fr; gap: 0; } }
 @media (prefers-reduced-motion: reduce) { .launch-spinner { animation: none; } }
+
+/* Talk to Ledge (spec §9.3; mockup ledge-chat.css). Card, pill and queued-dot rules ported from apps/overlay/src/surface/RelayCard.tsx / ChatView, in desktop tokens. */
+.ledge-chat-trigger { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--input); border-radius: 6px; background: var(--well); color: var(--sidebar-foreground); font-size: 11px; white-space: nowrap; }
+.ledge-chat-trigger[aria-pressed="true"] { border-color: var(--sidebar-primary); background: var(--sidebar-accent); }
+.ledge-chat-trigger:disabled { opacity: .5; cursor: not-allowed; }
+.ledge-chat-identity { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+.ledge-chat-identity > div { flex: 1; min-width: 0; }
+.ledge-chat-identity h3 { margin: 0 0 4px; }
+.ledge-chat-identity h3 span { color: var(--sidebar-primary); }
+.ledge-chat-identity p, .ledge-chat-purpose { margin: 0; font-size: 10px; line-height: 1.7; color: var(--muted-foreground); }
+.ledge-chat-welcome { text-align: center; padding: 20px 0; }
+.ledge-chat-welcome h3 { font-size: 17px; margin: 16px 0 8px; }
+.ledge-chat-welcome p { font-size: 12px; margin: 0; color: var(--muted-foreground); }
+.ledge-starters, .ledge-session-links { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.ledge-starters button, .ledge-session-links button { background: var(--well); border: 1px solid var(--sidebar-border); border-radius: 6px; text-align: left; padding: 10px 12px; font-size: 11px; color: var(--sidebar-foreground); }
+.ledge-session-links button { color: var(--sidebar-primary); }
+.ledge-starters button:disabled, .ledge-session-links button:disabled, .ledge-choices button:disabled { opacity: .5; cursor: not-allowed; }
+.ledge-source { display: block; margin-top: 12px; font-size: 9px; line-height: 1.7; color: var(--muted-foreground); }
+.ledge-answer p { white-space: normal; }
+.ledge-answer ul { margin: 6px 0 0; padding-left: 18px; }
+.ledge-answer h4 { margin: 10px 0 0; font-size: 12px; }
+.ledge-answer code, .ledge-card code { font-size: 11px; background: var(--well); border-radius: 4px; padding: 0 4px; }
+.ledge-inline-session { background: transparent; padding: 0; font: inherit; font-weight: 600; color: var(--sidebar-primary); text-decoration: underline; text-underline-offset: 2px; }
+.ledge-steps { list-style: none; margin: 6px 0 0; padding: 0; font-size: 11px; line-height: 1.7; color: var(--muted-foreground); }
+.ledge-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ledge-clarification { display: block; margin-top: 6px; font-size: 10px; color: var(--muted-foreground); }
+.ledge-destination { margin: 12px 0 0; font-size: 10px; color: var(--muted-foreground); }
+.ledge-stop { margin-top: 10px; }
+.ledge-error { color: var(--warning); }
+.ledge-card { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--sidebar-border); border-radius: 9px; background: var(--well); font-size: 11px; }
+.ledge-card dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; }
+.ledge-card dt { color: var(--muted-foreground); }
+.ledge-card dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ledge-card blockquote { margin: 0; padding-left: 10px; border-left: 2px solid var(--sidebar-primary); }
+.ledge-card-session { display: flex; align-items: center; gap: 8px; }
+.ledge-card-session small { display: block; color: var(--muted-foreground); }
+.ledge-card-muted { color: var(--muted-foreground); }
+.ledge-card-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; color: var(--muted-foreground); }
+.ledge-card-done { display: flex; align-items: center; gap: 8px; margin: 0; }
+.ledge-card-error { margin: 10px 0 0; font-size: 10px; color: var(--warning); }
+.ledge-pill { margin-left: auto; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--sidebar-border); font-size: 9px; white-space: nowrap; }
+.ledge-pill[data-pill="waiting"] { color: var(--warning); }
+.ledge-pill[data-pill="stopped"] { color: var(--muted-foreground); }
+.ledge-queued-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sidebar-primary); }
+.workspace-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 14px; }
+.view-body > .central.ledge-chat-empty { display: flex; min-height: 0; }
