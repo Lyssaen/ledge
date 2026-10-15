@@ -1,4 +1,5 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
+import type { DaemonStatus, SshProblem } from '@ledge/fleet';
 import type { Availability, LaunchProblem } from '../launch/form';
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -110,6 +111,49 @@ const fr = {
     failed: (name: string) => `${name} a rencontré une erreur`,
     manyTitle: 'Votre équipe',
     many: (n: number) => `${n} sessions vous attendent ou ont terminé`
+  },
+  settings: {
+    machines: {
+      title: 'Vos machines',
+      note: 'Connexion SSH depuis WSL, comme dans Ledge classique.',
+      status: { open: 'Connectée', connecting: 'Connexion…', unreachable: 'Déconnectée' } as Record<DaemonStatus, string>,
+      localKind: 'Local · WSL',
+      ssh: (alias: string) => `SSH · ${alias}`,
+      version: (v: string | undefined) => (v ? `Ledge ${v}` : 'Version inconnue'),
+      test: 'Tester', retry: 'Réessayer', edit: 'Modifier', remove: 'Retirer', cancel: 'Annuler',
+      add: '＋ Ajouter une machine',
+      addTitle: 'Ajouter une machine',
+      editTitle: (label: string) => `Modifier ${label}`,
+      label: 'Nom', labelAria: 'Nom de la machine', labelPlaceholder: 'Serveur de dev',
+      alias: 'Alias SSH', aliasHint: 'Nom d’un bloc Host de ~/.ssh/config dans WSL.',
+      before: 'Avant d’ajouter un serveur',
+      checklist: ['L’alias fonctionne depuis WSL, sans mot de passe.', 'La clé du serveur est déjà approuvée.', 'Node 22+ et tmux sont installés.', 'Ledge est installé et démarré sur le serveur.'],
+      probe: 'Tester la connexion', save: 'Enregistrer', saving: 'Enregistrement…',
+      optional: 'Test facultatif : une machine injoignable peut être enregistrée.',
+      probing: (alias: string) => `Connexion à ${alias}…`,
+      probeOk: (v: string | undefined, n: number) => `${v ? `Ledge ${v}` : 'Ledge'} répond · ${n} ${plural(n, 'session', 'sessions')}`,
+      problem: {
+        alias: 'Alias introuvable. Ajoutez un bloc Host pour cet alias dans ~/.ssh/config de WSL.',
+        key: 'La clé SSH est refusée. Vérifiez IdentityFile pour cet alias dans ~/.ssh/config de WSL.',
+        hostKey: 'La clé du serveur n’est pas encore approuvée. Connectez-vous une fois depuis WSL avec ssh et cet alias.',
+        unreachable: 'Le serveur ne répond pas. Il est peut-être éteint, ou hors du réseau.',
+        ledge: 'Ledge est absent ou trop ancien sur ce serveur. Installez-le, puis lancez « ledge setup ».',
+        stopped: 'Le service Ledge ne tourne pas sur le serveur. Lancez « ledge setup » sur le serveur.',
+        local: 'Mettez à jour Ledge sur cette machine pour rejoindre un serveur.',
+        other: 'La connexion a échoué.'
+      } as Record<SshProblem, string>,
+      errors: {
+        invalid: 'Vérifiez le nom et l’alias SSH : lettres, chiffres, point, tiret ou souligné, sans espace.',
+        duplicate: 'Cet alias est déjà ajouté.',
+        full: 'Vous avez atteint 20 machines.',
+        offline: 'Le daemon local n’est pas connecté : réessayez dans un instant.',
+        timeout: 'Le daemon local n’a pas répondu. Rien n’a changé.',
+        refused: 'Le daemon local a refusé cette liste. Rien n’a changé.'
+      },
+      saved: (label: string) => `${label} est enregistrée.`,
+      removed: (label: string) => `${label} est retirée de la liste.`,
+      confirm: (label: string) => `Retirer ${label} ? Ses sessions quitteront la vue ; le travail continue sur le serveur.`
+    }
   },
   status: {
     sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
@@ -385,6 +429,49 @@ const en: typeof fr = {
     failed: (name) => `${name} ran into an error`,
     manyTitle: 'Your team',
     many: (n) => `${n} sessions need you or have finished`
+  },
+  settings: {
+    machines: {
+      title: 'Your machines',
+      note: 'SSH connection from WSL, as in classic Ledge.',
+      status: { open: 'Connected', connecting: 'Connecting…', unreachable: 'Disconnected' },
+      localKind: 'Local · WSL',
+      ssh: (alias) => `SSH · ${alias}`,
+      version: (v) => (v ? `Ledge ${v}` : 'Unknown version'),
+      test: 'Test', retry: 'Retry', edit: 'Edit', remove: 'Remove', cancel: 'Cancel',
+      add: '＋ Add a machine',
+      addTitle: 'Add a machine',
+      editTitle: (label) => `Edit ${label}`,
+      label: 'Name', labelAria: 'Machine name', labelPlaceholder: 'Dev server',
+      alias: 'SSH alias', aliasHint: 'Name of a Host block in ~/.ssh/config in WSL.',
+      before: 'Before adding a server',
+      checklist: ['The alias works from WSL, without a password.', 'The server’s host key is already approved.', 'Node 22+ and tmux are installed.', 'Ledge is installed and running on the server.'],
+      probe: 'Test the connection', save: 'Save', saving: 'Saving…',
+      optional: 'The test is optional: an unreachable machine can be saved.',
+      probing: (alias) => `Connecting to ${alias}…`,
+      probeOk: (v, n) => `${v ? `Ledge ${v}` : 'Ledge'} answers · ${n} ${plural(n, 'session', 'sessions')}`,
+      problem: {
+        alias: 'Alias not found. Add a Host block for this alias to ~/.ssh/config in WSL.',
+        key: 'The SSH key is refused. Check IdentityFile for this alias in ~/.ssh/config in WSL.',
+        hostKey: 'The server’s host key is not approved yet. Connect once from WSL with ssh and this alias.',
+        unreachable: 'The server does not answer. It may be off, or out of the network.',
+        ledge: 'Ledge is missing or too old on this server. Install it, then run “ledge setup”.',
+        stopped: 'The Ledge service is not running on the server. Run “ledge setup” on the server.',
+        local: 'Update Ledge on this machine to reach a server.',
+        other: 'The connection failed.'
+      },
+      errors: {
+        invalid: 'Check the name and SSH alias: letters, digits, dot, dash or underscore, no spaces.',
+        duplicate: 'This alias is already added.',
+        full: 'You have reached 20 machines.',
+        offline: 'The local daemon is not connected: try again in a moment.',
+        timeout: 'The local daemon did not answer. Nothing changed.',
+        refused: 'The local daemon refused this list. Nothing changed.'
+      },
+      saved: (label) => `${label} is saved.`,
+      removed: (label) => `${label} was removed from the list.`,
+      confirm: (label) => `Remove ${label}? Its sessions will leave the view; the work on the server goes on.`
+    }
   },
   status: {
     sessions: (n) => `${n} ${plural(n, 'session', 'sessions')}`,
