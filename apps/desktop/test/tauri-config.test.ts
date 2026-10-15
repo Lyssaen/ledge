@@ -44,4 +44,10 @@ describe('Desktop Tauri config', () => {
     expect(caps.permissions).toContain('updater:default'); expect(caps.permissions).toContain('process:allow-restart');
     expect(main).toContain('tauri_plugin_updater::Builder::new().build()'); expect(main).toContain('tauri_plugin_process::init()');
   });
+  it('shows toasts, zooms the WebView, and keeps the window hidden for Do not disturb (spec §9.4, §10)', () => {
+    expect(caps.permissions).toContain('notification:default');
+    expect(caps.permissions).toContain('core:webview:allow-set-webview-zoom');
+    expect(main).toContain('.plugin(tauri_plugin_notification::init())');
+    expect(main).toContain('if tray_shows_window(id) { show_main(app); }');
+  });
 });

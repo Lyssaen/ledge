@@ -17,6 +17,7 @@
     "@ledge/protocol": "workspace:*",
     "@ledge/ui": "workspace:*",
     "@tauri-apps/api": "^2.6.0",
+    "@tauri-apps/plugin-notification": "^2.7.0",
     "@tauri-apps/plugin-process": "^2.4.0",
     "@tauri-apps/plugin-updater": "^2.13.3",
     "react": "^19.0.0",

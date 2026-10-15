@@ -54,6 +54,11 @@ fn set_tray_labels(app: AppHandle, open: String, new_session: String, dnd: Strin
     Ok(())
 }
 
+/// Every tray entry brings the window forward except Do not disturb, a switch the user flips without looking (spec §10).
+fn tray_shows_window(id: &str) -> bool {
+    id != TRAY_DND
+}
+
 fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -76,7 +81,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, e| match e.id().as_ref() {
             TRAY_QUIT => app.exit(0),
             TRAY_OPEN => show_main(app),
-            id => { show_main(app); let _ = app.emit("ledge://tray", TrayPayload { action: id.to_string() }); }
+            id => { if tray_shows_window(id) { show_main(app); } let _ = app.emit("ledge://tray", TrayPayload { action: id.to_string() }); }
         })
         .on_tray_icon_event(|tray, e| {
             if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = e {
@@ -111,6 +116,7 @@ fn main() {
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![MINIMIZED])))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![focus_terminal, foreground_is_terminal, open_terminal, open_url, get_autostart, set_autostart, set_tray_labels])
         .setup(|app| {
             build_tray(app)?;
@@ -130,7 +136,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{launched_minimized, tray_title};
+    use super::{launched_minimized, tray_shows_window, tray_title};
     #[test]
     fn the_tray_tells_a_dev_build_from_an_installed_one() {
         assert_eq!(tray_title("0.5.2", false), "Ledge Desktop 0.5.2");
@@ -141,5 +147,11 @@ mod tests {
         let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         assert!(launched_minimized(args(&["ledge-desktop.exe", "--minimized"])));
         assert!(!launched_minimized(args(&["ledge-desktop.exe"])));
+    }
+
+    #[test]
+    fn do_not_disturb_from_the_tray_keeps_the_window_hidden() {
+        assert!(!tray_shows_window("dnd"));
+        assert!(tray_shows_window("new"));
     }
 }

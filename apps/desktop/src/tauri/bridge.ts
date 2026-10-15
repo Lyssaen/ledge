@@ -5,6 +5,9 @@
  *   open_terminal { title, command }   open a Windows Terminal tab running `command` in WSL (true once spawned)
  *   open_url { url }                   open a web URL in the default browser
  *   get_autostart / set_autostart { on }   launch at login (null: not offered)
+ *   foreground_is_terminal             whether a terminal window is in front (sounds: « only when the terminal is behind »)
+ *   set_tray_labels { open, newSession, dnd, quit }   tray entries in the app's language
+ *   plugin notification                Windows toasts (spec §10)
  *   event `ledge://tray` { action }    tray menu action
  */
 import { listen } from '@tauri-apps/api/event';
@@ -59,4 +62,29 @@ export function onTrayAction(fn: (action: TrayAction) => void): () => void {
     if (disposed) un();
   }).catch(() => {});
   return () => { disposed = true; off(); };
+}
+
+/** Whether a terminal window is in front; false outside Tauri or when the shell cannot tell. */
+export async function foregroundIsTerminal(): Promise<boolean> {
+  if (!isTauri()) return false;
+  return invoke<boolean>('foreground_is_terminal').catch(() => false);
+}
+
+/** The tray entries, in the app's language (main.rs builds them in French until the first call). */
+export interface TrayLabels { open: string; newSession: string; dnd: string; quit: string }
+export function setTrayLabels(labels: TrayLabels): void {
+  if (!isTauri()) return;
+  void invoke('set_tray_labels', { open: labels.open, newSession: labels.newSession, dnd: labels.dnd, quit: labels.quit }).catch(() => {});
+}
+
+/** A Windows toast (spec §10); permission is asked once. False when refused, failed or outside Tauri. The click is not handled. */
+export async function showToast(title: string, body: string): Promise<boolean> {
+  if (!isTauri()) return false;
+  try {
+    const n = await import('@tauri-apps/plugin-notification');
+    const granted = (await n.isPermissionGranted()) || (await n.requestPermission()) === 'granted';
+    if (!granted) return false;
+    n.sendNotification({ title, body });
+    return true;
+  } catch { return false; }
 }
