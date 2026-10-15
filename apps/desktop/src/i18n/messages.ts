@@ -1,5 +1,6 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { DaemonStatus, SshProblem } from '@ledge/fleet';
+import type { DaemonInfo, UpdateFailure } from '@ledge/protocol';
 import type { Availability, LaunchProblem } from '../launch/form';
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -153,6 +154,50 @@ const fr = {
       saved: (label: string) => `${label} est enregistrée.`,
       removed: (label: string) => `${label} est retirée de la liste.`,
       confirm: (label: string) => `Retirer ${label} ? Ses sessions quitteront la vue ; le travail continue sur le serveur.`
+    },
+    about: {
+      title: 'Application et daemon',
+      app: 'Application Desktop',
+      daemon: (label: string) => `Daemon · ${label}`,
+      install: { npm: 'npm', git: 'clone git', unknown: 'installation inconnue' } as Record<DaemonInfo['install'], string>,
+      unknown: 'Version inconnue',
+      latest: 'Dernière version',
+      latestUnknown: 'Pas encore vérifiée',
+      latestCurrent: 'Desktop est à jour',
+      auto: 'Rechercher les mises à jour',
+      autoHint: 'Au démarrage, puis toutes les 6 heures. Installation seulement après votre clic.',
+      never: 'Jamais vérifié',
+      checkedAt: (when: string) => `Vérifié le ${when}`,
+      phase: {
+        idle: 'Aucune vérification pour l’instant.',
+        checking: 'Recherche d’une nouvelle version…',
+        current: 'Desktop est à jour.',
+        available: (v: string) => `Ledge ${v} est disponible. Rien n’est installé sans votre clic.`,
+        installing: (v: string) => `Installation de Ledge ${v}. Desktop redémarrera seul.`,
+        failedCheck: 'La vérification a échoué. Vérifiez votre connexion.',
+        failedInstall: 'L’installation a échoué. L’application n’a pas changé.'
+      },
+      check: 'Vérifier',
+      updateApp: 'Mettre à jour l’application',
+      installing: (percent: number | null) => (percent === null ? 'Installation…' : `Installation… ${percent} %`),
+      updateDaemon: 'Mettre à jour le daemon',
+      log: 'Journal du daemon',
+      step: {
+        sent: (v: string) => `Demande envoyée au daemon local : ${v}`,
+        installing: 'Installation de la nouvelle version…',
+        restarting: 'Redémarrage du daemon…',
+        done: (v: string) => `Daemon à jour : ${v}`
+      },
+      failed: {
+        'git-install': 'Votre daemon tourne depuis un clone git : mettez-le à jour vous-même.',
+        'no-systemd': 'Le daemon ne tourne pas comme service : il ne peut pas se relancer seul.',
+        'sessions-at-risk': 'Vos sessions tournent dans le service du daemon : un redémarrage les fermerait. Fermez-les, ou redémarrez WSL, puis réessayez.',
+        'npm-failed': 'Le daemon n’a pas pu se mettre à jour. Rien n’a changé.',
+        busy: 'Une mise à jour est déjà en cours.',
+        offline: 'Le daemon local n’est pas connecté : rien n’a été envoyé.',
+        timeout: 'Le daemon ne répond plus.'
+      } as Record<UpdateFailure | 'offline' | 'timeout', string>,
+      timeoutCommand: 'systemctl --user status ledge-daemon'
     }
   },
   status: {
@@ -471,6 +516,50 @@ const en: typeof fr = {
       saved: (label) => `${label} is saved.`,
       removed: (label) => `${label} was removed from the list.`,
       confirm: (label) => `Remove ${label}? Its sessions will leave the view; the work on the server goes on.`
+    },
+    about: {
+      title: 'App and daemon',
+      app: 'Desktop app',
+      daemon: (label) => `Daemon · ${label}`,
+      install: { npm: 'npm', git: 'git clone', unknown: 'unknown install' },
+      unknown: 'Unknown version',
+      latest: 'Latest version',
+      latestUnknown: 'Not checked yet',
+      latestCurrent: 'Desktop is up to date',
+      auto: 'Check for updates',
+      autoHint: 'At start-up, then every 6 hours. Installs only after your click.',
+      never: 'Never checked',
+      checkedAt: (when) => `Checked on ${when}`,
+      phase: {
+        idle: 'No check yet.',
+        checking: 'Looking for a new version…',
+        current: 'Desktop is up to date.',
+        available: (v) => `Ledge ${v} is available. Nothing is installed without your click.`,
+        installing: (v) => `Installing Ledge ${v}. Desktop will restart on its own.`,
+        failedCheck: 'The check failed. Check your connection.',
+        failedInstall: 'The install failed. The app did not change.'
+      },
+      check: 'Check',
+      updateApp: 'Update the app',
+      installing: (percent) => (percent === null ? 'Installing…' : `Installing… ${percent}%`),
+      updateDaemon: 'Update the daemon',
+      log: 'Daemon log',
+      step: {
+        sent: (v) => `Request sent to the local daemon: ${v}`,
+        installing: 'Installing the new version…',
+        restarting: 'Restarting the daemon…',
+        done: (v) => `Daemon up to date: ${v}`
+      },
+      failed: {
+        'git-install': 'Your daemon runs from a git clone: update it yourself.',
+        'no-systemd': 'The daemon does not run as a service: it cannot restart itself.',
+        'sessions-at-risk': 'Your sessions run inside the daemon service: a restart would close them. Close them, or restart WSL, then retry.',
+        'npm-failed': 'The daemon could not update. Nothing changed.',
+        busy: 'An update is already running.',
+        offline: 'The local daemon is not connected: nothing was sent.',
+        timeout: 'The daemon is not answering.'
+      },
+      timeoutCommand: 'systemctl --user status ledge-daemon'
     }
   },
   status: {
