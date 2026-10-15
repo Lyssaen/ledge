@@ -1,14 +1,16 @@
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { ClientMessage, Machines, Recent, Session } from '@ledge/protocol';
+import type { ClientMessage, DaemonInfo, Machines, Recent, Session } from '@ledge/protocol';
 
 export const T0 = new Date(Date.now() - 5 * 60_000).toISOString();
+/** A local daemon that can route the chat between machines (spec 2026-10-14 §5.3): the fleet coordinates through it. */
+export const ROUTING: DaemonInfo = { version: '0.6.0', install: 'npm', systemd: true, routing: true };
 export function session(id: string, extra: Partial<Session> = {}): Session {
   return { id, name: 'Otto', tool: 'claude', cwd: '/w/harness-assistant', project: 'harness-assistant', title: 'Otto · harness-assistant', tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra };
 }
 
 /** Simulates the local ledge daemon inside the page: a snapshot, then the machines list, and a `push` for later updates.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[] } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo } = {}) {
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
   let socket: WebSocketRoute | null = null;
@@ -16,7 +18,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
     if (!up) { ws.close(); return; }
     socket = ws;
-    ws.send(JSON.stringify({ type: 'snapshot', sessions: [...sessions.values()], ...(extras.launcher ? { launcher: extras.launcher } : {}), ...(extras.recents ? { recents: extras.recents } : {}) }));
+    ws.send(JSON.stringify({ type: 'snapshot', sessions: [...sessions.values()], ...(extras.launcher ? { launcher: extras.launcher } : {}), ...(extras.recents ? { recents: extras.recents } : {}), ...(extras.daemon ? { daemon: extras.daemon } : {}) }));
     ws.send(JSON.stringify({ type: 'machines', machines: extras.machines ?? [{ id: 'local', label: 'Local' }] }));
     ws.onMessage(m => { try { received.push(JSON.parse(String(m))); } catch { /* ignore */ } });
   });
