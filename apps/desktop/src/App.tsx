@@ -21,6 +21,7 @@ import { useConversations } from './conversation/useConversations';
 import { useLaunch } from './launch/useLaunch';
 import { LaunchScreen } from './launch/LaunchScreen';
 import { clearLaunch } from './launch/form';
+import { onTrayAction } from './tauri/bridge';
 
 function Shell({ client }: { client?: DaemonClient }) {
   const [state, dispatch] = useViewState();
@@ -62,6 +63,11 @@ function Shell({ client }: { client?: DaemonClient }) {
   const opener = useRef<'heading' | 'empty'>('heading');
   const { open: openFlow } = launch;
   const openLaunch = useCallback((from: 'heading' | 'empty') => { opener.current = from; openFlow(); }, [openFlow]);
+  // Tray « Nouvelle session » (main.rs shows the window first). Ignored while read-only; an open screen is left as it is
+  // (`open` is a no-op unless closed). « Ne pas déranger » and the tray labels' language come with lot 7.
+  const trayNew = useRef<() => void>(() => {});
+  useEffect(() => { trayNew.current = () => { if (canLaunch) openLaunch('heading'); }; });
+  useEffect(() => onTrayAction(action => { if (action === 'new') trayNew.current(); }), []);
 
   // The new session is selected once the fleet lists it: the attention filter goes off so it shows, the panel folds back,
   // and the cursor goes to the reply once its conversation is on screen (mockup launch.js).
