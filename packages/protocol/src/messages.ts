@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SessionSchema, ToolSchema } from './session.js';
+import { REASON_MAX, SessionSchema, ToolSchema } from './session.js';
 import { TurnSchema } from './history.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema } from './chat.js';
 import { AuthenticationJsonSchema, OperationIdSchema, OperationReasonSchema, OperationStatusSchema } from './operations.js';
@@ -31,7 +31,7 @@ export const SessionEventSchema = z.object({
   task: z.string().optional(),
   /** PostToolUseFailure: the user interrupted the turn (Esc); Claude then waits for input with no Stop. */
   interrupt: z.boolean().optional(),
-  reason: z.string().max(500).optional(),
+  reason: z.string().max(REASON_MAX).optional(),
   /** Native tracking (spec 2026-10-13 §2): the harness's id of the tool call, so its result lands on the same row. */
   toolUseId: z.string().optional(),
   /** The tool's input as the harness gave it, every string capped by the hook. */

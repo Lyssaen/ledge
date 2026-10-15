@@ -7,13 +7,16 @@ export type Tool = z.infer<typeof ToolSchema>;
 export const SessionStateSchema = z.enum(['starting', 'working', 'waiting_input', 'waiting_permission', 'idle', 'exited', 'error']);
 export type SessionState = z.infer<typeof SessionStateSchema>;
 
+/** The longest reason a session event or pending request carries (a Bash description, a refusal). */
+export const REASON_MAX = 500;
+
 export const PendingSchema = z.object({
   /** Identity of the request, so a phone can answer exactly this one (absent from journals written before). */
   id: z.string().optional(),
   version: z.number().int().positive().optional(),
   since: z.string().datetime().optional(),
   /** Why the request was refused or closed, when it was. */
-  reason: z.string().max(500).optional(),
+  reason: z.string().max(REASON_MAX).optional(),
   kind: z.enum(['question', 'permission', 'plan', 'diff']),
   text: z.string(),
   /** What to review in full before deciding, when `text` is only its summary: a plan's markdown. */

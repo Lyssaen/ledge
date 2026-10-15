@@ -8,6 +8,7 @@ import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCode
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import { connect } from '../src/client.js';
+import { REASON_MAX, SessionEventSchema } from '@ledge/protocol';
 
 const at = '2026-10-09T18:00:00.000Z';
 let home: string;
@@ -16,6 +17,11 @@ beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'ledge-hook-')); process.en
 describe('mapClaudeHook', () => {
   it('a Bash permission carries the tool description as reason', () => {
     expect(mapClaudeHook('PermissionRequest', { session_id: 's', tool_name: 'Bash', tool_input: { command: 'pnpm test', description: 'Run the overlay tests' } }, at)!.event.reason).toBe('Run the overlay tests');
+  });
+  it('a Bash description longer than the schema allows is cut, so the event still parses', () => {
+    const m = mapClaudeHook('PermissionRequest', { session_id: 's', tool_name: 'Bash', tool_input: { command: 'ls', description: `  ${'d'.repeat(600)}  ` } }, at)!;
+    expect(m.event.reason).toBe('d'.repeat(REASON_MAX));
+    expect(SessionEventSchema.safeParse(m.event).success).toBe(true);
   });
   it('a permission without a Bash description has no reason', () => {
     expect(mapClaudeHook('PermissionRequest', { session_id: 's', tool_name: 'Bash', tool_input: { command: 'ls' } }, at)!.event.reason).toBeUndefined();

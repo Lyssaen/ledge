@@ -1,4 +1,4 @@
-import { REPLY_MAX, REPLY_TRUNCATION_MARK, type SessionEvent, type Tool } from '@ledge/protocol';
+import { REASON_MAX, REPLY_MAX, REPLY_TRUNCATION_MARK, type SessionEvent, type Tool } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
@@ -16,10 +16,10 @@ const PROMPT_MAX = 4_000;
 const handBack = (t: string) => t.startsWith('<agent-message from="');
 const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, handBack(t) ? INPUT_MAX : PROMPT_MAX) } : {}; };
 
-/** Claude's own words for what a Bash command is for (`tool_input.description`). */
+/** Claude's own words for what a Bash command is for (`tool_input.description`), trimmed and cut to what the event schema accepts. */
 function bashReason(tool: string | undefined, input: unknown): { reason?: string } {
   if (tool !== 'Bash') return {};
-  const reason = str((input as Payload | null | undefined)?.description);
+  const reason = str((input as Payload | null | undefined)?.description)?.trim().slice(0, REASON_MAX);
   return reason ? { reason } : {};
 }
 
