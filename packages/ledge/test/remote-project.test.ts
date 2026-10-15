@@ -8,6 +8,7 @@ import { startServer } from '../src/daemon/server.js';
 import type { PeerSocket } from '../src/daemon/peers.js';
 import { createPeers } from '../src/daemon/peers.js';
 import { toRemote } from '../src/daemon/remote/project.js';
+import { capabilitiesByTool } from '../src/adapters/index.js';
 import { MOBILE_COMMANDS, PRE_AUTH } from '../src/daemon/remote/rights.js';
 import type { Tmux } from '../src/tmux.js';
 
@@ -61,9 +62,9 @@ function fakeTmux(): Tmux & { sent: string[][] } {
 }
 
 describe('toRemote', () => {
-  it('a remote snapshot has sessions only, without launcher, recents and daemon', () => {
+  it('a remote snapshot has sessions and capabilities only, without launcher, recents and daemon', () => {
     const m = toRemote({ type: 'snapshot', sessions: [mk('a')], recents: [R], launcher: ['node', 'x'], daemon: D }, view)!;
-    expect(Object.keys(m).sort()).toEqual(['sessions', 'type']);
+    expect(Object.keys(m).sort()).toEqual(['capabilities', 'sessions', 'type']);
     expect((m as any).sessions[0].tmuxSession).toBeNull();
   });
   it("marks each session with the device's own unread, in snapshots and updates", () => {
@@ -96,7 +97,7 @@ describe('toRemote', () => {
   it('a phone never learns where the transcript lives, the agent session id, or the SSH alias', () => {
     const s = { ...mk('a'), transcriptPath: '/home/u/.claude/projects/x/c.jsonl', agentSessionId: 'abc' };
     const snap = toRemote({ type: 'snapshot', sessions: [s], sshAlias: 'pc' } as ServerMessage, view) as Extract<ServerMessage, { type: 'snapshot' }>;
-    expect(Object.keys(snap).sort()).toEqual(['sessions', 'type']);
+    expect(Object.keys(snap).sort()).toEqual(['capabilities', 'sessions', 'type']);
     expect(snap.sessions[0]).not.toHaveProperty('transcriptPath');
     expect(snap.sessions[0]).not.toHaveProperty('agentSessionId');
     const upd = toRemote({ type: 'session.updated', session: s }, view) as Extract<ServerMessage, { type: 'session.updated' }>;
@@ -180,7 +181,7 @@ describe('server: a remote peer', () => {
     srv.preview('a', ['line']);
     const sock = fakeSocket(); srv.attach(sock, { kind: 'remote', deviceId: 'd1' });
     const snap = await sock.next('snapshot');
-    expect(snap).toEqual({ type: 'snapshot', sessions: [{ ...mk('a'), tmuxSession: null, unread: false }] });
+    expect(snap).toEqual({ type: 'snapshot', sessions: [{ ...mk('a'), tmuxSession: null, unread: false }], capabilities: capabilitiesByTool() });
     expect(await sock.next('session.preview')).toEqual({ type: 'session.preview', id: 'a', lines: ['line'] });
     expect(sock.sent.map(m => m.type)).toEqual(['snapshot', 'session.preview']);
   });
@@ -219,7 +220,7 @@ describe('server: a remote peer', () => {
     const sock = fakeSocket(); srv.attach(sock, { kind: 'remote', deviceId: 'd1' });
     await sock.next('snapshot');
     sock.receive({ type: 'snapshot.request' });
-    expect(Object.keys(await sock.next('snapshot')).sort()).toEqual(['sessions', 'type']);
+    expect(Object.keys(await sock.next('snapshot')).sort()).toEqual(['capabilities', 'sessions', 'type']);
   });
   it('attaching a socket that already closed sends nothing and adds no peer', () => {
     const sock = fakeSocket(); (sock as { readyState: number }).readyState = 3;

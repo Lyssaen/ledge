@@ -9,6 +9,7 @@ import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from '
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
 import { SshAliasSchema } from './ssh.js';
 import { ThreadItemSchema } from './thread.js';
+import { CapabilitiesByToolSchema } from './capabilities.js';
 
 export const PROTOCOL_PORT = 47831;
 
@@ -66,8 +67,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   DocumentErrorSchema,
   /** `recents`: the folders of past sessions, most recent first. `launcher`: the command that runs `ledge` inside WSL
    *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. `daemon`: absent
-   *  from daemons older than the auto-update. */
-  z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional(), daemon: DaemonInfoSchema.optional(), sshAlias: SshAliasSchema.optional() }),
+   *  from daemons older than the auto-update. `capabilities`: what each tool can answer, sent to phones only (lot 5). */
+  z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional(), daemon: DaemonInfoSchema.optional(), sshAlias: SshAliasSchema.optional(), capabilities: CapabilitiesByToolSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: SessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
@@ -118,7 +119,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
    *  and list it. Both are answered with a `folder.listing`. */
   z.object({ type: z.literal('folder.list'), path: z.string().optional() }),
   z.object({ type: z.literal('folder.create'), parent: z.string().min(1), name: z.string().min(1) }),
-  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1), operationId: OperationIdSchema.optional(), pendingId: z.string().optional(), pendingVersion: z.number().int().positive().optional() }),
+  /** `other`: a phone's free-text answer to the question it names (`text` is the answer, never an option number); only for a tool whose capabilities say `freeTextAnswer`. */
+  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1), operationId: OperationIdSchema.optional(), pendingId: z.string().optional(), pendingVersion: z.number().int().positive().optional(), other: z.boolean().optional() }),
   /** Local callers send `id` and `decision` only. A phone also names the request it saw (`pendingId`, `pendingVersion`), its operation, and for a high-risk accept a device check (`assertion`). */
   z.object({ type: z.literal('session.decide'), id: z.string(), decision: z.enum(['accept', 'deny']), pendingId: z.string().optional(), pendingVersion: z.number().int().positive().optional(), operationId: OperationIdSchema.optional(), assertion: AuthenticationJsonSchema.optional() }),
   /** The phone asks for a device-check challenge before accepting a request; answered with `decide.challenge`, or an `error` whose message is an OperationReason. */

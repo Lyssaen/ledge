@@ -187,6 +187,7 @@ export const REPLY_ENTER_DELAY_MS = 300;
 
 export const codexAdapter: Adapter = {
   tool: 'codex',
+  capabilities: { freeTextAnswer: false },
   detectPrompt,
   promptStillVisible,
   previewLines,

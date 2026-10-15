@@ -1,4 +1,5 @@
 import type { Helper, Pending, ServerMessage, Session } from '@ledge/protocol';
+import { capabilitiesByTool } from '../../adapters/index.js';
 
 /** Who receives the projection: the device, and whether a session's thread holds replies it has not read. */
 export interface RemoteView { deviceId: string; unread(sessionId: string): boolean }
@@ -34,11 +35,11 @@ const projectSession = (s: Session, view: RemoteView): Session => ({
 
 /**
  * What a remote peer may receive (decision D2): an allow-list by message type, everything else is dropped (null).
- * The snapshot loses `launcher`, `recents` and `daemon`; every `pair.*` message is dropped. Later lots add their types to the switch.
+ * The snapshot loses `launcher`, `recents` and `daemon`, and gains what each tool can answer (`capabilities`); every `pair.*` message is dropped. Later lots add their types to the switch.
  */
 export function toRemote(msg: ServerMessage, view: RemoteView): ServerMessage | null {
   switch (msg.type) {
-    case 'snapshot': return { type: 'snapshot', sessions: msg.sessions.map(s => projectSession(s, view)) };
+    case 'snapshot': return { type: 'snapshot', sessions: msg.sessions.map(s => projectSession(s, view)), capabilities: capabilitiesByTool() };
     case 'session.updated': return { type: 'session.updated', session: projectSession(msg.session, view) };
     case 'session.removed':
     case 'session.preview':

@@ -299,6 +299,7 @@ const PLAN_ACCEPT = /\bmanually approve\b/i;
 
 export const claudeAdapter: Adapter = {
   tool: 'claude',
+  capabilities: { freeTextAnswer: false },
   detectPrompt,
   promptStillVisible,
   promptGone,

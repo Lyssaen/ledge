@@ -12,3 +12,4 @@ export * from './remote.js';
 export * from './operations.js';
 export * from './history.js';
 export * from './push.js';
+export * from './capabilities.js';

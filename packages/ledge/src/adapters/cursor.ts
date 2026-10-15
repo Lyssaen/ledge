@@ -284,6 +284,7 @@ function atRest(pane: string): boolean {
 
 export const cursorAdapter: Adapter = {
   tool: 'cursor',
+  capabilities: { freeTextAnswer: false },
   detectPrompt,
   promptStillVisible,
   previewLines,

@@ -1,4 +1,4 @@
-import type { Pending, Tool } from '@ledge/protocol';
+import type { Capabilities, Pending, Tool } from '@ledge/protocol';
 
 /**
  * Steps sent to the pane in order: literal text, tmux key names, a pause (some TUIs need one before Enter), or
@@ -10,6 +10,8 @@ export type PanePromptMatch = { kind: 'permission' | 'question' | 'plan'; text: 
 
 export interface Adapter {
   tool: Tool;
+  /** What this adapter can type for a phone beyond accept, deny and an option number; the phone hides the rest. */
+  capabilities: Capabilities;
   detectPrompt(pane: string): PanePromptMatch | null;
   promptStillVisible(pane: string): boolean;
   /** `pane` is the bottom of the terminal right before the keys are sent, when the plan depends on the dialog. */
