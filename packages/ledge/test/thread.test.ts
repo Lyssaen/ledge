@@ -267,6 +267,25 @@ describe('thread', () => {
     expect(history.items('a').find(i => i.kind === 'permission')).toMatchObject({ decision: 'deny', source: 'phone', pendingId: pending.id });
   });
 
+  it('a request gone while the next dialog is already on screen is an answer taken, not a failure; the agent is left as its hooks put it', async () => {
+    await srv.close();
+    await start([PROMPT]); // the pane keeps showing a prompt: the next dialog, before its own hook
+    store.upsert(mk('a', { state: 'working' }));
+    store.apply('a', ev('UserPromptSubmit', { text: 'run the tests' }));
+    store.apply('a', ev('PermissionRequest', { tool: 'Bash', text: 'ls' }));
+    const pending = store.get('a')!.pending!;
+    const keys = fake.tmux.sendKeys.bind(fake.tmux);
+    // The tool runs and the turn ends before the pane check is over.
+    fake.tmux.sendKeys = async (n, k) => { await keys(n, k); setTimeout(() => { store.apply('a', ev('PostToolUse', { tool: 'Bash' })); store.apply('a', ev('Stop', { text: 'Done.' })); }, 5); };
+    const p = phone(srv, d1);
+    const opId = randomUUID();
+    p.send({ type: 'session.decide', id: 'a', decision: 'deny', pendingId: pending.id, pendingVersion: pending.version, operationId: opId });
+    expect(await p.result(opId)).toMatchObject({ status: 'applied' });
+    expect(store.get('a')).toMatchObject({ state: 'idle' });
+    expect(store.get('a')?.lastError).toBeUndefined();
+    expect((await turnsOf('a')).map((t: any) => [t.kind, t.decision, t.source])).toEqual([['prompt', undefined, undefined], ['decision', 'deny', 'phone'], ['reply', undefined, undefined]]);
+  });
+
   it('a read mark covers a reply updated in place after a later turn', async () => {
     store.upsert(mk('a', { state: 'working' }));
     const p = phone(srv, d1);

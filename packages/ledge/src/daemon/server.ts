@@ -260,18 +260,22 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const decided = s.pending;
       const stillTheSame = () => {
         const cur = store.get(id)?.pending;
-        // Gone altogether is the answer taken (its tool may finish before the check); only a newer request is left alone.
-        return cur === decided || !cur || (!!decided && cur.kind === decided.kind && cur.text === decided.text);
+        return cur === decided || (!!cur && !!decided && cur.kind === decided.kind && cur.text === decided.text);
       };
       try { await runPlan(s, plan); }
       catch (e) {
         store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: (e as Error).message });
         throw e;
       }
+      // The request left the session once the keys were out (its tool's hooks beat the pane check, or the next dialog is
+      // already on screen): the answer was taken. The session already moved on from it, so it is left as the hooks put it.
+      const answered = () => !!decided && !store.get(id)?.pending;
+      if (answered()) return true;
       // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.
       const gone = decided && adapter.promptGone
         ? await verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
         : await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
+      if (answered()) return true;
       if (!stillTheSame()) return false; // a newer prompt arrived meanwhile: leave it alone
       if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon' }); return true; }
       // The client gets an `error` reply for that id (or a phone `failed/not_taken`, decisions.ts), so a retry from `error` reads as failed.
