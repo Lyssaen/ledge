@@ -33,7 +33,9 @@ describe('talking to Ledge from the Shell', () => {
     await waitFor(() => expect(document.querySelector('[data-session="local:otto"]')).not.toBeNull());
     await user.click(heading());
     await waitFor(() => expect(reply()).toHaveFocus());
-    expect(heading()).toHaveAttribute('aria-pressed', 'true');
+    // It opens, never closes (plan decision 4): the current place, not a toggle.
+    expect(heading()).toHaveAttribute('aria-current', 'true');
+    expect(heading()).not.toHaveAttribute('aria-pressed');
     expect(document.querySelector('#conversation-pane')).toHaveAttribute('data-ledge-chat');
     await waitFor(() => expect(localStorage.getItem('desktop.selected')).toBe('ledge'));
 
@@ -64,7 +66,7 @@ describe('talking to Ledge from the Shell', () => {
     await user.click(within(screen.getByRole('group', { name: 'Sessions mentioned' })).getByRole('button', { name: 'Open Otto' }));
     await waitFor(() => expect(document.querySelector('#conversation-pane')).toHaveAttribute('data-conversation', 'local:otto'));
     await waitFor(() => expect(document.getElementById('conversation-reply')).toHaveFocus());
-    expect(heading()).toHaveAttribute('aria-pressed', 'false');
+    expect(heading()).not.toHaveAttribute('aria-current');
     expect(localStorage.getItem('desktop.selected')).toBe('local:otto');
   });
 
@@ -95,7 +97,7 @@ describe('talking to Ledge from the Shell', () => {
     await user.click(empty);
     await waitFor(() => expect(reply()).toHaveFocus());
     expect(document.querySelector('.workspace-empty')).not.toBeNull();
-    expect(document.querySelector('[data-open-ledge="empty"]')).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelector('[data-open-ledge="empty"]')).toHaveAttribute('aria-current', 'true');
     await user.click(screen.getByRole('button', { name: 'Who needs me?' }));
     await waitFor(() => expect(sentOf(d, 'chat.ask').map(m => m.text)).toEqual(['Who needs me?']));
   });
@@ -117,7 +119,7 @@ describe('the chat while the local daemon is down', () => {
     expect(reply()).toHaveValue('Kept draft');
     for (const b of within(screen.getByRole('group', { name: 'Suggestions for Ledge' })).getAllByRole('button')) expect(b).toBeDisabled();
     expect(screen.getAllByRole('alert')).toHaveLength(1);
-    expect(heading()).toHaveAttribute('aria-pressed', 'true');
+    expect(heading()).toHaveAttribute('aria-current', 'true');
     expect(localStorage.getItem('desktop.selected')).toBe('ledge');
   });
 });

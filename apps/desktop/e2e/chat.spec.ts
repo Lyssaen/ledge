@@ -20,7 +20,7 @@ test('un message au chat avec clarification', async ({ page }) => {
   // Open the chat from the heading: the cursor is in its composer.
   const trigger = page.locator('[data-open-ledge="heading"]');
   await trigger.click();
-  await expect(trigger).toHaveAttribute('aria-pressed', 'true');
+  await expect(trigger).toHaveAttribute('aria-current', 'true');
   const pane = page.locator('#conversation-pane[data-ledge-chat]');
   await expect(pane.getByRole('heading', { name: 'What do you need?' })).toBeVisible();
   const reply = page.locator('#ledge-chat-reply');
@@ -72,13 +72,13 @@ test('un message au chat avec clarification', async ({ page }) => {
   devbox.push({ type: 'chat.history', turns: [{ qid: ask.qid, question: 'On Devbox.', askedAt: at, steps: [{ kind: 'pane', id: 'pim', name: 'Pim' }], answer: '**Pim** broke the build. Start a session to fix it.', answeredAt: at, proposal: { ...proposal, launchedId: 'ari' } }] });
   await expect(pane.getByText('Ari has started')).toBeVisible();
   await expect(page.getByRole('button', { name: 'New session', exact: true })).toBeEnabled();
-  await expect(trigger).toHaveAttribute('aria-pressed', 'true');   // the card does not navigate
+  await expect(trigger).toHaveAttribute('aria-current', 'true');   // the card does not navigate
 
   // A link opens the new session's conversation, cursor in its reply.
   await pane.getByRole('group', { name: 'Sessions mentioned' }).getByRole('button', { name: 'Open Ari' }).click();
   await expect(page.locator('#conversation-pane')).toHaveAttribute('data-conversation', 'devbox:ari');
   await expect(page.locator('#conversation-reply')).toBeFocused();
-  await expect(trigger).toHaveAttribute('aria-pressed', 'false');
+  await expect(trigger).not.toHaveAttribute('aria-current');
 });
 
 test('no session and Devbox offline: Ledge still answers, a new conversation starts over', async ({ page }) => {

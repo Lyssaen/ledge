@@ -334,7 +334,7 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 
 /* Talk to Ledge (spec §9.3; mockup ledge-chat.css). Card, pill and queued-dot rules ported from apps/overlay/src/surface/RelayCard.tsx / ChatView, in desktop tokens. */
 .ledge-chat-trigger { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--input); border-radius: 6px; background: var(--well); color: var(--sidebar-foreground); font-size: 11px; white-space: nowrap; }
-.ledge-chat-trigger[aria-pressed="true"] { border-color: var(--sidebar-primary); background: var(--sidebar-accent); }
+.ledge-chat-trigger[aria-current="true"] { border-color: var(--sidebar-primary); background: var(--sidebar-accent); }
 .ledge-chat-trigger:disabled { opacity: .5; cursor: not-allowed; }
 .ledge-chat-identity { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
 .ledge-chat-identity > div { flex: 1; min-width: 0; }
