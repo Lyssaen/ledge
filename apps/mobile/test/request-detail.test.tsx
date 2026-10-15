@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import type { Session } from '@ledge/protocol';
 import { RequestDetail } from '../src/screens/RequestDetail';
+import { QuestionForm } from '../src/screens/QuestionForm';
 import { mobileStore } from '../src/state/store';
 
 beforeEach(() => { localStorage.clear(); mobileStore.reset(); mobileStore.setLink('connecting'); });
@@ -51,5 +52,12 @@ describe('RequestDetail of a low-risk permission', () => {
     act(() => { mobileStore.apply({ type: 'snapshot', sessions: [waiting('/w/site/a.ts', 'edit_inside_folder', 'Edit')] }); mobileStore.setLink('online'); });
     expect(screen.getByText('Modification dans le projet')).toBeInTheDocument();
     expect(screen.queryByText(/script de test/)).toBeNull();
+  });
+});
+
+describe('QuestionForm free answer field', () => {
+  it('has no "send" Return key: Return inserts a newline on iOS, it must not look like it sends', () => {
+    render(<QuestionForm options={['A', 'B']} value={2} onChange={() => {}} botName="Kai" other={{ text: '', onText: () => {}, problem: 'empty' }} />);
+    expect(screen.getByRole('textbox').getAttribute('enterkeyhint')).toBeNull();
   });
 });

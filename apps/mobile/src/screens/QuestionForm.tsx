@@ -39,7 +39,7 @@ export function QuestionForm({ options, value, onChange, disabled = false, botNa
               <label htmlFor="other-answer" className="mt-3 mb-2 block text-xs text-muted">{copy.question.fieldLabel(botName)}</label>
               <textarea
                 id="other-answer" rows={2} value={other.text} onChange={e => other.onText(e.target.value)} placeholder={copy.question.placeholder}
-                aria-invalid={showProblem} aria-describedby={showProblem ? 'other-problem' : undefined} autoComplete="off" enterKeyHint="send"
+                aria-invalid={showProblem} aria-describedby={showProblem ? 'other-problem' : undefined} autoComplete="off"
                 className="max-h-[120px] min-h-12 w-full min-w-0 resize-y rounded-[12px] border border-line bg-surface p-3 text-base leading-[22px] text-fg placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-info"
               />
               {showProblem && <p id="other-problem" role="alert" className="mt-2 text-xs text-danger-fg">{other.problem === 'long' ? copy.question.long(OTHER_MAX) : copy.question.untypable}</p>}
