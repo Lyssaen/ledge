@@ -147,7 +147,7 @@ test('the folder browser lists the chosen machine and fills the folder', async (
   await expect.poll(lists).toEqual([{ type: 'folder.list', path: '/w/ledge' }]);
   local.listing('/w/ledge', '/w', ['apps', 'docs']);
   await browser.getByRole('button', { name: 'Open apps' }).click();
-  await expect.poll(() => lists().length).toBe(2);
+  await expect.poll(lists).toEqual([{ type: 'folder.list', path: '/w/ledge' }, { type: 'folder.list', path: '/w/ledge/apps' }]);
   local.listing('/w/ledge/apps', '/w/ledge', ['desktop']);
   await expect(browser.getByRole('button', { name: 'Open desktop' })).toBeVisible();
   await browser.getByRole('button', { name: 'Choose this folder' }).click();
