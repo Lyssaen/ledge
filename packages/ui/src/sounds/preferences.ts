@@ -16,10 +16,14 @@ export const DEFAULT_SOUNDS: SoundPrefs = { enabled: true, volume: 'normal', cat
 
 export type SoundPatch = Partial<Omit<SoundPrefs, 'categories'>> & { categories?: Partial<Record<SoundCategory, boolean>> };
 
-/** One preference store per key prefix; state and subscribers are per instance. */
-export function createSoundPrefs(prefix: string) {
-  const FINISHED_KEY = `${prefix}.finished`;
+/** Desktop keeps its finish mode under `desktop.notify` and starts with sounds off (spec 2026-10-14 §7, §10). */
+export interface SoundPrefsOptions { finishedKey?: string; enabled?: boolean }
+
+/** One preference store per key prefix; state and subscribers are per instance. Without options: the island's keys and defaults. */
+export function createSoundPrefs(prefix: string, opts: SoundPrefsOptions = {}) {
+  const FINISHED_KEY = opts.finishedKey ?? `${prefix}.finished`;
   const SOUNDS_KEY = `${prefix}.sounds`;
+  const DEFAULTS: SoundPrefs = { ...DEFAULT_SOUNDS, enabled: opts.enabled ?? DEFAULT_SOUNDS.enabled };
 
   function loadFinished(): FinishedNotify {
     try { const v = localStorage.getItem(FINISHED_KEY); return (FINISHED_VALUES as readonly string[]).includes(v ?? '') ? (v as FinishedNotify) : 'both'; } catch { return 'both'; }
@@ -27,17 +31,17 @@ export function createSoundPrefs(prefix: string) {
   /** Each field is validated on its own, so a partial or outdated record keeps what it can and defaults the rest. */
   function loadSounds(): SoundPrefs {
     try {
-      const raw = localStorage.getItem(SOUNDS_KEY); if (!raw) return DEFAULT_SOUNDS;
-      const v = JSON.parse(raw) as Partial<SoundPrefs> | null; if (!v || typeof v !== 'object') return DEFAULT_SOUNDS;
-      const categories = { ...DEFAULT_SOUNDS.categories };
+      const raw = localStorage.getItem(SOUNDS_KEY); if (!raw) return DEFAULTS;
+      const v = JSON.parse(raw) as Partial<SoundPrefs> | null; if (!v || typeof v !== 'object') return DEFAULTS;
+      const categories = { ...DEFAULTS.categories };
       for (const c of CATEGORIES) if (typeof v.categories?.[c] === 'boolean') categories[c] = v.categories[c]!;
       return {
-        enabled: typeof v.enabled === 'boolean' ? v.enabled : DEFAULT_SOUNDS.enabled,
-        volume: (VOLUMES as readonly string[]).includes(v.volume ?? '') ? (v.volume as SoundVolume) : DEFAULT_SOUNDS.volume,
+        enabled: typeof v.enabled === 'boolean' ? v.enabled : DEFAULTS.enabled,
+        volume: (VOLUMES as readonly string[]).includes(v.volume ?? '') ? (v.volume as SoundVolume) : DEFAULTS.volume,
         categories,
-        onlyWhenTerminalBehind: typeof v.onlyWhenTerminalBehind === 'boolean' ? v.onlyWhenTerminalBehind : DEFAULT_SOUNDS.onlyWhenTerminalBehind
+        onlyWhenTerminalBehind: typeof v.onlyWhenTerminalBehind === 'boolean' ? v.onlyWhenTerminalBehind : DEFAULTS.onlyWhenTerminalBehind
       };
-    } catch { return DEFAULT_SOUNDS; }
+    } catch { return DEFAULTS; }
   }
 
   let finished = loadFinished();
