@@ -12,7 +12,9 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
   let socket: WebSocketRoute | null = null;
+  let up = true;
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
+    if (!up) { ws.close(); return; }
     socket = ws;
     ws.send(JSON.stringify({ type: 'snapshot', sessions: [...sessions.values()], ...(extras.launcher ? { launcher: extras.launcher } : {}) }));
     ws.send(JSON.stringify({ type: 'machines', machines: extras.machines ?? [{ id: 'local', label: 'Local' }] }));
@@ -24,8 +26,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     push,
     upsert(s: Session) { sessions.set(s.id, s); push({ type: 'session.updated', session: s }); },
     remove(id: string) { sessions.delete(id); push({ type: 'session.removed', id }); },
-    /** Drops the local daemon: the client sees its socket close. */
-    close() { socket?.close(); }
+    /** Drops the local daemon and refuses new connections, so the fleet's own reconnect cannot quietly bring it back (see `fakeRemote`). */
+    close() { up = false; socket?.close(); socket = null; }
   };
 }
 
