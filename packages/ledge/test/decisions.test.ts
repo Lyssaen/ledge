@@ -435,6 +435,18 @@ describe('free answers (Other)', () => {
     expect(fake.sent).toEqual([['text', 'ledge-a', '3'], ['text', 'ledge-a', '2 versions, la seconde'], ['keys', 'ledge-a', 'Enter']]);
   });
 
+  it('an emoji ZWJ sequence and a ZWNJ are valid free answers', async () => {
+    await srv.close();
+    await start([fx('claude2-question'), fx('claude2-question'), fx('claude2-question-other-focused'), '● Thinking…']);
+    asTool('claude');
+    const p = phone(srv, deviceId);
+    const text = '👨\u200d👩\u200d👧 et می\u200cخواهم';
+    const m = other(text);
+    p.send(m);
+    expect(await p.result(m.operationId)).toMatchObject({ status: 'applied' });
+    expect(fake.sent).toEqual([['text', 'ledge-a', '3'], ['text', 'ledge-a', text], ['keys', 'ledge-a', 'Enter']]);
+  });
+
   it('an empty or multi-line free answer is invalid, as is one too long or carrying control characters', async () => {
     await srv.close();
     await start([fx('claude2-question')]);

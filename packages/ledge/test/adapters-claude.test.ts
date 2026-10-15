@@ -276,6 +276,23 @@ describe('claude adapter: a phone\'s free answer (Other)', () => {
     expect(textSteps(plan)[0]).toEqual({ text: '3' });
     expect((plan[1] as { until: (p: string) => boolean }).until(tail(quoted, 30))).toBe(false);
   });
+  it('a ❯ 3. echoed above a dialog whose option 1 is cut off is not the free field (the scan stops at the top rule)', () => {
+    const plan = claudeAdapter.otherPlan!('Vert pomme', hook, fx('claude2-question'));
+    const wait = plan[1] as { until: (p: string) => boolean };
+    // Option 1 gone from the capture, a quoted free row above the dialog's top rule.
+    const cut = fx('claude2-question').replace(/^❯ Use the AskUserQuestion.*\n.*\n/m, '❯ 3. Type something.\n').replace(/^[❯ ]*1\. Red.*\n.*\n/m, '');
+    expect(cut).toContain('❯ 3. Type something.\n─');
+    expect(cut).not.toContain('1. Red');
+    expect(wait.until(cut)).toBe(false);
+    // A free row that really has the cursor in a cut-off dialog is still seen, rule between options 3 and 4 included.
+    expect(wait.until(fx('claude2-question-other-focused').replace(/^[❯ ]*1\. Red.*\n.*\n/m, ''))).toBe(true);
+  });
+  it('an emoji ZWJ sequence and a ZWNJ are accepted as free text; zero-width space and BOM are still refused', () => {
+    for (const ok of ['👨\u200d👩\u200d👧', 'می\u200cخواهم'])
+      expect(textSteps(claudeAdapter.otherPlan!(ok, hook, fx('claude2-question')))).toEqual([{ text: '3' }, { text: ok }, { keys: ['Enter'] }]);
+    for (const bad of ['a\u200bb', 'a\u200eb', 'a\u200fb', 'a\ufeffb'])
+      expect(() => claudeAdapter.otherPlan!(bad, hook, fx('claude2-question'))).toThrow();
+  });
   it('refuses a dialog without a free field, and text that could drive the terminal', () => {
     expect(() => claudeAdapter.otherPlan!('Green', hook, fx('claude2-question-multi-review'))).toThrow(/answer in the terminal/);
     expect(() => claudeAdapter.otherPlan!('Green', hook, fx('claude2-permission-bash'))).toThrow(/answer in the terminal/);

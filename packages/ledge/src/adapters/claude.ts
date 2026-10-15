@@ -99,7 +99,7 @@ function parseDialog(pane: string): Dialog | null {
     const m = lines[i]!.match(OPTION);
     if (m && m[1] === '1') { first = i; break; }
   }
-  if (first < 0) first = 0;
+  if (first < 0) return null;
   const { options, details } = optionsBetween(lines, first, footer);
 
   // The question is the block of text right above option 1 (wrapped lines joined).
@@ -306,7 +306,19 @@ function cursorOption(pane: string): number | null {
   if (end < 0) return null;
   let first = end - 1;
   while (first >= 0 && lines[first]!.match(OPTION)?.[1] !== '1') first--;
-  if (first < 0) first = 0;
+  if (first < 0) {
+    // Option 1 is cut off: read from the dialog's top rule (the one not followed by an option; a rule between two
+    // options is inside the dialog), never from the chat above it.
+    first = 0;
+    for (let i = end - 1; i >= 0; i--) {
+      if (!isRule(lines[i]!)) continue;
+      let n = i + 1;
+      while (n < end && isBlank(lines[n]!)) n++;
+      if (n < end && OPTION.test(lines[n]!)) continue;
+      first = i + 1;
+      break;
+    }
+  }
   for (let i = first; i < end; i++) {
     const m = lines[i]!.match(OPTION);
     if (m && lines[i]!.trimStart().startsWith('❯')) return Number(m[1]);
