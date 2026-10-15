@@ -103,6 +103,14 @@ const fr = {
     retry: 'Réessayer'
   },
   localDown: { title: 'Daemon local injoignable', text: 'Ledge ne peut pas joindre le daemon de cette machine. Tout est en lecture seule jusqu’à son retour.' },
+  notify: {
+    approval: (name: string) => `${name} attend votre accord`,
+    question: (name: string) => `${name} a une question`,
+    finished: (name: string) => `${name} a terminé`,
+    failed: (name: string) => `${name} a rencontré une erreur`,
+    manyTitle: 'Votre équipe',
+    many: (n: number) => `${n} sessions vous attendent ou ont terminé`
+  },
   status: {
     sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
     // A machine is feminine (« la machine »), as in the mockup: « Devbox connectée », « Devbox déconnectée »; the local one is « Local connecté ».
@@ -370,6 +378,14 @@ const en: typeof fr = {
     retry: 'Retry'
   },
   localDown: { title: 'Local daemon unreachable', text: 'Ledge cannot reach the daemon on this machine. Everything is read-only until it is back.' },
+  notify: {
+    approval: (name) => `${name} needs your approval`,
+    question: (name) => `${name} has a question`,
+    finished: (name) => `${name} has finished`,
+    failed: (name) => `${name} ran into an error`,
+    manyTitle: 'Your team',
+    many: (n) => `${n} sessions need you or have finished`
+  },
   status: {
     sessions: (n) => `${n} ${plural(n, 'session', 'sessions')}`,
     connected: (name, _isLocal) => `${name} connected`,
