@@ -103,7 +103,7 @@ describe('Composer', () => {
     rerender(<Harness session={bix} list={[bix]} />);
     expect(drafts()).toEqual({ 'local:bix': 'a', ledge: 'c' });
   });
-  it('editing the draft clears a failed command or decision banner', () => {
+  it('typing keeps an unseen decision or kill failure', () => {
     const asking: Session = { ...bix, state: 'waiting_permission', pending: { kind: 'permission', text: 'Run git push?', tool: 'Bash', source: 'hook' } };
     let api!: ReturnType<typeof useConversations>;
     function Probe() {
@@ -116,6 +116,28 @@ describe('Composer', () => {
     act(() => daemonStore.apply({ type: 'error', id: 'local:bix', message: 'Denied by policy' }));
     expect(api.sends.failed['local:bix']?.kind).toBe('decision');
     fireEvent.change(box(), { target: { value: 'x' } });
-    expect(api.sends.failed['local:bix']).toBeUndefined();
+    expect(api.sends.failed['local:bix']?.kind).toBe('decision');
+    act(() => api.command(asking, 'kill'));
+    act(() => daemonStore.apply({ type: 'error', id: 'local:bix', message: 'Not sent' }));
+    fireEvent.change(box(), { target: { value: 'xy' } });
+    expect(api.sends.failed['local:bix']?.kind).toBe('kill');
+  });
+  it('a blocked session shows the block reason over a failed reply', () => {
+    const { rerender } = render(<Harness session={bix} />);
+    fireEvent.change(box(), { target: { value: 'Hello' } });
+    fireEvent.keyDown(box(), { key: 'Enter', ctrlKey: true });
+    act(() => daemonStore.apply({ type: 'error', id: 'local:bix', message: 'Session busy' }));
+    expect(hint()).toHaveTextContent('Message not sent');
+    rerender(<Harness session={{ ...bix, offline: true }} />);
+    expect(hint()).toHaveTextContent('Machine disconnected: cannot send.');
+  });
+  it('keyCode 229 (WebKit IME) does not send, and a blank draft sends nothing', () => {
+    render(<Harness session={bix} />);
+    fireEvent.change(box(), { target: { value: 'Text' } });
+    fireEvent.keyDown(box(), { key: 'Enter', ctrlKey: true, keyCode: 229 });
+    expect(send).not.toHaveBeenCalled();
+    fireEvent.change(box(), { target: { value: '   \n ' } });
+    fireEvent.keyDown(box(), { key: 'Enter', ctrlKey: true });
+    expect(send).not.toHaveBeenCalled();
   });
 });
