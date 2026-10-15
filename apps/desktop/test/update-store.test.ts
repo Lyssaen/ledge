@@ -130,3 +130,23 @@ describe('a recheck keeps a previously found update (M1)', () => {
     expect(up.get().phase).toEqual({ kind: 'current' });
   });
 });
+
+describe('an install clicked during a recheck (round 2)', () => {
+  it('the recheck result does not bring the button back nor replace the held update', async () => {
+    const r = release();
+    let gate: Promise<void> | null = null;
+    const { d } = deps(async () => { if (gate) await gate; return r.u; });
+    const up = createUpdater(d);
+    await up.start();
+    let open!: () => void; gate = new Promise<void>(res => { open = res; });
+    const p = up.check();
+    const i = up.install();
+    expect(up.get().phase.kind).toBe('installing');
+    open(); await p;
+    expect(up.get().phase.kind).toBe('installing');
+    await up.install();
+    r.finish(); await i;
+    expect(r.u.downloadAndInstall).toHaveBeenCalledTimes(1);
+    expect(d.relaunch).toHaveBeenCalledTimes(1);
+  });
+});

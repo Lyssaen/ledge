@@ -38,6 +38,8 @@ export function createUpdater(deps: UpdaterDeps = {}): Updater {
   const listeners = new Set<() => void>();
   const put = (patch: Partial<UpdateSnapshot>) => { snap = { ...snap, ...patch }; for (const fn of [...listeners]) fn(); };
 
+  const installBusy = () => snap.phase.kind === 'installing' || (snap.phase.kind === 'failed' && snap.phase.during === 'install');
+
   const check = (): Promise<void> => {
     if (snap.phase.kind === 'installing') return Promise.resolve();
     if (checking) return checking;
@@ -46,12 +48,13 @@ export function createUpdater(deps: UpdaterDeps = {}): Updater {
     checking = (async () => {
       try {
         const u = await (deps.check ?? checkForUpdate)();
-        held = u;
         const at = (deps.now ?? Date.now)();
         set('desktop.update.checkedAt', String(at));
+        if (installBusy()) { put({ checkedAt: at, latest: u?.version ?? null }); return; }   // an install started meanwhile: phase and held stay
+        held = u;
         put({ checkedAt: at, latest: u?.version ?? null, phase: u ? { kind: 'available', version: u.version, notes: u.notes } : { kind: 'current' } });
       } catch {
-        if (!found) put({ phase: { kind: 'failed', during: 'check' } });   // offline or unreachable: shown, retried by the next check
+        if (!found && !installBusy()) put({ phase: { kind: 'failed', during: 'check' } });   // offline or unreachable: shown, retried by the next check
       } finally { checking = null; }
     })();
     return checking;
