@@ -7,7 +7,7 @@ import { TOAST_WINDOW_MS, useAlerts, type AlertDeps } from '../src/notify/useAle
 import { resetDndForTests, resetSoundPrefsForTests, setDnd, setNotifyMode, setSounds } from '../src/notify/prefs';
 import { machine } from './launch-helpers';
 
-type Props = { sessions: Session[]; machines: MachineState[]; status: DaemonStatus };
+type Props = { sessions: Session[]; machines: MachineState[]; status: DaemonStatus; daemonUpdating?: boolean };
 const ask = (id: string, name: string, state: Session['state'] = 'waiting_permission') => fakeSession(id, { name, state, ...(state.startsWith('waiting') ? { pending: { kind: state === 'waiting_input' ? 'question' : 'permission', source: 'hook', text: `${name} asks` } } : {}) });
 let now = 100_000;
 function setup(focused = false) {
@@ -110,6 +110,20 @@ describe('the daemon and the user', () => {
     h.rerender({ sessions: [], machines: [machine('local', { status: 'unreachable', ready: false })], status: 'unreachable' });
     await vi.waitFor(() => expect(deps.player.play).toHaveBeenCalledTimes(1));
     expect(deps.player.play).toHaveBeenCalledWith('error', 1);
+  });
+  it('a daemon update you started restarts the local daemon without the error cue (final review M3)', async () => {
+    const { deps, local, h } = setup();
+    const down = machine('local', { status: 'unreachable', ready: false });
+    h.rerender({ sessions: [], machines: [local], status: 'open', daemonUpdating: true });
+    h.rerender({ sessions: [], machines: [down], status: 'unreachable', daemonUpdating: true });
+    h.rerender({ sessions: [], machines: [local], status: 'open', daemonUpdating: true });
+    h.rerender({ sessions: [], machines: [local], status: 'open', daemonUpdating: false });
+    await Promise.resolve(); await Promise.resolve();
+    expect(deps.player.play).not.toHaveBeenCalled();
+    // once the update is over, a real outage sounds again
+    now += 60_000;
+    h.rerender({ sessions: [], machines: [down], status: 'unreachable', daemonUpdating: false });
+    await vi.waitFor(() => expect(deps.player.play).toHaveBeenCalledWith('error', 1));
   });
   it('a decision ticks without asking for the terminal; Test plays the question cue unless Do not disturb', async () => {
     const { deps, h } = setup();

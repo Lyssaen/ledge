@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
-import type { DaemonStatus, MachineState } from '@ledge/fleet';
+import type { DaemonStatus, MachineState, SessionChange } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
-import type { SessionChange } from '@ledge/fleet';
 import type { Cue } from '@ledge/ui/sounds/cues';
 import { decideSound } from '@ledge/ui/sounds/decide';
 import type { SoundPlayer } from '@ledge/ui/sounds/player';
@@ -24,9 +23,10 @@ const windowFocused = () => document.hasFocus();
 /**
  * Toasts and sounds from session changes (spec §10). A toast only while Desktop is behind or in the tray, never in Do
  * not disturb; a sound through the island's `decideSound` (sounds off by default on Desktop). The terminal check is async,
- * so a cue is decided once it answers; nothing on screen waits for it.
+ * so a cue is decided once it answers; nothing on screen waits for it. `daemonUpdating`: a daemon update the user started
+ * is running, so the local daemon's restart is expected and silent (final review M3).
  */
-export function useAlerts(input: { sessions: readonly Session[]; machines: readonly MachineState[]; status: DaemonStatus }, deps: AlertDeps = {}): Alerts {
+export function useAlerts(input: { sessions: readonly Session[]; machines: readonly MachineState[]; status: DaemonStatus; daemonUpdating?: boolean }, deps: AlertDeps = {}): Alerts {
   const { finished, sounds } = useSoundPrefs();
   const [dnd] = useDnd();
   const { t } = useI18n();
@@ -36,6 +36,8 @@ export function useAlerts(input: { sessions: readonly Session[]; machines: reado
   const lastPlayedAt = useRef<number | null>(null);
   const connectedAt = useRef<number | null>(null);
   const prevStatus = useRef(input.status);
+  const daemonUpdating = useRef(false);
+  daemonUpdating.current = input.daemonUpdating === true;
   const sessionsNow = useRef(input.sessions);
   sessionsNow.current = input.sessions;
   const queued = useRef<SessionChange[]>([]);
@@ -90,10 +92,11 @@ export function useAlerts(input: { sessions: readonly Session[]; machines: reado
   }, [input.sessions, settled, api]);
 
   // The local daemon lost: once per outage, on open -> unreachable only; retries and the reconnection are silent (island rule).
+  // Not while a daemon update the user started restarts it.
   useEffect(() => {
     const was = prevStatus.current; prevStatus.current = input.status;
     if (input.status === 'open') connectedAt.current = (live.current.deps.now ?? Date.now)();
-    if (was === 'open' && input.status === 'unreachable') api.play('error');
+    if (was === 'open' && input.status === 'unreachable' && !daemonUpdating.current) api.play('error');
   }, [input.status, api]);
 
   return useMemo(() => ({ user: api.user, test: api.test }), [api]);

@@ -60,8 +60,12 @@ function Shell({ client, lang, onLang }: { client?: DaemonClient; lang: Lang; on
   const [panel, setPanel] = useStored(loadPanel, savePanel);
   // Bound to the conversation pane. `ready` is the Shell's `opened` (first snapshot received), never a bare connection.
   const conversations = useConversations(fleetClient, sessions, machines, ready);
-  // Toasts and sounds (spec §10), and the accept/deny sounds (decision 14): played only when the click really sends.
-  const alerts = useAlerts({ sessions, machines, status });
+  // Updates (spec §9.4, §11): checked by `main.tsx`, installed on a click only; the local daemon's offer follows the target.
+  const update = useUpdate(updater);
+  const daemonUpdate = useDaemonUpdate(fleet, machines, daemonTarget(update));
+  // Toasts and sounds (spec §10), and the accept/deny sounds (decision 14): played only when the click really sends;
+  // the local daemon's restart during an update the user started plays no error cue (final review M3).
+  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdate.running });
   const api: Conversations = {
     ...conversations,
     decide(s, decision) {
@@ -70,9 +74,6 @@ function Shell({ client, lang, onLang }: { client?: DaemonClient; lang: Lang; on
       return sent;
     }
   };
-  // Updates (spec §9.4, §11): checked by `main.tsx`, installed on a click only; the local daemon's offer follows the target.
-  const update = useUpdate(updater);
-  const daemonUpdate = useDaemonUpdate(fleet, machines, daemonTarget(update));
   // Settings take the heading's and the sessions' place (decision 12); the view state stays in this Shell meanwhile.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('display');
