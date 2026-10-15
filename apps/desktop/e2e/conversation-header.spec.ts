@@ -17,12 +17,15 @@ test('selecting a session opens its pane with the header and the actions', async
   await expect(pane.locator('.detail-meta')).toBeVisible();
   // Stop asks first, then sends once.
   const stop = actions.getByRole('button', { name: 'Stop' });
-  if (await stop.isVisible()) {
-    await stop.click();
-    await expect(pane.locator('.conversation-confirm')).toBeVisible();
-    await pane.getByRole('button', { name: 'Cancel' }).click();
-    await expect(pane.locator('.conversation-confirm')).toHaveCount(0);
-  }
+  await expect(stop).toBeVisible();
+  await stop.click();
+  await expect(pane.locator('.conversation-confirm')).toBeVisible();
+  await pane.getByRole('button', { name: 'Cancel' }).click();
+  await expect(pane.locator('.conversation-confirm')).toHaveCount(0);
+  expect(daemon.received.some(m => m.type === 'session.kill')).toBe(false);
+  await stop.click();
+  await pane.getByRole('button', { name: 'Yes, stop' }).click();
+  await expect.poll(() => daemon.received.some(m => m.type === 'session.kill' && m.id === 'luna')).toBe(true);
   await actions.getByRole('button', { name: 'Rename' }).click();
   const input = pane.getByRole('textbox', { name: 'Session subject' });
   await input.fill('Brand new subject');

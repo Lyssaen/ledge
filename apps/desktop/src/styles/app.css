@@ -230,14 +230,14 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .message-author { font-size: 10px; font-weight: 600; color: var(--muted-foreground); }
 .thread-message.user { margin-left: 24px; padding: 11px 14px; background: var(--well); border: 1px solid var(--sidebar-border); border-radius: 9px; }
 .thread-actions { padding: 8px 0; margin-bottom: 18px; color: var(--muted-foreground); font-size: 11px; border-top: 1px solid var(--sidebar-border); border-bottom: 1px solid var(--sidebar-border); }
-.thread-actions ul { margin: 8px 0 4px; padding-left: 20px; line-height: 1.9; }
-.thread-request { --request-tone: var(--warning); border-left: 2px solid var(--request-tone); padding: 12px 15px; margin: 0 0 20px; background: var(--well); border-radius: 0 7px 7px 0; font-size: 12px; line-height: 1.65; }
+.thread-actions ul { margin: 8px 0 4px; padding-left: 20px; line-height: 1.9; overflow-wrap: anywhere; }
+.thread-request { --request-tone: var(--warning); border-left: 2px solid var(--request-tone); padding: 12px 15px; margin: 0 0 20px; background: var(--well); border-radius: 0 7px 7px 0; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
 .thread-request.waiting_permission { --request-tone: var(--danger-text); }
 .thread-request > strong { color: var(--request-tone); font-size: 11px; }
 .thread-request code { display: block; padding: 10px; border-radius: 5px; background: var(--sidebar-accent); font: 11px/1.7 Consolas,monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
 .thread-request .request-actions button { font-size: 11px; padding: 9px; }
 .thread-request small { display: block; margin-top: 10px; color: var(--muted-foreground); font-size: 10px; }
-.request-resolution, .thread-notice { font-size: 10px; color: var(--muted-foreground); }
+.request-resolution, .thread-notice { font-size: 10px; color: var(--muted-foreground); overflow-wrap: anywhere; }
 .thread-notice { margin: -9px 0 22px; line-height: 1.6; }
 .conversation-composer { flex-shrink: 0; margin: 0; padding: 14px 22px 16px; border-top: 1px solid var(--sidebar-border); background: var(--notch); }
 .conversation-composer label { display: block; font-size: 11px; margin-bottom: 8px; font-weight: 500; }

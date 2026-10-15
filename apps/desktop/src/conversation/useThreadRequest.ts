@@ -8,6 +8,9 @@ export function useThreadRequest(client: DaemonClient, session: Session): Thread
   const { threads, snapshotSeq } = useDaemon();
   const items = threads.get(session.id);
   const loaded = items !== undefined;
+  // A snapshot empties the live threads while the re-request is in flight: keep showing the last items of this same session.
+  const last = useRef<{ id: string; items: ThreadItem[] } | undefined>(undefined);
+  if (items) last.current = { id: session.id, items };
   const asked = useRef(new Set<string>());
   const key = `${session.id}#${snapshotSeq}`;
   useEffect(() => {
@@ -15,5 +18,5 @@ export function useThreadRequest(client: DaemonClient, session: Session): Thread
     asked.current.add(key);
     client.send({ type: 'session.thread', id: session.id });
   }, [client, key, loaded, session.id, session.offline]);
-  return items;
+  return items ?? (last.current?.id === session.id ? last.current.items : undefined);
 }

@@ -70,6 +70,7 @@ export function ConversationHeader({ session: s, client, api, expanded, onExpand
         <summary>{c.meta.summary}</summary>
         <div className="detail-meta">
           {s.project} · {c.meta.duration(minutes(s))}
+          {s.cwd && <><br />{c.meta.folder} · {s.cwd}</>}
           {s.branch && <><br /><span className="branch">⑂ {s.branch}</span></>}
           <br />{jiraText}
         </div>

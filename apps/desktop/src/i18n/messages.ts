@@ -58,6 +58,7 @@ const fr = {
     local: 'Cette machine',
     meta: {
       summary: 'Détails de la session',
+      folder: 'Dossier',
       duration: (min: number) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`),
       jira: (key: string, from: 'branch' | 'topic') => `${key} · détectée dans ${from === 'branch' ? 'la branche' : 'le sujet'}`,
       ambiguous: (keys: readonly string[]) => `À clarifier : ${keys.join(', ')}`,
@@ -176,6 +177,7 @@ const en: typeof fr = {
     local: 'This machine',
     meta: {
       summary: 'Session details',
+      folder: 'Folder',
       duration: (min: number) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`),
       jira: (key: string, from: 'branch' | 'topic') => `${key} · found in the ${from === 'branch' ? 'branch' : 'subject'}`,
       ambiguous: (keys: readonly string[]) => `To clarify: ${keys.join(', ')}`,

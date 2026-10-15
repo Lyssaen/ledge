@@ -7,6 +7,7 @@ import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { threadBlocks } from '../src/conversation/blocks';
 import { Thread } from '../src/conversation/Thread';
 import { useConversations } from '../src/conversation/useConversations';
+import { useThreadRequest } from '../src/conversation/useThreadRequest';
 
 const local = [{ id: 'local', label: 'Local', status: 'open', ready: true, recents: [], sessions: [], launcher: null }] as unknown as MachineState[];
 const at = (min: number) => new Date(Date.UTC(2026, 9, 13, 10, min)).toISOString();
@@ -120,6 +121,69 @@ describe('Thread reading position', () => {
     el.scrollTop = 120; fireEvent.scroll(el);
     rerender(<Harness session={nova} list={items} also={bix} />);
     expect(JSON.parse(localStorage.getItem('desktop.thread')!)['local:bix'].scroll).toBe(120);
+  });
+});
+
+describe('Thread reading position across reloads', () => {
+  const desc = (k: 'scrollTop' | 'scrollHeight' | 'clientHeight') => Object.getOwnPropertyDescriptor(HTMLElement.prototype, k);
+  const saved = { scrollTop: desc('scrollTop'), scrollHeight: desc('scrollHeight'), clientHeight: desc('clientHeight') };
+  beforeEach(() => {
+    const tops = new WeakMap<HTMLElement, number>();
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 1000 });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => 200 });
+    Object.defineProperty(HTMLElement.prototype, 'scrollTop', { configurable: true, get(this: HTMLElement) { return tops.get(this) ?? 0; }, set(this: HTMLElement, v: number) { tops.set(this, v); } });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    for (const [k, d] of Object.entries(saved)) { if (d) Object.defineProperty(HTMLElement.prototype, k, d); else delete (HTMLElement.prototype as unknown as Record<string, unknown>)[k]; }
+  });
+  const scroller = (c: HTMLElement) => c.querySelector('.thread-scroll') as HTMLElement;
+
+  it('a snapshot that clears the thread keeps the rendered items and the saved position', () => {
+    vi.useFakeTimers();
+    const sess = { ...bix, lastReply: { text: 'Partial reply', at: at(1) } };
+    function Live() {
+      const list = useThreadRequest(client, sess);
+      const sessions = useMemo(() => [sess], []);
+      const api = useConversations(client, sessions, local, true);
+      return <Thread session={sess} items={list} api={api} />;
+    }
+    act(() => {
+      daemonStore.apply({ type: 'snapshot', sessions: [sess] });
+      daemonStore.apply({ type: 'session.thread', id: 'local:bix', items });
+    });
+    const { container } = render(<Live />);
+    const el = scroller(container);
+    el.scrollTop = 420; fireEvent.scroll(el);
+    act(() => { vi.advanceTimersByTime(250); });
+    expect(JSON.parse(localStorage.getItem('desktop.thread')!)['local:bix'].scroll).toBe(420);
+    act(() => daemonStore.apply({ type: 'snapshot', sessions: [sess] }));
+    expect(container.querySelector('.thread-start')).toHaveTextContent(/^Session started · /);
+    expect(container.querySelector('.thread-message.agent')).not.toHaveTextContent('Partial reply');
+    expect(el.scrollTop).toBe(420);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(JSON.parse(localStorage.getItem('desktop.thread')!)['local:bix'].scroll).toBe(420);
+  });
+  it('never saves a position while the history is the partial fallback', () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(<Harness session={bix} list={items} />);
+    const el = scroller(container);
+    el.scrollTop = 420; fireEvent.scroll(el);
+    rerender(<Harness session={bix} />);
+    el.scrollTop = 0; fireEvent.scroll(el);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(JSON.parse(localStorage.getItem('desktop.thread')!)['local:bix'].scroll).toBe(420);
+  });
+  it('without a thread, the view is at the end: a request arriving later is scrolled into view, nothing is saved', () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(<Harness session={bix} />);
+    const el = scroller(container);
+    el.scrollTop = 0;
+    rerender(<Harness session={{ ...bix, state: 'waiting_input', pending: { kind: 'question', text: 'Which one?', source: 'hook' } as Session['pending'] }} />);
+    expect(el.scrollTop).toBe(1000);
+    fireEvent.scroll(el);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(localStorage.getItem('desktop.thread')).toBeNull();
   });
 });
 

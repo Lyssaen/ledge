@@ -55,7 +55,7 @@ export function Thread({ session, items, api }: { session: Session; items: Threa
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el || restored.current) return;
-    if (!loaded) { el.scrollTop = el.scrollHeight; return; }
+    if (!loaded) { atEnd.current = true; el.scrollTop = el.scrollHeight; return; }
     const at = latest.current.pref(session.id).scroll;
     el.scrollTop = at ?? el.scrollHeight;
     atEnd.current = at === null;
@@ -65,12 +65,13 @@ export function Thread({ session, items, api }: { session: Session; items: Threa
   const tail = `${blocks.length}|${items?.at(-1)?.id ?? ''}|${session.pending?.text ?? ''}|${session.lastReply?.at ?? ''}`;
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (el && restored.current && atEnd.current) el.scrollTop = el.scrollHeight;
+    if (el && (restored.current || !loaded) && atEnd.current) el.scrollTop = el.scrollHeight;
   }, [tail]);
 
   const onScroll = () => {
     const el = scroller.current;
-    if (!el || !restored.current) return;
+    // Never record a position while the partial fallback is shown (the collapsed content would clamp it).
+    if (!el || !restored.current || !loaded) return;
     atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < END_SLACK;
     pending.current = atEnd.current ? null : Math.round(el.scrollTop);
     clearTimeout(timer.current);

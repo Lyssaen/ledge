@@ -56,7 +56,7 @@ function Shell({ client }: { client?: DaemonClient }) {
         {localDown && <LocalDownNotice />}
         <OfflineNotice machines={machines} onRetry={id => fleet.retry(id)} />
         {(ready || localDown) && sessions.length === 0 && <EmptyWorkspace />}
-        {sessions.length > 0 && <SplitView panel={panel} onPanel={setPanel}
+        {sessions.length > 0 && <SplitView selectedId={selected?.id ?? null} panel={panel} onPanel={setPanel}
           list={<>
             {state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
             {state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} attentionOnly={state.attentionOnly} />}

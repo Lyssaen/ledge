@@ -36,7 +36,7 @@ const button = (name: string) => screen.getByRole('button', { name });
 
 describe('ConversationHeader', () => {
   it('shows the subject, the agent, its machine and state, and folded session details kept per session', () => {
-    const done = fakeSession('local:bix', { name: 'Bix', state: 'exited', topic: 'LEDGE-42 · Documenter le protocole', project: 'ledge', branch: 'docs/protocol', startedAt: '2026-10-09T18:00:00.000Z', exitedAt: '2026-10-09T19:05:00.000Z' });
+    const done = fakeSession('local:bix', { name: 'Bix', state: 'exited', topic: 'LEDGE-42 · Documenter le protocole', project: 'ledge', cwd: '/w/ledge', branch: 'docs/protocol', startedAt: '2026-10-09T18:00:00.000Z', exitedAt: '2026-10-09T19:05:00.000Z' });
     const { container } = render(<Harness session={done} />);
     expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('LEDGE-42 · Documenter le protocole');
     expect(screen.getByText('Claude Code · This machine')).toBeInTheDocument();
@@ -44,7 +44,8 @@ describe('ConversationHeader', () => {
     const details = container.querySelector('details.conversation-meta') as HTMLDetailsElement;
     expect(details.open).toBe(false);
     const meta = details.querySelector('.detail-meta')!;
-    expect(meta).toHaveTextContent('ledge · 1 h 05');
+    expect(meta).toHaveTextContent('Folder · /w/ledge');
+    expect(meta).toHaveTextContent('1 h 05');
     expect(meta).toHaveTextContent('⑂ docs/protocol');
     expect(meta).toHaveTextContent('LEDGE-42 · found in the subject');
     act(() => { details.open = true; details.dispatchEvent(new Event('toggle')); });

@@ -168,4 +168,20 @@ describe('useThreadRequest', () => {
     act(() => daemonStore.apply({ type: 'snapshot', sessions: [{ ...frozen, id: 'local:x' }] }));
     expect(send).not.toHaveBeenCalled();
   });
+  it('keeps the last items of the same session while a snapshot clears them and the re-request is in flight', () => {
+    act(() => {
+      daemonStore.apply({ type: 'snapshot', sessions: [bix] });
+      daemonStore.apply({ type: 'session.thread', id: 'local:bix', items: [{ kind: 'prompt', id: 'p1', at, turn: 1, text: 'Go' }] });
+    });
+    const r = renderHook(({ s }) => useThreadRequest(client, s), { initialProps: { s: bix } });
+    expect(r.result.current?.map(i => i.id)).toEqual(['p1']);
+    send.mockClear();
+    act(() => daemonStore.apply({ type: 'snapshot', sessions: [bix] }));
+    expect(r.result.current?.map(i => i.id)).toEqual(['p1']);
+    expect(send).toHaveBeenCalledTimes(1);
+    // Never another session's items.
+    const nova = { ...bix, id: 'local:nova' };
+    r.rerender({ s: nova });
+    expect(r.result.current).toBeUndefined();
+  });
 });
