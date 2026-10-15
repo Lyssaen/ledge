@@ -19,6 +19,9 @@ export function loadTool(): Tool {
   return isTool(v) ? v : 'claude';
 }
 
+/** The default harness chosen in the settings (spec §9.4): the next launch form starts with it. */
+export function saveTool(tool: Tool): void { writeJson(TOOL_KEY, tool); }
+
 /** What was typed and not launched. `cwd` belongs to `machine`; null until typed or picked there (the form then shows the latest project). */
 export interface LaunchDraft { machine: string | null; cwd: string | null; tool: Tool; prompt: string }
 export const emptyDraft = (): LaunchDraft => ({ machine: null, cwd: null, tool: loadTool(), prompt: '' });

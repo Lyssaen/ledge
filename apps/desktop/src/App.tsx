@@ -25,6 +25,7 @@ import { useChat } from './chat/useChat';
 import { ChatPane } from './chat/ChatPane';
 import { CHAT_ID } from './chat/turns';
 import { onTrayAction } from './tauri/bridge';
+import { useAppearance } from './shell/theme';
 
 /** The chat's composer, or its thread when the composer is frozen (local daemon down). */
 function focusChat() {
@@ -170,5 +171,6 @@ function Shell({ client }: { client?: DaemonClient }) {
 
 export function App({ client }: { client?: DaemonClient } = {}) {
   const [lang] = useState(loadLang);
+  useAppearance();
   return <LangProvider lang={lang}><Shell client={client} /></LangProvider>;
 }
