@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Pending, Session } from '@ledge/protocol';
-import { pushFor } from '../src/daemon/push/triggers.js';
+import { createPushGate, pushFor, safeTag } from '../src/daemon/push/triggers.js';
 
 const T0 = '2026-10-14T18:00:00.000Z';
 const pid = '0b7e4c1a-9d2f-4f6e-8a31-5c2d7e9b1a44';
@@ -79,5 +79,32 @@ describe('pushFor', () => {
     const noId = sess('c', { pending: pend({ id: undefined }) });
     const after = waiting('a', pend());
     expect(pushFor(sess('a'), after, [after, b, noId, sess('d')])?.badge).toBe(2);
+  });
+});
+
+describe('tags', () => {
+  it('keeps only url-base64 characters and at most 32', () => {
+    expect(safeTag('fin-ses sion/é:1')).toBe('fin-ses_sion___1');
+    expect(safeTag('x'.repeat(50))).toHaveLength(32);
+    const after = sess('a b/c', { state: 'idle' });
+    expect(pushFor(sess('a b/c', { state: 'working' }), after, [after])?.tag).toBe('fin-a_b_c');
+  });
+});
+
+describe('createPushGate', () => {
+  const fin = { v: 1, kind: 'finished', title: 't', body: 'b', url: '/', badge: 0, tag: 'x' } as const;
+  it('lets a session notify a finished turn once per interval, per session', () => {
+    let t = 0;
+    const gate = createPushGate(60_000, () => t);
+    expect(gate('a', fin)).toBe(true);
+    t = 59_000; expect(gate('a', fin)).toBe(false);
+    expect(gate('b', fin)).toBe(true);
+    t = 60_001; expect(gate('a', fin)).toBe(true);
+  });
+  it('never holds back a request or a question', () => {
+    const gate = createPushGate(60_000, () => 0);
+    expect(gate('a', { ...fin, kind: 'request' })).toBe(true);
+    expect(gate('a', { ...fin, kind: 'request' })).toBe(true);
+    expect(gate('a', { ...fin, kind: 'question' })).toBe(true);
   });
 });

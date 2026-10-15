@@ -8,7 +8,7 @@ import { ensureLedgeDir, paths } from '../paths.js';
 import { log, quote } from '../log.js';
 import { DeviceStore, type MobileControl } from './devices.js';
 import { ensureVapid, loadVapid } from './push/vapid.js';
-import { pushFor } from './push/triggers.js';
+import { createPushGate, pushFor } from './push/triggers.js';
 import { createPushSender } from './push/sender.js';
 import { loginShellEnv } from '../shell-path.js';
 import { createPairing } from './pairing.js';
@@ -83,10 +83,11 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const server = handle = await startServer({ store, history, tmux, port: opts.port, daemon, updater, mobile });
   await mobile.start();
   const sender = createPushSender({ devices, vapid: loadVapid, env: async () => ({ ...process.env, ...(await loginShellEnv()) }) });
+  const pushGate = createPushGate(60_000);
   const offPush = store.onApply((id, _ev, before, after) => {
     if (before === after) return;
     const p = pushFor(before, after, store.all().map(s => (s.id === id ? after : s)));
-    if (p) sender.notify(p).catch(e => log(`push not sent: ${(e as Error).message}`));
+    if (p && pushGate(id, p)) sender.notify(p).catch(e => log(`push not sent: ${(e as Error).message}`));
   });
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
   await writeFile(paths().pid, String(process.pid));
