@@ -134,6 +134,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** Spaces as the adapters type them (newlines flattened) and as the hook reports them (trimmed). */
   const promptKey = (text: string) => text.replace(/\s+/g, ' ').trim();
   const phonePrompts = new Map<string, { text: string; ms: number }>();
+  /** Sessions Ledge is typing an answer into (injectAndVerify's lock). */
+  const inFlight = new Set<string>();
   /** The phone's instruction this prompt is, if any: same text within PHONE_PROMPT_MS of typing it. */
   const promptSource = (id: string, text: string | undefined): 'phone' | undefined => {
     const sent = phonePrompts.get(id);
@@ -158,8 +160,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeHistory = history ? (() => {
     const offs = [
       history.onItem((id, item) => { if (item.kind !== 'note') broadcast({ type: 'session.thread.item', id, item }); }),
-      store.onEvent((id, ev) => { history.record(id, ev, ev.name === 'UserPromptSubmit' ? promptSource(id, ev.text) : undefined); }),
-      store.onApply((id, ev, before, after) => { const n = resolvedBy(ev, before, after); if (n) history.note(id, n, ev.at); }),
+      // Before the reducer: `store.get` is still the session as the event found it.
+      store.onEvent((id, ev) => {
+        const source = ev.name === 'UserPromptSubmit' ? promptSource(id, ev.text) : undefined;
+        history.record(id, ev, { ...(source ? { source } : {}), pending: store.get(id)?.pending ?? null });
+      }),
+      store.onApply((id, ev, before, after) => {
+        // The row of a request the reducer took names it, so its decision or resolution finds exactly that row.
+        if (ev.name === 'PermissionRequest' && ev.tool && ev.text && after.pending?.id && after.pending !== before.pending) history.tagPending(id, after.pending.id, ev.tool, ev.text);
+        // While Ledge types an answer, a request that goes away is that answer taken (a fast tool's result can beat the check).
+        if (inFlight.has(id)) return;
+        const n = resolvedBy(ev, before, after); if (n) history.note(id, n, ev.at);
+      }),
       store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })
     ];
     return () => { for (const off of offs) off(); };
@@ -214,7 +226,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
   }
 
-  const inFlight = new Set<string>();
 
   /**
    * With `requirePrompt`, fail closed: the prompt must be on screen before anything is typed, else a
@@ -249,7 +260,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const decided = s.pending;
       const stillTheSame = () => {
         const cur = store.get(id)?.pending;
-        return cur === decided || (!!cur && !!decided && cur.kind === decided.kind && cur.text === decided.text);
+        // Gone altogether is the answer taken (its tool may finish before the check); only a newer request is left alone.
+        return cur === decided || !cur || (!!decided && cur.kind === decided.kind && cur.text === decided.text);
       };
       try { await runPlan(s, plan); }
       catch (e) {
@@ -407,8 +419,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (peer.ctx.kind !== 'remote') return;
         if (!store.get(msg.id)) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
         // Never past the last turn: a reply still to come stays unread.
-        const last = phoneTurns(history?.items(msg.id) ?? []).at(-1)?.at;
-        if (last) await opts.mobile?.devices.setRead(peer.ctx.deviceId, msg.id, Date.parse(last) < Date.parse(msg.at) ? last : msg.at);
+        // The latest time of any turn: a reply updated in place keeps its row but not its time.
+        const times = phoneTurns(history?.items(msg.id) ?? []).map(t => Date.parse(t.at));
+        if (times.length) {
+          const latest = Math.max(...times);
+          await opts.mobile?.devices.setRead(peer.ctx.deviceId, msg.id, new Date(Math.min(latest, Date.parse(msg.at))).toISOString());
+        }
         const s = store.get(msg.id);
         return s ? peer.send({ type: 'session.updated', session: s }) : undefined;
       }

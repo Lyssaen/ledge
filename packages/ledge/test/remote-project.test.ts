@@ -85,6 +85,14 @@ describe('toRemote', () => {
     expect(toRemote({ type: 'session.thread.item', id: 'a', item }, view)).toBeNull();
     expect(toRemote({ type: 'chat.routed', qid: 'q', result: { machineId: null, text: 'x' } } as ServerMessage, view)).toBeNull();
   });
+  it('projects sessions by allow-list: a field it does not know stays on the PC', () => {
+    const s = { ...mk('a'), machineId: 'local', secretFuture: 'x', pending: { kind: 'permission', text: 'ls', source: 'hook', id: 'p', version: 1, futurePendingField: 'y' }, helpers: [{ id: 'h', kind: 'k', task: 't', state: 'working', extra: 1 }] } as unknown as Session;
+    const upd = toRemote({ type: 'session.updated', session: s }, view) as Extract<ServerMessage, { type: 'session.updated' }>;
+    expect(upd.session).not.toHaveProperty('secretFuture');
+    expect(upd.session).not.toHaveProperty('machineId');
+    expect(upd.session.pending).toEqual({ kind: 'permission', text: 'ls', source: 'hook', id: 'p', version: 1 });
+    expect(upd.session.helpers).toEqual([{ id: 'h', kind: 'k', task: 't', state: 'working' }]);
+  });
   it('a phone never learns where the transcript lives, the agent session id, or the SSH alias', () => {
     const s = { ...mk('a'), transcriptPath: '/home/u/.claude/projects/x/c.jsonl', agentSessionId: 'abc' };
     const snap = toRemote({ type: 'snapshot', sessions: [s], sshAlias: 'pc' } as ServerMessage, view) as Extract<ServerMessage, { type: 'snapshot' }>;

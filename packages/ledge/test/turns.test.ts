@@ -33,7 +33,7 @@ describe('resolvedBy', () => {
 describe('phoneTurns: the phone reads the shared thread', () => {
   it('maps prompts, replies, decisions and notes in thread order, and nothing else', () => {
     const h = new History({ dir });
-    h.record('s', ev('UserPromptSubmit', { text: 'Lance les tests' }), 'phone');
+    h.record('s', ev('UserPromptSubmit', { text: 'Lance les tests' }), { source: 'phone' });
     h.record('s', ev('PreToolUse', { tool: 'Bash', text: 'Bash · rm -rf x', toolUseId: 't1', toolInput: { command: 'rm -rf x' } }, 1));
     h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf x' }, 2));
     h.note('s', { note: 'decision', decision: 'accept', source: 'phone', pendingId: 'p1' }, later(3));
@@ -81,6 +81,7 @@ describe('History: what the phone adds to it', () => {
     const h = new History({ dir });
     h.record('s', ev('UserPromptSubmit', { text: 'go' }));
     h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'ls' }, 1));
+    h.tagPending('s', 'p1', 'Bash', 'ls');
     h.note('s', { note: 'decision', decision: 'accept', source: 'phone', pendingId: 'p1' }, later(2));
     h.note('s', { note: 'answer', text: 'Oui', source: 'pc', pendingId: 'p2' }, later(3));
     await h.flush();
@@ -88,6 +89,27 @@ describe('History: what the phone adds to it', () => {
     expect(again.items('s').map(i => i.kind)).toEqual(['prompt', 'permission', 'note']);
     expect(again.items('s')[1]).toMatchObject({ decision: 'accept', source: 'phone', pendingId: 'p1' });
     expect(phoneTurns(again.items('s')).map(t => t.kind)).toEqual(['prompt', 'decision', 'answer']);
+  });
+  it('a request settled in the terminal closes its own row; a later decision on another request never takes it', () => {
+    const h = new History({ dir });
+    h.record('s', ev('UserPromptSubmit', { text: 'go' }));
+    h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'ls' }, 1));
+    h.tagPending('s', 'p1', 'Bash', 'ls');
+    h.note('s', { note: 'resolved', source: 'pc', pendingId: 'p1' }, later(2));
+    expect(h.items('s')[1]).toMatchObject({ kind: 'permission', decision: 'unknown', pendingId: 'p1' });
+    // The phone accepts a plan (no row of its own): Decided with that request pending, then the decision.
+    const plan = { id: 'p2', version: 1, kind: 'plan' as const, text: 'Plan', source: 'hook' as const };
+    h.record('s', ev('Decided', { source: 'daemon' }, 3), { pending: plan });
+    h.note('s', { note: 'decision', decision: 'accept', source: 'phone', pendingId: 'p2' }, later(4));
+    expect(h.items('s')[1]).toMatchObject({ decision: 'unknown', pendingId: 'p1' });
+    expect(phoneTurns(h.items('s')).map(t => [t.kind, t.pendingId, t.decision ?? ''])).toEqual([['prompt', undefined, ''], ['resolved', 'p1', ''], ['decision', 'p2', 'accept']]);
+  });
+  it('a Decided with nothing pending (an instruction typed into an idle agent) touches no row', () => {
+    const h = new History({ dir });
+    h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'ls' }));
+    h.record('s', ev('Decided', { source: 'daemon' }, 1), { pending: null });
+    expect(h.items('s')[0]).toMatchObject({ kind: 'permission' });
+    expect((h.items('s')[0] as { decision?: string }).decision).toBeUndefined();
   });
   it('an id with a slash never escapes the history folder, and is read back under its id', async () => {
     const h = new History({ dir });

@@ -1,17 +1,36 @@
-import type { ServerMessage, Session } from '@ledge/protocol';
+import type { Helper, Pending, ServerMessage, Session } from '@ledge/protocol';
 
 /** Who receives the projection: the device, and whether a session's thread holds replies it has not read. */
 export interface RemoteView { deviceId: string; unread(sessionId: string): boolean }
 
+/** The session fields a phone receives (fail closed: a field added to Session later stays on the PC until listed here). */
+const SESSION_FIELDS = [
+  'id', 'name', 'tool', 'cwd', 'project', 'title', 'topic', 'topicSource', 'repo', 'repoPath', 'branch', 'worktree', 'state',
+  'pendingSeq', 'lastReply', 'startedAt', 'lastActivityAt', 'lastHookAt', 'exitCode', 'exitedAt', 'lastError', 'source'
+] as const satisfies readonly (keyof Session)[];
+/** The request fields a phone needs to decide (the plan's `body`, each option's details), and nothing else. */
+const PENDING_FIELDS = [
+  'id', 'version', 'since', 'reason', 'kind', 'text', 'body', 'tool', 'options', 'optionDetails', 'risk', 'riskReason', 'source', 'helperId', 'parentState'
+] as const satisfies readonly (keyof Pending)[];
+const HELPER_FIELDS = ['id', 'kind', 'task', 'state'] as const satisfies readonly (keyof Helper)[];
+
+function pick<T extends object, K extends keyof T>(o: T, keys: readonly K[]): Pick<T, K> {
+  const out = {} as Pick<T, K>;
+  for (const k of keys) if (o[k] !== undefined) out[k] = o[k];
+  return out;
+}
+
 /**
- * A phone never learns the tmux session name (it cannot attach to it, and it says nothing it needs), nor where the
- * agent's transcript lives on the PC or the agent's own session id (the daemon reads those, the phone has no use for
- * them); it learns its own unread.
+ * A phone never learns the tmux session name (it cannot attach to it, and it says nothing it needs), where the agent's
+ * transcript lives on the PC, the agent's own session id or the overlay's machine annotations; it learns its own unread.
  */
-const projectSession = (s: Session, view: RemoteView): Session => {
-  const { transcriptPath: _t, agentSessionId: _a, ...rest } = s;
-  return { ...rest, tmuxSession: null, unread: view.unread(s.id) };
-};
+const projectSession = (s: Session, view: RemoteView): Session => ({
+  ...pick(s, SESSION_FIELDS),
+  ...(s.pending ? { pending: pick(s.pending, PENDING_FIELDS) } : {}),
+  helpers: s.helpers.map(h => pick(h, HELPER_FIELDS)),
+  tmuxSession: null,
+  unread: view.unread(s.id)
+});
 
 /**
  * What a remote peer may receive (decision D2): an allow-list by message type, everything else is dropped (null).

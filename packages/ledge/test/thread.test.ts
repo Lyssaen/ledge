@@ -250,6 +250,51 @@ describe('thread', () => {
     expect(fake.sent).toEqual([]);
   });
 
+  it('a fast tool whose result beats the check leaves a phone decision a decision, never settled in the terminal', async () => {
+    store.upsert(mk('a', { state: 'working' }));
+    store.apply('a', ev('UserPromptSubmit', { text: 'run the tests' }));
+    store.apply('a', ev('PermissionRequest', { tool: 'Bash', text: 'ls' }));
+    const pending = store.get('a')!.pending!;
+    // The keys go out, and the tool's PostToolUse lands while the daemon waits to see the prompt gone.
+    const keys = fake.tmux.sendKeys.bind(fake.tmux);
+    fake.tmux.sendKeys = async (n, k) => { await keys(n, k); setTimeout(() => store.apply('a', ev('PostToolUse', { tool: 'Bash' })), 5); };
+    const p = phone(srv, d1);
+    const opId = randomUUID();
+    p.send({ type: 'session.decide', id: 'a', decision: 'deny', pendingId: pending.id, pendingVersion: pending.version, operationId: opId });
+    expect(await p.result(opId)).toMatchObject({ status: 'applied' });
+    const turns = await turnsOf('a');
+    expect(turns.map((t: any) => [t.kind, t.decision, t.source, t.pendingId])).toEqual([['prompt', undefined, undefined, undefined], ['decision', 'deny', 'phone', pending.id]]);
+    expect(history.items('a').find(i => i.kind === 'permission')).toMatchObject({ decision: 'deny', source: 'phone', pendingId: pending.id });
+  });
+
+  it('a read mark covers a reply updated in place after a later turn', async () => {
+    store.upsert(mk('a', { state: 'working' }));
+    const p = phone(srv, d1);
+    await p.wait(m => m.type === 'snapshot');
+    await hook('a', ev('UserPromptSubmit', { text: 'go' }), ev('Stop', { text: 'first', at: '2026-10-15T09:00:01.000Z' }));
+    history.note('a', { note: 'interrupt', source: 'pc' }, '2026-10-15T09:00:02.000Z');
+    // The same turn's reply comes again, later: its row keeps its place, its time moves past the note.
+    store.apply('a', ev('Stop', { text: 'second', at: '2026-10-15T09:00:03.000Z' }));
+    const from = p.sent.length;
+    p.send({ type: 'session.read', id: 'a', at: '2099-01-01T00:00:00.000Z' });
+    expect((await p.wait(m => m.type === 'session.updated', from)).session.unread).toBe(false);
+    expect(devices.get(d1)?.read).toEqual({ a: '2026-10-15T09:00:03.000Z' });
+  });
+
+  it('notes never reach the overlay: neither broadcast nor in the thread it asks for', async () => {
+    store.upsert(mk('a', { state: 'working' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    const p = phone(srv, d1);
+    const msg = { type: 'session.interrupt', id: 'a', operationId: randomUUID() };
+    p.send(msg);
+    expect(await p.result(msg.operationId)).toMatchObject({ status: 'applied' });
+    expect(history.items('a').map(i => i.kind)).toEqual(['note']);
+    await expect(c.next('session.thread.item', 200)).rejects.toThrow(/timeout/);
+    c.send({ type: 'session.thread', id: 'a' });
+    expect(await c.next('session.thread')).toEqual({ type: 'session.thread', id: 'a', items: [] });
+    c.close();
+  });
+
   it('dismissing a session deletes its history', async () => {
     store.upsert(mk('a', { state: 'idle' }));
     await hook('a', ev('Stop', { text: 'Done.' }));

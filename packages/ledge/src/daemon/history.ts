@@ -1,6 +1,6 @@
 import { appendFile, chmod, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { NoteItem, SessionEvent, ThreadItem, ThreadSource, ToolItem } from '@ledge/protocol';
+import type { NoteItem, Pending, SessionEvent, ThreadItem, ThreadSource, ToolItem } from '@ledge/protocol';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
 import { filesOf } from './files.js';
@@ -104,7 +104,10 @@ export class History {
   /** The user's own decision, sent from the overlay: it lands on the last permission still undecided or only seen to vanish.
    *  `by` says from where (the PC or a phone) and on which request; `turn` limits it to that turn's permissions. */
   decide(id: string, decision: 'accept' | 'deny', by?: { source: ThreadSource; pendingId?: string; turn?: number }): ThreadItem | undefined {
-    const perm = [...this.items(id)].reverse().find(i => i.kind === 'permission' && (i.decision === undefined || i.decision === 'unknown') && (by?.turn === undefined || i.turn === by.turn));
+    const unsettled = (d: string | undefined) => d === undefined || d === 'unknown';
+    // A request Ledge knows by id lands on its own row only (tagPending), never on another request's.
+    const perm = by?.pendingId ? this.rowOf(id, by.pendingId, unsettled)
+      : [...this.items(id)].reverse().find(i => i.kind === 'permission' && unsettled(i.decision) && (by?.turn === undefined || i.turn === by.turn));
     if (!perm || perm.kind !== 'permission') return undefined;
     return this.put(id, { ...perm, decision, ...(by ? { source: by.source, ...(by.pendingId ? { pendingId: by.pendingId } : {}) } : {}) });
   }
@@ -119,11 +122,32 @@ export class History {
       const row = this.decide(id, n.decision, { source: n.source ?? 'pc', pendingId: n.pendingId, turn });
       if (row) return row;
     }
+    // Settled in the terminal: its own row closes as seen to vanish, so no later decision can land on it.
+    if (n.note === 'resolved' && n.pendingId) {
+      const row = this.rowOf(id, n.pendingId, d => d === undefined);
+      if (row) return this.put(id, { ...row, decision: 'unknown', source: n.source ?? 'pc' });
+    }
     return this.put(id, { kind: 'note', id: `note-${at}-${this.items(id).length}`, at, turn, ...n });
   }
 
-  /** `source`: who typed the prompt, when the server knows it was a phone. */
-  record(id: string, ev: SessionEvent, source?: ThreadSource): ThreadItem | undefined {
+  /** The open permission row of request `pendingId` (stamped by tagPending). */
+  private rowOf(id: string, pendingId: string, open: (d: string | undefined) => boolean): Extract<ThreadItem, { kind: 'permission' }> | undefined {
+    return [...this.items(id)].reverse().find((i): i is Extract<ThreadItem, { kind: 'permission' }> => i.kind === 'permission' && i.pendingId === pendingId && open(i.decision));
+  }
+
+  /** The server names the request a PermissionRequest row stands for, so a decision or a resolution finds exactly that row. */
+  tagPending(id: string, pendingId: string, tool: string, text: string): ThreadItem | undefined {
+    const row = [...this.items(id)].reverse().find(i => i.kind === 'permission' && i.decision === undefined && i.pendingId === undefined && i.tool === tool && i.text === text);
+    return row && row.kind === 'permission' ? this.put(id, { ...row, pendingId }) : undefined;
+  }
+
+  /**
+   * `ctx.source`: who typed the prompt, when the server knows it was a phone. `ctx.pending`: the session's request before
+   * the event (null: none), when the server knows it; a `Decided` then closes that request's row only, and none when
+   * nothing was pending. Without it a `Decided` closes the last open row, as before.
+   */
+  record(id: string, ev: SessionEvent, ctx?: { source?: ThreadSource; pending?: Pending | null }): ThreadItem | undefined {
+    const source = ctx?.source;
     const turn = this.turns.get(id) ?? 0;
     const common = { at: ev.at, turn, ...(ev.helperId ? { helperId: ev.helperId } : {}) };
     // Claude 2.1 starts a helper without its task; the hook reads it later, on the helper's own events.
@@ -169,7 +193,9 @@ export class History {
         return this.put(id, { kind: 'permission', id: `perm-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, text: ev.text });
       }
       case 'Decided': {
-        const perm = [...this.items(id)].reverse().find(i => i.kind === 'permission' && i.decision === undefined);
+        const known = ctx?.pending;
+        const perm = known === undefined ? [...this.items(id)].reverse().find(i => i.kind === 'permission' && i.decision === undefined)
+          : known?.id ? this.rowOf(id, known.id, d => d === undefined) : undefined;
         return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision: ev.decision ?? 'unknown' }) : undefined;
       }
       case 'Stop': {
