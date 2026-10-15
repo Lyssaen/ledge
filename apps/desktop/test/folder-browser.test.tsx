@@ -58,6 +58,15 @@ describe('FolderBrowser', () => {
     await userEvent.click(screen.getByRole('button', { name: '/' }));
     expect(f.sent.at(-1)!.msg).toEqual({ type: 'folder.list', path: '/' });
   });
+  it('sends a navigation path unchanged, spaces included, and accepts its listing', async () => {
+    const { f, reply } = setup();
+    reply(listing('/w', [' x ']));
+    await userEvent.click(screen.getByRole('button', { name: 'Open  x ' }));
+    expect(f.sent.at(-1)!.msg).toEqual({ type: 'folder.list', path: '/w/ x ' });
+    reply(listing('/w/ x ', ['y']));
+    expect(screen.queryByText('Loading…')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Open y' })).toBeInTheDocument();
+  });
   it('opens on home when the field holds no accepted path', () => {
     const { f } = setup('w/relative');
     expect(f.sent).toEqual([{ machine: 'devbox', msg: { type: 'folder.list' } }]);

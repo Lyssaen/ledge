@@ -35,7 +35,8 @@ export function FolderBrowser(p: FolderBrowserProps) {
     const next = ask(current.current, 'list', exact && path ? path : null);
     if (!next) return;
     setNewName(null);
-    send(path?.trim() ? { type: 'folder.list', path: path.trim() } : { type: 'folder.list' }, next);
+    // Sent as given: a navigation path comes from the daemon and may carry spaces; only the typed field is trimmed (below).
+    send(path ? { type: 'folder.list', path } : { type: 'folder.list' }, next);
   }, [send]);
   const create = () => {
     const shown = current.current.shown; const name = newName?.trim();
@@ -47,7 +48,7 @@ export function FolderBrowser(p: FolderBrowserProps) {
   // One request on open (a second mount in StrictMode is refused by `ask`), focus inside so Escape stays here.
   useEffect(() => {
     rootRef.current?.querySelector<HTMLElement>('[data-initial-focus]')?.focus();
-    list(isPathAccepted(props.current.start) ? props.current.start : undefined, false);
+    list(isPathAccepted(props.current.start) ? props.current.start.trim() : undefined, false);
   }, [list]);
   useEffect(() => p.fleet.onMachineMessage((machine, m) => {
     if (machine !== props.current.machine || m.type !== 'folder.listing') return;
