@@ -9,7 +9,7 @@ export function withRisk(p: Pending, cwd: string): Pending {
 
 /** What makes a request a different ask: a change in any of these bumps the version of the same id. */
 export function pendingKey(p: Pending): string {
-  return JSON.stringify([p.kind, p.text, p.tool ?? null, p.options ?? null, p.helperId ?? null, p.reason ?? null]);
+  return JSON.stringify([p.kind, p.text, p.tool ?? null, p.options ?? null, p.optionDetails ?? null, p.body ?? null, p.helperId ?? null, p.reason ?? null]);
 }
 
 /** The session with an id, risk, version 1 and `since` given to a pending that has none; identical when it has an id or no pending. */

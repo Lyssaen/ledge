@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Session, SessionEvent } from '@ledge/protocol';
+import type { Pending, Session, SessionEvent } from '@ledge/protocol';
 import { reduce } from '../src/daemon/state.js';
 import { identify, pendingKey } from '../src/daemon/identify.js';
 import { Store } from '../src/daemon/store.js';
@@ -59,6 +59,12 @@ describe('request identity in the reducer', () => {
     const p = { kind: 'permission', text: 'ls', source: 'hook' } as const;
     expect(pendingKey(p)).toBe(pendingKey({ ...p }));
     expect(pendingKey(p)).not.toBe(pendingKey({ ...p, reason: 'List files' }));
+  });
+  it('a change of option descriptions or of the body to review is a new version', () => {
+    const q: Pending = { kind: 'question', text: 'Which?', options: ['A', 'B'], optionDetails: ['simple', ''], source: 'hook' };
+    expect(pendingKey(q)).not.toBe(pendingKey({ ...q, optionDetails: ['rewrites everything', ''] }));
+    const plan: Pending = { kind: 'plan', text: '# Plan', body: '# Plan\n1. read', source: 'hook' };
+    expect(pendingKey(plan)).not.toBe(pendingKey({ ...plan, body: '# Plan\n1. delete' }));
   });
   it('a reason on the event lands on the pending', () => {
     const s = reduce(base(), ev('PermissionRequest', { tool: 'Bash', text: 'ls', reason: 'List files' }));
