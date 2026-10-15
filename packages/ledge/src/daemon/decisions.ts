@@ -23,6 +23,16 @@ export const BUSY = 'a decision is already in progress';
 export const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
 /** The longest instruction a phone may type into an agent's input line. */
 export const MESSAGE_MAX = 4_000;
+/** The longest free answer (Other) a phone may type into a question. */
+export const OTHER_MAX = 2_000;
+/** A free answer is one line: no line break, and no control character that could drive the terminal (ESC, C0, C1). */
+const UNTYPABLE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+
+/** The free answer as it will be typed (trimmed), or null when it is empty, too long or not one plain line. */
+function freeAnswer(text: string): string | null {
+  const t = text.trim();
+  return t === '' || t.length > OTHER_MAX || UNTYPABLE.test(text) ? null : t;
+}
 
 /** What decisions write to a session's shared thread (history.ts; server.ts dates the note). */
 export interface Thread {
@@ -178,23 +188,25 @@ function recordDecision(peer: Peer, msg: SessionDecide, pending: Pending, deps: 
   deps.thread?.record(msg.id, { note: 'decision', decision: msg.decision, source: sourceOf(peer), ...(pending.id ? { pendingId: pending.id } : {}) });
 }
 
-/** An option picked by its number is written to the thread by its label. */
-function recordAnswer(peer: Peer, msg: SessionReply, pending: Pending, deps: DecisionDeps): void {
-  const n = /^[1-9]$/.test(msg.text.trim()) ? Number(msg.text.trim()) : 0;
-  const text = pending.options?.[n - 1] ?? msg.text;
+/** An option picked by its number is written to the thread by its label; a free answer as typed. */
+function recordAnswer(peer: Peer, msg: SessionReply, pending: Pending, deps: DecisionDeps, typed?: string): void {
+  const n = typed === undefined && /^[1-9]$/.test(msg.text.trim()) ? Number(msg.text.trim()) : 0;
+  const text = typed ?? pending.options?.[n - 1] ?? msg.text;
   deps.thread?.record(msg.id, { note: 'answer', text, source: sourceOf(peer), ...(pending.id ? { pendingId: pending.id } : {}) });
 }
 
 export async function runAnswer(peer: Peer, msg: SessionReply, deps: DecisionDeps): Promise<void> {
   const remote = peer.ctx.kind === 'remote';
-  if ((remote && !msg.operationId) || namesRequestHalfway(msg)) return peer.send({ type: 'error', id: msg.id, message: 'invalid' });
+  // A free answer always names the question it answers.
+  if ((remote && !msg.operationId) || namesRequestHalfway(msg) || (msg.other && msg.pendingId === undefined)) return peer.send({ type: 'error', id: msg.id, message: 'invalid' });
   // From a phone, text that names no request is an instruction to an idle agent.
   if (remote && msg.pendingId === undefined) return runMessage(peer, msg, deps);
   return operate(peer, msg, deps, async () => {
     if (msg.pendingId === undefined) return legacyReply(peer, msg, deps);
     const { session, pending } = requestFor(deps.store, msg.id, msg.pendingId, msg.pendingVersion!);
+    if (msg.other) return otherAnswer(peer, msg, session, pending, deps);
     if (remote) {
-      // A phone picks one of the options it was shown; free text arrives with lot 5.
+      // Without `other`, a phone picks one of the options it was shown.
       const n = /^[1-9]$/.test(msg.text) ? Number(msg.text) : 0;
       if (pending.kind !== 'question' || n === 0 || n > (pending.options?.length ?? 0)) throw new Refusal('unsupported');
       // Questions are classified low today and carry no assertion: should that change, a phone must not slip through.
@@ -206,6 +218,27 @@ export async function runAnswer(peer: Peer, msg: SessionReply, deps: DecisionDep
     const adapter = adapterFor(session.tool);
     if (await deps.inject(msg.id, pane => { stillPaired(peer, deps); return adapter.replyPlan(msg.text, pending, pane || undefined); }, true, { id: pending.id, version: pending.version })) recordAnswer(peer, msg, pending, deps);
   });
+}
+
+/**
+ * A free answer (`other`) to the question named, from a phone or this PC: only for a tool that declares it
+ * (`unsupported` otherwise), one plain line of text (`invalid` otherwise), and from a phone only on a low-risk question.
+ * It goes through the same lock, identity check and verification as an option number; its text is never read as one.
+ */
+async function otherAnswer(peer: Peer, msg: SessionReply, session: Session, pending: Pending & { id: string; version: number }, deps: DecisionDeps): Promise<void> {
+  const adapter = adapterFor(session.tool);
+  const plan = adapter.otherPlan;
+  if (pending.kind !== 'question' || !adapter.capabilities.freeTextAnswer || !plan) throw new Refusal('unsupported');
+  const text = freeAnswer(msg.text);
+  if (text === null) throw new Refusal('invalid');
+  if (peer.ctx.kind === 'remote' && pending.risk !== 'low') throw new Refusal('forbidden');
+  const build = (pane: string) => {
+    stillPaired(peer, deps);
+    // Raised before the first character: the dialog on screen has no free field.
+    try { return plan(text, pending, pane); }
+    catch (e) { throw new Refusal('unsupported', (e as Error).message); }
+  };
+  if (await deps.inject(msg.id, build, true, { id: pending.id, version: pending.version })) recordAnswer(peer, msg, pending, deps, text);
 }
 
 /** Free to take an instruction: idle, with nothing waiting on an answer. */

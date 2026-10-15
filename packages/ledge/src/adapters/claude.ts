@@ -290,8 +290,32 @@ function freeTextPlan(text: string, pane: string | undefined): KeyPlan {
   const d = pane ? parseDialog(pane) : null;
   const i = d?.kind === 'question' ? d.options.findIndex(o => FREE_ROW.test(o)) : -1;
   if (i < 0) throw new Error(NO_FREE_ROW);
-  const row = new RegExp(`^\\s*❯\\s*${i + 1}\\.\\s`, 'm');
-  return [...digit(i + 1), { until: p => row.test(p) }, { text }, { keys: ['Enter'] }];
+  const focused = (p: string) => cursorOption(p) === i + 1;
+  // The row already has the cursor (moved there with the arrows): its digit would be typed into the field.
+  return [...(focused(pane!) ? [] : digit(i + 1)), { until: focused }, { text }, { keys: ['Enter'] }];
+}
+
+/** The number of the option that has the cursor (❯) in the live dialog at the bottom of `pane`, or null: never a ❯ quoted in the chat above. */
+function cursorOption(pane: string): number | null {
+  const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
+  const end = dialogEnd(lines);
+  let first = end - 1;
+  while (first >= 0 && lines[first]!.match(OPTION)?.[1] !== '1') first--;
+  if (end < 0 || first < 0) return null;
+  for (let i = first; i < end; i++) {
+    const m = lines[i]!.match(OPTION);
+    if (m && lines[i]!.trimStart().startsWith('❯')) return Number(m[1]);
+  }
+  return null;
+}
+
+/** What a phone's free answer may not carry: line breaks, and any control character that could drive the terminal (ESC, C1). */
+const UNTYPABLE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+
+/** A phone's free answer, typed as is (never read as an option number) into the question's "Type something." row. */
+function otherPlan(text: string, _pending: Pending, pane: string): KeyPlan {
+  if (text.trim() === '' || UNTYPABLE.test(text)) throw new Error('a free answer is one line of text');
+  return freeTextPlan(text, pane);
 }
 
 /** Accepting a plan keeps the permission mode as it was: never the option that turns on auto mode or auto edits. */
@@ -299,7 +323,7 @@ const PLAN_ACCEPT = /\bmanually approve\b/i;
 
 export const claudeAdapter: Adapter = {
   tool: 'claude',
-  capabilities: { freeTextAnswer: false },
+  capabilities: { freeTextAnswer: true },
   detectPrompt,
   promptStillVisible,
   promptGone,
@@ -321,6 +345,7 @@ export const claudeAdapter: Adapter = {
     return digit(1);
   },
   freeText: true,
+  otherPlan,
   replyPlan(text, pending, pane) {
     // Tmux.sendText rejects newlines: flatten here, Enter is a separate key step.
     const flat = text.replace(/\s*[\r\n]+\s*/g, ' ').trim();

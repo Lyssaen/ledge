@@ -5,12 +5,12 @@ export interface OperationRecord { id: string; owner: string; fingerprint: strin
 export type BeginResult = { kind: 'fresh' | 'replay'; record: OperationRecord } | { kind: 'conflict' };
 
 /** Fields of a client message that decide what an operation does. Add a field here (e.g. `other`) and it joins the fingerprint. */
-const FINGERPRINT_FIELDS = ['type', 'id', 'decision', 'text', 'pendingId', 'pendingVersion'] as const;
+const FINGERPRINT_FIELDS = ['type', 'id', 'decision', 'text', 'pendingId', 'pendingVersion', 'other'] as const;
 
-/** Stable JSON of what the operation does; never the assertion or the operation id. */
+/** Stable JSON of what the operation does; never the assertion or the operation id. `other: false` is no `other`. */
 export function fingerprint(msg: ClientMessage): string {
   const src = msg as unknown as Record<string, unknown>;
-  return JSON.stringify(FINGERPRINT_FIELDS.map((k) => src[k] ?? null));
+  return JSON.stringify(FINGERPRINT_FIELDS.map((k) => (k === 'other' ? src[k] === true || null : src[k] ?? null)));
 }
 
 interface Entry { record: OperationRecord; ms: number }

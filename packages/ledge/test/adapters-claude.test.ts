@@ -228,3 +228,41 @@ describe('claude adapter: pane title', () => {
     expect(claudeAdapter.paneTitle!('just text\nmore text')).toBeNull();
   });
 });
+
+describe('claude adapter: a phone\'s free answer (Other)', () => {
+  const hook = { kind: 'question' as const, text: 'Which color do you prefer?', options: ['Red', 'Blue'], source: 'hook' as const };
+  const textSteps = (plan: ReturnType<NonNullable<typeof claudeAdapter.otherPlan>>) => plan.filter(s => 'text' in s || 'keys' in s);
+
+  it('declares the free answer, as Codex and Cursor Agent do not', () => {
+    expect(claudeAdapter.capabilities.freeTextAnswer).toBe(true);
+    expect(adapterFor('codex').capabilities.freeTextAnswer).toBe(false);
+    expect(adapterFor('cursor').capabilities.freeTextAnswer).toBe(false);
+    expect(adapterFor('codex').otherPlan).toBeUndefined();
+    expect(adapterFor('cursor').otherPlan).toBeUndefined();
+  });
+  it('Other: picks the entry, waits for the free field, types the text, then Enter', () => {
+    const plan = claudeAdapter.otherPlan!('Vert pomme', hook, fx('claude2-question'));
+    expect(textSteps(plan)).toEqual([{ text: '3' }, { text: 'Vert pomme' }, { keys: ['Enter'] }]);
+    const wait = plan[1] as { until: (p: string) => boolean };
+    expect(wait.until(tail(fx('claude2-question'), 30))).toBe(false);
+    expect(wait.until(tail(fx('claude2-question-other-focused'), 30))).toBe(true);
+  });
+  it('a free answer starting with a digit is typed only once the free field is on screen', () => {
+    const plan = claudeAdapter.otherPlan!('2 versions, la seconde', hook, fx('claude2-question'));
+    expect(plan.map(s => Object.keys(s)[0])).toEqual(['text', 'until', 'text', 'keys']);
+    expect(plan[2]).toEqual({ text: '2 versions, la seconde' });
+    // A lone digit is still the free text, never an option number.
+    expect(textSteps(claudeAdapter.otherPlan!('2', hook, fx('claude2-question')))).toEqual([{ text: '3' }, { text: '2' }, { keys: ['Enter'] }]);
+  });
+  it('the free field already has the cursor: its digit is not typed into it', () => {
+    const plan = claudeAdapter.otherPlan!('Vert pomme', hook, fx('claude2-question-other-focused'));
+    expect(textSteps(plan)).toEqual([{ text: 'Vert pomme' }, { keys: ['Enter'] }]);
+    expect((plan[0] as { until: (p: string) => boolean }).until(tail(fx('claude2-question-other-focused'), 30))).toBe(true);
+  });
+  it('refuses a dialog without a free field, and text that could drive the terminal', () => {
+    expect(() => claudeAdapter.otherPlan!('Green', hook, fx('claude2-question-multi-review'))).toThrow(/answer in the terminal/);
+    expect(() => claudeAdapter.otherPlan!('Green', hook, fx('claude2-permission-bash'))).toThrow(/answer in the terminal/);
+    for (const bad of ['a\nb', 'a\rb', 'a\u001b[2Jb', 'a\tb', 'a\u0003', 'a\u009bb', 'a b', '', '   '])
+      expect(() => claudeAdapter.otherPlan!(bad, hook, fx('claude2-question'))).toThrow();
+  });
+});

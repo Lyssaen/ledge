@@ -86,5 +86,7 @@ describe('fingerprint', () => {
     expect(fingerprint({ ...base, id: 's2' } as ClientMessage)).not.toBe(f);
     const reply = { type: 'session.reply', id: 's1', text: 'a' } as ClientMessage;
     expect(fingerprint({ ...reply, text: 'b' } as ClientMessage)).not.toBe(fingerprint(reply));
+    expect(fingerprint({ ...reply, other: true } as ClientMessage)).not.toBe(fingerprint(reply));
+    expect(fingerprint({ ...reply, other: false } as ClientMessage)).toBe(fingerprint(reply));
   });
 });

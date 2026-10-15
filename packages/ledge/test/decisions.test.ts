@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Pending, Session } from '@ledge/protocol';
-import { prepareDecide, type DecisionDeps } from '../src/daemon/decisions.js';
+import { FREE_TEXT, OTHER_MAX, prepareDecide, runAnswer, type DecisionDeps } from '../src/daemon/decisions.js';
+import { OperationRegistry } from '../src/daemon/operations.js';
+import { ChallengeStore } from '../src/daemon/challenges.js';
+import type { Peer } from '../src/daemon/peers.js';
 import { Store } from '../src/daemon/store.js';
 import { startServer } from '../src/daemon/server.js';
 import { connect } from '../src/client.js';
@@ -405,6 +408,134 @@ describe('remote decisions', () => {
     p.send(msg);
     expect(await p.result(msg.operationId)).toMatchObject({ status: 'failed', reason: 'no_prompt' });
     expect(fake.sent).toEqual([]);
+  });
+});
+
+describe('free answers (Other)', () => {
+  const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8').replace(/\s+$/, '');
+  const question: Pending = { id: 'pA', version: 1, kind: 'question', text: 'Which color do you prefer?', options: ['Red', 'Blue'], risk: 'low', riskReason: 'question', source: 'hook' };
+  const other = (text: string, extra: Record<string, unknown> = {}) => ({ type: 'session.reply', id: 'a', text, other: true, pendingId: 'pA', pendingVersion: 1, operationId: randomUUID(), ...extra });
+  const asTool = (tool: Session['tool']) => store.upsert(mk('a', { tool, state: 'waiting_input', pending: question }));
+
+  it('a remote free answer is applied for Claude Code and unsupported for Codex and Cursor Agent', async () => {
+    await srv.close();
+    await start([fx('claude2-question'), fx('claude2-question'), fx('claude2-question-other-focused'), '● Thinking…']);
+    const p = phone(srv, deviceId);
+    for (const tool of ['codex', 'cursor'] as const) {
+      asTool(tool);
+      const m = other('Vert pomme');
+      p.send(m);
+      expect(await p.result(m.operationId)).toMatchObject({ status: 'rejected', reason: 'unsupported' });
+    }
+    expect(fake.sent).toEqual([]);
+    asTool('claude');
+    const m = other('2 versions, la seconde');
+    p.send(m);
+    expect(await p.result(m.operationId)).toMatchObject({ status: 'applied' });
+    expect(fake.sent).toEqual([['text', 'ledge-a', '3'], ['text', 'ledge-a', '2 versions, la seconde'], ['keys', 'ledge-a', 'Enter']]);
+  });
+
+  it('an empty or multi-line free answer is invalid, as is one too long or carrying control characters', async () => {
+    await srv.close();
+    await start([fx('claude2-question')]);
+    asTool('claude');
+    const p = phone(srv, deviceId);
+    const bad = ['   ', 'line one\nline two', 'a\r', 'x'.repeat(OTHER_MAX + 1), 'red\u001b[2J', 'tab\tbed', 'ctrl-c\u0003', 'c1\u009b', 'sep arator'];
+    for (const text of bad) {
+      const m = other(text);
+      p.send(m);
+      expect(await p.result(m.operationId)).toMatchObject({ status: 'rejected', reason: 'invalid' });
+    }
+    expect(fake.sent).toEqual([]);
+  });
+
+  it('the longest free answer is typed trimmed', async () => {
+    await srv.close();
+    await start([fx('claude2-question'), fx('claude2-question-other-focused'), '● Thinking…']);
+    asTool('claude');
+    const p = phone(srv, deviceId);
+    const text = 'x'.repeat(OTHER_MAX);
+    const m = other(`  ${text} `);
+    p.send(m);
+    expect(await p.result(m.operationId)).toMatchObject({ status: 'applied' });
+    expect(fake.sent[1]).toEqual(['text', 'ledge-a', text]);
+  });
+
+  it('a free answer needs a question named in its current version, and a low risk', async () => {
+    await srv.close();
+    await start([fx('claude2-question')]);
+    const p = phone(srv, deviceId);
+    waiting(low);
+    const toPermission = other('Vert pomme');
+    p.send(toPermission);
+    expect(await p.result(toPermission.operationId)).toMatchObject({ status: 'rejected', reason: 'unsupported' });
+    asTool('claude');
+    const changed = other('Vert pomme', { pendingVersion: 2 });
+    p.send(changed);
+    expect(await p.result(changed.operationId)).toMatchObject({ status: 'rejected', reason: 'changed' });
+    const unnamed = other('Vert pomme', { pendingId: undefined, pendingVersion: undefined });
+    p.send(unnamed);
+    expect(await p.wait(m => m.type === 'error')).toEqual({ type: 'error', id: 'a', message: 'invalid' });
+    store.upsert(mk('a', { tool: 'claude', state: 'waiting_input', pending: { ...question, risk: 'high' } }));
+    const high = other('Vert pomme');
+    p.send(high);
+    expect(await p.result(high.operationId)).toMatchObject({ status: 'rejected', reason: 'forbidden' });
+    expect(fake.sent).toEqual([]);
+  });
+
+  it('a dialog on screen without a free field types nothing: unsupported', async () => {
+    await srv.close();
+    await start([fx('claude2-question-multi-review')]);
+    asTool('claude');
+    const p = phone(srv, deviceId);
+    const m = other('Vert pomme');
+    p.send(m);
+    expect(await p.result(m.operationId)).toMatchObject({ status: 'rejected', reason: 'unsupported' });
+    expect(fake.sent).toEqual([]);
+  });
+
+  it('the same operationId as an option number and as a free answer is a conflict', async () => {
+    await srv.close();
+    await start([fx('claude2-question')]);
+    asTool('claude');
+    const p = phone(srv, deviceId);
+    const m = other('9', { other: undefined });
+    p.send(m);
+    expect(await p.result(m.operationId)).toMatchObject({ status: 'rejected', reason: 'unsupported' });
+    p.sent.length = 0;
+    p.send({ ...m, other: true });
+    expect(await p.result(m.operationId)).toMatchObject({ status: 'rejected', reason: 'conflict' });
+    p.sent.length = 0;
+    p.send({ ...m, other: false });
+    expect(await p.result(m.operationId)).toMatchObject({ status: 'rejected', reason: 'unsupported' });
+    expect(fake.sent).toEqual([]);
+  });
+
+  it('a free answer "2" is written to the thread as typed, never as option 2', async () => {
+    asTool('claude');
+    const notes: unknown[] = [];
+    const deps: DecisionDeps = {
+      store, ops: new OperationRegistry(), challenges: new ChallengeStore(), devices, config: () => cfg,
+      inject: async (_id, planFor) => { planFor(fx('claude2-question')); return true; },
+      interrupt: async () => {},
+      thread: { record: (_id, note) => { notes.push(note); }, expectPrompt() {}, dropPrompt() {} }
+    };
+    const peer: Peer = { ctx: { kind: 'remote', deviceId }, send() {}, close() {} };
+    await runAnswer(peer, other('2') as never, deps);
+    expect(notes).toEqual([{ note: 'answer', text: '2', source: 'phone', pendingId: 'pA' }]);
+  });
+
+  it('the overlay rule is unchanged: a local free-text reply to a question is still refused', async () => {
+    await srv.close();
+    await start([fx('claude2-question')]);
+    asTool('codex');
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: 'Vert pomme', pendingId: 'pA', pendingVersion: 1 });
+    expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: FREE_TEXT });
+    c.send({ type: 'session.reply', id: 'a', text: 'Vert pomme' });
+    expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: FREE_TEXT });
+    expect(fake.sent).toEqual([]);
+    await c.close();
   });
 });
 

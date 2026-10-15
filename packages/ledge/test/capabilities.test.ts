@@ -25,7 +25,7 @@ let srv: Awaited<ReturnType<typeof startServer>> | undefined;
 afterEach(async () => { await srv?.close(); srv = undefined; });
 
 describe('adapter capabilities', () => {
-  it('every adapter declares a valid capability set, and none answers in free text by default', () => {
+  it('every adapter declares a valid capability set; Codex and Cursor Agent give no free answer', () => {
     expect(NO_CAPABILITIES).toEqual({ freeTextAnswer: false });
     for (const tool of ToolSchema.options) expect(CapabilitiesSchema.parse(adapterFor(tool).capabilities)).toEqual(adapterFor(tool).capabilities);
     expect(adapterFor('codex').capabilities.freeTextAnswer).toBe(false);

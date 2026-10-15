@@ -21,6 +21,12 @@ export interface Adapter {
   replyPlan(text: string, pending?: Pending, pane?: string): KeyPlan;
   /** A question can be answered in free text (`replyPlan` with any text); without it, only an option number. */
   freeText?: boolean;
+  /**
+   * A phone's free answer to the question on screen (its "Other" entry): picks the entry, waits until the free field
+   * has the cursor, types `text` (one line, already checked by the daemon), then Enter. Throws when the dialog on screen
+   * has no free field. Present exactly when `capabilities.freeTextAnswer` is true.
+   */
+  otherPlan?(text: string, pending: Pending, pane: string): KeyPlan;
   interruptKeys(): string[];
   /**
    * The pane lines worth showing in the terminal preview, with the tool's own chrome (input box, status
