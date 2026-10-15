@@ -58,6 +58,8 @@ export function Inbox({ onReconnect }: { onReconnect: () => void }) {
           <div className="flex flex-col items-center gap-3 px-3 py-12 text-center">
             <h2 className="text-[21px] leading-[1.3] tracking-[-.5px]">{all.length ? copy.inbox.emptyFilter : copy.inbox.upToDate}</h2>
             <p className="max-w-[260px] text-[13px] text-muted">{all.length ? copy.inbox.emptyFilterHint : copy.inbox.upToDateHint}</p>
+            {!all.length && <a href={href({ name: 'agents' })} className="mt-1 inline-flex min-h-11 items-center gap-1 rounded-control border border-line px-4 text-[13px]">{copy.inbox.seeAgents}
+              <svg className="size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg></a>}
           </div>
         )}
         {offline && <p className="mt-4 text-xs text-muted">{copy.inbox.offlineNote}</p>}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { navigate, useRoute } from './router';
+import { Agents } from './screens/Agents';
 import { Connection } from './screens/Connection';
 import { Inbox } from './screens/Inbox';
 import { Pairing } from './screens/Pairing';
@@ -24,6 +25,9 @@ export function App({ onPaired, onReconnect = () => {} }: { onPaired?: () => voi
         ? <Connection onRepair={() => { setRepairing(true); navigate({ name: 'pair' }); }} />
         : route.name === 'request'
         ? <RequestDetail key={`${route.sessionId}/${route.pendingId}`} sessionId={route.sessionId} pendingId={route.pendingId} onReconnect={onReconnect} />
+        : route.name === 'agents' || route.name === 'thread' || route.name === 'terminal'
+        // The thread and the terminal screens arrive with the next tasks of lot 3; until then their links land on the list.
+        ? <Agents onReconnect={onReconnect} />
         : <Inbox onReconnect={onReconnect} />}
     </div>
   );

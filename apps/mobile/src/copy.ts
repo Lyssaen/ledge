@@ -11,11 +11,22 @@ export const copy = {
     lastKnown: 'Dernier état connu',
     upToDate: 'Vous êtes à jour',
     upToDateHint: 'Aucune demande n’attend de décision.',
+    seeAgents: 'Voir les agents',
     emptyFilter: 'Aucune demande dans ce filtre',
     emptyFilterHint: 'Les autres demandes restent dans « Tout ».',
     offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
-  nav: { label: 'Navigation principale', inbox: 'À traiter' },
+  nav: { label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents' },
+  agents: {
+    title: 'Agents',
+    subtitle: (sessions: number, projects: number) => `${sessions} ${sessions > 1 ? 'sessions' : 'session'} · ${projects} ${projects > 1 ? 'projets' : 'projet'} sur ce PC`,
+    offline: 'Dernier état connu · connexion perdue',
+    unread: '● Non lu',
+    working: 'Travaille sur les dernières modifications.',
+    state: { working: 'Au travail', idle: 'Disponible', exited: 'Terminée', error: 'Erreur' },
+    empty: 'Aucune session sur ce PC', emptyHint: 'Les agents lancés depuis Ledge apparaissent ici.',
+    open: (name: string, task: string) => `${name} · ${task}`
+  },
   link: {
     online: 'connecté', offline: 'déconnecté', settings: 'Connexion du téléphone',
     lostTitle: 'Connexion au PC perdue',
