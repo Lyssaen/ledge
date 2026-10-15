@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { DaemonStatus, MachineState } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
+import type { SessionChange } from '@ledge/fleet';
 import type { Cue } from '@ledge/ui/sounds/cues';
 import { decideSound } from '@ledge/ui/sounds/decide';
 import type { SoundPlayer } from '@ledge/ui/sounds/player';
@@ -13,6 +14,9 @@ import { useDnd, useSoundPrefs } from './prefs';
 
 export interface AlertDeps { player?: SoundPlayer; toast?: (title: string, body: string) => void; terminalInFront?: () => Promise<boolean>; focused?: () => boolean; now?: () => number }
 export interface Alerts { user(cue: 'accept' | 'deny'): void; test(): 'played' | 'dnd' }
+
+/** The fleet emits one update per session: toast-worthy changes are gathered this long, then shown as one toast. */
+export const TOAST_WINDOW_MS = 1000;
 
 const nativeToast = (title: string, body: string) => { void showToast(title, body); };
 const windowFocused = () => document.hasFocus();
@@ -32,6 +36,11 @@ export function useAlerts(input: { sessions: readonly Session[]; machines: reado
   const lastPlayedAt = useRef<number | null>(null);
   const connectedAt = useRef<number | null>(null);
   const prevStatus = useRef(input.status);
+  const sessionsNow = useRef(input.sessions);
+  sessionsNow.current = input.sessions;
+  const queued = useRef<SessionChange[]>([]);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); timer.current = null; queued.current = []; }, []);
 
   const api = useMemo(() => {
     const play = (cue: Cue) => {
@@ -69,8 +78,15 @@ export function useAlerts(input: { sessions: readonly Session[]; machines: reado
     const cue = strongestCue(changes);
     if (cue) api.play(cue);
     if (l.dnd || (l.deps.focused ?? windowFocused)()) return;
-    const toast = toastFor(changes, input.sessions, l.finished, l.copy);
-    if (toast) (l.deps.toast ?? nativeToast)(toast.title, toast.body);
+    queued.current.push(...changes);
+    timer.current ??= setTimeout(() => {
+      const gathered = queued.current;
+      queued.current = []; timer.current = null;
+      const c = live.current;
+      if (c.dnd || (c.deps.focused ?? windowFocused)()) return;   // re-checked: the state may have changed during the window
+      const toast = toastFor(gathered, sessionsNow.current, c.finished, c.copy);
+      if (toast) (c.deps.toast ?? nativeToast)(toast.title, toast.body);
+    }, TOAST_WINDOW_MS);
   }, [input.sessions, settled, api]);
 
   // The local daemon lost: once per outage, on open -> unreachable only; retries and the reconnection are silent (island rule).
