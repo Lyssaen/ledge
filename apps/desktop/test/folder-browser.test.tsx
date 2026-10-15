@@ -124,6 +124,10 @@ describe('FolderBrowser', () => {
     reply(listing('/w/api', []));
     expect(screen.queryByRole('textbox', { name: 'New folder name' })).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
+    // The name field is gone: the focus lands on the new folder, the breadcrumb's last step, not on the page.
+    const here = document.querySelector('[aria-current="location"]');
+    expect(here).toHaveTextContent('api');
+    expect(here).toHaveFocus();
   });
   it('cannot choose a folder while a request is pending', async () => {
     const { reply } = setup();

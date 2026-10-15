@@ -26,6 +26,8 @@ export function FolderBrowser(p: FolderBrowserProps) {
   useEffect(() => { props.current = p; });
   const rootRef = useRef<HTMLElement>(null);
   const newRef = useRef<HTMLInputElement>(null);
+  /** A created folder is shown: its name field is gone, so the focus goes to it (the breadcrumb's last step). */
+  const focusHere = useRef(false);
 
   const apply = useCallback((next: Browser) => { current.current = next; setState(next); }, []);
   const send = useCallback((msg: FolderRequest, next: Browser) => {
@@ -56,8 +58,13 @@ export function FolderBrowser(p: FolderBrowserProps) {
     const { browser, next } = answer(current.current, m);
     if (browser === current.current) return;
     if (next) send(next, browser); else apply(browser);
-    if (created) setNewName(null);
+    if (created) { setNewName(null); focusHere.current = true; }
   }), [p.fleet, apply, send]);
+  useEffect(() => {
+    if (!focusHere.current) return;
+    focusHere.current = false;
+    rootRef.current?.querySelector<HTMLElement>('[aria-current="location"]')?.focus({ preventScroll: true });
+  }, [state]);
   // The answer comes back on the connection that asked: once it is gone, stop waiting.
   useEffect(() => { if (!p.ready && current.current.pending) apply(unsent(current.current)); }, [p.ready, apply]);
   useEffect(() => { if (newName !== null) newRef.current?.focus(); }, [newName !== null]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -82,7 +89,7 @@ export function FolderBrowser(p: FolderBrowserProps) {
           <span key={c.path}>
             {i > 1 && <span aria-hidden="true">/</span>}
             {i === all.length - 1
-              ? <span aria-current="location">{c.name}</span>
+              ? <span aria-current="location" tabIndex={-1}>{c.name}</span>
               : <button type="button" onClick={() => list(c.path)}>{c.name}</button>}
           </span>
         ))}
