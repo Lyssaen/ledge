@@ -58,14 +58,25 @@ describe('FolderBrowser', () => {
     await userEvent.click(screen.getByRole('button', { name: '/' }));
     expect(f.sent.at(-1)!.msg).toEqual({ type: 'folder.list', path: '/' });
   });
-  it('sends a navigation path unchanged, spaces included, and accepts its listing', async () => {
+  // The real daemon (`listFolder`, packages/ledge/test/folders.test.ts) never trims a listed path: it echoes the asked
+  // path exactly, in a listing or in a refusal, and a trimmed sibling's listing is someone else's answer.
+  it('sends a navigation path unchanged, spaces included, and lands the daemon\'s exact echo', async () => {
     const { f, reply } = setup();
-    reply(listing('/w', [' x ']));
-    await userEvent.click(screen.getByRole('button', { name: 'Open x' }));
+    // Accessible names collapse spaces, so both rows read « Open x »; the first is ' x '.
+    const padded = () => screen.getAllByRole('button', { name: 'Open x' })[0]!;
+    reply(listing('/w', [' x ', 'x']));
+    await userEvent.click(padded());
     expect(f.sent.at(-1)!.msg).toEqual({ type: 'folder.list', path: '/w/ x ' });
+    reply(listing('/w/x', ['sibling']));
+    expect(screen.queryByRole('button', { name: 'Open sibling' })).toBeNull();
     reply(listing('/w/ x ', ['y']));
-    expect(screen.queryByText('Loading…')).toBeNull();
     expect(screen.getByRole('button', { name: 'Open y' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Parent folder' }));
+    reply(listing('/w', [' x ', 'x']));
+    await userEvent.click(padded());
+    reply(listing('/w/ x ', [], { parent: null, error: 'no such folder: /w/ x ' }));
+    expect(screen.getByRole('status')).toHaveTextContent('Could not: no such folder: /w/ x');
+    expect(screen.getByRole('button', { name: 'Choose this folder' })).toBeEnabled();
   });
   it('opens on home when the field holds no accepted path', () => {
     const { f } = setup('w/relative');
