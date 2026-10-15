@@ -130,6 +130,26 @@ describe('useChat: card actions', () => {
     act(() => { s.api().ask('Try /w/other'); });
     expect(s.api().note).toBeNull();
   });
+  it('the note goes once its card changes: no refusal left under a launched session', () => {
+    const s = setup();
+    act(() => { history([answered('a', { proposal })]); });
+    act(() => { s.api().launch('a'); });
+    act(() => { s.machineMessage('local', { type: 'error', message: 'already launched' }); });   // a racing click from another window
+    expect(s.api().note).toEqual({ qid: 'a', message: 'already launched' });
+    act(() => { history([answered('a', { proposal }), answered('b')]); });                     // another turn: the card is the same
+    expect(s.api().note).toEqual({ qid: 'a', message: 'already launched' });
+    act(() => { history([answered('a', { proposal: { ...proposal, launchedId: 'local:ari' } }), answered('b')]); });
+    expect(s.api().note).toBeNull();
+  });
+  it('the note goes with its turn (history reset)', () => {
+    const s = setup();
+    act(() => { history([answered('a', { proposal })]); });
+    act(() => { s.api().launch('a'); });
+    act(() => { s.machineMessage('local', { type: 'error', message: 'unknown proposal' }); });
+    expect(s.api().note).not.toBeNull();
+    act(() => { history([]); });
+    expect(s.api().note).toBeNull();
+  });
   it('losing its machine or the local daemon frees the card and makes the turn unavailable (Review Focus 3)', () => {
     const s = setup();
     act(() => { history([answered('a', { proposal, machineId: 'devbox', machineName: 'Devbox' })]); });
