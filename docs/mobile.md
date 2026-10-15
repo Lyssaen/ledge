@@ -1,6 +1,6 @@
 # Ledge on the phone
 
-An installable web app (PWA) that shows your agent sessions on your iPhone, from anywhere your tailnet reaches, lets you answer a pending permission, plan or question, read each agent's thread, send an instruction to an idle agent, watch its terminal and interrupt it while it works. It cannot launch, kill or rename anything; notifications and free-text answers to a question come in later lots.
+An installable web app (PWA) that shows your agent sessions on your iPhone, from anywhere your tailnet reaches, lets you answer a pending permission, plan or question, read each agent's thread, send an instruction to an idle agent, watch its terminal and interrupt it while it works. It cannot launch, kill or rename anything. It can notify you when an agent needs you (see [Notifications](#notifications)); free-text answers to a question come in a later lot.
 
 The whole path (Tailscale on Windows, the daemon in WSL2, the PWA on the phone) has been built and tested in WSL and in a browser. It has **not been validated on a real iPhone yet**: see [the feasibility report](spikes/2026-10-14-ledge-mobile-feasibility.md).
 
@@ -120,16 +120,62 @@ Some of the phone's wording was written during implementation (for instance "J'a
 7. R8: lock the phone for 10 minutes during an active session, then reopen the app: it reconnects by itself, refreshes, and checks any open operation.
 8. Check `~/.ledge/daemon.log` for the operations and that no assertion or token appears in it.
 
+## Notifications
+
+The PC can wake the phone when an agent asks for a permission or a plan, asks a question, or finishes a turn, even with the app closed. It uses Web Push, which on iPhone works only from the installed home-screen app (iOS 16.4 or later).
+
+### Turn them on
+
+- At the end of pairing, step 4 offers "Activer les notifications"; "Plus tard" skips it.
+- Later, open the Connexion panel (the settings icon in the app header). The Notifications row reads "Activées" or "Désactivées"; when off, the button below it asks again. Press it yourself: iOS only shows the permission prompt from a tap.
+- The button stays disabled ("Connexion au PC...") until the PC has answered, and says so if the PC has no push. If the PC did not receive the subscription, or refused it (the daemon answers with an error within 1.5 s), the panel says so and you can retry. A refusal of the permission is final until you change it in iOS settings.
+- The first phone to pair makes the PC's push key (`~/.ledge/vapid.json`, 0600). If that file is lost or replaced, the phone's subscription no longer matches: on the next connection the Connexion panel shows "Désactivées" with a message asking you to enable again, and the phone does not send the old subscription.
+
+### Turn them off
+
+There is no off switch in the app. Either disable Ledge in iOS Settings, Notifications (the PC then gets a "gone" answer from the push service and forgets the subscription), or press "Remove" for that phone in Settings, Mobile on the PC, which forgets the phone and its subscription. `ledge mobile disable` stops the remote listener, so no new subscription can arrive, but does not delete existing ones.
+
+### What a notification says, and the lock screen
+
+| Event | Title | Body |
+| --- | --- | --- |
+| Permission or plan request | Votre accord est demandé | task title, bot name and, when the agent gave a specific one, its motive |
+| Question | `<bot>` a une question | task title |
+| Turn finished | `<bot>` a terminé | task title |
+
+Never the command, the question or the reply. The motive is the agent's own wording and may paraphrase the command, so treat it as a hint, not as what will run. A notification has no Allow or Deny button: a tap opens that request in the app (or "Déjà traitée sur le PC" if it was handled meanwhile), and accepting there follows the usual risk policy, Face ID included.
+
+Notifications appear on the lock screen according to iOS settings (Settings, Notifications, Ledge, Show Previews). If task titles are private for you, set previews to "When Unlocked" or "Never": iOS then hides the text, and the app badge (the number of requests waiting) stays. Each request replaces its previous notification instead of stacking, and at most one "finished" notification per session is sent every 60 s.
+
+Delivery is the push service's job (Apple), not Ledge's: it is best effort, can be late, and Ledge does not retry. The PC contacts the push service from WSL, using the proxy of your login shell when there is one; a failure is written in `~/.ledge/daemon.log` and the app stays usable.
+
+### Testing notifications on the iPhone (R6 and R9, pending on device)
+
+R6, with the phone locked and the app closed (swiped away):
+
+1. Start a Ledge Claude session in a throwaway directory and ask it for ten successive commands that need approval (for example ten different `touch` files), one request at a time, noting each time the request appears on the PC.
+2. For each one, note when the notification shows on the phone. Compute the median and the maximum delay and write them in the feasibility report as measurements, not as a promise.
+3. Check the lock screen: title and task only, never the command. Tap one: the app opens on that request. Handle another on the PC first, then tap its notification: "Déjà traitée sur le PC".
+4. Check the app icon badge equals the number of requests still waiting, and clears at zero.
+
+R9, from the PC:
+
+1. With the daemon under systemd and no proxy, trigger a request: the notification arrives.
+2. Set a proxy in your login shell (`HTTPS_PROXY`), restart the daemon, trigger another: it arrives through the proxy.
+3. Make the push service unreachable (a wrong proxy, or block the host): the request is not delivered, `~/.ledge/daemon.log` has a `push to ... failed` line, and the app and the overlay show no error.
+
 ## Files
 
 | File | Content |
 | --- | --- |
 | `~/.ledge/mobile.json` | The origin and its host (the WebAuthn relying party). Absent means the phone access is off. 0600. |
-| `~/.ledge/devices.json` | The paired phones: id, name, dates, WebAuthn public key and counter, and the SHA-256 of the device token (never the token). 0600. |
+| `~/.ledge/devices.json` | The paired phones: id, name, dates, WebAuthn public key and counter, and the SHA-256 of the device token (never the token), and the push subscription when notifications are on. 0600. |
+| `~/.ledge/vapid.json` | The push key pair (VAPID) and the origin it speaks for. Made when the first phone pairs, never regenerated. 0600. |
 
 ## Troubleshooting
 
 - "Daemon not running" from `ledge mobile`: start a session or `ledge daemon`.
 - The page loads but the app stays "offline": the origin in `mobile.json` differs from the URL in the browser (the socket's `Origin` must match exactly); see `~/.ledge/daemon.log` for refused upgrades.
 - The page does not load: `tailscale serve status` on Windows, then check that the PC is awake and Tailscale is connected on both ends.
+- No notification arrives: check the Connexion panel (Notifications must read "Activées"), iOS settings for Ledge, that the app was opened from the home-screen icon, and `~/.ledge/daemon.log` for `push` lines.
 - Refused origins, failed pairings and bad tokens are all logged in `~/.ledge/daemon.log`.

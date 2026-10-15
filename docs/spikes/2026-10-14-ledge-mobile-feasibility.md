@@ -32,7 +32,7 @@ Throwaway prototype in a temporary folder, not committed; only this report is.
 
 ## Validation
 
-To be filled in by the user, on device. R1 to R3 belong to lot 1; R4, R5 and R8 belong to lot 2 and R7 to lot 3, both implemented and covered by tests in WSL and a browser: R4, R5 and R8 have their procedures in [docs/mobile.md](../mobile.md), and all stay unchecked until run on the iPhone. The others are for the later lots.
+To be filled in by the user, on device. R1 to R3 belong to lot 1; R4, R5 and R8 belong to lot 2 and R7 to lot 3, both implemented and covered by tests in WSL and a browser: R4, R5 and R8 have their procedures in [docs/mobile.md](../mobile.md), and all stay unchecked until run on the iPhone. Lot 4 is implemented and covered by tests in WSL and a browser: the procedures for R6 and R9 are in [Notifications](../mobile.md#testing-notifications-on-the-iphone-r6-and-r9-pending-on-device) and both stay unchecked until run on the iPhone. R6 delays are to be recorded below as measured (median and maximum): Apple's push service gives no guarantee. The others are for the later lots.
 
 | # | Lot | Condition | Expected | Result |
 | --- | --- | --- | --- | --- |
