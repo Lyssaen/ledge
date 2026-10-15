@@ -1017,6 +1017,19 @@ describe('device commands', () => {
     expect(await c.next('error')).toMatchObject({ message: 'unknown device' });
     await c.close();
   });
+  it('device.revoke closes the sockets and tells local peers even when devices.json cannot be saved', async () => {
+    const { devices } = await withMobile();
+    const { device } = await devices.create('iPhone', cred);
+    const mine = fakeRemote();
+    srv.attach(mine, { kind: 'remote', deviceId: device.id });
+    vi.spyOn(devices as never as { write(): Promise<void> }, 'write').mockRejectedValueOnce(new Error('disk full'));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'device.revoke', id: device.id });
+    expect((await c.next('devices')).devices).toEqual([]);
+    expect(mine.closed).toEqual([4403]);
+    expect(await c.next('error')).toMatchObject({ id: device.id, message: 'disk full' });
+    await c.close();
+  });
   it('mobile.configure hands the origin to the control and broadcasts the new state', async () => {
     const { configured } = await withMobile();
     const c = await connect({ port: srv.port }); await c.next('snapshot');

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,6 +39,14 @@ describe('DeviceStore', () => {
     expect(store.byToken(token)).toBeUndefined();
     expect(store.list()).toEqual([]);
     expect(await store.revoke(device.id)).toBe(false);
+    expect(changes).toBe(1);
+  });
+  it('a revoke whose save fails still forgets the device and announces it, then rejects', async () => {
+    const { token, device } = await store.create('iPhone', cred);
+    let changes = 0; store.onChange(() => { changes++; });
+    vi.spyOn(store as never as { write(): Promise<void> }, 'write').mockRejectedValueOnce(new Error('disk full'));
+    await expect(store.revoke(device.id)).rejects.toThrow('disk full');
+    expect(store.byToken(token)).toBeUndefined();
     expect(changes).toBe(1);
   });
   it('touch and setCounter persist', async () => {

@@ -473,9 +473,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return peer.send(opts.mobile ? devicesMessage(opts.mobile) : { type: 'error', message: NO_MOBILE });
       case 'device.revoke': {
         if (!opts.mobile) return peer.send({ type: 'error', message: NO_MOBILE });
-        if (!(await opts.mobile.devices.revoke(msg.id))) return peer.send({ type: 'error', id: msg.id, message: 'unknown device' });
+        if (!opts.mobile.devices.get(msg.id)) return peer.send({ type: 'error', id: msg.id, message: 'unknown device' });
+        // The device leaves memory synchronously: its sockets close before the save is awaited, so a failed save never leaves them open.
+        const removal = opts.mobile.devices.revoke(msg.id);
         const closed = peers.closeDevice(msg.id, REMOTE_CLOSE.revoked);
         log(`revoked device ${msg.id} (${closed} open connection${closed === 1 ? '' : 's'} closed)`);
+        await removal;
         return;
       }
       // The code goes to the PC that asked, never to a broadcast (and `toRemote` drops it anyway).

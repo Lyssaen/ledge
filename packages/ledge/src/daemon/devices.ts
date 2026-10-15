@@ -104,12 +104,14 @@ export class DeviceStore {
     await this.save();
   }
 
+  /** Forgets the device at once (its token stops opening a session) and announces it even when the file cannot be written; the save failure is then logged and rethrown. */
   async revoke(id: string): Promise<boolean> {
     const i = this.records.findIndex(r => r.id === id);
     if (i < 0) return false;
     this.records.splice(i, 1);
-    await this.save();
-    this.emit();
+    try { await this.save(); }
+    catch (e) { log(`devices file not saved after revoking ${id}: ${(e as Error).message}`); throw e; }
+    finally { this.emit(); }
     return true;
   }
 
