@@ -4,8 +4,8 @@ import type { ViewAction, ViewState } from '../state/view';
 
 const GLYPHS = { team: '▦', room: '◯' } as const;
 
-/** The mockup's view heading (app.js:102): the view's own title and subtitle, the toggle, the filter, Talk to Ledge and New session (disabled while read-only or while a chat card waits). */
-export function Heading({ state, dispatch, attentionCount, chat, onNewSession }: { state: ViewState; dispatch: (a: ViewAction) => void; attentionCount: number; chat?: { open: boolean; onOpen: () => void }; onNewSession?: () => void }) {
+/** The mockup's view heading (app.js:102): the view's own title and subtitle, the toggle, the filter, Talk to Ledge, New session (disabled while read-only or while a chat card waits) and ⚙ (with a pip when an app update is ready). */
+export function Heading({ state, dispatch, attentionCount, chat, onNewSession, onSettings, updateReady = false }: { state: ViewState; dispatch: (a: ViewAction) => void; attentionCount: number; chat?: { open: boolean; onOpen: () => void }; onNewSession?: () => void; onSettings?: () => void; updateReady?: boolean }) {
   const { t } = useI18n();
   const heading = t.heading[state.view];
   return (
@@ -24,6 +24,14 @@ export function Heading({ state, dispatch, attentionCount, chat, onNewSession }:
       </button>
       {chat && <ChatTrigger open={chat.open} onOpen={chat.onOpen} place="heading" />}
       <button type="button" className="primary" data-open-launch="heading" disabled={!onNewSession} onClick={onNewSession}><span className="plus" aria-hidden="true">+</span>{t.newSession}</button>
+      {onSettings && (() => {
+        const label = updateReady ? t.settingsShortcut.update : t.settingsShortcut.label;
+        return (
+          <button type="button" className="settings-shortcut" data-open-settings aria-label={label} title={label} onClick={onSettings}>
+            <span aria-hidden="true">⚙</span>{updateReady && <span className="update-pip" aria-hidden="true" />}
+          </button>
+        );
+      })()}
     </header>
   );
 }

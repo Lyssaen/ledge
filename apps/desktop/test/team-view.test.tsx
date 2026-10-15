@@ -3,6 +3,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TeamView } from '../src/team/TeamView';
 import { Heading } from '../src/shell/Heading';
+import { OfflineNotice } from '../src/shell/OfflineNotice';
+import { machine } from './launch-helpers';
 import { DEFAULT_VIEW } from '../src/state/view';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 
@@ -61,6 +63,29 @@ describe('TeamView', () => {
 });
 
 describe('Heading', () => {
+  it('⚙ sits after New session, with a pip when an update is ready', async () => {
+    const onSettings = vi.fn();
+    const { rerender } = render(<Heading state={{ ...DEFAULT_VIEW, view: 'team' }} dispatch={vi.fn()} attentionCount={0} onSettings={onSettings} />);
+    const gear = screen.getByRole('button', { name: 'Settings' });
+    expect(gear).toHaveAttribute('data-open-settings');
+    expect(gear).toHaveAttribute('title', 'Settings');
+    expect(gear.previousElementSibling).toHaveTextContent('New session');
+    expect(gear.querySelector('.update-pip')).toBeNull();
+    await userEvent.click(gear);
+    expect(onSettings).toHaveBeenCalledOnce();
+    rerender(<Heading state={{ ...DEFAULT_VIEW, view: 'team' }} dispatch={vi.fn()} attentionCount={0} onSettings={onSettings} updateReady />);
+    expect(screen.getByRole('button', { name: 'Settings · update available' }).querySelector('.update-pip')).not.toBeNull();
+  });
+
+  it('a disconnected machine offers its settings next to Retry', async () => {
+    const onSettings = vi.fn();
+    render(<OfflineNotice machines={[machine('local'), machine('devbox', { status: 'unreachable', ready: false })]} onRetry={vi.fn()} onSettings={onSettings} />);
+    const button = screen.getByRole('button', { name: 'Machine settings' });
+    expect(button).toHaveAttribute('data-open-machines');
+    await userEvent.click(button);
+    expect(onSettings).toHaveBeenCalledOnce();
+  });
+
   it('Talk to Ledge sits before New session and says when the chat is open', async () => {
     const onOpen = vi.fn();
     const { rerender } = render(<Heading state={{ ...DEFAULT_VIEW, view: 'team' }} dispatch={vi.fn()} attentionCount={0} chat={{ open: false, onOpen }} />);

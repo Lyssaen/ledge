@@ -103,9 +103,12 @@ const fr = {
     badge: 'Déconnectée',
     machine: 'Machine déconnectée',
     text: 'Les sessions distantes affichent leur dernier état connu. Les échanges reprendront après la reconnexion ; les sessions locales restent disponibles.',
-    retry: 'Réessayer'
+    retry: 'Réessayer',
+    settings: 'Paramètres des machines'
   },
   localDown: { title: 'Daemon local injoignable', text: 'Ledge ne peut pas joindre le daemon de cette machine. Tout est en lecture seule jusqu’à son retour.' },
+  tray: { open: 'Ouvrir Ledge Desktop', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', dndOff: 'Réactiver les alertes', quit: 'Quitter Ledge Desktop' },
+  settingsShortcut: { label: 'Paramètres', update: 'Paramètres · mise à jour disponible' },
   notify: {
     approval: (name: string) => `${name} attend votre accord`,
     question: (name: string) => `${name} a une question`,
@@ -500,9 +503,12 @@ const en: typeof fr = {
     badge: 'Disconnected',
     machine: 'Machine disconnected',
     text: 'Remote sessions show their last known state. Conversations resume once it reconnects; local sessions stay available.',
-    retry: 'Retry'
+    retry: 'Retry',
+    settings: 'Machine settings'
   },
   localDown: { title: 'Local daemon unreachable', text: 'Ledge cannot reach the daemon on this machine. Everything is read-only until it is back.' },
+  tray: { open: 'Open Ledge Desktop', newSession: 'New session', dnd: 'Do not disturb', dndOff: 'Resume alerts', quit: 'Quit Ledge Desktop' },
+  settingsShortcut: { label: 'Settings', update: 'Settings · update available' },
   notify: {
     approval: (name) => `${name} needs your approval`,
     question: (name) => `${name} has a question`,

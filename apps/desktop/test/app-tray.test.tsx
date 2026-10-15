@@ -13,13 +13,14 @@ vi.mock('../src/tauri/bridge', async importOriginal => ({
 }));
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
+import { resetDndForTests } from '../src/notify/prefs';
 import { recent } from './launch-helpers';
 
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
 afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); });
 async function boot() {
-  localStorage.clear();
+  localStorage.clear(); resetDndForTests();
   const d = await createMockDaemon(); daemons.push(d);
   d.recents([recent('/w/ledge', '2026-10-15T09:00:00.000Z')]);
   d.machines([{ id: 'local', label: 'Local' }]);
@@ -30,11 +31,12 @@ async function boot() {
 const form = () => screen.queryByRole('form', { name: 'New session settings' });
 
 describe('tray « Nouvelle session »', () => {
-  it('opens the launch screen; « open » and « dnd » change nothing', async () => {
+  it('opens the launch screen; « open » changes nothing, « dnd » only switches do not disturb', async () => {
     await boot();
     act(() => tray.fire!('open'));
     act(() => tray.fire!('dnd'));
     expect(form()).toBeNull();
+    expect(localStorage.getItem('desktop.dnd')).toBe('1');
     act(() => tray.fire!('new'));
     expect(form()).not.toBeNull();
     expect(screen.getByLabelText('Machine')).toHaveFocus();

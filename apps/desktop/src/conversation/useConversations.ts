@@ -10,7 +10,8 @@ import { pruneGone } from '../state/prune';
 export type SessionCommand = 'interrupt' | 'kill' | 'dismiss';
 export interface Conversations {
   sends: SendsState;
-  decide(s: Session, decision: 'accept' | 'deny'): void;
+  /** True when the decision was sent (not blocked, not already in flight). */
+  decide(s: Session, decision: 'accept' | 'deny'): boolean;
   answer(s: Session, option: number): void;
   reply(s: Session, text: string): boolean;
   command(s: Session, kind: SessionCommand): void;
@@ -60,7 +61,11 @@ export function useConversations(client: DaemonClient, sessions: readonly Sessio
   };
   return {
     sends,
-    decide(s, decision) { if (canDecide(s)) out(s, { type: 'session.decide', id: s.id, decision }, 'decision'); },
+    decide(s, decision) {
+      if (!canDecide(s)) return false;
+      out(s, { type: 'session.decide', id: s.id, decision }, 'decision');
+      return true;
+    },
     answer(s, option) {
       if (!canDecide(s) || s.pending?.kind !== 'question' || !Number.isInteger(option) || option < 0) return;
       out(s, { type: 'session.reply', id: s.id, text: String(option + 1) }, 'decision');
