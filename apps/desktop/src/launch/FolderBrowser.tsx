@@ -31,8 +31,8 @@ export function FolderBrowser(p: FolderBrowserProps) {
   const send = useCallback((msg: FolderRequest, next: Browser) => {
     apply(props.current.fleet.sendTo(props.current.machine, msg) ? next : unsent(next));
   }, [apply]);
-  const list = useCallback((path?: string) => {
-    const next = ask(current.current, 'list');
+  const list = useCallback((path?: string, exact = true) => {
+    const next = ask(current.current, 'list', exact && path ? path : null);
     if (!next) return;
     setNewName(null);
     send(path?.trim() ? { type: 'folder.list', path: path.trim() } : { type: 'folder.list' }, next);
@@ -47,7 +47,7 @@ export function FolderBrowser(p: FolderBrowserProps) {
   // One request on open (a second mount in StrictMode is refused by `ask`), focus inside so Escape stays here.
   useEffect(() => {
     rootRef.current?.querySelector<HTMLElement>('[data-initial-focus]')?.focus();
-    list(isPathAccepted(props.current.start) ? props.current.start : undefined);
+    list(isPathAccepted(props.current.start) ? props.current.start : undefined, false);
   }, [list]);
   useEffect(() => p.fleet.onMachineMessage((machine, m) => {
     if (machine !== props.current.machine || m.type !== 'folder.listing') return;
@@ -94,7 +94,7 @@ export function FolderBrowser(p: FolderBrowserProps) {
             <button type="button" className="settings-button" disabled={!newName.trim() || pending !== null} onClick={create}>{b.create}</button>
           </div>
         )}
-        {!shown && loading && <span className="folder-hint">{b.loading}</span>}
+        {!shown && loading && <span role="status" className="folder-hint">{b.loading}</span>}
         {shown?.parent && <button type="button" className="folder-row" aria-label={b.up} onClick={() => list(shown.parent!)}><span aria-hidden="true">..</span></button>}
         {shown?.entries.map(name => (
           <button key={name} type="button" className="folder-row" aria-label={b.open(name)} onClick={() => list(childOf(shown.path, name))}>
@@ -105,7 +105,7 @@ export function FolderBrowser(p: FolderBrowserProps) {
       </div>
       <div className="folder-actions">
         <button type="button" className="settings-button" disabled={!shown || newName !== null} onClick={() => setNewName('')}>{b.newFolder}</button>
-        <button type="button" className="primary" disabled={!shown || loading} onClick={() => shown && p.onChoose(shown.path)}>{b.choose}</button>
+        <button type="button" className="primary" disabled={!shown || pending !== null} onClick={() => shown && p.onChoose(shown.path)}>{b.choose}</button>
       </div>
       {offline
         ? <p role="status" className="folder-error">{b.offline(p.label)}</p>

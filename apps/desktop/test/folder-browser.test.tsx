@@ -27,6 +27,11 @@ describe('folders (pure)', () => {
     expect(ask(asked, 'list')).toBeNull();
     expect(answer(BROWSER_START, listing('/w', [])).browser).toBe(BROWSER_START);
   });
+  it('ignores a late listing for another path than the one asked', () => {
+    const asked = ask(BROWSER_START, 'list', '/w/api')!;
+    expect(answer(asked, listing('/w/old', ['x'])).browser).toBe(asked);
+    expect(answer(asked, listing('/w/api', [])).browser).toMatchObject({ pending: null, shown: { path: '/w/api' } });
+  });
   it('falls back to home when the first folder cannot be listed, keeping the reason', () => {
     const first = answer(ask(BROWSER_START, 'list')!, listing('/nope', [], { error: 'not found' }));
     expect(first.next).toEqual({ type: 'folder.list' });
@@ -99,6 +104,13 @@ describe('FolderBrowser', () => {
     reply(listing('/w/api', []));
     expect(screen.queryByRole('textbox', { name: 'New folder name' })).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
+  });
+  it('cannot choose a folder while a request is pending', async () => {
+    const { reply } = setup();
+    reply(listing('/w', []));
+    await userEvent.click(screen.getByRole('button', { name: 'New folder' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'New folder name' }), 'api{Enter}');
+    expect(screen.getByRole('button', { name: 'Choose this folder' })).toBeDisabled();
   });
   it('chooses the folder shown', async () => {
     const { onChoose, reply } = setup();
