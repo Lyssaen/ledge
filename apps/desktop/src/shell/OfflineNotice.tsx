@@ -12,7 +12,8 @@ export function OfflineNotice({ machines, onRetry }: { machines: MachineState[];
   ))}</>;
 }
 
-export function LocalDownNotice() {
+/** `role` is `status` inside the launch screen, where only validation and failure messages are alerts. */
+export function LocalDownNotice({ role = 'alert' }: { role?: 'alert' | 'status' } = {}) {
   const { t } = useI18n();
-  return <div role="alert" className="connection-notice local-down"><div><strong>{t.localDown.title}</strong><p>{t.localDown.text}</p></div></div>;
+  return <div role={role} className="connection-notice local-down"><div><strong>{t.localDown.title}</strong><p>{t.localDown.text}</p></div></div>;
 }

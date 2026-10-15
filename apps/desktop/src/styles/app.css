@@ -289,3 +289,45 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .folder-new { display: flex; gap: 8px; padding: 2px 8px; }
 .folder-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--sidebar-border); }
 .folder-error { margin: 0; padding: 0 12px 10px; color: var(--danger-text); }
+/* From the mockup's settings.css: the launch screen reuses the settings heading. */
+.settings-heading { border-bottom: 1px solid var(--sidebar-border); }
+.settings-heading > div:first-child { min-width: 0; }
+.settings-heading p { max-width: none; }
+/* From the mockup's journeys.css: the launch screens. The app fills the window: the body scrolls inside. */
+.launch-scroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--input) transparent; }
+.launch-form, .launch-progress { width: min(100%,650px); margin: 0 auto; padding: 28px 30px 35px; }
+.launch-form > .launch-field, .launch-fields .launch-field { display: flex; flex-direction: column; gap: 8px; font-size: 12px; margin-bottom: 22px; }
+.launch-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.launch-form input:not([type=radio]), .launch-form select, .launch-form textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--input); border-radius: 6px; background: var(--well); color: var(--sidebar-foreground); font: inherit; font-size: 12px; }
+.launch-form textarea { resize: vertical; min-height: 110px; line-height: 1.7; }
+.launch-form small, .launch-note { font-size: 10px; line-height: 1.7; color: var(--muted-foreground); }
+.launch-form :is(input,select,textarea):focus-visible { outline: 2px solid var(--sidebar-primary); outline-offset: 2px; }
+.launch-form [aria-invalid=true] { border-color: var(--danger-text); }
+.launch-folder-row { display: flex; gap: 8px; }
+.launch-folder-row input { flex: 1; min-width: 0; }
+.launch-agents { padding: 0; border: 0; margin: 0 0 23px; display: flex; flex-wrap: wrap; gap: 10px; }
+.launch-agents legend { font-size: 12px; margin-bottom: 10px; }
+.launch-agents label { flex: 1; min-width: 140px; position: relative; }
+.launch-agents input { position: absolute; opacity: 0; }
+.launch-agents label > span { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border: 1px solid var(--input); border-radius: 7px; font-size: 11px; cursor: pointer; }
+.launch-agents input:checked + span { border-color: var(--sidebar-primary); background: var(--sidebar-accent); }
+.launch-agents input:focus-visible + span { outline: 2px solid var(--sidebar-primary); outline-offset: 2px; }
+.launch-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 22px; }
+.launch-actions > small { margin-right: auto; }
+.launch-actions .primary { padding: 11px 16px; font-size: 12px; }
+.launch-progress h3 { font-size: 22px; font-weight: 550; margin: 14px 0 8px; }
+.launch-progress h3:focus { outline: none; }
+.launch-progress > p { font-size: 12px; line-height: 1.7; color: var(--muted-foreground); }
+.launch-summary { border-top: 1px solid var(--sidebar-border); border-bottom: 1px solid var(--sidebar-border); margin: 24px 0 14px; padding: 12px 0; }
+.launch-summary > div { display: grid; grid-template-columns: 80px minmax(0,1fr); gap: 12px; font-size: 11px; padding: 6px 0; }
+.launch-summary dt { color: var(--muted-foreground); }
+.launch-summary dd { margin: 0; overflow-wrap: anywhere; }
+.launch-prompt { margin: 0; border-left: 2px solid var(--input); padding-left: 14px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.launch-steps { list-style: none; padding: 0; margin: 26px 0; font-size: 12px; line-height: 2.8; color: var(--muted-foreground); }
+.launch-steps [aria-current] { color: var(--sidebar-foreground); }
+.launch-spinner { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; border: 1px solid var(--input); border-top-color: var(--sidebar-primary); animation: launch-spin 1s linear infinite; }
+@keyframes launch-spin { to { transform: rotate(360deg); } }
+.launch-error, .launch-failed h3 { color: var(--danger-text); }
+.launch-error { font-size: 12px; }
+@media (max-width: 570px) { .launch-form, .launch-progress { padding: 22px 18px; } .launch-fields { grid-template-columns: 1fr; gap: 0; } }
+@media (prefers-reduced-motion: reduce) { .launch-spinner { animation: none; } }
