@@ -4,6 +4,8 @@ import type { MobileState } from './store';
 export const TOKEN_KEY = 'ledge.mobile.token';
 export const DEVICE_KEY = 'ledge.mobile.device';
 export const LAST_STATE_KEY = 'ledge.mobile.lastState';
+/** Thread turns live under their own key: they are the heavy part, and a full storage must never cost the session list. */
+export const TURNS_KEY = 'ledge.mobile.turns';
 
 export type LastState = Pick<MobileState, 'sessions' | 'previews' | 'syncedAt' | 'pcName'> & { turns?: Record<string, Turn[]> };
 
@@ -19,16 +21,29 @@ export function loadLastState(storage?: Storage): LastState | null {
     if (!raw) return null;
     const v = JSON.parse(raw) as Partial<LastState>;
     if (!v || !Array.isArray(v.sessions)) return null;
-    return { sessions: v.sessions, previews: v.previews ?? {}, syncedAt: v.syncedAt ?? null, pcName: v.pcName ?? null, turns: v.turns && typeof v.turns === 'object' ? v.turns : {} };
+    return { sessions: v.sessions, previews: v.previews ?? {}, syncedAt: v.syncedAt ?? null, pcName: v.pcName ?? null, turns: loadTurns(storage) };
   } catch { return null; }
 }
 
+/** The sessions and previews; the turns are saved apart (`saveTurns`) so one failing never takes the other down. */
 export function saveLastState(s: LastState, storage?: Storage): void {
-  try { store(storage)?.setItem(LAST_STATE_KEY, JSON.stringify({ sessions: s.sessions, previews: s.previews, syncedAt: s.syncedAt, pcName: s.pcName, turns: Object.fromEntries(Object.entries(s.turns ?? {}).map(([id, t]) => [id, t.slice(-TURNS_KEPT)])) })); } catch { /* storage full or blocked: the live state still works */ }
+  try { store(storage)?.setItem(LAST_STATE_KEY, JSON.stringify({ sessions: s.sessions, previews: s.previews, syncedAt: s.syncedAt, pcName: s.pcName })); } catch { /* storage full or blocked: the live state still works */ }
+}
+
+function loadTurns(storage?: Storage): Record<string, Turn[]> {
+  try {
+    const raw = store(storage)?.getItem(TURNS_KEY);
+    const v = raw ? JSON.parse(raw) as unknown : null;
+    return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, Turn[]> : {};
+  } catch { return {}; }
+}
+
+export function saveTurns(turns: Record<string, Turn[]>, storage?: Storage): void {
+  try { store(storage)?.setItem(TURNS_KEY, JSON.stringify(Object.fromEntries(Object.entries(turns).map(([id, t]) => [id, t.slice(-TURNS_KEPT)])))); } catch { /* storage full or blocked: the threads are read again from the PC */ }
 }
 
 export function clearLastState(storage?: Storage): void {
-  try { store(storage)?.removeItem(LAST_STATE_KEY); } catch { /* ignore */ }
+  try { store(storage)?.removeItem(LAST_STATE_KEY); store(storage)?.removeItem(TURNS_KEY); } catch { /* ignore */ }
 }
 
 /** Whether this phone holds a device token (it is paired). */

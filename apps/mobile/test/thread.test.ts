@@ -117,6 +117,22 @@ describe('store and drafts', () => {
     a.apply({ type: 'snapshot', sessions: [] });
     expect(createMobileStore(storage).getState().turns.a).toBeUndefined();
   });
+  it('keeps the session list when the turns cannot be saved, and saves the turns only when they arrive', () => {
+    const real = storage.setItem.bind(storage);
+    const writes: string[] = [];
+    storage.setItem = (k: string, v: string) => { writes.push(k); if (k === 'ledge.mobile.turns') throw new DOMException('full', 'QuotaExceededError'); real(k, v); };
+    const a = createMobileStore(storage);
+    a.apply({ type: 'snapshot', sessions: [s()] });
+    a.apply({ type: 'session.preview', id: 'a', lines: ['x'] });
+    expect(writes).not.toContain('ledge.mobile.turns');
+    a.apply({ type: 'session.turns', id: 'a', turns: [turn('t1', 'reply', 1, { text: 'x' })] });
+    expect(writes).toContain('ledge.mobile.turns');
+    expect(a.getState().turns.a).toHaveLength(1);
+    a.apply({ type: 'session.preview', id: 'a', lines: ['y'] });
+    const b = createMobileStore(storage);
+    expect(b.getState().sessions.map(x => x.id)).toEqual(['a']);
+    expect(b.getState().previews.a).toEqual(['y']);
+  });
   it('remembers a cleared instruction across reloads', () => {
     expect(wasCleared('o1', storage)).toBe(false);
     markCleared('o1', storage);

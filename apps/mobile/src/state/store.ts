@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { ClientMessage, ServerMessage, Session, Turn } from '@ledge/protocol';
 import { isNew, loadOps, matches, opsReducer, saveOps, toCheck, type OpEvent, type OpState } from '../model/operations';
-import { clearLastState, DEVICE_KEY, loadLastState, saveLastState } from './persist';
+import { clearLastState, DEVICE_KEY, loadLastState, saveLastState, saveTurns } from './persist';
 
 export type Link = 'unpaired' | 'connecting' | 'online' | 'offline';
 export interface MobileState {
@@ -99,7 +99,9 @@ export function createMobileStore(storage?: Storage): MobileStore {
           const ids = new Set(msg.sessions.map(s => s.id));
           const previews = Object.fromEntries(Object.entries(state.previews).filter(([id]) => ids.has(id)));
           const turns = Object.fromEntries(Object.entries(state.turns).filter(([id]) => ids.has(id)));
+          const dropped = Object.keys(turns).length !== Object.keys(state.turns).length;
           set({ sessions: msg.sessions, previews, turns, syncedAt: now() }, true);
+          if (dropped) saveTurns(turns, storage);
           break;
         }
         case 'session.updated': {
@@ -110,15 +112,20 @@ export function createMobileStore(storage?: Storage): MobileStore {
         }
         case 'session.removed': {
           const { [msg.id]: _gone, ...previews } = state.previews;
-          const { [msg.id]: _turns, ...turns } = state.turns;
+          const { [msg.id]: goneTurns, ...turns } = state.turns;
           set({ sessions: state.sessions.filter(s => s.id !== msg.id), previews, turns, syncedAt: now() }, true);
+          if (goneTurns !== undefined) saveTurns(turns, storage);
           break;
         }
         case 'session.preview':
           set({ previews: { ...state.previews, [msg.id]: msg.lines }, syncedAt: now() }, true);
           break;
         // Rows are replaced by id in the PC's order: a reply updated in place keeps its row, and no time sort is applied.
-        case 'session.turns': set({ turns: { ...state.turns, [msg.id]: msg.turns } }, true); break;
+        case 'session.turns': {
+          set({ turns: { ...state.turns, [msg.id]: msg.turns } }, false);
+          saveTurns(state.turns, storage);
+          break;
+        }
         case 'operation.received': dispatch({ type: 'received', operationId: msg.operationId }); break;
         case 'operation.result': dispatch({ type: 'result', operationId: msg.operationId, status: msg.status, ...(msg.reason ? { reason: msg.reason } : {}) }); break;
         default: break;

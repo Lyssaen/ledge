@@ -116,6 +116,18 @@ export const copy = {
       uncertain: 'La connexion a été perdue ou le terminal n’a pas confirmé. Le message a peut-être été reçu : vérifiez le terminal avant de le renvoyer. Votre brouillon est conservé.'
     }
   },
+  terminal: {
+    title: (bot: string) => `Terminal de ${bot}`, back: 'Retour au fil',
+    live: 'Lecture seule · en direct', waiting: 'Lecture seule · en attente', offline: 'Lecture seule · dernier état connu',
+    smaller: 'Réduire le texte', larger: 'Agrandir le texte',
+    output: 'Sortie du terminal, défilement horizontal', empty: 'Aucune sortie pour le moment.', unknown: 'Cette session n’existe plus sur le PC.',
+    scrollHint: 'Faites défiler horizontalement pour lire les lignes longues.',
+    interrupt: (bot: string) => `Interrompre ${bot}`, sending: 'Interruption en cours…', sent: 'Interruption transmise',
+    note: 'Interrompre n’annule pas les actions déjà effectuées.',
+    why: { waiting: 'Une décision est attendue : traitez-la d’abord.', offline: 'Reconnectez-vous pour interrompre.', idle: 'L’agent ne travaille pas.' },
+    fail: 'L’interruption n’a pas été transmise. Vérifiez le terminal sur le PC.',
+    uncertain: 'Réception non confirmée : vérifiez le terminal avant de recommencer.'
+  },
   question: { legend: 'Choisir une réponse' },
   confirm: {
     label: (title: string) => `Confirmer : ${title}`,

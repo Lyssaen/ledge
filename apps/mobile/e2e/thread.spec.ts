@@ -185,7 +185,7 @@ test('after a link loss the daemon never heard of the operation: composer reopen
 });
 
 test('a cold start offline reads the last known thread; an unopened one says it is unavailable', async ({ page }) => {
-  await page.addInitScript(([k, v]) => { if (!localStorage.getItem(k!)) { localStorage.setItem('ledge.mobile.token', 't'.repeat(43)); localStorage.setItem(k!, v!); } }, ['ledge.mobile.lastState', JSON.stringify({ sessions: [idle(), session('kai', { name: 'Kai', topic: 'Autre' })], previews: {}, syncedAt: new Date().toISOString(), pcName: 'PC', turns: { bix: TURNS } })]);
+  await page.addInitScript(([k, v, t]) => { if (!localStorage.getItem(k!)) { localStorage.setItem('ledge.mobile.token', 't'.repeat(43)); localStorage.setItem(k!, v!); localStorage.setItem('ledge.mobile.turns', t!); } }, ['ledge.mobile.lastState', JSON.stringify({ sessions: [idle(), session('kai', { name: 'Kai', topic: 'Autre' })], previews: {}, syncedAt: new Date().toISOString(), pcName: 'PC' }), JSON.stringify({ bix: TURNS })]);
   await page.routeWebSocket(/.*/, ws => { void ws.close({ code: 1001 }); });
   await page.goto('/m/#/thread/bix');
   await expect(page.getByText('La recherche de sessions est prête.')).toBeVisible();

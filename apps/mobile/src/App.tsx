@@ -4,6 +4,7 @@ import { Agents } from './screens/Agents';
 import { Connection } from './screens/Connection';
 import { Inbox } from './screens/Inbox';
 import { Pairing } from './screens/Pairing';
+import { Terminal } from './screens/Terminal';
 import { Thread } from './screens/Thread';
 import { RequestDetail } from './screens/RequestDetail';
 import { hasToken } from './state/persist';
@@ -28,8 +29,9 @@ export function App({ onPaired, onReconnect = () => {} }: { onPaired?: () => voi
         ? <RequestDetail key={`${route.sessionId}/${route.pendingId}`} sessionId={route.sessionId} pendingId={route.pendingId} onReconnect={onReconnect} />
         : route.name === 'thread'
         ? <Thread key={route.sessionId} sessionId={route.sessionId} onReconnect={onReconnect} />
-        : route.name === 'agents' || route.name === 'terminal'
-        // The terminal screen arrives with the next task of lot 3; until then its link lands on the list.
+        : route.name === 'terminal'
+        ? <Terminal key={route.sessionId} sessionId={route.sessionId} />
+        : route.name === 'agents'
         ? <Agents onReconnect={onReconnect} />
         : <Inbox onReconnect={onReconnect} />}
     </div>
