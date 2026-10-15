@@ -7,6 +7,7 @@ import { Pairing } from './screens/Pairing';
 import { Terminal } from './screens/Terminal';
 import { Thread } from './screens/Thread';
 import { RequestDetail } from './screens/RequestDetail';
+import { hashOf } from './push/handlers';
 import { hasToken } from './state/persist';
 import { useMobile, mobileStore } from './state/store';
 
@@ -18,8 +19,20 @@ export function App({ onPaired, onReconnect = () => {} }: { onPaired?: () => voi
   // A paired phone reaches the pairing flow only through the confirmation on the Connexion panel.
   const [repairing, setRepairing] = useState(false);
   useEffect(() => { if (link === 'unpaired') setPairing(true); }, [link]);
+  // A tap on a notification while the app is open: the service worker sends the link, the router does the rest.
+  useEffect(() => {
+    const sw = navigator.serviceWorker;
+    if (!sw) return;
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as { type?: unknown; url?: unknown } | null;
+      const hash = d?.type === 'open' ? hashOf(d.url) : null;
+      if (hash) globalThis.location.hash = hash;
+    };
+    sw.addEventListener('message', onMessage);
+    return () => sw.removeEventListener('message', onMessage);
+  }, []);
   if (pairing || link === 'unpaired' || (route.name === 'pair' && (repairing || !hasToken()))) {
-    return <Pairing onCancel={repairing ? () => { setRepairing(false); navigate({ name: 'connection' }); } : undefined} onContinue={() => { setPairing(false); setRepairing(false); navigate({ name: 'inbox' }); mobileStore.setLink('connecting'); onPaired?.(); }} />;
+    return <Pairing onCancel={repairing ? () => { setRepairing(false); navigate({ name: 'connection' }); } : undefined} onSaved={() => { mobileStore.setLink('connecting'); onPaired?.(); }} onContinue={() => { setPairing(false); setRepairing(false); navigate({ name: 'inbox' }); }} />;
   }
   return (
     <div className="app">

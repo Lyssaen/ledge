@@ -37,7 +37,7 @@ const Loading = () => (
 
 /** One request: read it, then decide it from the phone (or see what became of it). */
 export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId: string; pendingId: string; onReconnect: () => void }) {
-  const { sessions, previews, link, syncedAt, ops } = useMobile();
+  const { sessions, previews, link, syncedAt, ops, live } = useMobile();
   const now = useNow();
   const item = requestsOf(sessions).find(i => i.sessionId === sessionId && i.pendingId === pendingId);
   // The version the phone showed first: a decision always names it, and a newer one must be read again.
@@ -60,7 +60,8 @@ export function RequestDetail({ sessionId, pendingId, onReconnect }: { sessionId
   const shown = item ?? (open ? last.current : undefined);
   if (!shown) {
     // Never say "handled" before the PC has been heard from, nor while the link is down.
-    if (link === 'connecting' || (syncedAt === null && link !== 'offline')) return <Loading />;
+    // A link opened from a notification lands here before the first snapshot: the persisted one is not an answer.
+    if (link === 'connecting' || (link === 'online' && !live) || (syncedAt === null && link !== 'offline')) return <Loading />;
     return <Gone stale={link === 'offline' || outcome.kind !== 'handledElsewhere'} item={last.current} />;
   }
   const changed = item !== undefined && seen !== null && item.pendingVersion !== seen;

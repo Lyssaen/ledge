@@ -62,7 +62,7 @@ for (const width of [320, 390, 430]) {
     const { scrollWidth, innerWidth } = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth }));
     expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
 
-    await page.getByRole('button', { name: 'Continuer' }).click();
+    await page.getByRole('button', { name: 'Plus tard' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'À traiter' })).toBeVisible();
     await expect.poll(() => received.some(m => m.type === 'auth' && m.token === TOKEN)).toBe(true);
     expect(received.find(m => m.type === 'pair.complete')).toMatchObject({ deviceName: 'Navigateur', webauthn: { type: 'public-key' } });

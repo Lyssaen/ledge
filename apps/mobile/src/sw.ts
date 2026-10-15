@@ -1,13 +1,18 @@
-// Service worker, built as its own entry to `sw.js` at the root of /m/. Offline shell: `index.html` goes network
+// Service worker, built apart (vite.sw.config.ts) to a single `sw.js` at the root of /m/. Offline shell: `index.html` goes network
 // first (so a new build is picked up), hashed `assets/*` cache first. The DOM lib has no worker types, so the few
 // members used are declared here.
+import { badgeFrom, notificationFrom, openTarget, setBadge, type ClientsLike } from './push/handlers';
+
 interface Ev { waitUntil(p: Promise<unknown>): void }
 interface FetchEv extends Ev { request: Request; respondWith(r: Promise<Response>): void }
 interface Sw {
   location: Location;
   skipWaiting(): Promise<void>;
-  clients: { claim(): Promise<void> };
+  clients: ClientsLike & { claim(): Promise<void> };
+  registration: { showNotification(title: string, o?: NotificationOptions): Promise<void> };
   addEventListener(type: 'install' | 'activate', cb: (e: Ev) => void): void;
+  addEventListener(type: 'push', cb: (e: Ev & { data: { json(): unknown } | null }) => void): void;
+  addEventListener(type: 'notificationclick', cb: (e: Ev & { notification: { close(): void; data?: { url?: unknown } } }) => void): void;
   addEventListener(type: 'fetch', cb: (e: FetchEv) => void): void;
 }
 const sw = self as unknown as Sw;
@@ -57,4 +62,19 @@ sw.addEventListener('fetch', e => {
   if (rel.startsWith('assets/')) e.respondWith(cacheFirst(req));
   else if (req.mode === 'navigate' || rel === '' || rel === 'index.html') e.respondWith(networkFirst(req));
   else if (SHELL.includes(url.href)) e.respondWith(networkFirst(req));
+});
+
+// A push shows the notification (iOS revokes a subscription that shows none) and sets the badge when the API exists.
+sw.addEventListener('push', e => {
+  let data: unknown = null;
+  try { data = e.data?.json() ?? null; } catch { /* not JSON: nothing to show */ }
+  const n = notificationFrom(data);
+  const badge = badgeFrom(data);
+  e.waitUntil(Promise.all([n ? sw.registration.showNotification(n.title, n.options) : undefined, badge !== null ? setBadge(badge) : undefined]));
+});
+
+sw.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = e.notification.data?.url;
+  if (typeof url === 'string' && url.startsWith('/m/#/')) e.waitUntil(openTarget(url, sw.clients));
 });

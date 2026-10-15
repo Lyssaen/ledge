@@ -104,7 +104,7 @@ function Footer({ session, composer, draft, onDraft, onSend, link, taken, checki
 
 /** One agent's thread: what was said and decided, and a way to give an instruction while the agent is free. */
 export function Thread({ sessionId, onReconnect }: { sessionId: string; onReconnect: () => void }) {
-  const { sessions, turns, ops, link, syncedAt } = useMobile();
+  const { sessions, turns, ops, link, syncedAt, live } = useMobile();
   const now = useNow();
   const session = sessions.find(s => s.id === sessionId);
   const mine = turns[sessionId];
@@ -155,7 +155,7 @@ export function Thread({ sessionId, onReconnect }: { sessionId: string; onReconn
             <LinkStatus />
           </div>
         </header>
-        <main className="min-h-0 flex-1 px-side pt-7 text-[13px] text-muted" role="status">{link === 'connecting' || (syncedAt === null && link !== 'offline') ? copy.thread.loading : copy.thread.unknown}</main>
+        <main className="min-h-0 flex-1 px-side pt-7 text-[13px] text-muted" role="status">{link === 'connecting' || (link === 'online' && !live) || (syncedAt === null && link !== 'offline') ? copy.thread.loading : copy.thread.unknown}</main>
       </>
     );
   }

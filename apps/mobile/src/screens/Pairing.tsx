@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { startRegistration } from '@simplewebauthn/browser';
 import { copy } from '../copy';
+import { useEnableNotifications } from '../push/useEnable';
+import type { enableNotifications } from '../push/subscribe';
 import { completePairing, guessDeviceName, isIosBrowserTab, openPairSocket, PairFailure, requestChallenge, savePairing, type PairChallenge } from '../connection/pair';
 
 const t = copy.pairing;
@@ -25,13 +27,16 @@ export interface PairingProps {
   onContinue(): void;
   /** Set when a paired phone re-pairs on purpose: step 1 then offers a way out. */
   onCancel?: () => void;
+  /** Called as soon as the phone is paired (token stored): the app connects then, so the PC's push key is there for step 4. */
+  onSaved?: () => void;
   /** Test seams. */
+  enable?: typeof enableNotifications;
   request?: typeof requestChallenge;
   complete?: typeof completePairing;
   iosTab?: boolean;
 }
 
-export function Pairing({ onContinue, onCancel, request = requestChallenge, complete = completePairing, iosTab = isIosBrowserTab() }: PairingProps) {
+export function Pairing({ onContinue, onCancel, onSaved, enable, request = requestChallenge, complete = completePairing, iosTab = isIosBrowserTab() }: PairingProps) {
   const [step, setStep] = useState(0);
   const [code, setCode] = useState('');
   const [failure, setFailure] = useState<PairFailure['reason'] | null>(null);
@@ -40,6 +45,9 @@ export function Pairing({ onContinue, onCancel, request = requestChallenge, comp
   const held = useRef<PairChallenge | null>(null);
   const attempt = useRef(0);
   const s = t.steps[step]!;
+  const push = useEnableNotifications(enable);
+  // The permission prompt runs from this tap (user activation); the person moves on only when it is granted.
+  const activate = () => { void push.start().then(r => { if (r === 'granted') onContinue(); }); };
 
   const drop = () => { attempt.current++; try { held.current?.socket.close(); } catch { /* gone */ } held.current = null; setChallenge(null); setBusy(false); };
   useEffect(() => () => { attempt.current++; try { held.current?.socket.close(); } catch { /* gone */ } }, []);
@@ -68,6 +76,7 @@ export function Pairing({ onContinue, onCancel, request = requestChallenge, comp
     complete(code, ch, { startRegistration, deviceName }).then(r => {
       if (mine !== attempt.current) return;
       savePairing(r, deviceName);
+      onSaved?.();
       held.current = null; setChallenge(null); setStep(3);
     }, e => {
       if (mine !== attempt.current) return;
@@ -86,7 +95,7 @@ export function Pairing({ onContinue, onCancel, request = requestChallenge, comp
   const goBack = () => { drop(); setFailure(null); setStep(step - 1); };
 
   const showNext = step !== 1 || !iosTab;
-  const next = () => { if (step === 2) { if (challenge) verify(); else if (code.length === 6) void ask(code); } else if (step === 3) onContinue(); else setStep(step + 1); };
+  const next = () => { if (step === 2) { if (challenge) verify(); else if (code.length === 6) void ask(code); } else if (step === 3) activate(); else setStep(step + 1); };
 
   return (
     <main className="app" aria-labelledby="pair-title">
@@ -143,14 +152,24 @@ export function Pairing({ onContinue, onCancel, request = requestChallenge, comp
           </>
         )}
         {step === 3 && (
-          <div className={`${notice} border-ok/25 bg-ok/5`}><strong className="mb-[5px] block text-[13px] text-ok">{t.done.title}</strong><p>{t.done.body}</p></div>
+          <>
+            <div className={`${notice} border-ok/25 bg-ok/5`}><strong className="mb-[5px] block text-[13px] text-ok">{t.done.title}</strong><p>{t.done.body}</p></div>
+            <div className="mt-6">
+              <h2 className="text-lg font-semibold tracking-[-0.4px]">{t.notifications.title}</h2>
+              <p className="mt-2 text-[13px] text-muted">{t.notifications.body}</p>
+            </div>
+            <div role="alert" className="min-h-0">
+              {(push.state === 'denied' || push.state === 'unsupported' || push.noPush) && <p className="my-2.5 rounded-control bg-danger-bg px-3 py-2 text-xs text-danger-fg">{push.noPush ? t.notifications.noPush : t.notifications[push.state === 'denied' ? 'denied' : 'unsupported']}</p>}
+            </div>
+          </>
         )}
       </div>
       {showNext && (
         <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg px-side pt-3 pb-4">
-          <button type="button" id="pair-next" className={`${btn} bg-fg text-[#121415] disabled:opacity-50`} disabled={step === 2 && (code.length !== 6 || busy)} onClick={next}>
-            {busy ? t.pending : step === 2 && challenge ? t.verify : s.button}
+          <button type="button" id="pair-next" className={`${btn} bg-fg text-[#121415] disabled:opacity-50`} disabled={(step === 2 && (code.length !== 6 || busy)) || (step === 3 && (!push.ready || push.state === 'working'))} onClick={next}>
+            {busy ? t.pending : step === 2 && challenge ? t.verify : step === 3 && push.state === 'working' ? t.notifications.working : step === 3 && !push.ready && !push.noPush ? t.notifications.waiting : s.button}
           </button>
+          {step === 3 && <button type="button" id="pair-later" className={`${btn} mt-0! border-transparent text-muted`} onClick={onContinue}>{t.notifications.later}</button>}
         </footer>
       )}
     </main>

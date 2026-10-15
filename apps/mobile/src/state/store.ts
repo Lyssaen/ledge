@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import type { ClientMessage, ServerMessage, Session, Turn } from '@ledge/protocol';
 import { isNew, loadOps, matches, opsReducer, saveOps, toCheck, type OpEvent, type OpState } from '../model/operations';
+import { setBadge } from '../push/handlers';
+import { requestsOf } from '../model/requests';
 import { clearLastState, DEVICE_KEY, loadLastState, saveLastState, saveTurns } from './persist';
 
 export type Link = 'unpaired' | 'connecting' | 'online' | 'offline';
@@ -15,6 +17,10 @@ export interface MobileState {
   ops: Record<string, OpState>;
   /** Each opened thread as the PC last sent it (`session.turns`), in the PC's order; kept in memory only. */
   turns: Record<string, Turn[]>;
+  /** The daemon's Web Push public key, from `auth.ok`; null until authenticated (or for a daemon without push). */
+  vapidPublicKey: string | null;
+  /** True once this connection's snapshot has arrived: until then a persisted state is only the last one seen. */
+  live: boolean;
 }
 export interface MobileStore {
   getState(): MobileState;
@@ -47,7 +53,7 @@ function loadDevice(storage?: Storage): MobileState['device'] {
 
 export function createMobileStore(storage?: Storage): MobileStore {
   const last = loadLastState(storage);
-  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage), turns: last?.turns ?? {} };
+  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage), turns: last?.turns ?? {}, vapidPublicKey: null, live: false };
   let send: ((m: ClientMessage) => void) | null = null;
   const fns = new Set<() => void>();
   const listeners = new Set<(msg: ServerMessage) => void>();
@@ -67,7 +73,7 @@ export function createMobileStore(storage?: Storage): MobileStore {
   return {
     getState: () => state,
     subscribe: fn => { fns.add(fn); return () => { fns.delete(fn); }; },
-    setLink: l => { if (l !== state.link) { set({ link: l }, false); dispatch({ type: 'link', link: l }); } },
+    setLink: l => { if (l !== state.link) { set(l === 'online' ? { link: l } : { link: l, live: false }, false); dispatch({ type: 'link', link: l }); } },
     setSender: f => { send = f; },
     dispatch,
     send: msg => {
@@ -84,14 +90,14 @@ export function createMobileStore(storage?: Storage): MobileStore {
       dispatch({ type: 'sent', op });
       return true;
     },
-    reset: () => { clearLastState(storage); saveOps({}, storage); set({ link: 'unpaired', sessions: [], previews: {}, syncedAt: null, device: null, pcName: null, ops: {}, turns: {} }, false); },
+    reset: () => { clearLastState(storage); saveOps({}, storage); set({ link: 'unpaired', sessions: [], previews: {}, syncedAt: null, device: null, pcName: null, ops: {}, turns: {}, vapidPublicKey: null, live: false }, false); },
     apply: msg => {
       listeners.forEach(f => f(msg));
       switch (msg.type) {
         case 'auth.ok': {
           const device = { id: msg.deviceId, name: msg.deviceName };
           try { (storage ?? globalThis.localStorage)?.setItem(DEVICE_KEY, JSON.stringify(device)); } catch { /* ignore */ }
-          set({ link: 'online', device, pcName: msg.pcName }, true);
+          set({ link: 'online', device, pcName: msg.pcName, vapidPublicKey: msg.vapidPublicKey ?? null }, true);
           for (const operationId of toCheck(state.ops)) send?.({ type: 'operation.status', operationId });
           break;
         }
@@ -100,7 +106,8 @@ export function createMobileStore(storage?: Storage): MobileStore {
           const previews = Object.fromEntries(Object.entries(state.previews).filter(([id]) => ids.has(id)));
           const turns = Object.fromEntries(Object.entries(state.turns).filter(([id]) => ids.has(id)));
           const dropped = Object.keys(turns).length !== Object.keys(state.turns).length;
-          set({ sessions: msg.sessions, previews, turns, syncedAt: now() }, true);
+          set({ sessions: msg.sessions, previews, turns, syncedAt: now(), live: true }, true);
+          void setBadge(requestsOf(msg.sessions).length);
           if (dropped) saveTurns(turns, storage);
           break;
         }

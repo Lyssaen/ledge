@@ -2,8 +2,9 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-// Served by the daemon under /m/ (decision D12). The service worker is a second entry emitted at the root as
-// `sw.js` so its scope can cover /m/; the page entry and its assets go under assets/ (immutable, hashed).
+// Served by the daemon under /m/ (decision D12). The page entry and its assets go under assets/ (immutable, hashed).
+// The service worker is built apart (vite.sw.config.ts) into a single classic script `sw.js` at the root, so its
+// scope covers /m/ and it imports nothing at run time.
 const build = String(Date.now());
 
 export default defineConfig({
@@ -16,10 +17,7 @@ export default defineConfig({
     outDir: '../../packages/ledge/dist/mobile',
     emptyOutDir: true,
     rollupOptions: {
-      input: { index: 'index.html', sw: 'src/sw.ts' },
-      output: {
-        entryFileNames: chunk => (chunk.name === 'sw' ? 'sw.js' : 'assets/[name]-[hash].js')
-      }
+      input: { index: 'index.html' }
     }
   },
   test: {

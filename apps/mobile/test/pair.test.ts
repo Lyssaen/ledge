@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { guessDeviceName, isIosBrowserTab, PairFailure, completePairing, requestChallenge, savePairing, type PairSocket } from '../src/connection/pair';
 import { Pairing } from '../src/screens/Pairing';
 import { copy } from '../src/copy';
+import { mobileStore } from '../src/state/store';
 import { DEVICE_KEY, TOKEN_KEY } from '../src/state/persist';
 
 const REG = { id: 'c', rawId: 'c', type: 'public-key', response: { clientDataJSON: 'x', attestationObject: 'y' } };
@@ -118,7 +119,9 @@ describe('Pairing screen', () => {
     const ch = { socket: { send: vi.fn(), receive: vi.fn(), close: vi.fn() }, options: {}, expiresAt: Date.now() + 60_000 };
     const request = vi.fn().mockRejectedValueOnce(new PairFailure('invalid_code')).mockResolvedValue(ch);
     const complete = vi.fn().mockResolvedValue({ token: 'tok', deviceId: 'd' });
-    render(createElement(Pairing, { onContinue, request, complete, iosTab: false }));
+    const onSaved = vi.fn();
+    const enable = vi.fn().mockResolvedValue('granted');
+    render(createElement(Pairing, { onContinue, onSaved, enable, request, complete, iosTab: false }));
     goToCode();
     const input = screen.getByLabelText(copy.pairing.codeLabel) as HTMLInputElement;
     expect(input).toHaveAttribute('autocomplete', 'one-time-code');
@@ -137,8 +140,30 @@ describe('Pairing screen', () => {
     expect(complete).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Vous êtes connecté' })).toBeInTheDocument());
     expect(localStorage.getItem(TOKEN_KEY)).toBe('tok');
-    fireEvent.click(screen.getByRole('button', { name: 'Continuer' }));
-    expect(onContinue).toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    // Step 4 waits for the PC's push key, then the tap asks permission and moves on only once granted.
+    expect(screen.getByRole('button', { name: copy.pairing.notifications.waiting })).toBeDisabled();
+    act(() => mobileStore.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC', vapidPublicKey: 'BKEY' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Activer les notifications' }));
+    expect(enable).toHaveBeenCalledWith(expect.objectContaining({ vapidPublicKey: 'BKEY' }));
+    await waitFor(() => expect(onContinue).toHaveBeenCalledTimes(1));
+  });
+
+  it('step 4: a refusal stays on the step with a message, and "Plus tard" moves on without asking', async () => {
+    const onContinue = vi.fn();
+    const enable = vi.fn().mockResolvedValue('denied');
+    const ch = { socket: { send: vi.fn(), receive: vi.fn(), close: vi.fn() }, options: {}, expiresAt: Date.now() + 60_000 };
+    render(createElement(Pairing, { onContinue, enable, request: vi.fn().mockResolvedValue(ch), complete: vi.fn().mockResolvedValue({ token: 'tok', deviceId: 'd' }), iosTab: false }));
+    goToCode();
+    fireEvent.change(screen.getByLabelText(copy.pairing.codeLabel), { target: { value: '123456' } });
+    fireEvent.click(await screen.findByRole('button', { name: copy.pairing.verify }));
+    await screen.findByRole('heading', { name: 'Vous êtes connecté' });
+    act(() => mobileStore.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC', vapidPublicKey: 'BKEY' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Activer les notifications' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(copy.pairing.notifications.denied);
+    expect(onContinue).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Plus tard' }));
+    expect(onContinue).toHaveBeenCalledTimes(1);
   });
 
   it('goes back to asking for a challenge when the held one fails, and clears the error when stepping back', async () => {

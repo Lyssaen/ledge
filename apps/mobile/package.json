@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build --config vite.sw.config.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test"

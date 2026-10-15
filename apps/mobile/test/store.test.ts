@@ -27,6 +27,17 @@ describe('mobile store', () => {
     expect(st.getState()).toMatchObject({ link: 'online', device: { id: 'd1', name: 'iPhone' }, pcName: 'DESKTOP' });
   });
 
+  it('keeps the push key from auth.ok, and is live only once this connection\'s snapshot has arrived', () => {
+    const st = createMobileStore();
+    expect(st.getState()).toMatchObject({ vapidPublicKey: null, live: false });
+    st.apply({ type: 'auth.ok', deviceId: 'd1', deviceName: 'iPhone', pcName: 'PC', vapidPublicKey: 'BKEY' });
+    expect(st.getState()).toMatchObject({ link: 'online', vapidPublicKey: 'BKEY', live: false });
+    st.apply({ type: 'snapshot', sessions: [] });
+    expect(st.getState().live).toBe(true);
+    st.setLink('offline');
+    expect(st.getState().live).toBe(false);
+  });
+
   it('the last state survives a reload', () => {
     const st = createMobileStore();
     st.apply({ type: 'auth.ok', deviceId: 'd1', deviceName: 'iPhone', pcName: 'DESKTOP' });

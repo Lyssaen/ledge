@@ -175,6 +175,7 @@ export const copy = {
     repair: 'Réappairer', repairTitle: 'Réappairer ce téléphone ?',
     repairBody: 'Vous allez repasser par le code affiché sur le PC. L’accès actuel reste valable jusqu’à la fin de l’appairage.',
     repairConfirm: 'Oui, réappairer', repairCancel: 'Annuler', unknown: 'Inconnu',
+    notifications: 'Notifications', notificationsOn: 'Activées', notificationsOff: 'Désactivées',
     status_: { online: 'Connecté', offline: 'Déconnecté', connecting: 'Connexion en cours…', unpaired: 'Non appairé' }
   },
   pairing: {
@@ -184,7 +185,7 @@ export const copy = {
       { title: 'Votre PC, à portée de main', subtitle: 'Connectez le téléphone au réseau privé de votre PC pour retrouver vos agents.', button: 'Tailscale est connecté' },
       { title: 'Installer Ledge', subtitle: 'Le QR code du PC ouvre l’adresse privée de votre application.', button: 'Ledge est installé' },
       { title: 'Appairer ce téléphone', subtitle: 'Saisissez le code affiché dans Ledge sur votre PC.', button: 'Appairer mon téléphone' },
-      { title: 'Vous êtes connecté', subtitle: 'Ce téléphone est appairé à votre PC.', button: 'Continuer' }
+      { title: 'Vous êtes connecté', subtitle: 'Ce téléphone est appairé à votre PC.', button: 'Activer les notifications' }
     ],
     checklist: [
       { title: 'Connecter Tailscale', hint: 'Sur le PC et le téléphone, utilisez le même réseau privé.' },
@@ -197,6 +198,13 @@ export const copy = {
     pending: 'Vérification…',
     verify: 'Vérifier avec cet appareil',
     privacy: { title: 'Réseau privé', body: 'Vous pourrez retirer l’accès de ce téléphone depuis Réglages → Mobile sur le PC.' },
+    notifications: {
+      title: 'Être prévenu quand un agent attend', body: 'Activez les notifications pour ouvrir une demande directement depuis votre écran verrouillé.',
+      later: 'Plus tard', working: 'Activation…', waiting: 'Connexion au PC…',
+      denied: 'Notifications refusées. Vous pourrez les autoriser dans les réglages du téléphone.',
+      unsupported: 'Ce navigateur ne propose pas les notifications. Sur iPhone, ouvrez Ledge depuis son icône de l’écran d’accueil.',
+      noPush: 'Les notifications ne sont pas disponibles sur ce PC.'
+    },
     done: { title: 'Accès confirmé', body: 'Vos demandes et conversations sont disponibles tant que le PC et Tailscale sont connectés.' },
     errors: {
       invalid_code: 'Code non reconnu. Vérifiez le code affiché sur le PC.',
