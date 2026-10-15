@@ -14,7 +14,7 @@ export function Connection({ onRepair }: { onRepair: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const t = copy.connection;
   const push = useEnableNotifications();
-  const on = push.state === 'granted' || (push.state === 'idle' && typeof Notification !== 'undefined' && Notification.permission === 'granted');
+  const on = !push.stale && (push.state === 'granted' || (push.state === 'idle' && typeof Notification !== 'undefined' && Notification.permission === 'granted'));
   const pt = copy.notifications;
   return (
     <>

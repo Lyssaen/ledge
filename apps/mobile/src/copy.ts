@@ -184,7 +184,8 @@ export const copy = {
     denied: 'Notifications refusées. Vous pourrez les autoriser dans les réglages du téléphone.',
     unsupported: 'Ce navigateur ne propose pas les notifications. Sur iPhone, ouvrez Ledge depuis son icône de l’écran d’accueil.',
     failed: 'L’activation n’a pas abouti : le PC n’a pas reçu l’abonnement. Vérifiez la connexion, puis réessayez.',
-    noPush: 'Les notifications ne sont pas disponibles sur ce PC.'
+    noPush: 'Les notifications ne sont pas disponibles sur ce PC.',
+    stale: 'Le PC a changé de clés : réactivez les notifications pour que ce téléphone les reçoive à nouveau.'
   },
   pairing: {
     stepOf: (n: number) => `Connexion · ${n} / 4`,

@@ -120,6 +120,20 @@ describe('startPushSync', () => {
     st.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC' });
     await vi.waitFor(() => expect(sent).toHaveLength(2));
   });
+  it('does not re-send a subscription made for another PC key and flags it, until a matching one is held', async () => {
+    const st = createMobileStore();
+    const sent: unknown[] = [];
+    st.setSender(m => sent.push(m));
+    let held: Record<string, unknown> = { ...sub, serverKey: 'OLD' };
+    startPushSync(st, { supported: () => true, granted: () => true, subscription: () => Promise.resolve(held as never) });
+    st.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC', vapidPublicKey: 'NEW' });
+    await vi.waitFor(() => expect(st.getState().pushStale).toBe(true));
+    expect(sent).toEqual([]);
+    held = { ...sub, serverKey: 'NEW' };
+    st.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC', vapidPublicKey: 'NEW' });
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    expect(st.getState().pushStale).toBe(false);
+  });
   it('does nothing without granted permission', async () => {
     const { st, sent } = setup(false);
     st.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC' });

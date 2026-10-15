@@ -19,6 +19,8 @@ export interface MobileState {
   turns: Record<string, Turn[]>;
   /** The daemon's Web Push public key, from `auth.ok`; null until authenticated (or for a daemon without push). */
   vapidPublicKey: string | null;
+  /** The subscription this phone holds was made for another PC key: notifications must be enabled again (needs a tap). */
+  pushStale: boolean;
   /** True once this connection's snapshot has arrived: until then a persisted state is only the last one seen. */
   live: boolean;
 }
@@ -39,6 +41,7 @@ export interface MobileStore {
   listen(fn: (msg: ServerMessage) => void): () => void;
   /** Feed the operations model (e.g. `resumed` on return to the foreground). */
   dispatch(e: OpEvent): void;
+  setPushStale(stale: boolean): void;
   /** Forget the PC's data (token refused or revoked). */
   reset(): void;
 }
@@ -53,7 +56,7 @@ function loadDevice(storage?: Storage): MobileState['device'] {
 
 export function createMobileStore(storage?: Storage): MobileStore {
   const last = loadLastState(storage);
-  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage), turns: last?.turns ?? {}, vapidPublicKey: null, live: false };
+  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage), turns: last?.turns ?? {}, vapidPublicKey: null, pushStale: false, live: false };
   let send: ((m: ClientMessage) => void) | null = null;
   const fns = new Set<() => void>();
   const listeners = new Set<(msg: ServerMessage) => void>();
@@ -90,7 +93,8 @@ export function createMobileStore(storage?: Storage): MobileStore {
       dispatch({ type: 'sent', op });
       return true;
     },
-    reset: () => { clearLastState(storage); saveOps({}, storage); set({ link: 'unpaired', sessions: [], previews: {}, syncedAt: null, device: null, pcName: null, ops: {}, turns: {}, vapidPublicKey: null, live: false }, false); },
+    setPushStale: stale => { if (stale !== state.pushStale) set({ pushStale: stale }, false); },
+    reset: () => { clearLastState(storage); saveOps({}, storage); set({ link: 'unpaired', sessions: [], previews: {}, syncedAt: null, device: null, pcName: null, ops: {}, turns: {}, vapidPublicKey: null, pushStale: false, live: false }, false); },
     apply: msg => {
       listeners.forEach(f => f(msg));
       switch (msg.type) {

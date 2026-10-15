@@ -186,8 +186,9 @@ describe('Pairing screen', () => {
   });
 
   it('step 4: an error reply from the PC to the subscription is a failure', async () => {
-    const enable = vi.fn().mockImplementation(async () => { setTimeout(() => mobileStore.apply({ type: 'error', message: 'unsupported push service' }), 20); return 'granted'; });
+    const enable = vi.fn().mockImplementation(async (o: { send(m: unknown): boolean }) => { o.send({ type: 'push.subscribe' }); setTimeout(() => mobileStore.apply({ type: 'error', message: 'unsupported push service' }), 20); return 'granted'; });
     await reachStep4(enable);
+    mobileStore.setSender(() => {});
     fireEvent.click(screen.getByRole('button', { name: 'Activer les notifications' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(copy.notifications.failed));
   });
