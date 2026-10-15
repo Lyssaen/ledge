@@ -10,25 +10,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--sidebar-primary); outline-offset: 3px; }
 a { color: inherit; text-decoration: none; }
 button:hover { filter: brightness(.96); }
-.study-header { height: 82px; display: flex; align-items: center; justify-content: space-between; max-width: 1440px; margin: auto; padding: 0 42px; border-bottom: 1px solid var(--border); }
-.wordmark { font-size: 30px; font-weight: 750; letter-spacing: -1.8px; display: flex; align-items: center; }
-.wordmark > span { color: var(--sidebar-primary); }
-.wordmark small { font-size: 9px; letter-spacing: 1.5px; font-weight: 600; margin-left: 20px; padding-left: 20px; border-left: 1px solid var(--border); color: var(--muted-foreground); }
-.study-note { font-size: 12px; color: var(--muted-foreground); }
-.quiet { background: transparent; font-size: 12px; padding: 10px 0 10px 12px; }
-.quiet span { margin-left: 12px; font-size: 17px; }
-main { max-width: 1440px; margin: auto; padding: 32px 42px 0; }
 .eyebrow { font-size: 10px; letter-spacing: 2px; font-weight: 600; color: var(--sidebar-primary); margin: 0 0 11px; }
-h1 { font-size: 35px; letter-spacing: -1.3px; font-weight: 550; margin: 0 0 10px; }
-.intro { margin-bottom: 27px; }
-.intro > p:last-child { font-size: 13px; color: var(--muted-foreground); margin: 0; }
-.window { background: var(--notch); color: var(--sidebar-foreground); border: 1px solid var(--input); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-overlay); }
-.titlebar { height: 39px; background: var(--sidebar); border-bottom: 1px solid var(--sidebar-border); display: flex; align-items: center; gap: 9px; padding: 0 16px; font-size: 11px; }
-.app-icon { background: var(--primary); color: var(--primary-foreground); font-weight: 700; font-size: 12px; border-radius: 4px; width: 19px; height: 19px; display: grid; place-items: center; }
-.title-dim { color: var(--muted-foreground); margin-left: 7px; }
-.demo { margin-left: auto; font-size: 8px; letter-spacing: 1.1px; color: var(--muted-foreground); }
-.window-controls { margin-left: 36px; font-size: 14px; color: var(--muted-foreground); }
-.app { display: flex; min-height: 625px; }
+/* The app is the whole window (not the mockup's framed study page): only the view scrolls, the status bar stays at the bottom. */
+.app { display: flex; height: 100vh; overflow: hidden; }
 .project-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
 .project-primary { background: var(--sidebar-primary); }
 .project-secondary { background: var(--muted-foreground); }
@@ -36,7 +20,7 @@ h1 { font-size: 35px; letter-spacing: -1.3px; font-weight: 550; margin: 0 0 10px
 .machine-row small { display: block; color: var(--muted-foreground); font-size: 9px; margin-top: 5px; }
 .dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
 .green { background: var(--success); }
-.content { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.content { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .view-heading { min-height: 100px; padding: 25px 27px 19px; display: flex; align-items: center; flex-wrap: wrap; gap: 15px; }
 .view-heading > div:first-child { flex: 1; min-width: 190px; }
 .view-heading h2 { font-size: 23px; font-weight: 550; letter-spacing: -.65px; margin: 0 0 7px; }
@@ -51,7 +35,7 @@ h1 { font-size: 35px; letter-spacing: -1.3px; font-weight: 550; margin: 0 0 10px
 .primary { padding: 9px 12px; border-radius: 6px; background: var(--primary); color: var(--primary-foreground); font-size: 10px; white-space: nowrap; }
 .primary:hover { background: var(--primary-hover); }
 .primary .plus { font-size: 15px; margin-right: 7px; }
-.view-body { display: flex; flex: 1; min-height: 0; }
+.view-body { display: flex; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--input) transparent; }
 .central { padding: 0 27px 22px; flex: 1; min-width: 0; }
 .toolbar { display: flex; gap: 19px; align-items: center; height: 37px; border-bottom: 1px solid var(--sidebar-border); font-size: 10px; color: var(--muted-foreground); margin-bottom: 18px; }
 .toolbar .right { margin-left: auto; font-size: 9px; }
@@ -125,7 +109,7 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .grouping-hint { color: var(--muted-foreground); font-size: 9px; line-height: 1.6; margin: 12px 0 16px; }
 /* Pack tables using their participant-sized stage, with breathing room for seats.
    Wrapping follows the available panel width, including while resizing the chat. */
-.table-groups { display: flex; flex-wrap: wrap; align-items: flex-start; align-content: start; gap: 14px; max-height: 560px; overflow-y: auto; padding: 3px 5px 15px 3px; scrollbar-width: thin; scrollbar-color: var(--input) transparent; }
+.table-groups { display: flex; flex-wrap: wrap; align-items: flex-start; align-content: start; gap: 14px; padding: 3px 5px 15px 3px; }
 .table-group { flex: 0 1 calc(var(--stage-width) + 22px); max-width: 100%; min-width: 0; overflow: hidden; }
 .table-group .room-stage { height: var(--stage-height); width: min(calc(100% - 20px),var(--stage-width)); margin: 6px auto; }
 .table-group .meeting-table { height: var(--table-height); width: min(72%,var(--table-width)); }
@@ -142,7 +126,6 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .table-group .raised { right: 10px; }
 .seat-machine { color: var(--muted-foreground); font-size: 7px; margin-top: 3px; }
 .story-context { color: var(--muted-foreground); font-size: 9px; line-height: 1.6; border-top: 1px solid var(--sidebar-border); padding-top: 10px; margin-bottom: 0; }
-@media(max-width:570px) { .table-groups { max-height: none; overflow: visible; } }
 .meeting-table { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 65%; height: 145px; background: linear-gradient(130deg,var(--sidebar),var(--sidebar-accent) 55%,var(--sidebar)); border: 1px solid var(--input); border-radius: 100px; box-shadow: 0 8px 0 var(--well),0 9px 0 var(--input),var(--shadow-overlay); display: flex; align-items: center; justify-content: center; flex-direction: column; }
 .table-eyebrow { font-size: 8px; letter-spacing: 2px; color: var(--muted-foreground); margin-bottom: 10px; }
 .meeting-table strong { font-size: 17px; font-weight: 500; letter-spacing: -.6px; color: var(--sidebar-foreground); }
@@ -169,32 +152,29 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--popover); color: var(--popover-foreground); border: 1px solid var(--input); padding: 13px 20px; border-radius: 8px; box-shadow: var(--shadow-overlay); font-size: 12px; z-index: 20; max-width: 90vw; text-align: center; }
 [data-theme="dark"] .bot .shell { stroke-width: 1.5; }
 @media(min-width:1500px) {
-  main { padding-top: 40px; } .app { min-height: 650px; } .session-card { padding: 17px; } .room-stage { height: 385px; }
+  .session-card { padding: 17px; } .room-stage { height: 385px; }
 }
 @media(max-width:1200px) {
-  main { padding: 25px 20px 0; } .study-header { padding: 0 20px; }
   .detail { width: 250px; padding-left: 16px; padding-right: 16px; } .view-heading { padding-left: 20px; padding-right: 20px; }
   .central { padding-left: 20px; padding-right: 20px; }
 }
 @media(max-width:950px) {
   .detail { width: 220px; padding-left: 12px; padding-right: 12px; }
-  .view-heading > div:first-child { flex-basis: 100%; } .study-note { display: none; }
+  .view-heading > div:first-child { flex-basis: 100%; }
   .room-stage { height: 350px; } .meeting-table { width: 71%; height: 140px; } .meeting-table strong { font-size: 13px; }
   .meeting-table small { font-size: 7px; } .table-mark { display: none; } .seat { width: 75px; } .seat .avatar { width: 46px; height: 46px; }
 }
 @media(max-width:760px) {
-  main { padding: 22px 12px 0; } .study-header { padding: 0 15px; height: 68px; } .wordmark small { font-size: 7px; margin-left: 10px; padding-left: 10px; }
-  h1 { font-size: 27px; } .detail { width: 220px; } .view-heading h2 { font-size: 20px; }
+  .detail { width: 220px; } .view-heading h2 { font-size: 20px; }
   .central { padding-left: 15px; padding-right: 15px; } .design-caption { gap: 15px; } .design-caption h3 { font-size: 11px; }
   .design-caption p { font-size: 10px; } .statusbar > span:last-child { display: none; } footer > span:last-child { font-size: 8px; max-width: 50%; text-align: right; }
-  .window-controls { margin-left: 15px; } .demo { font-size: 6px; }
 }
 @media(max-width:570px) {
   .view-body { flex-direction: column; } .detail { width: 100%; border-left: 0; border-top: 1px solid var(--sidebar-border); padding: 0 18px 18px; }
-  .detail-bottom { display: none; } .app { min-height: 0; } .design-caption { grid-template-columns: 1fr; gap: 14px; }
+  .detail-bottom { display: none; } .design-caption { grid-template-columns: 1fr; gap: 14px; }
   .view-heading { padding-left: 15px; padding-right: 15px; gap: 12px; } .view-toggle { width: 100%; } .view-toggle button { flex: 1; justify-content: center; }
   .view-heading .primary { font-size: 9px; } .room-stage { max-width: 430px; margin-left: auto; margin-right: auto; }
-  .room-info { font-size: 9px; } .statusbar { font-size: 7px; } .title-dim { display: none; } .toolbar { gap: 12px; }
+  .room-info { font-size: 9px; } .statusbar { font-size: 7px; } .toolbar { gap: 12px; }
 }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation: none !important; transition: none !important; } }
 /* From the mockup's journeys.css and settings.css: the offline notice and the disconnected dot. */
@@ -208,7 +188,7 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 /* Desktop only: the local daemon itself is down (spec §6). */
 .connection-notice.local-down strong { color: var(--danger-text); }
 /* From the mockup's journeys.css and conversation.css: the empty workspace and an emptied view. */
-.workspace-empty { flex: 1; min-height: 450px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 35px 24px; }
+.workspace-empty { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 35px 24px; }
 .workspace-empty h3 { font-size: 22px; font-weight: 550; margin: 22px 0 10px; }
 .workspace-empty p { font-size: 12px; line-height: 1.8; color: var(--muted-foreground); max-width: 380px; margin: 0 0 22px; }
 .workspace-empty .primary { font-size: 12px; padding: 12px 18px; }
