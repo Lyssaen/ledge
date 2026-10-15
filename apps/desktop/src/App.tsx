@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import { groupSessions } from '@ledge/fleet';
 import { LangProvider, loadLang } from './i18n/lang';
@@ -18,6 +18,9 @@ import { ConversationPane } from './conversation/ConversationPane';
 import { useStored } from './state/useStored';
 import { loadPanel, savePanel } from './state/panel';
 import { useConversations } from './conversation/useConversations';
+import { useLaunch } from './launch/useLaunch';
+import { LaunchScreen } from './launch/LaunchScreen';
+import { clearLaunch } from './launch/form';
 
 function Shell({ client }: { client?: DaemonClient }) {
   const [state, dispatch] = useViewState();
@@ -49,19 +52,68 @@ function Shell({ client }: { client?: DaemonClient }) {
     lastScope.current = scope;
     setPanel(p => (p.expanded ? { ...p, expanded: false } : p));
   }, [scope, setPanel]);
+  // The launch lives in the Shell, not in its screen: a start cancelled by closing the screen still owes an answer, skipped (spec §9.2).
+  const [created, setCreated] = useState<string | null>(null);
+  const onLaunched = useCallback((id: string) => { clearLaunch(); setCreated(id); }, []);
+  const launch = useLaunch(fleet, machines, onLaunched);
+  const launching = launch.flow.stage !== 'closed';
+  // Read-only while the local daemon is down (spec §6): every machine, remote ones too, is reached through it.
+  const canLaunch = !localDown;
+  const opener = useRef<'heading' | 'empty'>('heading');
+  const { open: openFlow } = launch;
+  const openLaunch = useCallback((from: 'heading' | 'empty') => { opener.current = from; openFlow(); }, [openFlow]);
+
+  // The new session is selected once the fleet lists it: the attention filter goes off so it shows, the panel folds back,
+  // and the cursor goes to the reply once its conversation is on screen (mockup launch.js).
+  const replyFor = useRef<string | null>(null);
+  const [replyTick, setReplyTick] = useState(0);
+  useEffect(() => {
+    if (!created || !sessions.some(s => s.id === created)) return;
+    setCreated(null);
+    dispatch({ type: 'attention', on: false });
+    dispatch({ type: 'select', id: created });
+    setPanel(p => (p.expanded ? { ...p, expanded: false } : p));
+    replyFor.current = created;
+    setReplyTick(n => n + 1);
+  }, [created, sessions, dispatch, setPanel]);
+  // Keyed on the created-session trigger and on what the pane shows, so it never steals focus on unrelated renders.
+  const paneId = selected?.id ?? null;
+  useEffect(() => {
+    const id = replyFor.current;
+    if (!id || paneId !== id || document.getElementById('conversation-pane')?.getAttribute('data-conversation') !== id) return;
+    const reply = document.getElementById('conversation-reply');
+    if (!reply) return;
+    replyFor.current = null;
+    reply.focus({ preventScroll: true });
+  }, [replyTick, paneId, panel.expanded]);
+  // Choosing another session before the new one's conversation shows drops the pending focus.
+  const pick = (id: string) => { replyFor.current = null; dispatch({ type: 'select', id }); };
+
+  // Closing without a new session (Back to sessions, Cancel) gives the focus back to the button that opened the screen.
+  const wasLaunching = useRef(false);
+  useEffect(() => {
+    if (wasLaunching.current && !launching && !created) {
+      (document.querySelector<HTMLElement>(`[data-open-launch="${opener.current}"]`) ?? document.querySelector<HTMLElement>('[data-open-launch]'))?.focus({ preventScroll: true });
+    }
+    wasLaunching.current = launching;
+  }, [launching, created]);
+  // Inside the launch screen the local-down notice is a status: only its own validation and failure messages are alerts there.
+  const offline = <OfflineNotice machines={machines} onRetry={id => fleet.retry(id)} />;
   return (
     <main className="app" data-readonly={localDown ? 'true' : undefined}>
       <div className="content">
-        <Heading state={state} dispatch={dispatch} attentionCount={sessions.filter(needsAttention).length} />
-        {localDown && <LocalDownNotice />}
-        <OfflineNotice machines={machines} onRetry={id => fleet.retry(id)} />
-        {(ready || localDown) && sessions.length === 0 && <EmptyWorkspace />}
-        {sessions.length > 0 && <SplitView selectedId={selected?.id ?? null} panel={panel} onPanel={setPanel}
-          list={<>
-            {state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
-            {state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} attentionOnly={state.attentionOnly} />}
-          </>}
-          pane={selected ? <ConversationPane session={selected} client={fleetClient} api={conversations} expanded={panel.expanded} onExpand={on => setPanel(p => ({ ...p, expanded: on }))} /> : null} />}
+        {launching ? <LaunchScreen launch={launch} machines={machines} fleet={fleet} notices={<>{localDown && <LocalDownNotice role="status" />}{offline}</>} /> : <>
+          <Heading state={state} dispatch={dispatch} attentionCount={sessions.filter(needsAttention).length} onNewSession={canLaunch ? () => openLaunch('heading') : undefined} />
+          {localDown && <LocalDownNotice />}
+          {offline}
+          {(ready || localDown) && sessions.length === 0 && <EmptyWorkspace onNewSession={canLaunch ? () => openLaunch('empty') : undefined} />}
+          {sessions.length > 0 && <SplitView selectedId={selected?.id ?? null} panel={panel} onPanel={setPanel}
+            list={<>
+              {state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={pick} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
+              {state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={pick} attentionOnly={state.attentionOnly} />}
+            </>}
+            pane={selected ? <ConversationPane session={selected} client={fleetClient} api={conversations} expanded={panel.expanded} onExpand={on => setPanel(p => ({ ...p, expanded: on }))} /> : null} />}
+        </>}
         <StatusBar sessions={sessions} machines={machines} />
       </div>
     </main>

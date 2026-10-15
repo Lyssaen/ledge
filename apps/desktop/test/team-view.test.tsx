@@ -81,6 +81,16 @@ describe('Heading', () => {
     await userEvent.click(filter);
     expect(dispatch).toHaveBeenCalledWith({ type: 'attention', on: true });
   });
+
+  it('New session opens the launch screen when the Shell allows it', async () => {
+    const onNewSession = vi.fn();
+    render(<Heading state={{ ...DEFAULT_VIEW, view: 'team' }} dispatch={vi.fn()} attentionCount={0} onNewSession={onNewSession} />);
+    const button = screen.getByRole('button', { name: 'New session' });
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute('data-open-launch', 'heading');
+    await userEvent.click(button);
+    expect(onNewSession).toHaveBeenCalledOnce();
+  });
   it('reflects an active filter, and the room has its own title', () => {
     render(<Heading state={{ ...DEFAULT_VIEW, attentionOnly: true }} dispatch={() => {}} attentionCount={0} />);
     expect(screen.getByRole('button', { name: /Needs you/ })).toHaveAttribute('aria-pressed', 'true');
