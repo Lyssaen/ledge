@@ -154,10 +154,17 @@ describe('cursor adapter: plan (Plan mode, no hook)', () => {
   const plan = { kind: 'plan' as const, text: 'Add line d to notes.txt', source: 'pane' as const };
   it('detects "Ready to build?" with the plan\'s title and its options', () => {
     expect(cursorAdapter.detectPrompt(fx('cursor-plan'))).toEqual({
-      kind: 'plan', text: 'Add line d to notes.txt', options: ['Yes, build locally', 'Yes, build in cloud', 'No, propose changes']
+      kind: 'plan', text: 'Add line d to notes.txt', options: ['Yes, build locally', 'Yes, build in cloud', 'No, propose changes'],
+      body: 'Add line d to notes.txt\n\nnotes.txt (notes.txt) currently contains:\n\na\nb\n\nYou selected d. The change is to append that as a third line so the file becomes:\n\n'
+        + 'a\nb\nd\n\nNo other files need to change. After you approve, I will edit notes.txt (notes.txt) only.'
     });
     expect(cursorAdapter.promptStillVisible(tail(fx('cursor-plan')))).toBe(true);
     expect(cursorAdapter.atRest!(fx('cursor-plan'))).toBe(false);
+  });
+  it('a plan box whose top scrolled out of the pane gives no body rather than half a plan', () => {
+    const cut = fx('cursor-plan').split('\n').filter(l => !/Suggested Plan/.test(l)).join('\n');
+    expect(cursorAdapter.detectPrompt(cut)).toMatchObject({ kind: 'plan', text: 'Ready to build?' });
+    expect(cursorAdapter.detectPrompt(cut)).not.toHaveProperty('body');
   });
   it('accept builds locally (b, never the cloud); deny opens the revise field and waits for it', () => {
     expect(cursorAdapter.keysFor('accept', plan, fx('cursor-plan'))).toEqual([{ text: 'b' }]);

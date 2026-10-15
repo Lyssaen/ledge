@@ -52,7 +52,7 @@ test('overview: brand with its red period, subtitle, header icons, rows with tin
   expect(await badge.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
   // The oldest ask carries the red bar; the secondary line is "Name · age" (the tool is in the row's title).
   await expect(rows.nth(0)).toHaveCSS('border-left-width', '2px');
-  await expect(rows.nth(0)).toContainText(/Otto\s*·\s*18 min/);
+  await expect(rows.nth(0)).toContainText(/Otto\s*·\s*Cette machine\s*·\s*18 min/);
   await expect(rows.nth(0)).not.toContainText('pnpm');
   // Footer at the bottom: the do-not-disturb text toggle and the shortcut.
   const foot = list.locator('[data-dnd-footer]');
@@ -144,6 +144,8 @@ test('the session content and the terminal preview scroll with thin scrollbars t
   await openSession(page, 'landing-page, Pim, ouvrir');
   d.preview('pim', Array.from({ length: 30 }, (_, i) => `line ${i + 1}`));
   const view = layer(page, 'session');
+  // The terminal shows whole in reading mode, alongside the thread.
+  await view.locator('[data-terminal-band]').click();
   await expect(view.locator('pre')).toContainText('line 30');
   for (const sel of ['[data-scroll]', 'pre']) expect(await view.locator(sel).first().evaluate(el => getComputedStyle(el).scrollbarWidth)).toBe('thin');
   const pre = view.locator('pre');

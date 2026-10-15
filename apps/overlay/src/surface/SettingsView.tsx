@@ -15,8 +15,12 @@ import { TOOLS } from '../defaultTool';
 import { toolName, duration } from '../format';
 import { compareVersions } from '../update/semver';
 import type { DaemonInfo, Tool } from '@ledge/protocol';
+import { MachineSettings } from './MachineSettings';
+import type { MachineConfig, MachineState, ProbeResult } from '../daemon/machines';
 
 export interface SettingsViewProps {
+  /** The Machines tab (absent: no tab): the machines, how to change them, test an SSH alias and reconnect one now. */
+  machines?: MachineState[]; onMachines?: (config: MachineConfig[]) => void; onProbe?: (ssh: string) => Promise<ProbeResult>; onRetry?: (id: string) => void;
   visible: boolean; theme: 'dark' | 'light'; dnd: boolean;
   /** When the layer's fade-in starts, in ms (see `enterDelay` in motion). */
   enterDelay?: number;
@@ -116,7 +120,7 @@ function AccentRow({ value, onChange }: { value: string | null; onChange?: (hex:
 }
 
 /** The settings sections, one tab each; the last one opened is remembered. */
-export const SETTINGS_TABS = ['display', 'notifications', 'sounds', 'mobile', 'about'] as const;
+export const SETTINGS_TABS = ['display', 'machines', 'notifications', 'sounds', 'mobile', 'about'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 const TAB_KEY = 'ledge.settings.tab';
 const isTab = (v: unknown): v is SettingsTab => (SETTINGS_TABS as readonly unknown[]).includes(v);
@@ -142,11 +146,12 @@ export function SettingsView(p: SettingsViewProps) {
   const chosen = resolveMonitor(choice, monitors);
   const chosenValue = choice !== null && !monitors.some(m => m.id === choice) ? choice : chosen && !chosen.primary ? chosen.id : 'primary';
   const [storedTab, setTab] = useState<SettingsTab>(loadSettingsTab);
-  const tab: SettingsTab = (storedTab === 'about' && !p.about) || (storedTab === 'mobile' && !p.mobile) ? 'display' : storedTab;
+  const fleet = !!(p.machines && p.onMachines);
+  const tab: SettingsTab = (storedTab === 'about' && !p.about) || (storedTab === 'machines' && !fleet) || (storedTab === 'mobile' && !p.mobile) ? 'display' : storedTab;
   const chooseTab = (next: SettingsTab) => { setTab(next); saveSettingsTab(next); };
-  const tabLabel = { display: t.settings.tabDisplay, notifications: t.settings.tabNotifications, sounds: t.settings.tabSounds, mobile: t.settings.tabMobile, about: t.settings.tabAbout } as const;
+  const tabLabel = { display: t.settings.tabDisplay, machines: t.machines.title, notifications: t.settings.tabNotifications, sounds: t.settings.tabSounds, mobile: t.settings.tabMobile, about: t.settings.tabAbout } as const;
   const about = p.about;
-  const tabs = SETTINGS_TABS.filter(v => v === 'about' ? about : v === 'mobile' ? p.mobile : true);
+  const tabs = SETTINGS_TABS.filter(v => (v !== 'about' || about) && (v !== 'machines' || fleet) && (v !== 'mobile' || p.mobile));
   const onMobileOpen = p.mobile?.onOpen; const mobileShown = tab === 'mobile' && p.visible; const mobileOnline = p.mobile?.online ?? true;
   // Asked when the tab opens and again whenever the connection (re)opens while it is shown.
   useEffect(() => { if (mobileShown && mobileOnline) onMobileOpen?.(); }, [mobileShown, mobileOnline]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -188,6 +193,7 @@ export function SettingsView(p: SettingsViewProps) {
               <Switch label={t.settings.reduced} hint={t.settings.reducedHint} checked={p.reduced} onChange={p.onReduced} />
               {p.osReduced && !p.reduced && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', padding: '0 0 8px' }}>{t.settings.osReduced}</span>}
             </>}
+            {tab === 'machines' && p.machines && p.onMachines && <MachineSettings machines={p.machines} onChange={p.onMachines} onProbe={p.onProbe} onRetry={p.onRetry} />}
             {tab === 'notifications' && <>
               <Row><Switch label={t.settings.dnd} hint={t.settings.dndHint} checked={p.dnd} onChange={on => { if (on !== p.dnd) p.onToggleDnd(); }} /></Row>
               <Segmented<FinishedNotify> name="ledge-finished" label={t.settings.finished} hint={t.settings.finishedHint} value={p.finished} onChange={p.onFinished}

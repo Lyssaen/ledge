@@ -65,9 +65,10 @@ export interface ListProps {
   /** Removes an eligible row (see canDismiss); `offline` disables the button like every other send. */
   onDismiss?: (id: string) => void; offline?: boolean;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number;
+  disconnected?: string[];
 }
 
-export function SessionList({ sessions, visible, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onOpenChat, onTyping, askDisabled = false, notice = null, noticeRef, update, updateRef, gearPip = false, gearLabel, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120 }: ListProps) {
+export function SessionList({ sessions, visible, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onOpenChat, onTyping, askDisabled = false, notice = null, noticeRef, update, updateRef, gearPip = false, gearLabel, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120, disconnected = [] }: ListProps) {
   const { t } = useI18n();
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
@@ -87,6 +88,7 @@ export function SessionList({ sessions, visible, selectedId, focusedId = null, d
           <span data-topic style={{ fontSize: 14, lineHeight: '18px', fontWeight: s.topic ? 600 : 500, color: s.topic ? undefined : 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.topic ?? t.list.noTopic}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
             <span style={{ flexShrink: 0 }}>{s.name}</span>
+            {s.machineName && <><span aria-hidden="true">·</span><span title={s.machineName} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.machineId === 'local' ? t.machines.local : s.machineName}</span></>}
             {s.branch && <><span aria-hidden="true">·</span><BranchChip session={s} /></>}
             <span aria-hidden="true">·</span><span style={{ flexShrink: 0 }}>{relativeTime(s.startedAt, now, t)}</span>
             <span style={{ flexGrow: 1 }} />
@@ -134,6 +136,7 @@ export function SessionList({ sessions, visible, selectedId, focusedId = null, d
       {update && <div ref={updateRef} data-update>{update}</div>}
       {onAsk && <AskField onAsk={onAsk} onOpen={onOpenChat} onTyping={onTyping} disabled={askDisabled} theme={theme} reducedMotion={reducedMotion} />}
       <div data-scroll className="ledge-scroll" style={{ display: 'flex', flexDirection: 'column', padding: sessions.length ? '8px 0' : 0, flexGrow: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        {disconnected.length > 0 && <div role="status" style={{ padding: '4px 17px 8px', fontSize: 11, lineHeight: '16px', color: 'var(--warning)' }}>{t.machines.reconnecting(disconnected.join(', '))}</div>}
         {sessions.length === 0 && (
           // The permanent Ledge resident also greets the empty list.
           <div data-empty style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6, height: SIZES.emptyH, boxSizing: 'border-box', padding: '18px 24px 16px', borderTop: '1px solid var(--sidebar-border)' }}>
@@ -149,7 +152,7 @@ export function SessionList({ sessions, visible, selectedId, focusedId = null, d
           <div key={g.key} data-group-of={g.key} style={{ display: 'contents' }}>
             <div data-group style={{ display: 'flex', alignItems: 'baseline', gap: 8, height: GROUP_H, flexShrink: 0, boxSizing: 'border-box', padding: '10px 17px 0', fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', opacity: visible ? 1 : 0, transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay + 20 : 0]]) }}>
               <span style={{ fontWeight: 600, color: 'var(--sidebar-foreground)', flexShrink: 0 }}>{g.label}</span>
-              <span className="mono" style={{ fontSize: 11, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{tildePath(g.path)}</span>
+              <span className="mono" style={{ fontSize: 11, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{new Set(g.sessions.map(s => s.machineId)).size > 1 ? t.machines.count(new Set(g.sessions.map(s => s.machineId)).size) : tildePath(g.path)}</span>
               <span style={{ flexGrow: 1 }} />
               <span style={{ flexShrink: 0 }}>{t.list.groupCount(g.sessions.length)}</span>
             </div>

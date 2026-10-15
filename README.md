@@ -104,7 +104,7 @@ One binary, `ledge`, with eight commands. Source under `src/`:
 | `daemon/state.ts` | The pure reducer `reduce(session, event)`: the whole state machine, including helper (subagent) routing, the hook-over-pane priority, the session topic (`PaneTitle`, `Renamed`, first `UserPromptSubmit`) and `lastReply` from a `Stop`. |
 | `daemon/git.ts` | One `git rev-parse` per session: repository name and path, checked-out branch, and whether `cwd` is a linked worktree. |
 | `daemon/poller.ts` | Every 1 s captures each live pane (200 lines), hashes it to detect activity, broadcasts a 30-line preview when it changed, runs the adapter's prompt detection on the last 60 lines, reads Claude Code's conversation title (`PaneTitle`), refreshes git fields on the life check (every 5 s), and drops exited sessions after 10 min. |
-| `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect (then `chat.history`), broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent with the login shell's environment (see `shell-path.ts`) and answers `session.launched`. `session.rename` sets the topic. Chat commands go to `chat/`. |
+| `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect (then `chat.history`), broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent with the login shell's environment (see `shell-path.ts`) and answers `session.launched`. With a chat card's `qid`, it launches the proposal once and marks the turn. `session.rename` sets the topic. Chat commands go to `chat/`. |
 | `daemon/peers.ts`, `daemon/remote/` | The remote entry for the phone: a second listener (`127.0.0.1:47832`, published by `tailscale serve`) that serves the PWA under `/m/` and one WebSocket at `/m/ws`. A socket reads only `auth`, `pair.options` and `pair.complete` until a known device token arrives; then it is a peer, which receives the allow-listed projection of the broadcasts (`project.ts`) and may run only the commands in `rights.ts` (five: `snapshot.request`, `session.decide`, `decide.prepare`, `operation.status`, `session.reply`). `risk.ts` classifies requests; `challenges.ts` holds the single-use WebAuthn challenges; `operations.ts` records decision outcomes for idempotence. |
 | `daemon/devices.ts`, `daemon/pairing.ts`, `daemon/webauthn.ts` | The paired phones (`devices.json`, token stored as a SHA-256 hash), the pairing window (six-digit code, 2 minutes, five attempts, one window at a time) and the WebAuthn registration check. `mobile/config.ts` reads and writes `mobile.json`. |
 | `daemon/folders.ts` | `resolveFolder` (`~` expanded, absolute, existing) and the folder browser's `listFolder` and `createFolder`, which answer with a `folder.listing`. |
@@ -213,7 +213,11 @@ The overlay sends `chat.ask { qid, text, tool? }`. `tool` is the default harness
 
 One question at a time (a second one gets `chat.error`). A turn that takes more than 180 s is stopped and reported as a timeout, with no retry. A failed resume of the day's session is retried once with a fresh id. The question goes on stdin, never in argv. `LEDGE_CHAT=1` so Ledge's own hooks ignore the run; an inherited `ANTHROPIC_API_KEY` is dropped so the CLI's own login is used. The context folder is deleted when the turn ends. `~/.ledge/chat.json` remembers the day's session id and which harness it belongs to.
 
-Bot names in the answer are links that open that session. Ledge never sends an instruction to a pane from the chat.
+Bot names in the answer are links that open that session.
+
+Ledge never sends an instruction to a pane, or starts anything, by itself: the user clicks the card. Asked to open or start a session ("open a session in ledge to fix the build"), it answers with a card when the folder is certain — an absolute path from `sessions.md`, from `folders.md` (the recent folders, written beside the other context files) or typed by the user — and asks which folder otherwise. The harness ends its answer with a ```` ```ledge-session ```` block holding `{"cwd", "prompt"?}`; the daemon takes the block out of the text, checks the folder, and attaches a `proposal` to the turn. The card's "Start the session" sends `session.launch { qid }`: the daemon launches the proposal's own folder, harness (the question's) and instruction, once, and marks the card started or failed for every client. The terminal tab opens as the launch form's switch says.
+
+Ask it to pass something on — "tell Otto to run the overlay tests" — and, when exactly one tracked session matches and Ledge can type into it, the answer ends with a card: the session, its state, and the exact instruction. **Send** types it into the session the way a reply from the overlay does. If the session is busy, the card waits ("Otto is working; I'll send it as soon as it's done", **Cancel**) and the daemon sends it the next time the session is free, one instruction per free moment, oldest first, even with the overlay closed. Sessions started outside Ledge (hook only) are read-only and never get a card. A reset, a new day or a daemon restart drops the waiting instructions with the history; nothing is sent.
 
 ## Protocol
 
@@ -227,15 +231,17 @@ Daemon to clients:
 | `session.updated { session }` | Any change to a session. |
 | `session.removed { id }` | The session left the list (retired or dismissed). |
 | `session.preview { id, lines }` | The last 30 cleaned lines of the pane, sent only when they changed. |
+| `session.thread { id, items }` | A session's thread, answered to a `session.thread` request. |
+| `session.thread.item { id, item }` | One thread item created or updated, broadcast as it happens. |
 | `session.launched { id }` | To the requester of a `session.launch` only: the session exists (its `session.updated` was broadcast just before). |
 | `recents { recents }` | The recent folders changed. |
 | `folder.listing { path, parent, entries, error? }` | To the requester of a `folder.list` or `folder.create` only: the folder (resolved, `~` expanded), its parent (`null` at the root) and its subfolders by name, hidden ones left out. A refusal says why in `error`, never in an `error` message. |
 | `chat.step { qid, step }` | What Ledge is reading: `sessions`, `pane`, `reply`, `git` or `repo` (`id` / `name` / `path` when they apply). |
 | `chat.delta { qid, text }` | The next slice of the answer, as the harness writes it. |
-| `chat.done { qid, text, at }` | The finished answer. |
+| `chat.done { qid, text, at, proposal?, relay? }` | The finished answer; `proposal` the session card, `relay` the instruction card, if any. |
 | `chat.error { qid, message }` | The question could not be answered (busy, timeout, cancel, harness missing). |
-| `chat.history { turns }` | The day's turns (50 at most), after each snapshot and after each ask or reset. A turn still running has no `answer`. |
-| `error { message, id? }` | A rejected command. With `id`, the overlay shows it on that session; without one, a refused launch. |
+| `chat.history { turns }` | The day's turns (50 at most), after each snapshot and after each ask or reset. A turn still running has no `answer`. A turn's `proposal` carries `launchedId` once started and `error` if the start failed; its `relay` carries `status` (`queued` or `sent`), `sentAt` and `error`. |
+| `error { message, id? }` | A rejected command. With `id`, the overlay shows it on that session; without one, a refused launch or relay (`session.relay`, `session.relay.cancel`). |
 
 Clients to daemon:
 
@@ -253,12 +259,15 @@ Clients to daemon:
 | `session.kill { id }` | overlay | Kill the tmux session. |
 | `session.dismiss { id }` | overlay | Remove a finished or read-only session from the list. |
 | `session.focus { id }` | overlay | Acknowledged only; the overlay focuses the terminal itself. |
-| `session.launch { tool, cwd, name?, prompt?, continue? }` | overlay | Start a session: `cwd` a WSL folder (`~` allowed, must exist), `name` a preferred bot name, `prompt` the first instruction, `continue` resumes the folder's last conversation. The daemon spawns the agent exactly like `ledge <tool>` would (minus the exit-code wrapper: the poller sees the pane end) and answers `session.launched`. |
+| `session.launch { tool, cwd, name?, prompt?, continue?, qid? }` | overlay | Start a session: `cwd` a WSL folder (`~` allowed, must exist), `name` a preferred bot name, `prompt` the first instruction, `continue` resumes the folder's last conversation. The daemon spawns the agent exactly like `ledge <tool>` would (minus the exit-code wrapper: the poller sees the pane end) and answers `session.launched`. With `qid`, it starts that chat turn's proposal (the other fields are ignored), refused once started. |
+| `session.relay { qid }` | overlay | Sends the chat card's instruction now, or queues it until the session is free. Refusals: `unknown relay`, `already sent`, `already queued`. |
+| `session.relay.cancel { qid }` | overlay | Takes the card's instruction back out of the queue (`nothing queued` otherwise). |
 | `folder.list { path? }` | overlay | The launch form's folder browser: list a WSL folder's subfolders (home without `path`). |
 | `folder.create { parent, name }` | overlay | Make a folder named `name` (no `/`, not `.` or `..`) inside `parent`, then list it. |
 | `chat.ask { qid, text, tool? }` | overlay | Ask Ledge. `tool` is the overlay's default harness (`claude` when omitted). |
 | `chat.cancel { qid }` | overlay | Stop the running question. |
 | `chat.reset` | overlay | Clear the day's turns and start a new harness session on the next question. Refused while a question is running. |
+| `session.thread { id }` | overlay | Ask for a session's thread; it is not in the snapshot. |
 | `snapshot.request` | any | Ask for a fresh snapshot. |
 | `pair.begin` | overlay | Open the pairing window; the daemon answers `pair.code`. |
 | `pair.options { code }`, `pair.complete { code, deviceName, webauthn }` | phone (not yet authenticated) | Prove the code and get the WebAuthn registration options, then send the registration; answered with `pair.challenge`, `pair.done { token, deviceId }` or `pair.error`. |
@@ -311,6 +320,21 @@ startedAt, lastActivityAt, lastHookAt?, exitCode?, exitedAt?, lastError?, source
 
 Where a pending request comes from, for Claude Code: `PermissionRequest` gives `permission` (or `diff` for Edit/Write/MultiEdit), `PreToolUse` on `AskUserQuestion` gives `question` with the first question's options (later questions and the "Ready to submit your answers?" review come from the pane), `PreToolUse` on `ExitPlanMode` gives `plan`, a permission `Notification` gives `permission`, and the pane detector gives `permission`, `question` or `plan` from the dialog footer (the workspace trust dialog included). A `PostToolUse` for the same tool, a `Stop`, a confirmed injection, or the pane at rest clears it. Answering question 1 of a multi-question dialog so that question 2 appears is success: the first prompt is gone.
 
+### Thread
+
+Each session has a thread the daemon builds from the hooks (`~/.ledge/history/<id>.jsonl`, 400 items kept):
+
+```
+prompt { text }                                  UserPromptSubmit
+message { text }                                 the agent's text, read from the transcript tail
+tool { tool, label, input?, output?, error?, status: running | success | failed | unknown, durationMs?, files[] }
+permission { tool, text, decision?: accept | deny | unknown }
+reply { text }                                   Stop, or a helper's report (helperId)
+helper { task, agentType?, state: working | exited }
+```
+
+Every item carries `id`, `at`, `turn` and, for a subagent's own items, `helperId`. What a harness does not send (Cursor: results, durations, messages) is shown as unavailable, never guessed.
+
 ## Files and settings
 
 WSL side, under `~/.ledge` (or `$LEDGE_HOME`):
@@ -349,6 +373,7 @@ Windows side, the overlay keeps its preferences in the WebView's `localStorage`:
 - The WebAuthn challenge is single use, kept in memory (a daemon restart voids it), lives 60 s, and is bound to the device, the session, the request, its version and the decision (`accept`). It is spent even when the check fails, and a new `decide.prepare` replaces the previous one for the same request. A decision that names a request or version that is no longer the pending one is refused (`stale` or `changed`) before anything is typed.
 - Decisions are idempotent. The phone gives each decision an operation id, and the daemon records the outcome (24 h, 500 operations at most): a repeated id replays it, never types twice, and a status check after a lost link returns the recorded state. There is no offline queue and no automatic resend: a decision that could not be sent says so and is not kept, and one whose delivery is uncertain is only ever checked, never replayed. If the daemon does not know the operation, the phone says "unknown" and the user decides again from the current request.
 - A hook never blocks or fails the agent: 100 ms budget, every error swallowed and logged.
+- The `transcriptPath` of a local `session.event` is read by the daemon to fill the thread: only the tail of the file (512 KiB at most), only its text blocks, broadcast to local clients. It trusts that path under the same loopback model as `session.reply`: whatever can send it could already type into a pane.
 - An answer is typed only if the prompt is on screen, and reported as taken only if the prompt then disappears. Nothing is retried automatically; the session goes to `error` and the overlay offers a retry.
 - A decision is locked in the overlay until the daemon confirms, rejects, or the connection drops, so a double click never sends two answers.
 - The overlay survives the daemon: it shows "daemon unreachable, retrying" under the island and reconnects with backoff.
@@ -358,7 +383,7 @@ Windows side, the overlay keeps its preferences in the WebView's `localStorage`:
 
 ## How to install?
 
-Ledge has two halves: the `ledge` CLI and its daemon in WSL2, and the overlay on Windows. The WSL side installs from this repository. The Windows side is a ready-made installer from the [Releases](https://github.com/Paradow-dev/ledge/releases) page, or one you build yourself.
+Ledge has two halves: the `ledge` CLI and its daemon in WSL2, and the overlay on Windows. The WSL side installs from this repository. The Windows side is a ready-made installer from the [Releases](https://github.com/Lyssaen/ledge/releases) page, or one you build yourself.
 
 ### What you need
 
@@ -388,12 +413,12 @@ ledge status
 
 ### 2. Get the Windows installer
 
-Download `Ledge_<version>_x64-setup.exe` from the [latest release](https://github.com/Paradow-dev/ledge/releases/latest). The release notes give its SHA-256.
+Download `Ledge_<version>_x64-setup.exe` from the [latest release](https://github.com/Lyssaen/ledge/releases/latest). The release notes give its SHA-256.
 
 Or build it yourself. Clone the repository a second time, on the Windows disk, in PowerShell. Do not build from the `\\wsl$` path: `node_modules` must be the Windows one.
 
 ```powershell
-git clone https://github.com/Paradow-dev/ledge.git $HOME\Workspace\ledge
+git clone https://github.com/Lyssaen/ledge.git $HOME\Workspace\ledge
 cd $HOME\Workspace\ledge
 pnpm install --frozen-lockfile
 cd apps\overlay
@@ -455,7 +480,7 @@ More details: the WSL side in [packages/ledge/README.md](packages/ledge/README.m
 ## Development
 
 ```sh
-git clone https://github.com/Paradow-dev/ledge.git ~/Workspace/ledge && cd ~/Workspace/ledge
+git clone https://github.com/Lyssaen/ledge.git ~/Workspace/ledge && cd ~/Workspace/ledge
 pnpm install
 pnpm --filter @paradow/ledge build
 chmod +x packages/ledge/dist/cli/index.js
@@ -496,6 +521,7 @@ docs/                design specs, implementation plans, mockups, the approved p
 - Markdown document reader — **implemented in the overlay and WSL daemon**: [spec](docs/superpowers/specs/2026-10-11-markdown-reader-design.md), [implementation plan](docs/superpowers/plans/2026-10-11-markdown-reader.md), and [approved mockup](docs/mockups/ledge-reader-existing.html). Opens cited plans, designs and skills in the same 560 px panel, supports an 800 px expanded view, and returns to the conversation with its draft and scroll position preserved. Browser integration is tested; native Windows validation is still pending.
 - Ledge on the phone, a PWA to answer agents away from the PC — **V2 design approved on 2026-10-14; lots 1 (read-only access) and 2 (decisions) implemented, iPhone validation (R1 to R5, R8) pending**: [approved design and prototype guide](docs/superpowers/specs/2026-10-14-ledge-mobile-design.md), [interactive gallery](docs/mockups/ledge-mobile/index.html), and [inbox preview](docs/mockups/ledge-mobile-inbox.png). Two tabs, contextual decisions, explicit delivery states and a guided pairing flow. Setup, pairing and security: [docs/mobile.md](docs/mobile.md); device checks: [feasibility report](docs/spikes/2026-10-14-ledge-mobile-feasibility.md). The mockup's interactions are simulated; V1 and the original canvas export remain historical references.
 - Starting a session from Ledge: [spec](docs/superpowers/specs/2026-10-10-launch-from-ledge-design.md) and [mockups](https://claude.ai/artifact/YBX4UV7Z2eBRNKAwNh3876)
+- Relaying an instruction from the chat to a session: [spec](docs/superpowers/specs/2026-10-12-relay-from-chat-design.md).
 - Design canvas (mockups and playable prototype): https://claude.ai/artifact/57oDjsKdabQBmPgAXn15mc
 - Design system "Shadcn Red": https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV
 - Initial mascot exploration: [docs/mockups/mascots.html](docs/mockups/mascots.html), a historical comparison of three directions.

@@ -1,10 +1,13 @@
 import { z } from 'zod';
 import { SessionSchema, ToolSchema } from './session.js';
 import { TurnSchema } from './history.js';
-import { ChatStepSchema, ChatTurnSchema } from './chat.js';
+import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema } from './chat.js';
 import { AuthenticationJsonSchema, OperationIdSchema, OperationReasonSchema, OperationStatusSchema } from './operations.js';
 import { DeviceSchema, PairErrorSchema, RegistrationJsonSchema } from './remote.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
+import { RoutingContextSchema, RouteResultSchema } from './routing.js';
+import { SshAliasSchema } from './ssh.js';
+import { ThreadItemSchema } from './thread.js';
 
 export const PROTOCOL_PORT = 47831;
 
@@ -15,14 +18,31 @@ export const SessionEventSchema = z.object({
   tool: z.string().optional(),
   text: z.string().optional(),
   options: z.array(z.string()).optional(),
+  /** Each option's description, by index ('' when it has none); left out when no option has one. */
+  optionDetails: z.array(z.string()).optional(),
   kind: z.enum(['question', 'permission', 'plan', 'diff']).optional(),
+  /** PanePrompt: what to review in full before deciding (a plan read in the terminal), when `text` is its summary. */
+  body: z.string().optional(),
   exitCode: z.number().int().nullable().optional(),
   helperId: z.string().optional(),
   /** The helper's description, once known (Claude Code: its `.meta.json`, written after SubagentStart). */
   task: z.string().optional(),
   /** PostToolUseFailure: the user interrupted the turn (Esc); Claude then waits for input with no Stop. */
   interrupt: z.boolean().optional(),
-  reason: z.string().max(500).optional()
+  reason: z.string().max(500).optional(),
+  /** Native tracking (spec 2026-10-13 §2): the harness's id of the tool call, so its result lands on the same row. */
+  toolUseId: z.string().optional(),
+  /** The tool's input as the harness gave it, every string capped by the hook. */
+  toolInput: z.record(z.string(), z.unknown()).optional(),
+  /** PostToolUse: the result as text; SubagentStop: nothing (the report travels in `text`). */
+  output: z.string().optional(),
+  durationMs: z.number().nonnegative().optional(),
+  /** PostToolUseFailure: the harness's error message. */
+  error: z.string().optional(),
+  /** The session's transcript, or the helper's on SubagentStop; the daemon reads its tail for the agent's messages. */
+  transcriptPath: z.string().optional(),
+  /** Decided: what was chosen when the daemon knows it. */
+  decision: z.enum(['accept', 'deny']).optional()
 });
 export type SessionEvent = z.infer<typeof SessionEventSchema>;
 
@@ -34,21 +54,25 @@ export type Recent = z.infer<typeof RecentSchema>;
 export const SEMVER = /^\d+\.\d+\.\d+$/;
 /** What the daemon knows of itself (spec 2026-10-12 auto-update §6): its version, how it was installed, whether it runs
  *  as the systemd service, and the command a person runs by hand when it cannot update itself. */
-export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional() });
+export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
 
 export const ServerMessageSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('chat.routed'), qid: z.string(), result: RouteResultSchema }),
   DocumentContentSchema,
   DocumentErrorSchema,
   /** `recents`: the folders of past sessions, most recent first. `launcher`: the command that runs `ledge` inside WSL
    *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. `daemon`: absent
    *  from daemons older than the auto-update. */
-  z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional(), daemon: DaemonInfoSchema.optional() }),
+  z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional(), daemon: DaemonInfoSchema.optional(), sshAlias: SshAliasSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: SessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
+  /** A session's thread, on request (spec 2026-10-13 §5); then each created or updated item, broadcast. */
+  z.object({ type: z.literal('session.thread'), id: z.string(), items: z.array(ThreadItemSchema) }),
+  z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema }),
   /** Answer to the requester of a `session.launch`: the session exists (its `session.updated` is broadcast as usual). */
   z.object({ type: z.literal('session.launched'), id: z.string() }),
   /** Answer to `session.history`: the session's thread, oldest first. */
@@ -61,7 +85,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** The chat (spec 2026-10-11 §5): what Ledge reads, its words as they come, the final text, or why it stopped; the day's turns after each snapshot. */
   z.object({ type: z.literal('chat.step'), qid: z.string(), step: ChatStepSchema }),
   z.object({ type: z.literal('chat.delta'), qid: z.string(), text: z.string() }),
-  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime() }),
+  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), relay: ChatRelaySchema.optional() }),
   z.object({ type: z.literal('chat.error'), qid: z.string(), message: z.string() }),
   z.object({ type: z.literal('chat.history'), turns: z.array(ChatTurnSchema) }),
   /** The daemon updating itself: npm is running, then the service restarts (the socket closes right after). */
@@ -83,10 +107,12 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('chat.route'), qid: z.string().min(1).max(100), text: z.string().min(1).max(20000), tool: ToolSchema.optional(), context: RoutingContextSchema }),
   DocumentReadSchema,
   /** The overlay starts a session: `cwd` is a WSL path (`~` allowed), `name` a preferred bot name (the daemon picks a
-   *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation. */
-  z.object({ type: z.literal('session.launch'), tool: ToolSchema, cwd: z.string().min(1), name: z.string().optional(), prompt: z.string().optional(), continue: z.boolean().optional() }),
+   *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation.
+   *  With `qid` it is the chat card of that turn: the daemon launches the turn's proposal and ignores the other fields. */
+  z.object({ type: z.literal('session.launch'), tool: ToolSchema, cwd: z.string().min(1), name: z.string().optional(), prompt: z.string().optional(), continue: z.boolean().optional(), qid: z.string().min(1).optional() }),
   /** The launch form's folder browser: list a folder's subfolders (home when no `path`), or make `name` inside `parent`
    *  and list it. Both are answered with a `folder.listing`. */
   z.object({ type: z.literal('folder.list'), path: z.string().optional() }),
@@ -98,17 +124,22 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('decide.prepare'), id: z.string(), pendingId: z.string(), pendingVersion: z.number().int().positive(), decision: z.literal('accept') }),
   /** Where did my operation end up (after a lost connection)? Answered with `operation.result`. */
   z.object({ type: z.literal('operation.status'), operationId: OperationIdSchema }),
+  /** The chat card's instruction (spec 2026-10-12 relay §4): sent now if the session is free, else queued until it is. */
+  z.object({ type: z.literal('session.relay'), qid: z.string().min(1) }),
+  /** Takes the card's queued instruction back out of the queue. */
+  z.object({ type: z.literal('session.relay.cancel'), qid: z.string().min(1) }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),
   z.object({ type: z.literal('session.kill'), id: z.string() }),
   z.object({ type: z.literal('session.interrupt'), id: z.string(), operationId: OperationIdSchema.optional() }),
   /** The phone opens a session's thread: answered with `session.turns`. */
   z.object({ type: z.literal('session.history'), id: z.string() }),
-  /** The phone has read the thread up to `seq` (0: nothing). */
-  z.object({ type: z.literal('session.read'), id: z.string(), seq: z.number().int().nonnegative() }),
+  /** The phone has read the thread up to the turn of that time (`at` of the last turn it showed). */
+  z.object({ type: z.literal('session.read'), id: z.string(), at: z.string().datetime() }),
   /** Removes a finished (exited) or read-only (hook_only) session from the list; refused for a live launcher session. */
   z.object({ type: z.literal('session.dismiss'), id: z.string() }),
   /** The user names the session's topic from the overlay (500 characters at most, the hook's prompt cap); an empty topic hands back to the automatic sources. */
   z.object({ type: z.literal('session.rename'), id: z.string(), topic: z.string().max(500) }),
+  z.object({ type: z.literal('session.thread'), id: z.string() }),
   z.object({ type: z.literal('session.register'), session: SessionSchema }),
   /** `agent` and `cwd` describe the session when the daemon does not know it yet (a hook from an agent started without ledge). */
   z.object({ type: z.literal('session.event'), id: z.string(), event: SessionEventSchema, agent: ToolSchema.optional(), cwd: z.string().optional() }),

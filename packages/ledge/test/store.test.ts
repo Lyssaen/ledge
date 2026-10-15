@@ -15,6 +15,15 @@ let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ledge-')); process.env.LEDGE_HOME = dir; });
 
 describe('Store', () => {
+  it('tells event listeners about every applied event, even one the reducer ignores', () => {
+    const s = new Store(); const seen: string[] = [];
+    s.onEvent((id, ev) => seen.push(`${id}:${ev.name}`));
+    s.upsert(mk('a'));
+    s.apply('a', { name: 'Stop', at: '2026-10-09T18:01:00.000Z', source: 'hook' });
+    s.apply('a', { name: 'Decided', at: '2026-10-09T18:02:00.000Z', source: 'daemon' }); // nothing pending: same object
+    s.apply('zz', { name: 'Stop', at: '2026-10-09T18:03:00.000Z', source: 'hook' }); // unknown session: nothing
+    expect(seen).toEqual(['a:Stop', 'a:Decided']);
+  });
   it('upserts, applies events and notifies', async () => {
     const s = new Store(); const seen: string[] = [];
     s.onChange(c => seen.push(c.type));

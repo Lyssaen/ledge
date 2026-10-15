@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { Session, SessionEvent, SessionState } from '@ledge/protocol';
+import type { Pending, Session, SessionEvent, SessionState } from '@ledge/protocol';
 import { reduce, HOOK_PRIORITY_MS } from '../src/daemon/state.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
@@ -77,9 +77,47 @@ describe('reduce: pending rules', () => {
     const next = reduce(session('working'), ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Which one?', options: ['Backfill', 'Shadow'] }));
     expect(next.pending).toMatchObject({ kind: 'question', text: 'Which one?', options: ['Backfill', 'Shadow'], source: 'hook' });
   });
+  /** The request's own content, without the identity and risk the reducer stamps on it (mobile, lot 2). */
+  const content = (p: Pending | undefined) => { if (!p) return p; const { id: _i, version: _v, since: _s, risk: _r, riskReason: _rr, ...rest } = p; return rest; };
+  it('AskUserQuestion keeps its option descriptions; a pane prompt with new options drops the old ones', () => {
+    const next = reduce(session('working'), ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Which one?', options: ['Backfill', 'Shadow'], optionDetails: ['Copies the history.', ''] }));
+    expect(content(next.pending)).toEqual({ kind: 'question', text: 'Which one?', options: ['Backfill', 'Shadow'], optionDetails: ['Copies the history.', ''], source: 'hook' });
+    const pane = reduce(session('working'), ev('PanePrompt', { source: 'pane', kind: 'question', text: 'Which one?', options: ['A', 'B'], optionDetails: ['', ''] }));
+    expect(content(pane.pending)).toEqual({ kind: 'question', text: 'Which one?', options: ['A', 'B'], source: 'pane' });
+  });
   it('ExitPlanMode sets a plan pending', () => {
     const next = reduce(session('working'), ev('PreToolUse', { tool: 'ExitPlanMode', text: 'Fix three findings' }));
     expect(next.pending?.kind).toBe('plan');
+  });
+  it('ExitPlanMode carries the whole plan to review, its first line staying the summary', () => {
+    const plan = '# Plan: add README.md\n\n## Steps\n\n1. Create README.md\n2. Read it back';
+    const next = reduce(session('working'), ev('PreToolUse', { tool: 'ExitPlanMode', text: '# Plan: add README.md', toolInput: { plan } }));
+    expect(content(next.pending)).toEqual({ kind: 'plan', text: '# Plan: add README.md', body: plan, source: 'hook' });
+    // Claude's PermissionRequest for the same call keeps the plan.
+    expect(reduce(next, ev('PermissionRequest', { tool: 'ExitPlanMode', text: '# Plan: add README.md', toolInput: { plan } })).pending?.body).toBe(plan);
+  });
+  it('the transcript a hook names becomes the session transcript (it follows /clear and --resume), never a helper one', () => {
+    const s = session('working', { transcriptPath: '/c/projects/-w/launch.jsonl' });
+    expect(reduce(s, ev('UserPromptSubmit', { text: 'go', transcriptPath: '/c/projects/-w/after-clear.jsonl' })).transcriptPath).toBe('/c/projects/-w/after-clear.jsonl');
+    expect(reduce(s, ev('SubagentStop', { helperId: 'h1', transcriptPath: '/c/projects/-w/launch/subagents/agent-h1.jsonl' })).transcriptPath).toBe('/c/projects/-w/launch.jsonl');
+    expect(reduce(s, ev('PaneChanged', { source: 'pane' })).transcriptPath).toBe('/c/projects/-w/launch.jsonl');
+  });
+  it('a plan read in the terminal keeps its body (Cursor, Claude without hooks)', () => {
+    const next = reduce(session('working', { tool: 'cursor' }), ev('PanePrompt', { source: 'pane', kind: 'plan', text: 'Add line d', body: 'Add line d\n\nAppend d.', options: ['Yes, build locally'] }));
+    expect(next.pending).toMatchObject({ kind: 'plan', text: 'Add line d', body: 'Add line d\n\nAppend d.', source: 'pane' });
+  });
+  it('a Stop whose reply is a proposed plan keeps that mark on the reply; the next ordinary Stop drops it', () => {
+    const planned = reduce(session('working', { tool: 'codex' }), ev('Stop', { kind: 'plan', text: '# Add README\n\n## Changes\n\n- Add README.md' }));
+    expect(planned.lastReply).toMatchObject({ text: '# Add README\n\n## Changes\n\n- Add README.md', plan: true });
+    expect(reduce({ ...planned, state: 'working' }, ev('Stop', { text: 'Done.' })).lastReply).toEqual({ text: 'Done.', at: later(5000) });
+  });
+  it('Codex: "Implement this plan?" reads the plan the agent just proposed, its last reply', () => {
+    const reply = { text: '# Add Red Banner\n\n1. Create banner.html\n2. Check it renders red', at: later(4000) };
+    const s = session('idle', { tool: 'codex', lastReply: reply });
+    const next = reduce(s, ev('PanePrompt', { source: 'pane', kind: 'plan', text: 'Implement this plan?', options: ['Yes, implement this plan', 'No, stay in Plan mode'] }));
+    expect(next.pending).toMatchObject({ kind: 'plan', text: 'Implement this plan?', body: reply.text, source: 'pane' });
+    // No reply to read: the summary alone, nothing made up.
+    expect(reduce(session('idle', { tool: 'codex' }), ev('PanePrompt', { source: 'pane', kind: 'plan', text: 'Implement this plan?' })).pending?.body).toBeUndefined();
   });
   it('Edit permission sets a diff pending', () => {
     const next = reduce(session('working'), ev('PermissionRequest', { tool: 'Edit', text: 'src/daemon/state.ts' }));

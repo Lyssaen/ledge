@@ -1,0 +1,116 @@
+<title>Relais depuis le chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+/* Same canvas as ledge-launch-from-chat.html: dark overlay panels (the app's look) on a light board, one look on purpose. */
+:root{color-scheme:light;--board:#f4f4f5;--ink:#18181b;--muted-ink:#52525b;--brand:#9f0712;--panel:#171717;--fg:#fafafa;--muted:#a1a1a1;--well:#0a0a0a;--chip:#262626;--line:#ffffff1a;--line2:#ffffff26;--link:#fb2c36;--work:#90c7f2;--idle:#a9dfc7;--err:#ffab9f}
+body{margin:0;background:var(--board);font-family:'Geist',system-ui,sans-serif;color:var(--ink)}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.page{box-sizing:border-box;padding-block:48px;padding-inline:max(16px,4vw);display:flex;flex-direction:column;gap:36px}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 40px}
+.top h1{margin:0;font-size:clamp(28px,4vw,40px);line-height:1.1;font-weight:700;letter-spacing:-.02em;text-wrap:balance}
+.top p{margin:0;max-width:560px;font-size:14px;line-height:21px;color:var(--muted-ink)}
+.grid{display:flex;flex-wrap:wrap;gap:40px 32px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:16px;width:min(440px,100%)}
+.eyebrow{margin:0;font-size:11px;letter-spacing:.12em;font-weight:600;color:var(--brand)}
+.capt{margin:0;font-size:20px;line-height:26px;font-weight:650;text-wrap:balance}
+.capd{margin:0;font-size:13px;line-height:19px;color:var(--muted-ink);min-height:57px}
+.panel{width:100%;height:600px;box-sizing:border-box;background:var(--panel);color:var(--fg);border-radius:0 0 20px 20px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 40px -12px rgba(0,0,0,.45);font-size:13px;line-height:19px}
+.head{display:flex;align-items:center;gap:8px;height:52px;flex-shrink:0;box-sizing:border-box;padding:0 8px;border-bottom:1px solid var(--line)}
+.ib{width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:8px;color:var(--muted);padding:0}
+.ht{display:flex;flex-direction:column;gap:2px;flex-grow:1}
+.ht b{font-size:14px;line-height:18px;font-weight:650}.ht b i{font-style:normal;color:var(--link)}
+.ht span{font-size:11px;line-height:14px;color:var(--muted)}
+.thread{flex:1 1 auto;display:flex;flex-direction:column;gap:14px;padding:14px 16px 10px;overflow:hidden}
+.q{align-self:flex-end;max-width:85%;padding:8px 12px;border-radius:12px 12px 4px 12px;background:#27272a}
+.ans{display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:start}
+.body{display:flex;flex-direction:column;gap:8px;min-width:0}
+.p{margin:0}
+.ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px}
+.code{font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;background:var(--chip);border-radius:4px;padding:1px 4px}
+.mono{font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px}
+.src{display:flex;flex-wrap:wrap;gap:2px 8px;padding-top:6px;border-top:1px solid var(--line);font-size:11px;line-height:16px;color:var(--muted)}
+.src b{font-weight:500}
+.card{display:flex;flex-direction:column;border:1px solid var(--line2);border-radius:10px;background:var(--well);overflow:hidden}
+.crow{display:grid;grid-template-columns:92px 1fr;gap:8px;padding:8px 12px;font-size:12px;line-height:17px;align-items:start}
+.crow + .crow{border-top:1px solid #ffffff12}
+.lab{color:var(--muted)}
+.who{display:flex;align-items:center;gap:8px;min-width:0}
+.who .meta{display:flex;flex-direction:column;gap:1px;min-width:0}
+.who .meta span{color:var(--muted)}
+.state{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:999px;background:var(--chip);font-size:11px;color:var(--fg)}
+.state::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--dot)}
+.instr{margin:0;padding-left:10px;border-left:2px solid var(--line2);font-size:12.5px;line-height:18px}
+.cfoot{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:var(--panel)}
+.btn{height:30px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:8px;border:0;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;flex-shrink:0}
+.btn:focus-visible{outline:2px solid var(--link);outline-offset:2px}
+.primary{background:var(--brand);color:#fef2f2}
+.outline{background:transparent;color:var(--fg);border:1px solid var(--line2)}
+.hint{font-size:11.5px;color:var(--muted)}
+.grow{flex-grow:1;font-size:12.5px;min-width:0}
+.dim{color:var(--muted)}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--work);flex-shrink:0;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none}}
+.alert{display:flex;gap:8px;padding:8px 12px;border-top:1px solid var(--line);background:#450a0a;color:#ffa2a2;font-size:12px;line-height:17px}
+.comp{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+.field{flex:1;min-width:0;height:34px;box-sizing:border-box;padding:0 10px;background:var(--well);color:var(--muted);border:1px solid var(--line2);border-radius:8px;font:inherit;font-size:13px}
+.send{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:var(--brand);color:#fef2f2;opacity:.5}
+.notes{max-width:900px;display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:20px;color:var(--muted-ink)}
+.notes h2{margin:0;font-size:15px;color:var(--ink)}
+.notes ul{margin:0;padding-left:18px}
+</style>
+
+<div class="page">
+  <div class="top">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <p class="eyebrow">ASK LEDGE · RELAYER UNE INSTRUCTION</p>
+      <h1>Le chat propose, tu envoies.</h1>
+    </div>
+    <p>« Dis à Otto de… » en langage naturel. Ledge reconnaît la session et affiche une carte. Rien ne part sans ton clic ; si la session travaille, l'instruction attend dans le daemon et part dès qu'elle a fini.</p>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="notes">
+    <h2>Ce qui ne change pas</h2>
+    <ul>
+      <li>Un tour porte une seule carte : lancement ou relais, jamais les deux.</li>
+      <li>Les sessions lancées hors de Ledge (hooks seuls) restent en lecture seule : Ledge le dit, sans carte.</li>
+      <li>Un double clic, un second overlay ou une reconnexion ne renvoient rien : la carte reflète l'état que diffuse le daemon.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+// Bots: the Ledge mascot and the session companions share one shape; the eyes carry the state.
+const bot = (size, eye) => `<svg width="${size}" height="${size}" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="19" rx="8" fill="#34434b"/><rect x="6.5" y="10" width="15" height="8" rx="4" fill="#172124"/><circle cx="11" cy="14" r="1.8" fill="${eye}"/><circle cx="17" cy="14" r="1.8" fill="${eye}"/></svg>`;
+const EYE = { idle: '#a9dfc7', work: '#90c7f2', err: '#ffab9f' };
+const icon = d => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="${d}"/></svg>`;
+const head = sub => `<div class="head"><button class="ib" aria-label="Retour">${icon('M15 18l-6-6 6-6')}</button>${bot(28, EYE.idle)}<div class="ht"><b>Ledge<i>.</i></b><span>${sub}</span></div><button class="ib" aria-label="Nouvelle conversation">${icon('M12 5v14M5 12h14')}</button><button class="ib" aria-label="Fermer">${icon('M18 6L6 18M6 6l12 12')}</button></div>`;
+const comp = `<div class="comp"><input class="field" type="text" aria-label="Demander à Ledge" placeholder="Demander à Ledge…"><button class="send" aria-label="Envoyer">${icon('M5 12h14M13 6l6 6-6 6')}</button></div>`;
+const ans = (eye, html) => `<div class="ans">${bot(24, eye)}<div class="body">${html}</div></div>`;
+const src = (files, when) => `<div class="src"><b>Sources</b>${files.map(f => `<span>${f}</span>`).join('')}<span>${when}</span></div>`;
+
+// The session row: who will receive it, and its live state from the snapshot.
+const target = (state, dot, eye) => `<div class="crow"><span class="lab">Session</span><span class="who">${bot(22, eye)}<span class="meta"><strong>Otto</strong><span>Claude Code · ledge <span class="mono">feat/launch-from-chat</span></span></span><span class="state" style="--dot:${dot}">${state}</span></span></div>`;
+const instr = `<div class="crow"><span class="lab">Instruction</span><p class="instr">Lance les tests de l'overlay et corrige ceux qui échouent</p></div>`;
+const Q = `<div class="q">Dis à Otto de lancer les tests de l'overlay et de corriger ceux qui échouent</div>`;
+const intro = `<p class="p"><strong>Otto</strong> travaille sur <span class="code">feat/launch-from-chat</span> dans <strong>ledge</strong>. Je lui transmets ta demande :</p>`;
+const sendIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 20l18-8L3 4v6l12 2-12 2z"/></svg>`;
+
+const states = [
+  { eyebrow: '01 / LA PROPOSITION', title: 'La session est claire : une carte.', desc: 'Un seul bot correspond. La carte montre à qui part l’instruction, son état actuel et le texte exact qui sera tapé.', sub: '3 sessions · 2 dépôts',
+    thread: Q + ans(EYE.idle, intro + `<div class="card">${target('à toi', 'var(--idle)', EYE.idle)}${instr}<div class="cfoot"><button class="btn primary">${sendIcon}Envoyer</button><span class="hint">ou reformule ta demande</span></div></div>` + src(['sessions.md'], 'il y a 3 s')) },
+  { eyebrow: '02 / SESSION AMBIGUË', title: 'Pas sûr du bot : il demande.', desc: 'Deux sessions dans le même dépôt, ou une session en lecture seule : aucune carte, Ledge cite les candidats.', sub: '4 sessions · 2 dépôts',
+    thread: `<div class="q">Dis à la session ledge de mettre à jour le README</div>` + ans(EYE.idle, `<p class="p">Deux sessions travaillent dans <strong>ledge</strong> :</p><ul class="ul"><li><strong>Otto</strong> · <span class="code">feat/launch-from-chat</span> · à toi</li><li><strong>Nova</strong> · <span class="code">main</span> · travaille</li></ul><p class="p">Laquelle ? <strong>Iris</strong> est aussi dans ce dépôt, mais lancée hors de Ledge : je ne peux pas lui écrire.</p>` + src(['sessions.md'], 'il y a 2 s')) },
+  { eyebrow: '03 / EN ATTENTE', title: 'Otto travaille : l’instruction attend.', desc: 'Le daemon la garde et l’envoie au prochain « à toi », même overlay fermé. Annuler la remet en proposition.', sub: '3 sessions · 2 dépôts',
+    thread: Q + ans(EYE.idle, intro + `<div class="card">${target('travaille', 'var(--work)', EYE.work)}${instr}<div class="cfoot"><span class="pulse" aria-hidden="true"></span><span class="grow"><strong>Otto</strong> travaille, <span class="dim">j'enverrai dès qu'il aura fini</span></span><button class="btn outline">Annuler</button></div></div>` + src(['sessions.md'], 'il y a 40 s')) },
+  { eyebrow: '04 / ENVOYÉE', title: 'La carte garde la trace.', desc: 'Plus de bouton : la carte dit quand l’instruction est partie. Le prénom ouvre la session dans la liste.', sub: '3 sessions · 2 dépôts',
+    thread: Q + ans(EYE.idle, intro + `<div class="card">${target('travaille', 'var(--work)', EYE.work)}${instr}<div class="cfoot">${bot(22, EYE.work)}<span class="grow">Envoyé à <a href="#">Otto</a> <span class="dim">· 14:32</span></span></div></div>` + src(['sessions.md'], 'il y a 2 min')) },
+  { eyebrow: '05 / ÉCHEC', title: 'L’erreur reste sur la carte.', desc: 'La session s’est arrêtée pendant l’attente, ou le terminal n’a pas pris le texte : le message du daemon s’affiche ici.', sub: '3 sessions · 2 dépôts',
+    thread: Q + ans(EYE.err, intro + `<div class="card">${target('arrêtée', 'var(--err)', EYE.err)}${instr}<div class="alert" role="alert"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.5"/></svg><span>Otto s'est arrêté avant de recevoir l'instruction.</span></div><div class="cfoot"><button class="btn outline">Réessayer</button><span class="hint">ou reformule ta demande</span></div></div>` + src(['sessions.md'], 'il y a 5 min')) }
+];
+
+document.getElementById('grid').innerHTML = states.map(s => `<div class="col"><div style="display:flex;flex-direction:column;gap:6px"><p class="eyebrow">${s.eyebrow}</p><p class="capt">${s.title}</p><p class="capd">${s.desc}</p></div><div class="panel">${head(s.sub)}<div class="thread">${s.thread}</div>${comp}</div></div>`).join('');
+</script>

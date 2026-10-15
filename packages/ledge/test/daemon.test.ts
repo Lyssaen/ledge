@@ -5,12 +5,11 @@ import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { startDaemon } from '../src/daemon/index.js';
-import { realTmux } from '../src/tmux.js';
+import { realTmux, type Tmux } from '../src/tmux.js';
 import { killTestServer } from './helpers.js';
 import { connect } from '../src/client.js';
-import { ensureLedgeDir } from '../src/paths.js';
-import { HistoryStore } from '../src/daemon/history.js';
-import type { Tmux } from '../src/tmux.js';
+import { ensureLedgeDir, paths } from '../src/paths.js';
+import { History } from '../src/daemon/history.js';
 
 const noTmux: Tmux = {
   async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return null; }, async hasSession() { return false; },
@@ -46,6 +45,25 @@ describe('startDaemon', () => {
       } finally { await d2.stop(); }
     } finally { await killTestServer(socket); }
   });
+
+  it('removes the history journals of the sessions it prunes at startup, and keeps the others', async () => {
+    process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
+    await ensureLedgeDir();
+    const seed = new Store();
+    seed.upsert(mk('live', { tmuxSession: 'ledge-live' })); seed.upsert(mk('dead'));
+    await seed.save();
+    const dir = paths().history; mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify({ kind: 'prompt', id: 'prompt-1', at: T0, turn: 1, text: 'x' }) + '\n';
+    for (const id of ['live', 'dead', 'orphan']) writeFileSync(join(dir, `${id}.jsonl`), line);
+    const tmux: Tmux = {
+      async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return ''; },
+      async hasSession(n) { return n === 'ledge-live'; }, async listSessions() { return ['ledge-live']; },
+      async killSession() {}, async setOption() {}, attachArgs: n => ['attach', n]
+    };
+    const d = await startDaemon({ port: 0, tmux });
+    await d.stop(); // flushes the history writes
+    expect(['live', 'dead', 'orphan'].filter(id => existsSync(join(dir, `${id}.jsonl`)))).toEqual(['live']);
+  });
 });
 
 describe('startDaemon: the history prune', () => {
@@ -58,24 +76,23 @@ describe('startDaemon: the history prune', () => {
   };
   const logText = () => readFileSync(join(process.env.LEDGE_HOME!, 'daemon.log'), 'utf8');
 
-  it('a thread that cannot be removed is logged and the daemon still starts', async () => {
+  it('a thread that cannot be read never keeps the daemon from starting; the folder is closed to its owner', async () => {
     const dir = home();
-    // rm without `recursive` cannot remove a folder: that file's prune fails.
+    // A folder named like a journal: read as nothing, never removed.
     mkdirSync(join(dir, 'gone.jsonl')); writeFileSync(join(dir, 'gone.jsonl', 'x'), '');
-    writeFileSync(join(dir, 'old.jsonl'), ''); writeFileSync(join(dir, 'old.jsonl.tmp'), '');
+    writeFileSync(join(dir, 'old.jsonl'), '');
     const d = await startDaemon({ port: 0, tmux: noTmux });
     await d.stop();
-    expect(logText()).toContain('history gone.jsonl not pruned');
-    expect([existsSync(join(dir, 'old.jsonl')), existsSync(join(dir, 'old.jsonl.tmp'))]).toEqual([false, false]);
+    expect([existsSync(join(dir, 'gone.jsonl', 'x')), existsSync(join(dir, 'old.jsonl'))]).toEqual([true, false]);
     expect(statSync(dir).mode & 0o777).toBe(0o700);
   });
 
-  it('a failing prune never rejects startDaemon', async () => {
+  it('a history that fails to load never rejects startDaemon', async () => {
     home();
-    vi.spyOn(HistoryStore.prototype, 'prune').mockRejectedValue(new Error('EACCES: permission denied'));
+    vi.spyOn(History.prototype, 'load').mockRejectedValue(new Error('EACCES: permission denied'));
     const d = await startDaemon({ port: 0, tmux: noTmux });
     await d.stop();
-    expect(logText()).toContain('history prune failed: EACCES: permission denied');
+    expect(logText()).toContain('history not loaded: EACCES: permission denied');
   });
 
   it('a journal that could not be read prunes nothing', async () => {

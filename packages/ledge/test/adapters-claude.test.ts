@@ -20,10 +20,11 @@ describe('claude adapter: detection (Claude Code 2.x captures)', () => {
       options: ['Yes', 'Yes, and switch to accept edits (auto-approve file edits and common file', 'No']
     });
   });
-  it('detects a question with its options, without description lines', () => {
+  it('detects a question with its options, the lines under each as its description', () => {
     expect(claudeAdapter.detectPrompt(fx('claude2-question'))).toEqual({
       kind: 'question', text: 'Which color do you prefer?',
-      options: ['Red', 'Blue', 'Type something.', 'Chat about this']
+      options: ['Red', 'Blue', 'Type something.', 'Chat about this'],
+      optionDetails: ['Choose red as your preferred color.', 'Choose blue as your preferred color.', '', '']
     });
   });
   it('reads only the last dialog when an older one is still in scrollback', () => {
@@ -92,17 +93,32 @@ describe('claude adapter: keys', () => {
     expect(claudeAdapter.replyPlan('3', q)).toEqual([{ text: '3' }]);
     expect(claudeAdapter.replyPlan('9', q)).toEqual([{ text: '9' }]);
     expect(claudeAdapter.replyPlan('4', { kind: 'question', text: 'Which?', source: 'hook' })).toEqual([{ text: '4' }]);
-    expect(claudeAdapter.replyPlan('0', { kind: 'question', text: 'Which?', source: 'hook' })).toEqual([{ text: '0' }, { keys: ['Enter'] }]);
+    expect(claudeAdapter.replyPlan('0', { kind: 'question', text: 'Which?', source: 'hook' }, fx('claude2-question'))[0]).toEqual({ text: '3' });
   });
   it('with nothing pending a number is ordinary input: typed then Enter', () => {
     expect(claudeAdapter.replyPlan('2')).toEqual([{ text: '2' }, { keys: ['Enter'] }]);
   });
-  it('a free text reply is typed literally then Enter, multi-line joined by spaces', () => {
-    expect(claudeAdapter.replyPlan('fix all three\nthen run tests', q)).toEqual([{ text: 'fix all three then run tests' }, { keys: ['Enter'] }]);
+  it('answers a question in free text through its "Type something." row: its digit, then the text once it has the cursor, then Enter', () => {
+    const plan = claudeAdapter.replyPlan('fix all three\nthen run tests', q, fx('claude2-question'));
+    expect(plan.filter(s => !('until' in s))).toEqual([{ text: '3' }, { text: 'fix all three then run tests' }, { keys: ['Enter'] }]);
+    const wait = plan[1] as { until: (p: string) => boolean };
+    expect(wait.until(tail(fx('claude2-question-other-focused'), 30))).toBe(true);
+    expect(wait.until(tail(fx('claude2-question'), 30))).toBe(false);
+  });
+  it('finds the "Type something." row on screen when the hook options leave it out', () => {
+    const hook = { kind: 'question' as const, text: 'Which color do you prefer?', options: ['Red', 'Blue'], source: 'hook' as const };
+    expect(claudeAdapter.replyPlan('Green', hook, fx('claude2-question'))[0]).toEqual({ text: '3' });
+  });
+  it('refuses free text when the dialog on screen has no "Type something." row', () => {
+    expect(() => claudeAdapter.replyPlan('Green', q, fx('claude2-question-multi-review'))).toThrow(/answer in the terminal/);
+    expect(() => claudeAdapter.replyPlan('Green', q)).toThrow(/answer in the terminal/);
+  });
+  it('a reply with nothing pending is typed literally then Enter, multi-line joined by spaces', () => {
+    expect(claudeAdapter.replyPlan('fix all three\nthen run tests')).toEqual([{ text: 'fix all three then run tests' }, { keys: ['Enter'] }]);
   });
   it('never emits a text step containing a newline or carriage return', () => {
     for (const input of ['a\nb', 'a\r\nb', 'a\rb', '\n\na\n\n\nb\n', '\n2\n']) {
-      const texts = claudeAdapter.replyPlan(input, q).filter((s): s is { text: string } => 'text' in s);
+      const texts = claudeAdapter.replyPlan(input, q, fx('claude2-question')).filter((s): s is { text: string } => 'text' in s);
       for (const s of texts) expect(s.text).not.toMatch(/[\r\n]/);
     }
     expect(claudeAdapter.replyPlan('a\nb')).toEqual([{ text: 'a b' }, { keys: ['Enter'] }]);

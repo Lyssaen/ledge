@@ -6,7 +6,7 @@ import type { Pending, Tool } from '@ledge/protocol';
  * one read can apply them all to the screen it had): if it never does, the rest is not sent.
  */
 export type KeyPlan = Array<{ text: string } | { keys: string[] } | { waitMs: number } | { until: (lastLines: string) => boolean }>;
-export type PanePromptMatch = { kind: 'permission' | 'question' | 'plan'; text: string; options?: string[] };
+export type PanePromptMatch = { kind: 'permission' | 'question' | 'plan'; text: string; options?: string[]; optionDetails?: string[]; body?: string };
 
 export interface Adapter {
   tool: Tool;
@@ -17,6 +17,8 @@ export interface Adapter {
   /** `pending` is what the reply answers, if anything: a question can take an option number. */
   /** `pane` is the bottom of the terminal right before the keys are sent, when a prompt is pending. */
   replyPlan(text: string, pending?: Pending, pane?: string): KeyPlan;
+  /** A question can be answered in free text (`replyPlan` with any text); without it, only an option number. */
+  freeText?: boolean;
   interruptKeys(): string[];
   /**
    * The pane lines worth showing in the terminal preview, with the tool's own chrome (input box, status

@@ -1,4 +1,5 @@
-import type { ClientMessage, OperationReason, Pending, ServerMessage, Session, Turn } from '@ledge/protocol';
+import type { ClientMessage, OperationReason, Pending, ServerMessage, Session } from '@ledge/protocol';
+import type { Note } from './history.js';
 import type { Store } from './store.js';
 import type { Peer } from './peers.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
@@ -19,13 +20,13 @@ export const READ_ONLY = 'session started without ledge, read only';
 export const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
 export const NOT_TAKEN = 'the terminal did not take it';
 export const BUSY = 'a decision is already in progress';
-const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
+export const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
 /** The longest instruction a phone may type into an agent's input line. */
 export const MESSAGE_MAX = 4_000;
 
-/** What decisions write to a session's thread (server.ts numbers and dates the turn). */
+/** What decisions write to a session's shared thread (history.ts; server.ts dates the note). */
 export interface Thread {
-  record(id: string, turn: Omit<Turn, 'seq' | 'at'>): void;
+  record(id: string, note: Note): void;
   /** A phone's instruction is about to be typed: the next prompt with this text is the phone's. */
   expectPrompt(id: string, text: string): void;
   /** Nothing was typed after all. */
@@ -48,8 +49,11 @@ export interface DecisionDeps {
   config(): MobileConfig | null;
   /** Live remote peers of a device: the final result of its operation goes to all of them, not only to the socket that asked. */
   peersOf?(deviceId: string): Peer[];
-  /** `injectAndVerify`: takes the session lock, re-checks `expected` and builds the plan before the first character. */
-  inject(id: string, planFor: (pane: string) => KeyPlan, requirePrompt: boolean, expected?: { id: string; version: number }): Promise<void>;
+  /**
+   * `injectAndVerify`: takes the session lock, re-checks `expected` and builds the plan before the first character.
+   * True once the terminal took it, false when a newer prompt arrived meanwhile and was left alone.
+   */
+  inject(id: string, planFor: (pane: string) => KeyPlan, requirePrompt: boolean, expected?: { id: string; version: number }): Promise<boolean>;
   /** Sends the agent's interrupt keys once. */
   interrupt(session: Session): Promise<void>;
   thread?: Thread;
@@ -156,8 +160,9 @@ export async function runDecide(peer: Peer, msg: SessionDecide, deps: DecisionDe
       if (s.source === 'hook_only') throw new Refusal('read_only', READ_ONLY);
       if (!s.pending) throw new Refusal('stale', 'nothing to decide');
       const pending = s.pending; const adapter = adapterFor(s.tool);
-      await deps.inject(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true);
-      return recordDecision(peer, msg, pending, deps);
+      // Only a decision the terminal took lands in the thread: otherwise the last open permission may be the newer one.
+      if (await deps.inject(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true)) recordDecision(peer, msg, pending, deps);
+      return;
     }
     const { session, pending } = requestFor(deps.store, msg.id, msg.pendingId, msg.pendingVersion!);
     // Only a phone proves who it is; the overlay on this PC decides without WebAuthn. A missing risk counts as high.
@@ -165,20 +170,19 @@ export async function runDecide(peer: Peer, msg: SessionDecide, deps: DecisionDe
       await checkAssertion(peer.ctx.deviceId, msg, session.id, pending, deps);
     }
     const adapter = adapterFor(session.tool);
-    await deps.inject(msg.id, pane => { stillPaired(peer, deps); return adapter.keysFor(msg.decision, pending, pane); }, true, { id: pending.id, version: pending.version });
-    recordDecision(peer, msg, pending, deps);
+    if (await deps.inject(msg.id, pane => { stillPaired(peer, deps); return adapter.keysFor(msg.decision, pending, pane); }, true, { id: pending.id, version: pending.version })) recordDecision(peer, msg, pending, deps);
   });
 }
 
 function recordDecision(peer: Peer, msg: SessionDecide, pending: Pending, deps: DecisionDeps): void {
-  deps.thread?.record(msg.id, { kind: 'decision', decision: msg.decision, source: sourceOf(peer), ...(pending.id ? { pendingId: pending.id } : {}) });
+  deps.thread?.record(msg.id, { note: 'decision', decision: msg.decision, source: sourceOf(peer), ...(pending.id ? { pendingId: pending.id } : {}) });
 }
 
 /** An option picked by its number is written to the thread by its label. */
 function recordAnswer(peer: Peer, msg: SessionReply, pending: Pending, deps: DecisionDeps): void {
   const n = /^[1-9]$/.test(msg.text.trim()) ? Number(msg.text.trim()) : 0;
   const text = pending.options?.[n - 1] ?? msg.text;
-  deps.thread?.record(msg.id, { kind: 'answer', text, source: sourceOf(peer), ...(pending.id ? { pendingId: pending.id } : {}) });
+  deps.thread?.record(msg.id, { note: 'answer', text, source: sourceOf(peer), ...(pending.id ? { pendingId: pending.id } : {}) });
 }
 
 export async function runAnswer(peer: Peer, msg: SessionReply, deps: DecisionDeps): Promise<void> {
@@ -197,11 +201,10 @@ export async function runAnswer(peer: Peer, msg: SessionReply, deps: DecisionDep
       if (pending.risk !== 'low') throw new Refusal('forbidden');
     } else {
       if (pending.kind !== 'question') throw new Refusal('unsupported', `a ${pending.kind} prompt takes accept or deny, not a reply`);
-      if (!/^[1-9]$/.test(msg.text.trim())) throw new Refusal('unsupported', FREE_TEXT);
+      if (!/^[1-9]$/.test(msg.text.trim()) && !adapterFor(session.tool).freeText) throw new Refusal('unsupported', FREE_TEXT);
     }
     const adapter = adapterFor(session.tool);
-    await deps.inject(msg.id, pane => { stillPaired(peer, deps); return adapter.replyPlan(msg.text, pending, pane || undefined); }, true, { id: pending.id, version: pending.version });
-    recordAnswer(peer, msg, pending, deps);
+    if (await deps.inject(msg.id, pane => { stillPaired(peer, deps); return adapter.replyPlan(msg.text, pending, pane || undefined); }, true, { id: pending.id, version: pending.version })) recordAnswer(peer, msg, pending, deps);
   });
 }
 
@@ -248,7 +251,7 @@ export async function runInterrupt(peer: Peer, msg: SessionInterrupt, deps: Deci
   if (remote && !msg.operationId) return peer.send({ type: 'error', id: msg.id, message: 'invalid' });
   const send = async (s: Session) => {
     await deps.interrupt(s);
-    deps.thread?.record(s.id, { kind: 'interrupt', source: sourceOf(peer) });
+    deps.thread?.record(s.id, { note: 'interrupt', source: sourceOf(peer) });
   };
   if (!msg.operationId) {
     const s = deps.store.get(msg.id);
@@ -274,13 +277,14 @@ async function legacyReply(peer: Peer, msg: SessionReply, deps: DecisionDeps): P
   // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
   if (s.pending && s.pending.kind !== 'question') throw new Refusal('unsupported', `a ${s.pending.kind} prompt takes accept or deny, not a reply`);
   if (msg.text.trim() === '') throw new Refusal('invalid', 'empty reply');
-  // The 2.x question dialog is a select: typed text then Enter would silently pick the highlighted option.
-  if (s.pending?.kind === 'question' && !/^[1-9]$/.test(msg.text.trim())) throw new Refusal('unsupported', FREE_TEXT);
-  // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
+  // A question dialog is a select: typed text then Enter would silently pick the highlighted option, unless the
+  // adapter knows the dialog's own free-text field (as the server's replyTo, shared with the chat's relay).
   const pending = s.pending; const adapter = adapterFor(s.tool);
-  await deps.inject(msg.id, pane => adapter.replyPlan(msg.text, pending, pane || undefined), !!pending);
+  if (pending?.kind === 'question' && !/^[1-9]$/.test(msg.text.trim()) && !adapter.freeText) throw new Refusal('unsupported', FREE_TEXT);
+  // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
+  const taken = await deps.inject(msg.id, pane => adapter.replyPlan(msg.text, pending, pane || undefined), !!pending);
   // Text typed into the input line comes back as the agent's prompt hook: only an answer is written here.
-  if (pending) recordAnswer(peer, msg, pending, deps);
+  if (pending && taken) recordAnswer(peer, msg, pending, deps);
 }
 
 /**

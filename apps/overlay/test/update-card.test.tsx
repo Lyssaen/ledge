@@ -21,6 +21,16 @@ describe('UpdateCard', () => {
     expect(screen.getByText('npm i -g @paradow/ledge@0.3.0')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Réessayer' })).toBeTruthy();
   });
+  it('names the servers behind, a server step and the server a failure happened on', () => {
+    const { unmount } = r(<UpdateCard view={{ kind: 'available', version: '0.3.0', current: '0.3.0', notes: [], servers: [{ label: 'dev-server', version: '0.2.2' }] }} sessions={0} onUpdate={noop} onLater={noop} onRetry={noop} onAck={noop} onNotes={noop} />);
+    expect(screen.getByText('Serveurs en retard : dev-server (0.2.2)')).toBeTruthy();
+    unmount();
+    const run = r(<UpdateCard view={{ kind: 'running', steps: [{ key: 'remote', label: 'dev-server', status: 'run', meta: '0.3.0' }, { key: 'daemon', status: 'todo', meta: '0.3.0' }] }} sessions={0} onUpdate={noop} onLater={noop} onRetry={noop} onAck={noop} onNotes={noop} />);
+    expect(screen.getByText('dev-server mis à jour, sessions retrouvées')).toBeTruthy();
+    run.unmount();
+    r(<UpdateCard view={{ kind: 'failed', reason: 'daemon-timeout', machine: 'dev-server' }} sessions={0} onUpdate={noop} onLater={noop} onRetry={noop} onAck={noop} onNotes={noop} />);
+    expect(screen.getByText('Sur dev-server')).toBeTruthy();
+  });
   it('names the sessions that did not come back', () => {
     r(<UpdateCard view={{ kind: 'failed', reason: 'sessions-lost', missing: ['Nova'] }} sessions={0} onUpdate={noop} onLater={noop} onRetry={noop} onAck={noop} onNotes={noop} />);
     expect(screen.getByText('Manquantes : Nova')).toBeTruthy();

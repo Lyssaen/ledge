@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { initialUpdate, reduceUpdate, cardView, pipTone, gearPip, targetOf, type UpdateEvent, type UpdateState } from '../src/update/machine';
+import { initialUpdate, reduceUpdate, cardView, pipTone, gearPip, targetOf, type RemoteDaemon, type UpdateEvent, type UpdateState } from '../src/update/machine';
 
 const NPM = { version: '0.2.2', install: 'npm' as const, systemd: true };
 const run = (events: UpdateEvent[], s: UpdateState = initialUpdate(null, null)) => events.reduce(reduceUpdate, s);
@@ -28,7 +28,7 @@ describe('update machine', () => {
   });
   it('walks daemon, reconnect, download, install when all sessions come back', () => {
     let s = run([...base, START]);
-    expect(s.phase).toEqual({ kind: 'daemon', step: 'sent' });
+    expect(s.phase).toEqual({ kind: 'daemon', machine: 'local', step: 'sent' });
     s = run([{ type: 'progress', step: 'installing' }, { type: 'progress', step: 'restarting' }, { type: 'disconnected' }], s);
     expect(s.phase.kind).toBe('waiting');
     s = run([{ type: 'snapshot', daemon: { ...NPM, version: '0.3.0' }, ids: ['a', 'b'] }], s);
@@ -109,7 +109,7 @@ describe('update machine', () => {
   });
   it('a timeout while the daemon has not yet restarted is ignored; it counts only once waiting', () => {
     let s = run([...base, START, { type: 'timeout' }]);
-    expect(s.phase).toEqual({ kind: 'daemon', step: 'sent' });
+    expect(s.phase).toEqual({ kind: 'daemon', machine: 'local', step: 'sent' });
     s = run([{ type: 'disconnected' }, { type: 'timeout' }], s);
     expect(s.phase).toMatchObject({ kind: 'failed', reason: 'daemon-timeout' });
   });
@@ -123,5 +123,54 @@ describe('update machine', () => {
     const cleared = run([{ type: 'checked', at: 2, latest: null }, { type: 'dismiss' }], dismissed);
     expect(targetOf(cleared)).toBeNull();
     expect(cleared.dismissed).toBe('0.3.0');
+  });
+});
+
+describe('update machine, remote machines', () => {
+  const server = (version: string, sessions = [{ id: 's1', name: 'Remy' }], install: 'npm' | 'git' = 'npm'): RemoteDaemon =>
+    ({ id: 'server', label: 'dev-server', daemon: { version, install, systemd: true }, sessions });
+  const current: UpdateEvent[] = [
+    { type: 'app', version: '0.3.0', updatedFrom: null },
+    { type: 'snapshot', daemon: { ...NPM, version: '0.3.0' }, ids: ['a'] },
+    { type: 'checked', at: 1, latest: { version: '0.3.0', notes: '' } }
+  ];
+  it('offers the release when only a server is behind, and names it', () => {
+    const s = run([...current, { type: 'remotes', remotes: [server('0.2.2')] }]);
+    expect(targetOf(s)).toBe('0.3.0');
+    expect(cardView(s)).toMatchObject({ kind: 'available', version: '0.3.0', servers: [{ label: 'dev-server', version: '0.2.2' }] });
+  });
+  it('leaves a server running from a clone to its owner', () => {
+    expect(cardView(run([...current, { type: 'remotes', remotes: [server('0.2.2', [], 'git')] }]))).toEqual({ kind: 'hidden' });
+  });
+  it('updates the servers first, then this machine, then the app', () => {
+    let s = run([...base, { type: 'remotes', remotes: [server('0.2.2')] }, START]);
+    expect(s.phase).toEqual({ kind: 'daemon', machine: 'server', step: 'sent' });
+    expect(cardView(s)).toMatchObject({ kind: 'running', steps: [{ key: 'remote', label: 'dev-server', status: 'run' }, { key: 'daemon', status: 'todo' }, { key: 'restart', status: 'todo' }, { key: 'download' }, { key: 'install' }] });
+    // The local daemon's own messages do not move a remote's turn.
+    s = run([{ type: 'progress', step: 'restarting' }, { type: 'disconnected' }], s);
+    expect(s.phase).toEqual({ kind: 'daemon', machine: 'server', step: 'sent' });
+    s = run([{ type: 'progress', machine: 'server', step: 'restarting' }, { type: 'remotes', remotes: [] }], s);
+    expect(s.phase).toEqual({ kind: 'waiting', machine: 'server' });
+    s = run([{ type: 'remotes', remotes: [server('0.3.0')] }], s);
+    expect(s.phase).toEqual({ kind: 'daemon', machine: 'local', step: 'sent' });
+    expect(cardView(s)).toMatchObject({ kind: 'running', steps: [{ key: 'remote', status: 'done' }, { key: 'daemon', status: 'run' }, { key: 'restart', status: 'todo' }, { key: 'download' }, { key: 'install' }] });
+    s = run([{ type: 'disconnected' }, { type: 'snapshot', daemon: { ...NPM, version: '0.3.0' }, ids: ['a', 'b'] }], s);
+    expect(s.phase).toEqual({ kind: 'downloading', done: 0, total: null });
+  });
+  it('stops on a server whose session did not come back, and says which server', () => {
+    let s = run([...base, { type: 'remotes', remotes: [server('0.2.2')] }, START, { type: 'remotes', remotes: [] }]);
+    s = run([{ type: 'remotes', remotes: [server('0.3.0', [])] }], s);
+    expect(cardView(s)).toEqual({ kind: 'failed', reason: 'sessions-lost', missing: ['Remy'], machine: 'dev-server' });
+  });
+  it('reports a server refusal with its name; a retry goes on from where it is', () => {
+    let s = run([...base, { type: 'remotes', remotes: [server('0.2.2')] }, START, { type: 'failed', machine: 'server', reason: 'npm-failed', detail: 'EACCES' }]);
+    expect(cardView(s)).toEqual({ kind: 'failed', reason: 'npm-failed', detail: 'EACCES', machine: 'dev-server' });
+    // Updated by hand meanwhile: the next start skips it.
+    s = run([{ type: 'retry' }, { type: 'remotes', remotes: [server('0.3.0')] }, START], s);
+    expect(s.phase).toEqual({ kind: 'daemon', machine: 'local', step: 'sent' });
+  });
+  it('only a server behind: the update ends once it is back', () => {
+    const s = run([...current, { type: 'remotes', remotes: [server('0.2.2')] }, { type: 'start', sessions: [] }, { type: 'remotes', remotes: [server('0.3.0')] }]);
+    expect(s.phase).toEqual({ kind: 'idle' }); expect(cardView(s)).toEqual({ kind: 'hidden' });
   });
 });

@@ -3,7 +3,7 @@ import type { DocumentContent, DocumentErrorCode, ServerMessage } from '@ledge/p
 import type { DaemonClient, DaemonStatus } from '@ledge/client';
 import type { DocumentReference } from './references';
 
-export type DocumentOrigin = { kind: 'session'; sessionId: string } | { kind: 'chat' };
+export type DocumentOrigin = { kind: 'session'; sessionId: string } | { kind: 'chat'; machineId?: string };
 export interface ReadingEntry {
   reference: DocumentReference; document?: DocumentContent;
   error?: DocumentErrorCode | 'timeout' | 'offline';
@@ -35,7 +35,7 @@ export function useDocumentReader({ client, onExit }: { client: DaemonClient; on
     const requestId = `document-${Date.now()}-${++sequence.current}`;
     active.current = requestId;
     client.send({ type: 'document.read', requestId, path: reference.path,
-      ...(basePath ? { basePath } : origin.kind === 'session' ? { sessionId: origin.sessionId } : {}) });
+      ...(basePath ? { basePath } : {}), ...(origin.kind === 'session' ? { sessionId: origin.sessionId } : origin.machineId ? { machineId: origin.machineId } : {}) });
     timer.current = setTimeout(() => { if (active.current === requestId) { active.current = null; replaceTop({ loading: false, error: 'timeout' }); } }, 10_000);
   }, [cancel, client, replaceTop]);
   useEffect(() => {

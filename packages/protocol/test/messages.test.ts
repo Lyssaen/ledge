@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema } from '../src/index.js';
 
 const T0 = '2026-10-09T18:02:00.000Z';
 
@@ -107,6 +107,20 @@ describe('protocol', () => {
     expect(parseServerMessage({ type: 'chat.history', turns: [{ qid: 'q1', question: 'x', askedAt: T0, steps: [] }] }).type).toBe('chat.history');
     expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0 }).type).toBe('chat.done');
   });
+
+  it('carries a launch proposal on a turn, on chat.done, and the card qid on session.launch', () => {
+    const proposal = { cwd: '/w/ledge', project: 'ledge', prompt: 'Corrige le build', tool: 'claude' as const };
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, proposal })).toEqual({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, proposal });
+    const launched = { ...proposal, launchedId: 'n1' };
+    const h = parseServerMessage({ type: 'chat.history', turns: [{ qid: 'q1', question: 'x', askedAt: T0, steps: [], answer: 'ok', answeredAt: T0, proposal: launched }] });
+    expect(h.type === 'chat.history' && h.turns[0]!.proposal).toEqual(launched);
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, proposal: { ...proposal, tool: 'vim' } })).toThrow();
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, proposal: { ...proposal, cwd: '' } })).toThrow();
+    expect(parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w/ledge', qid: 'q1' })).toEqual({ type: 'session.launch', tool: 'claude', cwd: '/w/ledge', qid: 'q1' });
+    // Older messages stay valid.
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0 })).not.toHaveProperty('proposal');
+    expect(parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w' })).not.toHaveProperty('qid');
+  });
 });
 
 describe('protocol: launching from the overlay', () => {
@@ -151,6 +165,25 @@ describe('protocol: browsing folders from the launch form', () => {
   });
 });
 
+describe('relay from the chat (spec 2026-10-12 relay §5)', () => {
+  const relay = { id: 's1', name: 'Otto', tool: 'claude', text: 'Lance les tests' };
+  it('a turn and chat.done carry a relay; old messages still parse', () => {
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', relay })).toMatchObject({ relay });
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z' })).not.toHaveProperty('relay');
+    const turn = { qid: 'q1', question: 'dis à Otto', askedAt: '2026-10-12T10:00:00.000Z', steps: [], relay: { ...relay, status: 'sent', sentAt: '2026-10-12T10:01:00.000Z' } };
+    expect(parseServerMessage({ type: 'chat.history', turns: [turn] })).toEqual({ type: 'chat.history', turns: [turn] });
+  });
+  it('rejects an unknown status and an empty text', () => {
+    expect(() => parseServerMessage({ type: 'chat.history', turns: [{ qid: 'q1', question: 'x', askedAt: '2026-10-12T10:00:00.000Z', steps: [], relay: { ...relay, status: 'lost' } }] })).toThrow();
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', relay: { ...relay, text: '' } })).toThrow();
+  });
+  it('session.relay and session.relay.cancel name the turn', () => {
+    expect(parseClientMessage({ type: 'session.relay', qid: 'q1' })).toEqual({ type: 'session.relay', qid: 'q1' });
+    expect(parseClientMessage({ type: 'session.relay.cancel', qid: 'q1' })).toEqual({ type: 'session.relay.cancel', qid: 'q1' });
+    expect(() => parseClientMessage({ type: 'session.relay', qid: '' })).toThrow();
+  });
+});
+
 describe('update messages', () => {
   it('keeps a snapshot without daemon info valid (older daemons)', () => {
     expect(parseServerMessage({ type: 'snapshot', sessions: [] })).toEqual({ type: 'snapshot', sessions: [] });
@@ -168,5 +201,31 @@ describe('update messages', () => {
     expect(parseClientMessage({ type: 'update.daemon', version: '0.3.0' })).toEqual({ type: 'update.daemon', version: '0.3.0' });
     expect(() => parseClientMessage({ type: 'update.daemon', version: 'latest' })).toThrow();
     expect(() => parseClientMessage({ type: 'update.daemon', version: '0.3.0; rm -rf ~' })).toThrow();
+  });
+});
+
+describe('native session tracking (spec 2026-10-13 §3, §5)', () => {
+  const at = '2026-10-13T10:00:00.000Z';
+  it('validates each thread item kind and defaults the files of an action', () => {
+    const tool = ThreadItemSchema.parse({ kind: 'tool', id: 'toolu_1', at, turn: 1, tool: 'Bash', label: 'Bash · pnpm test', status: 'running' });
+    expect(tool).toMatchObject({ kind: 'tool', files: [] });
+    expect(ThreadItemSchema.parse({ kind: 'prompt', id: 'p1', at, turn: 1, text: 'Fais le plan' }).kind).toBe('prompt');
+    expect(ThreadItemSchema.parse({ kind: 'helper', id: 'h1', at, turn: 1, task: 'review task 1', agentType: 'Explore', state: 'working' }).kind).toBe('helper');
+    expect(ThreadItemSchema.parse({ kind: 'permission', id: 'perm-1', at, turn: 1, tool: 'Bash', text: 'rm -rf dist', decision: 'deny' }).kind).toBe('permission');
+    expect(ThreadItemSchema.parse({ kind: 'reply', id: 'r1', at, turn: 1, text: 'Terminé', helperId: 'h1' }).helperId).toBe('h1');
+    expect(() => ThreadItemSchema.parse({ kind: 'tool', id: 't', at, turn: 1, tool: 'Bash', label: 'x', status: 'done' })).toThrow();
+  });
+  it('accepts the enriched hook event and keeps the old shape valid', () => {
+    const old = { type: 'session.event', id: 's', event: { name: 'PostToolUse', at, source: 'hook', tool: 'Bash' } };
+    expect(parseClientMessage(old)).toMatchObject(old);
+    const rich = { ...old, event: { ...old.event, toolUseId: 'toolu_1', toolInput: { command: 'pnpm test' }, output: 'ok', durationMs: 812, transcriptPath: '/t.jsonl' } };
+    expect(parseClientMessage(rich)).toMatchObject(rich);
+    expect(() => parseClientMessage({ ...old, event: { ...old.event, durationMs: -1 } })).toThrow();
+  });
+  it('carries a thread request, a thread and a single item', () => {
+    expect(parseClientMessage({ type: 'session.thread', id: 's' })).toEqual({ type: 'session.thread', id: 's' });
+    const item = { kind: 'message', id: 'm1', at, turn: 1, text: 'Je regarde le reducer.' };
+    expect(parseServerMessage({ type: 'session.thread', id: 's', items: [item] })).toMatchObject({ type: 'session.thread', items: [item] });
+    expect(parseServerMessage({ type: 'session.thread.item', id: 's', item })).toMatchObject({ type: 'session.thread.item', item });
   });
 });

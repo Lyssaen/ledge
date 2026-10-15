@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { homedir, userInfo } from 'node:os';
 import { join, dirname } from 'node:path';
 import { ensureLedgeDir, paths } from '../paths.js';
+import { tmuxServerAtRisk } from '../update/guard.js';
 
 export const CLAUDE_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd',
   'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop'] as const;
@@ -146,9 +147,9 @@ export async function stopDetachedDaemon(pidFile: string): Promise<number | null
 /**
  * Installs and starts the systemd user service so the daemon runs from WSL boot (linger) and
  * is restarted when it crashes. Idempotent: a changed unit restarts the service, an unchanged
- * one is left alone.
+ * one is left alone. A restart that would kill the tmux server (hence every agent) is not done: the unit waits for it.
  */
-export async function installService(opts: { unitDir?: string; node?: string; script?: string; run?: Runner } = {}): Promise<string[]> {
+export async function installService(opts: { unitDir?: string; node?: string; script?: string; run?: Runner; atRisk?: () => Promise<boolean> } = {}): Promise<string[]> {
   const out: string[] = [];
   const run = opts.run ?? execRunner;
   const unitDir = opts.unitDir ?? join(homedir(), '.config', 'systemd', 'user');
@@ -158,7 +159,9 @@ export async function installService(opts: { unitDir?: string; node?: string; sc
   const reload = await run('systemctl', ['--user', 'daemon-reload']);
   if (reload.code !== 0) throw new Error(`systemd user session unavailable (systemctl --user daemon-reload failed: ${reload.stderr.trim() || reload.code}); the daemon will still be started on demand by ledge claude`);
   const active = (await run('systemctl', ['--user', 'is-active', SERVICE])).code === 0;
-  if (active && changed) {
+  if (active && changed && await (opts.atRisk ?? tmuxServerAtRisk)()) {
+    out.push(`${SERVICE} unit updated but not restarted: the tmux server of your agents runs inside the service and would stop with it; close the sessions, then run ledge setup again (or systemctl --user restart ${SERVICE})`);
+  } else if (active && changed) {
     const r = await run('systemctl', ['--user', 'restart', SERVICE]);
     if (r.code !== 0) throw new Error(`systemctl --user restart ${SERVICE} failed: ${r.stderr.trim()}`);
     out.push(`${SERVICE} updated and restarted`);

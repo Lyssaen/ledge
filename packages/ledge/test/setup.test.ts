@@ -225,10 +225,20 @@ describe('systemd service', () => {
     const d = tmp(); const unitDir = join(d, 'systemd');
     await installService({ unitDir, node: '/old', script: '/s.js', run: fakeRun({ 'systemctl --user is-active': { code: 3 }, 'loginctl show-user': { code: 0, stdout: 'Linger=yes\n' } }).run });
     const f = fakeRun({ 'systemctl --user is-active': { code: 0 }, 'loginctl show-user': { code: 0, stdout: 'Linger=yes\n' } });
-    const out = await installService({ unitDir, node: '/new', script: '/s.js', run: f.run });
+    const out = await installService({ unitDir, node: '/new', script: '/s.js', run: f.run, atRisk: async () => false });
     expect(f.calls.map(f.key)).toContain(`systemctl --user restart ${SERVICE}`);
     expect(f.calls.map(f.key)).not.toContain(`systemctl --user enable --now ${SERVICE}`);
     expect(out.join('\n')).toContain(`${SERVICE} updated and restarted`);
+  });
+
+  it('leaves the changed unit for later when a restart would kill the tmux server of the agents', async () => {
+    const d = tmp(); const unitDir = join(d, 'systemd');
+    await installService({ unitDir, node: '/old', script: '/s.js', run: fakeRun({ 'systemctl --user is-active': { code: 3 }, 'loginctl show-user': { code: 0, stdout: 'Linger=yes\n' } }).run });
+    const f = fakeRun({ 'systemctl --user is-active': { code: 0 }, 'loginctl show-user': { code: 0, stdout: 'Linger=yes\n' } });
+    const out = await installService({ unitDir, node: '/new', script: '/s.js', run: f.run, atRisk: async () => true });
+    expect(readFileSync(join(unitDir, SERVICE), 'utf8')).toBe(systemdUnit({ node: '/new', script: '/s.js' }));
+    expect(f.calls.map(f.key)).not.toContain(`systemctl --user restart ${SERVICE}`);
+    expect(out.join('\n')).toContain('not restarted');
   });
 
   it('stops a detached daemon before starting the service, so the port is free', async () => {

@@ -1,4 +1,4 @@
-export const SIZES = { bubbleW: 440, bubbleH: 128, listW: 380, sessionW: 480, readingW: 560, readerW: 560, readerExpandedW: 800, readerH: 760, rowH: 58, headerH: 72, footerH: 44, margin: 40, settingsH: 360, helpH: 420, launchH: 600, chatH: 560, emptyH: 200, groupH: 28, separatorH: 1 } as const;
+export const SIZES = { bubbleW: 440, bubbleH: 128, listW: 380, sessionW: 480, readingW: 800, readerW: 560, readerExpandedW: 800, expandedMaxW: 1200, readerH: 760, rowH: 58, headerH: 72, footerH: 44, margin: 40, settingsH: 360, helpH: 420, launchH: 600, chatH: 560, emptyH: 200, groupH: 28, separatorH: 1 } as const;
 /** The compact island, a row along the top edge (spec 2026-10-12 §3): margins, the Ledge mascot, the separator, the
  *  companions, the "+n" pill past six, the DND moon; and the discreet strip with one dot per session. */
 export const ISLAND = { h: 38, padL: 12, padR: 14, resident: 22, sepGap: 8, companion: 22, gap: 8, max: 6, pill: 30, moon: 12, stripH: 10, stripPad: 10, dotW: 6, dotH: 4, dotGap: 4 } as const;
@@ -6,7 +6,7 @@ export const ISLAND = { h: 38, padL: 12, padR: 14, resident: 22, sepGap: 8, comp
  *  the notch is borderless so it merges with the screen edge. */
 export const SURFACE_BORDER = 0;
 export const SURFACE_CHROME_Y = 2 * SURFACE_BORDER;
-export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'settings' | 'help' | 'launch' | 'chat' | 'reader';
+export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'helper' | 'settings' | 'help' | 'launch' | 'chat' | 'reader';
 /** Where the island's axis sits on the top edge: the centre, or a quarter of the width from the left or the right. */
 export type IslandPosition = 'center' | 'left' | 'right';
 /** The resident's finished-chat notice: not a session id. */
@@ -18,17 +18,26 @@ const DETAIL_FALLBACK_H: Record<'settings' | 'help' | 'launch', number> = { sett
 export interface Slot { id: string; size: number; center: number }
 export interface Layout { left: number; top: number; w: number; h: number; slots: Slot[]; handle: { left: number; w: number; h: number } }
 
-/** The island shows asks first, then the others in list order (stable). */
-export function islandOrder<T extends { pending: boolean }>(bots: T[]): T[] {
-  return [...bots.filter(b => b.pending), ...bots.filter(b => !b.pending)];
+/** The island groups the companions by machine (this machine first, the others in list order) and shows each
+ *  machine's asks first, then its other sessions in list order (stable). One machine: asks first, then the others. */
+export function islandOrder<T extends { pending: boolean; machine?: string }>(bots: T[]): T[] {
+  const machines = [...new Set(['local', ...bots.map(b => b.machine ?? 'local')])];
+  return machines.flatMap(m => { const own = bots.filter(b => (b.machine ?? 'local') === m); return [...own.filter(b => b.pending), ...own.filter(b => !b.pending)]; });
 }
 
-/** The compact island's width for `n` sessions: six companions at most, then the "+n" pill; the DND moon when on. */
-export function islandWidth(n: number, dnd = false): number {
+/** Whether a pipe (a separator like the one after the mascot) stands before `b`: it starts another machine's group. */
+export const pipeBefore = (prev: { id: string; machine?: string } | undefined, b: { id: string; machine?: string }): boolean => !!prev && (prev.machine ?? 'local') !== (b.machine ?? 'local');
+
+/** The pipes between the shown companions' machines (`ordered` as given by `islandOrder`). */
+export const islandPipes = (ordered: Array<{ id: string; machine?: string }>): number => ordered.slice(0, ISLAND.max).filter((b, i, a) => pipeBefore(a[i - 1], b)).length;
+
+/** The compact island's width for `n` sessions: six companions at most, then the "+n" pill; the DND moon when on;
+ *  `pipes` separators between machines (`islandPipes`). */
+export function islandWidth(n: number, dnd = false, pipes = 0): number {
   const moon = dnd ? ISLAND.gap + ISLAND.moon : 0;
   if (n === 0) return ISLAND.padL + ISLAND.resident + moon + ISLAND.padR;
   const shown = Math.min(n, ISLAND.max);
-  return ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap + shown * ISLAND.companion + (shown - 1) * ISLAND.gap + (n > ISLAND.max ? ISLAND.gap + ISLAND.pill : 0) + moon + ISLAND.padR;
+  return ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap + shown * ISLAND.companion + (shown - 1) * ISLAND.gap + pipes * (ISLAND.sepGap + SIZES.separatorH) + (n > ISLAND.max ? ISLAND.gap + ISLAND.pill : 0) + moon + ISLAND.padR;
 }
 
 /** The discreet strip's width: one dot per session (six at most), never narrower than the bare island. */
@@ -41,9 +50,11 @@ export const islandAxis = (screenW: number, position: IslandPosition = 'center')
   position === 'left' ? screenW / 4 : position === 'right' ? (3 * screenW) / 4 : screenW / 2;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+/** An enlarged view (reading mode, expanded reader) takes 60% of the screen width, never less than `min` nor more than `expandedMaxW`. */
+export const expandedWidth = (screenW: number, min: number) => clamp(Math.round(screenW * 0.6), min, SIZES.expandedMaxW);
 
-/** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of an expanded (focused) list row. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
-export interface LayoutInput { bots: Array<{ id: string; pending: boolean }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
+/** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of the list: an expanded (focused) row, the notice, the update card. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
+export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; /** Measured height of the open helper view. */ helperH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
 
 /** Everything hangs from the top edge of the work area, centred on the island's axis; `left` is clamped into the screen. */
 export function layout(input: LayoutInput): Layout {
@@ -53,22 +64,28 @@ export function layout(input: LayoutInput): Layout {
   const axis = islandAxis(screenW, input.position);
   const place = (w: number) => clamp(Math.round(axis - w / 2), 0, Math.max(0, screenW - w));
   const strip = mode === 'handle' && !!input.strip;
-  const handleW = strip ? stripWidth(n) : islandWidth(n, input.dnd);
+  const ordered = islandOrder(bots);
+  const handleW = strip ? stripWidth(n) : islandWidth(n, input.dnd, islandPipes(ordered));
   const handle = { left: place(handleW), w: handleW, h: strip ? ISLAND.stripH : ISLAND.h };
   const slots: Slot[] = [];
   let x = handle.left + ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap;
-  for (const b of islandOrder(bots).slice(0, ISLAND.max)) { slots.push({ id: b.id, size: ISLAND.companion, center: x + ISLAND.companion / 2 }); x += ISLAND.companion + ISLAND.gap; }
+  ordered.slice(0, ISLAND.max).forEach((b, i, shown) => {
+    if (pipeBefore(shown[i - 1], b)) x += ISLAND.sepGap + SIZES.separatorH;
+    slots.push({ id: b.id, size: ISLAND.companion, center: x + ISLAND.companion / 2 }); x += ISLAND.companion + ISLAND.gap;
+  });
   const view = (w: number, h: number): Layout => ({ left: place(w), top: 0, w, h: Math.min(maxH, h), slots, handle });
   if (mode === 'handle') return { left: handle.left, top: 0, w: handleW, h: handle.h, slots, handle };
   if (mode === 'bubble') return view(SIZES.bubbleW, input.bubbleH ?? SIZES.bubbleH);
   // The native frame adds a small shadow outside this width.
-  if (mode === 'reader') return view(Math.min(input.readerExpanded ? SIZES.readerExpandedW : SIZES.readerW, Math.max(0, screenW - 24)), SIZES.readerH);
+  if (mode === 'reader') return view(Math.min(input.readerExpanded ? expandedWidth(screenW, SIZES.readerExpandedW) : SIZES.readerW, Math.max(0, screenW - 24)), SIZES.readerH);
   if (mode === 'chat') return view(SIZES.sessionW, input.detailH ?? SIZES.chatH);
   if (mode === 'settings' || mode === 'help' || mode === 'launch') return view(SIZES.listW, input.detailH ?? DETAIL_FALLBACK_H[mode]);
-  // An empty list shows the empty state (a bot, two lines, a button) instead of rows.
-  const rowsH = n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.groups ?? 0) * SIZES.groupH + (input.listExtraH ?? 0);
+  // An empty list shows the empty state (a bot, two lines, a button) instead of rows; the extras (the update card,
+  // the notice) still grow it.
+  const rowsH = (n === 0 ? SIZES.emptyH : 16 + n * SIZES.rowH + (input.groups ?? 0) * SIZES.groupH) + (input.listExtraH ?? 0);
   if (mode === 'list') return view(SIZES.listW, SIZES.headerH + rowsH + (input.askH ?? 0) + SIZES.footerH + SURFACE_CHROME_Y);
-  return view(input.reading ? SIZES.readingW : SIZES.sessionW, input.sessionH ?? 480);
+  if (mode === 'helper') return view(SIZES.sessionW, input.helperH ?? 480);
+  return view(input.reading ? Math.min(expandedWidth(screenW, SIZES.readingW), Math.max(SIZES.sessionW, screenW - 24)) : SIZES.sessionW, input.sessionH ?? 480);
 }
 
 /**

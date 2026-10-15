@@ -5,6 +5,8 @@
 .ledge-document h4,.ledge-document h5,.ledge-document h6 { margin:20px 0 8px; }
 .ledge-document p,.ledge-document ul,.ledge-document ol,.ledge-document blockquote,.ledge-document pre,.ledge-document table { margin:0 0 16px; }
 .ledge-document ul,.ledge-document ol { padding-left:24px; }
+.ledge-document ul,.ledge-thread-md ul { list-style:disc; }
+.ledge-document ol,.ledge-thread-md ol { list-style:decimal; }
 .ledge-document li { margin:4px 0; }
 .ledge-document li > ul,.ledge-document li > ol { margin:4px 0; }
 .ledge-document blockquote { border-left:3px solid var(--sidebar-border); padding-left:14px; color:var(--muted-foreground); }
@@ -15,6 +17,33 @@
 .ledge-document th,.ledge-document td { border:1px solid var(--sidebar-border); padding:5px 9px; }
 .ledge-document hr { border:0; border-top:1px solid var(--sidebar-border); margin:24px 0; }
 .ledge-document a { color:var(--sidebar-primary); cursor:pointer; text-decoration:underline; }
+/* A plan under review, inside the session's request card: compact. */
+[data-plan] .ledge-document { padding:12px 14px; font-size:13px; line-height:20px; }
+[data-plan] .ledge-document h1 { font-size:16px; line-height:22px; margin:0 0 10px; }
+[data-plan] .ledge-document h2 { font-size:14px; line-height:20px; margin:16px 0 8px; }
+[data-plan] .ledge-document h3 { font-size:13px; line-height:20px; margin:14px 0 6px; }
+[data-plan] .ledge-document > :last-child { margin-bottom:0; }
+.ledge-document mark,.ledge-thread-md mark { background:color-mix(in oklab, var(--sidebar-primary) 28%, transparent); color:inherit; border-radius:3px; padding:0 2px; }
+/* An agent's message in a session's thread: compact, its first paragraph on the line of the bot's name. */
+.ledge-thread-md { display:inline; overflow-wrap:anywhere; }
+.ledge-thread-md > p:first-child { display:inline; }
+.ledge-thread-md p,.ledge-thread-md ul,.ledge-thread-md ol,.ledge-thread-md blockquote,.ledge-thread-md pre,.ledge-thread-md table { margin:8px 0 0; }
+.ledge-thread-md h1,.ledge-thread-md h2,.ledge-thread-md h3,.ledge-thread-md h4,.ledge-thread-md h5,.ledge-thread-md h6 { margin:12px 0 0; font-weight:650; }
+.ledge-thread-md h1 { font-size:16px; line-height:22px; }
+.ledge-thread-md h2 { font-size:14px; line-height:20px; }
+.ledge-thread-md h3,.ledge-thread-md h4,.ledge-thread-md h5,.ledge-thread-md h6 { font-size:13px; line-height:20px; }
+.ledge-thread-md ul,.ledge-thread-md ol { padding-left:20px; }
+.ledge-thread-md li { margin:2px 0; }
+.ledge-thread-md li > ul,.ledge-thread-md li > ol,.ledge-thread-md li > p { margin:2px 0; }
+.ledge-thread-md strong { font-weight:600; }
+.ledge-thread-md blockquote { border-left:3px solid var(--sidebar-border); padding-left:10px; color:var(--muted-foreground); }
+.ledge-thread-md pre { overflow:auto; max-height:220px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--well); font-size:11px; line-height:17px; }
+.ledge-thread-md code { font-family:var(--font-mono, ui-monospace, monospace); }
+.ledge-thread-md :not(pre)>code { font-size:.92em; background:var(--muted); border-radius:6px; padding:1px 5px; }
+.ledge-thread-md table { border-collapse:collapse; display:block; overflow-x:auto; font-size:12px; }
+.ledge-thread-md th,.ledge-thread-md td { border:1px solid var(--sidebar-border); padding:3px 7px; }
+.ledge-thread-md hr { border:0; border-top:1px solid var(--sidebar-border); margin:12px 0; }
+.ledge-thread-md a { color:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:var(--muted-foreground); text-underline-offset:2px; }
 .ledge-document-image { color:var(--muted-foreground); font-style:italic; }
 .ledge-outline { position:absolute; z-index:2; top:8px; left:12px; right:12px; max-height:min(72%,560px); overflow:hidden; display:flex; flex-direction:column; background:var(--notch); border:1px solid var(--sidebar-border); border-radius:14px; box-shadow:0 16px 42px #0005; }
 .ledge-outline-header { min-height:52px; display:flex; align-items:center; gap:10px; padding:0 12px 0 18px; border-bottom:1px solid var(--sidebar-border); }

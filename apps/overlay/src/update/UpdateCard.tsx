@@ -54,12 +54,13 @@ function Dot({ status }: { status: 'done' | 'run' | 'todo' }) {
 export function UpdateCard({ view, sessions, offline = false, theme = 'dark', onUpdate, onLater, onRetry, onAck, onNotes }: UpdateCardProps) {
   const { t } = useI18n();
   const u = t.update;
+  const stepLabel = (s: Extract<CardView, { kind: 'running' }>['steps'][number]) => s.key === 'remote' ? u.remoteStep(s.label ?? '') : u.steps[s.key];
   let title: string; let subtitle: string | null = null; let badge: string; let tone: Tone;
   switch (view.kind) {
     case 'available': title = u.available(view.version); subtitle = view.current ? u.current(view.current) : null; badge = u.badgeNew; tone = 'info'; break;
     case 'manual': title = u.manualTitle; subtitle = view.version; badge = u.badgeManual; tone = 'warning'; break;
     case 'running': title = u.running(view.steps[0]?.meta ?? ''); subtitle = u.dontClose; badge = u.badgeRunning; tone = 'info'; break;
-    case 'failed': title = u.failed[view.reason]; badge = u.failedBadge; tone = 'danger'; break;
+    case 'failed': title = u.failed[view.reason]; subtitle = view.machine ? u.on(view.machine) : null; badge = u.failedBadge; tone = 'danger'; break;
     case 'updated': title = u.updated(view.version); badge = u.badgeUpdated; tone = 'success'; break;
   }
   const border = tone === 'danger' ? 'color-mix(in srgb, var(--danger) 45%, var(--input))' : tone === 'success' ? 'color-mix(in srgb, var(--success) 40%, var(--input))' : 'var(--input)';
@@ -78,6 +79,7 @@ export function UpdateCard({ view, sessions, offline = false, theme = 'dark', on
 
       {view.kind === 'available' && (
         <>
+          {view.servers && <span style={sub}>{u.servers(view.servers.map(x => `${x.label} (${x.version})`).join(', '))}</span>}
           {view.notes.length > 0 && <ul style={{ margin: 0, padding: '0 0 0 16px', display: 'flex', flexDirection: 'column', gap: 2, ...sub, lineHeight: '17px' }}>{view.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
           <span style={{ ...sub, fontSize: 11, lineHeight: '15px' }}>{u.keepRunning(sessions)}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -103,12 +105,12 @@ export function UpdateCard({ view, sessions, offline = false, theme = 'dark', on
       {view.kind === 'running' && (
         <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {view.steps.map(s => (
-            <li key={s.key} data-step={s.key} data-status={s.status} style={{ display: 'grid', gridTemplateColumns: '16px minmax(0, 1fr) auto', gap: 8, alignItems: 'center', fontSize: 12, lineHeight: '16px', color: s.status === 'todo' ? 'var(--muted-foreground)' : undefined }}>
+            <li key={`${s.key}:${s.label ?? ''}`} data-step={s.key} data-status={s.status} style={{ display: 'grid', gridTemplateColumns: '16px minmax(0, 1fr) auto', gap: 8, alignItems: 'center', fontSize: 12, lineHeight: '16px', color: s.status === 'todo' ? 'var(--muted-foreground)' : undefined }}>
               <Dot status={s.status} />
-              <span>{u.steps[s.key]}</span>
+              <span>{stepLabel(s)}</span>
               {s.meta && <span className="mono" style={{ fontSize: 11, color: 'var(--muted-foreground)', fontVariantNumeric: 'tabular-nums' }}>{s.meta}</span>}
               {s.progress !== undefined && (
-                <div role="progressbar" aria-label={u.steps[s.key]} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(s.progress * 100)} style={{ gridColumn: '2 / 4', height: 4, borderRadius: 4, background: 'var(--muted)', overflow: 'hidden' }}>
+                <div role="progressbar" aria-label={stepLabel(s)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(s.progress * 100)} style={{ gridColumn: '2 / 4', height: 4, borderRadius: 4, background: 'var(--muted)', overflow: 'hidden' }}>
                   <i style={{ display: 'block', height: '100%', width: `${Math.round(s.progress * 100)}%`, background: 'var(--info)', borderRadius: 4 }} />
                 </div>
               )}

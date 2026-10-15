@@ -19,6 +19,9 @@ export const QUESTION_TOOLS: ReadonlySet<string> = new Set(['AskUserQuestion', '
 /** Tools whose permission request is a file change: Claude Code's, and Codex's patch. */
 const DIFF_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'apply_patch']);
 
+/** The options' descriptions travel with them, only when there are some. */
+const details = (ev: SessionEvent) => (ev.optionDetails?.some(Boolean) ? { optionDetails: ev.optionDetails } : {});
+
 function pendingFor(ev: SessionEvent): Pending | undefined {
   if (ev.name === 'PermissionRequest') {
     const diff = !!ev.tool && DIFF_TOOLS.has(ev.tool);
@@ -26,16 +29,17 @@ function pendingFor(ev: SessionEvent): Pending | undefined {
   }
   if (ev.name === 'PreToolUse' && ev.tool && QUESTION_TOOLS.has(ev.tool)) {
     // The tool is kept only when it is not Claude's, so its PostToolUse can still be matched (see pendingTool).
-    return { kind: 'question', text: ev.text ?? '', options: ev.options, source: 'hook', ...(ev.tool !== 'AskUserQuestion' ? { tool: ev.tool } : {}) };
+    return { kind: 'question', text: ev.text ?? '', options: ev.options, ...details(ev), source: 'hook', ...(ev.tool !== 'AskUserQuestion' ? { tool: ev.tool } : {}) };
   }
   if (ev.name === 'PreToolUse' && ev.tool === 'ExitPlanMode') {
-    return { kind: 'plan', text: ev.text ?? '', source: 'hook' };
+    const plan = ev.toolInput?.plan;
+    return { kind: 'plan', text: ev.text ?? '', ...(typeof plan === 'string' && plan.trim() ? { body: plan } : {}), source: 'hook' };
   }
   if (ev.name === 'Notification' && ev.kind === 'permission') {
     return { kind: 'permission', text: ev.text ?? '', source: 'hook' };
   }
   if (ev.name === 'PanePrompt') {
-    return { kind: ev.kind ?? 'permission', text: ev.text ?? '', options: ev.options, source: 'pane' };
+    return { kind: ev.kind ?? 'permission', text: ev.text ?? '', ...(ev.body ? { body: ev.body } : {}), options: ev.options, ...details(ev), source: 'pane' };
   }
   return undefined;
 }
@@ -55,7 +59,11 @@ function mergePending(current: Pending | undefined, incoming: Pending): Pending 
   // A permission/diff request over a richer hook pending (plan, question) keeps that kind.
   if (current.source === 'hook' && (current.kind === 'plan' || current.kind === 'question') && incoming.source === 'hook') return current;
   const kind = incoming.kind;
-  return { ...current, ...incoming, kind, text: incoming.text || current.text, tool: incoming.tool ?? current.tool, options: incoming.options ?? current.options };
+  // The descriptions belong to the options they came with.
+  const options = incoming.options ?? current.options;
+  const optionDetails = incoming.options ? incoming.optionDetails : current.optionDetails;
+  const { optionDetails: _old, ...rest } = { ...current, ...incoming };
+  return { ...rest, kind, text: incoming.text || current.text, tool: incoming.tool ?? current.tool, options, ...(optionDetails ? { optionDetails } : {}) };
 }
 
 /** The tool whose PostToolUse means a hook pending was answered (in the terminal or from Ledge). */
@@ -166,7 +174,7 @@ function withoutReply(s: Session): Session {
 
 function samePending(a: Pending, b: Pending): boolean {
   return a.kind === b.kind && a.text === b.text && a.tool === b.tool && a.source === b.source
-    && JSON.stringify(a.options) === JSON.stringify(b.options);
+    && JSON.stringify(a.options) === JSON.stringify(b.options) && JSON.stringify(a.optionDetails) === JSON.stringify(b.optionDetails);
 }
 
 /**
@@ -202,6 +210,8 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
   const lastHookAt = s.lastHookAt;
   if (ev.name === 'SubagentStart' || ev.name === 'SubagentStop') return ev.helperId ? reduceHelper(s, { ...ev, helperId: ev.helperId }) : s;
   if (ev.helperId && ev.source === 'hook' && ev.name !== 'SessionEnd') return reduceHelper(s, { ...ev, helperId: ev.helperId });
+  // The transcript a hook names is the live one (it follows /clear and --resume): it replaces the one the launch implied.
+  if (ev.source === 'hook' && ev.transcriptPath && ev.transcriptPath !== s.transcriptPath) s = { ...s, transcriptPath: ev.transcriptPath };
 
   switch (ev.name) {
     case 'SessionEnd':
@@ -234,7 +244,7 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
     }
     case 'Stop': {
       // The turn's last message rides on the hook; a Stop without one keeps what the last Stop said.
-      const lastReply = ev.text ? { text: ev.text, at } : s.lastReply;
+      const lastReply = ev.text ? { text: ev.text, at, ...(ev.kind === 'plan' ? { plan: true } : {}) } : s.lastReply;
       if (s.pending?.helperId) return underHelper(s, 'idle', at, { lastReply });
       return { ...s, state: 'idle', pending: undefined, lastReply, lastHookAt: at, lastActivityAt: at };
     }
@@ -256,7 +266,9 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
     case 'PanePrompt': {
       if (s.pending?.source === 'hook') return s;
       if (hooksReportPrompts(s) && lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
-      const pending = mergePending(s.pending, pendingFor(ev)!);
+      let pending = mergePending(s.pending, pendingFor(ev)!);
+      // Codex asks "Implement this plan?" under the plan it just proposed: its last reply is what to review.
+      if (pending.kind === 'plan' && !pending.body && s.tool === 'codex' && s.lastReply) pending = { ...pending, body: s.lastReply.text };
       if (s.pending && samePending(s.pending, pending)) return s;
       const state = pending.kind === 'question' ? 'waiting_input' : 'waiting_permission';
       return { ...s, state, pending, lastActivityAt: at };

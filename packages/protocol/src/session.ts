@@ -16,8 +16,12 @@ export const PendingSchema = z.object({
   reason: z.string().max(500).optional(),
   kind: z.enum(['question', 'permission', 'plan', 'diff']),
   text: z.string(),
+  /** What to review in full before deciding, when `text` is only its summary: a plan's markdown. */
+  body: z.string().optional(),
   tool: z.string().optional(),
   options: z.array(z.string()).optional(),
+  /** Each option's description, by index ('' when it has none); left out when no option has one. */
+  optionDetails: z.array(z.string()).optional(),
   /** How dangerous accepting it blindly would be, and why (absent from journals written before). */
   risk: RiskSchema.optional(),
   riskReason: RiskReasonSchema.optional(),
@@ -32,7 +36,9 @@ export type Pending = z.infer<typeof PendingSchema>;
 /** The agent's last message of a finished turn, as the tool reported it (markdown), until the next prompt is sent. */
 export const ReplySchema = z.object({
   text: z.string(),
-  at: z.string().datetime()
+  at: z.string().datetime(),
+  /** The reply is a plan the agent proposes (Codex Plan mode): nothing in it is done yet. */
+  plan: z.boolean().optional()
 });
 export type Reply = z.infer<typeof ReplySchema>;
 
@@ -49,6 +55,8 @@ export const TopicSourceSchema = z.enum(['user', 'pane', 'prompt']);
 export type TopicSource = z.infer<typeof TopicSourceSchema>;
 
 export const SessionSchema =z.object({
+  /** Origin is annotated by the overlay, never used as an unqualified session id on the wire. */
+  machineId: z.string().optional(), machineName: z.string().optional(), repoId: z.string().optional(),
   id: z.string().min(1),
   name: z.string().min(1),
   tool: ToolSchema,
@@ -72,6 +80,10 @@ export const SessionSchema =z.object({
   startedAt: z.string().datetime(),
   lastActivityAt: z.string().datetime(),
   lastHookAt: z.string().datetime().optional(),
+  /** The agent's own session id when Ledge chose it at launch (Claude Code `--session-id`). */
+  agentSessionId: z.string().optional(),
+  /** The agent's transcript: the latest one a hook named (it follows /clear and --resume), else the one the launch implies. */
+  transcriptPath: z.string().optional(),
   exitCode: z.number().int().nullable().optional(),
   exitedAt: z.string().datetime().optional(),
   lastError: z.string().optional(),

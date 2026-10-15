@@ -3,8 +3,15 @@ import type { ServerMessage, Session } from '@ledge/protocol';
 /** Who receives the projection: the device, and whether a session's thread holds replies it has not read. */
 export interface RemoteView { deviceId: string; unread(sessionId: string): boolean }
 
-/** A phone never learns the tmux session name (it cannot attach to it, and it says nothing it needs); it learns its own unread. */
-const projectSession = (s: Session, view: RemoteView): Session => ({ ...s, tmuxSession: null, unread: view.unread(s.id) });
+/**
+ * A phone never learns the tmux session name (it cannot attach to it, and it says nothing it needs), nor where the
+ * agent's transcript lives on the PC or the agent's own session id (the daemon reads those, the phone has no use for
+ * them); it learns its own unread.
+ */
+const projectSession = (s: Session, view: RemoteView): Session => {
+  const { transcriptPath: _t, agentSessionId: _a, ...rest } = s;
+  return { ...rest, tmuxSession: null, unread: view.unread(s.id) };
+};
 
 /**
  * What a remote peer may receive (decision D2): an allow-list by message type, everything else is dropped (null).

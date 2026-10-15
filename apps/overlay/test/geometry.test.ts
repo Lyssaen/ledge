@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { layout, scaledLayout, islandWidth, stripWidth, islandOrder, ISLAND, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
+import { layout, scaledLayout, islandWidth, islandPipes, stripWidth, islandOrder, ISLAND, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
 import { frameOf } from '../src/surface/frame';
 const bots = (n: number, pending: number[] = []) => Array.from({ length: n }, (_, i) => ({ id: String(i), pending: pending.includes(i) }));
 const W = 1920, H = 1080;
@@ -26,6 +26,21 @@ describe('island geometry', () => {
     expect(l.slots[0]).toEqual({ id: '6', size: 22, center: first + 11 });
     expect(l.slots[1]!.center).toBe(first + 22 + 8 + 11);
   });
+  it('several machines: this machine first, asks first inside each machine, a 9 px pipe between two machines', () => {
+    const fleet = [{ id: 'r1', pending: false, machine: 'srv' }, { id: 'l1', pending: false }, { id: 'r2', pending: true, machine: 'srv' }, { id: 'l2', pending: true, machine: 'local' }, { id: 'o1', pending: false, machine: 'other' }];
+    const ordered = islandOrder(fleet);
+    expect(ordered.map(b => b.id)).toEqual(['l2', 'l1', 'r2', 'r1', 'o1']);
+    expect(islandPipes(ordered)).toBe(2);
+    expect(islandPipes(islandOrder(bots(8, [6])))).toBe(0);
+    expect(islandWidth(5, false, 2)).toBe(islandWidth(5) + 2 * (8 + 1));
+    const l = layout({ bots: fleet, mode: 'handle', screenH: H, screenW: W });
+    expect(l.w).toBe(islandWidth(5, false, 2));
+    const first = l.left + 12 + 22 + 8 + 1 + 8;
+    expect(l.slots.map(s => s.center - first - 11)).toEqual([0, 30, 30 + 9 + 30, 30 + 9 + 60, 30 + 9 + 60 + 9 + 30]);
+    // Only the shown companions count: a machine pushed past six behind the "+n" draws no pipe.
+    const many = [...bots(6), { id: 'x', pending: false, machine: 'srv' }];
+    expect(layout({ bots: many, mode: 'handle', screenH: H, screenW: W }).w).toBe(islandWidth(7));
+  });
   it('no sessions: the mascot alone, no separator room', () => {
     expect(layout({ bots: [], mode: 'handle', screenH: H, screenW: W })).toMatchObject({ w: 48, h: 38, slots: [] });
   });
@@ -45,7 +60,7 @@ describe('island geometry', () => {
     expect(list).toMatchObject({ top: 0, w: SIZES.listW, left: (W - SIZES.listW) / 2 });
     expect(list.h).toBe(SIZES.headerH + 16 + 3 * SIZES.rowH + SIZES.footerH + SURFACE_CHROME_Y);
     expect(layout({ bots: bots(2), mode: 'session', screenH: H, screenW: W, sessionH: 500 })).toMatchObject({ top: 0, w: 480, h: 500, left: (W - 480) / 2 });
-    expect(layout({ bots: bots(2), mode: 'session', screenH: H, screenW: W, sessionH: 500, reading: true }).w).toBe(SIZES.readingW);
+    expect(layout({ bots: bots(2), mode: 'session', screenH: H, screenW: W, sessionH: 500, reading: true }).w).toBe(1152); // 60% of W
     expect(layout({ bots: bots(2), mode: 'launch', screenH: H, screenW: W })).toMatchObject({ w: SIZES.listW, h: SIZES.launchH });
     expect(layout({ bots: bots(2), mode: 'launch', screenH: H, screenW: W, detailH: 700 }).h).toBe(700);
     expect(layout({ bots: [], mode: 'chat', screenH: 1000, screenW: W, detailH: 500 })).toMatchObject({ w: SIZES.sessionW, h: 500 });
@@ -56,6 +71,9 @@ describe('island geometry', () => {
     expect(layout({ bots: bots(30), mode: 'list', screenH: 600, screenW: W }).h).toBe(600 - SIZES.margin);
     expect(layout({ bots: bots(0), mode: 'launch', screenH: 300, screenW: W }).h).toBe(300 - SIZES.margin);
     expect(layout({ bots: bots(3), mode: 'list', screenH: H, screenW: W, listExtraH: 42 }).h).toBe(layout({ bots: bots(3), mode: 'list', screenH: H, screenW: W }).h + 42);
+  });
+  it('the empty list also grows by the extra height (the update card, the notice)', () => {
+    expect(layout({ bots: [], mode: 'list', screenH: H, screenW: W, listExtraH: 150 }).h).toBe(layout({ bots: [], mode: 'list', screenH: H, screenW: W }).h + 150);
   });
   it('the bubble is the island stretched to 440 px, top edge, centred, whatever bot asks', () => {
     const l = layout({ bots: bots(5, [4]), mode: 'bubble', screenH: H, screenW: W });
@@ -72,6 +90,15 @@ describe('island geometry', () => {
       const f = frameOf(g, [], { w: 700, h: 900 });
       expect(f.left).toBeGreaterThanOrEqual(0); expect(f.left + f.w).toBeLessThanOrEqual(700);
     }
+  });
+  it('an enlarged view (reading mode, expanded reader) takes 60% of the screen, between its old width and 1200', () => {
+    const w = (mode: 'session' | 'reader', screenW: number) => layout({ bots: [], mode, screenH: H, screenW, reading: true, readerExpanded: true }).w;
+    expect(w('session', 1920)).toBe(1152); expect(w('reader', 1920)).toBe(1152);
+    expect(w('session', 2560)).toBe(1200); expect(w('reader', 3840)).toBe(1200);
+    expect(w('session', 1280)).toBe(800); expect(w('reader', 1280)).toBe(800);
+    expect(w('session', 800)).toBe(776); // the terminal sits alongside: as wide as the screen allows
+    expect(w('session', 500)).toBe(480); // never narrower than the session view itself
+    expect(layout({ bots: [], mode: 'session', screenH: H, screenW: 1920, sessionH: 500 }).w).toBe(SIZES.sessionW);
   });
   it('the island position moves the axis to a quarter of the screen, clamped inside it', () => {
     const left = layout({ bots: bots(2), mode: 'handle', screenH: H, screenW: W, position: 'left' });

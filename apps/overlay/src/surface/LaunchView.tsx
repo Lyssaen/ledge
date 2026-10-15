@@ -13,15 +13,14 @@ import { toolName } from '../format';
 import { DetailHeader } from './DetailHeader';
 import { Segmented } from './SettingsView';
 import { useI18n } from '../i18n/lang';
+import { loadOpenTab, saveOpenTab } from './openTabPreference';
+import type { MachineState } from '../daemon/machines';
 
 /** What the form sends: the daemon's `session.launch` fields, plus whether to open a terminal tab once it answers. */
 export interface LaunchRequest { tool: Tool; cwd: string; name?: string; prompt?: string; continue: boolean; openTab: boolean }
 
 /** The actions row under the scrolling body (its border included), added to the measured body by the surface. */
 export const LAUNCH_FOOTER_H = 61;
-const OPEN_TAB_KEY = 'ledge.launch.openTab';
-const loadOpenTab = () => { try { return localStorage.getItem(OPEN_TAB_KEY) !== '0'; } catch { return true; } };
-const saveOpenTab = (on: boolean) => { try { localStorage.setItem(OPEN_TAB_KEY, on ? '1' : '0'); } catch { /* in-memory only */ } };
 
 /** The folder's last path segment, as the daemon will name the project. */
 export const projectOf = (cwd: string) => cwd.trim().replace(/\/+$/, '').split('/').pop() || cwd.trim();
@@ -55,7 +54,11 @@ function Switch({ id, label: text, hint: why, checked, onChange, last }: { id: s
   );
 }
 
+/** How many recent folders the form offers: the daemon remembers more, the list stays short. */
+export const SHOWN_RECENTS = 3;
+
 export interface LaunchViewProps {
+  machines?: MachineState[]; machineId?: string; onMachine?: (id: string) => void;
   visible: boolean; recents: Recent[]; sessions: Session[];
   /** The daemon is unreachable: nothing can be sent (the reason is shown under the actions). */
   offline?: string | null;
@@ -106,6 +109,7 @@ export function LaunchView(p: LaunchViewProps) {
       <form data-launch-form onSubmit={e => { e.preventDefault(); submit(); }} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flexGrow: 1 }}>
         <div className="ledge-scroll" style={{ overflowY: 'auto', minHeight: 0, overscrollBehavior: 'contain' }}>
           <div ref={p.contentRef} style={{ display: 'flex', flexDirection: 'column', padding: '4px 17px 8px' }}>
+            {p.machines && p.machines.length > 1 && <div style={{ borderBottom: '1px solid var(--sidebar-border)' }}><Segmented name="launch-machine" label={t.machines.target} hint={t.machines.hint} value={p.machineId ?? 'local'} onChange={p.busy ? undefined : p.onMachine} options={p.machines.map(m => ({ value: m.id, label: `${m.id === 'local' ? t.machines.local : m.label}${!m.ready ? ` · ${t.machines.offline}` : ''}` }))} /></div>}
             <Row>
               <label htmlFor="ledge-launch-cwd" style={label}>{t.launch.folder}</label>
               <span style={{ ...hint, marginTop: 3 }}>{t.launch.folderHint}</span>
@@ -116,7 +120,7 @@ export function LaunchView(p: LaunchViewProps) {
               <span style={{ ...hint, marginTop: 10, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>{t.launch.recents}</span>
               {p.recents.length === 0 && <span style={{ ...hint, marginTop: 4 }}>{t.launch.noRecents}</span>}
               <div role="list" style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
-                {p.recents.map(r => {
+                {p.recents.slice(0, SHOWN_RECENTS).map(r => {
                   const who = busyIn(r.cwd); const on = r.cwd === cwd.trim();
                   return (
                     <button key={r.cwd} type="button" role="listitem" data-recent={r.cwd} aria-label={t.launch.pick(r.project, r.cwd)} aria-pressed={on} onClick={() => setCwd(r.cwd)} className="ledge-recent"

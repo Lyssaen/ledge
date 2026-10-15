@@ -1,9 +1,13 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { createMockDaemon, fakeSession } from './mockDaemon';
-import { createDaemonClient } from '@ledge/client';
+import { createDaemonClient } from '../src/daemon/client';
 import { attachClient, daemonStore } from '../src/daemon/store';
 import { useUpdate, withinMs } from '../src/update/useUpdate';
+import type { ClientMessage, ServerMessage } from '@ledge/protocol';
+import type { DaemonClient, DaemonStatus } from '../src/daemon/client';
+import { createFleetClient } from '../src/daemon/fleet';
+import { LOCAL_MACHINE } from '../src/daemon/machines';
 
 let cleanup: Array<() => unknown> = [];
 afterEach(async () => { for (const c of cleanup.reverse()) await c(); cleanup = []; daemonStore.reset(); localStorage.clear(); });
@@ -85,5 +89,38 @@ describe('withinMs', () => {
   it('rejects a promise that does not settle in time, passes one that does', async () => {
     await expect(withinMs(new Promise(() => {}), 20)).rejects.toMatchObject({ message: 'no answer within 20 ms' });
     await expect(withinMs(Promise.resolve(1), 20)).resolves.toBe(1);
+  });
+});
+
+function peer() {
+  let status: DaemonStatus = 'connecting';
+  const messages = new Set<(m: ServerMessage) => void>(), statuses = new Set<(s: DaemonStatus) => void>();
+  const sent: ClientMessage[] = [];
+  const set = (s: DaemonStatus) => { status = s; statuses.forEach(f => f(s)); };
+  const client: DaemonClient = { connect: () => set('open'), close: () => set('unreachable'), status: () => status, send: m => { sent.push(m); }, onMessage: f => { messages.add(f); return () => { messages.delete(f); }; }, onStatus: f => { statuses.add(f); return () => { statuses.delete(f); }; } };
+  return { client, sent, set, emit: (m: ServerMessage) => messages.forEach(f => f(m)) };
+}
+
+describe('useUpdate with a remote machine', () => {
+  it('updates the server first, then the local daemon, then the app', async () => {
+    const local = peer(), server = peer();
+    const client = createFleetClient([LOCAL_MACHINE, { id: 'server', label: 'dev-server', ssh: 'dev-server' }], o => o.url.endsWith('/ssh/dev-server') ? server.client : local.client);
+    client.connect();
+    const snap = (version: string, ids: string[]): Extract<ServerMessage, { type: 'snapshot' }> => ({ type: 'snapshot', sessions: ids.map(id => fakeSession(id)), launcher: [], daemon: { version, install: 'npm', systemd: true } });
+    local.emit(snap('0.2.2', ['a'])); server.emit({ ...snap('0.2.2', ['s1']), sshAlias: 'dev-server' });
+    const install = vi.fn(async () => {});
+    const hook = renderHook(() => useUpdate(client, { version: async () => '0.2.2', check: async () => ({ version: '0.3.0', notes: '', downloadAndInstall: install }), relaunch: async () => {}, waitMs: 500, stallMs: 1000 }));
+    await waitFor(() => expect(hook.result.current.card).toMatchObject({ kind: 'available', servers: [{ label: 'dev-server', version: '0.2.2' }] }));
+    act(() => hook.result.current.start());
+    await waitFor(() => expect(server.sent).toEqual([{ type: 'update.daemon', version: '0.3.0' }]));
+    expect(local.sent).toEqual([]);
+    // The server restarts: its bridge drops, then it answers with 0.3.0 and its session.
+    act(() => { server.emit({ type: 'update.progress', version: '0.3.0', step: 'restarting' }); server.set('connecting'); });
+    act(() => { server.set('open'); server.emit({ ...snap('0.3.0', ['s1']), sshAlias: 'dev-server' }); });
+    await waitFor(() => expect(local.sent).toEqual([{ type: 'update.daemon', version: '0.3.0' }]));
+    act(() => { local.set('connecting'); local.set('open'); local.emit(snap('0.3.0', ['a'])); });
+    await waitFor(() => expect(install).toHaveBeenCalledOnce());
+    expect(server.sent).toHaveLength(1);
+    hook.unmount(); client.close();
   });
 });

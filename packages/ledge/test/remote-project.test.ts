@@ -73,11 +73,26 @@ describe('toRemote', () => {
     expect((toRemote({ type: 'session.updated', session: mk('b') }, mine) as Extract<ServerMessage, { type: 'session.updated' }>).session.unread).toBe(true);
   });
   it('passes a session thread to the phone that asked', () => {
-    const turns: ServerMessage = { type: 'session.turns', id: 'a', turns: [{ seq: 1, at: T0, kind: 'reply', text: 'Done.' }] };
+    const turns: ServerMessage = { type: 'session.turns', id: 'a', turns: [{ id: 'reply-1', at: T0, kind: 'reply', text: 'Done.' }] };
     expect(toRemote(turns, view)).toEqual(turns);
   });
   it('drops chat, document, folder, update, recents and launched messages for a remote peer', () => {
     for (const msg of [chatDone, docContent, folderListing, updateProgress, recents, launched]) expect(toRemote(msg, view)).toBeNull();
+  });
+  it("drops the overlay's thread, its routing answers and every other message main added, by default", () => {
+    const item = { kind: 'tool' as const, id: 't1', at: T0, turn: 1, tool: 'Bash', label: 'Bash', input: 'cat ~/.ssh/id_rsa', output: 'secret', status: 'success' as const, files: [] };
+    expect(toRemote({ type: 'session.thread', id: 'a', items: [item] }, view)).toBeNull();
+    expect(toRemote({ type: 'session.thread.item', id: 'a', item }, view)).toBeNull();
+    expect(toRemote({ type: 'chat.routed', qid: 'q', result: { machineId: null, text: 'x' } } as ServerMessage, view)).toBeNull();
+  });
+  it('a phone never learns where the transcript lives, the agent session id, or the SSH alias', () => {
+    const s = { ...mk('a'), transcriptPath: '/home/u/.claude/projects/x/c.jsonl', agentSessionId: 'abc' };
+    const snap = toRemote({ type: 'snapshot', sessions: [s], sshAlias: 'pc' } as ServerMessage, view) as Extract<ServerMessage, { type: 'snapshot' }>;
+    expect(Object.keys(snap).sort()).toEqual(['sessions', 'type']);
+    expect(snap.sessions[0]).not.toHaveProperty('transcriptPath');
+    expect(snap.sessions[0]).not.toHaveProperty('agentSessionId');
+    const upd = toRemote({ type: 'session.updated', session: s }, view) as Extract<ServerMessage, { type: 'session.updated' }>;
+    expect(JSON.stringify(upd)).not.toContain('.claude/projects');
   });
   it('drops the device list and the chat history', () => {
     expect(toRemote({ type: 'devices', devices: [], origin: null, listening: false }, view)).toBeNull();

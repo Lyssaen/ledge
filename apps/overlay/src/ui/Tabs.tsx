@@ -23,7 +23,7 @@ export function Tabs<T extends string>({ id, label, value, tabs, onChange }: { i
         const { tabId, panelId } = tabIds(id, tab.value);
         return (
           <button key={tab.value} type="button" role="tab" id={tabId} aria-selected={on} aria-controls={panelId} tabIndex={on ? 0 : -1} onClick={() => onChange(tab.value)} onKeyDown={e => onKeyDown(e, i)}
-            style={{ flex: '1 1 0', height: 28, padding: 0, border: 'none', borderRadius: 'calc(var(--radius-md) - 2px)', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', cursor: 'pointer', background: on ? 'var(--sidebar)' : 'transparent', color: on ? 'var(--sidebar-foreground)' : 'var(--muted-foreground)', boxShadow: on ? '0 1px 2px rgb(0 0 0 / .2)' : 'none', transition: transition([['background-color', 'hover'], ['color', 'hover']]) }}>
+            style={{ flex: '1 1 0', height: 28, padding: '0 6px', border: 'none', borderRadius: 'calc(var(--radius-md) - 2px)', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', cursor: 'pointer', background: on ? 'var(--sidebar)' : 'transparent', color: on ? 'var(--sidebar-foreground)' : 'var(--muted-foreground)', boxShadow: on ? '0 1px 2px rgb(0 0 0 / .2)' : 'none', transition: transition([['background-color', 'hover'], ['color', 'hover']]) }}>
             {tab.label}
           </button>
         );

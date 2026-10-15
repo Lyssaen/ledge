@@ -217,7 +217,7 @@ describe('remote decisions', () => {
     const sent: any[] = [];
     const peer = { ctx: { kind: 'remote' as const, deviceId }, send: (m: unknown) => { sent.push(m); }, close() {} };
     const deps: DecisionDeps = {
-      store, ops: { } as never, challenges: { issue: () => { throw new Error('secret internals'); } } as never, devices, config: () => cfg, inject: async () => {}, interrupt: async () => {}
+      store, ops: { } as never, challenges: { issue: () => { throw new Error('secret internals'); } } as never, devices, config: () => cfg, inject: async () => true, interrupt: async () => {}
     };
     await prepareDecide(peer as never, { type: 'decide.prepare', id: 'a', pendingId: 'pA', pendingVersion: 1, decision: 'accept' }, deps);
     expect(sent).toEqual([{ type: 'error', id: 'a', message: 'forbidden' }]);

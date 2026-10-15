@@ -1,7 +1,19 @@
 import { execFile } from 'node:child_process';
 import { basename, dirname, resolve } from 'node:path';
 
-export interface GitInfo { repo: string; repoPath: string; branch: string; worktree: boolean }
+export interface GitInfo { repo: string; repoPath: string; branch: string; worktree: boolean; repoId?: string }
+/** Transport-neutral identity. User/password/query are never returned to the overlay. */
+export function repositoryId(remote: string): string | undefined {
+  const value = remote.trim();
+  try {
+    const url = new URL(value);
+    if (!['https:', 'http:', 'ssh:', 'git:'].includes(url.protocol)) return undefined;
+    return `${url.hostname.toLowerCase()}${url.pathname.replace(/\.git\/?$/, '').replace(/\/$/, '')}`;
+  } catch {
+    const scp = value.match(/^(?:[^@\s]+@)?([a-zA-Z0-9.-]+):([^\s]+)$/);
+    return scp ? `${scp[1]!.toLowerCase()}/${scp[2]!.replace(/\.git$/, '').replace(/\/$/, '')}` : undefined;
+  }
+}
 /** Runs `file args` in `cwd`; a missing binary or a non-zero exit is a non-zero `code`, never a throw. */
 export type Exec = (file: string, args: string[], cwd: string) => Promise<{ code: number; stdout: string }>;
 export const execGit: Exec = (file, args, cwd) => new Promise(res => {
@@ -26,7 +38,9 @@ export async function gitInfo(cwd: string, exec: Exec = execGit): Promise<GitInf
     if (sha.code !== 0 || !sha.stdout.trim()) return null;
     branch = sha.stdout.trim();
   }
-  return { repo: basename(repoPath), repoPath, branch, worktree };
+  const remote = await exec('git', ['config', '--get', 'remote.origin.url'], cwd);
+  const repoId = remote.code === 0 ? repositoryId(remote.stdout) : undefined;
+  return { repo: basename(repoPath), repoPath, branch, worktree, ...(repoId ? { repoId } : {}) };
 }
 
 /** What a reader needs to know about the folder's work: status with the branch line, the last commits, the uncommitted diff stat. */

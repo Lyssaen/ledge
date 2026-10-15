@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const REPO = 'Paradow-dev/ledge';
+const REPO = 'Lyssaen/ledge';
 
 export function latestJson({ tag, notes, signature, exeName, pubDate }) {
   const version = tag.replace(/^v/, '');

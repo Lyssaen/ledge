@@ -1,6 +1,6 @@
 import { writeFile, rm } from 'node:fs/promises';
 import { Store } from './store.js';
-import { HistoryStore } from './history.js';
+import { History } from './history.js';
 import { startServer, type ServerHandle } from './server.js';
 import { startPoller } from './poller.js';
 import { realTmux, type Tmux } from '../tmux.js';
@@ -61,18 +61,16 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   if (live) for (const s of store.all()) {
     if (s.tmuxSession && !live.has(s.tmuxSession)) store.remove(s.id);
   }
-  // One history for the startup prune and for the server. A journal that could not be read lists no session: pruning
-  // against it would erase every thread, so the prune waits for a readable one.
-  const history = new HistoryStore();
-  if (store.loadFailed) log('history prune skipped: the session journal could not be read');
-  else {
-    try { await history.prune(new Set(store.all().map(s => s.id))); }
-    catch (e) { log(`history prune failed: ${(e as Error).message}`); }
-  }
   const daemon = await daemonInfo();
   const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save() }));
   const devices = new DeviceStore();
   await devices.load();
+  const history = new History();
+  try { await history.load(); } catch (e) { log(`history not loaded: ${(e as Error).message}`); }
+  // The startup prune above ran before the history existed: the journals of the sessions it dropped go now. A session
+  // journal that could not be read lists no session: forgetting against it would erase every thread, so nothing goes.
+  if (store.loadFailed) log('history prune skipped: the session journal could not be read');
+  else for (const id of history.ids()) if (!store.get(id)) history.forget(id);
   // The remote entry attaches its phones to the server, which needs the control for its device commands: started after both exist.
   let handle: ServerHandle | undefined;
   const mobile = mobileControl({ config: await loadMobileConfig(), devices, server: () => handle!, remotePort: opts.remotePort });

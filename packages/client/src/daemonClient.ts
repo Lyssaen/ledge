@@ -28,12 +28,13 @@ export function createDaemonClient(opts: {
     setStatus(status === 'open' ? 'connecting' : status);
     const sock = new Ws(opts.url); ws = sock;
     sock.onopen = () => {
-      backoff = min;
+      if (ws !== sock) return;
       const hello = opts.hello?.();
       if (hello) sock.send(JSON.stringify(hello));
       setStatus('open');
     };
-    sock.onmessage = ev => { try { const m = parseServerMessage(JSON.parse(String(ev.data))); msgFns.forEach(f => f(m)); } catch { /* ignore malformed */ } };
+    // The backoff starts over only once the daemon has answered: a socket that opens then closes at once keeps backing off.
+    sock.onmessage = ev => { if (ws !== sock) return; try { const m = parseServerMessage(JSON.parse(String(ev.data))); if (m.type === 'snapshot') backoff = min; msgFns.forEach(f => f(m)); } catch { /* ignore malformed */ } };
     sock.onerror = () => { /* onclose follows */ };
     sock.onclose = ev => {
       if (ws !== sock) return; ws = null; setStatus('unreachable');

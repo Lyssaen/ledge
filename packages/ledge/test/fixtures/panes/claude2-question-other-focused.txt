@@ -1,0 +1,18 @@
+✻ Brewed for 2s · done 9:17 AM                                
+                                                              
+❯ Use the AskUserQuestion tool to ask me one question: which color do I prefer, 
+  with options Red and Blue.                                                    
+────────────────────────────────────────────────────────────────────────────────
+ ☐ Color 
+
+Which color do you prefer?
+
+  1. Red                                                                        
+     Choose red as your preferred color.            
+  2. Blue                                              
+     Choose blue as your preferred color.                                       
+❯ 3. Type something.
+────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this                                                     
+
+Enter to select · ↑/↓ to navigate · ctrl+g to edit in Vim · Esc to cancel  

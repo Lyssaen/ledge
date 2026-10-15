@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type Ref } from 'react';
-import type { ChatStep, ChatTurn, Session } from '@ledge/protocol';
+import { hideProposal, type ChatStep, type ChatTurn, type Session } from '@ledge/protocol';
 import { ResidentMascot } from '../bots/ResidentMascot';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
@@ -7,16 +7,25 @@ import { relativeTime } from '../format';
 import { transition } from '../motion';
 import { useI18n, type Messages } from '../i18n/lang';
 import { inline } from './ReplyCard';
+import { LaunchCard } from './LaunchCard';
+import { RelayCard } from './RelayCard';
 import { groupSessions } from '@ledge/client';
 import type { DocumentReference } from '../documents/references';
 
 export const CHAT_HEADER_H = 56;
+/** The composer under the thread: its padding, the 34 px field and the top border. */
+export const CHAT_COMPOSER_H = 10 + 34 + 10 + 1;
 export interface ChatViewProps {
   turns: ChatTurn[]; live: { qid: string; text: string } | null; sessions: Session[]; visible: boolean; enterDelay?: number;
   /** Null when questions may be sent; otherwise why not (offline). */
   offline: string | null;
   onAsk: (text: string) => void; onCancel: (qid: string) => void; onReset: () => void; onBack: () => void; onClose: () => void; onOpenSession: (id: string) => void;
-  onDocument?: (ref: DocumentReference) => void;
+  onDocument?: (ref: DocumentReference, qid?: string) => void;
+  turnAvailable?: (qid: string) => boolean;
+  /** The chat card being launched (its turn's qid) and the card's actions (spec 2026-10-12 §6). */
+  launchingQid?: string | null; onLaunchProposal?: (qid: string) => void; onTerminal?: (id: string) => void;
+  /** The relay card's turn being sent (its qid) and its actions. */
+  relayingQid?: string | null; onRelay?: (qid: string) => void; onRelayCancel?: (qid: string) => void;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number; contentRef?: Ref<HTMLDivElement>;
 }
 
@@ -76,8 +85,21 @@ export function ChatView(p: ChatViewProps) {
       <div ref={thread} data-scroll className="ledge-scroll" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         <div ref={p.contentRef} data-chat-content style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 16px 10px' }}>
           {turns.length === 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6, padding: '18px 16px 8px', color: 'var(--muted-foreground)', fontSize: 12.5, lineHeight: '18px' }}>
-              {mascot(44)}<strong style={{ color: 'var(--sidebar-foreground)', fontSize: 14 }}>{t.chat.emptyTitle}</strong><span>{t.chat.emptyHint(p.sessions.length)}</span>
+            <div data-chat-empty style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6, padding: '26px 4px 6px', color: 'var(--muted-foreground)', fontSize: 12.5, lineHeight: '18px' }}>
+              {mascot(56)}
+              <strong style={{ color: 'var(--sidebar-foreground)', fontSize: 15, lineHeight: '20px', marginTop: 8 }}>{t.chat.emptyTitle}</strong>
+              <span style={{ maxWidth: 340 }}>{t.chat.emptyHint(p.sessions.length)}</span>
+              {/* The starters live in the thread so the measured content includes them: the view grows to hold them instead of scrolling. */}
+              <div data-chips style={{ display: 'flex', flexDirection: 'column', gap: 6, alignSelf: 'stretch', marginTop: 24, textAlign: 'left' }}>
+                <span style={{ fontSize: 11, lineHeight: '14px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 2 }}>{t.chat.starters}</span>
+                {t.chat.chips.map(c => (
+                  <button key={c} type="button" className="ledge-recent" disabled={busy || !!p.offline} onClick={() => submit(c)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, height: 38, padding: '0 12px', border: '1px solid var(--sidebar-border)', borderRadius: 'var(--radius-md)', background: 'var(--well)', color: 'var(--sidebar-foreground)', fontSize: 13, lineHeight: '18px', textAlign: 'left', cursor: 'pointer', transition: transition([['background-color', 'hover']]) }}>
+                    <span style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c}</span>
+                    <span style={{ display: 'flex', color: 'var(--muted-foreground)' }}><Icon size={14} {...ICONS.chevronRight} /></span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {turns.map(turn => (
@@ -95,7 +117,22 @@ export function ChatView(p: ChatViewProps) {
                         {turn.steps.map((s, i) => <span key={i} style={{ display: 'flex', gap: 4, color: i === turn.steps.length - 1 ? 'var(--sidebar-foreground)' : undefined }}>{i < turn.steps.length - 1 && <span aria-hidden>✓</span>}<span>{stepLabel(s, t)}</span></span>)}
                       </div>
                     )}
-                    {(turn.answer || (turn.answeredAt === undefined && live?.qid === turn.qid && live.text)) && <Answer text={turn.answer || live!.text} sessions={p.sessions} onOpen={p.onOpenSession} onDocument={p.onDocument} />}
+                    {(() => {
+                      // While it streams, a proposal block (closed or not) is held back: the card shows it once the turn is done.
+                      const text = turn.answer || (turn.answeredAt === undefined && live?.qid === turn.qid ? hideProposal(live.text) : '');
+                      return text && <Answer text={text} sessions={p.sessions.filter(s => !turn.machineId || s.machineId === turn.machineId)} onOpen={p.onOpenSession} onDocument={p.onDocument ? ref => p.onDocument!(ref, turn.qid) : undefined} />;
+                    })()}
+                    {!!turn.choices?.length && turn === turns.at(-1) && <><div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{turn.choices.map(c => <Button key={c.id} variant="outline" size="sm" disabled={busy || !!p.offline} onClick={() => submit(t.machines.choose(c.label))} style={{ height: 30, padding: '0 10px', fontSize: 12 }}>{c.label}</Button>)}</div><small style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{t.machines.clarification}</small></>}
+                    {turn.machineName && (turn.proposal || turn.relay) && <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.machines.destination} : <strong style={{ color: 'var(--sidebar-foreground)' }}>{turn.machineId === 'local' ? t.machines.local : turn.machineName}</strong>{p.turnAvailable?.(turn.qid) === false && ` · ${t.machines.offline}`}</div>}
+                    {turn.answeredAt !== undefined && turn.relay ? (
+                      <RelayCard relay={turn.relay} session={p.sessions.find(s => s.id === turn.relay!.id)} busy={p.relayingQid === turn.qid}
+                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.relayingQid && p.relayingQid !== turn.qid) || !!p.launchingQid} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
+                        onSend={() => p.onRelay?.(turn.qid)} onCancel={() => p.onRelayCancel?.(turn.qid)} onOpenSession={p.onOpenSession} />
+                    ) : turn.answeredAt !== undefined && turn.proposal && (
+                      <LaunchCard proposal={turn.proposal} session={p.sessions.find(s => s.id === turn.proposal!.launchedId)} busy={p.launchingQid === turn.qid}
+                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid}
+                        onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
+                    )}
                     {turn.answeredAt !== undefined && (
                       <div data-sources style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', paddingTop: 6, borderTop: '1px solid var(--sidebar-border)', fontSize: 11, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
                         <span style={{ fontWeight: 500 }}>{t.chat.sources}</span>
@@ -111,11 +148,6 @@ export function ChatView(p: ChatViewProps) {
           ))}
         </div>
       </div>
-      {turns.length === 0 && (
-        <div data-chips style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 10px' }}>
-          {t.chat.chips.map(c => <Button key={c} variant="outline" size="sm" disabled={busy || !!p.offline} onClick={() => submit(c)} style={{ height: 28, padding: '0 10px', borderRadius: 999, fontSize: 12 }}>{c}</Button>)}
-        </div>
-      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', borderTop: '1px solid var(--sidebar-border)' }}>
         {p.offline && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{p.offline}</span>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

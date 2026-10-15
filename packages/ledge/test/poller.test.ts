@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
@@ -185,6 +185,23 @@ describe('poller rest detection', () => {
     const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
     for (let i = 0; i < 5; i++) { clock += 1000; await p.tick(); }
     expect(store.get('a')!.state).toBe('working');
+    p.stop();
+  });
+  it('a plan found in the pane reaches the session with its body', async () => {
+    panes['ledge-a'] = fx('cursor-plan'); store.upsert(mk('a', { tool: 'cursor', state: 'working' }));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
+    for (let i = 0; i < 4; i++) { clock += 1000; await p.tick(); }
+    expect(store.get('a')!.pending).toMatchObject({ kind: 'plan', text: 'Add line d to notes.txt', source: 'pane' });
+    expect(store.get('a')!.pending?.body).toContain('No other files need to change.');
+    p.stop();
+  });
+  it('Claude without hooks: a plan found in the pane reads its text from the session transcript', async () => {
+    const transcriptPath = join(process.env.LEDGE_HOME!, 'claude.jsonl');
+    writeFileSync(transcriptPath, JSON.stringify({ type: 'assistant', uuid: 'u1', timestamp: now(), message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'ExitPlanMode', input: { plan: '# Add README\n\n1. Write it' } }] } }) + '\n');
+    panes['ledge-a'] = fx('claude2-plan'); store.upsert(mk('a', { transcriptPath }));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
+    for (let i = 0; i < 4; i++) { clock += 1000; await p.tick(); }
+    expect(store.get('a')!.pending).toMatchObject({ kind: 'plan', body: '# Add README\n\n1. Write it', source: 'pane' });
     p.stop();
   });
   it('clears a plan dismissed in the terminal once the input box is back', async () => {

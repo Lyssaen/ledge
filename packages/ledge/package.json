@@ -1,13 +1,13 @@
 {
   "name": "@paradow/ledge",
-  "version": "0.3.3",
+  "version": "0.5.3",
   "description": "Follow and answer your WSL agent sessions (Claude Code, Codex, Cursor Agent) from the Ledge island on Windows.",
   "type": "module",
   "bin": { "ledge": "dist/cli/index.js" },
   "files": ["dist"],
   "engines": { "node": ">=22" },
-  "repository": { "type": "git", "url": "git+https://github.com/Paradow-dev/ledge.git", "directory": "packages/ledge" },
-  "homepage": "https://github.com/Paradow-dev/ledge#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/Lyssaen/ledge.git", "directory": "packages/ledge" },
+  "homepage": "https://github.com/Lyssaen/ledge#readme",
   "license": "UNLICENSED",
   "publishConfig": { "access": "public", "provenance": true },
   "scripts": {

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import type { DaemonClient } from '@ledge/client';
+import type { DaemonClient } from '../daemon/client';
 import { daemonStore } from '../daemon/store';
 import { appVersion, checkForUpdate, relaunchApp, type AvailableUpdate } from './bridge';
-import { cardView, gearPip, initialUpdate, pipTone, reduceUpdate, type CardView, type PipTone, type UpdateEvent, type UpdateState } from './machine';
+import { cardView, gearPip, initialUpdate, LOCAL, pipTone, reduceUpdate, type CardView, type PipTone, type RemoteDaemon, type UpdateEvent, type UpdateState } from './machine';
 import { loadAuto, loadCheckedAt, loadDismissed, saveAuto, saveCheckedAt, saveDismissed, saveUpdatedFrom, takeUpdatedFrom } from './prefs';
 
 declare global { interface Window { __LEDGE_FAKE_UPDATE__?: AvailableUpdate } }
@@ -69,6 +69,38 @@ export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateCo
 
   // The daemon store: snapshots, update progress, disconnects, removed sessions.
   useEffect(() => {
+    const fleet = clientRef.current.fleet;
+    if (fleet) {
+      const primary = fleet.primary;
+      const snapshot = fleet.localSnapshot();
+      if (snapshot) dispatch({ type: 'snapshot', daemon: snapshot.daemon ?? null, ids: snapshot.sessions.map(s => s.id) });
+      const offMessage = primary.onMessage(m => {
+        if (m.type === 'snapshot') dispatch({ type: 'snapshot', daemon: m.daemon ?? null, ids: m.sessions.map(s => s.id) });
+        if (m.type === 'session.removed') dispatch({ type: 'removed', id: m.id });
+        if (m.type === 'update.progress') dispatch({ type: 'progress', step: m.step });
+        if (m.type === 'update.failed') dispatch({ type: 'failed', reason: m.reason, detail: m.detail, command: m.command });
+      });
+      let was = primary.status();
+      const offStatus = primary.onStatus(s => { if (was === 'open' && s !== 'open') dispatch({ type: 'disconnected' }); was = s; });
+      // The connected remotes: their daemons are updated first, and each one must come back like the local one.
+      const offRemote = fleet.onMachineMessage((machine, m) => {
+        if (machine === LOCAL) return;
+        if (m.type === 'session.removed') dispatch({ type: 'removed', machine, id: m.id });
+        if (m.type === 'update.progress') dispatch({ type: 'progress', machine, step: m.step });
+        if (m.type === 'update.failed') dispatch({ type: 'failed', machine, reason: m.reason, detail: m.detail, command: m.command });
+      });
+      let seen = '';
+      const remotes = () => {
+        const list: RemoteDaemon[] = fleet.machines().filter(m => m.id !== LOCAL && m.ready)
+          .map(m => ({ id: m.id, label: m.label, daemon: m.daemon ?? null, sessions: m.sessions.map(x => ({ id: x.id, name: x.name })) }));
+        // The fleet changes with every session update: only a change of what the updater reads is dispatched.
+        const key = JSON.stringify(list);
+        if (key !== seen) { seen = key; dispatch({ type: 'remotes', remotes: list }); }
+      };
+      remotes();
+      const offFleet = fleet.subscribe(remotes);
+      return () => { offMessage(); offStatus(); offRemote(); offFleet(); };
+    }
     let snapshotSeq = 0; let updateSeq = daemonStore.getState().lastUpdate?.seq ?? 0;
     let status = daemonStore.getState().status;
     const onChange = () => {
@@ -91,18 +123,34 @@ export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateCo
 
   // The restarted daemon gets a limited time to answer, counted from the disconnect (npm alone may take minutes).
   const kind = state.phase.kind;
+  const machine = state.phase.kind === 'daemon' || state.phase.kind === 'waiting' ? state.phase.machine : null;
   useEffect(() => {
     if (kind !== 'waiting') return;
     const t = setTimeout(() => dispatch({ type: 'timeout' }), deps.waitMs ?? WAIT_MS);
     return () => clearTimeout(t);
-  }, [kind, deps.waitMs, dispatch]);
+  }, [kind, machine, deps.waitMs, dispatch]);
 
-  // While the daemon holds the request: a watchdog, so a silent daemon never leaves the card running forever.
+  // While a daemon holds the request: a watchdog, so a silent daemon never leaves the card running forever.
   useEffect(() => {
     if (kind !== 'daemon') return;
     const t = setTimeout(() => dispatch({ type: 'stalled' }), deps.stallMs ?? STALL_MS);
     return () => clearTimeout(t);
-  }, [kind, deps.stallMs, dispatch]);
+  }, [kind, machine, deps.stallMs, dispatch]);
+
+  // Each daemon's turn sends its request, once per entry: a second one would only be refused as busy.
+  const sendTo = state.phase.kind === 'daemon' && state.phase.step === 'sent' ? state.phase.machine : null;
+  const sentTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sendTo) { sentTo.current = null; return; }
+    const target = stateRef.current.target;
+    if (sentTo.current === sendTo || !target) return;
+    sentTo.current = sendTo;
+    const msg = { type: 'update.daemon', version: target } as const;
+    const fleet = clientRef.current.fleet;
+    if (sendTo === LOCAL) clientRef.current.send(msg);
+    // Gone since the plan was made: nothing was sent, so nothing will answer.
+    else if (!fleet?.sendTo(sendTo, msg)) dispatch({ type: 'stalled' });
+  }, [sendTo, dispatch]);
 
   // Entering the download phase installs the app, once per entry.
   useEffect(() => {
@@ -128,12 +176,10 @@ export function useUpdate(client: DaemonClient, deps: UpdateDeps = {}): UpdateCo
 
   const start = useCallback(() => {
     // A click while the socket is closed would be dropped by the client and leave the phase stuck.
-    if (clientRef.current.status() !== 'open') return;
-    const sessions = daemonStore.getState().sessions.map(x => ({ id: x.id, name: x.name }));
-    const event: UpdateEvent = { type: 'start', sessions };
-    const next = reduceUpdate(stateRef.current, event);
-    rawDispatch(event);
-    if (next.phase.kind === 'daemon' && next.target) clientRef.current.send({ type: 'update.daemon', version: next.target });
+    const fleet = clientRef.current.fleet;
+    if ((fleet?.primary ?? clientRef.current).status() !== 'open') return;
+    const sessions = (fleet ? fleet.localSnapshot()?.sessions ?? [] : daemonStore.getState().sessions).map(x => ({ id: x.id, name: x.name }));
+    rawDispatch({ type: 'start', sessions });
   }, []);
   const later = useCallback(() => {
     const next = reduceUpdate(stateRef.current, { type: 'dismiss' });

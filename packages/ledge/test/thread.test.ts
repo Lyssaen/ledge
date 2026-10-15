@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Pending, Session, SessionEvent } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
-import { HistoryStore } from '../src/daemon/history.js';
+import { History } from '../src/daemon/history.js';
 import { startServer } from '../src/daemon/server.js';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
@@ -67,7 +67,7 @@ function phone(srv: Srv, deviceId: string) {
   };
 }
 
-let srv: Srv; let store: Store; let history: HistoryStore; let devices: DeviceStore; let fake: ReturnType<typeof fakeTmux>;
+let srv: Srv; let store: Store; let history: History; let devices: DeviceStore; let fake: ReturnType<typeof fakeTmux>;
 let d1: string; let d2: string;
 
 async function start(panes: string[]) {
@@ -78,7 +78,7 @@ async function start(panes: string[]) {
 
 beforeEach(async () => {
   process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
-  store = new Store(); history = new HistoryStore();
+  store = new Store(); history = new History();
   devices = new DeviceStore({ path: join(process.env.LEDGE_HOME, 'devices.json') });
   d1 = (await devices.create('iPhone', credential)).device.id;
   d2 = (await devices.create('iPad', credential)).device.id;
@@ -116,10 +116,11 @@ describe('thread', () => {
     await hook('a', ev('Stop', { text: 'All 12 tests pass.' }));
 
     await srv.close(); await store.save(); await history.flush();
-    store = new Store(); await store.load(); history = new HistoryStore();
+    store = new Store(); await store.load(); history = new History(); await history.load();
     await start([RUNNING]);
     const turns = await turnsOf('a');
-    expect(turns.map((t: any) => [t.seq, t.kind])).toEqual([[1, 'prompt'], [2, 'decision'], [3, 'reply']]);
+    expect(turns.map((t: any) => t.kind)).toEqual(['prompt', 'decision', 'reply']);
+    expect(new Set(turns.map((t: any) => t.id)).size).toBe(3);
     expect(turns[0]).toMatchObject({ text: 'run the tests' });
     expect(turns[1]).toMatchObject({ decision: 'accept', source: 'phone', pendingId: 'pA' });
     expect(turns[2]).toMatchObject({ text: 'All 12 tests pass.' });
@@ -148,7 +149,7 @@ describe('thread', () => {
     const msg = { type: 'session.reply', id: 'a', text: '2', pendingId: 'pQ', pendingVersion: 1, operationId: randomUUID() };
     p.send(msg);
     expect(await p.result(msg.operationId)).toMatchObject({ status: 'applied' });
-    expect(await turnsOf('a')).toMatchObject([{ seq: 1, kind: 'answer', text: 'Blue', source: 'phone', pendingId: 'pQ' }]);
+    expect(await turnsOf('a')).toMatchObject([{ kind: 'answer', text: 'Blue', source: 'phone', pendingId: 'pQ' }]);
   });
 
   it('an interrupt from the overlay is written from the PC', async () => {
@@ -158,13 +159,13 @@ describe('thread', () => {
     await new Promise(r => setTimeout(r, 50));
     c.close();
     expect(fake.sent).toEqual([['keys', 'ledge-a', 'Escape']]);
-    expect(await turnsOf('a')).toMatchObject([{ seq: 1, kind: 'interrupt', source: 'pc' }]);
+    expect(await turnsOf('a')).toMatchObject([{ kind: 'interrupt', source: 'pc' }]);
   });
 
   it('a request settled in the terminal, seen only by the poller, is a resolved turn', async () => {
     store.upsert(mk('a', { state: 'waiting_permission', pending: { ...low, source: 'pane' } }));
     store.apply('a', { name: 'PaneIdle', at: new Date().toISOString(), source: 'pane' });
-    expect(await turnsOf('a')).toMatchObject([{ seq: 1, kind: 'resolved', source: 'pc', pendingId: 'pA' }]);
+    expect(await turnsOf('a')).toMatchObject([{ kind: 'resolved', source: 'pc', pendingId: 'pA' }]);
   });
 
   it('unread is per device: reading on one phone leaves the other unread', async () => {
@@ -176,13 +177,15 @@ describe('thread', () => {
     await p2.wait(m => m.type === 'session.updated' && m.session.unread === true);
     expect(u1.session.state).toBe('idle');
     const from1 = p1.sent.length; const from2 = p2.sent.length;
-    p1.send({ type: 'session.read', id: 'a', seq: 1 });
+    const replyAt = (await turnsOf('a')).at(-1)!.at;
+    // A mark past the last turn is held to it: a reply still to come stays unread.
+    p1.send({ type: 'session.read', id: 'a', at: '2099-01-01T00:00:00.000Z' });
     expect((await p1.wait(m => m.type === 'session.updated', from1)).session.unread).toBe(false);
     await new Promise(r => setTimeout(r, 50));
     expect(p2.sent.length).toBe(from2);
     p2.send({ type: 'snapshot.request' });
     expect((await p2.wait(m => m.type === 'snapshot', from2)).sessions[0].unread).toBe(true);
-    expect(devices.get(d1)?.read).toEqual({ a: 1 });
+    expect(devices.get(d1)?.read).toEqual({ a: replyAt });
   });
 
   it('a message to an idle agent is typed once and its prompt is tagged phone', async () => {
@@ -196,7 +199,7 @@ describe('thread', () => {
     expect(await p.wait(m => m.type === 'operation.result', from)).toMatchObject({ status: 'applied' });
     expect(fake.sent).toEqual([['text', 'ledge-a', 'now fix the lint'], ['keys', 'ledge-a', 'Enter']]);
     await hook('a', ev('UserPromptSubmit', { text: 'now fix the lint' }));
-    expect(await turnsOf('a')).toMatchObject([{ seq: 1, kind: 'prompt', text: 'now fix the lint', source: 'phone' }]);
+    expect(await turnsOf('a')).toMatchObject([{ kind: 'prompt', text: 'now fix the lint', source: 'phone' }]);
   });
 
   it('a message to a working agent is refused as agent_busy and nothing is typed or queued', async () => {
@@ -233,7 +236,7 @@ describe('thread', () => {
     p.send(msg);
     expect(await p.wait(m => m.type === 'operation.result', from)).toMatchObject({ status: 'applied' });
     expect(fake.sent).toEqual([['keys', 'ledge-a', 'C-c']]);
-    expect(await turnsOf('a')).toMatchObject([{ seq: 1, kind: 'interrupt', source: 'phone' }]);
+    expect(await turnsOf('a')).toMatchObject([{ kind: 'interrupt', source: 'phone' }]);
   });
 
   it('an interrupt from a phone needs an operation and a working agent', async () => {

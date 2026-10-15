@@ -41,10 +41,12 @@ function lastLine(lines: string[]): number {
   return i;
 }
 
-type Dialog = { kind: 'approval' | 'question' | 'plan' | 'confirm'; header: string[]; options: string[] };
+type Dialog = { kind: 'approval' | 'question' | 'plan' | 'confirm'; header: string[]; options: string[]; details: string[] };
 
 /** Option label: the description after two spaces and the key hint (`(y)`, `(esc)`) left out. */
 const label = (text: string) => text.split(/\s{2,}/)[0]!.replace(/\s+\([a-z]+\)$/, '').trim();
+/** Option description: what follows the label after two spaces (wrapped lines were joined with one). */
+const detail = (text: string) => text.split(/\s{2,}/).slice(1).join(' ').replace(/\s+/g, ' ').trim();
 
 function parseDialog(pane: string): Dialog | null {
   const lines = split(pane);
@@ -74,7 +76,7 @@ function parseDialog(pane: string): Dialog | null {
   const kind = APPROVAL_FOOTER.test(f) ? 'approval' : QUESTION_FOOTER.test(f) ? 'question' : SELECT_FOOTER.test(f) ? 'plan' : 'confirm';
   // A select footer is also any picker the user opens (/model, /permissions): only the plan question is the agent's.
   if (kind === 'plan' && !header.some(l => /^\s*Implement this plan\?\s*$/.test(l))) return null;
-  return { kind, header, options: raw.map(label) };
+  return { kind, header, options: raw.map(label), details: raw.map(detail) };
 }
 
 /** The non-blank run of header lines starting at `from`, trimmed. */
@@ -115,7 +117,7 @@ function confirmText(header: string[]): string {
 function detectPrompt(pane: string): PanePromptMatch | null {
   const d = parseDialog(pane);
   if (!d) return null;
-  if (d.kind === 'question') return { kind: 'question', text: questionText(d.header), options: d.options };
+  if (d.kind === 'question') return { kind: 'question', text: questionText(d.header), options: d.options, ...(d.details.some(Boolean) ? { optionDetails: d.details } : {}) };
   if (d.kind === 'plan') return { kind: 'plan', text: 'Implement this plan?', options: d.options };
   if (d.kind === 'confirm') return { kind: 'permission', text: confirmText(d.header), options: d.options };
   return { kind: 'permission', text: approvalText(d.header), options: d.options };

@@ -19,6 +19,7 @@ export function HelpView({ visible, onBack, onClose, contentRef, enterDelay = 12
           ])}
         </dl>
         <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.help.tab}</span>
+        <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.help.chat}</span>
       </div>
       </div>
     </div>

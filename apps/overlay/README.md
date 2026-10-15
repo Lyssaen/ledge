@@ -141,7 +141,7 @@ List rows group by repository (`src/surface/groups.ts`). Line 1 is the topic, li
 ## Known V1 limits
 
 - Focus brings the Windows Terminal window forward; it does not switch to the exact tab yet.
-- Free-text answers to a question are not supported by the daemon yet: the question's free field ("Ou proposez autre chose…") is off; answer in the terminal.
+- Free-text answers to a question go through the dialog's own free-text row, which only Claude Code's adapter knows: for Codex and Cursor the question's free field ("Ou proposez autre chose…") is off; answer in the terminal.
 - "Toujours pour cette session" (allow for the session) is shown off: no adapter confirms a scoped authorization yet.
 - The review of a diff or a plan is the session's terminal preview for now.
 - The last reply comes from the `Stop` hook of Claude Code and Codex, and from `afterAgentResponse` for Cursor Agent.

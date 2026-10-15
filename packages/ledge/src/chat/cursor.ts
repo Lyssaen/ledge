@@ -33,5 +33,5 @@ export function parseCursorLine(line: string): ClaudeEvent[] {
 
 export function runCursor(o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawnImpl: typeof nodeSpawn = nodeSpawn): RunHandle {
   const [file = 'cursor-agent', ...pre] = o.bin ?? ['cursor-agent'];
-  return runJsonl(file, [...pre, ...cursorArgs(o)], { cwd: o.cwd, env: o.env, question: `${PERSONA}\n\n${o.question}` }, parseCursorLine, onEvent, spawnImpl);
+  return runJsonl(file, [...pre, ...cursorArgs(o)], { cwd: o.cwd, env: o.env, question: `${o.persona ?? PERSONA}\n\n${o.question}` }, parseCursorLine, onEvent, spawnImpl);
 }

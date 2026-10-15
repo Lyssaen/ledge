@@ -17,7 +17,7 @@ import { fakeSession } from './mockDaemon';
    exact (no socket I/O, no shouldAdvanceTime drift). */
 function stubClient() {
   const sent: ClientMessage[] = [];
-  const client: DaemonClient = { connect() {}, close() {}, send: m => { sent.push(m); }, status: () => 'open', onMessage: () => () => {}, onStatus: () => () => {} };
+  const client: DaemonClient = { connect() {}, close() {}, send: m => { if (m.type !== 'session.thread') sent.push(m); }, status: () => 'open', onMessage: () => () => {}, onStatus: () => () => {} };
   return { client, sent };
 }
 const snapshot = (sessions: Session[]) => act(() => { daemonStore.setStatus('open'); daemonStore.apply({ type: 'snapshot', sessions }); });

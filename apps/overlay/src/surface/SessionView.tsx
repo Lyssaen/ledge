@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
-import type { Helper, Pending, Session } from '@ledge/protocol';
+import type { Helper, Pending, Session, ThreadItem } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
 import { botState, liveHelpers, poseFor, type BotState, parseReply } from '@ledge/client';
 import { Badge } from '../ui/Badge';
@@ -8,69 +8,100 @@ import { Kbd } from '../ui/Kbd';
 import { Icon, ICONS } from '../ui/icons';
 import { relativeTime, toolName } from '../format';
 import { transition } from '../motion';
+import { MarkdownDocument } from '../documents/MarkdownDocument';
 import { useI18n, type Messages } from '../i18n/lang';
 import { canDismiss } from './SessionList';
 import { BranchChip } from '../ui/BranchChip';
 import { ReplyCard, inline } from './ReplyCard';
+import { Thread } from './Thread';
+import { helperRows, type HelperRow } from '../thread/turns';
 import type { DocumentReference } from '../documents/references';
+import { TerminalBand, TerminalPane, TerminalRail } from './TerminalBand';
 
 const mono = "'Geist Mono', ui-monospace, monospace";
 const well: React.CSSProperties = { fontFamily: mono, fontSize: 13, lineHeight: '20px', padding: '10px 12px', background: 'var(--sidebar)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' };
 const rule = '1px solid var(--sidebar-border)';
 /** Fixed parts of the view: its header and the reply area under the content. */
 export const SESSION_HEADER_H = 60;
+/** Reading mode: the body is at least this tall, so the terminal alongside the thread shows its lines. */
+export const READING_TERMINAL_H = 600;
 
 /** The last reply is shown when nothing is asked and the agent waits (or ended) on it: "your turn". */
 export const shownReply = (s: Session) => (!s.pending && (s.state === 'idle' || s.state === 'exited') ? s.lastReply : undefined);
 
 /** A first estimate of the view's height, before (or without) a measurement of its content. */
 export function measureSessionH(s: Session, reading: boolean): number {
-  const ask = !s.pending ? 0 : s.pending.kind === 'question' ? 140 + (s.pending.options?.length ?? 0) * 56 : 260;
+  const ask = !s.pending ? 0 : s.pending.kind === 'question' ? 140 + (s.pending.options?.length ?? 0) * 56 + detailsH(s.pending) : 260;
   const reply = shownReply(s) ? Math.min(560, 160 + shownReply(s)!.text.length / 3) : 0;
   return SESSION_HEADER_H + 90 + ask + reply + (reading ? 400 : 240) + 96;
 }
 /** The cap the request block grows to (its content is always shorter): only the fold animation uses it. */
-export const askMaxH = (p: Pending) => (p.kind === 'question' ? 160 + (p.options?.length ?? 0) * 72 : 360);
+export const askMaxH = (p: Pending) => (p.kind === 'question' ? 160 + (p.options?.length ?? 0) * 72 + detailsH(p) * 1.5 : 360 + (p.body ? PLAN_MAX_H : 0));
+/** A plan to review scrolls in its own box under this height, its decision kept in view below it. */
+const PLAN_MAX_H = 320;
+const noop = () => {};
+/** What the options' descriptions add: a 16px line per ~55 characters, plus the gap above each one. */
+function detailsH(p: Pending): number {
+  return (p.optionDetails ?? []).reduce((h, d) => (d ? h + 2 + Math.ceil(d.length / 55) * 16 : h), 0);
+}
 
-function QuestionCard({ pending, onReply, disabled, t }: { pending: Pending; onReply: (t: string) => void; disabled: boolean; t: Messages }) {
+/** `freeText`: the daemon can type an answer into the dialog's own free-text row (Claude Code); otherwise Other stays off. */
+function QuestionCard({ pending, onReply, disabled, freeText, t }: { pending: Pending; onReply: (t: string) => void; disabled: boolean; freeText: boolean; t: Messages }) {
+  /** The option picked, or -1 for Other. */
   const [choice, setChoice] = useState(0);
+  const [other, setOther] = useState('');
   const opts = pending.options ?? [];
+  const details = pending.optionDetails ?? [];
+  const answer = choice < 0 ? other.trim() : String(choice + 1);
+  const send = () => { if (answer) onReply(answer); };
   const card: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, minHeight: 48, boxSizing: 'border-box', padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', backgroundColor: 'transparent', cursor: 'pointer', transition: transition([['border-color', 'hover'], ['background-color', 'hover']]) };
+  const why = freeText ? undefined : 'ledge-other-why';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <fieldset disabled={disabled} style={{ margin: 0, padding: 0, border: 'none', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
         <legend style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{t.session.options}</legend>
         {opts.map((o, i) => (
-          <label key={o} className="ledge-opt" data-checked={choice === i || undefined} style={card}>
-            <input type="radio" name="opt" checked={choice === i} onChange={() => setChoice(i)} style={{ margin: 0, width: 16, height: 16, flexShrink: 0 }} />
-            <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{o}</span>
+          <label key={o} className="ledge-opt" data-checked={choice === i || undefined} style={details[i] ? { ...card, alignItems: 'flex-start' } : card}>
+            <input type="radio" name="opt" checked={choice === i} onChange={() => setChoice(i)} aria-labelledby={details[i] ? `ledge-opt-label-${i}` : undefined} aria-describedby={details[i] ? `ledge-opt-detail-${i}` : undefined} style={{ margin: details[i] ? '2px 0 0' : 0, width: 16, height: 16, flexShrink: 0 }} />
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+              <span id={`ledge-opt-label-${i}`} style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{o}</span>
+              {details[i] && <span id={`ledge-opt-detail-${i}`} style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', overflowWrap: 'anywhere' }}>{details[i]}</span>}
+            </span>
           </label>
         ))}
-        {/* The daemon cannot type a free-text answer into the select dialog yet: the field stays visible but off. */}
-        <input type="radio" name="opt" data-other aria-label={t.session.other} disabled aria-describedby="ledge-other-why" style={{ position: 'absolute', opacity: 0, width: 1, height: 1, margin: 0 }} />
-        <input type="text" className="ledge-field" placeholder={t.session.otherPlaceholder} disabled aria-label={t.session.otherAnswer} aria-describedby="ledge-other-why"
-          style={{ height: 40, boxSizing: 'border-box', padding: '0 12px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 14, cursor: 'not-allowed' }} />
-        <span id="ledge-other-why" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.session.otherWhy}</span>
+        {/* Only some daemons' adapters can type a free-text answer into the select dialog: elsewhere the field stays visible but off. */}
+        <input type="radio" name="opt" data-other aria-label={t.session.other} disabled={!freeText} checked={choice < 0} onChange={() => setChoice(-1)} aria-describedby={why} style={{ position: 'absolute', opacity: 0, width: 1, height: 1, margin: 0 }} />
+        <input type="text" className="ledge-field" placeholder={t.session.otherPlaceholder} disabled={!freeText} aria-label={t.session.otherAnswer} aria-describedby={why}
+          value={other} onFocus={() => setChoice(-1)} onChange={e => { setOther(e.target.value); setChoice(-1); }}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}
+          style={{ height: 40, boxSizing: 'border-box', padding: '0 12px', background: 'var(--well)', color: 'inherit', border: `1px solid ${choice < 0 ? 'var(--ring)' : 'var(--border)'}`, borderRadius: 'var(--radius-md)', fontSize: 14, cursor: freeText ? 'text' : 'not-allowed' }} />
+        {!freeText && <span id="ledge-other-why" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.session.otherWhy}</span>}
       </fieldset>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}><Button variant="primary" disabled={disabled} onClick={() => onReply(String(choice + 1))}>{t.session.send}</Button></div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}><Button variant="primary" disabled={disabled || !answer} onClick={send}>{t.session.send}</Button></div>
     </div>
   );
 }
 
 const HELPER_STATE: Record<Helper['state'], BotState> = { starting: 'starting', working: 'working', waiting_input: 'question', waiting_permission: 'approval', idle: 'idle', exited: 'done', error: 'error' };
 
-/** Spec board 17: the live helpers under their bot, 20 px each, in a tree whose last branch ends in └. */
-function HelpersTree({ parent, helpers, t, theme, paused, frozen, reducedMotion }: { parent: Session; helpers: Helper[]; t: Messages; theme: 'dark' | 'light'; paused: boolean; frozen?: boolean; reducedMotion?: boolean }) {
+/** Spec 2026-10-13 §6: the current turn's helpers under the title, 20 px bots in a tree whose last branch ends in └; each
+ *  row opens the helper's own thread. */
+function HelpersTree({ parent, helpers, t, theme, paused, frozen, reducedMotion, onOpen }: { parent: Session; helpers: HelperRow[]; t: Messages; theme: 'dark' | 'light'; paused: boolean; frozen?: boolean; reducedMotion?: boolean; onOpen?: (id: string) => void }) {
   return (
     <ul data-helpers aria-label={t.session.helpers} style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
       {helpers.map((h, i) => {
         const st = HELPER_STATE[h.state]; const seed = `${parent.id}:${h.id}`; const last = i === helpers.length - 1;
+        const stateLabel = h.state === 'exited' ? t.thread.helperDone : t.botLabel[st];
         return (
-          <li key={h.id} data-helper data-last={last ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, fontSize: 12, lineHeight: '16px' }}>
-            <span aria-hidden="true" className="mono" style={{ width: 14, flexShrink: 0, color: 'var(--muted-foreground)' }}>{last ? '└' : '├'}</span>
-            <Bot seed={seed} tool={parent.tool} state={st} pose={poseFor(seed, st)} size={20} theme={theme} paused={paused} frozen={frozen} reducedMotion={reducedMotion} />
-            <span data-helper-task style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--sidebar-foreground)' }}>{h.task}</span>
-            <span style={{ flexShrink: 0, color: 'var(--muted-foreground)' }}>{h.kind} · {t.botLabel[st]}</span>
+          <li key={h.id} style={{ minWidth: 0 }}>
+            <button type="button" data-helper data-helper-id={h.id} data-last={last ? 'true' : undefined} aria-label={`${h.task} · ${t.thread.helperOpen}`} onClick={() => onOpen?.(h.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0, padding: 0, background: 'none', border: 0, textAlign: 'left', font: 'inherit', fontSize: 12, lineHeight: '16px', color: 'var(--sidebar-foreground)', cursor: 'pointer', borderRadius: 4 }}>
+              <span aria-hidden="true" className="mono" style={{ width: 14, flexShrink: 0, color: 'var(--muted-foreground)' }}>{last ? '└' : '├'}</span>
+              <Bot seed={seed} tool={parent.tool} state={st} pose={poseFor(seed, st)} size={20} theme={theme} paused={paused} frozen={frozen} reducedMotion={reducedMotion} />
+              <span data-helper-task style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.task}</span>
+              <span style={{ flexShrink: 0, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{h.kind} · {stateLabel}</span>
+              <span aria-hidden="true" style={{ flexShrink: 0, color: 'var(--muted-foreground)', fontSize: 14 }}>›</span>
+            </button>
           </li>
         );
       })}
@@ -85,6 +116,9 @@ export interface SessionViewProps {
   onDraft: (t: string) => void; onBack: () => void; onClose: () => void; onDecide: (d: 'accept' | 'deny') => void; onReply: (t: string) => void;
   onInterrupt: () => void; onKill: () => void; onFocus: () => void; onToggleReading: () => void; onRename?: (topic: string) => void;
   onDocument?: (ref: DocumentReference) => void;
+  /** Native tracking (spec 2026-10-13 §6): the session's thread once received; undefined while it is on its way. */
+  thread?: ThreadItem[];
+  onOpenHelper?: (id: string) => void;
   /** Removes a finished or read-only session from the list (shown only for those); `dismissOff` while offline. */
   onDismiss?: () => void; dismissOff?: boolean;
   /** Null when commands may be sent; otherwise why every send/decision path is disabled (offline, read-only). */
@@ -111,26 +145,44 @@ export function SessionView(p: SessionViewProps) {
   const shown = pending ?? last;
   const isQ = shown?.kind === 'question';
   const st = botState(s);
-  const helpers = liveHelpers(s);
+  const live = liveHelpers(s);
+  const rows = helperRows(s, p.thread);
   // The daemon rests the main thread between turns while a background helper still works: the view reads as in progress.
-  const busy = s.state === 'working' || (s.state === 'idle' && helpers.length > 0);
+  const busy = s.state === 'working' || (s.state === 'idle' && live.length > 0);
   // The preview follows its latest line, like a terminal: on open, and on each update unless the user scrolled up to read.
   const termRef = useRef<HTMLPreElement>(null);
   const stuck = useRef(true);
+  // Reading mode puts the terminal alongside the thread; it folds into a rail to give the thread the width.
+  const [termOpen, setTermOpen] = useState(true);
+  const termShown = p.reading && termOpen && p.preview.length > 0;
   const termFor = useRef(s.id);
   if (termFor.current !== s.id) { termFor.current = s.id; stuck.current = true; }
   const toBottom = () => { const el = termRef.current; if (el) el.scrollTop = el.scrollHeight; };
-  useLayoutEffect(() => { if (stuck.current) toBottom(); }, [p.preview, visible, p.reading]);
+  useLayoutEffect(() => { if (stuck.current) toBottom(); }, [p.preview, visible, termShown]);
+  // The conversation reads the same way: it opens on its end and follows each new item, unless the user scrolled up to
+  // read the history; back at the end, it follows again. Content that grows on its own (a card unfolding) is followed too.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const atEnd = useRef(true);
+  const endFor = useRef(s.id);
+  if (endFor.current !== s.id) { endFor.current = s.id; atEnd.current = true; }
+  const toEnd = () => { const el = scrollRef.current; if (el && atEnd.current) el.scrollTop = el.scrollHeight; };
+  useLayoutEffect(toEnd, [p.thread, s.lastReply, s.pending, visible, p.reading]);
+  useLayoutEffect(() => {
+    const el = scrollRef.current?.firstElementChild;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(toEnd);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // A permission, diff or plan prompt takes Approve/Deny only: the daemon would refuse a typed reply.
   const promptOnly = !!pending && pending.kind !== 'question';
   const replyOff = blocked !== null || promptOnly;
   const sendDraft = () => { if (!replyOff && p.draft.trim()) p.onReply(p.draft); };
   // The agent's last message, read like a plan, while it waits for the next instruction.
   const reply = shownReply(s);
-  const doc = useMemo(() => (reply ? parseReply(reply.text) : null), [reply?.text]); // eslint-disable-line react-hooks/exhaustive-deps
+  const doc = useMemo(() => (reply ? parseReply(reply.text, { plan: reply.plan }) : null), [reply?.text, reply?.plan]); // eslint-disable-line react-hooks/exhaustive-deps
   const replyField = useRef<HTMLTextAreaElement>(null);
   const questions = doc?.questions.length ?? 0;
-  const doneCount = doc ? doc.sections.reduce((n, sec) => n + sec.blocks.reduce((m, b) => m + (b.type === 'list' ? b.items.filter(it => sec.kind === 'done' || it.checked).length : 0), 0), 0) : 0;
   const hint = blocked ?? (promptOnly ? t.session.hintPrompt(pending!.kind)
     : pending?.kind === 'question' ? t.session.hintQuestion
     : questions > 1 ? t.reply.hintAnswerAll : questions === 1 ? t.reply.hintChips
@@ -139,7 +191,6 @@ export function SessionView(p: SessionViewProps) {
   const badgeState = s.state === 'error' ? 'error' : pending ? (pending.kind === 'question' ? 'question' : 'approval') : st;
   const title = pending
     ? (pending.kind === 'question' ? pending.text : pending.kind === 'diff' ? t.session.title.diff(s.name) : pending.kind === 'plan' ? t.session.title.plan(s.name) : t.session.title.permission(s.name))
-    : doc?.title ? doc.title
     : readOnly ? t.session.title.readonly
     : s.state === 'exited' ? t.session.title.exited : s.state === 'error' ? t.session.title.error : s.state === 'idle' && !busy ? t.session.title.idle : s.state === 'starting' ? t.session.title.starting : t.session.title.working;
   const failureText = (s.state === 'error' || p.failure) && pending ? t.session.failed(p.failure ?? s.lastError ?? t.notTaken) : null;
@@ -155,21 +206,29 @@ export function SessionView(p: SessionViewProps) {
         <Button variant="ghost" size="icon" aria-label={t.session.close} title={t.session.close} onClick={p.onClose} style={{ width: 32, height: 32, flexShrink: 0, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.close} /></Button>
       </div>
 
-      <div data-scroll className="ledge-scroll" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex' }}>
+      <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <div ref={scrollRef} data-scroll onScroll={e => { const el = e.currentTarget; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4; }} className="ledge-scroll" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         <div ref={p.contentRef} data-session-content style={{ display: 'flex', flexDirection: 'column', padding: '18px 16px 16px', fontSize: p.reading ? 14 : undefined, lineHeight: p.reading ? '21px' : undefined }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
             <span data-eyebrow style={{ fontSize: 11, lineHeight: '16px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted-foreground)' }}>{eyebrow}</span>
             {readOnly ? <Badge state="readonly" tone={badgeState} caps /> : <Badge state={badgeState} caps />}
           </div>
           <h2 style={{ margin: 0, fontSize: 18, lineHeight: '26px', fontWeight: 650, letterSpacing: '-0.01em', overflowWrap: 'anywhere' }}>{title}</h2>
-          {helpers.length > 0 && <HelpersTree parent={s} helpers={helpers} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} />}
+          {rows.length > 0 && <HelpersTree parent={s} helpers={rows} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
+          {p.thread !== undefined
+            // The current answer is the card below when there is one, or the plan the request shows; otherwise (a request waits) it reads in the thread.
+            ? <Thread session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} onDocument={p.onDocument} hideCurrentReply={!!(reply && doc) || (!!pending?.body && pending.body === s.lastReply?.text)} />
+            : <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '12px 0 0' }}>{t.thread.loading}</p>}
           {reply && doc && <>
             <span data-reply-meta style={{ marginTop: 6, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
-              {[t.reply.finished(s.name, relativeTime(reply.at, p.now, t)), doneCount ? t.reply.doneCount(doneCount) : null, questions ? t.reply.questionCount(questions) : null].filter(Boolean).join(' · ')}
+              {t.reply.finished(s.name, relativeTime(reply.at, p.now, t))}
             </span>
+            {/* The reply's own heading opens it, next to its card: above the whole thread it read as lost. */}
+            {doc.title && <h3 data-reply-title style={{ margin: '10px 0 0', fontSize: 16, lineHeight: '22px', fontWeight: 650, overflowWrap: 'anywhere' }}>{inline(doc.title, 0, undefined, p.onDocument)}</h3>}
             {doc.lead && <p data-reply-lead style={{ margin: '10px 0 0', fontSize: 14, lineHeight: '21px', color: 'var(--sidebar-foreground)', overflowWrap: 'anywhere' }}>{inline(doc.lead, 0, undefined, p.onDocument)}</p>}
             <div style={{ marginTop: 14 }}>
-              <ReplyCard key={reply.at} doc={doc} raw={reply.text} t={t} onDraft={p.onDraft} onFocusReply={() => replyField.current?.focus()} onDocument={p.onDocument} />
+              <ReplyCard key={reply.at} doc={doc} raw={reply.text} t={t} onDraft={p.onDraft} onFocusReply={() => replyField.current?.focus()} onDocument={p.onDocument} onSend={readOnly || replyOff ? undefined : p.onReply} />
             </div>
           </>}
           {readOnly && <>
@@ -181,16 +240,20 @@ export function SessionView(p: SessionViewProps) {
           {failureText && <span role="status" style={{ marginTop: 10, fontSize: 12, lineHeight: '16px', color: 'var(--danger-text)' }}>{failureText}</span>}
 
           <div data-ask inert={!pending} style={{ flexShrink: 0, maxHeight: pending ? `${askMaxH(pending)}px` : '0px', opacity: pending ? 1 : 0, overflow: 'hidden', transition: pending ? transition([['max-height', 'grow'], ['opacity', 'fadeIn', 0]]) : transition([['max-height', 'cardExit'], ['opacity', 'cardExit']]) }}>
-            {shown && (isQ ? <div style={{ paddingTop: 14 }}><QuestionCard key={shown.text} pending={shown} onReply={p.onReply} disabled={decideOff} t={t} /></div> : (
+            {shown && (isQ ? <div style={{ paddingTop: 14 }}><QuestionCard key={shown.text} pending={shown} onReply={p.onReply} disabled={decideOff} freeText={s.tool === 'claude'} t={t} /></div> : (
               <div style={{ paddingTop: 14 }}>
                 <section style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14, background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
                   <h3 style={{ margin: 0, fontSize: 14, lineHeight: '20px', fontWeight: 650, overflowWrap: 'anywhere' }}>{shown.kind === 'permission' ? t.session.runIn(s.project) : t.session.reviewIn(s.project)}</h3>
-                  <div style={well}>{shown.text}</div>
+                  {shown.body
+                    ? <div data-plan className="ledge-scroll" style={{ maxHeight: PLAN_MAX_H, overflowY: 'auto', overscrollBehavior: 'contain', background: 'var(--sidebar)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', userSelect: 'text' }}>
+                        <MarkdownDocument text={shown.body} onDocument={p.onDocument ?? noop} onHeadings={noop} />
+                      </div>
+                    : <div style={well}>{shown.text}</div>}
                   {shown.kind === 'permission'
                     ? <label className="ledge-check" title={t.session.alwaysWhy} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, lineHeight: '18px', color: 'var(--muted-foreground)', cursor: 'not-allowed', opacity: 0.7 }}>
                         <input type="checkbox" disabled aria-describedby="ledge-always-why" style={{ margin: 0, width: 15, height: 15 }} />{t.session.always}
                       </label>
-                    : <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.session.reviewHint}</span>}
+                    : !shown.body && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.session.reviewHint}</span>}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
                     <Button variant="outline" disabled={decideOff} onClick={() => p.onDecide('deny')}>{t.session.deny}</Button>
                     <Button variant="primary" disabled={decideOff} onClick={() => p.onDecide('accept')} aria-keyshortcuts="Y">{t.session.allow}<span aria-hidden="true" style={{ display: 'inline-flex' }}><Kbd accent>Y</Kbd></span></Button>
@@ -201,19 +264,15 @@ export function SessionView(p: SessionViewProps) {
             ))}
           </div>
 
-          {p.preview.length > 0 && <details className="ledge-terminal" open={(!pending && !reply) || p.reading} onToggle={e => { if ((e.currentTarget as HTMLDetailsElement).open) { stuck.current = true; toBottom(); } }} style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-            <summary style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--well)', fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
-              <span data-caret aria-hidden="true" style={{ display: 'inline-flex', transition: transition([['transform', 'hover']]) }}><Icon size={12} {...ICONS.chevronRight} /></span>
-              <span style={{ color: 'var(--sidebar-foreground)' }}>{t.session.terminal}</span><span>· {t.session.terminalNote}</span>
-            </summary>
-            <pre ref={termRef} data-terminal onScroll={e => { const el = e.currentTarget; stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4; }} className="mono ledge-scroll" style={{ margin: 0, padding: '10px 12px', maxHeight: p.reading ? 360 : 200, overflow: 'auto', fontSize: 12, lineHeight: '18px', color: 'var(--muted-foreground)', background: 'var(--well)', borderTop: '1px solid var(--border)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{p.preview.map((l, i) => <div key={i}>{l || ' '}</div>)}</pre>
-          </details>}
         </div>
       </div>
 
+      <div ref={p.replyRef} style={{ flexShrink: 0 }}>
+      {/* Compact view: the terminal is a strip over the reply field; reading mode shows it whole, alongside. */}
+      {!p.reading && p.preview.length > 0 && <TerminalBand session={s} lines={p.preview} t={t} onOpen={p.onToggleReading} />}
       {/* A session started without Ledge cannot be written to: the mockup drops the reply area, the note above says why. */}
       {!readOnly && (
-        <div ref={p.replyRef} data-reply-area style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px 10px', flexShrink: 0, borderTop: rule }}>
+        <div data-reply-area style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px 10px', borderTop: rule }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
             <textarea ref={replyField} data-reply rows={1} className="ledge-field" placeholder={t.session.replyPlaceholder(s.name)} aria-label={t.session.replyLabel(s.name)} aria-describedby="ledge-reply-hint" value={p.draft}
               onChange={e => p.onDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDraft(); } }}
@@ -229,6 +288,11 @@ export function SessionView(p: SessionViewProps) {
           </div>
         </div>
       )}
+      </div>
+      </div>
+      {termShown && <TerminalPane session={s} lines={p.preview} t={t} preRef={termRef} onScroll={el => { stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4; }} onFold={() => setTermOpen(false)} />}
+      {p.reading && !termOpen && p.preview.length > 0 && <TerminalRail session={s} t={t} onUnfold={() => { stuck.current = true; setTermOpen(true); }} />}
+      </div>
     </div>
   );
 }

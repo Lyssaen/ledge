@@ -25,6 +25,7 @@ export class Store {
   private listeners = new Set<(c: StoreChange) => void>();
   private observers = new Set<ApplyObserver>();
   private failedLoad = false;
+  private eventListeners = new Set<(id: string, event: SessionEvent) => void>();
   private timer: NodeJS.Timeout | null = null;
   private saving: Promise<void> = Promise.resolve();
   private readonly journalPath: string;
@@ -81,15 +82,22 @@ export class Store {
   }
 
   /** Facts no event carries (the session's repository): the changed fields only, nothing emitted when they are equal. */
-  patch(id: string, fields: Partial<Pick<Session, 'repo' | 'repoPath' | 'branch' | 'worktree'>>): void {
+  patch(id: string, fields: Partial<Pick<Session, 'repo' | 'repoPath' | 'branch' | 'worktree' | 'repoId'>>): void {
     const cur = this.sessions.get(id); if (!cur) return;
     if ((Object.keys(fields) as Array<keyof typeof fields>).every(k => cur[k] === fields[k])) return;
     this.upsert({ ...cur, ...fields });
   }
 
+  /** Every event applied to a known session, before the reducer decides whether it changes anything. */
+  onEvent(listener: (id: string, event: SessionEvent) => void): () => void {
+    this.eventListeners.add(listener);
+    return () => this.eventListeners.delete(listener);
+  }
+
   apply(id: string, event: SessionEvent): Session | undefined {
     const cur = this.sessions.get(id);
     if (!cur) return undefined;
+    for (const l of this.eventListeners) { try { l(id, event); } catch (e) { log(`event listener failed: ${(e as Error).message}`); } }
     const next = reduce(cur, event);
     for (const o of this.observers) { try { o(id, event, cur, next); } catch (e) { log(`apply observer failed: ${(e as Error).message}`); } }
     if (next === cur) return cur;

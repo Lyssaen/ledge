@@ -88,6 +88,22 @@ describe('daemon client + store', () => {
     expect(client.status()).toBe('connecting');
   });
 
+  it('keeps the proposal a chat.done carries', () => {
+    daemonStore.reset();
+    daemonStore.beginTurn({ qid: 'q1', question: 'x', askedAt: T0, steps: [] });
+    const proposal = { cwd: '/w/ledge', project: 'ledge', tool: 'claude' as const };
+    daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, proposal });
+    expect(daemonStore.getState().chat[0]).toMatchObject({ answer: 'ok', proposal });
+  });
+
+  it('chat.done keeps the relay', () => {
+    daemonStore.reset();
+    daemonStore.beginTurn({ qid: 'q1', question: 'dis à Otto', askedAt: T0, steps: [] });
+    const relay = { id: 's1', name: 'Otto', tool: 'claude' as const, text: 'Lance les tests' };
+    daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, relay });
+    expect(daemonStore.getState().chat[0]!.relay).toEqual(relay);
+  });
+
   it('keeps the chat turns and the live answer', () => {
     daemonStore.reset();
     daemonStore.apply({ type: 'chat.history', turns: [{ qid: 'q0', question: 'hier', askedAt: T0, steps: [], answer: 'ok', answeredAt: T0 }] });
@@ -99,5 +115,27 @@ describe('daemon client + store', () => {
     const s = daemonStore.getState();
     expect(s.chatLive).toBeNull(); expect(s.chat.map(t => t.qid)).toEqual(['q0', 'q1']); expect(s.chat[1]).toMatchObject({ answer: 'Deux bots travaillent.', steps: [{ kind: 'sessions' }] });
     daemonStore.apply({ type: 'chat.error', qid: 'q1', message: 'boom' }); expect(daemonStore.getState().chat[1]?.error).toBe('boom');
+  });
+
+  it('keeps a session thread, updates its items in place, ignores items of a thread it never loaded, forgets removed ones', () => {
+    daemonStore.reset();
+    const at = '2026-10-13T10:00:00.000Z';
+    daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('a'), fakeSession('b')] });
+    daemonStore.apply({ type: 'session.thread.item', id: 'b', item: { kind: 'prompt', id: 'p1', at, turn: 1, text: 'x' } });
+    expect(daemonStore.getState().threads.has('b')).toBe(false);
+    daemonStore.apply({ type: 'session.thread', id: 'a', items: [{ kind: 'prompt', id: 'p1', at, turn: 1, text: 'Lance les tests' }, { kind: 'tool', id: 'toolu_1', at, turn: 1, tool: 'Bash', label: 'Bash · pnpm test', status: 'running', files: [] }] });
+    daemonStore.apply({ type: 'session.thread.item', id: 'a', item: { kind: 'tool', id: 'toolu_1', at, turn: 1, tool: 'Bash', label: 'Bash · pnpm test', status: 'success', output: 'ok', files: [] } });
+    daemonStore.apply({ type: 'session.thread.item', id: 'a', item: { kind: 'reply', id: 'r1', at, turn: 1, text: 'Fini' } });
+    const thread = daemonStore.getState().threads.get('a')!;
+    expect(thread.map(i => i.id)).toEqual(['p1', 'toolu_1', 'r1']);
+    expect(thread[1]).toMatchObject({ status: 'success', output: 'ok' });
+    // A thread for a session that vanished meanwhile is kept harmlessly until its removal arrives.
+    daemonStore.apply({ type: 'session.thread', id: 'gone', items: [] });
+    daemonStore.apply({ type: 'session.removed', id: 'gone' });
+    daemonStore.apply({ type: 'session.removed', id: 'a' });
+    expect(daemonStore.getState().threads.size).toBe(0);
+    daemonStore.apply({ type: 'session.thread', id: 'b', items: [] });
+    daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('b')] });
+    expect(daemonStore.getState().threads.size).toBe(0);
   });
 });

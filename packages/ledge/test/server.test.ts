@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
-import type { Session } from '@ledge/protocol';
+import type { ChatProposal, ChatRelay, Session } from '@ledge/protocol';
+import type { Chat } from '../src/chat/service.js';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
 import { startServer, ALLOWED_ORIGINS, FORWARDED_HEADERS, launchArgs, resolveFolder } from '../src/daemon/server.js';
@@ -14,6 +15,8 @@ import type { Tmux } from '../src/tmux.js';
 import { createDaemonUpdater } from '../src/update/run-update.js';
 import { DeviceStore, type MobileControl } from '../src/daemon/devices.js';
 import { createPairing } from '../src/daemon/pairing.js';
+import { History } from '../src/daemon/history.js';
+import { until } from './helpers.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
@@ -188,9 +191,21 @@ describe('server', () => {
     });
   });
 
+  it('routes the first event of a hook-only session through the store, so event listeners see it', async () => {
+    const seen: string[] = [];
+    store.onEvent((id, ev) => seen.push(`${id}:${ev.name}`));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'h1', cwd: '/w/x', event: { name: 'UserPromptSubmit', at: T0, source: 'hook', text: 'Fais le plan' } });
+    await c.next('session.updated');
+    expect(seen).toEqual(['h1:UserPromptSubmit']);
+    expect(store.get('h1')?.source).toBe('hook_only');
+    c.close();
+  });
+
   it('register upgrades a hook_only session created by an early hook', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.event', id: 'b', event: { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'npm test' } });
+    await c.next('session.updated'); // the bare session, then the event applied to it
     const first = await c.next('session.updated');
     expect(first.session.source).toBe('hook_only');
     expect(first.session.pending?.text).toBe('npm test');
@@ -364,6 +379,18 @@ describe('server', () => {
     c.close();
   });
 
+  it('Claude Code: a free-text answer goes through the "Type something." row, typed once that row has the cursor', async () => {
+    const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8').replace(/\s+$/, '');
+    tmux = fakeTmux({ 'ledge-a': [fx('claude2-question'), fx('claude2-question'), fx('claude2-question-other-focused'), '● Thinking…'] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0, untilMs: 300, verify: { attempts: 2, intervalMs: 20 } });
+    store.upsert(mk('a', { tool: 'claude', state: 'waiting_input', pending: { kind: 'question', text: 'Which color do you prefer?', options: ['Red', 'Blue'], source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: 'Vert pomme' });
+    await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '3'], ['text', 'ledge-a', 'Vert pomme'], ['keys', 'ledge-a', 'Enter']]);
+    c.close();
+  });
+
   describe('Claude Code: an AskUserQuestion with two questions, answered from Ledge', () => {
     const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8').replace(/\s+$/, '');
     async function answer(panes: string[], pending: { kind: 'question'; text: string; source: 'hook' | 'pane' }) {
@@ -430,8 +457,8 @@ describe('server', () => {
     c.close();
   });
 
-  it.each(['shadow table', '12', '0', '2 please'])('refuses a free-text reply (%j) to a question, nothing injected (fail closed)', async text => {
-    const before = mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', options: ['Red', 'Blue'], source: 'pane' } });
+  it.each(['shadow table', '12', '0', '2 please'])('refuses a free-text reply (%j) to a question of a tool that cannot take one, nothing injected (fail closed)', async text => {
+    const before = mk('a', { tool: 'codex', state: 'waiting_input', pending: { kind: 'question', text: 'Which?', options: ['Red', 'Blue'], source: 'pane' } });
     store.upsert(before);
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.reply', id: 'a', text });
@@ -544,6 +571,116 @@ describe('server', () => {
     });
   });
 
+  describe('launch from a chat card', () => {
+    const home = () => process.env.LEDGE_HOME!;
+    /** A chat holding one proposal for `q1`; the marks are recorded and broadcast as a history, like the real one. */
+    function stubChat(initial: ChatProposal | undefined) {
+      let proposal = initial; const marks: string[][] = [];
+      const chat: Chat = {
+        async ask() {}, cancel() {}, async reset() {}, history: () => [],
+        proposal: qid => (qid === 'q1' ? proposal : undefined),
+        markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
+        markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); },
+        relay: () => undefined, markRelay() {}, queuedRelays: () => []
+      };
+      return { chat, marks };
+    }
+    const start = (chat: Chat) => startServer({ store, tmux, port: 0, home: home(), chat, agentEnv: async () => ({ ...process.env, PATH: '/login/bin:/usr/bin' }) });
+
+    it('launches the proposal\'s own fields, marks the turn for everyone, and refuses a second launch, even a simultaneous one', async () => {
+      mkdirSync(join(home(), 'ledge'));
+      const { chat, marks } = stubChat({ cwd: join(home(), 'ledge'), project: 'ledge', tool: 'claude', prompt: 'Corrige le build' });
+      const srv2 = await start(chat);
+      const c = await connect({ port: srv2.port }); await c.next('snapshot'); await c.next('chat.history');
+      const other = await connect({ port: srv2.port }); await other.next('snapshot'); await other.next('chat.history');
+      // The message's fields are ignored: only the qid names the card.
+      c.send({ type: 'session.launch', tool: 'codex', cwd: '/elsewhere', prompt: 'autre chose', qid: 'q1' });
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'ledge'), qid: 'q1' });
+      const launched = await c.next('session.launched');
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'already launched' });
+      expect(tmux.created).toHaveLength(1);
+      expect(tmux.created[0]!.cwd).toBe(join(home(), 'ledge'));
+      expect(JSON.stringify(tmux.created[0]!.command)).toContain('Corrige le build');
+      expect(JSON.stringify(tmux.created[0]!.command)).not.toContain('autre chose');
+      expect(store.get(launched.id)).toMatchObject({ tool: 'claude', project: 'ledge', source: 'launcher' });
+      expect(marks).toEqual([['launched', 'q1', launched.id]]);
+      await other.next('chat.history');
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'ledge'), qid: 'q1' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'already launched' });
+      expect(tmux.created).toHaveLength(1);
+      c.close(); other.close(); await srv2.close();
+    });
+
+    it('refuses an unknown proposal without spawning', async () => {
+      const srv2 = await start(stubChat(undefined).chat);
+      const c = await connect({ port: srv2.port }); await c.next('snapshot');
+      c.send({ type: 'session.launch', tool: 'claude', cwd: '/w', qid: 'q1' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown proposal' });
+      expect(tmux.created).toHaveLength(0);
+      c.close(); await srv2.close();
+    });
+
+    it('marks a failed launch, then lets the card retry', async () => {
+      const { chat, marks } = stubChat({ cwd: join(home(), 'gone'), project: 'gone', tool: 'claude' });
+      const srv2 = await start(chat);
+      const c = await connect({ port: srv2.port }); await c.next('snapshot');
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'gone'), qid: 'q1' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: `no such folder: ${join(home(), 'gone')}` });
+      expect(marks).toEqual([['failed', 'q1', `no such folder: ${join(home(), 'gone')}`]]);
+      mkdirSync(join(home(), 'gone'));
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'gone'), qid: 'q1' });
+      const launched = await c.next('session.launched');
+      expect(marks.at(-1)).toEqual(['launched', 'q1', launched.id]);
+      c.close(); await srv2.close();
+    });
+  });
+
+  describe('relay from a chat card', () => {
+    function relayChat(relay: ChatRelay) {
+      let r: ChatRelay | undefined = relay;
+      const chat: Chat = {
+        async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+        relay: qid => (qid === 'q1' ? r : undefined),
+        markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
+        queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r }] : [])
+      };
+      return { chat, current: () => r };
+    }
+
+    it('types the turn\'s own text into a free session and tells every client', async () => {
+      tmux = fakeTmux({ 'ledge-a': ['> '] });
+      const { chat, current } = relayChat({ id: 'a', name: 'Otto', tool: 'claude', text: 'Lance les tests' });
+      const srv2 = await startServer({ store, tmux, port: 0, chat });
+      store.upsert(mk('a', { state: 'idle' }));
+      const c = await connect({ port: srv2.port }); await c.next('snapshot'); await c.next('chat.history');
+      const other = await connect({ port: srv2.port }); await other.next('snapshot'); await other.next('chat.history');
+      c.send({ type: 'session.relay', qid: 'q1' });
+      await other.next('chat.history', 3000);
+      expect(tmux.sent).toEqual([['text', 'ledge-a', 'Lance les tests'], ['keys', 'ledge-a', 'Enter']]);
+      expect(current()).toMatchObject({ status: 'sent' });
+      c.close(); other.close(); await srv2.close();
+    });
+
+    it('queues for a busy session, then cancel; refusals reach the requester as errors', async () => {
+      const { chat, current } = relayChat({ id: 'a', name: 'Otto', tool: 'claude', text: 'x' });
+      const srv2 = await startServer({ store, tmux, port: 0, chat });
+      store.upsert(mk('a', { state: 'working' }));
+      const c = await connect({ port: srv2.port }); await c.next('snapshot'); await c.next('chat.history');
+      c.send({ type: 'session.relay', qid: 'q1' }); await c.next('chat.history');
+      expect(current()!.status).toBe('queued');
+      c.send({ type: 'session.relay', qid: 'q1' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'already queued' });
+      c.send({ type: 'session.relay.cancel', qid: 'q1' }); await c.next('chat.history');
+      expect(current()).not.toHaveProperty('status');
+      c.send({ type: 'session.relay.cancel', qid: 'q1' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'nothing queued' });
+      c.send({ type: 'session.relay', qid: 'q9' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown relay' });
+      expect(tmux.sent).toEqual([]);
+      c.close(); await srv2.close();
+    });
+  });
+
   describe('launch from the overlay', () => {
     const home = () => process.env.LEDGE_HOME!;
     it('creates the tmux session in the folder, registers it starting, answers the requester and broadcasts', async () => {
@@ -564,6 +701,26 @@ describe('server', () => {
       await expect(other.next('session.launched', 100)).rejects.toThrow(/timeout/);
       expect((await other.next('recents')).recents).toEqual([{ cwd: join(home(), 'api-gateway'), project: 'api-gateway', lastAt: s.startedAt }]);
       c.close(); other.close();
+    });
+    it('Claude Code gets its session id from the launch, so its transcript is known without hooks; a resume keeps its own', async () => {
+      mkdirSync(join(home(), 'my_app.v2'));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'my_app.v2'), prompt: 'plan it' });
+      const launched = await c.next('session.launched');
+      const cmd = tmux.created[0]!.command;
+      expect(cmd[0]).toBe('claude'); expect(cmd[1]).toBe('--session-id');
+      const uuid = cmd[2]!;
+      expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      expect(cmd.slice(3)).toEqual(['plan it']);
+      const s = store.get(launched.id)!;
+      expect(s.agentSessionId).toBe(uuid);
+      const dir = join(home(), 'my_app.v2').replace(/[^a-zA-Z0-9]/g, '-');
+      expect(s.transcriptPath).toMatch(new RegExp(`/projects/${dir}/${uuid}\\.jsonl$`));
+      c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'my_app.v2'), continue: true });
+      const resumed = await c.next('session.launched');
+      expect(tmux.created[1]!.command).toEqual(['claude', '--continue']);
+      expect(store.get(resumed.id)!.transcriptPath).toBeUndefined();
+      c.close();
     });
     it('picks a free name when none is given or the wanted one is live, and never a live id', async () => {
       mkdirSync(join(home(), 'p'));
@@ -771,7 +928,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); } } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -856,5 +1013,66 @@ describe('device commands', () => {
     await c.next('devices');
     expect(configured).toEqual(['https://pc.tail.ts.net']);
     await c.close();
+  });
+});
+
+describe('session thread (spec 2026-10-13 §5)', () => {
+  it('answers a thread request, broadcasts each item, syncs the transcript, records the decision and forgets a removed session', async () => {
+    const dir = process.env.LEDGE_HOME!;
+    const store = new Store(); const history = new History({ dir: join(dir, 'history') });
+    const transcript = join(dir, 'c.jsonl');
+    writeFileSync(transcript, JSON.stringify({ uuid: 'u1', timestamp: '2026-10-09T18:00:30.000Z', type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Je lance les tests.' }] } }) + '\n');
+    store.upsert(mk('a'));
+    const server = await startServer({ store, tmux: fakeTmux({ 'ledge-a': [PROMPT, ''] }), port: 0, history });
+    const c = await connect({ port: server.port, host: '127.0.0.1', timeoutMs: 2000 });
+    await c.next('snapshot', 2000);
+    c.send({ type: 'session.thread', id: 'a' });
+    expect(await c.next('session.thread', 2000)).toEqual({ type: 'session.thread', id: 'a', items: [] });
+    c.send({ type: 'session.event', id: 'a', event: { name: 'UserPromptSubmit', at: T0, source: 'hook', text: 'Lance les tests', transcriptPath: transcript } });
+    expect(await c.next('session.thread.item', 2000)).toMatchObject({ id: 'a', item: { kind: 'prompt', text: 'Lance les tests' } });
+    c.send({ type: 'session.event', id: 'a', event: { name: 'PreToolUse', at: '2026-10-09T18:01:00.000Z', source: 'hook', tool: 'Bash', text: 'Bash · pnpm test', toolUseId: 'toolu_1', transcriptPath: transcript } });
+    expect(await c.next('session.thread.item', 2000)).toMatchObject({ item: { kind: 'message', id: 'msg-u1' } }); // synced before the row
+    expect(await c.next('session.thread.item', 2000)).toMatchObject({ item: { kind: 'tool', id: 'toolu_1', status: 'running' } });
+    c.send({ type: 'session.event', id: 'a', event: { name: 'PermissionRequest', at: '2026-10-09T18:02:00.000Z', source: 'hook', tool: 'Bash', text: 'pnpm test' } });
+    expect(await c.next('session.thread.item', 2000)).toMatchObject({ item: { kind: 'permission', text: 'pnpm test' } });
+    await until(() => store.get('a')?.state === 'waiting_permission', 2000);
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    await until(() => history.items('a').some(i => i.kind === 'permission' && i.decision === 'accept'), 2000);
+    store.remove('a');
+    await until(() => history.items('a').length === 0, 1000);
+    c.close(); await server.close();
+  });
+  it('records no decision when a newer prompt replaced the one decided while the keys were typed', async () => {
+    const store = new Store(); const history = new History({ dir: join(process.env.LEDGE_HOME!, 'history') });
+    const NEWER = PROMPT.replace('Bash command', 'Bash command (rm -rf dist)');
+    const tmux = fakeTmux({ 'ledge-a': [PROMPT, NEWER] });
+    store.upsert(mk('a'));
+    const server = await startServer({ store, tmux, port: 0, history, verify: { attempts: 2, intervalMs: 20 } });
+    const c = await connect({ port: server.port, host: '127.0.0.1', timeoutMs: 2000 });
+    await c.next('snapshot', 2000);
+    c.send({ type: 'session.event', id: 'a', event: { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'pnpm test' } });
+    await until(() => store.get('a')?.state === 'waiting_permission', 2000);
+    // The agent asks again while the answer is typed: the pane and the pending now show the newer prompt.
+    const typed = tmux.sendText.bind(tmux);
+    tmux.sendText = async (n, t) => {
+      await typed(n, t);
+      store.upsert({ ...store.get('a')!, pending: { kind: 'permission', text: 'rm -rf dist', tool: 'Bash', source: 'hook' } });
+      history.record('a', { name: 'PermissionRequest', at: '2026-10-09T18:00:05.000Z', source: 'hook', tool: 'Bash', text: 'rm -rf dist' });
+    };
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    await until(() => tmux.sent.length === 1, 2000);
+    await new Promise(r => setTimeout(r, 200)); // past the verification
+    expect(store.get('a')?.pending?.text).toBe('rm -rf dist');
+    expect(history.items('a').filter(i => i.kind === 'permission').map(i => i.kind === 'permission' && [i.text, i.decision])).toEqual([['pnpm test', undefined], ['rm -rf dist', undefined]]);
+    c.close(); await server.close();
+  });
+  it('answers an unknown session with an empty thread and works without a history', async () => {
+    const store = new Store();
+    const server = await startServer({ store, tmux: fakeTmux({}), port: 0 });
+    const c = await connect({ port: server.port, host: '127.0.0.1', timeoutMs: 2000 });
+    await c.next('snapshot', 2000);
+    c.send({ type: 'session.thread', id: 'nope' });
+    expect(await c.next('session.thread', 2000)).toEqual({ type: 'session.thread', id: 'nope', items: [] });
+    c.close(); await server.close();
   });
 });

@@ -7,7 +7,7 @@ const read = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8');
 describe('updater configuration', () => {
   const conf = JSON.parse(read('src-tauri/tauri.conf.json'));
   it('reads the latest release of the public repository, signed with our key', () => {
-    expect(conf.plugins.updater.endpoints).toEqual(['https://github.com/Paradow-dev/ledge/releases/latest/download/latest.json']);
+    expect(conf.plugins.updater.endpoints).toEqual(['https://github.com/Lyssaen/ledge/releases/latest/download/latest.json']);
     expect(Buffer.from(conf.plugins.updater.pubkey, 'base64').toString()).toMatch(/^untrusted comment: minisign public key/);
     expect(conf.plugins.updater.windows.installMode).toBe('passive');
     expect(conf.bundle.createUpdaterArtifacts).toBe(true);

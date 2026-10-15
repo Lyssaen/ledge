@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { ServerMessage } from '@ledge/protocol';
+import type { ServerMessage, Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createChat } from '../src/chat/service.js';
 
@@ -166,5 +166,129 @@ describe('chat service', () => {
     expect(args[1]).toContain('--session-id');
     expect(args[1]).not.toContain('exec');
     expect(JSON.parse(readFileSync(join(home, 'chat.json'), 'utf8'))).toMatchObject({ tool: 'claude' });
+  });
+
+  const fence = (json: string) => 'Je te propose cette session.\n\n```ledge-session\n' + json + '\n```';
+
+  it('gives Ledge the recent folders in folders.md', async () => {
+    const { chat, store } = setup({ env: async () => ({ ...process.env, FAKE_CLAUDE_MODE: 'folders' }) });
+    store.touchRecent('/w/ledge', 'ledge', '2026-10-11T09:00:00.000Z');
+    await chat.ask('q1', 'x', () => {});
+    expect(chat.history()[0]!.answer).toContain('- ledge: /w/ledge');
+  });
+
+  it('a valid block becomes the turn proposal, joined to chat.done, and leaves the text', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'proj-'));
+    const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fence(`{"cwd": "${dir}/", "prompt": " Corrige le build "}`) }) });
+    const out: ServerMessage[] = [];
+    await chat.ask('q1', 'ouvre une session pour corriger le build', m => out.push(m));
+    const proposal = { cwd: dir, project: basename(dir), tool: 'claude', prompt: 'Corrige le build' };
+    expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je te propose cette session.', at: expect.any(String), proposal });
+    expect(chat.history()[0]).toMatchObject({ answer: 'Je te propose cette session.', proposal });
+    expect(chat.proposal('q1')).toEqual(proposal);
+  });
+
+  it('a ~ path resolves against the user home, a blank prompt means an empty session', async () => {
+    const userHome = mkdtempSync(join(tmpdir(), 'home-')); mkdirSync(join(userHome, 'ledge'));
+    const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: fence('{"cwd": "~/ledge/", "prompt": "   "}') }) });
+    await chat.ask('q1', 'x', () => {});
+    expect(chat.proposal('q1')).toEqual({ cwd: join(userHome, 'ledge'), project: 'ledge', tool: 'claude' });
+  });
+
+  it('no card for a missing folder, a file, or a bad block; the text is shown without the block', async () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'f-')), 'a.txt'); writeFileSync(file, 'x');
+    for (const json of ['{"cwd": "/nope/ledge-missing"}', `{"cwd": "${file}"}`, '{"cwd":', '{"prompt": "x"}']) {
+      const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fence(json) }) });
+      const out: ServerMessage[] = [];
+      await chat.ask('q1', 'x', m => out.push(m));
+      const done = out.find(m => m.type === 'chat.done');
+      expect(done).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je te propose cette session.', at: expect.any(String) });
+      expect(chat.proposal('q1')).toBeUndefined();
+    }
+  });
+
+  it('no card when the prompt would read as a flag', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'proj-'));
+    const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fence(JSON.stringify({ cwd: dir, prompt: '  --dangerously-skip-permissions' })) }) });
+    await chat.ask('q1', 'x', () => {});
+    expect(chat.proposal('q1')).toBeUndefined();
+  });
+
+  it('markLaunched and markFailed update the proposal and tell every client', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'proj-'));
+    const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fence(`{"cwd": "${dir}"}`) }) });
+    await chat.ask('q1', 'x', () => {});
+    const out: ServerMessage[] = [];
+    chat.markFailed('q1', 'no such folder: /w', m => out.push(m));
+    expect(out.at(-1)).toMatchObject({ type: 'chat.history', turns: [{ qid: 'q1', proposal: { cwd: dir, error: 'no such folder: /w' } }] });
+    chat.markLaunched('q1', 'n1', m => out.push(m));
+    expect(chat.proposal('q1')).toEqual({ cwd: dir, project: basename(dir), tool: 'claude', launchedId: 'n1' });
+    expect(out).toHaveLength(2);
+    chat.markLaunched('nope', 'n2', m => out.push(m)); chat.markFailed('nope', 'x', m => out.push(m));
+    expect(out).toHaveLength(2);
+  });
+  describe('relay (spec 2026-10-12 relay §4)', () => {
+    const relayFence = (json: string) => 'Je transmets à Otto.\n\n```ledge-relay\n' + json + '\n```';
+    const session = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: 'Otto', tool: 'codex', cwd: '/w/ledge', project: 'ledge', title: 'Otto · ledge',
+      tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: '2026-10-11T08:00:00.000Z', lastActivityAt: '2026-10-11T08:00:00.000Z', source: 'launcher', ...extra });
+    const askWith = async (block: string, sessions: Session[], extra: Partial<Parameters<typeof createChat>[0]> = {}) => {
+      const s = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: relayFence(block) }), ...extra });
+      for (const x of sessions) s.store.upsert(x);
+      const out: ServerMessage[] = [];
+      await s.chat.ask('q1', 'dis à Otto de lancer les tests', m => out.push(m));
+      return { ...s, out };
+    };
+
+    it('a block naming a tracked session becomes the turn relay, joined to chat.done, with the session\'s own name and tool', async () => {
+      const { chat, out } = await askWith('{"session": "s1", "text": " Lance les tests "}', [session('s1')]);
+      const relay = { id: 's1', name: 'Otto', tool: 'codex', text: 'Lance les tests' };
+      expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je transmets à Otto.', at: expect.any(String), relay });
+      expect(chat.history()[0]).toMatchObject({ answer: 'Je transmets à Otto.', relay });
+      expect(chat.relay('q1')).toEqual(relay);
+      expect(chat.history()[0]).not.toHaveProperty('proposal');
+    });
+
+    it.each([
+      ['unknown', '{"session": "nope", "text": "x"}', [session('s1')]],
+      ['read-only', '{"session": "s1", "text": "x"}', [session('s1', { source: 'hook_only', tmuxSession: null })]],
+      ['exited', '{"session": "s1", "text": "x"}', [session('s1', { state: 'exited' })]],
+      ['invalid', '{"session": "s1", "text": "   "}', [session('s1')]],
+      ['bash-mode', '{"session": "s1", "text": "  !rm -rf ~"}', [session('s1')]]
+    ])('an %s session gives no card, the text stays', async (_why, block, sessions) => {
+      const { chat, out } = await askWith(block, sessions);
+      expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je transmets à Otto.', at: expect.any(String) });
+      expect(chat.relay('q1')).toBeUndefined();
+    });
+
+    it('markRelay replaces the state fields and tells every client; queuedRelays lists the queued ones, oldest first', async () => {
+      const { chat } = await askWith('{"session": "s1", "text": "a"}', [session('s1')]);
+      await chat.ask('q2', 'et dis-lui aussi b', () => {});
+      const emitted: ServerMessage[] = [];
+      chat.markRelay('q2', { status: 'queued' }, m => emitted.push(m));
+      chat.markRelay('q1', { status: 'queued' }, m => emitted.push(m));
+      expect(emitted.map(m => m.type)).toEqual(['chat.history', 'chat.history']);
+      expect(chat.queuedRelays().map(r => r.qid)).toEqual(['q1', 'q2']);
+      chat.markRelay('q1', { error: 'Otto stopped before it got the instruction' }, () => {});
+      expect(chat.relay('q1')).toEqual({ id: 's1', name: 'Otto', tool: 'codex', text: 'a', error: 'Otto stopped before it got the instruction' });
+      chat.markRelay('q1', { status: 'sent', sentAt: '2026-10-11T09:00:00.000Z' }, () => {});
+      expect(chat.relay('q1')).toEqual({ id: 's1', name: 'Otto', tool: 'codex', text: 'a', status: 'sent', sentAt: '2026-10-11T09:00:00.000Z' });
+      chat.markRelay('q2', {}, () => {});
+      expect(chat.queuedRelays()).toEqual([]);
+    });
+
+    it('a reset or a new day takes the queue away', async () => {
+      let day = '2026-10-11';
+      const { chat } = await askWith('{"session": "s1", "text": "a"}', [session('s1')], { today: () => day });
+      chat.markRelay('q1', { status: 'queued' }, () => {});
+      day = '2026-10-12';
+      const histories: ServerMessage[] = [];
+      expect(chat.queuedRelays(m => histories.push(m))).toEqual([]);
+      expect(chat.relay('q1')).toBeUndefined();
+      expect(histories).toEqual([{ type: 'chat.history', turns: [] }]);
+      const again = await askWith('{"session": "s1", "text": "a"}', [session('s1')]);
+      again.chat.markRelay('q1', { status: 'queued' }, () => {});
+      await again.chat.reset(() => {});
+      expect(again.chat.queuedRelays()).toEqual([]);
+    });
   });
 });

@@ -1,5 +1,6 @@
 import type { SoundCategory } from '../sounds/preferences';
 import type { BotState } from '@ledge/client';
+import type { SshProblem } from '../daemon/machines';
 
 /**
  * Every user-visible string of the overlay, aria-labels and tooltips included, in French (the default) and English.
@@ -9,6 +10,13 @@ import type { BotState } from '@ledge/client';
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 const fr = {
+  machines: { title: 'Machines', target: 'Machine', hint: 'Le compagnon et son dossier vivent sur cette machine.', local: 'Cette machine', online: 'Connectée', offline: 'Hors ligne', reconnecting: (names: string) => `${names} : reconnexion en cours`, count: (n: number) => `${n} machines`, add: 'Ajouter une machine', save: 'Enregistrer', remove: 'Retirer', label: 'Nom', ssh: 'Alias SSH', invalid: 'Vérifiez le nom et l’alias SSH. Chaque alias ne peut être ajouté qu’une fois.',
+    intro: 'Ledge rejoint vos serveurs par SSH, depuis WSL. Leurs sessions s’affichent dans vos projets, avec le nom de la machine.', localMeta: 'Local · WSL', connecting: 'Connexion…', version: (v: string) => `Ledge ${v}`, sessions: (n: number) => `${n} session${n > 1 ? 's' : ''}`,
+    test: 'Tester', retry: 'Réessayer', edit: 'Modifier', cancel: 'Annuler', removeAsk: 'Retirer', removeNote: '? Ses sessions disparaissent de la liste. Rien n’est arrêté ni supprimé sur le serveur.', none: 'Aucun serveur pour l’instant. Vos sessions locales ne changent pas.',
+    editTitle: (name: string) => `Modifier ${name}`, labelHint: 'Ce que vous verrez dans les sessions et le chat.', labelPlaceholder: 'Serveur de dev', sshHint: 'Le nom d’un bloc Host de ~/.ssh/config dans WSL.', duplicate: 'Cet alias est déjà ajouté.',
+    before: 'Avant d’ajouter un serveur', steps: [['L’alias fonctionne depuis WSL, sans mot de passe : ', 'ssh mon-serveur'], ['La clé du serveur est déjà approuvée (première connexion faite à la main).'], ['Node 22+ et tmux sont installés sur le serveur.'], ['Ledge est installé et démarré sur le serveur : ', 'npm i -g @paradow/ledge && ledge setup']] as ReadonlyArray<readonly [string, string?]>,
+    probe: 'Tester la connexion', probing: 'Connexion à', probeOk: (v: string | undefined, n: number) => `${v ? `Ledge ${v}` : 'Ledge'} répond · ${n} session${n > 1 ? 's' : ''}`, savedAnyway: 'Le test est facultatif : une machine injoignable peut être enregistrée.',
+    problem: { alias: 'Alias introuvable. Ajoutez un bloc Host pour cet alias dans ~/.ssh/config de WSL.', key: 'La clé SSH est refusée. Vérifiez IdentityFile pour cet alias dans ~/.ssh/config de WSL.', hostKey: 'La clé du serveur n’est pas encore approuvée. Connectez-vous une fois depuis WSL avec ssh et cet alias.', unreachable: 'Le serveur ne répond pas. Il est peut-être éteint, ou hors du réseau.', ledge: 'Ledge est absent ou trop ancien sur ce serveur. Installez-le, puis lancez « ledge setup ».', stopped: 'Le service Ledge ne tourne pas sur le serveur. Lancez « ledge setup » sur le serveur.', local: 'Mettez à jour Ledge sur cette machine pour rejoindre un serveur.', other: 'La connexion a échoué.' } as Record<SshProblem, string>, clarification: 'Vous pouvez aussi répondre dans le chat.', destination: 'Destination', choose: (name: string) => `Sur ${name}.`, configure: 'Configurer les machines' },
   lang: { label: 'Langue', hint: 'La langue de Ledge.', fr: 'Français', en: 'English' },
   /** The Windows tray icon's menu (its first line, the product and version, is not translated). */
   tray: { open: 'Ouvrir Ledge', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', quit: 'Quitter Ledge' },
@@ -91,7 +99,7 @@ const fr = {
     readonlyNext: 'Pour une prochaine session interactive :',
     runIn: (project: string) => `Exécution dans ${project}`,
     reviewIn: (project: string) => `À relire dans ${project}`,
-    reviewHint: 'Relisez-le dans l’aperçu du terminal ci-dessous.',
+    reviewHint: 'Relisez-le dans le terminal : le bandeau en bas, ou T.',
     always: 'Toujours pour cette session',
     alwaysWhy: 'Aucun outil ne confirme encore une autorisation durable : chaque demande se décide une à une.',
     scope: 'La décision concerne cette commande uniquement : « Toujours » n’est pas encore pris en charge.',
@@ -101,7 +109,10 @@ const fr = {
     otherWhy: 'Réponse libre pas encore prise en charge : répondez dans le terminal',
     send: 'Envoyer la réponse →',
     failed: (why: string) => `${why}. Réessayez ou ouvrez l’onglet.`,
-    terminal: 'Aperçu du terminal', terminalNote: '30 dernières lignes · lecture seule',
+    terminal: 'Terminal', terminalNote: (n: number) => `${n} dernières lignes · lecture seule`,
+    band: { working: 'Travaille', approval: 'Attend votre accord', question: 'Pose une question', idle: 'À vous', done: 'Terminé', error: 'Échec', open: 'ouvrir le mode lecture' },
+    peek: '8 dernières lignes', peekHint: 'Clic ou T : mode lecture',
+    foldTerminal: 'Replier le terminal', unfoldTerminal: 'Rouvrir le terminal',
     replyLabel: (name: string) => `Répondre à ${name}`,
     replyPlaceholder: (_name: string) => 'Une instruction pour votre compagnon…',
     sendReply: 'Envoyer',
@@ -113,10 +124,9 @@ const fr = {
   /** The agent's last message, read like a plan (the "your turn" view). */
   reply: {
     finished: (name: string, when: string) => `${name} a terminé il y a ${when}`,
-    doneCount: (n: number) => `${n} ${plural(n, 'point fait', 'points faits')}`,
-    questionCount: (n: number) => `${n} ${plural(n, 'question', 'questions')}`,
     question: 'Question',
     typeAnswer: 'Répondre librement',
+    recommended: 'Recommandé',
     showRaw: 'Réponse complète, telle quelle', showStructured: 'Vue structurée',
     hintChips: 'Une puce remplit le champ, Entrée envoie',
     hintAnswerAll: 'Une ligne par question, Entrée envoie'
@@ -162,7 +172,7 @@ const fr = {
     versionsMismatch: 'Les deux moitiés n’ont pas la même version.', versionApp: 'Application Windows', versionDaemon: 'Daemon WSL', versionLatest: 'Dernière version',
     installKind: { npm: 'npm', git: 'clone git', unknown: 'inconnu' }, unknownVersion: '—',
     autoUpdate: 'Rechercher les mises à jour', autoUpdateHint: 'Au démarrage, puis toutes les 6 heures. Ledge ne met jamais à jour sans votre clic.',
-    checked: (ago: string) => `Vérifié il y a ${ago}`, neverChecked: 'Jamais vérifié', checkedHint: 'Sur les releases GitHub de Paradow-dev/ledge.', checkNow: 'Vérifier',
+    checked: (ago: string) => `Vérifié il y a ${ago}`, neverChecked: 'Jamais vérifié', checkedHint: 'Sur les releases GitHub de Lyssaen/ledge.', checkNow: 'Vérifier',
     osReduced: 'Votre système demande des mouvements réduits ; Ledge continue de le respecter.',
     finished: 'Quand un bot ou Ledge a terminé', finishedHint: 'Une bulle de 6 s, un son, les deux, ou seulement l’île.',
     finishedBoth: 'Bulle et son', finishedBubble: 'Bulle', finishedSound: 'Son', finishedNone: 'Île seule',
@@ -181,19 +191,32 @@ const fr = {
     ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…', open: 'Ouvrir la conversation avec Ledge', send: 'Envoyer', stop: 'Arrêter', reset: 'Nouvelle conversation', back: 'Retour aux sessions', close: 'Fermer',
     emptyTitle: 'Demandez-moi des nouvelles.',
     emptyHint: (n: number) => `${n === 0 ? 'Je ne vois aucune session pour l’instant.' : n === 1 ? 'Je vois 1 session, son terminal et son dépôt.' : `Je vois ${n} sessions, les terminaux et les dépôts.`} Je lis, je ne touche à rien.`,
+    starters: 'Pour commencer',
     chips: ['Où en sont les autres ?', 'Qu’est-ce qui attend ma décision ?', 'Quelles branches peuvent être fusionnées ?'],
     thinking: 'Ledge cherche…',
     step: { sessions: 'Relit les sessions', pane: (name: string) => `Lit le terminal de ${name}`, reply: (name: string) => `Lit la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => `Lit ${path}` },
     source: { sessions: 'les sessions', pane: (name: string) => `le terminal de ${name}`, reply: (name: string) => `la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'aucune lecture', ago: (when: string) => `il y a ${when}`,
     error: (why: string) => `Ledge n’a pas pu répondre : ${why}`,
-    stopped: 'Arrêté.'
+    stopped: 'Arrêté.',
+    card: {
+      label: 'Session proposée', folder: 'Dossier', tool: 'Harnais', byDefault: (tool: string) => `${tool} · par défaut`, prompt: 'Instruction', noPrompt: 'Aucune, session vide',
+      launch: 'Lancer la session', launching: 'Lancement…', retry: 'Réessayer', orRephrase: 'ou reformule ta demande', orFolder: 'ou donne-moi un autre dossier',
+      failed: (why: string) => `Échec du lancement : ${why}`, started: 'a démarré', startedUnknown: 'Session démarrée', terminal: 'Terminal'
+    },
+    relay: {
+      label: 'Instruction à envoyer', session: 'Session', instruction: 'Instruction',
+      send: 'Envoyer', sending: 'Envoi…', cancel: 'Annuler', retry: 'Réessayer', orRephrase: 'ou reformule ta demande',
+      queued: 'travaille, j’enverrai dès qu’il aura fini', sentTo: 'Envoyé à', failed: (why: string) => `Échec de l’envoi : ${why}`,
+      pill: { yours: 'à toi', working: 'travaille', waiting: 'attend ta réponse', stopped: 'arrêtée' }
+    },
   },
   help: {
     title: 'Au bout des doigts.',
     keys: [['Ouvrir la liste', ['Ctrl Alt L']], ['Choisir une session', ['J', 'K']], ['Ouvrir la sélection', ['Entrée']], ['Autoriser / refuser', ['Y', 'N']],
-      ['Session précédente / suivante', ['Alt ←', 'Alt →']], ['Nouvelle session', ['Ctrl Alt N']], ['Aller à la première instruction', ['I']], ['Répondre', ['R']], ['Ouvrir l’onglet du terminal', ['O']], ['Ne pas déranger', ['D']], ['Retour, puis replier', ['Échap']]] as Array<[string, string[]]>,
-    tab: 'Tab conserve la navigation entre les contrôles.'
+      ['Session précédente / suivante', ['Alt ←', 'Alt →']], ['Nouvelle session', ['Ctrl Alt N']], ['Aller à la première instruction', ['I']], ['Répondre', ['R']], ['Ouvrir l’onglet du terminal', ['O']], ['Mode lecture, le terminal à côté', ['T']], ['Ne pas déranger', ['D']], ['Retour, puis replier', ['Échap']]] as Array<[string, string[]]>,
+    tab: 'Tab conserve la navigation entre les contrôles.',
+    chat: 'Au chat, « ouvre une session dans ledge pour corriger le build » propose une carte : le clic sur Lancer démarre la session. « Dis à Otto de lancer les tests » propose une instruction : Envoyer la tape dans sa session, tout de suite ou dès qu’il a fini.'
   },
   coach: {
     label: 'Clavier', title: 'Naviguer au clavier', ok: 'Compris',
@@ -206,6 +229,7 @@ const fr = {
     keepRunning: (n: number) => n === 0 ? 'Ledge se ferme environ 20 s pour se mettre à jour.' : `Vos ${n} session${n > 1 ? 's' : ''} continue${n > 1 ? 'nt' : ''}. Ledge se ferme environ 20 s pour se mettre à jour.`,
     running: (v: string) => `Mise à jour vers ${v}`, dontClose: 'Ne fermez pas Ledge', badgeRunning: 'En cours',
     steps: { daemon: 'Daemon WSL mis à jour', restart: 'Daemon redémarré, sessions retrouvées', download: 'Téléchargement de l’application', install: 'Installation et redémarrage' },
+    remoteStep: (name: string) => `${name} mis à jour, sessions retrouvées`, servers: (list: string) => `Serveurs en retard : ${list}`, on: (name: string) => `Sur ${name}`,
     updated: (v: string) => `Ledge ${v} est installé`, badgeUpdated: 'À jour',
     manualTitle: 'Votre daemon tourne depuis un clone git', manualHint: 'Ledge ne touche pas à un clone. Mettez le daemon à jour dans WSL :', manualApp: 'Mettre à jour l’application', manualWait: (v: string) => `Le bouton s’active dès que le daemon annonce ${v}.`, badgeManual: 'Manuel',
     failedBadge: 'Échec',
@@ -223,12 +247,28 @@ const fr = {
     missing: (names: string[]) => `Manquantes : ${names.join(', ')}`,
     pip: { new: (v: string) => `Ledge ${v} est prêt`, busy: 'Mise à jour en cours…', bad: 'La mise à jour a échoué', ok: 'Ledge est à jour' }
   },
+  thread: {
+    you: 'Vous', loading: 'Le fil arrive…',
+    empty: 'Le fil se remplit au prochain événement de l’agent.',
+    liveLabel: 'Outil en cours',
+    permission: 'Permission demandée', decided: { accept: 'Autorisée', deny: 'Refusée', unknown: 'Répondue dans le terminal' }, undecided: 'En attente de votre décision',
+    cursorNote: 'Cette source ne transmet ni résultats ni messages intermédiaires.',
+    helperOpen: 'Ouvrir la discussion', helperDone: 'Terminé', helperWorking: 'Au travail',
+    backTo: 'Discussion principale', delegatedBy: 'Délégué par', instruction: 'Consigne', report: 'Rapport final', helperWaiting: 'attend son rapport…'
+  },
   shortcut: 'Ctrl Alt L'
 };
 
 export type Messages = typeof fr;
 
 const en: Messages = {
+  machines: { title: 'Machines', target: 'Machine', hint: 'The companion and its folder live on this machine.', local: 'This machine', online: 'Connected', offline: 'Offline', reconnecting: (names: string) => `${names}: reconnecting`, count: (n: number) => `${n} machines`, add: 'Add a machine', save: 'Save', remove: 'Remove', label: 'Name', ssh: 'SSH alias', invalid: 'Check the name and SSH alias. Each alias can only be added once.',
+    intro: 'Ledge reaches your servers over SSH, from WSL. Their sessions show in your projects, with the machine’s name.', localMeta: 'Local · WSL', connecting: 'Connecting…', version: (v: string) => `Ledge ${v}`, sessions: (n: number) => `${n} session${n === 1 ? '' : 's'}`,
+    test: 'Test', retry: 'Retry', edit: 'Edit', cancel: 'Cancel', removeAsk: 'Remove', removeNote: '? Its sessions leave the list. Nothing is stopped or deleted on the server.', none: 'No servers yet. Your local sessions do not change.',
+    editTitle: (name: string) => `Edit ${name}`, labelHint: 'What you will see in sessions and the chat.', labelPlaceholder: 'Dev server', sshHint: 'The name of a Host block in ~/.ssh/config in WSL.', duplicate: 'This alias is already added.',
+    before: 'Before adding a server', steps: [['The alias works from WSL, without a password: ', 'ssh my-server'], ['The server’s host key is already approved (first connection made by hand).'], ['Node 22+ and tmux are installed on the server.'], ['Ledge is installed and running on the server: ', 'npm i -g @paradow/ledge && ledge setup']],
+    probe: 'Test the connection', probing: 'Connecting to', probeOk: (v: string | undefined, n: number) => `${v ? `Ledge ${v}` : 'Ledge'} answers · ${n} session${n > 1 ? 's' : ''}`, savedAnyway: 'The test is optional: an unreachable machine can be saved.',
+    problem: { alias: 'Alias not found. Add a Host block for this alias to ~/.ssh/config in WSL.', key: 'The SSH key is refused. Check IdentityFile for this alias in ~/.ssh/config in WSL.', hostKey: 'The server’s host key is not approved yet. Connect once from WSL with ssh and this alias.', unreachable: 'The server does not answer. It may be off, or out of the network.', ledge: 'Ledge is missing or too old on this server. Install it, then run “ledge setup”.', stopped: 'The Ledge service is not running on the server. Run “ledge setup” on the server.', local: 'Update Ledge on this machine to reach a server.', other: 'The connection failed.' }, clarification: 'You can also answer in the chat.', destination: 'Destination', choose: (name: string) => `On ${name}.`, configure: 'Configure machines' },
   lang: { label: 'Language', hint: 'The language of Ledge.', fr: 'Français', en: 'English' },
   tray: { open: 'Open Ledge', newSession: 'New session', dnd: 'Do not disturb', quit: 'Quit Ledge' },
   time: { seconds: (n: number) => `${n}s`, minutes: (n: number) => `${n}m`, hours: (n: number) => `${n}h`, locale: 'en-US' },
@@ -308,7 +348,7 @@ const en: Messages = {
     readonlyNext: 'For your next interactive session:',
     runIn: (project: string) => `Run in ${project}`,
     reviewIn: (project: string) => `To review in ${project}`,
-    reviewHint: 'Review it in the terminal preview below.',
+    reviewHint: 'Review it in the terminal: the strip at the bottom, or T.',
     always: 'Always for this session',
     alwaysWhy: 'No tool confirms a lasting authorization yet: each request is decided on its own.',
     scope: 'The decision covers this command only: “Always” is not supported yet.',
@@ -318,7 +358,10 @@ const en: Messages = {
     otherWhy: 'answer in the terminal',
     send: 'Answer',
     failed: (why: string) => `${why}, try again or open the tab`,
-    terminal: 'Terminal preview', terminalNote: 'last 30 lines · read only',
+    terminal: 'Terminal', terminalNote: (n: number) => `last ${n} lines · read only`,
+    band: { working: 'Working', approval: 'Waiting for your approval', question: 'Asking a question', idle: 'Your turn', done: 'Done', error: 'Failed', open: 'open reading mode' },
+    peek: 'Last 8 lines', peekHint: 'Click or T: reading mode',
+    foldTerminal: 'Fold the terminal', unfoldTerminal: 'Reopen the terminal',
     replyLabel: (name: string) => `Reply to ${name}`,
     replyPlaceholder: (name: string) => `Reply to ${name}…`,
     sendReply: 'Send',
@@ -329,10 +372,9 @@ const en: Messages = {
   },
   reply: {
     finished: (name: string, when: string) => `${name} finished ${when} ago`,
-    doneCount: (n: number) => `${n} done`,
-    questionCount: (n: number) => `${n} ${plural(n, 'question', 'questions')}`,
     question: 'Question',
     typeAnswer: 'Type an answer',
+    recommended: 'Recommended',
     showRaw: 'Full reply as written', showStructured: 'Structured view',
     hintChips: 'A chip fills the field, Enter sends',
     hintAnswerAll: 'One line per question, Enter sends'
@@ -378,7 +420,7 @@ const en: Messages = {
     versionsMismatch: 'The two halves are not on the same version.', versionApp: 'Windows app', versionDaemon: 'WSL daemon', versionLatest: 'Latest version',
     installKind: { npm: 'npm', git: 'clone', unknown: 'unknown' }, unknownVersion: '—',
     autoUpdate: 'Check for updates', autoUpdateHint: 'At startup, then every 6 hours. Ledge never updates without your click.',
-    checked: (ago: string) => `Checked ${ago} ago`, neverChecked: 'Never checked', checkedHint: 'On the GitHub releases of Paradow-dev/ledge.', checkNow: 'Check',
+    checked: (ago: string) => `Checked ${ago} ago`, neverChecked: 'Never checked', checkedHint: 'On the GitHub releases of Lyssaen/ledge.', checkNow: 'Check',
     osReduced: 'Your system asks for reduced motion; Ledge keeps respecting it.',
     finished: 'When a bot or Ledge finishes', finishedHint: 'A 6 s bubble, a sound, both, or the island only.',
     finishedBoth: 'Bubble and sound', finishedBubble: 'Bubble', finishedSound: 'Sound', finishedNone: 'Island only',
@@ -397,19 +439,32 @@ const en: Messages = {
     ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…', open: 'Open the conversation with Ledge', send: 'Send', stop: 'Stop', reset: 'New conversation', back: 'Back to sessions', close: 'Close',
     emptyTitle: 'Ask me how things are going.',
     emptyHint: (n: number) => `${n === 0 ? 'I see no session yet.' : n === 1 ? 'I see 1 session, its terminal and its repository.' : `I see ${n} sessions, the terminals and the repositories.`} I read, I touch nothing.`,
+    starters: 'To start with',
     chips: ['How are the others doing?', 'What is waiting for my decision?', 'Which branches can be merged?'],
     thinking: 'Ledge is looking…',
     step: { sessions: 'Reads the sessions', pane: (name: string) => `Reads ${name}'s terminal`, reply: (name: string) => `Reads ${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => `Reads ${path}` },
     source: { sessions: 'the sessions', pane: (name: string) => `${name}'s terminal`, reply: (name: string) => `${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'nothing read', ago: (when: string) => `${when} ago`,
     error: (why: string) => `Ledge could not answer: ${why}`,
-    stopped: 'Stopped.'
+    stopped: 'Stopped.',
+    card: {
+      label: 'Proposed session', folder: 'Folder', tool: 'Harness', byDefault: (tool: string) => `${tool} · default`, prompt: 'Instruction', noPrompt: 'None, empty session',
+      launch: 'Start the session', launching: 'Starting…', retry: 'Retry', orRephrase: 'or rephrase your request', orFolder: 'or give me another folder',
+      failed: (why: string) => `Could not start: ${why}`, started: 'has started', startedUnknown: 'Session started', terminal: 'Terminal'
+    },
+    relay: {
+      label: 'Instruction to send', session: 'Session', instruction: 'Instruction',
+      send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',
+      queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: (why: string) => `Could not send: ${why}`,
+      pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
+    },
   },
   help: {
     title: 'Keyboard',
     keys: [['Open the list', ['Ctrl Alt L']], ['Choose a session', ['J', 'K']], ['Open the selection', ['Enter']], ['Approve or deny', ['Y', 'N']],
-      ['Previous or next session', ['Alt ←', 'Alt →']], ['New session', ['Ctrl Alt N']], ['Go to the first instruction', ['I']], ['Reply', ['R']], ['Open the terminal tab', ['O']], ['Do not disturb', ['D']], ['Back, then collapse', ['Esc']]],
-    tab: 'Tab keeps moving between the controls.'
+      ['Previous or next session', ['Alt ←', 'Alt →']], ['New session', ['Ctrl Alt N']], ['Go to the first instruction', ['I']], ['Reply', ['R']], ['Open the terminal tab', ['O']], ['Reading mode, the terminal alongside', ['T']], ['Do not disturb', ['D']], ['Back, then collapse', ['Esc']]],
+    tab: 'Tab keeps moving between the controls.',
+    chat: 'Ask the chat "open a session in ledge to fix the build": it proposes a card, and Start the session starts it. "Tell Otto to run the tests" proposes an instruction: Send types it into his session, now or as soon as he is done.'
   },
   coach: {
     label: 'Keyboard', title: 'Move with the keyboard', ok: 'Got it',
@@ -422,6 +477,7 @@ const en: Messages = {
     keepRunning: (n: number) => n === 0 ? 'Ledge closes for about 20 s to update.' : `Your ${n} session${n > 1 ? 's' : ''} keep${n > 1 ? '' : 's'} running. Ledge closes for about 20 s to update.`,
     running: (v: string) => `Updating to ${v}`, dontClose: 'Do not close Ledge', badgeRunning: 'Running',
     steps: { daemon: 'WSL daemon updated', restart: 'Daemon restarted, sessions found again', download: 'Downloading the app', install: 'Installing and restarting' },
+    remoteStep: (name: string) => `${name} updated, sessions found again`, servers: (list: string) => `Servers behind: ${list}`, on: (name: string) => `On ${name}`,
     updated: (v: string) => `Ledge ${v} is installed`, badgeUpdated: 'Up to date',
     manualTitle: 'Your daemon runs from a git clone', manualHint: 'Ledge does not touch a clone. Update the daemon in WSL:', manualApp: 'Update the app', manualWait: (v: string) => `The button turns on once the daemon reports ${v}.`, badgeManual: 'Manual',
     failedBadge: 'Failed',
@@ -438,6 +494,15 @@ const en: Messages = {
     timeoutCommand: 'systemctl --user status ledge-daemon',
     missing: (names: string[]) => `Missing: ${names.join(', ')}`,
     pip: { new: (v: string) => `Ledge ${v} is ready`, busy: 'Update in progress…', bad: 'The update failed', ok: 'Ledge is up to date' }
+  },
+  thread: {
+    you: 'You', loading: 'Loading the thread…',
+    empty: 'The thread fills up with the agent’s next event.',
+    liveLabel: 'Running tool',
+    permission: 'Permission requested', decided: { accept: 'Allowed', deny: 'Denied', unknown: 'Answered in the terminal' }, undecided: 'Waiting for your decision',
+    cursorNote: 'This source sends neither results nor intermediate messages.',
+    helperOpen: 'Open the discussion', helperDone: 'Done', helperWorking: 'Working',
+    backTo: 'Main discussion', delegatedBy: 'Delegated by', instruction: 'Instruction', report: 'Final report', helperWaiting: 'is waiting for its report…'
   },
   shortcut: 'Ctrl Alt L'
 };

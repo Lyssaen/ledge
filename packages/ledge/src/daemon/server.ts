@@ -1,12 +1,12 @@
 import type { IncomingMessage } from 'node:http';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { PROTOCOL_PORT, REMOTE_CLOSE, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { PROTOCOL_PORT, REMOTE_CLOSE, SshAliasSchema, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
+import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
 import { verifyGone } from '../adapters/verify.js';
-import { reduce } from './state.js';
 import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
 import { spawnSession } from '../spawn.js';
@@ -16,6 +16,7 @@ import { log } from '../log.js';
 import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
 import { readDocument } from './documents.js';
+import { createRelay } from './relay.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createPeers, type Peer, type PeerContext, type PeerSocket } from './peers.js';
 import { toRemote } from './remote/project.js';
@@ -25,8 +26,11 @@ import { PairError } from './pairing.js';
 import { OperationRegistry } from './operations.js';
 import { ChallengeStore } from './challenges.js';
 import { parseOrigin } from '../mobile/config.js';
-import { BUSY, NO_PROMPT, NOT_TAKEN, READ_ONLY, Refusal, operationStatus, prepareDecide, runAnswer, runDecide, runInterrupt, type DecisionDeps, type Thread } from './decisions.js';
-import { HistoryStore, turnFromEvent } from './history.js';
+import { BUSY, FREE_TEXT, NO_PROMPT, NOT_TAKEN, READ_ONLY, Refusal, operationStatus, prepareDecide, runAnswer, runDecide, runInterrupt, type DecisionDeps, type Thread } from './decisions.js';
+import { phoneTurns, lastReplyAt, resolvedBy } from './turns.js';
+import { createRouter } from '../chat/routing.js';
+import { serveSsh } from '../transport/ssh.js';
+import { MAX_FRAME } from '../transport/frames.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
@@ -87,25 +91,27 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; mobile?: MobileControl;
-  /** Each session's thread; the daemon passes the instance it pruned at startup. */
-  history?: HistoryStore;
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; mobile?: MobileControl;
+  /** Each session's thread (history.ts, `~/.ledge/history`): the overlay's thread and, mapped to turns, the phone's. */
+  history?: History;
   /** What an authenticated phone may send; the plan's closed list unless a test widens it. */
   remoteCommands?: ReadonlySet<ClientMessage['type']> }): Promise<ServerHandle> {
   const { store, tmux } = opts;
-  const history = opts.history ?? new HistoryStore();
+  const history = opts.history;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
   // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
-  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, env: agentEnv, bin: opts.claudeBin, now });
+  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now });
+  const router = createRouter({ env: agentEnv });
   const wss = new WebSocketServer({
-    host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT,
+    host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT, maxPayload: MAX_FRAME,
     verifyClient: ({ req }: { req: IncomingMessage }) => {
       const forwarded = FORWARDED_HEADERS.find(h => req.headers[h] !== undefined);
       if (forwarded) { log(`refused a forwarded connection (${forwarded}) on the local port`); return false; }
-      const ok = originAllowed(req.headers.origin);
+      const path = req.url ?? '/';
+      const ok = originAllowed(req.headers.origin) && (path === '/' || (path.startsWith('/ssh/') && SshAliasSchema.safeParse(path.slice(5)).success));
       if (!ok) log(`refused a connection from origin ${String(req.headers.origin)}`);
       return ok;
     }
@@ -113,8 +119,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   await new Promise<void>((res, rej) => { wss.once('listening', res); wss.once('error', rej); });
   const port = (wss.address() as { port: number }).port;
 
+  const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
+  // Peers are the local overlays and the phones the remote entry attached (each through toRemote). The `/ssh/` bridges
+  // below are neither: they never receive local snapshots, sessions, previews or chat broadcasts.
   const peers = createPeers();
   const broadcast = (msg: ServerMessage) => peers.broadcast(msg);
+  const remoteClients = new Set<WebSocket>();
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -124,26 +134,36 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** Spaces as the adapters type them (newlines flattened) and as the hook reports them (trimmed). */
   const promptKey = (text: string) => text.replace(/\s+/g, ' ').trim();
   const phonePrompts = new Map<string, { text: string; ms: number }>();
+  /** The phone's instruction this prompt is, if any: same text within PHONE_PROMPT_MS of typing it. */
+  const promptSource = (id: string, text: string | undefined): 'phone' | undefined => {
+    const sent = phonePrompts.get(id);
+    if (!sent) return undefined;
+    if (Date.now() - sent.ms > PHONE_PROMPT_MS) { phonePrompts.delete(id); return undefined; }
+    if (sent.text !== promptKey(text ?? '')) return undefined;
+    phonePrompts.delete(id);
+    return 'phone';
+  };
+  /** Decisions, answers and interruptions made through Ledge go to the shared thread with where they were made (decisions.ts). */
   const thread: Thread = {
-    record: (id, turn) => { history.next(id, { ...turn, at: now() }); },
+    record: (id, note) => { history?.note(id, note, now()); },
     expectPrompt: (id, text) => { phonePrompts.set(id, { text: promptKey(text), ms: Date.now() }); },
     dropPrompt: id => { phonePrompts.delete(id); }
   };
   /**
-   * Every applied event (hooks, the poller, the daemon's own) writes its turn before the change is announced, so the
-   * unread a phone receives already counts it. A prompt matching a phone's recent instruction is the phone's.
+   * The thread (history.ts) records every applied event, hooks, the poller and the daemon's own, before the change is
+   * announced, so the unread a phone receives already counts a new reply. A prompt matching a phone's recent instruction
+   * is the phone's; a request that left the terminal without Ledge deciding it is noted as resolved there. The phone-only
+   * notes never reach the overlay: it neither shows nor needs them.
    */
-  const recordTurn = (id: string, ev: SessionEvent, before: Session | undefined, after: Session | undefined) => {
-    const turn = turnFromEvent(ev, before, after);
-    if (!turn) return;
-    if (turn.kind === 'prompt') {
-      const sent = phonePrompts.get(id);
-      if (sent && Date.now() - sent.ms > PHONE_PROMPT_MS) phonePrompts.delete(id);
-      else if (sent && sent.text === promptKey(turn.text ?? '')) { phonePrompts.delete(id); turn.source = 'phone'; }
-    }
-    history.next(id, { ...turn, at: ev.at });
-  };
-  const unobserve = store.onApply(recordTurn);
+  const unsubscribeHistory = history ? (() => {
+    const offs = [
+      history.onItem((id, item) => { if (item.kind !== 'note') broadcast({ type: 'session.thread.item', id, item }); }),
+      store.onEvent((id, ev) => { history.record(id, ev, ev.name === 'UserPromptSubmit' ? promptSource(id, ev.text) : undefined); }),
+      store.onApply((id, ev, before, after) => { const n = resolvedBy(ev, before, after); if (n) history.note(id, n, ev.at); }),
+      store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })
+    ];
+    return () => { for (const off of offs) off(); };
+  })() : () => {};
   const unsubscribe = store.onChange(c => {
     if (c.type === 'recents') return broadcast({ type: 'recents', recents: c.recents });
     if (c.type === 'updated' && c.session.tmuxSession && titles.get(c.session.id) !== c.session.title) {
@@ -152,7 +172,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
     if (c.type === 'removed') {
       previews.delete(c.id); titles.delete(c.id); phonePrompts.delete(c.id);
-      history.remove(c.id).catch(e => log(`history of ${c.id} not removed: ${(e as Error).message}`));
       opts.mobile?.devices.forgetRead(c.id).catch(e => log(`read marks of ${c.id} not removed: ${(e as Error).message}`));
     }
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
@@ -161,7 +180,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // Every change to the device list (pairing, revocation) reaches the local peers once; remote peers drop `devices` in toRemote.
   const unsubscribeDevices = opts.mobile?.devices.onChange(() => broadcast(devicesMessage(opts.mobile!)));
   const sendSnapshot = (peer: Peer) => {
-    peer.send({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: opts.daemon } : {}) });
+    peer.send({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true } } : {}) });
     for (const [id, lines] of previews) if (store.get(id)) peer.send({ type: 'session.preview', id, lines });
     peer.send({ type: 'chat.history', turns: chat.history() });
   };
@@ -201,11 +220,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * With `requirePrompt`, fail closed: the prompt must be on screen before anything is typed, else a
    * stale pending (or a dialog the adapter cannot read) would get keys meant for something else and
    * the "prompt gone" check would then report success. A plan given as a function is built from that
-   * same capture, so the keys match the dialog actually on screen.
+   * same capture, so the keys match the dialog actually on screen. True once `Decided` is applied, false when a newer
+   * prompt arrived meanwhile and was left alone.
    * With `expected`, the request decided must still be that id in that version, checked under the lock once the
    * capture is in, right before the plan is built and the first character typed.
    */
-  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean, expected?: { id: string; version: number }): Promise<void> {
+  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean, expected?: { id: string; version: number }): Promise<boolean> {
     const s = store.get(id);
     if (!s) throw new Refusal('stale', `unknown session ${id}`);
     if (inFlight.has(id)) throw new Refusal('busy', BUSY);
@@ -240,8 +260,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const gone = decided && adapter.promptGone
         ? await verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
         : await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
-      if (!stillTheSame()) return; // a newer prompt arrived meanwhile: leave it alone
-      if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon' }); return; }
+      if (!stillTheSame()) return false; // a newer prompt arrived meanwhile: leave it alone
+      if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon' }); return true; }
       // The client gets an `error` reply for that id (or a phone `failed/not_taken`, decisions.ts), so a retry from `error` reads as failed.
       store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: NOT_TAKEN });
       throw new Refusal('not_taken', NOT_TAKEN);
@@ -260,6 +280,37 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     thread
   };
   const remoteCommands = opts.remoteCommands ?? MOBILE_COMMANDS;
+
+  /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
+  async function replyTo(id: string, text: string): Promise<string | null> {
+    const s = store.get(id); if (!s) return 'unknown session';
+    if (s.source === 'hook_only') return READ_ONLY;
+    // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
+    if (s.pending && s.pending.kind !== 'question') return `a ${s.pending.kind} prompt takes accept or deny, not a reply`;
+    if (text.trim() === '') return 'empty reply';
+    // A question dialog is a select: typed text then Enter would silently pick the highlighted option, unless the
+    // adapter knows the dialog's own free-text field.
+    const pending = s.pending; const adapter = adapterFor(s.tool);
+    if (pending?.kind === 'question' && !/^[1-9]$/.test(text.trim()) && !adapter.freeText) return FREE_TEXT;
+    // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
+    await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending);
+    return null;
+  }
+  const relay = createRelay({ chat, store, replyTo, broadcast, now });
+
+  /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
+  const chatLaunches = new Set<string>();
+  /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
+  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean }): Promise<Session> {
+    const cwd = await resolveFolder(req.cwd, opts.home);
+    const live = store.all();
+    const env = await agentEnv();
+    const session = await spawnSession({ tool: req.tool, args: launchArgs(req), name: req.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+    store.upsert(session);
+    store.touchRecent(session.cwd, session.project, session.startedAt);
+    log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
+    return session;
+  }
 
   async function handle(peer: Peer, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
@@ -292,14 +343,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.launch': {
         // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
-        const cwd = await resolveFolder(msg.cwd, opts.home);
-        const live = store.all();
-        const env = await agentEnv();
-        const session = await spawnSession({ tool: msg.tool, args: launchArgs(msg), name: msg.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
-        store.upsert(session);
-        store.touchRecent(session.cwd, session.project, session.startedAt);
-        log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
-        return peer.send({ type: 'session.launched', id: session.id });
+        if (msg.qid === undefined) return peer.send({ type: 'session.launched', id: (await launch(msg)).id });
+        // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's.
+        const qid = msg.qid; const p = chat.proposal(qid);
+        if (!p) return peer.send({ type: 'error', message: 'unknown proposal' });
+        if (p.launchedId || chatLaunches.has(qid)) return peer.send({ type: 'error', message: 'already launched' });
+        chatLaunches.add(qid);
+        try {
+          const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt });
+          peer.send({ type: 'session.launched', id: session.id });
+          chat.markLaunched(qid, session.id, broadcast);
+        } catch (e) { chat.markFailed(qid, (e as Error).message, broadcast); throw e; }
+        finally { chatLaunches.delete(qid); }
+        return;
       }
       case 'folder.list': return peer.send(await listFolder(msg.path, opts.home));
       case 'folder.create': {
@@ -308,18 +364,27 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return peer.send(listing);
       }
       case 'session.event': {
+        const ev = msg.event;
+        // The agent's text precedes the action it announces: sync the parent's transcript before the row lands.
+        const ownTurn = !ev.helperId && (ev.name === 'PreToolUse' || ev.name === 'PermissionRequest' || ev.name === 'Stop');
+        const helperEnd = ev.name === 'SubagentStop' && !!ev.helperId;
+        if (history && ev.transcriptPath && (ownTurn || helperEnd)) {
+          try { history.sync(msg.id, ev.transcriptPath, { helperId: helperEnd ? ev.helperId : undefined, force: ev.name === 'Stop' || helperEnd }); }
+          catch (e) { log(`transcript not read for ${msg.id}: ${(e as Error).message}`); }
+        }
         const before = store.get(msg.id);
         if (!before) {
           const taken = store.all().map(s => s.name);
           const cwd = msg.cwd ?? '';
           const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
-          const after = reduce(base, msg.event);
-          recordTurn(msg.id, msg.event, undefined, after);
-          store.upsert(after);
+          store.upsert(base);
+          store.apply(msg.id, msg.event); // through apply, so the history sees the session's first event too
         } else store.apply(msg.id, msg.event);
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
         return;
       }
+      case 'session.thread':
+        return peer.send({ type: 'session.thread', id: msg.id, items: (history?.items(msg.id) ?? []).filter(i => i.kind !== 'note') });
       case 'session.rename': {
         if (!store.get(msg.id)) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
         store.apply(msg.id, { name: 'Renamed', at: now(), source: 'daemon', text: msg.topic });
@@ -335,14 +400,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.interrupt': return runInterrupt(peer, msg, decisions);
       case 'session.history': {
         if (!store.get(msg.id)) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
-        return peer.send({ type: 'session.turns', id: msg.id, turns: await history.read(msg.id) });
+        return peer.send({ type: 'session.turns', id: msg.id, turns: phoneTurns(history?.items(msg.id) ?? []) });
       }
       case 'session.read': {
         // Read marks are a phone's: the overlay has no unread.
         if (peer.ctx.kind !== 'remote') return;
         if (!store.get(msg.id)) return peer.send({ type: 'error', id: msg.id, message: 'unknown session' });
         // Never past the last turn: a reply still to come stays unread.
-        await opts.mobile?.devices.setRead(peer.ctx.deviceId, msg.id, Math.min(msg.seq, history.lastSeq(msg.id)));
+        const last = phoneTurns(history?.items(msg.id) ?? []).at(-1)?.at;
+        if (last) await opts.mobile?.devices.setRead(peer.ctx.deviceId, msg.id, Date.parse(last) < Date.parse(msg.at) ? last : msg.at);
         const s = store.get(msg.id);
         return s ? peer.send({ type: 'session.updated', session: s }) : undefined;
       }
@@ -362,6 +428,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.remove(msg.id);
         return;
       }
+      // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
+      case 'session.relay': return relay.request(msg.qid);
+      case 'session.relay.cancel': return relay.cancel(msg.qid);
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
       // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
       case 'update.daemon':
@@ -390,15 +459,24 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         await opts.mobile.configure(msg.origin);
         return broadcast(devicesMessage(opts.mobile));
       case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast, msg.tool);
-      case 'chat.cancel': return chat.cancel(msg.qid);
+      case 'chat.route':
+        try { peer.send({ type: 'chat.routed', qid: msg.qid, result: await router.route(msg) }); }
+        catch (e) { peer.send({ type: 'chat.error', qid: msg.qid, message: (e as Error).message }); }
+        return;
+      case 'chat.cancel': router.cancel(msg.qid); return chat.cancel(msg.qid);
       case 'chat.reset': return chat.reset(broadcast);
       case 'session.focus':
         return; // handled by the overlay plan via wt.exe; the daemon only acknowledges
     }
   }
 
-  /** The thread holds a reply after the last turn this device read. */
-  const unread = (deviceId: string, sessionId: string) => history.lastReplySeq(sessionId) > (opts.mobile?.devices.get(deviceId)?.read?.[sessionId] ?? 0);
+  /** The thread holds a reply of the agent after the last turn this device read. */
+  const unread = (deviceId: string, sessionId: string) => {
+    const reply = history && lastReplyAt(history.items(sessionId));
+    if (!reply) return false;
+    const read = opts.mobile?.devices.get(deviceId)?.read?.[sessionId];
+    return typeof read !== 'string' || Date.parse(reply) > Date.parse(read);
+  };
 
   /** A local peer gets every message as before; a remote one only what `toRemote` lets through. */
   function peerFor(socket: PeerSocket, ctx: PeerContext): Peer {
@@ -434,7 +512,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     });
   }
 
-  wss.on('connection', ws => attach(ws, { kind: 'local' }));
+  wss.on('connection', (ws, req) => {
+    // A bridge to another machine over SSH (the overlay's fleet): bytes only, never a peer, never a broadcast.
+    if (req.url?.startsWith('/ssh/')) {
+      ws.on('error', e => log(`socket error: ${e.message}`));
+      if (remoteClients.size >= 20) { ws.close(1013, 'Too many remote connections'); return; }
+      remoteClients.add(ws); ws.once('close', () => remoteClients.delete(ws));
+      const alias = SshAliasSchema.parse(req.url.slice(5));
+      void agentEnv().then(env => { if (ws.readyState === WebSocket.OPEN) (opts.ssh ?? serveSsh)(ws, alias, { env }); })
+        .catch(e => { send(ws, { type: 'error', message: (e as Error).message }); ws.close(1011); });
+      return;
+    }
+    attach(ws, { kind: 'local' });
+  });
 
   return {
     port,
@@ -442,6 +532,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     preview,
     attach,
     peers,
-    close: () => new Promise(res => { unobserve(); unsubscribe(); unsubscribeDevices?.(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
+    close: () => new Promise(res => { unsubscribe(); unsubscribeHistory(); unsubscribeDevices?.(); relay.close(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
   };
 }
