@@ -37,8 +37,8 @@ function Shell({ client }: { client?: DaemonClient }) {
   const key = shown.map(s => s.id).join('\n');
   useEffect(() => { if (ready && !localDown) dispatch({ type: 'visible', ids: key ? key.split('\n') : [] }); }, [ready, localDown, key, dispatch]);
   const [panel, setPanel] = useStored(loadPanel, savePanel);
-  // Passed to the conversation pane in a later task. `ready` is the Shell's `opened` (first snapshot received), never a bare connection.
-  useConversations(fleetClient, sessions, machines, ready);
+  // Bound to the conversation pane. `ready` is the Shell's `opened` (first snapshot received), never a bare connection.
+  const conversations = useConversations(fleetClient, sessions, machines, ready);
   // The resident (`ledge`) gets its own panel in a later lot; a lost selection is replaced by the first visible session (lot 3 reducer).
   const selected = state.selected && state.selected !== 'ledge' ? sessions.find(s => s.id === state.selected) ?? null : null;
   // « Agrandir » folds back when the view or the attention filter changes (mockup conversation.js).
@@ -61,7 +61,7 @@ function Shell({ client }: { client?: DaemonClient }) {
             {state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
             {state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={id => dispatch({ type: 'select', id })} attentionOnly={state.attentionOnly} />}
           </>}
-          pane={selected ? <ConversationPane session={selected} expanded={panel.expanded} onExpand={on => setPanel(p => ({ ...p, expanded: on }))} /> : null} />}
+          pane={selected ? <ConversationPane session={selected} client={fleetClient} api={conversations} expanded={panel.expanded} onExpand={on => setPanel(p => ({ ...p, expanded: on }))} /> : null} />}
         <StatusBar sessions={sessions} machines={machines} />
       </div>
     </main>

@@ -8,13 +8,13 @@ export function session(id: string, extra: Partial<Session> = {}): Session {
 
 /** Simulates the local ledge daemon inside the page: a snapshot, then the machines list, and a `push` for later updates.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[] } = {}) {
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
   let socket: WebSocketRoute | null = null;
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
     socket = ws;
-    ws.send(JSON.stringify({ type: 'snapshot', sessions: [...sessions.values()] }));
+    ws.send(JSON.stringify({ type: 'snapshot', sessions: [...sessions.values()], ...(extras.launcher ? { launcher: extras.launcher } : {}) }));
     ws.send(JSON.stringify({ type: 'machines', machines: extras.machines ?? [{ id: 'local', label: 'Local' }] }));
     ws.onMessage(m => { try { received.push(JSON.parse(String(m))); } catch { /* ignore */ } });
   });
