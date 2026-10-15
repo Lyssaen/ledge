@@ -431,6 +431,47 @@ fn open_terminal(title: String, command: Vec<String>) -> Result<bool, String> {
 #[tauri::command]
 fn open_terminal(_title: String, _command: Vec<String>) -> Result<bool, String> { Ok(false) }
 
+/// `wsl.exe` arguments that print `~/.ledge/token`. No caller input: the command cannot be turned into a shell.
+#[cfg_attr(not(windows), allow(dead_code))]
+const WSL_TOKEN_ARGS: &[&str] = ["-e", "sh", "-c", r#"cat "$HOME/.ledge/token""#];
+
+/// 32 bytes, hex, as written by the daemon. Anything else is treated as missing.
+fn parse_daemon_token(raw: &str) -> Option<String> {
+    let token = raw.trim();
+    if token.len() == 64 && token.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        Some(token.to_string())
+    } else {
+        None
+    }
+}
+
+fn read_daemon_token_text() -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("wsl.exe")
+            .args(WSL_TOKEN_ARGS)
+            .output()
+            .map_err(|e| format!("wsl: {e}"))?;
+        if !output.status.success() { return Err("token unreadable".into()); }
+        let n = output.stdout.len().min(128);
+        return Ok(String::from_utf8_lossy(&output.stdout[..n]).into_owned());
+    }
+    #[cfg(not(windows))]
+    {
+        let home = std::env::var("HOME").map_err(|_| "token unreadable".to_string())?;
+        let path = std::path::Path::new(&home).join(".ledge").join("token");
+        let bytes = std::fs::read(&path).map_err(|_| "token unreadable".to_string())?;
+        let n = bytes.len().min(128);
+        Ok(String::from_utf8_lossy(&bytes[..n]).into_owned())
+    }
+}
+
+/// The loopback token the overlay presents on every daemon socket. Read inside WSL, where the daemon wrote it.
+#[tauri::command]
+fn daemon_token() -> Result<String, String> {
+    parse_daemon_token(&read_daemon_token_text()?).ok_or_else(|| "token missing".into())
+}
+
 /// Opens a web URL in the default browser through the shell (`rundll32 url.dll,FileProtocolHandler`, which takes `&`
 /// and `?` as they are, unlike `cmd /C start`): the overlay's webview must never navigate away. Only http(s) is accepted.
 #[tauri::command]
@@ -608,7 +649,7 @@ fn main() {
         .manage(OutsideWatch::default())
         .manage(PrevForeground::default())
         .manage(Screen::default())
-        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zone, set_outside_watch, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor, set_tray_labels, get_autostart, set_autostart])
+        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zone, set_outside_watch, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor, set_tray_labels, get_autostart, set_autostart, daemon_token])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_always_on_top(true);
@@ -626,7 +667,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{autostart_by_default, choose, covers, cursor_near, desktop_class, frame_rect, inside_rect, poll_interval, press_outside, terminal_args, title_matches, tray_title, window_rect_of, Area, CURSOR_POLL, NEAR_POLL};
+    use super::{autostart_by_default, choose, covers, cursor_near, desktop_class, frame_rect, inside_rect, parse_daemon_token, poll_interval, press_outside, terminal_args, title_matches, tray_title, window_rect_of, Area, CURSOR_POLL, NEAR_POLL, WSL_TOKEN_ARGS};
 
     #[test] fn the_window_takes_the_mouse_inside_the_drawn_rectangle_only() {
         let rect = (100, 0, 200, 60);
@@ -718,6 +759,19 @@ mod tests {
         assert!(covers((-8, -8, 2568, 1448), mon)); // a maximised window's invisible border
         assert!(!covers((0, 0, 2560, 1400), mon));
         assert!(!covers((100, 0, 2660, 1440), mon));
+    }
+
+    #[test] fn a_daemon_token_is_64_lowercase_hex_chars() {
+        let ok = "ab".repeat(32);
+        assert_eq!(parse_daemon_token(&format!("\n{ok}\n")).as_deref(), Some(ok.as_str()));
+        assert!(parse_daemon_token("ab").is_none());
+        assert!(parse_daemon_token(&"AB".repeat(32)).is_none());
+        assert!(parse_daemon_token(&format!("{ok}!")).is_none());
+        assert!(parse_daemon_token("").is_none());
+    }
+
+    #[test] fn the_windows_token_read_is_a_fixed_wsl_command() {
+        assert_eq!(WSL_TOKEN_ARGS, ["-e", "sh", "-c", "cat \"$HOME/.ledge/token\""]);
     }
 
     #[test] fn only_a_fresh_press_outside_the_window_counts() {

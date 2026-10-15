@@ -11,6 +11,7 @@ import WebSocket from 'ws';
 import { startServer, ALLOWED_ORIGINS, launchArgs, resolveFolder } from '../src/daemon/server.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from '../src/client.js';
+import { readDaemonToken } from '../src/auth.js';
 import type { Tmux } from '../src/tmux.js';
 import { createDaemonUpdater } from '../src/update/run-update.js';
 import { History } from '../src/daemon/history.js';
@@ -47,12 +48,14 @@ beforeEach(async () => {
 });
 afterEach(async () => { await srv.close(); });
 
-/** Opens a raw WebSocket with the given Origin; resolves with 'open' or the HTTP status of the refusal. */
-function handshake(port: number, origin?: string): Promise<'open' | number> {
+/** Opens a raw WebSocket with the given Origin. Sends the daemon token unless `token` is `''`. */
+function handshake(port: number, origin?: string, token: string | undefined = readDaemonToken()): Promise<'open' | number> {
   return new Promise(res => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}`, origin ? { origin } : {});
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, { headers, ...(origin ? { origin } : {}) });
     ws.once('open', () => { ws.terminate(); res('open'); });
-    ws.once('unexpected-response', (_req, r) => { res(r.statusCode ?? 0); ws.terminate(); });
+    ws.once('unexpected-response', (_req, r) => { res(r.statusCode ?? 0); r.resume(); ws.terminate(); });
     ws.once('error', () => {});
   });
 }
@@ -479,7 +482,7 @@ describe('server', () => {
   describe('terminal preview delivery', () => {
     /** A raw socket that records every message type (and id) in arrival order. */
     async function recorder() {
-      const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`);
+      const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`, { headers: { Authorization: `Bearer ${readDaemonToken()}` } });
       const got: Array<{ type: string; id?: string; lines?: string[] }> = [];
       ws.on('message', d => got.push(JSON.parse(String(d))));
       await new Promise(res => ws.once('open', res));
@@ -887,7 +890,7 @@ describe('chat', () => {
   });
   it('tells a client connected before the question about the turn before its first step', async () => {
     const got: Array<{ type: string; turns?: Array<Record<string, unknown>> }> = [];
-    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`);
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`, { headers: { Authorization: `Bearer ${readDaemonToken()}` } });
     const finished = new Promise<void>(res => ws.on('message', d => { const m = JSON.parse(String(d)); got.push(m); if (m.type === 'chat.done') res(); }));
     await new Promise(r => ws.once('open', r));
     const c = await connect({ port: srv.port }); await c.next('snapshot');

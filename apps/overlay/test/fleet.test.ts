@@ -125,15 +125,22 @@ describe('common chat routing', () => {
 });
 
 class FakeProbe {
-  static last: FakeProbe; url: string; closed = false;
+  static last: FakeProbe; url: string; protocols?: string | string[]; closed = false;
   onmessage: ((ev: { data: unknown }) => void) | null = null; onclose: (() => void) | null = null; onerror: (() => void) | null = null;
-  constructor(url: string) { this.url = url; FakeProbe.last = this; }
+  constructor(url: string, protocols?: string | string[]) { this.url = url; this.protocols = protocols; FakeProbe.last = this; }
   close() { this.closed = true; }
   emit(m: ServerMessage) { this.onmessage?.({ data: JSON.stringify(m) }); }
 }
 const probeSnapshot = (sshAlias?: string): ServerMessage => ({ type: 'snapshot', sessions: [fakeSession('a'), fakeSession('b')], daemon: { version: '0.4.1', install: 'npm', systemd: true, routing: true }, sshAlias });
 
 describe('connection test', () => {
+  it('presents the daemon token on the SSH probe', () => {
+    const token = 'ab'.repeat(32);
+    void probeMachine('ws://127.0.0.1:47831', 'box', { WebSocketImpl: FakeProbe, token });
+    expect(FakeProbe.last.url).toBe('ws://127.0.0.1:47831/ssh/box');
+    expect(FakeProbe.last.protocols).toEqual([`ledge.${token}`]);
+    FakeProbe.last.onclose?.();
+  });
   it('opens the SSH route of the local daemon and answers with the remote version and sessions', async () => {
     const done = probeMachine('ws://127.0.0.1:47831', 'dev-server', { WebSocketImpl: FakeProbe });
     expect(FakeProbe.last.url).toBe('ws://127.0.0.1:47831/ssh/dev-server');

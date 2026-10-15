@@ -8,7 +8,7 @@ type Binding = { machine: string; raw: string };
 type PendingRoute = { qid: string; text: string; tool?: 'claude' | 'codex' | 'cursor'; coordinator: string };
 
 /** An overlay-owned connection per host. No command is broadcast; a missing owner fails closed. */
-export function createFleetClient(config: MachineConfig[], makeClient = createDaemonClient): DaemonClient {
+export function createFleetClient(config: MachineConfig[], makeClient = createDaemonClient, token?: string): DaemonClient {
   let configs = parseMachines(config), selected = configs[0]!.id, connected = false, configuring = false, state: MachineState[] = [];
   const peers = new Map<string, Peer>();
   const machineMessages = new Set<(machine: string, m: ServerMessage) => void>();
@@ -127,7 +127,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (machine === 'local') emit(m);
   }
   function add(c: MachineConfig) {
-    const client = makeClient({ url: machineUrl(c, configs[0]!) });
+    const client = makeClient({ url: machineUrl(c, configs[0]!), ...(token ? { token } : {}) });
     const p: Peer = { config: c, client, status: 'connecting', fresh: false, snapshot: null, previews: new Map(), off: [] }; peers.set(c.id, p);
     p.off.push(client.onMessage(m => receive(p, m)), client.onStatus(s => {
       p.status = s;
@@ -207,7 +207,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         for (const c of configs) { const p = peers.get(c.id); if (p) p.config = c; else add(c); }
         if (!peers.has(selected)) selected = 'local'; configuring = false; publish();
       },
-      probe: ssh => probeMachine(configs[0]!.url!, ssh),
+      probe: ssh => probeMachine(configs[0]!.url!, ssh, token ? { token } : {}),
       retry(id) { const p = peers.get(id); if (p && connected) p.client.connect(); },
       terminal(id) { const origin = splitId(id); const m = state.find(x => x.id === origin?.machine); return origin && m ? terminalCommand(m, origin.id) : null; },
       turnMachine(qid) { return state.find(m => m.id === bindings.get(qid)?.machine); },

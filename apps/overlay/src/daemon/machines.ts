@@ -52,15 +52,17 @@ export function loadMachines(): MachineConfig[] {
   try { return parseMachines(JSON.parse(localStorage.getItem('ledge.machines') ?? 'null')); } catch { return [LOCAL_MACHINE]; }
 }
 type ProbeSocket = { close(): void; onclose: null | (() => void); onerror: null | (() => void); onmessage: null | ((ev: { data: unknown }) => void) };
+type ProbeCtor = new (url: string, protocols?: string | string[]) => ProbeSocket;
 /** Opens `/ssh/<alias>` on the local daemon once and settles on the first snapshot, error or close. */
-export function probeMachine(url: string, ssh: string, opts: { WebSocketImpl?: new (url: string) => ProbeSocket; timeoutMs?: number } = {}): Promise<ProbeResult> {
-  const Ws = opts.WebSocketImpl ?? (globalThis as unknown as { WebSocket: new (url: string) => ProbeSocket }).WebSocket;
+export function probeMachine(url: string, ssh: string, opts: { WebSocketImpl?: ProbeCtor; timeoutMs?: number; token?: string } = {}): Promise<ProbeResult> {
+  const Ws = opts.WebSocketImpl ?? (globalThis as unknown as { WebSocket: ProbeCtor }).WebSocket;
   return new Promise(resolve => {
     let sock: ProbeSocket, error = '', done = false;
     const finish = (r: ProbeResult) => { if (done) return; done = true; clearTimeout(timer); if (sock) { sock.onclose = sock.onmessage = sock.onerror = null; sock.close(); } resolve(r); };
     // The daemon gives up on a silent remote after 60 s; this only guards against a daemon that never answers.
     const timer = setTimeout(() => finish({ ok: false, error: 'SSH: no Ledge snapshot received.' }), opts.timeoutMs ?? 75_000);
-    try { sock = new Ws(machineUrl({ id: 'probe', label: ssh, ssh }, { ...LOCAL_MACHINE, url })); } catch (e) { finish({ ok: false, error: (e as Error).message }); return; }
+    const target = machineUrl({ id: 'probe', label: ssh, ssh }, { ...LOCAL_MACHINE, url });
+    try { sock = opts.token ? new Ws(target, [`ledge.${opts.token}`]) : new Ws(target); } catch (e) { finish({ ok: false, error: (e as Error).message }); return; }
     sock.onmessage = ev => {
       let m: ServerMessage; try { m = parseServerMessage(JSON.parse(String(ev.data))); } catch { return; }
       if (m.type === 'error') error = m.message;

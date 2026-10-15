@@ -15,6 +15,7 @@
  *   set_tray_labels { open, newSession, dnd, quit }  translated tray menu items
  *   get_autostart                      whether Ledge launches at login (null: not offered, a `tauri dev` build)
  *   set_autostart { on }               turn launch at login on or off; returns the state Windows now reports
+ *   daemon_token                       the WSL daemon's loopback token (`~/.ledge/token`), for the WebSocket handshake
  *   event `ledge://outside-click`      a mouse button went down outside the window while the watch was armed
  *   event `ledge://cursor-near` { x, y } | null    cursor in the top band around the island, in logical work-area coordinates
  *   event `ledge://foreground` { covered }   a maximised or full-screen window took (or left) the foreground on the island's monitor
@@ -175,6 +176,15 @@ export async function getAutostart(): Promise<boolean | null> {
 export async function setAutostart(on: boolean): Promise<boolean | null> {
   if (!inTauri()) return null;
   return invoke<boolean | null>('set_autostart', { on }).catch(() => null);
+}
+
+/** The daemon token from WSL (`wsl.exe` reading `~/.ledge/token`). Null in the browser, where tests and the demo send none. */
+export async function daemonToken(): Promise<string | null> {
+  if (!inTauri()) return null;
+  try {
+    const token = await invoke<string>('daemon_token');
+    return /^[0-9a-f]{64}$/.test(token) ? token : null;
+  } catch { return null; }
 }
 
 /** Whether Windows Terminal is the foreground window (the "only when the terminal is behind" sound rule). False outside Tauri. */

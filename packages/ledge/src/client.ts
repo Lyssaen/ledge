@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { PROTOCOL_PORT, parseServerMessage, type ClientMessage, type ServerMessage } from '@ledge/protocol';
+import { readDaemonToken } from './auth.js';
 
 export interface Client {
   send(msg: ClientMessage): void;
@@ -8,10 +9,14 @@ export interface Client {
   close(): Promise<void>;
 }
 
-export function connect(opts: { port?: number; host?: string; timeoutMs?: number } = {}): Promise<Client> {
+export function connect(opts: { port?: number; host?: string; timeoutMs?: number; token?: string | null } = {}): Promise<Client> {
   const port = opts.port ?? PROTOCOL_PORT;
   const host = opts.host ?? '127.0.0.1';
-  const ws = new WebSocket(`ws://${host}:${port}`);
+  // `token: null` skips the file (a probe of something that is not Ledge, before the first start).
+  const token = opts.token === undefined ? readDaemonToken() : opts.token || undefined;
+  const ws = token
+    ? new WebSocket(`ws://${host}:${port}`, { headers: { Authorization: `Bearer ${token}` } })
+    : new WebSocket(`ws://${host}:${port}`);
   const queue: ServerMessage[] = [];
   const MAX_QUEUED = 100;
   const waiters: Array<{ type: string; resolve: (m: ServerMessage) => void }> = [];

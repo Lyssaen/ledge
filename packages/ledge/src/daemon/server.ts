@@ -1,4 +1,4 @@
-import type { IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PROTOCOL_PORT, SshAliasSchema, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
@@ -15,6 +15,7 @@ import { loginShellEnv } from '../shell-path.js';
 import { log } from '../log.js';
 import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
+import { ensureDaemonToken, hostAllowed, requestAuthorized, selectDaemonProtocol } from '../auth.js';
 import { readDocument } from './documents.js';
 import { createRelay } from './relay.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -35,7 +36,8 @@ export { resolveFolder };
 
 /**
  * Origins allowed to open a WebSocket: the Tauri overlay (packaged and dev server). A browser always
- * sends Origin, so any web page is refused; Node clients (hook, launcher, status) send none and pass.
+ * sends Origin, so any other web page is refused. Node clients (hook, launcher, status) send none.
+ * Origin is not enough: every client must also present the daemon token, and Host must be loopback.
  */
 export const ALLOWED_ORIGINS: readonly string[] = [
   'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420'
@@ -43,6 +45,35 @@ export const ALLOWED_ORIGINS: readonly string[] = [
 
 export function originAllowed(origin: string | undefined): boolean {
   return origin === undefined || ALLOWED_ORIGINS.includes(origin);
+}
+
+function requestPath(url: string | undefined): string {
+  const raw = url ?? '/';
+  const q = raw.indexOf('?');
+  return q === -1 ? raw : raw.slice(0, q);
+}
+
+/** Why a handshake is refused, or null when path, origin, host and token all pass. The reason is safe to log. */
+function refusal(req: IncomingMessage, token: string): 'path' | 'origin' | 'host' | 'auth' | null {
+  const path = requestPath(req.url);
+  if (!(path === '/' || (path.startsWith('/ssh/') && SshAliasSchema.safeParse(path.slice(5)).success))) return 'path';
+  if (!originAllowed(req.headers.origin)) return 'origin';
+  if (!hostAllowed(req.headers.host)) return 'host';
+  if (!requestAuthorized(req.headers, token)) return 'auth';
+  return null;
+}
+
+/** Plain HTTP is not a daemon API. 401, and no CORS headers, so a browser page cannot read the response. */
+function unauthorized(req: IncomingMessage, res: ServerResponse): void {
+  req.resume();
+  const body = 'Unauthorized\n';
+  res.writeHead(401, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
+    'Cache-Control': 'no-store',
+    Connection: 'close'
+  });
+  res.end(body);
 }
 
 export interface ServerHandle {
@@ -78,17 +109,28 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now });
   const router = createRouter({ env: agentEnv });
+  const token = await ensureDaemonToken();
+  const httpServer = createServer(unauthorized);
+  const sockets = new Set<import('node:net').Socket>();
+  httpServer.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
   const wss = new WebSocketServer({
-    host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT, maxPayload: MAX_FRAME,
+    server: httpServer, maxPayload: MAX_FRAME,
     verifyClient: ({ req }: { req: IncomingMessage }) => {
-      const path = req.url ?? '/';
-      const ok = originAllowed(req.headers.origin) && (path === '/' || (path.startsWith('/ssh/') && SshAliasSchema.safeParse(path.slice(5)).success));
-      if (!ok) log(`refused a connection from origin ${String(req.headers.origin)}`);
-      return ok;
-    }
+      const why = refusal(req, token);
+      if (why) {
+        const origin = String(req.headers.origin ?? 'none').replace(/[\r\n]/g, '').slice(0, 120);
+        log(`refused a connection (${why}) from origin ${origin}`);
+      }
+      return why === null;
+    },
+    handleProtocols: (protocols: Set<string>) => selectDaemonProtocol(protocols, token)
   });
-  await new Promise<void>((res, rej) => { wss.once('listening', res); wss.once('error', rej); });
-  const port = (wss.address() as { port: number }).port;
+  await new Promise<void>((res, rej) => {
+    const onError = (e: Error) => rej(e);
+    httpServer.once('error', onError);
+    httpServer.listen(opts.port ?? PROTOCOL_PORT, opts.host ?? '127.0.0.1', () => { httpServer.off('error', onError); res(); });
+  });
+  const port = (httpServer.address() as { port: number }).port;
 
   const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
   // Remote peers must never receive local snapshots, sessions, previews or chat broadcasts.
@@ -394,6 +436,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port,
     broadcast,
     preview,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); relay.close(); for (const c of wss.clients) c.terminate(); wss.close(() => res()); })
+    close: () => new Promise(res => {
+      unsubscribe(); for (const u of unsubscribeHistory) u(); relay.close();
+      for (const c of wss.clients) c.terminate();
+      for (const socket of sockets) socket.destroy();
+      wss.close(() => httpServer.close(() => res()));
+    })
   };
 }
