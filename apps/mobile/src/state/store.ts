@@ -47,7 +47,7 @@ function loadDevice(storage?: Storage): MobileState['device'] {
 
 export function createMobileStore(storage?: Storage): MobileStore {
   const last = loadLastState(storage);
-  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage), turns: {} };
+  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage), turns: last?.turns ?? {} };
   let send: ((m: ClientMessage) => void) | null = null;
   const fns = new Set<() => void>();
   const listeners = new Set<(msg: ServerMessage) => void>();
@@ -118,7 +118,7 @@ export function createMobileStore(storage?: Storage): MobileStore {
           set({ previews: { ...state.previews, [msg.id]: msg.lines }, syncedAt: now() }, true);
           break;
         // Rows are replaced by id in the PC's order: a reply updated in place keeps its row, and no time sort is applied.
-        case 'session.turns': set({ turns: { ...state.turns, [msg.id]: msg.turns } }, false); break;
+        case 'session.turns': set({ turns: { ...state.turns, [msg.id]: msg.turns } }, true); break;
         case 'operation.received': dispatch({ type: 'received', operationId: msg.operationId }); break;
         case 'operation.result': dispatch({ type: 'result', operationId: msg.operationId, status: msg.status, ...(msg.reason ? { reason: msg.reason } : {}) }); break;
         default: break;

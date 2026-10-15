@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Session, Turn } from '@ledge/protocol';
 import { composerState, threadItems } from '../src/model/thread';
 import { isNew, matches, type OpState } from '../src/model/operations';
-import { loadDraft, saveDraft } from '../src/state/drafts';
+import { loadDraft, markCleared, saveDraft, wasCleared } from '../src/state/drafts';
 import { createMobileStore } from '../src/state/store';
 
 const T = (m: number) => new Date(Date.UTC(2026, 9, 14, 10, m)).toISOString();
@@ -38,7 +38,9 @@ describe('threadItems', () => {
   it('shows an instruction on its way, then taken, and never twice once the PC lists it', () => {
     expect(threadItems([], s(), { o1: msg() })).toMatchObject([{ kind: 'me', text: 'Lance les tests', delivery: 'sending' }]);
     expect(threadItems([], s(), { o1: msg({ phase: 'uncertain' }) })).toMatchObject([{ delivery: 'uncertain' }]);
-    expect(threadItems([], s(), { o1: msg({ phase: 'applied' }) })).toMatchObject([{ delivery: 'taken', fresh: true }]);
+    const at = Date.parse(T(5));
+    expect(threadItems([], s(), { o1: msg({ phase: 'applied' }) }, at + 5_000)).toMatchObject([{ delivery: 'taken', fresh: true }]);
+    expect(threadItems([], s(), { o1: msg({ phase: 'applied' }) }, at + 60_000)[0]).not.toHaveProperty('fresh');
     expect(threadItems([], s(), { o1: msg({ phase: 'rejected', reason: 'agent_busy' }) })).toEqual([]);
     const listed = [turn('p', 'prompt', 6, { text: 'Lance les tests', source: 'phone' })];
     expect(threadItems(listed, s(), { o1: msg({ phase: 'applied' }) })).toMatchObject([{ key: 'p', delivery: 'taken' }]);
@@ -104,6 +106,21 @@ describe('store and drafts', () => {
     expect(store.submit(msg(), { type: 'session.reply', id: 'a', text: 'Lance les tests', operationId: 'o1' })).toBe(true);
     expect(store.submit(msg({ operationId: 'o2' }), { type: 'session.reply', id: 'a', text: 'Lance les tests', operationId: 'o2' })).toBe(false);
     expect(sent).toHaveLength(1);
+  });
+  it('persists the latest turns with the last state, and drops them with their session', () => {
+    const a = createMobileStore(storage);
+    a.apply({ type: 'snapshot', sessions: [s()] });
+    a.apply({ type: 'session.turns', id: 'a', turns: Array.from({ length: 80 }, (_, i) => turn(`t${i}`, 'reply', 1, { text: 'x' })) });
+    const b = createMobileStore(storage);
+    expect(b.getState().turns.a).toHaveLength(50);
+    expect(b.getState().turns.a![49]!.id).toBe('t79');
+    a.apply({ type: 'snapshot', sessions: [] });
+    expect(createMobileStore(storage).getState().turns.a).toBeUndefined();
+  });
+  it('remembers a cleared instruction across reloads', () => {
+    expect(wasCleared('o1', storage)).toBe(false);
+    markCleared('o1', storage);
+    expect(wasCleared('o1', storage)).toBe(true);
   });
   it('stores a draft per session and forgets an empty one', () => {
     saveDraft('a', 'Salut', storage);

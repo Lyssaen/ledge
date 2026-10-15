@@ -35,7 +35,10 @@ export const messagesOf = (sessionId: string, ops: Record<string, OpState>): OpS
  * phone sent that the PC's thread does not show yet, then the request still waiting. A decision turn already sits
  * at its request's position and carries the request's time.
  */
-export function threadItems(turns: Turn[], session: Session, ops: Record<string, OpState>): ThreadItem[] {
+/** How long a taken instruction is said to be taken « à l’instant », and keeps the composer closed. */
+export const TAKEN_WINDOW = 20_000;
+
+export function threadItems(turns: Turn[], session: Session, ops: Record<string, OpState>, now: number = Date.now()): ThreadItem[] {
   const items: ThreadItem[] = [];
   // Each applied instruction is consumed by the first prompt of the same text the PC shows, so it is never said twice.
   const claimed = new Set<string>();
@@ -56,7 +59,7 @@ export function threadItems(turns: Turn[], session: Session, ops: Record<string,
     if (o.phase === 'sending' || o.phase === 'received') items.push({ ...base, delivery: 'sending' });
     else if (o.phase === 'uncertain') items.push({ ...base, delivery: 'uncertain' });
     // Applied but not in the PC's thread yet. One older than everything the PC still lists has fallen off its window.
-    else if (o.phase === 'applied' && !shown.has(o.operationId) && !(oldest && Date.parse(oldest) - Date.parse(o.startedAt) > 300_000)) items.push({ ...base, delivery: 'taken', fresh: true });
+    else if (o.phase === 'applied' && !shown.has(o.operationId) && !(oldest && Date.parse(oldest) - Date.parse(o.startedAt) > 300_000)) items.push({ ...base, delivery: 'taken', ...(now - Date.parse(o.startedAt) < TAKEN_WINDOW ? { fresh: true } : {}) });
   }
   const awaiting = requestsOf([session])[0];
   if (awaiting) items.push({ key: `awaiting-${awaiting.pendingId}`, kind: 'awaiting', item: awaiting });

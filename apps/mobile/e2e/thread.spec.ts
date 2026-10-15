@@ -161,3 +161,57 @@ test('the request result links to the thread', async ({ page }) => {
   await page.getByRole('link', { name: 'Voir le fil de Bix' }).click();
   await expect(page).toHaveURL(/#\/thread\/bix$/);
 });
+
+test('after a link loss the daemon never heard of the operation: composer reopens, one explicit tap, two replies in all', async ({ page }) => {
+  const d = await open(page);
+  let n = 0;
+  d.onMessage(m => {
+    if (m.type === 'session.history') d.send({ type: 'session.turns', id: m.id, turns: TURNS });
+    if (m.type === 'session.reply') { n++; if (n === 1) d.drop(); else d.send({ type: 'operation.result', operationId: m.operationId, status: 'applied' }); }
+    if (m.type === 'operation.status') d.send({ type: 'operation.result', operationId: m.operationId, status: 'unknown' });
+  });
+  await page.goto('/m/#/thread/bix');
+  await page.getByLabel('Message pour Bix').fill('Lance les tests');
+  await page.getByRole('button', { name: 'Envoyer à Bix' }).click();
+  await expect.poll(() => sends(d.received, 'operation.status').length).toBeGreaterThan(0);
+  await expect(page.getByRole('alert')).toContainText('Message non envoyé');
+  await expect(page.getByLabel('Message pour Bix')).toHaveValue('Lance les tests');
+  await expect(page.getByLabel('Message pour Bix')).toBeEnabled();
+  await page.waitForTimeout(500);
+  expect(sends(d.received, 'session.reply')).toHaveLength(1);
+  await page.getByRole('button', { name: 'Envoyer à Bix' }).click();
+  await expect(page.getByLabel('Message pour Bix')).toHaveValue('');
+  expect(sends(d.received, 'session.reply')).toHaveLength(2);
+});
+
+test('a cold start offline reads the last known thread; an unopened one says it is unavailable', async ({ page }) => {
+  await page.addInitScript(([k, v]) => { if (!localStorage.getItem(k!)) { localStorage.setItem('ledge.mobile.token', 't'.repeat(43)); localStorage.setItem(k!, v!); } }, ['ledge.mobile.lastState', JSON.stringify({ sessions: [idle(), session('kai', { name: 'Kai', topic: 'Autre' })], previews: {}, syncedAt: new Date().toISOString(), pcName: 'PC', turns: { bix: TURNS } })]);
+  await page.routeWebSocket(/.*/, ws => { void ws.close({ code: 1001 }); });
+  await page.goto('/m/#/thread/bix');
+  await expect(page.getByText('La recherche de sessions est prête.')).toBeVisible();
+  await expect(page.getByText('Aucun échange pour le moment.')).toHaveCount(0);
+  await expect(page.getByLabel('Message pour Bix')).toBeDisabled();
+  await page.goto('/m/#/thread/kai');
+  await expect(page.getByText('Fil indisponible hors connexion')).toBeVisible();
+  await expect(page.getByText('Aucun échange')).toHaveCount(0);
+});
+
+test('a draft equal to an old, applied instruction survives a reload', async ({ page }) => {
+  const d = await open(page);
+  d.onMessage(m => {
+    if (m.type === 'session.history') d.send({ type: 'session.turns', id: m.id, turns: TURNS });
+    if (m.type === 'session.reply') d.send({ type: 'operation.result', operationId: m.operationId, status: 'applied' });
+  });
+  await page.goto('/m/#/thread/bix');
+  await page.getByLabel('Message pour Bix').fill('Lance les tests');
+  await page.getByRole('button', { name: 'Envoyer à Bix' }).click();
+  await expect(page.getByLabel('Message pour Bix')).toHaveValue('');
+  d.upsert(idle({ state: 'working' }));
+  d.upsert(idle({ lastActivityAt: ago(0) }));
+  await page.getByLabel('Message pour Bix').fill('Lance les tests');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('ledge.mobile.draft.bix'))).toBe('Lance les tests');
+  await page.reload();
+  await expect(page.getByLabel('Message pour Bix')).toHaveValue('Lance les tests');
+  await page.waitForTimeout(400);
+  await expect(page.getByLabel('Message pour Bix')).toHaveValue('Lance les tests');
+});

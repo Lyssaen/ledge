@@ -39,7 +39,7 @@ describe('mobile store', () => {
 
   it('saveLastState then loadLastState round-trips, and garbage reads as null', () => {
     saveLastState({ sessions: [s('a')], previews: { a: ['x'] }, syncedAt: 't', pcName: 'P' });
-    expect(loadLastState()).toEqual({ sessions: [s('a')], previews: { a: ['x'] }, syncedAt: 't', pcName: 'P' });
+    expect(loadLastState()).toEqual({ turns: {}, sessions: [s('a')], previews: { a: ['x'] }, syncedAt: 't', pcName: 'P' });
     localStorage.setItem('ledge.mobile.lastState', '{nope');
     expect(loadLastState()).toBeNull();
   });

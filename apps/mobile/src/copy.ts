@@ -88,7 +88,7 @@ export const copy = {
     back: 'Retour aux agents', title: 'Conversation avec un agent',
     terminal: (bot: string) => `Ouvrir le terminal de ${bot}`,
     log: (bot: string) => `Échanges avec ${bot}`,
-    loading: 'Chargement du fil…', empty: 'Aucun échange pour le moment.',
+    loading: 'Chargement du fil…', unavailable: 'Fil indisponible hors connexion', empty: 'Aucun échange pour le moment.',
     unknown: 'Cette session n’existe plus sur le PC.', unknownBack: 'Retour aux agents',
     suggestion: 'Suggestion pour la suite',
     agentLabel: 'Réponse de l’agent',

@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@ledge/protocol';
 import { copy } from '../copy';
 import { newOperationId } from '../model/operations';
-import { composerState, messagesOf, QUICK_REPLIES, MESSAGE_MAX, threadItems, type Composer, type ThreadItem } from '../model/thread';
+import { composerState, messagesOf, QUICK_REPLIES, MESSAGE_MAX, TAKEN_WINDOW, threadItems, type Composer, type ThreadItem } from '../model/thread';
 import { headline } from '../model/requests';
 import { href } from '../router';
-import { loadDraft, saveDraft } from '../state/drafts';
+import { loadDraft, markCleared, saveDraft, wasCleared } from '../state/drafts';
 import { mobileStore, useMobile, type Link } from '../state/store';
 import { LinkStatus } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
@@ -14,10 +14,6 @@ import { ReplyView } from '../ui/ReplyView';
 import { useNow } from '../useNow';
 
 const ICON = 'size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
-/** Instructions whose draft was already cleared: a text typed again later is a new draft. */
-const cleared = new Set<string>();
-/** How long a taken instruction keeps the composer closed while the agent has not yet shown it is working. */
-const TAKEN_WINDOW = 20_000;
 
 function Bubble({ item }: { item: ThreadItem }) {
   switch (item.kind) {
@@ -58,9 +54,9 @@ function failureOf(phase: string, reason: string | undefined): { title: string; 
   return { title: c.failTitle, body };
 }
 
-function Footer({ session, composer, draft, onDraft, onSend, link, taken, error, onReconnect }: {
+function Footer({ session, composer, draft, onDraft, onSend, link, taken, checking, error, onReconnect }: {
   session: Session; composer: Composer; draft: string; onDraft: (t: string) => void; onSend: () => void; link: Link;
-  taken: boolean; error: { title: string; body: string } | null; onReconnect: () => void;
+  taken: boolean; checking: boolean; error: { title: string; body: string } | null; onReconnect: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -68,7 +64,7 @@ function Footer({ session, composer, draft, onDraft, onSend, link, taken, error,
     const t = setTimeout(() => setBusy(false), 4000);
     return () => clearTimeout(t);
   }, [busy]);
-  const status = taken ? { tone: 'ok' as const, label: copy.thread.composer.status.taken } : composer.status;
+  const status = taken ? { tone: 'ok' as const, label: copy.thread.composer.status.taken } : checking ? { tone: 'muted' as const, label: copy.decide.checking } : composer.status;
   const tooLong = draft.trim().length > MESSAGE_MAX;
   const ref = useRef<HTMLTextAreaElement>(null);
   return (
@@ -113,7 +109,8 @@ export function Thread({ sessionId, onReconnect }: { sessionId: string; onReconn
   const session = sessions.find(s => s.id === sessionId);
   const mine = turns[sessionId];
   const [draft, setDraft] = useState(() => loadDraft(sessionId));
-  const changeDraft = (t: string) => { setDraft(t); saveDraft(sessionId, t); };
+  const [refused, setRefused] = useState(false);
+  const changeDraft = (t: string) => { setDraft(t); saveDraft(sessionId, t); setRefused(false); };
 
   // The thread is asked for on open, after every reconnection and whenever the session changes: no turn is pushed.
   useEffect(() => {
@@ -132,14 +129,19 @@ export function Thread({ sessionId, onReconnect }: { sessionId: string; onReconn
   const last = sent[sent.length - 1];
   // The draft goes only when the terminal took it, and only once.
   useEffect(() => {
-    if (last?.phase !== 'applied' || cleared.has(last.operationId)) return;
-    cleared.add(last.operationId);
+    if (last?.phase !== 'applied' || wasCleared(last.operationId)) return;
+    markCleared(last.operationId);
     if (draft.trim() === last.text) changeDraft('');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [last?.phase, last?.operationId]);
 
+  // Once the agent shows it is busy after an instruction, that instruction no longer holds the composer shut.
+  const [reacted, setReacted] = useState('');
+  const state = session?.state;
+  useEffect(() => { if (last?.phase === 'applied' && state && state !== 'idle') setReacted(last.operationId); }, [state, last?.phase, last?.operationId]);
+
   const scroller = useRef<HTMLElement>(null);
-  const items = session ? threadItems(mine ?? [], session, ops) : [];
+  const items = session ? threadItems(mine ?? [], session, ops, now) : [];
   const end = items[items.length - 1]?.key;
   useEffect(() => { const el = scroller.current; if (el) el.scrollTop = el.scrollHeight; }, [end, items.length]);
 
@@ -159,15 +161,17 @@ export function Thread({ sessionId, onReconnect }: { sessionId: string; onReconn
   }
 
   const open = last?.phase === 'sending' || last?.phase === 'received' || last?.phase === 'uncertain';
-  const takenNow = last?.phase === 'applied' && session.state === 'idle' && !session.pending && now - Date.parse(last.startedAt) < TAKEN_WINDOW;
+  const takenNow = last?.phase === 'applied' && reacted !== last.operationId && session.state === 'idle' && !session.pending && now - Date.parse(last.startedAt) < TAKEN_WINDOW;
   const composer = composerState(session, link, open || takenNow);
   const failed = last && (last.phase === 'rejected' || last.phase === 'failed' || last.phase === 'unknown' || last.phase === 'uncertain')
-    && (last.phase === 'uncertain' || draft.trim() !== '') ? failureOf(last.phase, last.reason) : null;
+    && (last.phase === 'uncertain' || draft.trim() === last.text) ? failureOf(last.phase, last.reason) : null;
+  const error = refused && !failed ? { title: copy.thread.composer.failTitle, body: copy.thread.composer.lost } : failed;
   const send = () => {
     const text = draft.trim();
     if (!text || !composer.enabled) return;
+    setRefused(false);
     const operationId = newOperationId();
-    mobileStore.submit({ operationId, sessionId, kind: 'message', text, phase: 'sending', startedAt: new Date().toISOString() }, { type: 'session.reply', id: sessionId, text, operationId });
+    if (!mobileStore.submit({ operationId, sessionId, kind: 'message', text, phase: 'sending', startedAt: new Date().toISOString() }, { type: 'session.reply', id: sessionId, text, operationId })) setRefused(true);
   };
 
   return (
@@ -187,11 +191,11 @@ export function Thread({ sessionId, onReconnect }: { sessionId: string; onReconn
         <p className="mt-2 ml-[46px] text-[11px] [overflow-wrap:anywhere] text-muted">{session.repo ?? session.project}{session.branch && <> · <code className={`font-mono text-[.9em] ${session.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{session.branch}</code></>}</p>
       </header>
       <main ref={scroller} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain px-side pt-5 pb-4">
-        {mine === undefined && items.length === 0 && <p className="text-center text-[11px] text-muted" role="status">{link === 'online' ? copy.thread.loading : copy.thread.empty}</p>}
+        {mine === undefined && items.length === 0 && <p className="text-center text-[11px] text-muted" role="status">{link === 'online' || link === 'connecting' ? copy.thread.loading : copy.thread.unavailable}</p>}
         {mine !== undefined && items.length === 0 && <p className="text-center text-[11px] text-muted">{copy.thread.empty}</p>}
         {items.map(it => <Bubble key={it.key} item={it} />)}
       </main>
-      <Footer session={session} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} link={link} taken={takenNow} error={failed} onReconnect={onReconnect} />
+      <Footer session={session} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} link={link} taken={takenNow} checking={last?.phase === 'uncertain' && link === 'online'} error={error} onReconnect={onReconnect} />
     </>
   );
 }
