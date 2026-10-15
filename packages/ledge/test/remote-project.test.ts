@@ -137,14 +137,14 @@ describe('toRemote', () => {
 });
 
 describe('remote rights', () => {
-  it('a remote peer may run decisions from lot 2 on and the thread and interruption from lot 3 on, never local-only commands', () => {
-    for (const t of ['snapshot.request', 'session.decide', 'decide.prepare', 'operation.status', 'session.reply', 'session.history', 'session.read', 'session.interrupt'] as const) expect(MOBILE_COMMANDS.has(t)).toBe(true);
+  it('a remote peer may run decisions from lot 2 on and the thread and interruption from lot 3 on, and their push subscription from lot 4 on, never local-only commands', () => {
+    for (const t of ['snapshot.request', 'session.decide', 'decide.prepare', 'operation.status', 'session.reply', 'session.history', 'session.read', 'session.interrupt', 'push.subscribe', 'push.unsubscribe'] as const) expect(MOBILE_COMMANDS.has(t)).toBe(true);
     for (const t of ['document.read', 'session.launch', 'folder.create', 'update.daemon', 'device.revoke', 'pair.begin', 'mobile.configure', 'session.kill', 'session.dismiss', 'session.rename', 'session.event', 'chat.ask'] as const)
       expect(MOBILE_COMMANDS.has(t as never)).toBe(false);
   });
   it('pre-auth and mobile lists are the closed sets of the plan', () => {
     expect([...PRE_AUTH]).toEqual(['auth', 'pair.options', 'pair.complete']);
-    expect([...MOBILE_COMMANDS].sort()).toEqual(['decide.prepare', 'operation.status', 'session.decide', 'session.history', 'session.interrupt', 'session.read', 'session.reply', 'snapshot.request']);
+    expect([...MOBILE_COMMANDS].sort()).toEqual(['decide.prepare', 'operation.status', 'push.subscribe', 'push.unsubscribe', 'session.decide', 'session.history', 'session.interrupt', 'session.read', 'session.reply', 'snapshot.request']);
   });
 });
 

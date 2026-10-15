@@ -9,6 +9,7 @@ import type { ServerHandle } from '../server.js';
 import type { DeviceStore } from '../devices.js';
 import { PairError, type Pairing } from '../pairing.js';
 import type { MobileConfig } from '../../mobile/config.js';
+import { loadVapid } from '../push/vapid.js';
 import { PRE_AUTH } from './rights.js';
 import { serveMobile } from './static.js';
 import { log, quote } from '../../log.js';
@@ -44,6 +45,8 @@ export async function startRemoteListener(o: {
   const staticDir = o.staticDir ?? fileURLToPath(new URL('../mobile/', import.meta.url));
   const authTimeoutMs = o.authTimeoutMs ?? AUTH_TIMEOUT_MS;
   const pcName = o.pcName ?? hostname();
+  // Kept here so `authenticate` stays synchronous up to the attach; refreshed after a pairing, which is what makes the keys.
+  let vapidKey: string | null = (await loadVapid())?.publicKey ?? null;
 
   const http = createServer((req, res) => serveMobile(req, res, staticDir, config.origin));
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD });
@@ -88,7 +91,7 @@ export async function startRemoteListener(o: {
       // Synchronous from here to attach: no message can slip between the pre-auth reader and the server's.
       preAuth = false; clearTimeout(timer); ws.off('message', onMessage);
       devices.touch(device.id).catch(e => log(`last connection of ${device.id} not saved: ${quote((e as Error).message)}`));
-      ws.send(JSON.stringify({ type: 'auth.ok', deviceId: device.id, deviceName: device.name, pcName } satisfies ServerMessage));
+      ws.send(JSON.stringify({ type: 'auth.ok', deviceId: device.id, deviceName: device.name, pcName, ...(vapidKey ? { vapidPublicKey: vapidKey } : {}) } satisfies ServerMessage));
       log(`remote ${device.id} connected from ${who}`);
       server.attach(ws, { kind: 'remote', deviceId: device.id });
     };
@@ -113,6 +116,7 @@ export async function startRemoteListener(o: {
         case 'pair.complete':
           pairing.complete(msg.code, msg.deviceName, msg.webauthn).then(r => {
             log(`paired device ${r.deviceId} from ${who}`);
+            loadVapid().then(v => { vapidKey = v?.publicKey ?? null; }, () => undefined);
             send({ type: 'pair.done', token: r.token, deviceId: r.deviceId });
             shut(1000);
           }, failed);

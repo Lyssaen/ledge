@@ -7,6 +7,7 @@ import { realTmux, type Tmux } from '../tmux.js';
 import { ensureLedgeDir, paths } from '../paths.js';
 import { log, quote } from '../log.js';
 import { DeviceStore, type MobileControl } from './devices.js';
+import { ensureVapid } from './push/vapid.js';
 import { createPairing } from './pairing.js';
 import { startRemoteListener, type RemoteListener } from './remote/listener.js';
 import { loadMobileConfig, parseOrigin, saveMobileConfig, type MobileConfig } from '../mobile/config.js';
@@ -29,6 +30,8 @@ function mobileControl(o: { config: MobileConfig | null; devices: DeviceStore; s
   const startRemote = async () => {
     if (!config) return;
     try {
+      // Phones paired before the push keys existed get them here, so their next `auth.ok` carries the public key without a new pairing.
+      if (o.devices.list().length) await ensureVapid(config.origin).catch(e => log(`VAPID keys not made: ${quote((e as Error).message)}`));
       remote = await startRemoteListener({ server: o.server(), config, devices: o.devices, pairing, port: o.remotePort });
       log(`remote entry listening on 127.0.0.1:${remote.port} for ${config.origin}`);
     } catch (e) { log(`remote entry not started: ${quote((e as Error).message)}`); }

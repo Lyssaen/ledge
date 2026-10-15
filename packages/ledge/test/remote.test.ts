@@ -209,7 +209,7 @@ describe('remote entry', () => {
 
     const again = phone(remote.port, { origin });
     await again.send({ type: 'auth', token: done.token });
-    expect(await again.next('auth.ok')).toEqual({ type: 'auth.ok', deviceId: done.deviceId, deviceName: 'iPhone de Joffrey', pcName: 'pc' });
+    expect(await again.next('auth.ok')).toMatchObject({ type: 'auth.ok', deviceId: done.deviceId, deviceName: 'iPhone de Joffrey', pcName: 'pc' });
     const snap = await again.next('snapshot');
     expect(Object.keys(snap).sort()).toEqual(['sessions', 'type']);
     expect(snap.sessions).toEqual([{ ...mk('a'), tmuxSession: null, unread: false }]);

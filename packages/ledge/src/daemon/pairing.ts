@@ -4,6 +4,7 @@ import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/ser
 import type { MobileConfig } from '../mobile/config.js';
 import type { DeviceStore } from './devices.js';
 import { registrationOptions, verifyRegistration } from './webauthn.js';
+import { ensureVapid } from './push/vapid.js';
 import { log, quote } from '../log.js';
 
 export class PairError extends Error {
@@ -93,6 +94,8 @@ export function createPairing(deps: { config: () => MobileConfig | null; devices
       }
       if (win !== w) throw new PairError('no_window');
       win = null;
+      // The push keys are made at the first pairing: the phone reads the public key in `auth.ok`. A failure must not lose the pairing.
+      await ensureVapid(cfg.origin).catch(e => log(`VAPID keys not made: ${quote((e as Error).message)}`));
       const name = deviceName.trim().slice(0, NAME_MAX).trim() || DEFAULT_NAME;
       const { device, token } = await deps.devices.create(name, credential);
       return { token, deviceId: device.id };

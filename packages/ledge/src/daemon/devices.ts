@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { Device } from '@ledge/protocol';
+import type { Device, PushSubscription } from '@ledge/protocol';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
 import type { Pairing } from './pairing.js';
@@ -11,7 +11,7 @@ export interface StoredCredential { id: string; publicKey: string; counter: numb
 
 /** Only the SHA-256 of the token is kept (decision D6): a stolen file does not open a session. */
 /** `read`: per session, the time of the last thread turn this device has read (absent: none). */
-export interface DeviceRecord { id: string; name: string; tokenHash: string; createdAt: string; lastSeenAt?: string; credential: StoredCredential; read?: Record<string, string> }
+export interface DeviceRecord { id: string; name: string; tokenHash: string; createdAt: string; lastSeenAt?: string; credential: StoredCredential; read?: Record<string, string>; push?: PushSubscription }
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 
@@ -79,6 +79,13 @@ export class DeviceStore {
   async setCounter(id: string, counter: number): Promise<void> {
     const r = this.get(id); if (!r) return;
     r.credential = { ...r.credential, counter };
+    await this.save();
+  }
+
+  /** The phone's Web Push subscription (one per device; a new one replaces it), or `null` to remove it. Not announced: it changes nothing a list shows. */
+  async setPush(id: string, sub: PushSubscription | null): Promise<void> {
+    const r = this.get(id); if (!r) return;
+    if (sub) r.push = sub; else delete r.push;
     await this.save();
   }
 
