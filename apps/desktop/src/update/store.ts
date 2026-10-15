@@ -41,7 +41,8 @@ export function createUpdater(deps: UpdaterDeps = {}): Updater {
   const check = (): Promise<void> => {
     if (snap.phase.kind === 'installing') return Promise.resolve();
     if (checking) return checking;
-    put({ phase: { kind: 'checking' } });
+    const found = snap.phase.kind === 'available';   // a recheck never hides an update already found
+    if (!found) put({ phase: { kind: 'checking' } });
     checking = (async () => {
       try {
         const u = await (deps.check ?? checkForUpdate)();
@@ -50,7 +51,7 @@ export function createUpdater(deps: UpdaterDeps = {}): Updater {
         set('desktop.update.checkedAt', String(at));
         put({ checkedAt: at, latest: u?.version ?? null, phase: u ? { kind: 'available', version: u.version, notes: u.notes } : { kind: 'current' } });
       } catch {
-        put({ phase: { kind: 'failed', during: 'check' } });   // offline or unreachable: shown, retried by the next check
+        if (!found) put({ phase: { kind: 'failed', during: 'check' } });   // offline or unreachable: shown, retried by the next check
       } finally { checking = null; }
     })();
     return checking;

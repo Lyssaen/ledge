@@ -107,3 +107,26 @@ describe('failures are shown, and can be retried', () => {
     expect(localStorage.getItem('desktop.update.auto')).toBe('0');
   });
 });
+
+describe('a recheck keeps a previously found update (M1)', () => {
+  it('in progress or failed: still available; up to date: cleared', async () => {
+    const r = release();
+    let mode: 'found' | 'fail' | 'none' = 'found';
+    let gate: Promise<void> | null = null;
+    const { d } = deps(async () => { if (gate) await gate; if (mode === 'fail') throw new Error('offline'); return mode === 'found' ? r.u : null; });
+    const up = createUpdater(d);
+    await up.start();
+    const avail = { kind: 'available', version: '0.6.0', notes: 'Fixes' };
+    expect(up.get().phase).toEqual(avail);
+    let open!: () => void; gate = new Promise<void>(res => { open = res; });
+    mode = 'fail';
+    const p = up.check();
+    expect(up.get().phase).toEqual(avail);
+    open(); await p;
+    expect(up.get().phase).toEqual(avail);
+    expect(updateReady(up.get())).toBe(true);
+    gate = null; mode = 'none';
+    await up.check();
+    expect(up.get().phase).toEqual({ kind: 'current' });
+  });
+});

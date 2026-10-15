@@ -9,7 +9,7 @@ export type DaemonOffer = 'none' | 'offer' | 'manual';
  *  service behind the target; its manual command otherwise (git checkout, no systemd: the daemon would refuse). */
 export function daemonOffer(local: MachineState | undefined, target: string | null): DaemonOffer {
   const d = local?.daemon;
-  if (!d || !target || !SEMVER.test(target) || compareVersions(d.version, target) >= 0) return 'none';
+  if (!d || !target || !SEMVER.test(target) || !SEMVER.test(d.version) || compareVersions(d.version, target) >= 0) return 'none';
   return d.install === 'npm' && d.systemd ? 'offer' : 'manual';
 }
 /** The daemon follows Desktop: the release on offer, else the running app (the same lockstep version, spec §11). */

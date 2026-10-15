@@ -16,6 +16,10 @@ describe('daemonOffer', () => {
     expect(daemonOffer(machine('local'), '0.6.0')).toBe('none');
     expect(daemonOffer(local('0.5.0'), null)).toBe('none');
   });
+  it('a daemon version that is not a valid semver gets no offer (never a possible downgrade)', () => {
+    for (const v of ['', 'dev', '1.x']) expect(daemonOffer(local(v), '0.6.0')).toBe('none');
+    expect(daemonOffer(local('0.5.0'), '0.6.0')).toBe('offer');
+  });
   it('the target is the release on offer, else the running app', () => {
     expect(daemonTarget({ phase: { kind: 'available', version: '0.6.0', notes: '' }, auto: true, checkedAt: 1, app: '0.5.0', latest: '0.6.0' })).toBe('0.6.0');
     expect(daemonTarget({ phase: { kind: 'current' }, auto: true, checkedAt: 1, app: '0.5.0', latest: null })).toBe('0.5.0');
