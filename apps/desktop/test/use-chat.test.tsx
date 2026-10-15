@@ -55,8 +55,19 @@ describe('useChat: questions', () => {
     expect(s.sent).toEqual([]);
     act(() => { s.api().ask('Status?'); });
     const qid = s.api().running!.qid;
+    expect(s.api().canCancel).toBe(true);
     act(() => { s.api().cancel(); });
     expect(s.sent.at(-1)).toEqual({ type: 'chat.cancel', qid });
+  });
+  it('cancel is off while the local daemon is down, like asking', () => {
+    const s = setup();
+    act(() => { s.api().ask('Status?'); });
+    s.hook.rerender({ machines: machinesUp(['local']), localDown: true });
+    expect(s.api().running).not.toBeNull();
+    expect(s.api().canCancel).toBe(false);
+    const before = s.sent.length;
+    act(() => { s.api().cancel(); });
+    expect(s.sent).toHaveLength(before);
   });
   it('reset only between questions, with something to forget, local daemon up', () => {
     const s = setup();

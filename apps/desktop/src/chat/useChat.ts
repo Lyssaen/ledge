@@ -17,6 +17,8 @@ export interface ChatApi {
   running: ChatTurn | null;
   /** A question can be sent now: local daemon up, no turn running. */
   canAsk: boolean;
+  /** The running turn can be cancelled now: local daemon up (read-only otherwise, spec §6), a turn running. */
+  canCancel: boolean;
   card: ChatInFlight | null;
   note: ChatNote | null;
   /** True when the fleet listed the question (the draft can go); false when it was not sent or not taken. */
@@ -95,6 +97,7 @@ export function useChat(client: DaemonClient, fleet: ChatFleet, machines: readon
     turns, live, card, note,
     running: runningTurn(turns),
     canAsk: !localDown && !runningTurn(turns),
+    canCancel: !localDown && !!runningTurn(turns),
     ask, cancel, reset,
     launch: qid => begin(qid, 'launch', t => {
       const p = t.proposal;

@@ -211,6 +211,14 @@ describe('ChatPane: read-only and frozen machines', () => {
     expect(screen.getByRole('button', { name: 'Start the session' })).toBeDisabled();
     expect(screen.queryByRole('alert')).toBeNull();
   });
+  it('the local daemon down while a remote turn runs: Cancel is disabled like Send, not active and inert', () => {
+    act(() => history([turn('q1', { machineId: 'devbox', machineName: 'Devbox' })]));
+    const s = setup({ localDown: true, machines: machinesUp(['local']) });
+    const stop = screen.getByRole('button', { name: 'Cancel the current question' });
+    expect(stop).toBeDisabled();
+    fireEvent.click(stop);
+    expect(s.sent.filter(m => m.type === 'chat.cancel')).toEqual([]);
+  });
   it('a remote machine lost is announced in the chat', () => {
     setup({ machines: machinesUp(['devbox']) });
     expect(pane()).toHaveTextContent('Devbox: connection lost. Ledge relies on the last known state of these machines.');

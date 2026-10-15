@@ -87,7 +87,7 @@ export function ChatTurnView({ turn: tr, last, chat, sessions, machines, onOpenS
             </div>
           )}
           {tr.answeredAt && <small className="ledge-source">{c.sourcesLine(sources.length ? sources.join(', ') : c.sourcesNone, time)}</small>}
-          {running && <button type="button" className="settings-button ledge-stop" aria-label={c.stopLabel} onClick={chat.cancel}>{c.stop}</button>}
+          {running && <button type="button" className="settings-button ledge-stop" aria-label={c.stopLabel} disabled={!chat.canCancel} onClick={chat.cancel}>{c.stop}</button>}
         </article>
       )}
     </div>
