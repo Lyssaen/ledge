@@ -1,6 +1,7 @@
 import type { ChatProposal, Session } from '@ledge/protocol';
 import { useI18n } from '../i18n/lang';
 import { TOOL_NAMES } from '../shell/Person';
+import { ErrorStatus } from './ErrorStatus';
 
 export interface LaunchCardProps {
   proposal: ChatProposal;
@@ -25,7 +26,7 @@ export function LaunchCard(p: LaunchCardProps) {
           <dt>{c.tool}</dt><dd>{c.byDefault(TOOL_NAMES[pr.tool])}</dd>
           <dt>{c.prompt}</dt><dd>{pr.prompt ?? <span className="ledge-card-muted">{c.noPrompt}</span>}</dd>
         </dl>
-        {state === 'failed' && <p className="ledge-card-error" role="status">{c.failed(pr.error!)}</p>}
+        {state === 'failed' && <ErrorStatus className="ledge-card-error" raw={pr.error!} wrap={c.failed} />}
         <div className="ledge-card-foot">
           <button type="button" className="primary" disabled={p.busy || p.disabled} onClick={p.onLaunch}>{p.busy ? c.launching : state === 'failed' ? c.retry : c.launch}</button>
           <span>{state === 'failed' ? c.orFolder : c.orRephrase}</span>

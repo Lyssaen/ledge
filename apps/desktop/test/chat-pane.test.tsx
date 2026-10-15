@@ -184,7 +184,17 @@ describe('ChatPane: a turn', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start the session' }));
     act(() => s.machineMessage('devbox', { type: 'error', message: 'folder vanished' }));
     expect(screen.getByRole('button', { name: 'Start the session' })).toBeEnabled();
-    expect(pane()).toHaveTextContent('folder vanished');
+    const note = pane().querySelector('.ledge-turn > article > .ledge-card-error')!;
+    expect(note).toHaveTextContent('Unexpected error');
+    expect(note.querySelector('small')).toHaveTextContent('folder vanished');
+  });
+  it('known daemon and fleet errors are said in the UI language (no raw English in French)', () => {
+    const s = setup();
+    act(() => history([answered('q1', { machineId: 'devbox', machineName: 'Devbox', proposal })]));
+    fireEvent.click(screen.getByRole('button', { name: 'Start the session' }));
+    act(() => s.machineMessage('devbox', { type: 'error', message: 'Devbox: already launched' }));
+    expect(pane()).toHaveTextContent('Devbox: this session has already been started');
+    expect(pane()).not.toHaveTextContent('already launched');
   });
   it('errors and cancellations are statuses, never alerts', () => {
     setup();
@@ -193,6 +203,17 @@ describe('ChatPane: a turn', () => {
     expect(statuses).toContain('Ledge could not answer: Devbox is offline');
     expect(statuses).toContain('Question cancelled.');
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+  it('a turn error speaks French; an unknown one keeps the raw text as a small detail', () => {
+    act(() => history([turn('q1', { error: 'Devbox is offline' }), turn('q2', { error: 'Codex could not start: not found in PATH' }), turn('q3', { error: 'API Error: 529' })]));
+    render(<LangHarness />);
+    const statuses = within(pane()).getAllByRole('status');
+    expect(statuses[0]!.textContent).toBe('Ledge n’a pas pu répondre : Devbox est hors ligne');
+    expect(statuses[1]).toHaveTextContent('Ledge n’a pas pu répondre : Codex n’a pas pu démarrer');
+    expect(statuses[1]!.querySelector('small')).toHaveTextContent('not found in PATH');
+    expect(statuses[2]).toHaveTextContent('Ledge n’a pas pu répondre : erreur inattendue');
+    expect(statuses[2]!.querySelector('small')).toHaveTextContent('API Error: 529');
+    expect(statuses[2]).toHaveAttribute('title', 'API Error: 529');
   });
 });
 

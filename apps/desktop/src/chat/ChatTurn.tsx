@@ -4,6 +4,7 @@ import { hideProposal, type ChatStep, type ChatTurn, type Session } from '@ledge
 import { useI18n, type Messages } from '../i18n/lang';
 import { LaunchCard } from './LaunchCard';
 import { RelayCard } from './RelayCard';
+import { ErrorStatus } from './ErrorStatus';
 import { answerBlocks, cardKind, isRunning, mentionable, turnLinks, type Inline } from './turns';
 import type { ChatApi } from './useChat';
 
@@ -60,7 +61,7 @@ export function ChatTurnView({ turn: tr, last, chat, sessions, machines, onOpenS
     <div className="ledge-turn" data-turn={tr.qid}>
       <article className="thread-message user"><div className="message-author">{t.conversation.thread.you}</div><p>{tr.question}</p></article>
       {tr.error === 'cancelled' ? <p className="thread-notice" role="status">{c.stopped}</p>
-      : tr.error !== undefined ? <p className="thread-notice ledge-error" role="status">{c.error(tr.error)}</p>
+      : tr.error !== undefined ? <ErrorStatus className="thread-notice ledge-error" raw={tr.error} wrap={c.error} />
       : (
         <article className="thread-message agent">
           <div className="message-author">{c.author}</div>
@@ -80,7 +81,7 @@ export function ChatTurnView({ turn: tr, last, chat, sessions, machines, onOpenS
           {kind && machineLabel && <p className="ledge-destination">{c.destination(machineLabel)}{!available && ` · ${c.unavailable}`}</p>}
           {kind === 'relay' && <RelayCard relay={tr.relay!} session={find(tr.relay!.id)} busy={busy} disabled={disabled} onSend={() => chat.relay(tr.qid)} onCancel={() => chat.relayCancel(tr.qid)} />}
           {kind === 'launch' && <LaunchCard proposal={tr.proposal!} session={find(tr.proposal!.launchedId)} busy={busy} disabled={disabled} onLaunch={() => chat.launch(tr.qid)} />}
-          {note && <p className="ledge-card-error" role="status">{note}</p>}
+          {note && <ErrorStatus className="ledge-card-error" raw={note} />}
           {links.length > 0 && (
             <div className="ledge-session-links" role="group" aria-label={c.links}>
               {links.map(l => <button key={l.id} type="button" data-ledge-session={l.id} disabled={!l.live} onClick={() => onOpenSession(l.id)}>{c.open(l.name)}<span aria-hidden="true"> ↗</span></button>)}

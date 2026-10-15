@@ -31,12 +31,20 @@ describe('LaunchCard', () => {
     expect(screen.getByRole('button', { name: 'Start the session' })).toBeDisabled();
   });
   it('a failure is a status, never an alert, with a retry', () => {
-    render(<LaunchCard proposal={{ ...proposal, error: 'no such folder' }} busy={false} disabled={false} onLaunch={vi.fn()} />);
+    render(<LaunchCard proposal={{ ...proposal, error: 'no such folder: /w/ledge' }} busy={false} disabled={false} onLaunch={vi.fn()} />);
     expect(card()).toHaveAttribute('data-launch-card', 'failed');
-    expect(screen.getByRole('status')).toHaveTextContent('Could not start: no such folder');
+    expect(screen.getByRole('status')).toHaveTextContent('Could not start: the folder /w/ledge does not exist');
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
     expect(card()).toHaveTextContent('or give me another folder');
+  });
+  it('a failure speaks the UI language; an unknown one is generic with the daemon’s words kept small', () => {
+    const { rerender } = render(<LangProvider lang="fr"><LaunchCard proposal={{ ...proposal, error: 'no such folder: /w/ledge' }} busy={false} disabled={false} onLaunch={vi.fn()} /></LangProvider>);
+    expect(screen.getByRole('status').textContent).toBe('Échec du lancement : le dossier /w/ledge n’existe pas');
+    expect(screen.getByRole('status')).toHaveAttribute('title', 'no such folder: /w/ledge');
+    rerender(<LangProvider lang="fr"><LaunchCard proposal={{ ...proposal, error: 'spawn EACCES' }} busy={false} disabled={false} onLaunch={vi.fn()} /></LangProvider>);
+    expect(screen.getByRole('status')).toHaveTextContent('Échec du lancement : erreur inattendue');
+    expect(screen.getByRole('status').querySelector('small')).toHaveTextContent('spawn EACCES');
   });
   it('launched: names the session when listed, no button', () => {
     const ari = fakeSession('local:ari', { name: 'Ari' });
@@ -99,7 +107,8 @@ describe('RelayCard', () => {
   });
   it('failed: a status with a retry; a session that left the list is stopped', () => {
     render(<RelayCard relay={{ ...relay, error: 'pane gone' }} busy={false} disabled={false} onSend={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.getByRole('status')).toHaveTextContent('Could not send: pane gone');
+    expect(screen.getByRole('status')).toHaveTextContent('Could not send: unexpected error');
+    expect(screen.getByRole('status').querySelector('small')).toHaveTextContent('pane gone');
     expect(screen.queryByRole('alert')).toBeNull();
     expect(card().querySelector('[data-pill]')).toHaveTextContent('stopped');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
@@ -108,5 +117,9 @@ describe('RelayCard', () => {
     render(<LangProvider lang="fr"><RelayCard relay={relay} session={{ ...otto, state: 'waiting_input' }} busy={false} disabled={false} onSend={vi.fn()} onCancel={vi.fn()} /></LangProvider>);
     expect(card().querySelector('[data-pill]')).toHaveTextContent('attend votre réponse');
     expect(card()).toHaveTextContent('ou reformulez votre demande');
+  });
+  it('a relay refusal speaks French', () => {
+    render(<LangProvider lang="fr"><RelayCard relay={{ ...relay, error: 'Otto stopped before it got the instruction' }} busy={false} disabled={false} onSend={vi.fn()} onCancel={vi.fn()} /></LangProvider>);
+    expect(screen.getByRole('status').textContent).toBe('Échec de l’envoi : la session Otto s’est arrêtée avant de recevoir l’instruction');
   });
 });

@@ -371,6 +371,7 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .ledge-card-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; color: var(--muted-foreground); }
 .ledge-card-done { display: flex; align-items: center; gap: 8px; margin: 0; }
 .ledge-card-error { margin: 10px 0 0; font-size: 10px; color: var(--warning); }
+.ledge-error-detail { display: block; margin-top: 2px; font-size: 10px; color: var(--muted-foreground); overflow-wrap: anywhere; }
 .ledge-pill { margin-left: auto; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--sidebar-border); font-size: 9px; white-space: nowrap; }
 .ledge-pill[data-pill="waiting"] { color: var(--warning); }
 .ledge-pill[data-pill="stopped"] { color: var(--muted-foreground); }

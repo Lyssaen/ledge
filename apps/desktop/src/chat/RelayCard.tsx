@@ -2,6 +2,7 @@ import type { ChatRelay, Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui';
 import { useI18n } from '../i18n/lang';
 import { Avatar, TOOL_NAMES } from '../shell/Person';
+import { ErrorStatus } from './ErrorStatus';
 
 export type Pill = 'yours' | 'working' | 'waiting' | 'stopped';
 /** Ported from the island (`apps/overlay/src/surface/RelayCard.tsx`; the step and source labels come from its `ChatView`). The island stays unchanged.
@@ -45,7 +46,7 @@ export function RelayCard(p: RelayCardProps) {
           <dt>{c.instruction}</dt>
           <dd><blockquote>{r.text}</blockquote></dd>
         </dl>
-        {state === 'failed' && <p className="ledge-card-error" role="status">{c.failed(r.error!)}</p>}
+        {state === 'failed' && <ErrorStatus className="ledge-card-error" raw={r.error!} wrap={c.failed} />}
         {state === 'queued' ? (
           <div className="ledge-card-foot">
             <span className="ledge-queued-dot" aria-hidden="true" />
