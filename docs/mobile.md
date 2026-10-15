@@ -1,6 +1,6 @@
 # Ledge on the phone
 
-An installable web app (PWA) that shows your agent sessions on your iPhone, from anywhere your tailnet reaches, and (lot 2) lets you answer a pending permission, plan or question. It cannot launch, kill, interrupt or rename anything; notifications and free-text replies come in later lots.
+An installable web app (PWA) that shows your agent sessions on your iPhone, from anywhere your tailnet reaches, lets you answer a pending permission, plan or question, read each agent's thread, send an instruction to an idle agent, watch its terminal and interrupt it while it works. It cannot launch, kill or rename anything; notifications and free-text answers to a question come in later lots.
 
 The whole path (Tailscale on Windows, the daemon in WSL2, the PWA on the phone) has been built and tested in WSL and in a browser. It has **not been validated on a real iPhone yet**: see [the feasibility report](spikes/2026-10-14-ledge-mobile-feasibility.md).
 
@@ -64,9 +64,17 @@ tailscale serve --https=443 off     # on Windows
 
 ## What the phone can see, and what it cannot do
 
-It sees the session list, each session's state, its pending permission or question, the last reply and the terminal preview. It never receives the tmux session name, the launcher command, the recent folders or the daemon's version details.
+It sees the session list grouped by repository (with an unread mark when an agent replied since you last opened its thread), each session's state, its pending permission or question, the thread (your prompts, the agent's replies, the decisions taken, from the phone or the PC) and the terminal preview. Tool actions and their outputs stay on the PC. It never receives the tmux session name, the launcher command, the recent folders or the daemon's version details.
 
-The daemon accepts five commands from a phone: `snapshot.request`, `session.decide`, `decide.prepare`, `operation.status` and `session.reply`. Interrupts, kills, launches, renames, folder commands, Ask Ledge, device management and `mobile.configure` are refused. The list is an explicit allow-list in the daemon (`MOBILE_COMMANDS`), and a test pins it so that a later lot cannot widen it by accident.
+The daemon accepts eight commands from a phone: `snapshot.request`, `session.decide`, `decide.prepare`, `operation.status`, `session.reply`, `session.history`, `session.read` and `session.interrupt`. Kills, launches, renames, folder commands, Ask Ledge, device management and `mobile.configure` are refused. The list is an explicit allow-list in the daemon (`MOBILE_COMMANDS`), and a test pins it so that a later lot cannot widen it by accident.
+
+### Threads, instructions, terminal and interrupt
+
+The Agents tab lists sessions by repository; opening one shows its thread. The thread is the daemon's shared history (`~/.ledge/history/`) reduced to what was said and decided. Which replies you have read is kept per phone in `devices.json`; the PC overlay has no unread marks.
+
+- An instruction typed in the thread goes to the agent only when it is idle with nothing pending; a busy agent refuses it (`agent_busy`) and nothing is typed or queued. The draft stays in the field until the daemon confirms delivery, and a lost link is only checked, never resent.
+- The terminal view is read-only: the preview lines, no keyboard. Its one action is Interrupt (the agent's own interrupt key: Esc, or Ctrl-C for Cursor Agent), enabled only while the agent works and sent once per operation. "Applied" means the keys were sent; the agent's own reply shows whether it stopped.
+- Operations (decisions, instructions, interrupts) are remembered in the daemon's memory only. After a daemon restart the phone reads `unknown` for an older operation and you look at the current state instead.
 
 ### Decisions from the phone
 

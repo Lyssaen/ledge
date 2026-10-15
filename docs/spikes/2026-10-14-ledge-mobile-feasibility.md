@@ -32,7 +32,7 @@ Throwaway prototype in a temporary folder, not committed; only this report is.
 
 ## Validation
 
-To be filled in by the user, on device. R1 to R3 belong to lot 1; R4, R5 and R8 belong to lot 2, which is implemented and covered by tests in WSL and a browser: their procedures are in [docs/mobile.md](../mobile.md) and they stay unchecked until run on the iPhone. The others are for the later lots.
+To be filled in by the user, on device. R1 to R3 belong to lot 1; R4, R5 and R8 belong to lot 2 and R7 to lot 3, both implemented and covered by tests in WSL and a browser: R4, R5 and R8 have their procedures in [docs/mobile.md](../mobile.md), and all stay unchecked until run on the iPhone. The others are for the later lots.
 
 | # | Lot | Condition | Expected | Result |
 | --- | --- | --- | --- | --- |
