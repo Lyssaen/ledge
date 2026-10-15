@@ -29,9 +29,15 @@ describe('push sender', () => {
     await devices.setPush(id, sub());
     const send = vi.fn().mockResolvedValue({});
     await make(send).notify(payload('finished'));
-    expect(send).toHaveBeenCalledWith(sub(), JSON.stringify(payload('finished')), { vapidDetails: vapid, TTL: 3600, urgency: 'normal', topic: 'req-1' });
+    expect(send).toHaveBeenCalledWith(sub(), JSON.stringify(payload('finished')), { vapidDetails: vapid, TTL: 3600, urgency: 'normal', topic: 'req-1', timeout: 10_000 });
     await make(send).notify(payload('request'));
     expect(send.mock.calls[1]![2].urgency).toBe('high');
+  });
+  it('sends a topic web-push accepts, whatever the tag holds', async () => {
+    await devices.setPush(id, sub());
+    const send = vi.fn().mockResolvedValue({});
+    await make(send).notify({ ...payload(), tag: 'fin-a b/é.1' });
+    expect(send.mock.calls[0]![2].topic).toBe('fin-a_b___1');
   });
   it('uses the login shell proxy when there is one', async () => {
     await devices.setPush(id, sub());

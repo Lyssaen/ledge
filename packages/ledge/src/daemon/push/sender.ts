@@ -2,6 +2,7 @@ import webpush from 'web-push';
 import type { PushPayload } from '@ledge/protocol';
 import { log } from '../../log.js';
 import type { DeviceStore } from '../devices.js';
+import { safeTag } from './triggers.js';
 import { pushEndpointAllowed, type Vapid } from './vapid.js';
 
 /**
@@ -24,7 +25,7 @@ export function createPushSender(o: { devices: DeviceStore; vapid: () => Promise
         // Records come from disk: the allow-list is checked again at the moment of sending.
         if (!pushEndpointAllowed(sub.endpoint)) { log(`push to ${r!.id} skipped: endpoint not allowed`); return; }
         try {
-          await send(sub, body, { vapidDetails: vapid, TTL: 3600, urgency: p.kind === 'finished' ? 'normal' : 'high', topic: p.tag, ...(proxy ? { proxy } : {}) });
+          await send(sub, body, { vapidDetails: vapid, TTL: 3600, urgency: p.kind === 'finished' ? 'normal' : 'high', topic: safeTag(p.tag), timeout: 10_000, ...(proxy ? { proxy } : {}) });
         } catch (e) {
           const status = (e as { statusCode?: number }).statusCode;
           if (status === 404 || status === 410) {

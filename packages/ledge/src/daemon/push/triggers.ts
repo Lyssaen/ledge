@@ -4,6 +4,9 @@ const TAG_MAX = 32;
 /** Codex's stock reason carries no information: the notification leaves it out. */
 const GENERIC_REASONS = new Set(['Allow the requested shell command?']);
 
+/** web-push validates the topic as url-base64: anything else would make every send throw. */
+export const safeTag = (s: string): string => s.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, TAG_MAX);
+
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const task = (s: Session) => cut((s.topic ?? s.project).trim(), 120);
 
@@ -22,13 +25,26 @@ export function pushFor(before: Session | undefined, after: Session, all: Sessio
   const p = after.pending;
   if (p?.id && p.id !== before?.pending?.id) {
     const url = `/m/#/request/${after.id}/${p.id}`;
-    const tag = `req-${p.id}`.slice(0, TAG_MAX);
+    const tag = safeTag(`req-${p.id}`);
     if (p.kind === 'question') return { v: 1, kind: 'question', title: cut(`${after.name} a une question`, 80), body: task(after), url, badge, tag };
     const why = reason(after);
     return { v: 1, kind: 'request', title: 'Votre accord est demandé', body: cut(`${task(after)} · ${after.name}${why ? ` · ${why}` : ''}`, 120), url, badge, tag };
   }
   if (before?.state === 'working' && after.state === 'idle' && !p) {
-    return { v: 1, kind: 'finished', title: cut(`${after.name} a terminé`, 80), body: task(after), url: `/m/#/thread/${after.id}`, badge, tag: `fin-${after.id}`.slice(0, TAG_MAX) };
+    return { v: 1, kind: 'finished', title: cut(`${after.name} a terminé`, 80), body: task(after), url: `/m/#/thread/${after.id}`, badge, tag: safeTag(`fin-${after.id}`) };
   }
   return null;
+}
+
+/** At most one `finished` push per session within `minMs`: a working/idle flap must not storm the phone. Requests and questions always pass. */
+export function createPushGate(minMs: number, now: () => number = Date.now): (sessionId: string, p: PushPayload) => boolean {
+  const last = new Map<string, number>();
+  return (id, p) => {
+    if (p.kind !== 'finished') return true;
+    const t = now();
+    const prev = last.get(id);
+    if (prev !== undefined && t - prev < minMs) return false;
+    last.set(id, t);
+    return true;
+  };
 }
