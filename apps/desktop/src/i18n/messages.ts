@@ -1,6 +1,7 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { DaemonStatus, SshProblem } from '@ledge/fleet';
 import type { DaemonInfo, UpdateFailure } from '@ledge/protocol';
+import type { FinishedNotify, SoundCategory, SoundVolume } from '@ledge/ui/sounds/preferences';
 import type { Availability, LaunchProblem } from '../launch/form';
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -114,6 +115,41 @@ const fr = {
     many: (n: number) => `${n} sessions vous attendent ou ont terminé`
   },
   settings: {
+    title: 'Paramètres',
+    subtitle: 'Personnalisez votre application Desktop et ses connexions.',
+    back: 'Retour aux sessions',
+    nav: 'Sections des paramètres',
+    tabs: { display: 'Affichage', machines: 'Machines', notifications: 'Notifications', sounds: 'Sons', about: 'À propos' },
+    display: {
+      title: 'Votre application',
+      autostart: 'Lancer au démarrage', autostartHint: 'Avec votre session Windows.', autostartMissing: 'Disponible dans l’application installée.',
+      tool: 'Harnais par défaut', toolHint: 'Pour les nouvelles sessions et le chat Ledge.',
+      lang: 'Langue', langHint: 'S’applique tout de suite, menu de la zone de notification compris.', langs: { fr: 'Français', en: 'English' } as Record<Lang, string>,
+      scale: 'Échelle de l’interface', scaleHint: 'Taille du texte et des contrôles de Desktop.', auto: 'Auto',
+      theme: 'Thème', themeHint: 'Change aussi la matière des mascottes.', themes: { dark: 'Sombre · Signal', light: 'Clair · Galet' },
+      accent: 'Couleur de Ledge', accentHint: 'Accent personnalisable. Les couleurs des états restent inchangées.', hex: 'Code hexadécimal', coral: 'Corail',
+      accentInvalid: 'Couleur invalide : utilisez # et six caractères hexadécimaux.',
+      reduced: 'Mouvements réduits', reducedHint: 'Les états restent lisibles sans animation. La préférence système reste prioritaire.'
+    },
+    notifications: {
+      title: 'Quand l’équipe a besoin de vous',
+      dnd: 'Ne pas déranger', dndHint: 'Suspend les alertes et les sons ; les demandes restent visibles dans les sessions.',
+      finished: 'Quand un bot ou Ledge a terminé', finishedHint: 'Choisissez comment Desktop vous avertit.',
+      modes: { both: 'Alerte et son', bubble: 'Alerte visuelle', sound: 'Son', none: 'État de session uniquement' } as Record<FinishedNotify, string>,
+      note: 'L’état de la session reste toujours visible, même sans alerte ni son.'
+    },
+    sounds: {
+      title: 'Les signaux de votre équipe',
+      enabled: 'Sons', enabledHint: 'Des tons courts et doux. Jamais en Ne pas déranger.',
+      custom: 'Personnaliser les sons',
+      volume: 'Volume', volumeHint: 'Le bouton Test représente le signal de question.',
+      volumes: { quiet: 'Bas', normal: 'Normal', loud: 'Fort' } as Record<SoundVolume, string>,
+      test: 'Test', dndOn: 'Ne pas déranger est activé.',
+      when: 'Jouer un son quand',
+      categories: { requests: 'Un bot a besoin de vous · accord, question', finished: 'Un bot ou Ledge a terminé sa tâche', errors: 'Quelque chose échoue', decisions: 'Vous acceptez ou refusez', team: 'Un bot arrive ou part' } as Record<SoundCategory, string>,
+      behind: 'Seulement quand le terminal est derrière', behindHint: 'Pas de son si Windows Terminal est au premier plan. L’alerte visuelle reste disponible.',
+      note: 'Un seul son à la fois ; les rafales sont regroupées. Ouvrir, fermer et survoler restent silencieux.'
+    },
     machines: {
       title: 'Vos machines',
       note: 'Connexion SSH depuis WSL, comme dans Ledge classique.',
@@ -476,6 +512,41 @@ const en: typeof fr = {
     many: (n) => `${n} sessions need you or have finished`
   },
   settings: {
+    title: 'Settings',
+    subtitle: 'Make Desktop yours and manage its connections.',
+    back: 'Back to sessions',
+    nav: 'Settings sections',
+    tabs: { display: 'Display', machines: 'Machines', notifications: 'Notifications', sounds: 'Sounds', about: 'About' },
+    display: {
+      title: 'Your app',
+      autostart: 'Launch at start-up', autostartHint: 'With your Windows session.', autostartMissing: 'Available in the installed app.',
+      tool: 'Default harness', toolHint: 'For new sessions and the Ledge chat.',
+      lang: 'Language', langHint: 'Applies at once, the notification area menu included.', langs: { fr: 'Français', en: 'English' },
+      scale: 'Interface scale', scaleHint: 'Size of Desktop’s text and controls.', auto: 'Auto',
+      theme: 'Theme', themeHint: 'Also changes the mascots’ material.', themes: { dark: 'Dark · Signal', light: 'Light · Pebble' },
+      accent: 'Ledge colour', accentHint: 'Your own accent. State colours stay the same.', hex: 'Hex code', coral: 'Coral',
+      accentInvalid: 'Invalid colour: use # and six hexadecimal characters.',
+      reduced: 'Reduced motion', reducedHint: 'States stay readable without animation. The system setting wins.'
+    },
+    notifications: {
+      title: 'When the team needs you',
+      dnd: 'Do not disturb', dndHint: 'Holds alerts and sounds; requests stay visible in the sessions.',
+      finished: 'When a bot or Ledge is done', finishedHint: 'Choose how Desktop tells you.',
+      modes: { both: 'Alert and sound', bubble: 'Visual alert', sound: 'Sound', none: 'Session state only' },
+      note: 'The session state always stays visible, even without an alert or a sound.'
+    },
+    sounds: {
+      title: 'Your team’s signals',
+      enabled: 'Sounds', enabledHint: 'Short, soft tones. Never in Do not disturb.',
+      custom: 'Customise sounds',
+      volume: 'Volume', volumeHint: 'The Test button plays the question signal.',
+      volumes: { quiet: 'Low', normal: 'Normal', loud: 'Loud' },
+      test: 'Test', dndOn: 'Do not disturb is on.',
+      when: 'Play a sound when',
+      categories: { requests: 'A bot needs you · approval, question', finished: 'A bot or Ledge has finished its task', errors: 'Something fails', decisions: 'You allow or deny', team: 'A bot arrives or leaves' },
+      behind: 'Only when the terminal is behind', behindHint: 'No sound when Windows Terminal is in front. The visual alert stays available.',
+      note: 'One sound at a time; bursts are grouped. Opening, closing and hovering stay silent.'
+    },
     machines: {
       title: 'Your machines',
       note: 'SSH connection from WSL, as in classic Ledge.',
