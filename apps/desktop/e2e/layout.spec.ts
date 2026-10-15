@@ -17,4 +17,14 @@ for (const size of [{ width: 1920, height: 1080 }, { width: 1024, height: 700 }]
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(size.height);
     }
   });
+
+  test(`a lone table sits in the middle of a ${size.width}×${size.height} room`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await fakeDaemon(page, eight);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Meeting' }).click();
+    const area = (await page.locator('.table-groups').boundingBox())!;
+    const table = (await page.locator('.table-group').first().boundingBox())!;
+    expect(Math.abs(table.x + table.width / 2 - (area.x + area.width / 2))).toBeLessThan(6);
+  });
 }

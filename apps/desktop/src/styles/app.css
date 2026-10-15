@@ -109,7 +109,7 @@ footer > span:first-child { font-size: 8px; letter-spacing: 1px; }
 .grouping-hint { color: var(--muted-foreground); font-size: 9px; line-height: 1.6; margin: 12px 0 16px; }
 /* Pack tables using their participant-sized stage, with breathing room for seats.
    Wrapping follows the available panel width, including while resizing the chat. */
-.table-groups { display: flex; flex-wrap: wrap; align-items: flex-start; align-content: start; gap: 14px; padding: 3px 5px 15px 3px; }
+.table-groups { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; align-content: start; gap: 14px; padding: 3px 5px 15px 3px; }
 .table-group { flex: 0 1 calc(var(--stage-width) + 22px); max-width: 100%; min-width: 0; overflow: hidden; }
 .table-group .room-stage { height: var(--stage-height); width: min(calc(100% - 20px),var(--stage-width)); margin: 6px auto; }
 .table-group .meeting-table { height: var(--table-height); width: min(72%,var(--table-width)); }
