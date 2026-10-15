@@ -69,18 +69,28 @@ export function toCheck(s: Record<string, OpState>): string[] {
   return Object.values(s).filter(o => o.phase === 'uncertain').map(o => o.operationId);
 }
 
-/** Double-send guard: a new operation, and no live or applied one already answers the same request. */
+const live = (p: Phase) => p === 'sending' || p === 'received' || p === 'uncertain';
+
+/**
+ * Double-send guard: a new operation, and no live or applied one already answers the same request. An instruction
+ * or an interrupt names no request: it is refused while another of the same kind is still in flight or of unknown
+ * delivery on that session (a finished one does not stop a later, deliberate one).
+ */
 export function isNew(s: Record<string, OpState>, op: OpState): boolean {
   if (s[op.operationId]) return false;
-  if (op.pendingId === undefined) return true;
-  return !Object.values(s).some(o => o.sessionId === op.sessionId && o.pendingId === op.pendingId && o.pendingVersion === op.pendingVersion
-    && (o.phase === 'sending' || o.phase === 'received' || o.phase === 'uncertain' || o.phase === 'applied'));
+  if (op.pendingId === undefined) return !Object.values(s).some(o => o.kind === op.kind && o.sessionId === op.sessionId && live(o.phase));
+  return !Object.values(s).some(o => o.sessionId === op.sessionId && o.pendingId === op.pendingId && o.pendingVersion === op.pendingVersion && (live(o.phase) || o.phase === 'applied'));
 }
 
 /** The outgoing message and the tracked operation must describe the same thing. */
 export function matches(op: OpState, msg: ClientMessage): boolean {
   if (msg.type === 'session.decide') return op.kind === 'decide' && msg.operationId === op.operationId && msg.id === op.sessionId && msg.pendingId === op.pendingId && msg.pendingVersion === op.pendingVersion && msg.decision === op.decision;
-  if (msg.type === 'session.reply') return op.kind !== 'decide' && msg.operationId === op.operationId && msg.id === op.sessionId && msg.pendingId === op.pendingId && msg.pendingVersion === op.pendingVersion && msg.text === op.text;
+  if (msg.type === 'session.reply') {
+    // An answer names its request; an instruction ('message') names none.
+    const kindOk = op.kind === 'answer' ? op.pendingId !== undefined : op.kind === 'message' && op.pendingId === undefined && op.pendingVersion === undefined;
+    return kindOk && msg.operationId === op.operationId && msg.id === op.sessionId && msg.pendingId === op.pendingId && msg.pendingVersion === op.pendingVersion && msg.text === op.text;
+  }
+  if (msg.type === 'session.interrupt') return op.kind === 'interrupt' && op.pendingId === undefined && msg.operationId === op.operationId && msg.id === op.sessionId;
   return false;
 }
 

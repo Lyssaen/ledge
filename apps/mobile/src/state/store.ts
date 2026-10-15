@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { ClientMessage, ServerMessage, Session } from '@ledge/protocol';
+import type { ClientMessage, ServerMessage, Session, Turn } from '@ledge/protocol';
 import { isNew, loadOps, matches, opsReducer, saveOps, toCheck, type OpEvent, type OpState } from '../model/operations';
 import { clearLastState, DEVICE_KEY, loadLastState, saveLastState } from './persist';
 
@@ -13,6 +13,8 @@ export interface MobileState {
   pcName: string | null;
   /** Decisions and replies made from this phone, and where each stands. */
   ops: Record<string, OpState>;
+  /** Each opened thread as the PC last sent it (`session.turns`), in the PC's order; kept in memory only. */
+  turns: Record<string, Turn[]>;
 }
 export interface MobileStore {
   getState(): MobileState;
@@ -45,7 +47,7 @@ function loadDevice(storage?: Storage): MobileState['device'] {
 
 export function createMobileStore(storage?: Storage): MobileStore {
   const last = loadLastState(storage);
-  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage) };
+  let state: MobileState = { link: 'connecting', sessions: last?.sessions ?? [], previews: last?.previews ?? {}, syncedAt: last?.syncedAt ?? null, device: loadDevice(storage), pcName: last?.pcName ?? null, ops: loadOps(storage), turns: {} };
   let send: ((m: ClientMessage) => void) | null = null;
   const fns = new Set<() => void>();
   const listeners = new Set<(msg: ServerMessage) => void>();
@@ -82,7 +84,7 @@ export function createMobileStore(storage?: Storage): MobileStore {
       dispatch({ type: 'sent', op });
       return true;
     },
-    reset: () => { clearLastState(storage); saveOps({}, storage); set({ link: 'unpaired', sessions: [], previews: {}, syncedAt: null, device: null, pcName: null, ops: {} }, false); },
+    reset: () => { clearLastState(storage); saveOps({}, storage); set({ link: 'unpaired', sessions: [], previews: {}, syncedAt: null, device: null, pcName: null, ops: {}, turns: {} }, false); },
     apply: msg => {
       listeners.forEach(f => f(msg));
       switch (msg.type) {
@@ -96,7 +98,8 @@ export function createMobileStore(storage?: Storage): MobileStore {
         case 'snapshot': {
           const ids = new Set(msg.sessions.map(s => s.id));
           const previews = Object.fromEntries(Object.entries(state.previews).filter(([id]) => ids.has(id)));
-          set({ sessions: msg.sessions, previews, syncedAt: now() }, true);
+          const turns = Object.fromEntries(Object.entries(state.turns).filter(([id]) => ids.has(id)));
+          set({ sessions: msg.sessions, previews, turns, syncedAt: now() }, true);
           break;
         }
         case 'session.updated': {
@@ -107,12 +110,15 @@ export function createMobileStore(storage?: Storage): MobileStore {
         }
         case 'session.removed': {
           const { [msg.id]: _gone, ...previews } = state.previews;
-          set({ sessions: state.sessions.filter(s => s.id !== msg.id), previews, syncedAt: now() }, true);
+          const { [msg.id]: _turns, ...turns } = state.turns;
+          set({ sessions: state.sessions.filter(s => s.id !== msg.id), previews, turns, syncedAt: now() }, true);
           break;
         }
         case 'session.preview':
           set({ previews: { ...state.previews, [msg.id]: msg.lines }, syncedAt: now() }, true);
           break;
+        // Rows are replaced by id in the PC's order: a reply updated in place keeps its row, and no time sort is applied.
+        case 'session.turns': set({ turns: { ...state.turns, [msg.id]: msg.turns } }, false); break;
         case 'operation.received': dispatch({ type: 'received', operationId: msg.operationId }); break;
         case 'operation.result': dispatch({ type: 'result', operationId: msg.operationId, status: msg.status, ...(msg.reason ? { reason: msg.reason } : {}) }); break;
         default: break;

@@ -4,6 +4,7 @@ import { Agents } from './screens/Agents';
 import { Connection } from './screens/Connection';
 import { Inbox } from './screens/Inbox';
 import { Pairing } from './screens/Pairing';
+import { Thread } from './screens/Thread';
 import { RequestDetail } from './screens/RequestDetail';
 import { hasToken } from './state/persist';
 import { useMobile, mobileStore } from './state/store';
@@ -25,8 +26,10 @@ export function App({ onPaired, onReconnect = () => {} }: { onPaired?: () => voi
         ? <Connection onRepair={() => { setRepairing(true); navigate({ name: 'pair' }); }} />
         : route.name === 'request'
         ? <RequestDetail key={`${route.sessionId}/${route.pendingId}`} sessionId={route.sessionId} pendingId={route.pendingId} onReconnect={onReconnect} />
-        : route.name === 'agents' || route.name === 'thread' || route.name === 'terminal'
-        // The thread and the terminal screens arrive with the next tasks of lot 3; until then their links land on the list.
+        : route.name === 'thread'
+        ? <Thread key={route.sessionId} sessionId={route.sessionId} onReconnect={onReconnect} />
+        : route.name === 'agents' || route.name === 'terminal'
+        // The terminal screen arrives with the next task of lot 3; until then its link lands on the list.
         ? <Agents onReconnect={onReconnect} />
         : <Inbox onReconnect={onReconnect} />}
     </div>

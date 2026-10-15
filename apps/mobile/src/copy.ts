@@ -79,9 +79,42 @@ export const copy = {
   result: {
     header: 'Demande traitée',
     allowed: 'Autorisation prise en compte', denied: 'Refus pris en compte', answered: 'Réponse prise en compte',
-    body: 'Le terminal a reçu votre décision.',
+    body: 'Le terminal a reçu votre décision. Elle apparaît maintenant dans le fil de cette session.',
+    thread: (bot: string) => `Voir le fil de ${bot}`,
     final: 'Une décision transmise ne peut pas être annulée.',
     back: 'Retour aux demandes'
+  },
+  thread: {
+    back: 'Retour aux agents', title: 'Conversation avec un agent',
+    terminal: (bot: string) => `Ouvrir le terminal de ${bot}`,
+    log: (bot: string) => `Échanges avec ${bot}`,
+    loading: 'Chargement du fil…', empty: 'Aucun échange pour le moment.',
+    unknown: 'Cette session n’existe plus sur le PC.', unknownBack: 'Retour aux agents',
+    suggestion: 'Suggestion pour la suite',
+    agentLabel: 'Réponse de l’agent',
+    awaiting: 'Décision attendue · dans « À traiter »', examine: 'Examiner la demande',
+    event: {
+      accept: (from: string) => `Accord pris en compte · depuis ${from}`,
+      deny: (from: string) => `Refus pris en compte · depuis ${from}`,
+      answer: (option: string) => `Réponse prise en compte · ${option}`,
+      resolved: 'Traitée dans le terminal', interrupt: 'Interruption transmise',
+      fromPc: 'le PC', fromPhone: 'le téléphone'
+    },
+    delivery: { sending: 'Envoi au PC…', taken: 'Pris par le terminal', takenNow: 'Pris par le terminal · à l’instant', uncertain: 'Réception non confirmée' },
+    composer: {
+      label: (bot: string) => `Message pour ${bot}`, send: (bot: string) => `Envoyer à ${bot}`,
+      quickLabel: 'Consignes rapides',
+      placeholder: { idle: (bot: string) => `Écrire à ${bot}…`, working: 'L’agent travaille…', awaiting: 'Traitez la demande ci-dessus', offline: 'Reconnectez-vous pour écrire', connecting: 'Connexion en cours…', ended: 'Session terminée', readOnly: 'Répondez dans le terminal' },
+      status: { idle: 'Disponible pour votre consigne', working: 'Au travail · consultez le terminal', awaiting: 'En attente d’une décision', offline: 'Connexion perdue · dernier état connu', connecting: 'Connexion en cours…', sending: 'Envoi au PC…', taken: 'Consigne reçue · l’agent reprend', ended: 'Session terminée', readOnly: 'Session démarrée hors de Ledge' },
+      reconnect: 'Reconnecter', tooLong: (max: number) => `Le message est trop long : ${max} caractères au plus.`,
+      failTitle: 'Message non envoyé', uncertainTitle: 'Réception non confirmée',
+      lost: 'Le PC est injoignable. Votre brouillon est conservé.',
+      busy: 'L’agent n’est plus disponible pour une consigne. Votre brouillon est conservé.',
+      invalid: 'Le message n’a pas été accepté par le PC (4000 caractères au plus). Votre brouillon est conservé.',
+      readOnly: 'Cette session a été démarrée hors de Ledge : écrivez dans le terminal.',
+      forbidden: 'Ce téléphone n’est plus autorisé. Votre brouillon est conservé.',
+      uncertain: 'La connexion a été perdue ou le terminal n’a pas confirmé. Le message a peut-être été reçu : vérifiez le terminal avant de le renvoyer. Votre brouillon est conservé.'
+    }
   },
   question: { legend: 'Choisir une réponse' },
   confirm: {

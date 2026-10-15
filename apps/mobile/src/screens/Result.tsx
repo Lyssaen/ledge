@@ -35,6 +35,7 @@ export function Result({ header, title, body, item, final = false, children }: {
           {final && <p className="text-[13px] text-muted">{copy.result.final}</p>}
           {children}
           <a href={back} className="inline-flex min-h-12 w-full items-center justify-center rounded-control bg-fg px-4 py-2.5 text-[13px] font-medium text-[#121415]">{copy.result.back}</a>
+          {item && <a href={href({ name: 'thread', sessionId: item.sessionId })} className="inline-flex min-h-12 w-full items-center justify-center rounded-control border border-line px-4 py-2.5 text-[13px] font-medium">{copy.result.thread(item.botName)}</a>}
         </div>
       </main>
     </>
