@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PushPayload } from '@ledge/protocol';
-import { badgeFrom, hashOf, notificationFrom, openTarget, setBadge, type ClientsLike, type WindowLike } from '../src/push/handlers';
+import { badgeFrom, fallbackNotification, hashOf, notificationFrom, openTarget, setBadge, type ClientsLike, type WindowLike } from '../src/push/handlers';
 import { enableNotifications } from '../src/push/subscribe';
+import { startPushSync } from '../src/push/sync';
+import { createMobileStore } from '../src/state/store';
 
 const ok: PushPayload = { v: 1, kind: 'request', title: 'Votre accord est demandé', body: 'Otto · Lancer les tests', url: '/m/#/request/s1/p1', badge: 1, tag: 'p1' };
 
@@ -71,12 +73,18 @@ describe('enableNotifications', () => {
   };
   it('asks permission, subscribes with the key and sends push.subscribe', async () => {
     const { subscribe, reg } = setup('granted');
-    const send = vi.fn();
+    const send = vi.fn().mockReturnValue(true);
     await expect(enableNotifications({ vapidPublicKey: 'BAQAB-_w', send, reg })).resolves.toBe('granted');
     const arg = subscribe.mock.calls[0]![0] as { userVisibleOnly: boolean; applicationServerKey: Uint8Array };
     expect(arg.userVisibleOnly).toBe(true);
     expect([...arg.applicationServerKey]).toEqual([4, 4, 0, 7, 239, 240]);
     expect(send).toHaveBeenCalledWith({ type: 'push.subscribe', subscription: { endpoint: 'https://push.example/x', expirationTime: null, keys: { p256dh: 'p', auth: 'a' } } });
+  });
+  it('is failed, not granted, when the message could not be sent or the subscribe throws', async () => {
+    const { reg } = setup('granted');
+    await expect(enableNotifications({ vapidPublicKey: 'k', send: () => false, reg })).resolves.toBe('failed');
+    const bad = { pushManager: { subscribe: () => Promise.reject(new Error('push service')) } } as unknown as ServiceWorkerRegistration;
+    await expect(enableNotifications({ vapidPublicKey: 'k', send: () => true, reg: bad })).resolves.toBe('failed');
   });
   it('does not subscribe when permission is refused', async () => {
     const { subscribe, reg } = setup('denied');
@@ -87,5 +95,35 @@ describe('enableNotifications', () => {
   it('is unsupported without the Notification API', async () => {
     vi.stubGlobal('Notification', undefined);
     await expect(enableNotifications({ vapidPublicKey: 'k', send: vi.fn() })).resolves.toBe('unsupported');
+  });
+});
+
+describe('fallbackNotification', () => {
+  it('is a generic Ledge notification that opens the app', () => {
+    expect(fallbackNotification()).toMatchObject({ title: 'Ledge', options: { data: { url: '/m/#/' } } });
+  });
+});
+
+describe('startPushSync', () => {
+  const sub = { endpoint: 'https://push.example/x', expirationTime: null, keys: { p256dh: 'p', auth: 'a' } };
+  const setup = (granted: boolean) => {
+    const st = createMobileStore();
+    const sent: unknown[] = [];
+    st.setSender(m => sent.push(m));
+    startPushSync(st, { supported: () => true, granted: () => granted, subscription: () => Promise.resolve(sub) });
+    return { st, sent };
+  };
+  it('re-sends the existing subscription on every auth.ok when permission is granted', async () => {
+    const { st, sent } = setup(true);
+    st.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC' });
+    await vi.waitFor(() => expect(sent).toEqual([{ type: 'push.subscribe', subscription: sub }]));
+    st.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC' });
+    await vi.waitFor(() => expect(sent).toHaveLength(2));
+  });
+  it('does nothing without granted permission', async () => {
+    const { st, sent } = setup(false);
+    st.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC' });
+    await new Promise(r => setTimeout(r, 20));
+    expect(sent).toEqual([]);
   });
 });

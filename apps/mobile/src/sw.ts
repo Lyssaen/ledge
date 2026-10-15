@@ -1,7 +1,7 @@
 // Service worker, built apart (vite.sw.config.ts) to a single `sw.js` at the root of /m/. Offline shell: `index.html` goes network
 // first (so a new build is picked up), hashed `assets/*` cache first. The DOM lib has no worker types, so the few
 // members used are declared here.
-import { badgeFrom, notificationFrom, openTarget, setBadge, type ClientsLike } from './push/handlers';
+import { badgeFrom, fallbackNotification, notificationFrom, openTarget, setBadge, type ClientsLike } from './push/handlers';
 
 interface Ev { waitUntil(p: Promise<unknown>): void }
 interface FetchEv extends Ev { request: Request; respondWith(r: Promise<Response>): void }
@@ -68,9 +68,9 @@ sw.addEventListener('fetch', e => {
 sw.addEventListener('push', e => {
   let data: unknown = null;
   try { data = e.data?.json() ?? null; } catch { /* not JSON: nothing to show */ }
-  const n = notificationFrom(data);
+  const n = notificationFrom(data) ?? fallbackNotification();
   const badge = badgeFrom(data);
-  e.waitUntil(Promise.all([n ? sw.registration.showNotification(n.title, n.options) : undefined, badge !== null ? setBadge(badge) : undefined]));
+  e.waitUntil(Promise.all([sw.registration.showNotification(n.title, n.options), badge !== null ? setBadge(badge) : undefined]));
 });
 
 sw.addEventListener('notificationclick', e => {

@@ -1,6 +1,7 @@
 import { PushSubscriptionSchema, type ClientMessage } from '@ledge/protocol';
 
-export type EnableResult = 'granted' | 'denied' | 'unsupported';
+/** `failed`: permission was given but the subscription did not reach the PC (no push service, or the link was down). */
+export type EnableResult = 'granted' | 'denied' | 'unsupported' | 'failed';
 
 function keyBytes(b64url: string): Uint8Array<ArrayBuffer> {
   const bin = atob(b64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(b64url.length / 4) * 4, '='));
@@ -18,7 +19,8 @@ export function pushSupported(): boolean {
  * Asks for permission and subscribes this phone. Call it from the tap itself: the permission prompt must be the first
  * thing awaited, or iOS drops the user activation.
  */
-export async function enableNotifications(o: { vapidPublicKey: string; send(m: ClientMessage): void; reg?: ServiceWorkerRegistration }): Promise<EnableResult> {
+export async function enableNotifications(o: { vapidPublicKey: string; /** Returns false when the message could not be sent (link down). */
+  send(m: ClientMessage): boolean; reg?: ServiceWorkerRegistration }): Promise<EnableResult> {
   if (!pushSupported()) return 'unsupported';
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return 'denied';
@@ -26,9 +28,8 @@ export async function enableNotifications(o: { vapidPublicKey: string; send(m: C
     const reg = o.reg ?? await Promise.race([navigator.serviceWorker.ready, new Promise<never>((_, no) => setTimeout(() => no(new Error('no service worker')), READY_MS))]);
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(o.vapidPublicKey) });
     const subscription = PushSubscriptionSchema.parse(sub.toJSON());
-    o.send({ type: 'push.subscribe', subscription });
-    return 'granted';
+    return o.send({ type: 'push.subscribe', subscription }) ? 'granted' : 'failed';
   } catch {
-    return 'unsupported';
+    return 'failed';
   }
 }

@@ -6,6 +6,7 @@ import type { enableNotifications } from '../push/subscribe';
 import { completePairing, guessDeviceName, isIosBrowserTab, openPairSocket, PairFailure, requestChallenge, savePairing, type PairChallenge } from '../connection/pair';
 
 const t = copy.pairing;
+const nt = copy.notifications;
 
 function Bix() {
   return (
@@ -155,11 +156,11 @@ export function Pairing({ onContinue, onCancel, onSaved, enable, request = reque
           <>
             <div className={`${notice} border-ok/25 bg-ok/5`}><strong className="mb-[5px] block text-[13px] text-ok">{t.done.title}</strong><p>{t.done.body}</p></div>
             <div className="mt-6">
-              <h2 className="text-lg font-semibold tracking-[-0.4px]">{t.notifications.title}</h2>
-              <p className="mt-2 text-[13px] text-muted">{t.notifications.body}</p>
+              <h2 className="text-lg font-semibold tracking-[-0.4px]">{nt.title}</h2>
+              <p className="mt-2 text-[13px] text-muted">{nt.body}</p>
             </div>
             <div role="alert" className="min-h-0">
-              {(push.state === 'denied' || push.state === 'unsupported' || push.noPush) && <p className="my-2.5 rounded-control bg-danger-bg px-3 py-2 text-xs text-danger-fg">{push.noPush ? t.notifications.noPush : t.notifications[push.state === 'denied' ? 'denied' : 'unsupported']}</p>}
+              {push.message && <p className="my-2.5 rounded-control bg-danger-bg px-3 py-2 text-xs text-danger-fg">{push.message}</p>}
             </div>
           </>
         )}
@@ -167,9 +168,9 @@ export function Pairing({ onContinue, onCancel, onSaved, enable, request = reque
       {showNext && (
         <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg px-side pt-3 pb-4">
           <button type="button" id="pair-next" className={`${btn} bg-fg text-[#121415] disabled:opacity-50`} disabled={(step === 2 && (code.length !== 6 || busy)) || (step === 3 && (!push.ready || push.state === 'working'))} onClick={next}>
-            {busy ? t.pending : step === 2 && challenge ? t.verify : step === 3 && push.state === 'working' ? t.notifications.working : step === 3 && !push.ready && !push.noPush ? t.notifications.waiting : s.button}
+            {busy ? t.pending : step === 2 && challenge ? t.verify : step === 3 && push.state === 'working' ? nt.working : step === 3 && !push.ready && !push.noPush ? nt.waiting : s.button}
           </button>
-          {step === 3 && <button type="button" id="pair-later" className={`${btn} mt-0! border-transparent text-muted`} onClick={onContinue}>{t.notifications.later}</button>}
+          {step === 3 && <button type="button" id="pair-later" className={`${btn} mt-0! border-transparent text-muted`} onClick={onContinue}>{nt.later}</button>}
         </footer>
       )}
     </main>

@@ -115,12 +115,14 @@ export function createMobileStore(storage?: Storage): MobileStore {
           const has = state.sessions.some(s => s.id === msg.session.id);
           const sessions = has ? state.sessions.map(s => s.id === msg.session.id ? msg.session : s) : [...state.sessions, msg.session];
           set({ sessions, syncedAt: now() }, true);
+          void setBadge(requestsOf(sessions).length);
           break;
         }
         case 'session.removed': {
           const { [msg.id]: _gone, ...previews } = state.previews;
           const { [msg.id]: goneTurns, ...turns } = state.turns;
           set({ sessions: state.sessions.filter(s => s.id !== msg.id), previews, turns, syncedAt: now() }, true);
+          void setBadge(requestsOf(state.sessions).length);
           if (goneTurns !== undefined) saveTurns(turns, storage);
           break;
         }

@@ -142,11 +142,11 @@ describe('Pairing screen', () => {
     expect(localStorage.getItem(TOKEN_KEY)).toBe('tok');
     expect(onSaved).toHaveBeenCalledTimes(1);
     // Step 4 waits for the PC's push key, then the tap asks permission and moves on only once granted.
-    expect(screen.getByRole('button', { name: copy.pairing.notifications.waiting })).toBeDisabled();
+    expect(screen.getByRole('button', { name: copy.notifications.waiting })).toBeDisabled();
     act(() => mobileStore.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC', vapidPublicKey: 'BKEY' }));
     fireEvent.click(screen.getByRole('button', { name: 'Activer les notifications' }));
     expect(enable).toHaveBeenCalledWith(expect.objectContaining({ vapidPublicKey: 'BKEY' }));
-    await waitFor(() => expect(onContinue).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onContinue).toHaveBeenCalledTimes(1), { timeout: 4000 }); // after the PC's refusal window
   });
 
   it('step 4: a refusal stays on the step with a message, and "Plus tard" moves on without asking', async () => {
@@ -160,10 +160,36 @@ describe('Pairing screen', () => {
     await screen.findByRole('heading', { name: 'Vous êtes connecté' });
     act(() => mobileStore.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC', vapidPublicKey: 'BKEY' }));
     fireEvent.click(screen.getByRole('button', { name: 'Activer les notifications' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(copy.pairing.notifications.denied);
+    expect(await screen.findByRole('alert')).toHaveTextContent(copy.notifications.denied);
     expect(onContinue).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Plus tard' }));
     expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
+  const reachStep4 = async (enable: ReturnType<typeof vi.fn>) => {
+    const ch = { socket: { send: vi.fn(), receive: vi.fn(), close: vi.fn() }, options: {}, expiresAt: Date.now() + 60_000 };
+    render(createElement(Pairing, { onContinue: vi.fn(), enable: enable as never, request: vi.fn().mockResolvedValue(ch), complete: vi.fn().mockResolvedValue({ token: 'tok', deviceId: 'd' }), iosTab: false }));
+    goToCode();
+    fireEvent.change(screen.getByLabelText(copy.pairing.codeLabel), { target: { value: '123456' } });
+    fireEvent.click(await screen.findByRole('button', { name: copy.pairing.verify }));
+    await screen.findByRole('heading', { name: 'Vous êtes connecté' });
+    act(() => mobileStore.apply({ type: 'auth.ok', deviceId: 'd', deviceName: 'T', pcName: 'PC', vapidPublicKey: 'BKEY' }));
+  };
+
+  it('step 4: a link that dropped before the tap is a failure with retry copy, not a success', async () => {
+    const enable = vi.fn().mockImplementation(async (o: { send(m: unknown): boolean }) => (o.send({ type: 'push.subscribe' }) ? 'granted' : 'failed'));
+    await reachStep4(enable);
+    mobileStore.setLink('offline');
+    fireEvent.click(screen.getByRole('button', { name: 'Activer les notifications' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(copy.notifications.failed);
+    expect(screen.getByRole('button', { name: 'Activer les notifications' })).toBeEnabled();
+  });
+
+  it('step 4: an error reply from the PC to the subscription is a failure', async () => {
+    const enable = vi.fn().mockImplementation(async () => { setTimeout(() => mobileStore.apply({ type: 'error', message: 'unsupported push service' }), 20); return 'granted'; });
+    await reachStep4(enable);
+    fireEvent.click(screen.getByRole('button', { name: 'Activer les notifications' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(copy.notifications.failed));
   });
 
   it('goes back to asking for a challenge when the held one fails, and clears the error when stepping back', async () => {

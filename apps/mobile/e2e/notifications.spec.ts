@@ -100,10 +100,10 @@ for (const width of [320, 390, 430]) {
       await page.addInitScript(([k, v]) => { localStorage.setItem('ledge.mobile.token', 't'.repeat(43)); if (!localStorage.getItem(k!)) localStorage.setItem(k!, v!); }, ['ledge.mobile.lastState', JSON.stringify(lastState)]);
       let release!: () => void;
       const gate = new Promise<void>(r => { release = r; });
-      await fakeDaemon(page, { gate, sessions: [session('a', { name: 'Otto' })] });
+      const received = await fakeDaemon(page, { gate, sessions: [session('a', { name: 'Otto' })] });
       await page.goto('/m/#/request/a/p-a');
       await expect(page.getByRole('status')).toHaveText('Chargement de la demande…');
-      await page.waitForTimeout(400); // auth.ok has arrived by now, the snapshot has not
+      await expect.poll(() => received.some(m => m.type === 'auth')).toBe(true); // auth.ok is on its way, the snapshot is held
       await expect(page.getByRole('status')).toHaveText('Chargement de la demande…');
       await expect(page.getByText('Déjà traitée sur le PC')).toHaveCount(0);
       release();

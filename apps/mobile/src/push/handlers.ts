@@ -16,6 +16,11 @@ export function notificationFrom(data: unknown): { title: string; options: Notif
   return { title: p.data.title, options: { body: p.data.body, tag: p.data.tag, data: { url: p.data.url }, icon: ICON } };
 }
 
+/** Shown for a push whose payload is not understood (a newer daemon, say): iOS drops a subscription whose pushes show nothing. */
+export function fallbackNotification(): { title: string; options: NotificationOptions } {
+  return { title: 'Ledge', options: { tag: 'ledge', data: { url: '/m/#/' }, icon: ICON } };
+}
+
 /** The number of requests waiting, as the daemon counted it when it sent the push. */
 export function badgeFrom(data: unknown): number | null {
   const p = PushPayloadSchema.safeParse(data);

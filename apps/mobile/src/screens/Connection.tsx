@@ -15,7 +15,7 @@ export function Connection({ onRepair }: { onRepair: () => void }) {
   const t = copy.connection;
   const push = useEnableNotifications();
   const on = push.state === 'granted' || (push.state === 'idle' && typeof Notification !== 'undefined' && Notification.permission === 'granted');
-  const pt = copy.pairing.notifications;
+  const pt = copy.notifications;
   return (
     <>
       <BackHeader title={t.title} backTo={href({ name: 'inbox' })} label={t.back} />
@@ -25,13 +25,13 @@ export function Connection({ onRepair }: { onRepair: () => void }) {
           <dt className="text-muted">{t.pc}</dt><dd className="m-0 [overflow-wrap:anywhere]">{pcName ?? t.unknown}</dd>
           <dt className="text-muted">{t.device}</dt><dd className="m-0 [overflow-wrap:anywhere]">{device?.name ?? t.unknown}</dd>
           <dt className="text-muted">{t.status}</dt><dd className="m-0">{t.status_[link]}</dd>
-          <dt className="text-muted">{t.notifications}</dt><dd className="m-0">{on ? t.notificationsOn : t.notificationsOff}</dd>
+          <dt className="text-muted">{pt.row}</dt><dd className="m-0">{on ? pt.on : pt.off}</dd>
         </dl>
         {!on && (
           <div className="mt-6">
-            <button type="button" className={btn} disabled={!push.ready || push.state === 'working'} onClick={() => { void push.start(); }}>{push.state === 'working' ? pt.working : copy.pairing.steps[3].button}</button>
+            <button type="button" className={btn} disabled={!push.ready || push.state === 'working'} onClick={() => { void push.start(); }}>{push.state === 'working' ? pt.working : pt.enable}</button>
             <div role="alert" className="min-h-0">
-              {(push.state === 'denied' || push.state === 'unsupported' || push.noPush) && <p className="mt-2.5 rounded-control bg-danger-bg px-3 py-2 text-xs text-danger-fg">{push.noPush ? pt.noPush : pt[push.state === 'denied' ? 'denied' : 'unsupported']}</p>}
+              {push.message && <p className="mt-2.5 rounded-control bg-danger-bg px-3 py-2 text-xs text-danger-fg">{push.message}</p>}
             </div>
           </div>
         )}
