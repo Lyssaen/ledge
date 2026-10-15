@@ -53,6 +53,15 @@ describe('tray « Nouvelle session »', () => {
     expect(screen.getByRole('region', { name: 'Starting the session' })).toBeInTheDocument();
   });
 
+  it('a tray « new » while the screen is open keeps the opener the focus goes back to', async () => {
+    const user = userEvent.setup();
+    await boot();
+    await user.click(screen.getByRole('button', { name: 'Start a session' }));
+    act(() => tray.fire!('new'));
+    await user.click(screen.getByRole('button', { name: 'Back to sessions' }));
+    expect(screen.getByRole('button', { name: 'Start a session' })).toHaveFocus();
+  });
+
   it('stops listening when the app goes away', async () => {
     const { view } = await boot();
     expect(tray.fire).not.toBeNull();
