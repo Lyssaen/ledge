@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -100,7 +100,22 @@ const high: Pending = { id: 'pA', version: 1, kind: 'permission', text: 'git pus
 const waiting = (pending: Pending) => store.upsert(mk('a', { state: pending.kind === 'question' ? 'waiting_input' : 'waiting_permission', pending }));
 const decide = (extra: Record<string, unknown> = {}) => ({ type: 'session.decide', id: 'a', decision: 'accept', pendingId: 'pA', pendingVersion: 1, operationId: randomUUID(), ...extra });
 
+const logText = () => { const p = join(process.env.LEDGE_HOME!, 'daemon.log'); return existsSync(p) ? readFileSync(p, 'utf8') : ''; };
+
 describe('remote decisions', () => {
+  it('logs one line per finished operation, with its ids, type, status and reason', async () => {
+    waiting(low);
+    const p = phone(srv, deviceId);
+    const ok = decide();
+    p.send(ok);
+    await p.result(ok.operationId);
+    const late = decide();
+    p.send(late);
+    await p.result(late.operationId);
+    expect(logText()).toContain(`operation ${ok.operationId} session.decide a applied from device ${deviceId}`);
+    expect(logText()).toContain(`operation ${late.operationId} session.decide a rejected (stale) from device ${deviceId}: "stale"`);
+  });
+
   it('a decision taken on the phone then on the PC is injected once', async () => {
     waiting(low);
     const p = phone(srv, deviceId);
@@ -157,6 +172,8 @@ describe('remote decisions', () => {
     const forged = decide({ assertion: thief.assert(ch1.options) });
     p.send(forged);
     expect(await p.result(forged.operationId)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    // The library's message is quoted: it can neither break the log line nor forge another one.
+    expect(logText()).toMatch(new RegExp(`operation ${forged.operationId} .*: "assertion not verified: \\\\"`));
     // That challenge is spent: the genuine key cannot reuse it.
     const replayed = decide({ assertion: soft.assert(ch1.options) });
     p.send(replayed);

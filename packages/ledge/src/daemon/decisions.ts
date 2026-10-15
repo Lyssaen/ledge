@@ -8,7 +8,7 @@ import type { Binding, ChallengeStore } from './challenges.js';
 import type { DeviceStore } from './devices.js';
 import type { MobileConfig } from '../mobile/config.js';
 import { assertionOptions, challengeOf, verifyAssertion } from './webauthn.js';
-import { log } from '../log.js';
+import { log, quote } from '../log.js';
 
 export type SessionDecide = Extract<ClientMessage, { type: 'session.decide' }>;
 export type SessionReply = Extract<ClientMessage, { type: 'session.reply' }>;
@@ -116,17 +116,21 @@ async function operate(peer: Peer, msg: SessionDecide | SessionReply | SessionIn
     if (begun.kind === 'replay') return peer.send(resultOf(begun.record));
     notify({ type: 'operation.received', operationId: opId });
   }
+  // One line per finished operation: ids, type, status and reason only, never the typed text or the assertion.
+  const who = peer.ctx.kind === 'remote' ? `device ${peer.ctx.deviceId}` : 'local';
+  const finished = (status: string, reason?: OperationReason, detail?: string) =>
+    log(`operation ${opId ?? '-'} ${msg.type} ${msg.id} ${status}${reason ? ` (${reason})` : ''} from ${who}${detail ? `: ${quote(detail)}` : ''}`);
   try {
     await body();
   } catch (e) {
     const reason: OperationReason = e instanceof Refusal ? e.reason : 'not_taken';
     const status = statusOf(reason);
-    log(`${msg.type} ${msg.id} ${status} (${reason}): ${(e as Error).message}`);
+    finished(status, reason, (e as Error).message);
     if (opId) notify(resultOf(deps.ops.finish(opId, status, reason)));
     if (local) peer.send({ type: 'error', id: msg.id, message: (e as Error).message });
     return;
   }
-  if (opId) notify(resultOf(deps.ops.finish(opId, 'applied')));
+  if (opId) { finished('applied'); notify(resultOf(deps.ops.finish(opId, 'applied'))); }
 }
 
 /** Raised from inside the plan builder, under the lock and before the first character: a phone revoked meanwhile types nothing. */
@@ -151,7 +155,7 @@ async function checkAssertion(deviceId: string, msg: SessionDecide, sessionId: s
   if (spent !== 'ok') throw new Refusal('assertion_invalid');
   let newCounter: number;
   try { ({ newCounter } = await verifyAssertion(cfg, device.credential, msg.assertion, challenge!)); }
-  catch (e) { throw new Refusal('assertion_invalid', `assertion not verified: ${(e as Error).message}`); }
+  catch (e) { throw new Refusal('assertion_invalid', `assertion not verified: ${quote((e as Error).message)}`); }
   await deps.devices!.setCounter(deviceId, newCounter);
 }
 
