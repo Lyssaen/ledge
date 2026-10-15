@@ -93,6 +93,10 @@ describe('RelayCard', () => {
     expect(card()).toHaveTextContent(`Sent to Otto · ${time}`);
     expect(screen.queryByRole('button')).toBeNull();
   });
+  it('sent without a time: no dangling separator', () => {
+    render(<RelayCard relay={{ ...relay, status: 'sent' }} session={otto} busy={false} disabled={false} onSend={vi.fn()} onCancel={vi.fn()} />);
+    expect(card().querySelector('.ledge-card-done')!.textContent).toBe('Sent to Otto');
+  });
   it('failed: a status with a retry; a session that left the list is stopped', () => {
     render(<RelayCard relay={{ ...relay, error: 'pane gone' }} busy={false} disabled={false} onSend={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByRole('status')).toHaveTextContent('Could not send: pane gone');

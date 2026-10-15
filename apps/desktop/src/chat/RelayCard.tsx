@@ -33,7 +33,7 @@ export function RelayCard(p: RelayCardProps) {
   return (
     <section className="ledge-card" data-relay-card={state} aria-label={c.label}>
       {state === 'sent' ? (
-        <p className="ledge-card-done">{s && <Avatar session={s} size={20} />}<span>{c.sentTo} <strong>{r.name}</strong> · {time}</span></p>
+        <p className="ledge-card-done">{s && <Avatar session={s} size={20} />}<span>{c.sentTo} <strong>{r.name}</strong>{time && ` · ${time}`}</span></p>
       ) : <>
         <dl>
           <dt>{c.session}</dt>
