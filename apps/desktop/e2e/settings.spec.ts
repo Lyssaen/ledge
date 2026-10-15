@@ -67,4 +67,21 @@ for (const size of [{ width: 1280, height: 520 }, { width: 520, height: 700 }]) 
     await panel.evaluate(el => { el.scrollTop = el.scrollHeight; });
     await expect(page.getByRole('switch', { name: 'Reduced motion', exact: true })).toBeInViewport();
   });
+
+  test(`no settings section overflows sideways in a ${size.width}×${size.height} window`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await fakeDaemon(page, eight, { machines: [LOCAL, DEVBOX] });
+    await fakeRemote(page, 'devbox', [session('nova', { name: 'Nova', state: 'working' })]);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const nav = page.getByRole('navigation', { name: 'Settings sections' });
+    for (const tab of ['Display', 'Machines', 'Notifications', 'Sounds', 'About']) {
+      await nav.getByRole('button', { name: tab, exact: true }).click();
+      await expect(page.getByRole('region', { name: tab, exact: true })).toBeVisible();
+      const widths = await page.evaluate(() => [document.documentElement, ...document.querySelectorAll('.settings-screen, .settings-layout, .settings-nav, .settings-panel')]
+        .map(el => ({ el: el === document.documentElement ? 'document' : el.className, scroll: el.scrollWidth, client: el.clientWidth })));
+      expect(widths.length, tab).toBe(5);
+      for (const w of widths) expect(w.scroll, `${tab}: ${w.el}`).toBeLessThanOrEqual(w.client);
+    }
+  });
 }
