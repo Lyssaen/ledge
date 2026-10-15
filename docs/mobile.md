@@ -85,8 +85,16 @@ Risk policy, validated on 2026-10-14 without change:
 - Accepting a request the daemon classifies as low risk (for example a read-only command inside the project) needs no further check.
 - Accepting anything else, or a request with no risk at all, needs a WebAuthn assertion from the paired phone. The phone first sends `decide.prepare` and receives a single-use challenge bound to its device, the session, the request, its version and the decision. The assertion is verified against the key stored at pairing, and the counter is updated.
 - Denying never needs an assertion.
-- Questions are answered without a device check, by option number only, and only while the daemon classifies them low risk. Free text from the phone is not supported yet.
+- Questions are answered without a device check, by option number or in free text ("Autre réponse", see below), and only while the daemon classifies them low risk.
 - The PC overlay decides without WebAuthn, as before.
+
+#### Autre réponse (free answer to a question)
+
+Under the options of a question the phone can offer "Autre réponse". Choosing it shows a field, "Votre réponse à <bot>" (placeholder "Précisez votre choix…"); "Envoyer ma réponse" stays disabled while the text is empty or cannot be sent. The phone sends `session.reply { other: true, text, pendingId, pendingVersion, operationId }` and the daemon types the text into the dialog's "Type something." row, then Enter. It is never read as an option number.
+
+- Which tools: only those whose capabilities say `freeTextAnswer`, which the PC sends in the snapshot. Today: Claude Code. Codex and Cursor Agent do not offer it (not verified yet: the free field of their dialogs has not been captured), and a PC that sends no capabilities hides it too.
+- What a free answer may be: trimmed, 1 to 2000 characters, on one line. A line break, a control character, a bidi override or a zero-width space is refused. The phone checks this with the same rule as the PC and says why before sending (one line, 2000 characters at most); a trailing line break counts. The PC checks again (`invalid`) and a tool that cannot do it answers `unsupported`.
+- Like an option number it needs no device check, only on a low-risk question, once per operation, never queued or resent.
 
 #### What asks for the device check, and why
 
@@ -109,7 +117,7 @@ A decision is never queued and never resent. After a tap the request shows one o
 
 Some of the phone's wording was written during implementation (for instance "J'ai relu la demande" on the re-read button, and the confirmation and delivery messages) and has not been reviewed by the user yet; the exact copy is in `apps/mobile/src/copy.ts`.
 
-### Testing a decision on the iPhone (R4, R5 and R8, pending on device)
+### Testing a decision on the iPhone (R4, R5, R8 and R10, pending on device)
 
 1. In a throwaway directory run `git init` then `git init --bare ../fake-remote.git` and `git remote add origin file://$PWD/../fake-remote.git`, with one commit. Nothing real is at risk.
 2. Start a Ledge Claude session there (`ledge claude`), with the phone paired and open on the session.
@@ -119,6 +127,7 @@ Some of the phone's wording was written during implementation (for instance "J'a
 6. R5: tap "Allow once" on a `ls` request, then switch to airplane mode at once. Expect "receipt not confirmed", then, after reconnecting, the exact state (applied or not), and a single `ls` in the pane.
 7. R8: lock the phone for 10 minutes during an active session, then reopen the app: it reconnects by itself, refreshes, and checks any open operation.
 8. Check `~/.ledge/daemon.log` for the operations and that no assertion or token appears in it.
+9. R10: have a real Claude Code session ask an `AskUserQuestion` (for instance "Ask me which theme to use, with three options"). On the phone choose "Autre réponse", type a sentence with the soft keyboard, send. Expect the agent to receive the text word for word, then the next question or the end of the dialogue. Try a trailing line break (the phone refuses it) and 2001 characters (refused). Then open a Codex and a Cursor Agent question: "Autre réponse" must be absent.
 
 ## Notifications
 
