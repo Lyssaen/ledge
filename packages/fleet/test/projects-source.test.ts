@@ -48,12 +48,18 @@ describe('projects from the local daemon', () => {
     local.emit({ type: 'projects', projects: state }); local.set('unreachable');
     expect(api.fleet!.projects()).toEqual(state);
   });
+  it('setProjects refuses a local daemon that never sent projects (older than projects), sending nothing', () => {
+    const { api, local } = setup();
+    expect(() => api.fleet!.setProjects(state)).toThrow(expect.objectContaining({ name: 'DaemonOutdated' }));
+    expect(projectsSent(local)).toEqual([]);
+  });
   it('setProjects validates, refuses offline, and waits for the broadcast', () => {
     const { api, local } = setup();
+    local.emit({ type: 'projects', projects: { projects: [], rules: [] } });
     expect(() => api.fleet!.setProjects({ projects: [{ ...A, name: ' ' }], rules: [] })).toThrow();
     api.fleet!.setProjects(state);
     expect(projectsSent(local)).toEqual([{ type: 'projects.set', projects: state }]);
-    expect(api.fleet!.projects()).toBeNull();   // not applied before the daemon answers
+    expect(api.fleet!.projects()).toEqual({ projects: [], rules: [] });   // not applied before the daemon answers
     local.set('unreachable');
     expect(() => api.fleet!.setProjects(state)).toThrow(expect.objectContaining({ name: 'DaemonOffline' }));
     expect(projectsSent(local)).toHaveLength(1);

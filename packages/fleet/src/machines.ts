@@ -31,7 +31,7 @@ export interface Fleet {
   onMachineMessage(fn: (machine: string, m: ServerMessage) => void): () => void;
   /** The local daemon's projects and folder rules (build spec §5): null until it sends them, kept while it is down. */
   projects(): Projects | null;
-  /** Asks the local daemon to replace them; applied on its broadcast. Throws when invalid, or `DaemonOffline` when not connected. */
+  /** Asks the local daemon to replace them; applied on its broadcast. Throws when invalid, `DaemonOffline` when not connected, `DaemonOutdated` when it never sent projects. */
   setProjects(next: Projects): void;
 }
 export const LOCAL_MACHINE: MachineConfig = { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' };

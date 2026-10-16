@@ -271,6 +271,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const valid = ProjectsSchema.parse(next);
         const local = peers.get('local')!.client;
         if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
+        // A daemon that knows projects sends them after its snapshot; one that never did would refuse projects.set as invalid.
+        if (projects === null) throw Object.assign(new Error('Update the local Ledge daemon: it does not know projects'), { name: 'DaemonOutdated' });
         local.send({ type: 'projects.set', projects: valid });
       }
     }
