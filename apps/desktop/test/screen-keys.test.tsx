@@ -37,6 +37,32 @@ describe('screen keys', () => {
     expect(handler).not.toHaveBeenCalled();
     expect(dispatch).toHaveBeenCalledWith({ type: 'escape' });
   });
+  it('Ctrl K still opens the search while typing, under a dialog or with the chat open; J reaches the screen again once they close', () => {
+    const handler = vi.fn((e: KeyboardEvent) => e.key === 'j');
+    const dispatch = vi.fn();
+    const search = { type: 'modal', modal: { kind: 'search' } };
+    const { rerender } = render(<Harness state={base} keys={{ current: handler }} dispatch={dispatch} />);
+    screen.getByRole('textbox', { name: 'field' }).focus();
+    fireEvent.keyDown(document.activeElement!, { key: 'k', ctrlKey: true });
+    expect(dispatch).toHaveBeenLastCalledWith(search);
+    (document.activeElement as HTMLElement).blur();
+    rerender(<Harness state={{ ...base, modal: { kind: 'shortcuts' } }} keys={{ current: handler }} dispatch={dispatch} />);
+    fireEvent.keyDown(document.body, { key: 'j' });
+    fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true });
+    expect(dispatch).toHaveBeenLastCalledWith(search);
+    rerender(<Harness state={base} keys={{ current: handler }} dispatch={dispatch} />);         // the dialog closed
+    fireEvent.keyDown(document.body, { key: 'j' });
+    expect(handler).toHaveBeenCalledTimes(1);
+    rerender(<Harness state={{ ...base, chat: true }} keys={{ current: handler }} dispatch={dispatch} />);
+    fireEvent.keyDown(document.body, { key: 'j' });
+    fireEvent.keyDown(document.body, { key: 'k', metaKey: true });
+    expect(dispatch).toHaveBeenLastCalledWith(search);
+    expect(handler).toHaveBeenCalledTimes(1);
+    rerender(<Harness state={{ ...base, chat: false }} keys={{ current: handler }} dispatch={dispatch} />);   // the chat closed
+    fireEvent.keyDown(document.body, { key: 'j' });
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(dispatch).toHaveBeenCalledTimes(3);
+  });
   it('useScreenKeys registers while mounted and always calls the latest handler', () => {
     const keys: ScreenKeys = { current: null };
     function Screen({ answer }: { answer: boolean }) { useScreenKeys(() => answer); return null; }
