@@ -1,7 +1,6 @@
 import { test, expect } from './fixtures';
 import { eight, fakeDaemon, twoProjects } from './daemon';
 
-
 test('projects from the daemon in the sidebar, a filter from a click, cleared with Escape', async ({ page }) => {
   await fakeDaemon(page, eight, { projects: twoProjects });
   await page.goto('/');

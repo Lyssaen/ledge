@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { flushSync } from 'react-dom';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, listSessions } from './helpers';
@@ -7,6 +8,15 @@ afterEach(async () => { cleanup(); localStorage.clear(); await closeDaemons(); }
 
 const row = (name: string) => screen.getByRole('listitem', { name: new RegExp(`^${name},`) });
 const filter = () => screen.getByRole('textbox', { name: 'Filter the sessions' });
+// A browser runs the microtask checkpoint (React's flush of the state it just set) between the React root's key listener and the document's own;
+// a script-dispatched event does not, so this listener, after React's, does the same flush. Without it the document handler sees a stale render
+// and a key taken twice would go unnoticed.
+const press = (el: Element, key: string) => {
+  const root = el.closest('body > div')!;
+  const flush = () => { flushSync(() => {}); };
+  root.addEventListener('keydown', flush);
+  try { el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); } finally { root.removeEventListener('keydown', flush); }
+};
 const banner = () => within(screen.getByRole('banner'));
 
 describe('the List keys', () => {
@@ -23,6 +33,24 @@ describe('the List keys', () => {
     await user.keyboard('j'); expect(screen.getByRole('listitem', { name: /subagent of Otto/ })).toHaveFocus();
     await user.keyboard('{Enter}');
     expect(banner().getByText('Otto')).toBeVisible();
+  });
+  it('↓ from the filter stops on the first row: the document handler does not take the same key as a J', async () => {
+    const { user } = await boot({ sessions: listSessions(), list: true });
+    await user.keyboard('f');
+    press(filter(), 'ArrowDown');
+    expect(row('Otto')).toHaveFocus();
+    await waitFor(() => expect(row('Otto')).toHaveClass('keyboard-selected'));
+    expect(document.querySelectorAll('.lrow.keyboard-selected')).toHaveLength(1);
+  });
+  it('Enter from the filter chooses the first row and opens nothing', async () => {
+    const { user } = await boot({ sessions: listSessions(), list: true });
+    await user.keyboard('f');
+    press(filter(), 'Enter');
+    expect(row('Otto')).toHaveFocus();
+    await waitFor(() => expect(row('Otto')).toHaveClass('keyboard-selected'));
+    expect(document.querySelectorAll('.lrow.keyboard-selected')).toHaveLength(1);
+    expect(banner().queryByText('Otto')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true');
   });
   it('a collapsed group is skipped', async () => {
     const { user } = await boot({ sessions: listSessions(), list: true });

@@ -41,7 +41,6 @@ test('Allow from a row: the daemon gets one decision, the row follows the agent'
   await row(page, 'Otto').hover();
   await row(page, 'Otto').getByRole('button', { name: 'Allow' }).click();
   await expect.poll(() => daemon.received.filter(m => m.type === 'session.decide')).toEqual([{ type: 'session.decide', id: 'otto', decision: 'accept' }]);
-  daemon.upsert({ ...fleet[0]!, state: 'working', pending: undefined });
   await expect(row(page, 'Otto').getByText('Running')).toBeVisible();
 });
 test('drag Kit from Sans projet onto the Ledge group: the daemon gets the rule, Kit joins it', async ({ page }) => {
