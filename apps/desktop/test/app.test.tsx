@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { createDesktopFleet } from '../src/fleet/useFleet';
@@ -14,26 +14,27 @@ async function daemon() { const d = await createMockDaemon(); daemons.push(d); d
 /** A local daemon that refuses at once: the fleet settles on `unreachable` after its first attempt. */
 class DeadSocket { onopen = null; onmessage: unknown = null; onclose: ((e: unknown) => void) | null = null; onerror: ((e: unknown) => void) | null = null; readyState = 3; constructor(public url: string) { setTimeout(() => { this.onerror?.({}); this.onclose?.({ code: 1006 }); }, 0); } send() {} close() {} }
 
-describe('the waiting shell', () => {
-  it('waits on the real fleet: product name, session count and the local machine connected', async () => {
-    const d = await daemon(); d.upsert(fakeSession('otto')); d.upsert(fakeSession('nova'));
+describe('the shell on the real fleet', () => {
+  it('boots on the real fleet: the crumb says Atelier and the sidebar lists the local machine', async () => {
+    const d = await daemon(); d.upsert(fakeSession('otto')); d.upsert(fakeSession('nova', { name: 'Nova' }));
     render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
-    expect(await screen.findByRole('heading', { name: 'Ledge Desktop' })).toBeVisible();
-    expect(await screen.findByText('2 sessions')).toBeVisible();
-    expect(await screen.findByText('Local connected')).toBeVisible();
+    expect(within(screen.getByRole('banner')).getByText('Atelier')).toBeVisible();
+    const side = within(screen.getByRole('complementary', { name: 'Sidebar' }));
+    await waitFor(() => expect(side.getByRole('button', { name: /Local/ })).toHaveTextContent('2 agents'));
   });
 
-  it('says the local daemon is disconnected once the first attempt fails, without throwing', async () => {
+  it('shows the local machine offline once the first attempt fails, without throwing', async () => {
     render(<App client={createDesktopFleet({ WebSocketImpl: DeadSocket })} />);
-    expect(await screen.findByText('Local disconnected', {}, { timeout: 6000 })).toBeVisible();
-    expect(screen.getByText('0 sessions')).toBeVisible();
+    const side = within(screen.getByRole('complementary', { name: 'Sidebar' }));
+    await waitFor(() => expect(side.getByRole('button', { name: /Local/ })).toHaveTextContent('offline'), { timeout: 6000 });
+    expect(side.getByRole('button', { name: /Local/ }).querySelector('.machine-dot')).toHaveClass('off');
   });
 
   it('speaks the stored language from the first render', async () => {
     localStorage.setItem('desktop.lang', 'fr');
     const d = await daemon();
     render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
-    expect(screen.getByText('L’Atelier se construit. Ledge suit vos agents en attendant.')).toBeVisible();
-    expect(await screen.findByText('Local connecté')).toBeVisible();
+    expect(screen.getByText('Sessions locales et SSH')).toBeVisible();
+    expect(screen.getByRole('complementary', { name: 'Barre latérale' })).toBeVisible();
   });
 });

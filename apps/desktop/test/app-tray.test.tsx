@@ -23,15 +23,17 @@ async function boot() {
   const d = await createMockDaemon(); daemons.push(d);
   d.machines([{ id: 'local', label: 'Local' }]);
   const view = render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
-  await screen.findByText('Local connected');
+  await screen.findByRole('complementary', { name: 'Sidebar' });
   return { d, view };
 }
 
 describe('tray', () => {
-  it('ignores « new » and « open » (no launch screen yet) and switches do not disturb on « dnd »', async () => {
+  it('opens « New session » on « new », ignores « open » and switches do not disturb on « dnd »', async () => {
     await boot();
-    act(() => tray.fire!('new')); act(() => tray.fire!('open'));
-    expect(screen.getByRole('heading', { name: 'Ledge Desktop' })).toBeVisible();
+    act(() => tray.fire!('open'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    act(() => tray.fire!('new'));
+    expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible();
     act(() => tray.fire!('dnd'));
     expect(localStorage.getItem('desktop.dnd')).toBe('1');
     expect(tray.labels.at(-1)).toEqual({ open: 'Open Ledge Desktop', newSession: 'New session', dnd: 'Resume alerts', quit: 'Quit Ledge Desktop' });

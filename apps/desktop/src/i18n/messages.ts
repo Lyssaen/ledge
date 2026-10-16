@@ -1,11 +1,27 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
+import type { SectionId } from '../nav/state';
 
 /** French counts 0 and 1 as singular, English only 1. */
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 const pluralEn = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 const fr = {
-  waiting: { title: 'Ledge Desktop', text: 'L’Atelier se construit. Ledge suit vos agents en attendant.' },
+  side: {
+    label: 'Barre latérale', newSession: 'Nouvelle session', search: 'Rechercher', searchLabel: 'Rechercher une session',
+    views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
+    machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', settings: 'Réglages'
+  },
+  crumb: { atelier: 'Atelier', list: 'Liste', settings: 'Réglages', clearFilter: 'Retirer le filtre : voir tous les projets', clearFilterTitle: 'Tous les projets (Échap)', escape: 'Échap' },
+  top: {
+    viewTabs: 'Vue des agents', helpersHide: 'Masquer les sous-agents', helpersShow: 'Afficher les sous-agents', pause: 'Figer les animations', play: 'Animer',
+    search: 'Rechercher une session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran'
+  },
+  foot: { sessions: 'Sessions locales et SSH', search: 'Une session', chat: 'Chat Ledge', shortcuts: 'Raccourcis' },
+  sections: { general: 'Général', appearance: 'Apparence', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', projects: 'Projets', shortcuts: 'Raccourcis', about: 'À propos' } as Record<SectionId, string>,
+  pending: 'Cet écran arrive bientôt.',
+  close: 'Fermer',
+  // search and shortcuts: the mockup's titles, until the palette and the help (task 4) bring their own.
+  modalTitles: { launch: 'Nouvelle session', project: 'Nouveau projet', search: 'Aller à une session', shortcuts: 'Raccourcis clavier' },
   tray: { open: 'Ouvrir Ledge Desktop', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', dndOff: 'Réactiver les alertes', quit: 'Quitter Ledge Desktop' },
   notify: {
     approval: (name: string) => `${name} attend votre accord`,
@@ -29,7 +45,21 @@ const fr = {
 };
 
 const en: typeof fr = {
-  waiting: { title: 'Ledge Desktop', text: 'The Atelier is being built. Ledge keeps watch over your agents meanwhile.' },
+  side: {
+    label: 'Sidebar', newSession: 'New session', search: 'Search', searchLabel: 'Search a session',
+    views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
+    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', settings: 'Settings'
+  },
+  crumb: { atelier: 'Atelier', list: 'List', settings: 'Settings', clearFilter: 'Remove the filter: show every project', clearFilterTitle: 'Every project (Esc)', escape: 'Esc' },
+  top: {
+    viewTabs: 'Agents view', helpersHide: 'Hide subagents', helpersShow: 'Show subagents', pause: 'Freeze animations', play: 'Animate',
+    search: 'Search a session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen'
+  },
+  foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts' },
+  sections: { general: 'General', appearance: 'Appearance', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Shortcuts', about: 'About' },
+  pending: 'This screen is coming soon.',
+  close: 'Close',
+  modalTitles: { launch: 'New session', project: 'New project', search: 'Go to a session', shortcuts: 'Keyboard shortcuts' },
   tray: { open: 'Open Ledge Desktop', newSession: 'New session', dnd: 'Do not disturb', dndOff: 'Resume alerts', quit: 'Quit Ledge Desktop' },
   notify: {
     approval: (name) => `${name} needs your approval`,
