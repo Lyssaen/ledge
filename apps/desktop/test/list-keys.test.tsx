@@ -11,6 +11,7 @@ const filter = () => screen.getByRole('textbox', { name: 'Filter the sessions' }
 // A browser runs the microtask checkpoint (React's flush of the state it just set) between the React root's key listener and the document's own;
 // a script-dispatched event does not, so this listener, after React's, does the same flush. Without it the document handler sees a stale render
 // and a key taken twice would go unnoticed.
+// Assumes the React root is `body > div` (Testing Library's default container).
 const press = (el: Element, key: string) => {
   const root = el.closest('body > div')!;
   const flush = () => { flushSync(() => {}); };
@@ -42,9 +43,10 @@ describe('the List keys', () => {
     await waitFor(() => expect(row('Otto')).toHaveClass('keyboard-selected'));
     expect(document.querySelectorAll('.lrow.keyboard-selected')).toHaveLength(1);
   });
-  it('Enter from the filter chooses the first row and opens nothing', async () => {
+  it('guard: Enter from the filter chooses the first row and opens nothing', async () => {
     const { user } = await boot({ sessions: listSessions(), list: true });
     await user.keyboard('f');
+    // Passes without the fix too: Enter is skipped from inputs, so this pins that it stays that way.
     press(filter(), 'Enter');
     expect(row('Otto')).toHaveFocus();
     await waitFor(() => expect(row('Otto')).toHaveClass('keyboard-selected'));

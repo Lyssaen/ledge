@@ -85,7 +85,7 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
         if (!forget(id)) return;
         latest.current.o.notify(latest.current.t.decisions.unconfirmed(name));
       }, UNCONFIRMED_MS);
-      // Kept before the send: a machine found offline answers its error at once (the fleet's `${label} is offline`).
+      // `errorSeq` comes from the last render's `lastError`, so whether this is recorded before or after `client.send` does not matter for it.
       live.current.set(id, { request: requestKey(s), errorSeq: latest.current.o.lastError?.seq ?? 0, name, timer });
       setInFlight(new Set(live.current.keys()));
       latest.current.o.client.send({ type: 'session.decide', id, decision });

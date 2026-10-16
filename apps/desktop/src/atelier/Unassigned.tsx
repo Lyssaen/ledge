@@ -3,13 +3,12 @@ import type { Project, Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import { taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
 import { SHELL_ICONS } from '../shell/icons';
 import { SessionBot, StateBadge } from '../shell/SessionBot';
 import type { Filing } from './filing';
 import { MoveTo } from './MoveTo';
-import { machineOf } from '../nav/agents';
+import { machineOf, taskOf } from '../nav/agents';
 
 /** « Sans projet » (observatory.tsx, `unassigned-zone` in atelier mode): the agents Ledge ties to no project wait in a
  *  taped-off area, one card each. A card drags onto a table or a sidebar project, or « Ranger dans… » files it (filing). */
