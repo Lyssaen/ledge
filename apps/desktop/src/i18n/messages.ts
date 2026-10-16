@@ -63,6 +63,16 @@ const fr = {
     },
     legend: { working: 'En cours', approval: 'Votre accord', question: 'Une question', done: 'Terminé ou hors ligne', helper: 'Un petit bot est un sous-agent.' }
   },
+  filing: {
+    moveTo: 'Ranger dans…', newProject: 'Nouveau projet…', from: (folder: string) => `À partir de ${folder}`,
+    grip: 'Glisser vers une table pour le ranger',
+    dropHelp: (name: string) => `Déposez sur un projet pour y ranger ${name}.`,
+    dropHere: 'Déposer ici', dropNow: (name: string) => `Lâcher pour asseoir ${name}`,
+    joined: (name: string, table: string) => `${name} rejoint la table ${table}. Ledge s'en souviendra pour ce dossier.`,
+    offline: (name: string) => `Impossible de ranger ${name} : le daemon Ledge local n'est pas joignable.`,
+    outdated: (name: string) => `Impossible de ranger ${name} : mettez à jour le daemon Ledge local, il ne connaît pas encore les projets.`,
+    invalid: (name: string) => `Impossible de ranger ${name} : Ledge ne peut pas mémoriser ce dossier.`
+  },
   zoom: {
     bar: "Zoom de l'atelier", out: 'Dézoomer', outTitle: 'Dézoomer (−)', in: 'Zoomer', inTitle: 'Zoomer (+)',
     reset: 'Revenir à 100 %', fit: 'Ajuster', fitTitle: 'Tout voir (0)', hint: 'Ctrl + molette · glisser le sol · double-clic sur une table'
@@ -131,6 +141,16 @@ const en: typeof fr = {
       noRepo: 'this project'
     },
     legend: { working: 'Running', approval: 'Your approval', question: 'A question', done: 'Done or offline', helper: 'A small bot is a subagent.' }
+  },
+  filing: {
+    moveTo: 'Move to…', newProject: 'New project…', from: (folder) => `From ${folder}`,
+    grip: 'Drag onto a table to move it there',
+    dropHelp: (name) => `Drop on a project to move ${name} there.`,
+    dropHere: 'Drop here', dropNow: (name) => `Release to seat ${name}`,
+    joined: (name, table) => `${name} joins the ${table} table. Ledge will remember this folder.`,
+    offline: (name) => `${name} could not be moved: the local Ledge daemon is not reachable.`,
+    outdated: (name) => `${name} could not be moved: update the local Ledge daemon, it does not know projects yet.`,
+    invalid: (name) => `${name} could not be moved: Ledge cannot remember this folder.`
   },
   zoom: {
     bar: 'Atelier zoom', out: 'Zoom out', outTitle: 'Zoom out (−)', in: 'Zoom in', inTitle: 'Zoom in (+)',

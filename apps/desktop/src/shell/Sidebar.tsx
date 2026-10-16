@@ -8,14 +8,16 @@ import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { activeCount, dotOf } from '../nav/agents';
 import type { NavAction, NavState } from '../nav/state';
+import type { Filing } from '../atelier/filing';
 import { SHELL_ICONS } from './icons';
 import { useTheme } from './theme';
 
 const needsYou = (s: Session) => { const d = dotOf(s); return d === 'approval' || d === 'question'; };
 
 /** The mockup's sidebar: Ledge, New session and search, the views, the projects with their agents' dots, « Sans projet »,
- *  the machines and Settings. Dropping an agent on a project arrives with the atelier's filing task (lot 4, task 6). */
-export function Sidebar({ nav, dispatch, sessions, machines, projects, order, projectIdOf }: { nav: NavState; dispatch: (a: NavAction) => void; sessions: readonly Session[]; machines: readonly MachineState[]; projects: Projects | null; order: readonly Session[]; projectIdOf: (s: Session) => string | null }) {
+ *  the machines and Settings. Each project is a drop target for an agent of « Sans projet »; « Sans projet » itself is not
+ *  (a rule must name a project). */
+export function Sidebar({ nav, dispatch, sessions, machines, projects, order, projectIdOf, filing }: { nav: NavState; dispatch: (a: NavAction) => void; sessions: readonly Session[]; machines: readonly MachineState[]; projects: Projects | null; order: readonly Session[]; projectIdOf: (s: Session) => string | null; filing: Filing }) {
   const { t } = useI18n();
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
@@ -57,7 +59,7 @@ export function Sidebar({ nav, dispatch, sessions, machines, projects, order, pr
             {(projects?.projects ?? []).map(p => {
               const team = order.filter(s => projectIdOf(s) === p.id);
               return (
-                <button key={p.id} className={`side-row side-project ${filter === p.id ? 'active' : ''}`} onClick={() => dispatch({ type: 'home', project: p.id })}>
+                <button key={p.id} {...filing.dropProps(p.id)} className={`side-row side-project ${filter === p.id ? 'active' : ''} ${filing.over === p.id ? 'drop-over' : ''}`} onClick={() => dispatch({ type: 'home', project: p.id })}>
                   <i className="side-swatch" style={{ background: PROJECT_COLORS[p.color] }} />
                   <span title={p.name}>{p.name}</span>
                   <span className="side-dots" aria-label={t.side.agents(team.length)}>{team.slice(0, 6).map(s => <i key={s.id} className={`dot-${dotOf(s)}`} />)}</span>
@@ -71,6 +73,7 @@ export function Sidebar({ nav, dispatch, sessions, machines, projects, order, pr
               </button>
             )}
           </nav>
+          {filing.dragging && <p className="side-drop-help">{t.filing.dropHelp(filing.dragging.name)}</p>}
         </div>
         <div className="side-group">
           <div className="side-label">

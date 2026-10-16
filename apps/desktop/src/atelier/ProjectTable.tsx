@@ -9,6 +9,7 @@ import { useMotionPreferences } from '../motionPreferences';
 import { taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
 import { useTheme } from '../shell/theme';
+import type { Filing } from './filing';
 import { Plants } from './Plants';
 import { RUG_SIDE, helperState, layoutTable, noteX, sheetState, tableBranch, type Side } from './layout';
 
@@ -24,9 +25,11 @@ export interface ProjectTableProps {
   isolated: boolean;
   /** keyboard-selected (J / K). */
   focusedId: string | null;
-  /** just-seated (filing, task 6). */
+  /** just-seated: the agent that was just put away here. */
   seated: string | null;
   dispatch: (a: NavAction) => void;
+  /** The table is a drop target for the agents of « Sans projet ». */
+  filing: Filing;
 }
 
 /** The machine an agent runs on: the fleet's label, else its id. */
@@ -68,7 +71,7 @@ function TableTop({ sheets, length }: { sheets: Sheet[]; length: number }): JSX.
 
 /** One project's table in the atelier (observatory.tsx, `project-room` in atelier mode): the rug with its label and
  *  « +N », the plants, the chairs, the table with its sheets and post-its, the seats and the sub-agents at the ends. */
-export function ProjectTable({ project, mains, order, helpers, paused, isolated, focusedId, seated, dispatch }: ProjectTableProps): JSX.Element {
+export function ProjectTable({ project, mains, order, helpers, paused, isolated, focusedId, seated, dispatch, filing }: ProjectTableProps): JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
@@ -109,6 +112,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
         <button className="project-conversations" title={name} aria-label={t.atelier.conversations(name)} onClick={toList}>{name}</button>
         {branch !== null && <span className="heading-branch" title={branch}>⎇ {branch}</span>}
       </span>
+      {filing.dragging && <span className="drop-hint">{filing.over === id ? t.filing.dropNow(filing.dragging.name) : t.filing.dropHere}</span>}
       <span className="spacer" />
       <span className="room-menu-wrap" ref={wrap}>
         <button className="icon-action" aria-label={t.atelier.actions(name)} title={t.atelier.actionsTitle} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(m => !m)}>
@@ -141,7 +145,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
   });
 
   return (
-    <section className="project-room" data-project={id} aria-label={t.atelier.table(name)} style={{ '--room': `${width}px`, '--project': color } as CSSProperties}>
+    <section className={cls('project-room', filing.over === id && 'drop-over')} data-project={id} aria-label={t.atelier.table(name)} {...filing.dropProps(id)} style={{ '--room': `${width}px`, '--project': color } as CSSProperties}>
       <div className="table-scene">
         <div className="office-rug" style={{ left: at(-RUG_SIDE), right: 'auto', width: length + 2 * RUG_SIDE }}>
           {heading}

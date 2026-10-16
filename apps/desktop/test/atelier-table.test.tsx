@@ -6,6 +6,15 @@ import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { Helper, Project, Session } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
 import { ProjectTable, type ProjectTableProps } from '../src/atelier/ProjectTable';
+import type { Filing } from '../src/atelier/filing';
+
+/** No drag under way: the table only renders. */
+const noFiling: Filing = {
+  dragging: null, over: null, seated: null,
+  dragProps: () => ({ draggable: true, onDragStart: () => {}, onDragEnd: () => {} }),
+  dropProps: () => ({ onDragOver: () => {}, onDragLeave: () => {}, onDrop: () => {} }),
+  file: () => {}
+};
 
 describe('a project table', () => {
 const main = (id: string, extra: Partial<Session> = {}) => fakeSession(id, { id: `local:${id}`, name: id, machineId: 'local', cwd: '/w/ledge', ...extra });
@@ -16,7 +25,7 @@ type Overrides = Partial<Omit<ProjectTableProps, 'mains' | 'dispatch'>>;
 function tableElement(mains: readonly Session[], overrides: Overrides = {}, dispatch: ProjectTableProps['dispatch'] = vi.fn()) {
   return (
     <LangProvider lang="en">
-      <ProjectTable project={ledge} mains={mains} order={mains} helpers paused={false} isolated={false} focusedId={null} seated={null} dispatch={dispatch} {...overrides} />
+      <ProjectTable project={ledge} mains={mains} order={mains} helpers paused={false} isolated={false} focusedId={null} seated={null} dispatch={dispatch} filing={noFiling} {...overrides} />
     </LangProvider>
   );
 }

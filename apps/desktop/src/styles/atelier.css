@@ -212,7 +212,7 @@
 /* Second part (task 4): the atelier in the shell. */
 
 /* office.css, lines 24-39 and 47-50: « Sans projet ». The menu (41-44) is above with the table's; the filing rules
-   (40 `.assign-wrap`, 45-46 `.unassigned-nav`) arrive with filing (task 6). */
+   (40 `.assign-wrap`, 45-46 `.unassigned-nav`, 107-124 drag and drop) follow it. */
 /* Agents Ledge cannot tie to a project wait in a taped-off area, standing, until they are filed. */
 .unassigned-zone{margin:22px 30px 28px;padding:14px 16px 16px;border:1.5px dashed var(--input);border-radius:var(--radius-xl);background:color-mix(in srgb,var(--sidebar) 70%,transparent);position:relative}
 .compact.unassigned-zone,.unassigned-zone.compact{margin:16px 0 0;background:var(--sidebar);border-style:dashed}
@@ -231,6 +231,31 @@
 .unassigned-card:hover .seat-shortcut,.unassigned-card.keyboard-selected .seat-shortcut{display:inline}
 @media(max-width:700px){.unassigned-zone{margin:18px 0 20px}.unassigned-list{grid-template-columns:1fr}}
 .unassigned-actions{display:flex;align-items:center;gap:8px;padding:6px 2px 0;border-top:1px solid var(--border)}
+
+/* Filing (task 6): office.css lines 40 and 45-46, then 107-124. */
+.assign-wrap{position:relative;flex-shrink:0}
+.unassigned-nav{position:relative}
+.unassigned-nav>small{margin-left:auto;font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+/* Drag and drop: every table becomes a target; the hovered one lights up. */
+.unassigned-card{position:relative;cursor:grab;padding-left:22px}
+.unassigned-card:active{cursor:grabbing}
+.unassigned-card.is-dragged{opacity:.4;border-style:dashed}
+.drag-grip{position:absolute;left:7px;top:50%;transform:translateY(-50%);display:grid;grid-template-columns:repeat(2,3px);gap:3px}
+.drag-grip i{width:3px;height:3px;border-radius:50%;background:var(--muted-foreground);opacity:.6}
+.unassigned-card:hover .drag-grip i{opacity:1}
+.is-dragging .office-shell .office-rug{outline:1.5px dashed var(--ring);outline-offset:6px;transition:outline-color .15s,background .15s}
+.office-shell .drop-over .office-rug{outline:2px solid var(--sidebar-primary);background:color-mix(in srgb,var(--sidebar-primary) 9%,var(--sidebar))!important}
+.is-dragging .project-room.drop-over .room-heading{border-color:var(--sidebar-primary)}
+.drop-hint{font-size:10px;padding:1px 7px;border-radius:999px;border:1px dashed var(--ring);color:var(--muted-foreground);margin-left:6px;white-space:nowrap}
+.drop-over .drop-hint{border-style:solid;border-color:var(--sidebar-primary);color:var(--foreground);background:color-mix(in srgb,var(--sidebar-primary) 18%,transparent)}
+.compact .project-room.drop-over{outline:2px solid var(--sidebar-primary)}
+.just-seated{animation:seat-pop .9s cubic-bezier(.3,1.6,.5,1)}
+.just-seated:after{content:'';position:absolute;inset:-6px;border-radius:var(--radius-lg);border:2px solid var(--sidebar-primary);animation:seat-ring 1.4s ease-out forwards;pointer-events:none}
+@keyframes seat-pop{0%{transform:translateY(-26px) scale(.7);opacity:0}100%{transform:none;opacity:1}}
+@keyframes seat-ring{0%{opacity:1}100%{opacity:0;transform:scale(1.15)}}
+@media(prefers-reduced-motion:reduce){.just-seated,.just-seated:after{animation:none}}
+/* Not in the mockup: the app's own reduced-motion setting stills the seat pop too. */
+.office-reduced .just-seated,.office-reduced .just-seated:after{animation:none}
 
 /* office.css, lines 125-145: Ledge's desk. */
 /* Ledge's own little desk, at the head of the room: a click opens the chat. */

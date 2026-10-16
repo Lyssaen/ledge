@@ -23,6 +23,8 @@ import { Modal } from './shell/Modal';
 import { SearchPalette } from './shell/SearchPalette';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
 import { onFullscreenLeft, setWindowFullscreen } from './shell/fullscreen';
+import { Toast, useToast } from './shell/Toast';
+import { useFiling } from './atelier/filing';
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
@@ -31,7 +33,7 @@ const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'rec
 /** The Atelier's shell: sidebar, top bar, the current place (each screen waits for its lot), footer, chat and dialogs;
  *  the real fleet, toasts and sounds, and the tray. */
 function Shell({ client }: { client?: DaemonClient }) {
-  const { sessions, machines, status, localDown, client: fleetClient } = useFleet(client);
+  const { sessions, machines, status, localDown, fleet, client: fleetClient } = useFleet(client);
   const projects = useProjects(fleetClient);
   const { t } = useI18n();
   const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
@@ -62,6 +64,9 @@ function Shell({ client }: { client?: DaemonClient }) {
     return (id && projects?.projects.find(p => p.id === id)?.name) || t.side.unassigned;
   }, [projectIdOf, projects, t]);
   const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
+  // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
+  const { notice, notify } = useToast();
+  const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   useKeys(dispatch, { state: nav, order, screen: screenKeys });
   // The window may leave full screen by itself (Escape in a browser, the OS): the layout follows.
@@ -79,13 +84,13 @@ function Shell({ client }: { client?: DaemonClient }) {
 
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
-      <div className={`application ${nav.fullscreen ? 'immersive' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={nav.modal !== null}>
-        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} />
+      <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={nav.modal !== null}>
+        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
         <section className="workspace">
           <TopBar nav={nav} dispatch={dispatch} session={session} projects={projects} projectIdOf={projectIdOf} />
           {place.kind === 'settings' ? <Pending title={t.sections[place.section]} />
             : session ? <Pending title={taskOf(session)} />
-            : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} />
+            : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
             : (
               <div className="overview-scroll" id="view-panel-list" role="tabpanel" aria-labelledby="view-tab-list">
                 <Pending title={t.crumb.list} />
@@ -106,6 +111,7 @@ function Shell({ client }: { client?: DaemonClient }) {
         const title = nav.modal.kind === 'project' && nav.modal.edit !== undefined ? t.modalTitles.editProject : t.modalTitles[nav.modal.kind];
         return <Modal title={title} wide onClose={close}><Pending title={title} /></Modal>;
       })()}
+      <Toast notice={notice} />
     </ScreenKeysContext.Provider>
   );
 }

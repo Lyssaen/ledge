@@ -1,5 +1,5 @@
 /* The sidebar, copied from the frozen mockup (docs/mockups/desktop-observatory/sidebar.css) without the per-project
-   swatch classes (the colour comes inline from PROJECT_COLORS) and the drag-and-drop rules (the atelier's filing task, lot 4 task 6); the footer rules come
+   swatch classes (the colour comes inline from PROJECT_COLORS); the footer rules come
    from settings.css. Views, projects, machines with live state. */
 .sidebar{width:236px;padding:0;gap:0}
 .side-brand{height:56px;display:flex;align-items:center;gap:9px;padding:0 10px 0 16px;border-bottom:1px solid var(--sidebar-border)}
@@ -35,6 +35,8 @@
 .side-unassigned{border:1px dashed transparent}
 .side-unassigned:not(.active){border-color:var(--border)}
 .side-alert{width:6px;height:6px;border-radius:50%;background:var(--warning)}
+.side-project.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));color:var(--foreground);outline:1.5px solid var(--sidebar-primary)}
+.is-dragging .side-project:not(.drop-over){outline:1px dashed var(--input);outline-offset:-1px}
 .side-drop-help{margin:6px 10px 0;font-size:11px;line-height:15px;color:var(--muted-foreground)}
 .side-machine{height:30px;font-size:12px}
 .machine-dot{width:7px;height:7px;border-radius:50%;margin:0 4px 0 2px;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 18%,transparent);flex-shrink:0}

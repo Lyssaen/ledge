@@ -12,16 +12,16 @@ import { LedgeDesk } from './LedgeDesk';
 import { ProjectTable } from './ProjectTable';
 import { Unassigned } from './Unassigned';
 import { useAtelierView } from './useAtelierView';
+import { folderOf, type Filing } from './filing';
 import { LEDGE_TILE, ZONE_TILE } from './zoom';
 
 export interface AtelierProps {
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; projects: Projects | null; order: readonly Session[];
   projectIdOf: (s: Session) => string | null;
+  /** Putting the agents of « Sans projet » away: the tables are targets, the cards drag, « Ranger dans… » files. */
+  filing: Filing;
 }
-
-/** A folder's own name: the last segment of its path. */
-const folderOf = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
 /** The filtered project has no agent yet: say where its table will appear, and offer to start a session there. */
 function EmptyProject({ project, dispatch }: { project: Project; dispatch: (a: NavAction) => void }): JSX.Element {
@@ -42,7 +42,7 @@ function EmptyProject({ project, dispatch }: { project: Project; dispatch: (a: N
 /** The atelier (observatory.tsx, atelier mode): Ledge's desk, a table per project with agents, the filtered project's
  *  empty state, « Sans projet », then the legend; the zoom bar beside it. The mosaic is fitted to the space, zoomed and panned
  *  (useAtelierView). J / K (or ↓ / ↑) walk the agents shown, Entrée opens the chosen one; + / − / 0 zoom, Space pans. */
-export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf }: AtelierProps): JSX.Element {
+export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing }: AtelierProps): JSX.Element {
   const { t } = useI18n();
   const { reduced } = useMotionPreferences();
   const { place } = nav;
@@ -99,11 +99,12 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf 
         <div className={`project-grid ${scene.tables.length === 1 ? 'focused' : ''}`}>
           {scene.tables.map(({ project, mains }) => (
             <ProjectTable key={project.id} project={project} mains={mains} order={order} helpers={nav.helpers} paused={nav.paused}
-              isolated={filter === project.id} focusedId={focusedId} seated={null} dispatch={dispatch} />
+              isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing} />
           ))}
         </div>
         {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
-        <Unassigned sessions={scene.unassigned} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch} />
+        <Unassigned sessions={scene.unassigned} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch}
+          filing={filing} projects={projects?.projects ?? []} />
       </div>
       <div className="workspace-legend">
         <span><i className="live-dot" />{t.atelier.legend.working}</span>
