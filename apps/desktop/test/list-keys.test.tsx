@@ -37,6 +37,19 @@ describe('the List keys', () => {
     expect(filter()).toHaveValue('jkfn');
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.querySelector('.lrow.keyboard-selected')).toBeNull();
+    expect(document.querySelector('.lrow:focus')).toBeNull();
+  });
+  it('leaving the filter with Escape is not undone by the next render', async () => {
+    const { d, user } = await boot({ sessions: listSessions(), list: true });
+    await user.keyboard('j'); expect(row('Otto')).toHaveFocus();
+    await user.keyboard('f'); await user.keyboard('x');
+    await user.keyboard('{Escape}{Escape}');
+    expect(filter()).not.toHaveFocus(); expect(row('Otto')).not.toHaveFocus();
+    d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/pay', state: 'waiting_input', pending: { kind: 'question', text: 'Quel port ?', source: 'hook' }, lastActivityAt: new Date().toISOString() }));
+    await waitFor(() => expect(row('Nova').getAttribute('aria-label')).toMatch(/waiting|question|decide|Waiting/i));
+    await new Promise(r => setTimeout(r, 50));
+    expect(row('Otto')).not.toHaveFocus();
+    expect(document.body).toHaveFocus();
   });
   it('Escape in the filter clears it, then leaves it; only then does Escape remove the project filter', async () => {
     const { side, user } = await boot({ sessions: listSessions(), list: true });

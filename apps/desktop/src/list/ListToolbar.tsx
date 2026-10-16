@@ -33,7 +33,6 @@ export interface ListToolbarProps {
  *  and the chosen chip clicked again goes back to « Tous ». */
 export function ListToolbar({ barRef, inputRef, onClear, onFirst, text, onText, chip, onChip, counts, group, onGroup, density, onDensity }: ListToolbarProps): JSX.Element {
   const { t } = useI18n();
-  const input = inputRef;
   const radios = useRef<Partial<Record<GroupBy, HTMLButtonElement | null>>>({});
   const other: Density = density === 'tight' ? 'comfy' : 'tight';
   // A radio group: ← / → (and ↑ / ↓) move the choice and the focus, Home / End go to the ends.
@@ -63,9 +62,9 @@ export function ListToolbar({ barRef, inputRef, onClear, onFirst, text, onText, 
     <div ref={barRef} className="list-toolbar">
       <label className="list-filter">
         <Icon d={SHELL_ICONS.search} size={14} />
-        <input ref={input} value={text} onChange={e => onText(e.target.value)} onKeyDown={onFilterKey} placeholder={t.list.filterPlaceholder} aria-label={t.list.filter} />
+        <input ref={inputRef} value={text} onChange={e => onText(e.target.value)} onKeyDown={onFilterKey} placeholder={t.list.filterPlaceholder} aria-label={t.list.filter} />
         {text
-          ? <button type="button" className="filter-clear" aria-label={t.list.clearFilter} onClick={() => { onText(''); input.current?.focus(); }}><Icon d={ICONS.close.d} size={12} /></button>
+          ? <button type="button" className="filter-clear" aria-label={t.list.clearFilter} onClick={() => { onText(''); inputRef.current?.focus(); }}><Icon d={ICONS.close.d} size={12} /></button>
           : <Kbd>F</Kbd>}
       </label>
       <div className="state-chips" role="group" aria-label={t.list.chips}>

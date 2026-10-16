@@ -82,9 +82,11 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines }: 
   const walk = useMemo(() => walkRows(model.groups, collapsed), [model.groups, collapsed]);
   useEffect(() => { if (focusedId !== null && !walk.some(r => r.key === focusedId)) setFocusedId(null); }, [walk, focusedId]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const hasFocus = useRef(false);
+  // The row the focus was last in (the row itself or one of its buttons), null once it went elsewhere: the filter, the
+  // toolbar, a click on nothing, outside the List. Only a focus lost from the chosen row is given back.
+  const focusRow = useRef<string | null>(null);
   useEffect(() => {
-    const away = (e: PointerEvent) => { if (!(e.target instanceof Node && rootRef.current?.contains(e.target))) hasFocus.current = false; };
+    const away = () => { focusRow.current = null; };
     document.addEventListener('pointerdown', away, true);
     return () => document.removeEventListener('pointerdown', away, true);
   }, []);
@@ -93,7 +95,7 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines }: 
   const choose = (key: string) => { setFocusedId(key); rowEl(key)?.focus(); };
   // A row that moves (its state changed) or loses a button drops the focus to the body: it goes back to the chosen row.
   useLayoutEffect(() => {
-    if (focusedId !== null && hasFocus.current && document.activeElement === document.body) rowEl(focusedId)?.focus();
+    if (focusedId !== null && focusRow.current === focusedId && document.activeElement === document.body) rowEl(focusedId)?.focus();
   });
 
   useScreenKeys(e => {
@@ -162,8 +164,8 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines }: 
   return (
     <div className="overview-scroll list" id="view-panel-list" role="tabpanel" aria-labelledby="view-tab-list">
       <div ref={rootRef} className={`list-view density-${density} group-${group}`}
-        onFocus={() => { hasFocus.current = true; }}
-        onBlur={e => { if (e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) hasFocus.current = false; }}>
+        onFocus={e => { focusRow.current = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-agent]')?.dataset.agent ?? null : null; }}
+        onBlur={e => { if (e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) focusRow.current = null; }}>
         <ListToolbar barRef={barRef} inputRef={inputRef} onClear={clear} onFirst={() => { if (walk[0]) choose(walk[0].key); }} text={text} onText={setText} chip={chip} onChip={setChip} counts={model.counts}
           group={group} onGroup={g => setPrefs(p => ({ ...p, group: g }))} density={density} onDensity={d => setPrefs(p => ({ ...p, density: d }))} />
         {empty ?? model.groups.map(g => (
