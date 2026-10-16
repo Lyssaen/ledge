@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Notification push</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+.scroll{overflow-y:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:none}.scroll::-webkit-scrollbar{display:none}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.bot .shell{fill:url(#sig);stroke:#859397;stroke-width:.8}.bot .visor{fill:#172124;stroke:#00000055;stroke-width:1}.bot .foot{fill:#273238}.bot .ant{stroke:#273238;stroke-width:2;stroke-linecap:round}.bot .lamp,.bot .eye{fill:var(--eye)}
+.act{display:flex;align-items:center;justify-content:space-between;width:100%;height:48px;padding:0 16px;background:transparent;border:0;border-top:1px solid #ffffff14;color:#fafafa;font:500 15px/20px 'Geist',system-ui,sans-serif;text-align:left;cursor:pointer;box-sizing:border-box}
+.act:hover{background:#ffffff0d}
+</style>
+</helmet>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #0c0d10; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 10px; padding: 120px 12px 40px; overflow: hidden;">
+  <svg width="0" height="0" style="position: absolute;" aria-hidden="true"><defs><linearGradient id="sig" x1=".2" y1="0" x2=".75" y2="1"><stop stop-color="#34434b"></stop><stop offset="1" stop-color="#273238"></stop></linearGradient></defs></svg>
+
+  <article style="border-radius: 22px; background: #26272b; overflow: hidden; box-shadow: 0 20px 40px -12px rgba(0,0,0,0.7);">
+    <div style="display: flex; gap: 12px; padding: 14px 16px;">
+      <span style="width: 38px; height: 38px; border-radius: 9px; background: #000; display: grid; place-items: center; flex-shrink: 0;">
+        <svg class="bot" width="30" height="30" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #f2b09c;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="43" width="6" height="12" rx="3"></rect><rect class="eye" x="55" y="43" width="6" height="12" rx="3"></rect></svg>
+      </span>
+      <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+        <div style="display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: #a1a1a1;"><span>Ledge</span><span>maintenant</span></div>
+        <span style="font-weight: 600;">Otto attend votre accord</span>
+        <span style="color: #d4d4d4;">Lancer <span class="mono" style="font-size: 13px;">pnpm test --filter overlay</span> dans harness-assistant</span>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column;">
+      <button type="button" class="act">Autoriser</button>
+      <button type="button" class="act">Refuser</button>
+      <a href="Inbox.dc.html" class="act" style="color: #a1a1a1;">Ouvrir dans Ledge</a>
+    </div>
+  </article>
+
+  <article style="display: flex; gap: 12px; padding: 14px 16px; border-radius: 22px; background: #26272bcc;">
+    <span style="width: 38px; height: 38px; border-radius: 9px; background: #000; display: grid; place-items: center; flex-shrink: 0;">
+      <svg class="bot" width="30" height="30" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #f6d487;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><ellipse class="shell" cx="48" cy="49" rx="32" ry="31"></ellipse><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="42" width="6" height="14" rx="3"></rect><rect class="eye" x="55" y="42" width="6" height="14" rx="3"></rect></svg>
+    </span>
+    <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+      <div style="display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: #a1a1a1;"><span>Ledge</span><span>il y a 1 min</span></div>
+      <span style="font-weight: 600;">Nova a une question</span>
+      <span style="color: #d4d4d4;">Quel thème utiliser par défaut ?</span>
+    </div>
+  </article>
+
+  <article style="display: flex; gap: 12px; padding: 14px 16px; border-radius: 22px; background: #26272b99;">
+    <span style="width: 38px; height: 38px; border-radius: 9px; background: #000; display: grid; place-items: center; flex-shrink: 0;">
+      <svg class="bot" width="30" height="30" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #a9dfc7;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><path d="M35 51Q39 43 43 51M54 51Q58 43 62 51" style="fill: none; stroke: #a9dfc7; stroke-width: 3.4; stroke-linecap: round;"></path></svg>
+    </span>
+    <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+      <div style="display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: #a1a1a1;"><span>Ledge</span><span>il y a 2 min</span></div>
+      <span style="font-weight: 600;">Bix a terminé</span>
+      <span style="color: #d4d4d4;">Le badge d'attente est en place. Je fusionne la branche dans main ?</span>
+    </div>
+  </article>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

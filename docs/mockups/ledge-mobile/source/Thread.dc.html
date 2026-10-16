@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Fil d'un agent</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+.scroll{overflow-y:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:none}.scroll::-webkit-scrollbar{display:none}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.bot .shell{fill:url(#sig);stroke:#859397;stroke-width:.8}.bot .visor{fill:#172124;stroke:#00000055;stroke-width:1}.bot .foot{fill:#273238}.bot .ant{stroke:#273238;stroke-width:2;stroke-linecap:round}.bot .lamp,.bot .eye{fill:var(--eye)}.bot .happy{fill:none;stroke:var(--eye);stroke-width:3.4;stroke-linecap:round}
+.chip{display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:9999px;border:1px solid #ffffff26;background:#0a0a0a;color:#fafafa;font:500 13px/16px 'Geist',system-ui,sans-serif;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.chip:hover{background:#171717}
+.me{align-self:flex-end;max-width:290px;padding:10px 14px;border-radius:18px 18px 4px 18px;background:#262626}
+.time{font-size:11px;line-height:14px;color:#a1a1a1}
+</style>
+</helmet>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; overflow: hidden;">
+  <svg width="0" height="0" style="position: absolute;" aria-hidden="true"><defs><linearGradient id="sig" x1=".2" y1="0" x2=".75" y2="1"><stop stop-color="#34434b"></stop><stop offset="1" stop-color="#273238"></stop></linearGradient></defs></svg>
+
+  <header style="display: flex; align-items: center; gap: 8px; padding: 52px 8px 10px; border-bottom: 1px solid #ffffff1a;">
+    <a href="Agents.dc.html" aria-label="Retour aux agents" style="width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></a>
+    <svg class="bot" width="36" height="36" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #a9dfc7;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><path class="happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51"></path></svg>
+    <div style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
+      <span style="font-weight: 600;">Bix</span>
+      <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: #a1a1a1; min-width: 0;"><span style="width: 6px; height: 6px; border-radius: 9999px; background: #34d399; flex-shrink: 0;"></span><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Disponible · harness-assistant · <span class="mono">wait-badge</span></span></span>
+    </div>
+    <button type="button" aria-label="Plus d'actions" style="width: 44px; height: 44px; display: grid; place-items: center; background: transparent; border: 0; color: #fafafa; border-radius: 8px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
+  </header>
+
+  <main aria-label="Échanges avec Bix" class="scroll" style="flex-grow: 1; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px;">
+    <span class="time" style="align-self: center; margin-top: auto;">Aujourd'hui</span>
+    <div class="me">Ajoute un badge qui montre depuis combien de temps un bot attend.</div>
+
+    <div style="align-self: center; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 9999px; border: 1px solid #ffffff1a; font-size: 12px; line-height: 16px; color: #a1a1a1;">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; color: #34d399;"><path d="M20 6 9 17l-5-5"></path></svg>
+      <span class="mono" style="font-size: 11px; color: #d4d4d4;">pnpm test</span> autorisé depuis le PC · 10:09
+    </div>
+
+    <article style="display: flex; gap: 10px; align-items: flex-start;">
+      <svg class="bot" width="28" height="28" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #a9dfc7; flex-shrink: 0; margin-top: 2px;"><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><path class="happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51"></path></svg>
+      <div style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 4px 18px 18px 18px; background: #0a0a0a; border: 1px solid #ffffff1a; max-width: 300px;">
+        <strong style="font-size: 15px;">Le badge d'attente est en place.</strong>
+        <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; color: #d4d4d4;">
+          <li><span class="mono" style="font-size: 12px;">waitingSince</span> dans le modèle</li>
+          <li>Badge « 3 min » dans la liste</li>
+          <li>Relance de la bulle après 5 min</li>
+        </ul>
+        <span style="font-size: 12px; color: #60a5fa;">Vérifié · 412 tests verts</span>
+        <span style="padding-top: 8px; border-top: 1px solid #ffffff1a; font-weight: 500;">Je fusionne la branche dans main ?</span>
+      </div>
+    </article>
+    <span class="time" style="margin-left: 38px;">10:14</span>
+
+    <sc-for list="{{ sent }}" as="m" hint-placeholder-count="0">
+      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+        <div class="me">{{ m.text }}</div>
+        <span class="time" style="display: inline-flex; align-items: center; gap: 4px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; color: #34d399;"><path d="M20 6 9 17l-5-5"></path></svg>Pris par le terminal · à l'instant</span>
+      </div>
+    </sc-for>
+  </main>
+
+  <footer style="display: flex; flex-direction: column; gap: 10px; padding: 8px 0 30px; border-top: 1px solid #ffffff1a;">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 0 16px;">
+      <a href="Terminal.dc.html" style="display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 9999px; background: #171717; font-size: 13px; font-weight: 500;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; color: #a1a1a1;"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line></svg>Terminal<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; color: #a1a1a1;"><path d="m18 15-6-6-6 6"></path></svg></a>
+      <span style="font-size: 12px; color: #a1a1a1;">lecture seule</span>
+    </div>
+    <div style="display: flex; gap: 8px; padding: 0 16px; overflow-x: auto; scrollbar-width: none;">
+      <sc-for list="{{ chips }}" as="c" hint-placeholder-count="4">
+        <button type="button" class="chip" onClick="{{ c.pick }}">{{ c.label }}</button>
+      </sc-for>
+    </div>
+    <div style="display: flex; align-items: flex-end; gap: 8px; padding: 0 16px;">
+      <label for="draft" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Message pour Bix</label>
+      <textarea id="draft" rows="1" placeholder="Écrire à Bix…" value="{{ draft }}" onChange="{{ onDraft }}" style="flex-grow: 1; min-height: 48px; box-sizing: border-box; padding: 13px 16px; border-radius: 24px; border: 1px solid #ffffff26; background: #0a0a0a; color: #fafafa; font: 400 16px/20px 'Geist', system-ui, sans-serif; resize: none;"></textarea>
+      <button type="button" aria-label="Envoyer à Bix" onClick="{{ send }}" style="width: 48px; height: 48px; display: grid; place-items: center; border: 0; border-radius: 9999px; background: #9f0712; color: #fef2f2; flex-shrink: 0; cursor: pointer;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path></svg></button>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { draft: '', sent: [] };
+  }
+  renderVals() {
+    const labels = ['Oui, fusionne', 'Montre le diff', 'Continue', 'Lance les tests'];
+    return {
+      draft: this.state.draft,
+      sent: this.state.sent.map((text) => ({ text })),
+      chips: labels.map((label) => ({ label, pick: () => this.setState({ draft: label }) })),
+      onDraft: (e) => this.setState({ draft: e.target.value }),
+      send: () => {
+        const text = this.state.draft.trim();
+        if (!text) return;
+        this.setState({ draft: '', sent: this.state.sent.concat([text]) });
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

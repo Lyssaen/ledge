@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Agents</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+.scroll{overflow-y:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:none}.scroll::-webkit-scrollbar{display:none}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.bot .shell{fill:url(#sig);stroke:#859397;stroke-width:.8}.bot .visor{fill:#172124;stroke:#00000055;stroke-width:1}.bot .foot{fill:#273238}.bot .ant{stroke:#273238;stroke-width:2;stroke-linecap:round}.bot .lamp,.bot .eye{fill:var(--eye)}.bot .happy{fill:none;stroke:var(--eye);stroke-width:3.4;stroke-linecap:round}
+.row{display:flex;align-items:center;gap:12px;height:72px;padding:0 16px}
+.row:hover{background:#0f0f0f}
+.grp{margin:0;padding:14px 16px 4px;font-size:12px;line-height:16px;font-weight:500;color:#a1a1a1}
+.line1{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.name{font-weight:600;font-size:15px}
+.when{font-size:12px;color:#a1a1a1;white-space:nowrap}
+.prev{font-size:13px;line-height:18px;color:#a1a1a1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:52px;color:#a1a1a1;font:500 11px/14px 'Geist',system-ui,sans-serif;background:none;border:0;position:relative;cursor:pointer}
+.tab-on{color:#fafafa}
+</style>
+</helmet>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; overflow: hidden;">
+  <svg width="0" height="0" style="position: absolute;" aria-hidden="true"><defs><linearGradient id="sig" x1=".2" y1="0" x2=".75" y2="1"><stop stop-color="#34434b"></stop><stop offset="1" stop-color="#273238"></stop></linearGradient></defs></svg>
+
+  <header style="display: flex; align-items: flex-end; justify-content: space-between; padding: 56px 20px 8px;">
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.025em;">Agents</h1>
+      <p style="margin: 0; font-size: 13px; color: #a1a1a1;">5 sessions sur PC-Desan</p>
+    </div>
+    <button type="button" aria-label="Lancer un agent" style="width: 44px; height: 44px; display: grid; place-items: center; border-radius: 9999px; border: 1px solid #ffffff26; background: transparent; color: #fafafa; cursor: pointer;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></button>
+  </header>
+
+  <main class="scroll" style="flex-grow: 1; padding-bottom: 16px;">
+    <h2 class="grp">harness-assistant</h2>
+    <a href="Thread.dc.html" class="row">
+      <svg class="bot" width="44" height="44" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #f2b09c; filter: drop-shadow(0 0 5px #ff646788); flex-shrink: 0;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="43" width="6" height="12" rx="3"></rect><rect class="eye" x="55" y="43" width="6" height="12" rx="3"></rect></svg>
+      <span style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
+        <span class="line1"><span class="name">Otto</span><span class="when" style="color: #ff6467; font-weight: 600;">Votre accord</span></span>
+        <span class="prev">Lancer <span class="mono" style="font-size: 12px;">pnpm test --filter overlay</span></span>
+      </span>
+    </a>
+    <a href="Thread.dc.html" class="row">
+      <svg class="bot" width="44" height="44" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #a9dfc7; flex-shrink: 0;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><path class="happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51"></path></svg>
+      <span style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
+        <span class="line1"><span class="name">Bix</span><span class="when">10:14</span></span>
+        <span style="display: flex; align-items: center; gap: 8px;"><span class="prev" style="color: #fafafa; flex-grow: 1;">Je fusionne la branche dans main ?</span><span aria-label="Non lu" style="width: 10px; height: 10px; border-radius: 9999px; background: #fb2c36; flex-shrink: 0;"></span></span>
+      </span>
+    </a>
+    <a href="Thread.dc.html" class="row">
+      <svg class="bot" width="44" height="44" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #90c7f2; flex-shrink: 0;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><path class="shell" d="M23 77 Q14 78 17 66 L30 22 Q33 12 42 20 L79 54 Q88 63 77 67 L58 71 46 83 Q40 88 36 80 L32 73Z"></path><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="43" width="6" height="12" rx="3"></rect><rect class="eye" x="55" y="43" width="6" height="12" rx="3"></rect></svg>
+      <span style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
+        <span class="line1"><span class="name">Pim</span><span class="when" style="color: #60a5fa;">Au travail · 8 min</span></span>
+        <span class="prev">Lit <span class="mono" style="font-size: 12px;">src/reply/parse.ts</span></span>
+      </span>
+    </a>
+
+    <h2 class="grp">design-system</h2>
+    <a href="Thread.dc.html" class="row">
+      <svg class="bot" width="44" height="44" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #f6d487; filter: drop-shadow(0 0 5px #fbbf2477); flex-shrink: 0;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><ellipse class="shell" cx="48" cy="49" rx="32" ry="31"></ellipse><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="42" width="6" height="14" rx="3"></rect><rect class="eye" x="55" y="42" width="6" height="14" rx="3"></rect></svg>
+      <span style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
+        <span class="line1"><span class="name">Nova</span><span class="when" style="color: #fbbf24; font-weight: 600;">Une question</span></span>
+        <span class="prev">Quel thème utiliser par défaut ?</span>
+      </span>
+    </a>
+
+    <h2 class="grp">ledge-site</h2>
+    <a href="Thread.dc.html" class="row">
+      <svg class="bot" width="44" height="44" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #90c7f2; flex-shrink: 0;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><ellipse class="shell" cx="48" cy="49" rx="32" ry="31"></ellipse><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="43" width="6" height="12" rx="3"></rect><rect class="eye" x="55" y="43" width="6" height="12" rx="3"></rect></svg>
+      <span style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
+        <span class="line1"><span class="name">Kai</span><span class="when" style="color: #60a5fa;">Au travail · 2 min</span></span>
+        <span class="prev">Prépare la page de téléchargement</span>
+      </span>
+    </a>
+  </main>
+
+  <nav aria-label="Navigation principale" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 6px 8px 30px; border-top: 1px solid #ffffff1a; background: #000;">
+    <a href="Inbox.dc.html" class="tab">
+      <span style="position: relative; display: grid;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 24px; height: 24px;"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg><span style="position: absolute; top: -6px; right: -12px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9999px; background: #fb2c36; color: #fff; font: 600 11px/18px 'Geist', system-ui, sans-serif; text-align: center;">2</span></span>À traiter</a>
+    <a href="Agents.dc.html" class="tab tab-on" aria-current="page"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 24px; height: 24px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Agents</a>
+    <button type="button" class="tab"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 24px; height: 24px;"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>Demander à Ledge</button>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
