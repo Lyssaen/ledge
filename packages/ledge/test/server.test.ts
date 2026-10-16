@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
-import type { ChatProposal, ChatRelay, ServerMessage, Session } from '@ledge/protocol';
+import type { ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
@@ -17,6 +17,7 @@ import { History } from '../src/daemon/history.js';
 import { until } from './helpers.js';
 import { paths } from '../src/paths.js';
 import { writeMachines } from '../src/daemon/machines.js';
+import { writeProjects } from '../src/daemon/projects.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
@@ -506,24 +507,24 @@ describe('server', () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim' }));
       srv.preview('a', ['old']); srv.preview('a', ['● latest']);
       const r = await recorder(); await r.until(3);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'session.preview', 'chat.history']);
-      expect(r.got[2]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'session.preview', 'chat.history']);
+      expect(r.got[3]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
       r.ws.terminate();
     });
     it('a snapshot.request gets the previews again after the snapshot', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']);
       const r = await recorder(); await r.until(3);
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(8);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'session.preview', 'chat.history', 'snapshot', 'machines', 'session.preview', 'chat.history']);
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(10);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'session.preview', 'chat.history', 'snapshot', 'machines', 'projects', 'session.preview', 'chat.history']);
       r.ws.terminate();
     });
     it('a removed session drops its preview; a preview for an unknown session is ignored', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']); srv.preview('ghost', ['boo']);
       store.remove('a');
       const r = await recorder(); await r.until(1); await new Promise(res => setTimeout(res, 50));
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'chat.history']);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'chat.history']);
       store.upsert(mk('a'));
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(6); await new Promise(res => setTimeout(res, 50));
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(8); await new Promise(res => setTimeout(res, 50));
       expect(r.got.filter(m => m.type === 'session.preview')).toEqual([]);
       r.ws.terminate();
     });
@@ -1020,6 +1021,54 @@ const open = (port: number, path = '') => new Promise<WebSocket>(r => {
 });
 const collect = (ws: WebSocket) => inbox.get(ws)!;
 const dev = { id: 'dev', label: 'Devbox', ssh: 'dev-server' };
+
+const projectsState = {
+  projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }],
+  rules: [{ machine: 'dev', path: '/srv/x', project: 'ledge' }]
+};
+
+describe('projects', () => {
+  it('sends the stored projects right after the machines list', async () => {
+    writeProjects(projectsState as Projects);
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const ws = await open(s.port); const got = collect(ws);
+    await until(() => got.some(m => m.type === 'projects'));
+    expect(got.map(m => m.type).slice(0, 3)).toEqual(['snapshot', 'machines', 'projects']);
+    expect(got.find(m => m.type === 'projects')).toEqual({ type: 'projects', projects: projectsState });
+    ws.close(); await s.close();
+  });
+  it('projects.set is validated, written first, and broadcast to every local client', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const a = await open(s.port), b = await open(s.port); const gotA = collect(a), gotB = collect(b);
+    await until(() => gotB.some(m => m.type === 'projects'));
+    expect(gotB.find(m => m.type === 'projects')).toEqual({ type: 'projects', projects: { projects: [], rules: [] } });
+    a.send(JSON.stringify({ type: 'projects.set', projects: projectsState }));
+    await until(() => gotB.filter(m => m.type === 'projects').length === 2);
+    expect(gotB.filter(m => m.type === 'projects').at(-1)).toEqual({ type: 'projects', projects: projectsState });
+    await until(() => gotA.filter(m => m.type === 'projects').length === 2);
+    expect(JSON.parse(readFileSync(paths().projects, 'utf8'))).toEqual(projectsState);
+    a.close(); b.close(); await s.close();
+  });
+  it('refuses an invalid projects.set: nothing written, nothing broadcast, an error to the sender', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const a = await open(s.port), b = await open(s.port); const gotA = collect(a), gotB = collect(b);
+    await until(() => gotB.some(m => m.type === 'projects'));
+    a.send(JSON.stringify({ type: 'projects.set', projects: { projects: [{ id: 'a', name: 'A', color: 'blue', repos: [] }, { id: 'b', name: 'a', color: 'blue', repos: [] }], rules: [] } }));
+    await until(() => gotA.some(m => m.type === 'error'));
+    expect(gotB.filter(m => m.type === 'projects')).toHaveLength(1);
+    expect(existsSync(paths().projects)).toBe(false);
+    a.close(); b.close(); await s.close();
+  });
+  it('honours a projects file given at start', async () => {
+    const f = join(mkdtempSync(join(tmpdir(), 'ledge-projects-srv-')), 'projects.json');
+    writeProjects(projectsState as Projects, f);
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, projectsFile: f });
+    const ws = await open(s.port); const got = collect(ws);
+    await until(() => got.some(m => m.type === 'projects'));
+    expect(got.find(m => m.type === 'projects')).toEqual({ type: 'projects', projects: projectsState });
+    ws.close(); await s.close();
+  });
+});
 
 describe('machines list', () => {
   it('follows the snapshot, defaulting to local', async () => {

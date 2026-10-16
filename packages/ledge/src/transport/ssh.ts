@@ -27,8 +27,8 @@ export function serveSsh(ws: WebSocket, alias: string, opts: { spawn?: (args: st
   child.stdin.on('error', e => stop(`SSH: ${e.message}`));
   off = readFrames(child.stdout, raw => {
     const msg = parseServerMessage(raw);
-    // The remote daemon's machine list is meaningless to the front (spec §5.2), and an older peer rejects the unknown type (spec §14).
-    if (msg.type === 'machines') return;
+    // The remote daemon's machine list and projects are meaningless to the front (spec §5.2, build spec §5), and an older peer rejects the unknown type (spec §14).
+    if (msg.type === 'machines' || msg.type === 'projects') return;
     if (!ready && msg.type !== 'snapshot') throw new Error('Remote command did not start the Ledge protocol');
     if (msg.type === 'snapshot') { ready = true; clearTimeout(timer); }
     if (ws.bufferedAmount > MAX_FRAME) throw new Error('Ledge connection is overloaded');
@@ -40,8 +40,8 @@ export function serveSsh(ws: WebSocket, alias: string, opts: { spawn?: (args: st
       if (!ready) throw new Error('Remote Ledge is not ready');
       if (child.stdin.writableLength > MAX_FRAME) throw new Error('SSH connection is overloaded');
       const msg = parseClientMessage(JSON.parse(String(data)));
-      // The machines list is private to its host (spec §5.2): never written to the remote daemon; the link stays up.
-      if (msg.type === 'machines.set') return;
+      // The machines list and the projects are private to their host (spec §5.2, build spec §5): never written to the remote daemon; the link stays up.
+      if (msg.type === 'machines.set' || msg.type === 'projects.set') return;
       child.stdin.write(`${JSON.stringify(msg)}\n`);
     } catch (e) { stop((e as Error).message); }
   });

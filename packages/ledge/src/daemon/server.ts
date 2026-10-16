@@ -16,6 +16,7 @@ import { log } from '../log.js';
 import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
 import { readMachines, writeMachines } from './machines.js';
+import { readProjects, writeProjects } from './projects.js';
 import { readDocument } from './documents.js';
 import { createRelay } from './relay.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -72,7 +73,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -97,6 +98,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The machines list shared by every local front; copied so state never aliases DEFAULT_MACHINES. */
   let machines = readMachines(machinesFile).map(m => ({ ...m }));
   const machinesMsg = (): ServerMessage => ({ type: 'machines', machines });
+  const projectsFile = opts.projectsFile ?? paths().projects;
+  /** The projects and folder rules shared by every local front (build spec §5); never sent to a remote peer. */
+  let projects = readProjects(projectsFile);
+  const projectsMsg = (): ServerMessage => ({ type: 'projects', projects });
   const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
   // Remote peers must never receive local snapshots, sessions, previews or chat broadcasts.
   const localClients = new Set<WebSocket>();
@@ -125,6 +130,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const sendSnapshot = (ws: WebSocket) => {
     send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true } } : {}) });
     send(ws, machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
+    send(ws, projectsMsg()); // then the shared projects (build spec §5)
     for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
     send(ws, { type: 'chat.history', turns: chat.history() });
   };
@@ -248,6 +254,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender
         machines = msg.machines; // already validated by parseClientMessage
         return broadcast(machinesMsg()); // every local client, the sender included
+      }
+      case 'projects.set': {
+        writeProjects(msg.projects, projectsFile); // first: a failing write leaves memory unchanged and reaches the sender
+        projects = msg.projects; // already validated by parseClientMessage
+        return broadcast(projectsMsg());
       }
       case 'session.register': {
         let incoming = msg.session;
