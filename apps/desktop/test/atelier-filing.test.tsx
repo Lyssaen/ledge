@@ -1,15 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import WebSocket from 'ws';
 import { projectOf } from '@ledge/fleet';
-import type { Projects, Session } from '@ledge/protocol';
-import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { createDesktopFleet } from '../src/fleet/useFleet';
-import { App } from '../src/App';
+import type { Projects } from '@ledge/protocol';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import { boot, closeDaemons, declarations, transfer, PROJECTS } from './helpers';
 import { LangProvider } from '../src/i18n/lang';
 import { fileSession, ruleFor, useFiling } from '../src/atelier/filing';
 import { Toast, useToast } from '../src/shell/Toast';
@@ -151,12 +146,6 @@ describe('useToast', () => {
   });
 });
 
-/** jsdom loads no stylesheet: the declarations of the top-level rules naming `selector` in one of the app's sheets. */
-function declarations(sheet: string, selector: string): string {
-  const css = readFileSync(resolve(__dirname, '../src/styles', sheet), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*[^}]*\}/g, '');
-  return [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(m => m[1]!.split(',').map(x => x.trim().replace(/\s+/g, ' ')).includes(selector)).map(m => m[2]!.replace(/\s+/g, '')).join(';');
-}
-
 describe('the filing styles', () => {
   it('port the mockup: the menu anchor, the grip, the targets, the seat pop, the sidebar targets and the toast', () => {
     expect(declarations('atelier.css', '.assign-wrap')).toBe('position:relative;flex-shrink:0');
@@ -181,42 +170,8 @@ describe('the filing styles', () => {
   });
 });
 
-type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
-const daemons: Daemon[] = [];
 beforeEach(() => localStorage.clear());
-afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); });
-
-const projects3: Projects = {
-  projects: [
-    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] },
-    { id: 'pay', name: 'Payment Service Platform Migration Europe', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/pay' }] },
-    { id: 'docs', name: 'Docs', color: 'amber', description: '', repos: [{ machine: 'local', path: '/w/docs' }] }
-  ],
-  rules: []
-};
-const DEFAULT: Session[] = [
-  fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission' }),
-  fakeSession('nova', { name: 'Nova', cwd: '/w/pay', state: 'working' }),
-  fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input' })
-];
-
-/** atelier.test.tsx's fleet: Otto (Ledge), Nova (Payment…), Kit in /tmp (no project), plus Docs, a project without agents. */
-async function boot() {
-  const d = await createMockDaemon(); daemons.push(d);
-  d.machines([{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }]);
-  d.projects(projects3);
-  for (const s of DEFAULT) d.upsert(s);
-  const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
-  render(<App client={client} />);
-  const side = within(await screen.findByRole('complementary', { name: /sidebar/i }));
-  await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent('3'));
-  await side.findByRole('button', { name: /^Docs/ });
-  await screen.findByRole('button', { name: /^Kit,/ });
-  return { d, side, user: userEvent.setup() };
-}
-
-/** jsdom has no DataTransfer. */
-const transfer = () => { const data: Record<string, string> = {}; return { setData: (k: string, v: string) => { data[k] = v; }, getData: (k: string) => data[k] ?? '', effectAllowed: '', dropEffect: '' }; };
+afterEach(async () => { cleanup(); await closeDaemons(); });
 
 describe('putting an agent away', () => {
   it('only the cards of No project are draggable, with their grip', async () => {
@@ -242,7 +197,7 @@ describe('putting an agent away', () => {
     expect(within(table).getByText('Release to seat Kit')).toBeVisible();
     fireEvent.drop(table, { dataTransfer: dt });
     expect(document.querySelector('.application')).not.toHaveClass('is-dragging');
-    await waitFor(() => expect(d.received).toContainEqual({ type: 'projects.set', projects: { projects: projects3.projects, rules: [{ machine: 'local', path: '/tmp', project: 'ledge' }] } }));
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'projects.set', projects: { projects: PROJECTS.projects, rules: [{ machine: 'local', path: '/tmp', project: 'ledge' }] } }));
     await waitFor(() => expect(within(table).getByRole('button', { name: /^Kit,/ })).toHaveClass('just-seated'));
     expect(screen.getAllByRole('button', { name: /^Kit,/ })).toHaveLength(1);
     expect(screen.queryByRole('region', { name: 'No project' })).toBeNull();
@@ -296,7 +251,7 @@ describe('putting an agent away', () => {
   it('the dragged agent is now covered by a project (a repo): the drag stops', async () => {
     const { d } = await boot();
     fireEvent.dragStart(document.querySelector('.unassigned-card')!, { dataTransfer: transfer() });
-    d.projects({ ...projects3, projects: projects3.projects.map(p => (p.id === 'docs' ? { ...p, repos: [...p.repos, { machine: 'local', path: '/tmp' }] } : p)) });
+    d.projects({ ...PROJECTS, projects: PROJECTS.projects.map(p => (p.id === 'docs' ? { ...p, repos: [...p.repos, { machine: 'local', path: '/tmp' }] } : p)) });
     await waitFor(() => expect(within(screen.getByRole('region', { name: 'Docs table' })).getByRole('button', { name: /^Kit,/ })).toBeVisible());
     expect(document.querySelector('.application')).not.toHaveClass('is-dragging');
   });
@@ -321,7 +276,7 @@ describe('putting an agent away', () => {
     const table = screen.getByRole('region', { name: 'Ledge table' });
     fireEvent.dragOver(table, { dataTransfer: dt });
     fireEvent.drop(table, { dataTransfer: dt });
-    await waitFor(() => expect(d.received).toContainEqual({ type: 'projects.set', projects: { projects: projects3.projects, rules: [{ machine: 'local', path: '/tmp', project: 'ledge' }] } }));
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'projects.set', projects: { projects: PROJECTS.projects, rules: [{ machine: 'local', path: '/tmp', project: 'ledge' }] } }));
     expect(document.querySelector('.application')).not.toHaveClass('is-dragging');
   });
 

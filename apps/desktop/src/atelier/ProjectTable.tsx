@@ -1,14 +1,11 @@
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { PROJECT_COLORS, type Project, type Session } from '@ledge/protocol';
-import { Bot } from '@ledge/ui/bots/Bot';
-import { botState, poseFor, type BotState } from '@ledge/ui/bots/poseFor';
-import { Badge } from '@ledge/ui/ui/Badge';
+import { botState } from '@ledge/ui/bots/poseFor';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import { useMotionPreferences } from '../motionPreferences';
 import { taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
-import { useTheme } from '../shell/theme';
+import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import type { Filing } from './filing';
 import { Plants } from './Plants';
 import { RUG_SIDE, helperState, layoutTable, noteX, sheetState, tableBranch, type Side } from './layout';
@@ -73,8 +70,6 @@ function TableTop({ sheets, length }: { sheets: Sheet[]; length: number }): JSX.
  *  « +N », the plants, the chairs, the table with its sheets and post-its, the seats and the sub-agents at the ends. */
 export function ProjectTable({ project, mains, order, helpers, paused, isolated, focusedId, seated, dispatch, filing }: ProjectTableProps): JSX.Element {
   const { t } = useI18n();
-  const theme = useTheme();
-  const { reduced } = useMotionPreferences();
   const { id, name } = project;
   const color = PROJECT_COLORS[project.color];
   const layout = layoutTable(mains, helpers);
@@ -96,14 +91,8 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
   const choose = (a: NavAction) => { setMenu(false); dispatch(a); };
   const toList = () => dispatch({ type: 'home', project: id, view: 'list' });
 
-  const bot = (s: Session, size: number) => (
-    <Bot tool={s.tool} state={botState(s)} pose={poseFor(s.id, s.state)} size={size} theme={theme} seed={s.id} frozen={!!s.offline} paused={paused} reducedMotion={reduced} readOnly={s.source === 'hook_only'} />
-  );
-  const helperBot = (h: Session['helpers'][number], parent: Session, size: number) => {
-    const seed = `${parent.id}:${h.id}`;
-    const state: BotState = helperState(h);
-    return <Bot tool={parent.tool} state={state} pose={poseFor(seed, state)} size={size} theme={theme} seed={seed} frozen={!!parent.offline} paused={paused} reducedMotion={reduced} readOnly={parent.source === 'hook_only'} />;
-  };
+  const bot = (s: Session, size: number) => <SessionBot session={s} size={size} paused={paused} />;
+  const helperBot = (h: Session['helpers'][number], parent: Session, size: number) => <HelperBot helper={h} parent={parent} size={size} paused={paused} />;
 
   const heading = (
     <div className="room-heading">
@@ -170,7 +159,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
               {bot(s, 64)}
               <strong><span className="seat-name" title={s.name}>{s.name}</span>{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>
               <span className="seat-machine" title={machineOf(s)}>{machineOf(s)}</span>
-              {s.offline ? <Badge state="readonly" label={t.atelier.offline} /> : <Badge state={state} />}
+              <StateBadge state={state} offline={!!s.offline} />
             </button>
           );
         })}

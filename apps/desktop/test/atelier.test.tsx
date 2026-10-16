@@ -1,54 +1,11 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import WebSocket from 'ws';
-import type { Projects, Session } from '@ledge/protocol';
-import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { createDesktopFleet } from '../src/fleet/useFleet';
-import { App } from '../src/App';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import { boot, closeDaemons, declarations } from './helpers';
 import { saveReduced } from '../src/motionPreferences';
 
-/** jsdom loads no stylesheet: the declarations of the top-level rules naming `selector` in one of the app's sheets. */
-function declarations(sheet: string, selector: string): string {
-  const css = readFileSync(resolve(__dirname, '../src/styles', sheet), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*[^}]*\}/g, '');
-  return [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(m => m[1]!.split(',').map(x => x.trim().replace(/\s+/g, ' ')).includes(selector)).map(m => m[2]!.replace(/\s+/g, '')).join(';');
-}
-
-type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
-const daemons: Daemon[] = [];
 beforeEach(() => localStorage.clear());
-afterEach(async () => { cleanup(); vi.unstubAllEnvs(); saveReduced(false); for (const d of daemons.splice(0)) await d.close(); });
-
-const projects: Projects = {
-  projects: [
-    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] },
-    { id: 'pay', name: 'Payment Service Platform Migration Europe', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/pay' }] },
-    { id: 'docs', name: 'Docs', color: 'amber', description: '', repos: [{ machine: 'local', path: '/w/docs' }] }
-  ],
-  rules: []
-};
-const DEFAULT: Session[] = [
-  fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission' }),
-  fakeSession('nova', { name: 'Nova', cwd: '/w/pay', state: 'working' }),
-  fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input' })
-];
-
-/** The shell tests' fleet: Otto (Ledge), Nova (Payment…), Kit (no project), plus Docs, a project without agents. */
-async function boot({ sessions = DEFAULT }: { sessions?: Session[] } = {}) {
-  const d = await createMockDaemon(); daemons.push(d);
-  d.machines([{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }]);
-  d.projects(projects);
-  for (const s of sessions) d.upsert(s);
-  const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
-  const view = render(<App client={client} />);
-  const side = within(await screen.findByRole('complementary', { name: /sidebar/i }));
-  await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(sessions.length)));
-  await side.findByRole('button', { name: /^Docs/ });
-  if (sessions.length > 0) await screen.findByRole('button', { name: new RegExp(`^${sessions[0]!.name},`) });
-  return { d, side, view, client, user: userEvent.setup() };
-}
+afterEach(async () => { cleanup(); vi.unstubAllEnvs(); saveReduced(false); await closeDaemons(); });
 
 describe('the atelier', () => {
   it("Ledge's desk, a table per project with agents, and Sans projet", async () => {

@@ -1,45 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import WebSocket from 'ws';
-import type { Projects, Session } from '@ledge/protocol';
-import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { createDesktopFleet } from '../src/fleet/useFleet';
-import { App } from '../src/App';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import { boot, closeDaemons } from './helpers';
 
-type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
-const daemons: Daemon[] = [];
 beforeEach(() => localStorage.clear());
-afterEach(async () => { cleanup(); vi.unstubAllEnvs(); for (const d of daemons.splice(0)) await d.close(); });
-
-const projects: Projects = {
-  projects: [
-    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] },
-    { id: 'pay', name: 'Payment Service Platform Migration Europe', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/pay' }] },
-    { id: 'docs', name: 'Docs', color: 'amber', description: '', repos: [{ machine: 'local', path: '/w/docs' }] }
-  ],
-  rules: []
-};
-const DEFAULT: Session[] = [
-  fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission' }),
-  fakeSession('nova', { name: 'Nova', cwd: '/w/pay', state: 'working' }),
-  fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input' })
-];
-
-/** The harness of atelier.test.tsx: Otto (Ledge), Nova (Payment…), Kit (no project), plus Docs, a project without agents. */
-async function boot({ sessions = DEFAULT }: { sessions?: Session[] } = {}) {
-  const d = await createMockDaemon(); daemons.push(d);
-  d.machines([{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }]);
-  d.projects(projects);
-  for (const s of sessions) d.upsert(s);
-  const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
-  const view = render(<App client={client} />);
-  const side = within(await screen.findByRole('complementary', { name: /sidebar/i }));
-  await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(sessions.length)));
-  await side.findByRole('button', { name: /^Docs/ });
-  if (sessions.length > 0) await screen.findByRole('button', { name: new RegExp(`^${sessions[0]!.name},`) });
-  return { d, side, view, client, user: userEvent.setup() };
-}
+afterEach(async () => { cleanup(); vi.unstubAllEnvs(); await closeDaemons(); });
 
 const bar = () => within(screen.getByRole('toolbar', { name: 'Atelier zoom' }));
 

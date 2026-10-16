@@ -1,24 +1,19 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@ledge/protocol';
-import { Bot } from '@ledge/ui/bots/Bot';
-import { botState, poseFor } from '@ledge/ui/bots/poseFor';
-import { Badge } from '@ledge/ui/ui/Badge';
+import { botState } from '@ledge/ui/bots/poseFor';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import { useMotionPreferences } from '../motionPreferences';
 import { searchSessions, taskOf } from '../nav/agents';
 import { SHELL_ICONS } from './icons';
 import { Modal } from './Modal';
-import { useTheme } from './theme';
+import { SessionBot, StateBadge } from './SessionBot';
 
 /** « Aller à une session » (Ctrl K): the search field, the matching sessions and the keys' reminder. ↑ ↓ choose, Enter opens. */
 export function SearchPalette({ sessions, projectName, order, onOpen, onClose }: {
   sessions: readonly Session[]; projectName: (s: Session) => string; order: readonly Session[]; onOpen: (id: string) => void; onClose: () => void;
 }) {
   const { t } = useI18n();
-  const theme = useTheme();
-  const { reduced } = useMotionPreferences();
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
   const results = searchSessions(sessions, query, projectName);
@@ -43,9 +38,9 @@ export function SearchPalette({ sessions, projectName, order, onOpen, onClose }:
           const rank = order.indexOf(s);
           return (
             <button key={s.id} id={`result-${s.id}`} role="option" tabIndex={-1} aria-selected={s === current} onMouseMove={() => setIndex(results.indexOf(s))} onClick={() => onOpen(s.id)}>
-              <Bot seed={s.id} readOnly={s.source === 'hook_only'} tool={s.tool} state={botState(s)} pose={poseFor(s.id, s.state)} size={32} theme={theme} reducedMotion={reduced} />
+              <SessionBot session={s} size={32} />
               <span><strong>{s.name} <small>· {projectName(s)}</small></strong><small>{[taskOf(s), s.machineName].filter(Boolean).join(' · ')}</small></span>
-              <Badge state={botState(s)} />
+              <StateBadge state={botState(s)} offline={!!s.offline} />
               {rank >= 0 && rank < 9 && <Kbd>Alt {rank + 1}</Kbd>}
             </button>
           );

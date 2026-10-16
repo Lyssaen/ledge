@@ -1,16 +1,13 @@
 import { useRef } from 'react';
 import { PROJECT_COLORS, type Projects, type Session } from '@ledge/protocol';
-import { Bot } from '@ledge/ui/bots/Bot';
-import { botState, poseFor } from '@ledge/ui/bots/poseFor';
-import { Badge } from '@ledge/ui/ui/Badge';
+import { botState } from '@ledge/ui/bots/poseFor';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import { useMotionPreferences } from '../motionPreferences';
 import { taskOf } from '../nav/agents';
 import type { NavAction, NavState, ProjectFilter, View } from '../nav/state';
 import { SHELL_ICONS } from './icons';
-import { useTheme } from './theme';
+import { SessionBot, StateBadge } from './SessionBot';
 
 const VIEWS: readonly View[] = ['atelier', 'list'];
 
@@ -20,8 +17,6 @@ export function TopBar({ nav, dispatch, session, projects, projectIdOf }: {
   nav: NavState; dispatch: (a: NavAction) => void; session: Session | null; projects: Projects | null; projectIdOf: (s: Session) => string | null;
 }) {
   const { t } = useI18n();
-  const theme = useTheme();
-  const { reduced } = useMotionPreferences();
   const tabs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
   const { place } = nav;
   const viewName = (v: View) => (v === 'list' ? t.crumb.list : t.crumb.atelier);
@@ -44,7 +39,7 @@ export function TopBar({ nav, dispatch, session, projects, projectIdOf }: {
         <button className="crumb-link" onClick={() => dispatch({ type: 'home', project: pid })} title={filterName(pid)}>{filterName(pid)}</button>
         <span className="muted">/</span>
         <span className="crumb-session">
-          <Bot seed={session.id} readOnly={session.source === 'hook_only'} tool={session.tool} state={botState(session)} pose={poseFor(session.id, session.state)} size={22} theme={theme} paused={nav.paused} reducedMotion={reduced} />
+          <SessionBot session={session} size={22} paused={nav.paused} />
           <strong>{session.name}</strong>
           <span className="crumb-task" title={taskOf(session)}>{taskOf(session)}</span>
         </span>
@@ -83,7 +78,7 @@ export function TopBar({ nav, dispatch, session, projects, projectIdOf }: {
   return (
     <header className="app-header" role="banner">
       <div className="breadcrumb"><Icon d={crumbIcon} />{crumbs()}</div>
-      {place.kind === 'session' && session && <div className="header-view header-session"><Badge state={botState(session)} /></div>}
+      {place.kind === 'session' && session && <div className="header-view header-session"><StateBadge state={botState(session)} offline={!!session.offline} /></div>}
       {overview && (
         <div className="header-view">
           <div className="icon-tabs" role="tablist" aria-label={t.top.viewTabs}>{tab('atelier', SHELL_ICONS.grid)}{tab('list', SHELL_ICONS.list)}</div>

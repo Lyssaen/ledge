@@ -1,16 +1,13 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import type { Project, Session } from '@ledge/protocol';
-import { Bot } from '@ledge/ui/bots/Bot';
-import { botState, poseFor } from '@ledge/ui/bots/poseFor';
-import { Badge } from '@ledge/ui/ui/Badge';
+import { botState } from '@ledge/ui/bots/poseFor';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import { useMotionPreferences } from '../motionPreferences';
 import { taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
 import { SHELL_ICONS } from '../shell/icons';
-import { useTheme } from '../shell/theme';
+import { SessionBot, StateBadge } from '../shell/SessionBot';
 import { folderOf, type Filing } from './filing';
 import { machineOf } from './ProjectTable';
 
@@ -18,8 +15,6 @@ import { machineOf } from './ProjectTable';
  *  taped-off area, one card each. A card drags onto a table or a sidebar project, or « Ranger dans… » files it (filing). */
 export function Unassigned({ sessions, order, focusedId, paused, dispatch, filing, projects }: { sessions: readonly Session[]; order: readonly Session[]; focusedId: string | null; paused: boolean; dispatch: (a: NavAction) => void; filing: Filing; projects: readonly Project[] }): JSX.Element | null {
   const { t } = useI18n();
-  const theme = useTheme();
-  const { reduced } = useMotionPreferences();
   // The card whose « Ranger dans… » menu is open.
   const [assigning, setAssigning] = useState<string | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -53,7 +48,7 @@ export function Unassigned({ sessions, order, focusedId, paused, dispatch, filin
               className={`unassigned-card ${filing.dragging?.id === s.id ? 'is-dragged' : ''} ${focusedId === s.id ? 'keyboard-selected' : ''}`}>
               <span className="drag-grip" aria-hidden="true"><i /><i /><i /><i /><i /><i /></span>
               <button className="unassigned-open" data-agent={s.id} aria-label={`${s.name}, ${task}`} onClick={() => dispatch({ type: 'open', id: s.id })}>
-                <Bot tool={s.tool} state={botState(s)} pose={poseFor(s.id, s.state)} size={56} theme={theme} seed={s.id} frozen={!!s.offline} paused={paused} reducedMotion={reduced} readOnly={s.source === 'hook_only'} />
+                <SessionBot session={s} size={56} paused={paused} />
                 <span className="unassigned-copy">
                   <strong>{s.name}{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>
                   <span title={task}>{task}</span>
@@ -61,7 +56,7 @@ export function Unassigned({ sessions, order, focusedId, paused, dispatch, filin
                 </span>
               </button>
               <div className="unassigned-actions">
-                {s.offline ? <Badge state="readonly" label={t.atelier.offline} /> : <Badge state={botState(s)} />}
+                <StateBadge state={botState(s)} offline={!!s.offline} />
                 <span className="spacer" />
                 <div className="assign-wrap" ref={open ? wrap : undefined}>
                   <Button variant="outline" size="sm" aria-haspopup="menu" aria-expanded={open} onClick={() => setAssigning(open ? null : s.id)}>
