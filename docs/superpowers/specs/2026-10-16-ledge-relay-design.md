@@ -17,6 +17,7 @@ Piloter ses agents Ledge depuis son téléphone (lire, approuver, répondre, éc
 - Notifications push quand une demande, une question ou une fin de tour attend.
 - La PWA est servie par le serveur Railway en HTTPS et s'installe via « Ajouter à l'écran d'accueil ».
 - Fonctionnalités téléphone = celles de l'UI conservée : boîte de réception, détail et décision, questions (dont réponse libre), fil par agent, terminal en lecture avec interruption, envoi de message.
+- **Chat Ledge sur le téléphone** (onglet « Demander à Ledge ») : le même chat que l'overlay (questions sur les agents et les repos, étapes de lecture en direct, réponse en flux, arrêt, sources, noms d'agents qui ouvrent leur fil, cartes « lancer une session » et « envoyer à un agent »), mais **dans un fil séparé propre au téléphone**, distinct de celui de l'overlay.
 
 ## Non-objectifs
 
@@ -70,6 +71,13 @@ Piloter ses agents Ledge depuis son téléphone (lire, approuver, répondre, éc
 ### Décisions à fort impact
 
 L'archive exigeait une confirmation WebAuthn (Face ID) pour les demandes à haut risque (`risk.ts`, `challenges.ts`). *(mon choix)* On garde cette politique de risque et cette confirmation, avec le domaine Railway comme RP ID ; la clé WebAuthn est enregistrée au moment de la liaison et vérifiée par le daemon, jamais par le serveur.
+
+### Chat Ledge
+
+- Le daemon a déjà le chat (`chat.ask`, `chat.cancel`, `chat.reset`, `chat.step`, `chat.delta`, `chat.done`, `chat.error`, `chat.history`, cartes de proposition et de relais, fichier du jour `~/.ledge/chat.json`). Il faut le rendre multi-fil : chaque message de chat porte un identifiant de fil, l'overlay garde le sien, le téléphone a le sien. *(mon choix : un fil par appareil lié ; avec un seul téléphone, c'est « le fil du téléphone »)* Les questions d'un fil n'apparaissent jamais dans l'autre.
+- Ces opérations rejoignent la liste blanche de ce que le téléphone peut envoyer et recevoir, dans les mêmes enveloppes chiffrées. Lancer une session ou envoyer une consigne depuis une carte sont des écritures : elles passent par la même politique de risque que le reste.
+- *(mon choix)* Si l'app est en arrière-plan quand une réponse se termine, un push « Ledge a répondu » ouvre le fil.
+- Maquette : écran « 8 · Demander à Ledge » de la page V2.
 
 ### Notifications push
 
