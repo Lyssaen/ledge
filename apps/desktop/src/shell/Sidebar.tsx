@@ -14,7 +14,7 @@ import { useTheme } from './theme';
 const needsYou = (s: Session) => { const d = dotOf(s); return d === 'approval' || d === 'question'; };
 
 /** The mockup's sidebar: Ledge, New session and search, the views, the projects with their agents' dots, « Sans projet »,
- *  the machines and Settings. Dropping an agent on a project comes with lot 4. */
+ *  the machines and Settings. Dropping an agent on a project arrives with the atelier's filing task (lot 4, task 6). */
 export function Sidebar({ nav, dispatch, sessions, machines, projects, order, projectIdOf }: { nav: NavState; dispatch: (a: NavAction) => void; sessions: readonly Session[]; machines: readonly MachineState[]; projects: Projects | null; order: readonly Session[]; projectIdOf: (s: Session) => string | null }) {
   const { t } = useI18n();
   const theme = useTheme();

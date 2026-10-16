@@ -26,8 +26,18 @@ export function onFullscreenLeft(cb: () => void): () => void {
     try {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
       const win = getCurrentWindow();
+      // Edge-triggered: only a true -> false change actually observed counts, and only the latest answer is heard
+      // (an early resize while entering full screen reports false, and answers may arrive out of order).
+      let was = false;
+      let latest = 0;
       const un = await win.onResized(() => {
-        void win.isFullscreen().then(on => { if (!on && !stopped) cb(); }, () => {});
+        const mine = ++latest;
+        void win.isFullscreen().then(on => {
+          if (mine !== latest || stopped) return;
+          const left = was && !on;
+          was = on;
+          if (left) cb();
+        }, () => {});
       });
       if (stopped) un(); else unlisten = un;
     } catch { /* no window API */ }

@@ -1,5 +1,5 @@
 /* The sidebar, copied from the frozen mockup (docs/mockups/desktop-observatory/sidebar.css) without the per-project
-   swatch classes (the colour comes inline from PROJECT_COLORS) and the drag-and-drop rules (lot 4); the footer rules come
+   swatch classes (the colour comes inline from PROJECT_COLORS) and the drag-and-drop rules (the atelier's filing task, lot 4 task 6); the footer rules come
    from settings.css. Views, projects, machines with live state. */
 .sidebar{width:236px;padding:0;gap:0}
 .side-brand{height:56px;display:flex;align-items:center;gap:9px;padding:0 10px 0 16px;border-bottom:1px solid var(--sidebar-border)}
