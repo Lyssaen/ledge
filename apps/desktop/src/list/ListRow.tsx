@@ -26,6 +26,10 @@ export function Hl({ text, q }: { text: string; q: string }): JSX.Element {
 
 export interface ListRowProps {
   row: Row;
+  /** The row J / K chose. */
+  selected: boolean;
+  /** Focusing the row itself chooses it. */
+  onChoose: (key: string) => void;
   group: GroupBy;
   density: Density;
   /** The text filter, for the marks. */
@@ -43,7 +47,7 @@ export interface ListRowProps {
 /** One row of the List (list.tsx, `row`): bot, name (and the subagents' count), task and repository, badge, machine
  *  (or project when grouped by machine), activity. A subagent's row sits under its parent: its parent's machine, no clock
  *  of its own, and opening it opens the parent's session. */
-export function ListRow({ row, group, density, text, now, waits, projects, projectIdOf, paused, dispatch, onToggleKids }: ListRowProps): JSX.Element {
+export function ListRow({ row, selected, onChoose, group, density, text, now, waits, projects, projectIdOf, paused, dispatch, onToggleKids }: ListRowProps): JSX.Element {
   const { t } = useI18n();
   const session = row.kind === 'main' ? row.session : row.parent;
   const helper = row.kind === 'helper' ? row.helper : null;
@@ -63,8 +67,8 @@ export function ListRow({ row, group, density, text, now, waits, projects, proje
   const size = helper || density === 'tight' ? 24 : 32;
 
   return (
-    <div role="listitem" tabIndex={0} data-agent={row.key} aria-label={label} onClick={open}
-      className={cls('lrow', `b-${bucket}`, `s-${state}`, helper && 'child', row.kind === 'helper' && row.last && 'last', row.kind === 'main' && row.context && 'context')}>
+    <div role="listitem" tabIndex={0} data-agent={row.key} aria-label={label} onClick={open} onFocus={e => { if (e.target === e.currentTarget) onChoose(row.key); }}
+      className={cls('lrow', selected && 'keyboard-selected', `b-${bucket}`, `s-${state}`, helper && 'child', row.kind === 'helper' && row.last && 'last', row.kind === 'main' && row.context && 'context')}>
       <span className="r-bot">{helper ? <HelperBot helper={helper} parent={session} size={size} paused={paused} /> : <SessionBot session={session} size={size} paused={paused} />}</span>
       <span className="r-name">
         <strong><Hl text={name} q={text} /></strong>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { MachineState } from '@ledge/fleet';
 import { PROJECT_COLORS, type Projects, type Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
@@ -6,13 +6,14 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { folderOf } from '../atelier/filing';
 import { useI18n } from '../i18n/lang';
+import { useScreenKeys } from '../nav/screenKeys';
 import type { NavAction, NavState } from '../nav/state';
 import { SHELL_ICONS } from '../shell/icons';
 import { useStored } from '../state/useStored';
 import { ListGroup } from './ListGroup';
 import { ListRow } from './ListRow';
 import { ListToolbar } from './ListToolbar';
-import { listModel, type Chip, type ListCtx } from './model';
+import { listModel, walkRows, type Chip, type ListCtx } from './model';
 import { loadListPrefs, saveListPrefs } from './prefs';
 import { trackWaits, type Wait } from './time';
 
@@ -76,6 +77,50 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines }: 
     return listModel(order, ctx, { text, chip, group, helpers: nav.helpers, toggled, filter });
   }, [order, projects, projectIdOf, machines, waits, labels, text, chip, group, nav.helpers, toggled, filter]);
 
+  // The chosen row (a row key), the rows J / K walk, and whether the List holds the focus.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const walk = useMemo(() => walkRows(model.groups, collapsed), [model.groups, collapsed]);
+  useEffect(() => { if (focusedId !== null && !walk.some(r => r.key === focusedId)) setFocusedId(null); }, [walk, focusedId]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const hasFocus = useRef(false);
+  useEffect(() => {
+    const away = (e: PointerEvent) => { if (!(e.target instanceof Node && rootRef.current?.contains(e.target))) hasFocus.current = false; };
+    document.addEventListener('pointerdown', away, true);
+    return () => document.removeEventListener('pointerdown', away, true);
+  }, []);
+  // Compare keys as data, never build a selector from one.
+  const rowEl = (key: string) => [...(rootRef.current?.querySelectorAll<HTMLElement>('[data-agent]') ?? [])].find(el => el.dataset.agent === key);
+  const choose = (key: string) => { setFocusedId(key); rowEl(key)?.focus(); };
+  // A row that moves (its state changed) or loses a button drops the focus to the body: it goes back to the chosen row.
+  useLayoutEffect(() => {
+    if (focusedId !== null && hasFocus.current && document.activeElement === document.body) rowEl(focusedId)?.focus();
+  });
+
+  useScreenKeys(e => {
+    const target = e.target instanceof Element ? e.target : null;
+    const key = e.key.toLowerCase();
+    if (key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+      return true;
+    }
+    if (target?.closest('[role=tablist],[role=menu]')) return false;
+    const step = key === 'j' || key === 'arrowdown' ? 1 : key === 'k' || key === 'arrowup' ? -1 : 0;
+    if (step !== 0) {
+      if (walk.length === 0) return false;
+      const i = walk.findIndex(r => r.key === focusedId);
+      choose(walk[i < 0 ? (step > 0 ? 0 : walk.length - 1) : (i + step + walk.length) % walk.length]!.key);
+      return true;
+    }
+    const chosen = walk.find(r => r.key === focusedId);
+    // A focused button or link keeps its own Entrée.
+    if (e.key === 'Enter' && chosen && !target?.closest('button,a,input')) {
+      dispatch({ type: 'open', id: chosen.kind === 'main' ? chosen.session.id : chosen.parent.id });
+      return true;
+    }
+    return false;
+  });
+
   const clear = useCallback(() => { setText(''); setChip('all'); }, []);
   const launch = (project?: string) => dispatch({ type: 'modal', modal: project === undefined ? { kind: 'launch' } : { kind: 'launch', project } });
   const onToggleKids = useCallback((id: string) => setToggled(s => toggle(s, id)), []);
@@ -116,13 +161,15 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines }: 
 
   return (
     <div className="overview-scroll list" id="view-panel-list" role="tabpanel" aria-labelledby="view-tab-list">
-      <div ref={rootRef} className={`list-view density-${density} group-${group}`}>
-        <ListToolbar barRef={barRef} text={text} onText={setText} chip={chip} onChip={setChip} counts={model.counts}
+      <div ref={rootRef} className={`list-view density-${density} group-${group}`}
+        onFocus={() => { hasFocus.current = true; }}
+        onBlur={e => { if (e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) hasFocus.current = false; }}>
+        <ListToolbar barRef={barRef} inputRef={inputRef} onClear={clear} onFirst={() => { if (walk[0]) choose(walk[0].key); }} text={text} onText={setText} chip={chip} onChip={setChip} counts={model.counts}
           group={group} onGroup={g => setPrefs(p => ({ ...p, group: g }))} density={density} onDensity={d => setPrefs(p => ({ ...p, density: d }))} />
         {empty ?? model.groups.map(g => (
           <ListGroup key={g.key} group={g} collapsed={collapsed.has(g.key)} filtering={model.filtering} onToggle={() => setCollapsed(s => toggle(s, g.key))} dispatch={dispatch}>
             {g.rows.map(r => (
-              <ListRow key={r.key} row={r} group={group} density={density} text={text} now={now} waits={waits} projects={projects}
+              <ListRow key={r.key} row={r} selected={focusedId === r.key} onChoose={setFocusedId} group={group} density={density} text={text} now={now} waits={waits} projects={projects}
                 projectIdOf={projectIdOf} paused={nav.paused} dispatch={dispatch} onToggleKids={onToggleKids} />
             ))}
           </ListGroup>

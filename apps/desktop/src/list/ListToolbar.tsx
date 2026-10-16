@@ -1,4 +1,4 @@
-import { useRef, type JSX, type KeyboardEvent, type Ref } from 'react';
+import { useRef, type JSX, type KeyboardEvent, type Ref, type RefObject } from 'react';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -11,6 +11,11 @@ const GROUPS: readonly GroupBy[] = ['project', 'machine', 'state'];
 
 export interface ListToolbarProps {
   barRef: Ref<HTMLDivElement>;
+  inputRef: RefObject<HTMLInputElement | null>;
+  /** Escape with something to clear: the text and the chip. */
+  onClear: () => void;
+  /** ↓ or Entrée in the field: the first row. */
+  onFirst: () => void;
   text: string;
   onText: (text: string) => void;
   chip: Chip;
@@ -26,9 +31,9 @@ export interface ListToolbarProps {
 /** The List's sticky toolbar (list.tsx, lines 143-154): the text filter, the state chips with their counts, the grouping
  *  and the density. « Hors ligne » only shows when it counts or is chosen; a chip at 0 is disabled unless it is chosen,
  *  and the chosen chip clicked again goes back to « Tous ». */
-export function ListToolbar({ barRef, text, onText, chip, onChip, counts, group, onGroup, density, onDensity }: ListToolbarProps): JSX.Element {
+export function ListToolbar({ barRef, inputRef, onClear, onFirst, text, onText, chip, onChip, counts, group, onGroup, density, onDensity }: ListToolbarProps): JSX.Element {
   const { t } = useI18n();
-  const input = useRef<HTMLInputElement>(null);
+  const input = inputRef;
   const radios = useRef<Partial<Record<GroupBy, HTMLButtonElement | null>>>({});
   const other: Density = density === 'tight' ? 'comfy' : 'tight';
   // A radio group: ← / → (and ↑ / ↓) move the choice and the focus, Home / End go to the ends.
@@ -43,11 +48,22 @@ export function ListToolbar({ barRef, text, onText, chip, onChip, counts, group,
     onGroup(next);
     radios.current[next]?.focus();
   };
+  // Escape clears the text and the chip, then leaves the field; the navigation's Escape (the project filter) only gets the third.
+  const onFilterKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (text !== '' || chip !== 'all') onClear(); else e.currentTarget.blur();
+    } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      e.preventDefault();
+      onFirst();
+    }
+  };
   return (
     <div ref={barRef} className="list-toolbar">
       <label className="list-filter">
         <Icon d={SHELL_ICONS.search} size={14} />
-        <input ref={input} value={text} onChange={e => onText(e.target.value)} placeholder={t.list.filterPlaceholder} aria-label={t.list.filter} />
+        <input ref={input} value={text} onChange={e => onText(e.target.value)} onKeyDown={onFilterKey} placeholder={t.list.filterPlaceholder} aria-label={t.list.filter} />
         {text
           ? <button type="button" className="filter-clear" aria-label={t.list.clearFilter} onClick={() => { onText(''); input.current?.focus(); }}><Icon d={ICONS.close.d} size={12} /></button>
           : <Kbd>F</Kbd>}
