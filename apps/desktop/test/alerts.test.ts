@@ -3,7 +3,7 @@ import type { SessionChange } from '@ledge/fleet';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { baselineOf, cueOf, diffSessions, settledMachines, strongestCue, toastFor, toastKind } from '../src/notify/alerts';
 import { MESSAGES } from '../src/i18n/messages';
-import { machine } from './launch-helpers';
+import { machine } from './fleet-helpers';
 
 const copy = MESSAGES.en.notify;
 const working = fakeSession('local:a', { name: 'Otto', state: 'working' });

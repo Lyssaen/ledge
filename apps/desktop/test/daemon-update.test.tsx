@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { MachineState } from '@ledge/fleet';
 import { daemonOffer, daemonTarget, useDaemonUpdate } from '../src/update/daemon';
-import { fakeFleet, machine } from './launch-helpers';
+import { fakeFleet, machine } from './fleet-helpers';
 
 const local = (version: string, install: 'npm' | 'git' | 'unknown' = 'npm', extra: Partial<MachineState> = {}) =>
   machine('local', { daemon: { version, install, systemd: true, ...(install === 'npm' ? {} : { manual: 'cd ~/ledge && git pull && pnpm build' }) }, ...extra });

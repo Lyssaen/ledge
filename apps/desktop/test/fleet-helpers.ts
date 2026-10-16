@@ -1,14 +1,13 @@
 import type { MachineState } from '@ledge/fleet';
-import type { ClientMessage, Recent, ServerMessage } from '@ledge/protocol';
+import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 
 /** A machine as the fleet publishes it: ready unless told otherwise; remotes get an SSH alias. */
 export function machine(id: string, extra: Partial<MachineState> = {}): MachineState {
   const label = id === 'local' ? 'Local' : id[0]!.toUpperCase() + id.slice(1);
   return { id, label, ...(id === 'local' ? {} : { ssh: id }), status: 'open', ready: true, recents: [], sessions: [], launcher: null, ...extra };
 }
-export const recent = (cwd: string, lastAt: string, project = cwd.split('/').pop() ?? cwd): Recent => ({ cwd, project, lastAt });
 
-/** The two fleet calls the launch uses. `offline` lists the machines `sendTo` refuses; `emit` plays a daemon message from one machine. */
+/** The two fleet calls a machine action uses. `offline` lists the machines `sendTo` refuses; `emit` plays a daemon message from one machine. */
 export function fakeFleet(down: string[] = []) {
   const sent: { machine: string; msg: ClientMessage }[] = [];
   const listeners = new Set<(machine: string, m: ServerMessage) => void>();

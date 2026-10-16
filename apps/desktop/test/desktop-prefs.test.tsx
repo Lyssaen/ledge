@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { getDnd, loadNotifyMode, loadSounds, resetDndForTests, resetSoundPrefsForTests, setDnd, setNotifyMode, useDnd } from '../src/notify/prefs';
 import { resetAppearanceForTests, setAccent, setTheme, useAppearance, useTheme } from '../src/shell/theme';
-import { loadTool, saveTool } from '../src/launch/form';
 import { applyUiScale, loadUiScale, saveUiScale, type ZoomDeps } from '../src/settings/scale';
 
 beforeEach(() => {
@@ -52,14 +51,6 @@ describe('theme and accent, live', () => {
     act(() => setAccent(null));
     expect(localStorage.getItem('desktop.accent')).toBeNull();
     expect(document.documentElement.style.getPropertyValue('--primary')).toBe('');
-  });
-});
-
-describe('default harness', () => {
-  it('is what the next launch form starts with', () => {
-    saveTool('codex');
-    expect(localStorage.getItem('desktop.tool')).toBe('"codex"');
-    expect(loadTool()).toBe('codex');
   });
 });
 

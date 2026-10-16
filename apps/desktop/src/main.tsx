@@ -4,6 +4,9 @@ import './motionPreferences';
 import './styles/app.css';
 import { applyUiScale, loadUiScale } from './settings/scale';
 import { updater } from './update/store';
+import { purgeObsolete } from './state/obsolete';
+
+purgeObsolete();
 
 createRoot(document.getElementById('root')!).render(<App />);
 void updater.start();

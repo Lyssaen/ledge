@@ -5,7 +5,7 @@ import type { Session } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { TOAST_WINDOW_MS, useAlerts, type AlertDeps } from '../src/notify/useAlerts';
 import { resetDndForTests, resetSoundPrefsForTests, setDnd, setNotifyMode, setSounds } from '../src/notify/prefs';
-import { machine } from './launch-helpers';
+import { machine } from './fleet-helpers';
 
 type Props = { sessions: Session[]; machines: MachineState[]; status: DaemonStatus; daemonUpdating?: boolean };
 const ask = (id: string, name: string, state: Session['state'] = 'waiting_permission') => fakeSession(id, { name, state, ...(state.startsWith('waiting') ? { pending: { kind: state === 'waiting_input' ? 'question' : 'permission', source: 'hook', text: `${name} asks` } } : {}) });
