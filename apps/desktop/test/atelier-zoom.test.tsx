@@ -104,6 +104,35 @@ describe('the atelier zoom', () => {
     expect(scroller).not.toHaveClass('can-pan');
     expect(bar().getByRole('button', { name: 'Back to 100 %' })).toHaveTextContent('120 %');
   });
+  it('a refit while zoomed keeps the zoom and the point at the centre of the view, instead of jumping to the top left', async () => {
+    const { d, user } = await boot();
+    const scroller = document.querySelector<HTMLElement>('.overview-scroll.atelier')!;
+    const shell = scroller.querySelector<HTMLElement>('.office-shell')!;
+    // A browser in miniature: 1000 × 750 of content at zoom 1 in an 800 × 600 view; the scroll is clamped whenever the
+    // content shrinks, as a browser does on reflow.
+    let zoom = 1, left = 0, top = 0;
+    const width = () => Math.max(800, Math.round(1000 * zoom)), height = () => Math.max(600, Math.round(750 * zoom));
+    const clamp = () => { left = Math.max(0, Math.min(left, width() - 800)); top = Math.max(0, Math.min(top, height() - 600)); };
+    const props: Record<string, PropertyDescriptor> = {
+      clientWidth: { get: () => 800 }, clientHeight: { get: () => 600 }, offsetWidth: { get: () => 800 }, offsetHeight: { get: () => 600 },
+      scrollWidth: { get: width }, scrollHeight: { get: height },
+      scrollLeft: { get: () => left, set: (v: number) => { left = v; clamp(); } },
+      scrollTop: { get: () => top, set: (v: number) => { top = v; clamp(); } }
+    };
+    for (const [k, p] of Object.entries(props)) Object.defineProperty(scroller, k, { configurable: true, ...p });
+    Object.defineProperty(shell.style, 'zoom', { configurable: true, get: () => String(zoom), set: (v: string) => { zoom = Number(v) || 1; clamp(); } });
+    await user.keyboard('+');
+    const level = () => bar().getByRole('button', { name: 'Back to 100 %' });
+    expect(level()).toHaveTextContent('120 %');
+    scroller.scrollLeft = 300; scroller.scrollTop = 200;
+    const centre = { x: (300 + 400) / 1.2, y: (200 + 300) / 1.2 };
+    d.upsert(fakeSession('mia', { name: 'Mia', cwd: '/w/docs', state: 'working' }));        // one more agent: the mosaic refits
+    await screen.findByRole('button', { name: /^Mia,/ });
+    expect(level()).toHaveTextContent('120 %');
+    expect(scroller).not.toHaveClass('fitted');
+    expect((scroller.scrollLeft + 400) / 1.2).toBeCloseTo(centre.x);
+    expect((scroller.scrollTop + 300) / 1.2).toBeCloseTo(centre.y);
+  });
   it('a double-click on the floor refits; the zoom bar titles its buttons and shows its hint', async () => {
     const { user } = await boot();
     await user.keyboard('++');

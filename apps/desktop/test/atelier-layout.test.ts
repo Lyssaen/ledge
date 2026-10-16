@@ -5,7 +5,7 @@ import type { Helper, Projects, Session } from '@ledge/protocol';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import { mainOrder } from '../src/nav/agents';
 import { layoutTable, tableLength, roomWidth, noteX, tableBranch, sheetState, helperState, sceneOf, walkOrder, type AtelierScene } from '../src/atelier/layout';
-import { widestRow, fitCeiling, clampZoom, stepZoom, wheelZoom, zoomAround, frameZoom } from '../src/atelier/zoom';
+import { widestRow, fitCeiling, clampZoom, stepZoom, wheelZoom, zoomAround, frameZoom, centreOf, centreOn } from '../src/atelier/zoom';
 import { plantsFor } from '../src/atelier/plants';
 
 describe('atelier geometry', () => {
@@ -76,6 +76,12 @@ it('mosaic rows and zoom arithmetic', () => {
   expect(zoomAround({ zoom: 2, left: 100, top: 50 }, 1, { x: 100, y: 50 })).toEqual({ left: 0, top: 0 });
   const f = frameZoom({ x: 100, y: 50, w: 750, h: 502 }, { width: 1000, height: 600 });
   expect(f.zoom).toBeCloseTo(1.0996, 4); expect(f.left).toBeCloseTo(22.3, 1); expect(f.top).toBeCloseTo(31.0, 1);
+  const view = { width: 800, height: 600 };
+  expect(centreOf({ zoom: 2, left: 400, top: 100 }, view)).toEqual({ x: 400, y: 200 });
+  expect(centreOn({ x: 400, y: 200 }, 2, view, { width: 2000, height: 1500 })).toEqual({ left: 400, top: 100 });
+  // clamped to the scrollable range, never negative
+  expect(centreOn({ x: 990, y: 10 }, 2, view, { width: 2000, height: 1500 })).toEqual({ left: 1200, top: 0 });
+  expect(centreOn({ x: 400, y: 200 }, 1, view, { width: 500, height: 400 })).toEqual({ left: 0, top: 0 });
 });
 it('plants: one or two per table, from the project id, never on the label corner, away from the +N pill', () => {
   expect(plantsFor('ledge', [])).toEqual([{ spot: 'br', species: 'monstera', flip: false }]);

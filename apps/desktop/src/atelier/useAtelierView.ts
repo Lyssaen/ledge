@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { ScreenKeyHandler } from '../nav/screenKeys';
-import { clampZoom, fitCeiling, FIT_MIN, FIT_STEP, FLOOR_MARGIN, frameZoom, stepZoom, wheelZoom, widestRow, zoomAround } from './zoom';
+import { centreOf, centreOn, clampZoom, fitCeiling, FIT_MIN, FIT_STEP, FLOOR_MARGIN, frameZoom, stepZoom, wheelZoom, widestRow, zoomAround } from './zoom';
 
 export interface AtelierView {
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -45,6 +45,10 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
     const scroll = scrollRef.current, shell = shellRef.current;
     if (!scroll || !shell) return;
     const widths = tilesKey === '' ? [] : tilesKey.split(',').map(Number);
+    // Zoomed by hand: the point at the centre of the view, brought back once the manual zoom is re-applied (the fit below
+    // shrinks the content, which clamps the scroll to the top left).
+    const kept = manualRef.current === null ? null
+      : centreOf({ zoom: applied.current, left: scroll.scrollLeft, top: scroll.scrollTop }, { width: scroll.clientWidth, height: scroll.clientHeight });
     const s = shell.style;
     s.width = s.paddingInline = s.minHeight = s.maxWidth = s.marginInline = '';
     s.zoom = '1';
@@ -82,6 +86,10 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
     applied.current = manualRef.current ?? z;
     s.zoom = String(applied.current);
     scroll.classList.toggle('fitted', manualRef.current === null);
+    if (kept) {
+      const { left, top } = centreOn(kept, applied.current, { width: scroll.clientWidth, height: scroll.clientHeight }, { width: scroll.scrollWidth, height: scroll.scrollHeight });
+      scroll.scrollLeft = left; scroll.scrollTop = top;
+    }
   }, [tilesKey]);
 
   // `refit` is the caller's list of what redoes the fit (a list of the same length on every render).
