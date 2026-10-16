@@ -100,7 +100,7 @@ export function TopBar({ nav, dispatch, session, projects, projectIdOf }: {
         {overview && <span className="view-actions-sep" />}
         <Button variant="ghost" size="icon" aria-label={t.side.searchLabel} title={t.top.search} onClick={() => dispatch({ type: 'modal', modal: 'search' })}><Icon d={SHELL_ICONS.search} /></Button>
         <Button variant="ghost" size="icon" aria-label={t.side.chat} title={t.top.chat} onClick={() => dispatch({ type: 'chat', open: true })}><Icon d={SHELL_ICONS.chat} /></Button>
-        <Button variant="ghost" size="icon" aria-label={t.modalTitles.shortcuts} title={t.top.shortcuts} onClick={() => dispatch({ type: 'modal', modal: 'shortcuts' })}><Icon d={SHELL_ICONS.help} /></Button>
+        <Button variant="ghost" size="icon" aria-label={t.top.shortcuts} title={t.top.shortcuts} onClick={() => dispatch({ type: 'modal', modal: 'shortcuts' })}><Icon d={SHELL_ICONS.help} /></Button>
         <span className="view-actions-sep" />
         <Button variant="ghost" size="icon" aria-label={nav.fullscreen ? t.top.fullscreenExit : t.top.fullscreen} title={nav.fullscreen ? t.top.fullscreenExit : t.top.fullscreen} onClick={() => dispatch({ type: 'fullscreen', on: !nav.fullscreen })}>
           <Icon d={nav.fullscreen ? SHELL_ICONS.collapse : ICONS.expand.d} size={16} />

@@ -113,3 +113,22 @@
 .pending h2 { margin: 0; font-size: 16px; font-weight: 500; color: var(--foreground); }
 .pending p { margin: 0; font-size: 13px; color: var(--muted-foreground); }
 .ledge-chat-panel .chat-close { position: absolute; top: 10px; right: 10px; }
+
+/* Session search and shortcuts help (the mockup's palette) */
+.command-palette{width:650px}
+.palette-search{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);color:var(--muted-foreground)}
+.palette-search input{width:100%;border:0;background:transparent;padding:4px 0;font-size:14px}
+.palette-results{max-height:440px;overflow:auto;padding:6px}
+.palette-results button{display:flex;align-items:center;width:100%;padding:12px 10px;gap:12px;border-radius:var(--radius-md)}
+.palette-results button[aria-selected=true]{background:var(--sidebar-accent);outline:1px solid var(--input)}
+.palette-results button>span:not([data-badge]){flex:1;min-width:0}
+.palette-results strong{font-size:13px;font-weight:500}
+.palette-results small{display:block;font-size:11px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.palette-results strong small{display:inline}
+.palette-results kbd{font-size:10px!important}
+.palette-footer{display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid var(--border);font-size:10px;color:var(--muted-foreground)}
+.shortcut-list{padding:8px 20px 20px}
+.shortcut-list>p{font-size:11px;line-height:18px;color:var(--muted-foreground);margin:12px 0}
+.shortcut-list>div{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:10px 0;border-bottom:1px solid var(--border);font-size:12px}
+.shortcut-list kbd{font-size:10px!important;flex-shrink:0}
+.palette-results .empty-attention{padding:16px 10px;font-size:12px;color:var(--muted-foreground)}

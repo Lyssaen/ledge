@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { projectOf, useProjects, type DaemonClient } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
@@ -11,12 +11,16 @@ import { onTrayAction, setTrayLabels } from './tauri/bridge';
 import { useAppearance } from './shell/theme';
 import { initialNav, navReducer, reconcile, type NavAction, type NavState } from './nav/state';
 import { loadOverview, saveOverview } from './nav/overview';
-import { taskOf } from './nav/agents';
+import { mainOrder, taskOf } from './nav/agents';
+import { useKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { Pending } from './shell/Pending';
 import { Modal } from './shell/Modal';
+import { SearchPalette } from './shell/SearchPalette';
+import { ShortcutsHelp } from './shell/ShortcutsHelp';
+import { setWindowFullscreen } from './shell/fullscreen';
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
@@ -51,6 +55,19 @@ function Shell({ client }: { client?: DaemonClient }) {
   useEffect(() => { if (reconcile(nav, sessions, projects) !== nav) dispatch({ type: 'reconcile', sessions, projects }); }, [sessions, projects]);
 
   const projectIdOf = useCallback((s: Session) => (projects ? projectOf(s, projects) : null), [projects]);
+  const projectName = useCallback((s: Session) => {
+    const id = projectIdOf(s);
+    return (id && projects?.projects.find(p => p.id === id)?.name) || t.side.unassigned;
+  }, [projectIdOf, projects, t]);
+  const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
+  useKeys(dispatch, { state: nav, order });
+  // The window follows the full screen state (not at mount: nothing was asked yet).
+  const fullscreenSeen = useRef(nav.fullscreen);
+  useEffect(() => {
+    if (fullscreenSeen.current === nav.fullscreen) return;
+    fullscreenSeen.current = nav.fullscreen;
+    void setWindowFullscreen(nav.fullscreen);
+  }, [nav.fullscreen]);
   const session = place.kind === 'session' ? sessions.find(s => s.id === place.id) ?? null : null;
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
@@ -77,8 +94,10 @@ function Shell({ client }: { client?: DaemonClient }) {
           </aside>
         )}
       </div>
-      {nav.modal && (
-        <Modal title={t.modalTitles[nav.modal]} wide={nav.modal === 'launch' || nav.modal === 'project'} onClose={close}>
+      {nav.modal === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
+      {nav.modal === 'shortcuts' && <ShortcutsHelp onClose={close} />}
+      {(nav.modal === 'launch' || nav.modal === 'project') && (
+        <Modal title={t.modalTitles[nav.modal]} wide onClose={close}>
           <Pending title={t.modalTitles[nav.modal]} />
         </Modal>
       )}
