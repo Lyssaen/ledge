@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { attachClient, createDaemonClient, createFleetClient, loadMachines, LOCAL_MACHINE, useDaemon, useMachines, type DaemonClient, type DaemonStatus, type Fleet, type MachineState } from '@ledge/fleet';
+import { attachClient, createDaemonClient, createFleetClient, loadMachines, LOCAL_MACHINE, useDaemon, useMachines, type DaemonClient, type DaemonError, type DaemonStatus, type Fleet, type MachineState } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 
 const LOCAL_URL = LOCAL_MACHINE.url!;
@@ -19,7 +19,11 @@ export function createDesktopFleet(opts: { url?: string; WebSocketImpl?: unknown
 let singleton: DaemonClient | null = null;
 const defaultClient = (): DaemonClient => (singleton ??= createDesktopFleet());
 
-export interface FleetView { sessions: Session[]; machines: MachineState[]; status: DaemonStatus; fleet: Fleet; client: DaemonClient; localDown: boolean }
+export interface FleetView {
+  sessions: Session[]; machines: MachineState[]; status: DaemonStatus; fleet: Fleet; client: DaemonClient; localDown: boolean;
+  /** The daemon's last `error` reply (a refused decision, a machine offline at send), its session id qualified. */
+  lastError: DaemonError | null;
+}
 
 /** One attach/connect per client however many components use it: the first consumer starts it, the last one stops it. */
 const consumers = new WeakMap<DaemonClient, { count: number; detach: () => void }>();
@@ -36,5 +40,5 @@ export function useFleet(client: DaemonClient = defaultClient()): FleetView {
   const machines = useMachines(client);
   // Only a settled failure counts: the first machine starts as 'connecting', which must not flash the notice at boot.
   const localDown = machines[0]?.status === 'unreachable';
-  return { sessions: daemon.sessions, machines, status: daemon.status, fleet: client.fleet!, client, localDown };
+  return { sessions: daemon.sessions, machines, status: daemon.status, fleet: client.fleet!, client, localDown, lastError: daemon.lastError };
 }

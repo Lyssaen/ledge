@@ -5,6 +5,7 @@ import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { folderOf } from '../atelier/filing';
+import type { Decisions } from '../fleet/decisions';
 import { useI18n } from '../i18n/lang';
 import { useScreenKeys } from '../nav/screenKeys';
 import type { NavAction, NavState } from '../nav/state';
@@ -25,6 +26,8 @@ export interface ListProps {
   projects: Projects | null;
   projectIdOf: (s: Session) => string | null;
   machines: readonly MachineState[];
+  /** The quick Allow / Deny (App's useDecisions, shared with the session in lot 6). */
+  decisions: Decisions;
 }
 
 const toggle = (set: ReadonlySet<string>, key: string): Set<string> => {
@@ -36,7 +39,7 @@ const toggle = (set: ReadonlySet<string>, key: string): Set<string> => {
 /** The List (list.tsx, `SessionList`): every session as an aligned row, grouped by project, machine or state, what
  *  awaits a decision first in each group. Grouping and density are remembered (`desktop.list`); the text filter, the
  *  chip, the collapsed groups and the unfolded subagents live here and start over when the List unmounts. */
-export function List({ nav, dispatch, order, projects, projectIdOf, machines }: ListProps): JSX.Element {
+export function List({ nav, dispatch, order, projects, projectIdOf, machines, decisions }: ListProps): JSX.Element {
   const { t } = useI18n();
   const [prefs, setPrefs] = useStored(loadListPrefs, saveListPrefs);
   const [text, setText] = useState('');
@@ -172,7 +175,7 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines }: 
           <ListGroup key={g.key} group={g} collapsed={collapsed.has(g.key)} filtering={model.filtering} onToggle={() => setCollapsed(s => toggle(s, g.key))} dispatch={dispatch}>
             {g.rows.map(r => (
               <ListRow key={r.key} row={r} selected={focusedId === r.key} onChoose={setFocusedId} group={group} density={density} text={text} now={now} waits={waits} projects={projects}
-                projectIdOf={projectIdOf} paused={nav.paused} dispatch={dispatch} onToggleKids={onToggleKids} />
+                projectIdOf={projectIdOf} paused={nav.paused} dispatch={dispatch} onToggleKids={onToggleKids} decisions={decisions} />
             ))}
           </ListGroup>
         ))}

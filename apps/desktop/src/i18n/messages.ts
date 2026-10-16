@@ -109,6 +109,7 @@ const fr = {
     },
     foot: { walk: 'parcourir', open: 'ouvrir', filter: 'filtrer', note: 'les demandes en attente passent en tête de chaque groupe.' },
     enter: 'Entrée',
+    allow: 'Autoriser', deny: 'Refuser', reply: 'Répondre', open: 'Ouvrir', openTitle: 'Ouvrir la session (Entrée)',
     when: {
       now: 'à l’instant', wait: (d: string) => `depuis ${d}`, ago: (d: string) => `il y a ${d}`,
       requestNow: 'Demande reçue à l’instant', waitTitle: (d: string) => `En attente depuis ${d}`,
@@ -116,6 +117,10 @@ const fr = {
       seenAgo: (d: string) => `Vu pour la dernière fois il y a ${d}`,
       units: { min: 'min', h: 'h', d: 'j' }
     }
+  },
+  decisions: {
+    failed: (name: string, message: string) => `Décision non transmise à ${name} : ${message}`,
+    unconfirmed: (name: string) => `Ledge n’a pas vu la décision pour ${name} aboutir. Ouvrez la session pour vérifier.`
   },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
@@ -223,6 +228,7 @@ const en: typeof fr = {
     },
     foot: { walk: 'browse', open: 'open', filter: 'filter', note: 'pending requests come first in each group.' },
     enter: 'Enter',
+    allow: 'Allow', deny: 'Deny', reply: 'Reply', open: 'Open', openTitle: 'Open the session (Enter)',
     when: {
       now: 'just now', wait: (d) => `for ${d}`, ago: (d) => `${d} ago`,
       requestNow: 'Request received just now', waitTitle: (d) => `Waiting for ${d}`,
@@ -230,6 +236,10 @@ const en: typeof fr = {
       seenAgo: (d) => `Last seen ${d} ago`,
       units: { min: 'min', h: 'h', d: 'd' }
     }
+  },
+  decisions: {
+    failed: (name, message) => `Could not send the decision to ${name}: ${message}`,
+    unconfirmed: (name) => `Ledge did not see the decision for ${name} land. Open the session to check.`
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },

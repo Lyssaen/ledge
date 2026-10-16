@@ -7,6 +7,7 @@ import { projectOf } from '@ledge/fleet';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { App } from '../src/App';
 import { LangProvider } from '../src/i18n/lang';
+import type { Decisions } from '../src/fleet/decisions';
 import { List } from '../src/list/List';
 import { mainOrder } from '../src/nav/agents';
 import { initialNav } from '../src/nav/state';
@@ -20,6 +21,7 @@ afterEach(async () => { cleanup(); await closeDaemons(); });
 const rowsOf = (name: string) => within(screen.getByRole('region', { name })).getAllByRole('listitem').map(r => r.getAttribute('aria-label')!.split(',')[0]);
 const row = (name: string) => screen.getByRole('listitem', { name: new RegExp(`^${name},`) });
 const head = (name: string) => within(document.querySelector<HTMLElement>(`.lgroup[aria-label="${name}"] .lgroup-head`)!);
+const decisions: Decisions = { busy: () => false, landed: null, decide: () => false };
 const chip = (name: RegExp) => within(screen.getByRole('group', { name: 'Filter by state' })).getByRole('button', { name });
 
 describe('the List', () => {
@@ -239,7 +241,7 @@ describe('the List', () => {
     render(
       <LangProvider lang="fr">
         <List nav={initialNav({ view: 'list', helpers: true, paused: false })} dispatch={dispatch} order={order} projects={PROJECTS}
-          projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} />
+          projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} decisions={decisions} />
       </LangProvider>
     );
     expect(document.querySelector('.list-foot')).toHaveTextContent('JK parcourir · Entrée ouvrir · F filtrer · les demandes en attente passent en tête de chaque groupe.');
@@ -250,6 +252,10 @@ describe('the List', () => {
     expect(row('Otto')).toHaveAttribute('aria-label', 'Otto, Câbler la liste, à décider, Local');
     expect(within(row('Otto')).getByRole('button', { name: 'Afficher 1 sous-agent' })).toHaveAttribute('title', '1 sous-agent');
     expect(screen.getByRole('textbox', { name: 'Filtrer les sessions' })).toHaveAttribute('placeholder', 'Agent, tâche, machine, dépôt…');
+    expect(within(row('Otto')).getByRole('button', { name: 'Autoriser' })).toBeEnabled();
+    expect(within(row('Otto')).getByRole('button', { name: 'Refuser' })).toBeEnabled();
+    expect(within(row('Kit')).getByRole('button', { name: 'Répondre' })).toBeEnabled();
+    expect(within(row('Nova')).getByRole('button', { name: 'Ouvrir Entrée' })).toHaveAttribute('title', 'Ouvrir la session (Entrée)');
     await user.click(head('Ledge').getByRole('button', { name: 'Ledge' }));
     expect(head('Ledge').getByRole('button', { name: 'Ledge' })).toHaveAttribute('title', 'Voir seulement Ledge');
     expect(dispatch).toHaveBeenLastCalledWith({ type: 'home', project: 'ledge' });
@@ -260,7 +266,7 @@ describe('the List', () => {
   });
   it('no session at all: New session launches without a project', async () => {
     const dispatch = vi.fn();
-    render(<List nav={initialNav({ view: 'list', helpers: true, paused: false })} dispatch={dispatch} order={[]} projects={PROJECTS} projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} />);
+    render(<List nav={initialNav({ view: 'list', helpers: true, paused: false })} dispatch={dispatch} order={[]} projects={PROJECTS} projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} decisions={decisions} />);
     await userEvent.setup().click(screen.getByRole('button', { name: 'New session' }));
     expect(dispatch).toHaveBeenLastCalledWith({ type: 'modal', modal: { kind: 'launch' } });
   });

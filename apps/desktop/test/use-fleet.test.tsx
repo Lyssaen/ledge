@@ -61,4 +61,13 @@ describe('useFleet', () => {
     await waitFor(() => expect(c.result.current.machines[0]?.status).toBe('open'));
     c.unmount(); await d.close();
   });
+  it('publishes the daemon\'s last error, its session id qualified', async () => {
+    const d = await createMockDaemon(); d.upsert(fakeSession('otto'));
+    const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
+    const { result, unmount } = renderHook(() => useFleet(client));
+    await waitFor(() => expect(result.current.sessions.map(s => s.id)).toEqual(['local:otto']));
+    d.push({ type: 'error', id: 'otto', message: 'no pending request' });
+    await waitFor(() => expect(result.current.lastError).toMatchObject({ id: 'local:otto', message: 'no pending request' }));
+    unmount(); await d.close();
+  });
 });

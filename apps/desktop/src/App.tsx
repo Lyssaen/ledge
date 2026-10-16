@@ -5,6 +5,7 @@ import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { LangProvider, loadLang, useI18n, type Lang } from './i18n/lang';
 import { useFleet } from './fleet/useFleet';
+import { useDecisions } from './fleet/decisions';
 import { useAlerts } from './notify/useAlerts';
 import { getDnd, setDnd, useDnd } from './notify/prefs';
 import { onTrayAction, setTrayLabels } from './tauri/bridge';
@@ -34,7 +35,7 @@ const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'rec
 /** The Atelier's shell: sidebar, top bar, the current place (the atelier, the List; the other screens wait for their lot), footer, chat and dialogs;
  *  the real fleet, toasts and sounds, and the tray. */
 function Shell({ client }: { client?: DaemonClient }) {
-  const { sessions, machines, status, localDown, fleet, client: fleetClient } = useFleet(client);
+  const { sessions, machines, status, localDown, fleet, client: fleetClient, lastError } = useFleet(client);
   const projects = useProjects(fleetClient);
   const { t } = useI18n();
   const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
@@ -68,6 +69,8 @@ function Shell({ client }: { client?: DaemonClient }) {
   // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
   const { notice, notify } = useToast();
   const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
+  // Allow / Deny from the List (and, lot 6, the session): one send per request; a refusal or a silence is said in the toast.
+  const decisions = useDecisions({ client: fleetClient, sessions, lastError, notify });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   useKeys(dispatch, { state: nav, order, screen: screenKeys });
   // The window may leave full screen by itself (Escape in a browser, the OS): the layout follows.
@@ -92,7 +95,7 @@ function Shell({ client }: { client?: DaemonClient }) {
           {place.kind === 'settings' ? <Pending title={t.sections[place.section]} />
             : session ? <Pending title={taskOf(session)} />
             : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
-            : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} />}
+            : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} decisions={decisions} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} />}
         </section>
         {nav.chat && (
