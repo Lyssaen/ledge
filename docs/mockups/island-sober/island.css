@@ -1,0 +1,150 @@
+/* The sober island mockup: a page that scrolls (base.css pins the overlay's root), a fake desktop, the notch on top. */
+html, body { height: auto; min-height: 100%; }
+body { overflow: auto; background: var(--background); color: var(--foreground); }
+#root { position: static; overflow: visible; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.sober { max-width: 1440px; margin: 0 auto; padding: 20px 24px 40px; box-sizing: border-box; }
+.sober-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.sober-top > div { flex: 1; min-width: 240px; }
+.sober-top h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; }
+.sober-top p { margin: 2px 0 0; color: var(--muted-foreground); font-size: 13px; }
+.sober-mock { font-size: 12px; color: var(--muted-foreground); padding: 3px 8px; border: 1px dashed var(--border); border-radius: 6px; }
+
+.sober-scenarios { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; scrollbar-width: thin; }
+.sober-scenarios button { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); color: var(--card-foreground); cursor: pointer; text-align: left; }
+.sober-scenarios button:hover { background: var(--accent); }
+.sober-scenarios button[aria-pressed="true"] { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.sober-scenarios strong { font-size: 13px; font-weight: 500; }
+.sober-scenarios small { font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
+
+.sober-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+
+/* The desktop: a wallpaper the notch reads against, two decorative windows, a taskbar. */
+.stage { position: relative; height: 680px; border-radius: 12px; overflow: hidden; isolation: isolate;
+  background: radial-gradient(120% 90% at 20% 110%, #3b2a4a 0%, transparent 60%), radial-gradient(90% 80% at 90% 0%, #1f3b4d 0%, transparent 65%), #141821; }
+:root[data-theme="light"] .stage { background: radial-gradient(120% 90% at 20% 110%, #e9c9c3 0%, transparent 60%), radial-gradient(90% 80% at 90% 0%, #b9cfdc 0%, transparent 65%), #cfd6de; }
+.stage-windows .win { position: absolute; border-radius: 10px; background: color-mix(in srgb, var(--card) 88%, transparent); box-shadow: 0 18px 50px #0006; border: 1px solid var(--border); padding: 38px 18px 18px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; }
+.stage-windows .win::before { content: ''; position: absolute; left: 14px; top: 14px; width: 46px; height: 10px; border-radius: 5px; background: var(--muted); }
+.stage-windows .win i { display: block; height: 8px; border-radius: 4px; background: var(--muted); }
+.win-term { left: 6%; top: 150px; width: 44%; height: 300px; }
+.win-term i:nth-child(odd) { width: 70%; } .win-term i:nth-child(even) { width: 45%; }
+.win-editor { right: 6%; top: 230px; width: 40%; height: 320px; }
+.win-editor i:nth-child(1) { width: 55%; } .win-editor i:nth-child(2) { width: 80%; } .win-editor i:nth-child(3) { width: 65%; } .win-editor i:nth-child(4) { width: 35%; }
+.taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 40px; display: flex; justify-content: center; align-items: center; gap: 10px; background: color-mix(in srgb, var(--background) 82%, transparent); border-top: 1px solid var(--border); }
+.taskbar i { width: 22px; height: 22px; border-radius: 6px; background: color-mix(in srgb, var(--foreground) 14%, transparent); }
+.taskbar i.tb-ledge { background: var(--primary); }
+.stage-note { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); margin: 0; font-size: 12px; color: var(--muted-foreground); background: var(--card); padding: 4px 10px; border-radius: 6px; }
+
+/* The notch: pure black or white, borderless, merged with the top edge; it grows and shrinks between explicit sizes. */
+.island-wrap { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 2; transition: width 260ms cubic-bezier(.2,.8,.2,1); }
+.island { position: relative; background: var(--notch); color: var(--sidebar-foreground); border-radius: 0 0 22px 22px; overflow: clip; box-sizing: border-box;
+  transition: width 260ms cubic-bezier(.2,.8,.2,1), height 260ms cubic-bezier(.2,.8,.2,1), border-radius 200ms; }
+.island[data-mode="handle"] { border-radius: 0 0 19px 19px; }
+.island-content { position: absolute; left: 0; top: 0; right: 0; animation: island-in 220ms 90ms ease-out both; }
+.island[data-mode="handle"] .island-content { animation-delay: 0ms; }
+.island[data-mode="chat"] .island-content { bottom: 0; }
+@keyframes island-in { from { opacity: 0; transform: translateY(-6px); } }
+.handle-row { position: relative; height: 38px; display: flex; align-items: center; }
+.queue-slivers { position: absolute; left: 0; right: 0; top: 100%; display: flex; flex-direction: column; align-items: center; pointer-events: none; transition: none; }
+.queue-slivers i { display: block; height: 6px; margin-top: -1px; border-radius: 0 0 10px 10px; background: color-mix(in srgb, var(--notch) 86%, var(--sidebar-foreground)); }
+.queue-slivers i + i { background: color-mix(in srgb, var(--notch) 72%, var(--sidebar-foreground)); }
+
+/* Cards inside the notch. */
+.card { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 12px; box-sizing: border-box; }
+.card-who { display: flex; align-items: center; gap: 12px; }
+.card-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.card-title strong { font-size: 14px; line-height: 20px; font-weight: 600; }
+.card-title small { font-size: 12px; line-height: 16px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-body { display: flex; flex-direction: column; gap: 8px; }
+.card-text { margin: 0; font-size: 13px; line-height: 18px; }
+.card-question { font-size: 14px; line-height: 20px; font-weight: 500; text-wrap: pretty; }
+.card-detail { margin: 0; font-size: 12px; line-height: 17px; color: var(--muted-foreground); text-wrap: pretty; }
+.command { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 2px; align-items: baseline; padding: 8px 10px; border-radius: var(--radius-md); background: var(--well); border: 1px solid var(--border); }
+.command-tool { grid-row: span 2; font-size: 11px; font-weight: 500; color: var(--danger-text); }
+.command code { font-size: 12px; line-height: 17px; overflow-wrap: anywhere; }
+.command small { font-size: 11px; color: var(--muted-foreground); }
+.choices { display: flex; flex-direction: column; gap: 6px; }
+.choice { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--input); border-radius: var(--radius-md); background: transparent; color: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.choice span { flex: 1; }
+.choice:hover { background: var(--sidebar-accent); }
+.choice[aria-checked="true"] { border-color: var(--sidebar-primary); background: color-mix(in srgb, var(--sidebar-primary) 12%, transparent); }
+.short-reply { display: flex; height: 34px; padding: 0 10px; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--well); }
+.short-reply:focus-within { border-color: var(--ring); }
+.short-reply[data-nudge] { border-color: var(--warning); }
+.short-reply input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--sidebar-foreground); font-size: 13px; }
+.card-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.card[data-kind="approval"] .card-actions > * { flex: 1; }
+.card[data-kind="question"] .card-actions > * { flex: 1; }
+.card-actions kbd { margin-left: 2px; }
+.card-ack { display: flex; align-items: center; gap: 6px; margin: 0; min-height: 32px; font-size: 13px; color: var(--success); }
+.card-hint { margin: -4px 0 0; font-size: 12px; color: var(--warning); }
+.card-secondary { display: flex; justify-content: space-between; gap: 8px; margin: 0 -6px; }
+.link-btn { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
+.link-btn:hover { color: var(--sidebar-foreground); background: var(--sidebar-accent); }
+.queue-heads { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; padding: 2px 8px 2px 3px; border-radius: 9999px; background: var(--sidebar-accent); }
+.queue-heads > span { display: inline-flex; padding: 1px; border-radius: 9999px; opacity: .4; }
+.queue-heads > span[data-current] { opacity: 1; box-shadow: 0 0 0 1px var(--sidebar-primary); }
+.queue-heads b { margin-left: 4px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.notice { padding-bottom: 14px; }
+.drain { position: absolute; left: 16px; right: 16px; bottom: 0; height: 2px; border-radius: 9999px; background: var(--muted); overflow: hidden; }
+.drain i { display: block; height: 100%; background: var(--ring); animation-name: ledge-drain; animation-timing-function: linear; animation-fill-mode: forwards; }
+.machine-glyph { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 9999px; background: var(--sidebar-accent); color: var(--muted-foreground); flex-shrink: 0; }
+.peek-line { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.peek-line span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.island-chat { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.island-chat > * { flex: 1; min-height: 0; }
+
+.island-menu { display: flex; flex-direction: column; padding: 8px; gap: 2px; }
+.menu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.menu-item:hover { background: var(--sidebar-accent); }
+.menu-item > svg:first-child { color: var(--muted-foreground); flex-shrink: 0; }
+.menu-item span { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.menu-item strong { font-size: 13px; font-weight: 500; }
+.menu-item small { font-size: 11px; line-height: 15px; color: var(--muted-foreground); }
+.menu-switch { position: relative; width: 28px; height: 16px; flex-shrink: 0; border-radius: 9999px; background: var(--input); transition: background-color 150ms; }
+.menu-switch::after { content: ''; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 9999px; background: var(--sidebar-foreground); transition: transform 150ms; }
+.menu-switch[data-on] { background: var(--sidebar-primary); }
+.menu-switch[data-on]::after { transform: translateX(12px); background: #fff; }
+.menu-sep { height: 1px; margin: 4px 6px; background: var(--sidebar-border); }
+.menu-quit { color: var(--muted-foreground); }
+
+.toast { position: absolute; right: 16px; bottom: 56px; z-index: 3; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: var(--popover); color: var(--popover-foreground); border: 1px solid var(--border); box-shadow: 0 10px 30px #0005; animation: toast-in 200ms ease-out both; max-width: calc(100% - 32px); box-sizing: border-box; }
+.toast-app { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; background: var(--primary); color: var(--primary-foreground); flex-shrink: 0; }
+.toast span:last-child { display: flex; flex-direction: column; font-size: 13px; }
+.toast small { color: var(--muted-foreground); font-size: 12px; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+
+/* The scope panel. */
+.scope { border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--card-foreground); padding: 16px 18px; font-size: 13px; }
+.scope h2 { margin: 0 0 6px; font-size: 15px; line-height: 21px; font-weight: 600; text-wrap: balance; }
+.scope h3 { display: flex; align-items: center; gap: 8px; margin: 16px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.scope .dot { width: 8px; height: 8px; border-radius: 9999px; }
+.dot.keep { background: var(--success); } .dot.move { background: var(--info); } .dot.doubt { background: var(--warning); }
+.scope ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.scope li { display: flex; flex-direction: column; gap: 1px; }
+.scope li strong { font-weight: 500; }
+.scope li span { color: var(--muted-foreground); font-size: 12px; line-height: 17px; text-wrap: pretty; }
+.scope .doubts li span { color: var(--card-foreground); }
+.scope-keys { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; line-height: 22px; color: var(--muted-foreground); }
+
+@media (max-width: 980px) { .sober-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) {
+  .sober { padding: 16px; }
+  .stage { height: 640px; }
+  .island-wrap { max-width: 100%; }
+  .island { max-width: 100%; }
+  .win-editor { display: none; } .win-term { width: 88%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .island, .island-wrap, .menu-switch, .menu-switch::after { transition: none; }
+  .island-content, .toast { animation: none; }
+}
+
+/* Settings access lives in the chat: a gear just left of « Nouvelle conversation », its menu anchored under it. */
+.island-chat button[aria-label="Retour aux sessions"] { display: none !important; }
+.island-chat [data-layer="chat"] > div:first-child { padding-left: 16px !important; }
+.chat-gear { position: absolute; top: 10px; right: 96px; z-index: 2; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--sidebar-foreground); cursor: pointer; }
+.chat-gear:hover, .chat-gear[aria-expanded="true"] { background: var(--sidebar-accent); }
+.chat-menu { position: absolute; top: 52px; right: 52px; z-index: 3; width: 300px; box-sizing: border-box; border: 1px solid var(--sidebar-border); border-radius: var(--radius-lg); background: var(--popover); color: var(--popover-foreground); box-shadow: 0 12px 32px #0006; }
+.island-chat > .chat-gear, .island-chat > .chat-menu { flex: none; }
