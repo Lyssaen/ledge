@@ -2043,7 +2043,7 @@ dependencies = [
 
 [[package]]
 name = "ledge-desktop"
-version = "0.5.2"
+version = "0.5.4"
 dependencies = [
  "ledge-native",
  "serde",
@@ -2060,7 +2060,7 @@ dependencies = [
 
 [[package]]
 name = "ledge-native"
-version = "0.5.2"
+version = "0.5.4"
 dependencies = [
  "windows 0.58.0",
 ]

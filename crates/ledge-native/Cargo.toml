@@ -1,6 +1,6 @@
 [package]
 name = "ledge-native"
-version = "0.5.2"
+version = "0.5.4"
 edition = "2021"
 description = "Win32 helpers shared by the Ledge island and Ledge Desktop"
 
