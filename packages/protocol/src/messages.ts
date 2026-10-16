@@ -4,6 +4,7 @@ import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema } f
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
 import { SshAliasSchema } from './ssh.js';
+import { MachinesSchema } from './machines.js';
 import { ThreadItemSchema } from './thread.js';
 
 export const PROTOCOL_PORT = 47831;
@@ -86,6 +87,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('update.progress'), version: z.string(), step: z.enum(['installing', 'restarting']) }),
   /** Nothing was changed. `detail`: the useful end of npm's output; `command`: what the person can run instead. */
   z.object({ type: z.literal('update.failed'), version: z.string(), reason: UpdateFailureSchema, detail: z.string().optional(), command: z.string().optional() }),
+  /** The shared machines list (spec 2026-10-14 §5), sent to local clients only. */
+  z.object({ type: z.literal('machines'), machines: MachinesSchema }),
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional() })
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
@@ -125,7 +128,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** Starts a new conversation with Ledge: the day's turns are cleared and the next question opens a new harness session. */
   z.object({ type: z.literal('chat.reset') }),
   /** Installs `@paradow/ledge@version` and restarts the service (spec 2026-10-12 auto-update §6). */
-  z.object({ type: z.literal('update.daemon'), version: z.string().regex(SEMVER) })
+  z.object({ type: z.literal('update.daemon'), version: z.string().regex(SEMVER) }),
+  /** Replaces the daemon's machines list (first connected front wins); refused unless valid. */
+  z.object({ type: z.literal('machines.set'), machines: MachinesSchema })
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 

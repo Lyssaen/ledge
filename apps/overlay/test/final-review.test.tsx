@@ -116,7 +116,7 @@ describe('final review fixes', () => {
     expect(screen.getByRole('button', { name: 'Go' })).toHaveAttribute('data-variant', 'primary');
     expect(screen.getByRole('button', { name: 'Go' })).toHaveClass('ledge-btn');
     expect(screen.getByRole('button', { name: 'Off' })).toHaveStyle({ color: 'var(--danger-text)' });
-    const css = readFileSync(join(__dirname, '../src/styles/base.css'), 'utf8');
+    const css = readFileSync(join(__dirname, '../../../packages/ui/src/styles/base.css'), 'utf8');
     expect(css).toMatch(/button:disabled\s*\{[^}]*opacity:\s*\.5[^}]*cursor:\s*not-allowed/);
     expect(css).toMatch(/\.ledge-btn\[data-variant="primary"\]:hover:not\(:disabled\)\s*\{[^}]*var\(--primary-hover\)/);
     expect(css).toMatch(/\.ledge-btn\[data-variant="ghost"\]:hover:not\(:disabled\)\s*\{[^}]*var\(--sidebar-accent\)/);

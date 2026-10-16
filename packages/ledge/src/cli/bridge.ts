@@ -21,13 +21,20 @@ export function bridge(opts: { input?: Readable; output?: Writable; port?: numbe
     ws.on('open', () => {
       off = readFrames(input, raw => {
         const msg = parseClientMessage(raw);
+        // The machines list is private to its host (spec §5.2): a front's machines.set never reaches this daemon through the bridge.
+        if (msg.type === 'machines.set') return;
         if (ws.bufferedAmount > MAX_FRAME) throw new Error('Ledge bridge is overloaded');
         ws.send(JSON.stringify(msg));
       }, fail);
       input.on('end', end); if (input.readableEnded) end();
     });
     ws.on('message', data => {
-      try { if (!output.write(`${JSON.stringify(parseServerMessage(JSON.parse(String(data))))}\n`)) ws.pause(); }
+      try {
+        const msg = parseServerMessage(JSON.parse(String(data)));
+        // This daemon's machine list is meaningless to the front (spec §5.2), and an older peer rejects the unknown type (spec §14).
+        if (msg.type === 'machines') return;
+        if (!output.write(`${JSON.stringify(msg)}\n`)) ws.pause();
+      }
       catch (e) { fail(e as Error); }
     });
     ws.on('error', fail);

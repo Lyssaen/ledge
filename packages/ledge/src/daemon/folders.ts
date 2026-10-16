@@ -5,9 +5,8 @@ import type { ServerMessage } from '@ledge/protocol';
 
 type Listing = Extract<ServerMessage, { type: 'folder.listing' }>;
 
-/** A folder the overlay typed or picked: `~` expanded, absolute, and an existing directory. Throws the reason otherwise. */
-export async function resolveFolder(input: string, home = homedir()): Promise<string> {
-  const raw = input.trim();
+/** `raw` taken as given (a folder name may start or end with spaces): `~` expanded, absolute, an existing directory. */
+async function resolveExact(raw: string, home: string): Promise<string> {
   const expanded = raw === '~' ? home : raw.startsWith('~/') ? resolve(home, raw.slice(2)) : raw;
   if (!isAbsolute(expanded)) throw new Error(`not an absolute path: ${raw}`);
   const path = resolve(expanded);
@@ -15,6 +14,11 @@ export async function resolveFolder(input: string, home = homedir()): Promise<st
   try { s = await stat(path); } catch { throw new Error(`no such folder: ${path}`); }
   if (!s.isDirectory()) throw new Error(`not a folder: ${path}`);
   return path;
+}
+
+/** A folder the user typed (a launch `cwd`): trimmed, `~` expanded, absolute, and an existing directory. Throws the reason otherwise. */
+export async function resolveFolder(input: string, home = homedir()): Promise<string> {
+  return resolveExact(input.trim(), home);
 }
 
 const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -30,11 +34,15 @@ async function subfolders(path: string): Promise<string[]> {
   return found.filter((n): n is string => n !== null).sort(byName.compare);
 }
 
-/** The browser's answer for `input` (home when empty): its subfolders, or the reason it cannot be listed. */
+/**
+ * The browser's answer for `input` (home when absent or empty): its subfolders, or the reason it cannot be listed.
+ * The path is never trimmed: the browser asks for paths it took from a listing, and a name may end with a space;
+ * a refusal echoes the asked path byte for byte. Trimming typed input is the client's job.
+ */
 export async function listFolder(input: string | undefined, home = homedir()): Promise<Listing> {
-  const asked = input?.trim() ? input.trim() : '~';
+  const asked = input || '~';
   try {
-    const path = await resolveFolder(asked, home);
+    const path = await resolveExact(asked, home);
     const parent = dirname(path);
     return { type: 'folder.listing', path, parent: parent === path ? null : parent, entries: await subfolders(path) };
   } catch (e) {

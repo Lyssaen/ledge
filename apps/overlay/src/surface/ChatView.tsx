@@ -9,7 +9,7 @@ import { useI18n, type Messages } from '../i18n/lang';
 import { inline } from './ReplyCard';
 import { LaunchCard } from './LaunchCard';
 import { RelayCard } from './RelayCard';
-import { groupSessions } from './groups';
+import { groupSessions } from '@ledge/fleet';
 import type { DocumentReference } from '../documents/references';
 
 export const CHAT_HEADER_H = 56;

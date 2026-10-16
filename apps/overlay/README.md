@@ -33,7 +33,7 @@ there is reused). Any console error or page error fails the spec. The first run 
 
 ```
 pnpm --filter overlay tauri dev
-pnpm --filter overlay tauri build    # NSIS installer in src-tauri/target/release/bundle
+pnpm --filter overlay tauri build    # NSIS installer in <repo root>/target/release/bundle
 ```
 
 Needs Windows with Rust (stable MSVC), Node, pnpm and WebView2.
@@ -45,7 +45,7 @@ The installer needs no administrator rights: `installMode` is `currentUser` in `
 The Rust side compiles on Windows and its unit tests pass (`Cargo.lock` is committed); the runtime checks below have not all been run yet. Build from a clone on the Windows disk (for example `C:\Users\<you>\Workspace\ledge`), not from the WSL path: `node_modules` must be the Windows one.
 
 1. `pnpm install`.
-2. `cd apps\overlay\src-tauri; cargo test`: all tests must pass.
+2. `cargo test --workspace` from the repo root: all tests must pass.
 3. `pnpm tauri dev` with the daemon running in WSL, then check:
    - the Ledge icon is in the notification area (tray): its tooltip and the first, greyed line of its menu read `Ledge <version> (dev)` under `tauri dev` and `Ledge <version>` once installed (the version of `package.json`, which the release workflow sets from the tag); `Quitter Ledge` (`Quit Ledge` in English, it follows Settings > Language live) closes the overlay;
    - borderless, transparent, no shadow, not in the taskbar, always on top; handle vertically centered on the left edge of the primary work area, nothing drawn twice or offset; also at 125% and 150% scaling and with the taskbar on the left;

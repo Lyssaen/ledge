@@ -1,0 +1,59 @@
+@import "./tokens.css";
+@import "../bots/bots.css";
+@import "../bots/resident.css";
+/* Native controls (radios, checkboxes, scrollbars) follow the theme inside the overlay's own boxes only: on the root it
+   would paint the transparent window's canvas. */
+:root[data-theme="dark"] [data-surface], :root[data-theme="dark"] [data-coachmark] { color-scheme: dark; }
+:root[data-theme="light"] [data-surface], :root[data-theme="light"] [data-coachmark] { color-scheme: light; }
+html, body, #root { margin: 0; height: 100%; background: transparent; }
+body { font-family: 'Geist', system-ui, sans-serif; color: var(--sidebar-foreground); font-size: 14px; line-height: 20px; overflow: hidden; }
+/* The page never scrolls: a fixed, clipping root adds nothing to the document's scrollable overflow, so a control taking
+   focus while the native window is still at the island's height (a keyboard open grows it after the first paint) scrolls
+   only its own list, never the page out of the window's top. A hidden body alone still scrolls programmatically. */
+#root { position: fixed; inset: 0; overflow: clip; }
+.mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+button, input { font-family: inherit; }
+/* The bubble countdown drains from the controller's remainder (--ledge-from) to empty. */
+/* The update card's running step, and the island's busy pip. */
+@keyframes ledge-spin { to { transform: rotate(360deg) } }
+@keyframes ledge-pulse { 50% { opacity: .35 } }
+/* The live tool line's outcome mark (src/surface/LiveToolLine.tsx) pops in where the spinner was. */
+@keyframes ledge-mark-in { from { transform: scale(.4); opacity: 0 } }
+.ledge-spin { animation: ledge-spin .9s linear infinite }
+@media (prefers-reduced-motion: reduce) { .ledge-spin { animation: none } }
+@keyframes ledge-drain { from { width: var(--ledge-from, 100%) } to { width: 0% } }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.dnd-switch:has(input:focus-visible) .dnd-track, .ledge-seg:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ledge-opt:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
+/* Text fields (launch form, reply): no focus ring, the caret shows where you type. */
+.ledge-field:focus, .ledge-field:focus-visible { outline: none; }
+/* Buttons: variant colors, hover and disabled states (tokens only). */
+.ledge-btn { cursor: pointer; border: 1px solid transparent; }
+.ledge-btn[data-variant="primary"] { background: var(--primary); color: var(--primary-foreground); }
+.ledge-btn[data-variant="outline"] { background: transparent; color: var(--sidebar-foreground); border-color: var(--input); }
+.ledge-btn[data-variant="ghost"] { background: transparent; color: var(--muted-foreground); }
+.ledge-btn[data-variant="secondary"] { background: var(--secondary); color: var(--secondary-foreground); border-color: var(--border); }
+.ledge-btn[data-variant="primary"]:hover:not(:disabled) { background: var(--primary-hover); }
+.ledge-btn[data-variant="outline"]:hover:not(:disabled),
+.ledge-btn[data-variant="ghost"]:hover:not(:disabled) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.ledge-btn[data-variant="secondary"]:hover:not(:disabled) { background: var(--accent); color: var(--accent-foreground); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+/* Thin, token-coloured scrollbars on every scrolling area (list, session content, terminal preview, settings, help):
+   a muted thumb on a transparent track, as in the mockup's views. */
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent; }
+/* A text toggle (the list footer's do-not-disturb). */
+.ledge-text-btn:hover { color: var(--sidebar-foreground) !important; }
+.ledge-text-btn[aria-pressed="true"]:hover { color: var(--sidebar-primary) !important; }
+/* Question options: radio cards, the chosen one with a red border, a red tint and a red radio. */
+.ledge-opt input[type="radio"], .ledge-check input[type="checkbox"] { accent-color: var(--sidebar-primary); }
+.ledge-opt[data-checked] { border-color: var(--sidebar-primary) !important; background-color: color-mix(in srgb, var(--sidebar-primary) 8%, transparent) !important; }
+textarea::placeholder, .ledge-field::placeholder { color: var(--muted-foreground); }
+/* The launch form's recent folders: rows that light up on hover like list rows. */
+.ledge-recent:hover { background: var(--sidebar-accent) !important; }
+/* The session's terminal strip (src/surface/TerminalBand.tsx): its dot breathes while the agent works. */
+.ledge-band:hover { filter: brightness(1.15); }
+.ledge-band-live { animation: ledge-pulse 1.6s ease-in-out infinite }
+@media (prefers-reduced-motion: reduce) { .ledge-band-live { animation: none } }
+/* A row's remove button shows on hover or keyboard focus of the row only (it stays in the tab order). */
+.ledge-row .ledge-row-dismiss { opacity: 0; transition: opacity 120ms ease; }
+.ledge-row:hover .ledge-row-dismiss, .ledge-row:focus-within .ledge-row-dismiss { opacity: 1; }

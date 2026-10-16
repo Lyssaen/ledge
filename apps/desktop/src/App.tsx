@@ -1,0 +1,228 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DaemonClient } from '@ledge/fleet';
+import { groupSessions } from '@ledge/fleet';
+import { LangProvider, loadLang, saveLang, useI18n, type Lang } from './i18n/lang';
+import { useFleet } from './fleet/useFleet';
+import { needsAttention, visibleSessions } from './fleet/attention';
+import { useViewState } from './state/useViewState';
+import { Heading } from './shell/Heading';
+import { TeamView } from './team/TeamView';
+import { RoomView } from './room/RoomView';
+import { tables } from './grouping/groups';
+import { OfflineNotice, LocalDownNotice } from './shell/OfflineNotice';
+import { StatusBar } from './shell/StatusBar';
+import { EmptyWorkspace } from './shell/EmptyWorkspace';
+import { SplitView } from './conversation/SplitView';
+import { ConversationPane } from './conversation/ConversationPane';
+import { useStored } from './state/useStored';
+import { loadPanel, savePanel } from './state/panel';
+import { useConversations } from './conversation/useConversations';
+import { useLaunch } from './launch/useLaunch';
+import { LaunchScreen } from './launch/LaunchScreen';
+import { clearLaunch } from './launch/form';
+import { useChat } from './chat/useChat';
+import { ChatPane } from './chat/ChatPane';
+import { CHAT_ID } from './chat/turns';
+import { SettingsScreen, type SettingsTab } from './settings/SettingsScreen';
+import { useAlerts } from './notify/useAlerts';
+import { getDnd, setDnd, useDnd } from './notify/prefs';
+import { updater, updateReady, useUpdate } from './update/store';
+import { daemonTarget, useDaemonUpdate } from './update/daemon';
+import type { Conversations } from './conversation/useConversations';
+import { onTrayAction, setTrayLabels } from './tauri/bridge';
+import { useAppearance } from './shell/theme';
+
+/** The chat's composer, or its thread when the composer is frozen (local daemon down). */
+function focusChat() {
+  const pane = document.querySelector<HTMLElement>('#conversation-pane[data-ledge-chat]');
+  if (!pane) return;
+  const field = document.getElementById('ledge-chat-reply') as HTMLTextAreaElement | null;
+  (field && !field.disabled ? field : pane.querySelector<HTMLElement>('.thread-scroll'))?.focus({ preventScroll: true });
+}
+
+function Shell({ client, lang, onLang }: { client?: DaemonClient; lang: Lang; onLang(l: Lang): void }) {
+  const [state, dispatch] = useViewState();
+  const { sessions, machines, fleet, localDown, status, client: fleetClient } = useFleet(client);
+  const { t } = useI18n();
+  // Open once, for good: the daemon has sent its machine list (it follows the first snapshot; until then only local is known), some machine has delivered a snapshot and every machine has settled (ready, or unreachable after its
+  // first attempt). The fleet publishes empty snapshots earlier, and local can be ready before a remote's first one, so
+  // pruning sooner would drop a persisted remote selection. With every machine down nothing is known, so nothing is pruned.
+  const opened = useRef(false);
+  if (!opened.current && fleet.machinesSource() === 'daemon' && machines.some(m => m.ready) && machines.every(m => m.ready || m.status === 'unreachable')) opened.current = true;
+  const ready = opened.current;
+  const visible = visibleSessions(sessions, state.attentionOnly);
+  const shown = state.view === 'room' ? tables(visible, state.grouping, t).flatMap(g => g.sessions) : groupSessions(visible).flatMap(g => g.sessions);
+  // The ids the screen lists, in display order. Held back until a machine has delivered its first snapshot: before it `sessions` is [] and the
+  // selection restored from storage would be wiped (spec §9.1).
+  // While the local daemon is down its sessions are frozen (offline) and the view is read-only: nothing is pruned.
+  const key = shown.map(s => s.id).join('\n');
+  useEffect(() => { if (ready && !localDown) dispatch({ type: 'visible', ids: key ? key.split('\n') : [] }); }, [ready, localDown, key, dispatch]);
+  const [panel, setPanel] = useStored(loadPanel, savePanel);
+  // Bound to the conversation pane. `ready` is the Shell's `opened` (first snapshot received), never a bare connection.
+  const conversations = useConversations(fleetClient, sessions, machines, ready);
+  // Updates (spec §9.4, §11): checked by `main.tsx`, installed on a click only; the local daemon's offer follows the target.
+  const update = useUpdate(updater);
+  const daemonUpdate = useDaemonUpdate(fleet, machines, daemonTarget(update));
+  // Toasts and sounds (spec §10), and the accept/deny sounds (decision 14): played only when the click really sends;
+  // the local daemon's restart during an update the user started plays no error cue (final review M3).
+  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdate.running });
+  const api: Conversations = {
+    ...conversations,
+    decide(s, decision) {
+      const sent = conversations.decide(s, decision);
+      if (sent) alerts.user(decision);
+      return sent;
+    }
+  };
+  // Settings take the heading's and the sessions' place (decision 12); the view state stays in this Shell meanwhile.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('display');
+  const settingsFrom = useRef<'heading' | 'machines'>('heading');
+  const openSettings = useCallback((from: 'heading' | 'machines') => {
+    settingsFrom.current = from;
+    if (from === 'machines') setSettingsTab('machines');
+    setSettingsOpen(true);
+  }, []);
+  // The chat with Ledge (`ledge`) is not a session: its own pane (lot 6). A lost selection is replaced by the first visible session (lot 3 reducer).
+  const selected = state.selected && state.selected !== CHAT_ID ? sessions.find(s => s.id === state.selected) ?? null : null;
+  const chat = useChat(fleetClient, fleet, machines, localDown);
+  const chatOpen = state.selected === CHAT_ID;
+  // « Agrandir » folds back when the view or the attention filter changes (mockup conversation.js).
+  const scope = `${state.view}|${state.attentionOnly}`;
+  const lastScope = useRef(scope);
+  useEffect(() => {
+    if (lastScope.current === scope) return;
+    lastScope.current = scope;
+    setPanel(p => (p.expanded ? { ...p, expanded: false } : p));
+  }, [scope, setPanel]);
+  // The launch lives in the Shell, not in its screen: a start cancelled by closing the screen still owes an answer, skipped (spec §9.2).
+  const [created, setCreated] = useState<string | null>(null);
+  const onLaunched = useCallback((id: string) => { clearLaunch(); setCreated(id); }, []);
+  const launch = useLaunch(fleet, machines, onLaunched);
+  const launching = launch.flow.stage !== 'closed';
+  // Read-only while the local daemon is down (spec §6); one action at a time: not while a chat card waits for its machine (decision 10).
+  const canLaunch = !localDown && chat.card === null;
+  const opener = useRef<'heading' | 'empty'>('heading');
+  const { open: openFlow } = launch;
+  // An open screen keeps the opener it was opened from (the tray's « new » is then a no-op). A launched session the fleet
+  // never listed (it died at once) is forgotten: it would otherwise block the focus return and the next selection.
+  const openLaunch = useCallback((from: 'heading' | 'empty') => {
+    if (launching) return;
+    opener.current = from; setCreated(null); openFlow();
+  }, [launching, openFlow]);
+  // Tray « Nouvelle session » (main.rs shows the window first): closes Settings, then the launch screen. Ignored while
+  // read-only; an open screen is left as it is. « Ne pas déranger » switches without showing the window (decision 6).
+  const trayNew = useRef<() => void>(() => {});
+  useEffect(() => { trayNew.current = () => { if (!canLaunch) return; setSettingsOpen(false); openLaunch('heading'); }; });
+  useEffect(() => onTrayAction(action => {
+    if (action === 'new') trayNew.current();
+    else if (action === 'dnd') setDnd(!getDnd());
+  }), []);
+  // The tray speaks the app's language and names the way back from do not disturb (decision 7).
+  const [dnd] = useDnd();
+  useEffect(() => {
+    setTrayLabels({ open: t.tray.open, newSession: t.tray.newSession, dnd: dnd ? t.tray.dndOff : t.tray.dnd, quit: t.tray.quit });
+  }, [t, dnd]);
+
+  // The new session is selected once the fleet lists it: the attention filter goes off so it shows, the panel folds back,
+  // and the cursor goes to the reply once its conversation is on screen (mockup launch.js).
+  const replyFor = useRef<string | null>(null);
+  const [replyTick, setReplyTick] = useState(0);
+  useEffect(() => {
+    if (!created || !sessions.some(s => s.id === created)) return;
+    setCreated(null);
+    dispatch({ type: 'attention', on: false });
+    dispatch({ type: 'select', id: created });
+    setPanel(p => (p.expanded ? { ...p, expanded: false } : p));
+    replyFor.current = created;
+    setReplyTick(n => n + 1);
+  }, [created, sessions, dispatch, setPanel]);
+  // Keyed on the created-session trigger and on what the pane shows, so it never steals focus on unrelated renders.
+  const paneId = selected?.id ?? null;
+  useEffect(() => {
+    const id = replyFor.current;
+    if (!id || paneId !== id || document.getElementById('conversation-pane')?.getAttribute('data-conversation') !== id) return;
+    const reply = document.getElementById('conversation-reply');
+    if (!reply) return;
+    replyFor.current = null;
+    reply.focus({ preventScroll: true });
+  }, [replyTick, paneId, panel.expanded]);
+  // Choosing another session before the new one's conversation shows drops the pending focus.
+  const pick = (id: string) => { replyFor.current = null; dispatch({ type: 'select', id }); };
+
+  // Opening the chat puts the cursor in its composer once the pane is on screen, in its thread when the composer is frozen.
+  // The flag lives for one render: the one the selection change causes. Re-clicking while the chat is already selected changes
+  // nothing in the state (no render), so it focuses at once and never arms the flag: an armed flag would steal the focus on a
+  // later fleet-driven render.
+  const chatFocus = useRef(false);
+  useEffect(() => {
+    if (!chatFocus.current) return;
+    chatFocus.current = false;
+    if (chatOpen) focusChat();
+  });
+  const openChat = () => {
+    replyFor.current = null;
+    if (chatOpen) { chatFocus.current = false; focusChat(); return; }
+    chatFocus.current = true;
+    dispatch({ type: 'select', id: CHAT_ID });
+  };
+  // A session named by Ledge: its conversation, cursor in its reply (lot 5 focus effect); the attention filter goes off so it shows.
+  const openSession = (id: string) => { dispatch({ type: 'attention', on: false }); pick(id); replyFor.current = id; };
+  const chatEntry = { open: chatOpen, onOpen: openChat };
+  const empty = (ready || localDown) && sessions.length === 0;
+
+  // Closing without a new session (Back to sessions, Cancel) gives the focus back to the button that opened the screen.
+  const wasLaunching = useRef(false);
+  useEffect(() => {
+    if (wasLaunching.current && !launching && !created) {
+      (document.querySelector<HTMLElement>(`[data-open-launch="${opener.current}"]`) ?? document.querySelector<HTMLElement>('[data-open-launch]'))?.focus({ preventScroll: true });
+    }
+    wasLaunching.current = launching;
+  }, [launching, created]);
+  // Opening Settings puts the focus on the current section; leaving gives it back to the button that opened them
+  // (⚙ when the machine's notice has gone meanwhile). A tray « new » that closed them leaves the launch screen's focus alone.
+  const wasSettings = useRef(false);
+  useEffect(() => {
+    if (settingsOpen && !wasSettings.current) document.querySelector<HTMLElement>('[data-settings-tab][aria-current="page"]')?.focus({ preventScroll: true });
+    if (!settingsOpen && wasSettings.current && !launching) {
+      (document.querySelector<HTMLElement>(settingsFrom.current === 'machines' ? '[data-open-machines]' : '[data-open-settings]') ?? document.querySelector<HTMLElement>('[data-open-settings]'))?.focus({ preventScroll: true });
+    }
+    wasSettings.current = settingsOpen;
+  }, [settingsOpen, launching]);
+  // Inside the launch screen the local-down notice is a status: only its own validation and failure messages are alerts there.
+  const offline = (inLaunch: boolean) => <OfflineNotice machines={machines} onRetry={id => fleet.retry(id)} onSettings={inLaunch ? undefined : () => openSettings('machines')} />;
+  return (
+    <main className="app" data-readonly={localDown ? 'true' : undefined}>
+      <div className="content">
+        {launching ? <LaunchScreen launch={launch} machines={machines} fleet={fleet} notices={<>{localDown && <LocalDownNotice role="status" />}{offline(true)}</>} />
+          : settingsOpen ? <SettingsScreen tab={settingsTab} onTab={setSettingsTab} onBack={() => setSettingsOpen(false)} lang={lang} onLang={onLang}
+              machines={machines} fleet={fleet} localDown={localDown} testSound={alerts.test} updater={updater} daemon={daemonUpdate} />
+          : <>
+          <Heading state={state} dispatch={dispatch} attentionCount={sessions.filter(needsAttention).length} chat={chatEntry} onNewSession={canLaunch ? () => openLaunch('heading') : undefined} onSettings={() => openSettings('heading')} updateReady={updateReady(update)} />
+          {localDown && <LocalDownNotice />}{offline(false)}
+          {empty && !chatOpen && <EmptyWorkspace chat={chatEntry} onNewSession={canLaunch ? () => openLaunch('empty') : undefined} />}
+          {(sessions.length > 0 || (empty && chatOpen)) && <SplitView panel={panel} onPanel={setPanel} selectedId={chatOpen ? CHAT_ID : selected?.id ?? null}
+            list={sessions.length === 0
+              ? <div className="central ledge-chat-empty"><EmptyWorkspace chat={chatEntry} onNewSession={canLaunch ? () => openLaunch('empty') : undefined} /></div>
+              : <>
+                {state.view === 'room' && <RoomView sessions={visible} grouping={state.grouping} selected={state.selected} onSelect={pick} onGrouping={grouping => dispatch({ type: 'grouping', grouping })} />}
+                {state.view === 'team' && <TeamView sessions={visible} selected={state.selected} onSelect={pick} attentionOnly={state.attentionOnly} />}
+              </>}
+            pane={chatOpen
+              ? <ChatPane chat={chat} api={api} sessions={sessions} machines={machines} localDown={localDown} expanded={panel.expanded} onExpand={on => setPanel(p => ({ ...p, expanded: on }))} onOpenSession={openSession} />
+              : selected ? <ConversationPane session={selected} client={fleetClient} api={api} expanded={panel.expanded} onExpand={on => setPanel(p => ({ ...p, expanded: on }))} /> : null} />}
+        </>}
+        <StatusBar sessions={sessions} machines={machines} />
+      </div>
+    </main>
+  );
+}
+
+export function App({ client }: { client?: DaemonClient } = {}) {
+  const [lang, setLang] = useState(loadLang);
+  // Applies at once (decision 8): every text, the mascots' labels, the tray and the document's language.
+  const onLang = useCallback((l: Lang) => { saveLang(l); setLang(l); }, []);
+  useEffect(() => { document.documentElement.lang = lang; }, [lang]);
+  useAppearance();
+  return <LangProvider lang={lang}><Shell client={client} lang={lang} onLang={onLang} /></LangProvider>;
+}

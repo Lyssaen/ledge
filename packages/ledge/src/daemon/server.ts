@@ -15,6 +15,7 @@ import { loginShellEnv } from '../shell-path.js';
 import { log } from '../log.js';
 import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
+import { readMachines, writeMachines } from './machines.js';
 import { readDocument } from './documents.js';
 import { createRelay } from './relay.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -38,7 +39,9 @@ export { resolveFolder };
  * sends Origin, so any web page is refused; Node clients (hook, launcher, status) send none and pass.
  */
 export const ALLOWED_ORIGINS: readonly string[] = [
-  'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420'
+  'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420',
+  // Desktop's Vite dev server (spec 2026-10-14 §5.4)
+  'http://localhost:1421', 'http://127.0.0.1:1421'
 ];
 
 export function originAllowed(origin: string | undefined): boolean {
@@ -69,7 +72,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -90,6 +93,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   await new Promise<void>((res, rej) => { wss.once('listening', res); wss.once('error', rej); });
   const port = (wss.address() as { port: number }).port;
 
+  const machinesFile = opts.machinesFile ?? paths().machines;
+  /** The machines list shared by every local front; copied so state never aliases DEFAULT_MACHINES. */
+  let machines = readMachines(machinesFile).map(m => ({ ...m }));
+  const machinesMsg = (): ServerMessage => ({ type: 'machines', machines });
   const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
   // Remote peers must never receive local snapshots, sessions, previews or chat broadcasts.
   const localClients = new Set<WebSocket>();
@@ -117,6 +124,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   });
   const sendSnapshot = (ws: WebSocket) => {
     send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true } } : {}) });
+    send(ws, machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
     send(ws, { type: 'chat.history', turns: chat.history() });
   };
@@ -236,6 +244,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return send(ws, await readDocument(msg, { cwd: session?.cwd, home: opts.home ?? process.env.HOME ?? '' }));
       }
       case 'snapshot.request': return sendSnapshot(ws);
+      case 'machines.set': {
+        writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender
+        machines = msg.machines; // already validated by parseClientMessage
+        return broadcast(machinesMsg()); // every local client, the sender included
+      }
       case 'session.register': {
         let incoming = msg.session;
         const existing = store.get(incoming.id);
@@ -371,7 +384,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (req.url?.startsWith('/ssh/')) {
       if (remoteClients.size >= 20) { ws.close(1013, 'Too many remote connections'); return; }
       remoteClients.add(ws); ws.once('close', () => remoteClients.delete(ws));
-      const alias = SshAliasSchema.parse(req.url.slice(5));
+      const parsed = SshAliasSchema.safeParse(req.url.slice(5));
+      if (!parsed.success) { ws.close(1008, 'Invalid SSH alias'); remoteClients.delete(ws); return; }
+      const alias = parsed.data;
       void agentEnv().then(env => { if (ws.readyState === WebSocket.OPEN) (opts.ssh ?? serveSsh)(ws, alias, { env }); })
         .catch(e => { send(ws, { type: 'error', message: (e as Error).message }); ws.close(1011); });
       return;

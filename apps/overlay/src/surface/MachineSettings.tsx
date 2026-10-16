@@ -132,7 +132,7 @@ export function MachineSettings({ machines, onChange, onProbe, onRetry }: { mach
   const { t } = useI18n();
   const [form, setForm] = useState<string | null>(null), [error, setError] = useState('');
   const config = (list: MachineState[]): MachineConfig[] => list.map(m => m.ssh ? { id: m.id, label: m.label, ssh: m.ssh } : { id: m.id, label: m.label, url: m.url });
-  const apply = (next: MachineConfig[]) => { try { onChange(next); setForm(null); setError(''); } catch { setError(t.machines.invalid); } };
+  const apply = (next: MachineConfig[]) => { try { onChange(next); setForm(null); setError(''); } catch (e) { setError((e as Error).name === 'DaemonOffline' ? t.machines.daemonOffline : t.machines.invalid); } };
   const editing = form && form !== 'add' ? machines.find(m => m.id === form) : undefined;
   const remotes = machines.filter(m => m.ssh);
   const save = (label: string, ssh: string) => apply(editing

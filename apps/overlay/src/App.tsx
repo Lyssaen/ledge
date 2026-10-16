@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createDaemonClient } from './daemon/client';
 import { createFleetClient } from './daemon/fleet';
+import { fleetOptions } from './surface/fleetOptions';
 import { loadMachines } from './daemon/machines';
 import { attachClient } from './daemon/store';
 import { Surface } from './surface/Surface';
@@ -16,7 +17,7 @@ import { loadIslandPosition, saveIslandPosition, loadDiscreet, saveDiscreet, typ
 export function App() {
   // An isolated browser demo can point at a fake daemon without disturbing the live WSL daemon.
   const client = useMemo(() => import.meta.env.DEV && import.meta.env.VITE_LEDGE_DEMO_WS
-    ? createDaemonClient({ url: import.meta.env.VITE_LEDGE_DEMO_WS }) : createFleetClient(loadMachines()), []);
+    ? createDaemonClient({ url: import.meta.env.VITE_LEDGE_DEMO_WS }) : createFleetClient(loadMachines(), undefined, fleetOptions), []);
   // The work-area height in logical px. The page is never zoomed: each layer applies its own scale.
   const [workH, setWorkH] = useState(window.innerHeight);
   const [workW, setWorkW] = useState(window.innerWidth);

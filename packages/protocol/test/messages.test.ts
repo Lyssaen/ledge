@@ -29,6 +29,12 @@ describe('protocol', () => {
   });
   it('exposes the port', () => { expect(PROTOCOL_PORT).toBe(47831); });
 
+  it('accepts and keeps the optional offline flag', () => {
+    const s = SessionSchema.parse({ ...session, offline: true });
+    expect(s.offline).toBe(true);
+    expect(SessionSchema.parse(session).offline).toBeUndefined();
+  });
+
   it('accepts a full session', () => {
     expect(SessionSchema.parse(session)).toEqual(session);
   });
