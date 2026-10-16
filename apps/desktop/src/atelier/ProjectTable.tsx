@@ -1,10 +1,11 @@
-import { Fragment, useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
+import { Fragment, useState, type CSSProperties, type JSX } from 'react';
 import { PROJECT_COLORS, type Project, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
+import { Menu, MenuItem } from '../shell/Menu';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import type { Filing } from './filing';
 import { Plants } from './Plants';
@@ -78,17 +79,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
   const branch = tableBranch(mains);
 
   const [menu, setMenu] = useState(false);
-  const wrap = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (!menu) return;
-    const outside = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setMenu(false); };
-    // Capture on the window: Escape closes the menu and goes no further, so it never also closes a navigation layer.
-    const escape = (e: KeyboardEvent) => { if (e.key !== 'Escape') return; e.preventDefault(); e.stopPropagation(); setMenu(false); };
-    document.addEventListener('mousedown', outside);
-    window.addEventListener('keydown', escape, true);
-    return () => { document.removeEventListener('mousedown', outside); window.removeEventListener('keydown', escape, true); };
-  }, [menu]);
-  const choose = (a: NavAction) => { setMenu(false); dispatch(a); };
+  const choose = dispatch;
   const toList = () => dispatch({ type: 'home', project: id, view: 'list' });
 
   const bot = (s: Session, size: number) => <SessionBot session={s} size={size} paused={paused} />;
@@ -103,24 +94,22 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
       </span>
       {filing.dragging && <span className="drop-hint">{filing.over === id ? t.filing.dropNow(filing.dragging.name) : t.filing.dropHere}</span>}
       <span className="spacer" />
-      <span className="room-menu-wrap" ref={wrap}>
-        <button className="icon-action" aria-label={t.atelier.actions(name)} title={t.atelier.actionsTitle} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(m => !m)}>
-          <Icon d={[]} fill={DOTS} size={14} />
-        </button>
-        {menu && (
-          <div className="assign-menu room-menu" role="menu" aria-label={t.atelier.actions(name)}>
-            <button role="menuitem" autoFocus onClick={() => choose({ type: 'modal', modal: { kind: 'project', edit: id } })}>
-              <span><Icon d={PENCIL} size={13} />{t.atelier.edit}</span>
-            </button>
-            <button role="menuitem" aria-label={t.atelier.newSessionAt(name)} onClick={() => choose({ type: 'modal', modal: { kind: 'launch', project: id } })}>
-              <span><Icon d={ICONS.plus.d} size={13} />{t.atelier.newSession}</span>
-            </button>
-            <button role="menuitem" aria-label={isolated ? t.atelier.showAll : t.atelier.isolate(name)} onClick={() => choose(isolated ? { type: 'home' } : { type: 'home', project: id })}>
-              <span><Icon d={ICONS.expand.d} size={13} />{isolated ? t.atelier.showAll : t.atelier.isolateLabel}</span>
-            </button>
-          </div>
-        )}
-      </span>
+      <Menu open={menu} onOpenChange={setMenu} label={t.atelier.actions(name)} className="room-menu-wrap" menuClassName="assign-menu room-menu"
+        trigger={tr => (
+          <button className="icon-action" aria-label={t.atelier.actions(name)} title={t.atelier.actionsTitle} {...tr}>
+            <Icon d={[]} fill={DOTS} size={14} />
+          </button>
+        )}>
+        <MenuItem onSelect={() => choose({ type: 'modal', modal: { kind: 'project', edit: id } })}>
+          <span><Icon d={PENCIL} size={13} />{t.atelier.edit}</span>
+        </MenuItem>
+        <MenuItem aria-label={t.atelier.newSessionAt(name)} onSelect={() => choose({ type: 'modal', modal: { kind: 'launch', project: id } })}>
+          <span><Icon d={ICONS.plus.d} size={13} />{t.atelier.newSession}</span>
+        </MenuItem>
+        <MenuItem aria-label={isolated ? t.atelier.showAll : t.atelier.isolate(name)} onSelect={() => choose(isolated ? { type: 'home' } : { type: 'home', project: id })}>
+          <span><Icon d={ICONS.expand.d} size={13} />{isolated ? t.atelier.showAll : t.atelier.isolateLabel}</span>
+        </MenuItem>
+      </Menu>
     </div>
   );
 

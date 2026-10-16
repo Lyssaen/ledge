@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import type { Project, Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Button } from '@ledge/ui/ui/Button';
@@ -7,6 +7,7 @@ import { useI18n } from '../i18n/lang';
 import { taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
 import { SHELL_ICONS } from '../shell/icons';
+import { Menu, MenuItem } from '../shell/Menu';
 import { SessionBot, StateBadge } from '../shell/SessionBot';
 import { folderOf, type Filing } from './filing';
 import { machineOf } from './ProjectTable';
@@ -17,16 +18,6 @@ export function Unassigned({ sessions, order, focusedId, paused, dispatch, filin
   const { t } = useI18n();
   // The card whose « Ranger dans… » menu is open.
   const [assigning, setAssigning] = useState<string | null>(null);
-  const wrap = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (assigning === null) return;
-    const outside = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setAssigning(null); };
-    // Capture on the window: Escape closes the menu and goes no further, so it never also clears the filter.
-    const escape = (e: KeyboardEvent) => { if (e.key !== 'Escape') return; e.preventDefault(); e.stopPropagation(); setAssigning(null); };
-    document.addEventListener('mousedown', outside);
-    window.addEventListener('keydown', escape, true);
-    return () => { document.removeEventListener('mousedown', outside); window.removeEventListener('keydown', escape, true); };
-  }, [assigning]);
   // The menu's session left the zone (filed, gone): the menu goes with it.
   useEffect(() => { if (assigning !== null && !sessions.some(s => s.id === assigning)) setAssigning(null); }, [sessions, assigning]);
   if (sessions.length === 0) return null;
@@ -58,25 +49,22 @@ export function Unassigned({ sessions, order, focusedId, paused, dispatch, filin
               <div className="unassigned-actions">
                 <StateBadge state={botState(s)} offline={!!s.offline} />
                 <span className="spacer" />
-                <div className="assign-wrap" ref={open ? wrap : undefined}>
-                  <Button variant="outline" size="sm" aria-haspopup="menu" aria-expanded={open} onClick={() => setAssigning(open ? null : s.id)}>
-                    <Icon d={ICONS.folder.d} size={13} />{t.filing.moveTo}
-                  </Button>
-                  {open && (
-                    <div className="assign-menu" role="menu" aria-label={t.filing.moveTo}>
-                      {projects.map((p, i) => (
-                        <button key={p.id} role="menuitem" autoFocus={i === 0} onClick={() => { setAssigning(null); filing.file(s, p.id); }}>
-                          {p.name}<small>{p.repos.map(r => folderOf(r.path)).join(' · ')}</small>
-                        </button>
-                      ))}
-                      <button role="menuitem" className="assign-new" autoFocus={projects.length === 0}
-                        onClick={() => { setAssigning(null); dispatch({ type: 'modal', modal: { kind: 'project', file: s.id } }); }}>
-                        <span><Icon d={ICONS.plus.d} size={12} />{t.filing.newProject}</span>
-                        <small>{t.filing.from(s.cwd)}</small>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <Menu open={open} onOpenChange={o => setAssigning(o ? s.id : null)} label={t.filing.moveTo} className="assign-wrap" menuClassName="assign-menu"
+                  trigger={tr => (
+                    <Button variant="outline" size="sm" {...tr}>
+                      <Icon d={ICONS.folder.d} size={13} />{t.filing.moveTo}
+                    </Button>
+                  )}>
+                  {projects.map(p => (
+                    <MenuItem key={p.id} onSelect={() => filing.file(s, p.id)}>
+                      {p.name}<small>{p.repos.map(r => folderOf(r.path)).join(' · ')}</small>
+                    </MenuItem>
+                  ))}
+                  <MenuItem className="assign-new" onSelect={() => dispatch({ type: 'modal', modal: { kind: 'project', file: s.id } })}>
+                    <span><Icon d={ICONS.plus.d} size={12} />{t.filing.newProject}</span>
+                    <small>{t.filing.from(s.cwd)}</small>
+                  </MenuItem>
+                </Menu>
               </div>
             </div>
           );
