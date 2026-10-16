@@ -85,6 +85,8 @@ Connexions et déconnexions, identifiant de compte et d'appareil, erreurs, taill
 
 Première étape, avant tout code : mettre à jour `docs/mockups/ledge-mobile` et la faire valider. Écrans à ajouter ou remplacer : connexion GitHub, attente d'approbation, comparaison et confirmation du code (téléphone), alerte « clé du PC changée », validation d'une mise à jour avec son empreinte, « PC hors ligne ». Côté overlay : section « Accès mobile » et popup de confirmation du code. L'écran `Pairing` actuel (saisie d'un code) est remplacé.
 
+Mascotte : sur les écrans de compte et de liaison, c'est la mascotte de Ledge lui-même (le « resident » de l'overlay, `apps/overlay/src/bots/ResidentMascot.tsx`, avec son halo), pas un bot d'agent. Elle sert aussi d'icône à la PWA : icônes d'écran d'accueil (180, 192, 512, plus une version maskable) sur fond `#0c0d0e`, et **favicon** SVG (mascotte seule, sans halo) avec un repli PNG 32 px, déclaré dans `apps/mobile/index.html` et le manifeste.
+
 ## Réutilisation depuis `archive/ledge-mobile`
 
 **À reprendre** : `packages/protocol` (history, operations, thread, capabilities, push ; `remote.ts` à adapter), `packages/client`, côté daemon `history.ts`, `turns.ts`, `operations.ts`, `decisions.ts`, `risk.ts`, `challenges.ts`, `identify.ts`, `remote/project.ts` (projection par liste blanche), `push/triggers.ts`, les réponses libres dans `adapters/*`, et `MobileSettings.tsx` de l'overlay comme point de départ ; les tests associés.
