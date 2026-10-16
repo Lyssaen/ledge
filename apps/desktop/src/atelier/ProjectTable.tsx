@@ -3,7 +3,7 @@ import { PROJECT_COLORS, type Project, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import { taskOf } from '../nav/agents';
+import { machineOf, taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
 import { Menu, MenuItem } from '../shell/Menu';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
@@ -30,8 +30,6 @@ export interface ProjectTableProps {
   filing: Filing;
 }
 
-/** The machine an agent runs on: the fleet's label, else its id. */
-export const machineOf = (s: Session): string => s.machineName ?? s.machineId ?? 'local';
 const cls = (...names: (string | false | null | undefined)[]) => names.filter(Boolean).join(' ');
 
 /** The mockup's « … » glyph (observatory.tsx, room-heading). */

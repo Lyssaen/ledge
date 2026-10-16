@@ -1,5 +1,6 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
+import type { Bucket } from '../list/model';
 
 /** French counts 0 and 1 as singular, English only 1. */
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -77,6 +78,16 @@ const fr = {
   zoom: {
     bar: "Zoom de l'atelier", out: 'Dézoomer', outTitle: 'Dézoomer (−)', in: 'Zoomer', inTitle: 'Zoomer (+)',
     reset: 'Revenir à 100 %', fit: 'Ajuster', fitTitle: 'Tout voir (0)', hint: 'Ctrl + molette · glisser le sol · double-clic sur une table'
+  },
+  list: {
+    buckets: { decide: 'À décider', running: 'En cours', done: 'Terminés', offline: 'Hors ligne' } as Record<Bucket, string>,
+    when: {
+      now: 'à l’instant', wait: (d: string) => `depuis ${d}`, ago: (d: string) => `il y a ${d}`,
+      requestNow: 'Demande reçue à l’instant', waitTitle: (d: string) => `En attente depuis ${d}`,
+      activityNow: 'Dernière activité à l’instant', activityAgo: (d: string) => `Dernière activité il y a ${d}`,
+      seenAgo: (d: string) => `Vu pour la dernière fois il y a ${d}`,
+      units: { min: 'min', h: 'h', d: 'j' }
+    }
   },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
@@ -157,6 +168,16 @@ const en: typeof fr = {
   zoom: {
     bar: 'Atelier zoom', out: 'Zoom out', outTitle: 'Zoom out (−)', in: 'Zoom in', inTitle: 'Zoom in (+)',
     reset: 'Back to 100 %', fit: 'Fit', fitTitle: 'See everything (0)', hint: 'Ctrl + wheel · drag the floor · double-click a table'
+  },
+  list: {
+    buckets: { decide: 'To decide', running: 'Running', done: 'Done', offline: 'Offline' },
+    when: {
+      now: 'just now', wait: (d) => `for ${d}`, ago: (d) => `${d} ago`,
+      requestNow: 'Request received just now', waitTitle: (d) => `Waiting for ${d}`,
+      activityNow: 'Last activity just now', activityAgo: (d) => `Last activity ${d} ago`,
+      seenAgo: (d) => `Last seen ${d} ago`,
+      units: { min: 'min', h: 'h', d: 'd' }
+    }
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },

@@ -4,6 +4,8 @@ import type { Projects, Session } from '@ledge/protocol';
 const TOOLS: Record<Session['tool'], string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' };
 export const toolName = (tool: Session['tool']): string => TOOLS[tool];
 export const taskOf = (s: Session): string => s.topic ?? s.title;
+/** The machine an agent runs on: the fleet's label, else its id. */
+export const machineOf = (s: Session): string => s.machineName ?? s.machineId ?? 'local';
 
 /** Agents grouped by project in the projects' order, « Sans projet » last (also for a project that is gone), oldest first (then by id) within a group. */
 export function mainOrder(sessions: readonly Session[], projects: Projects | null): Session[] {
@@ -22,7 +24,7 @@ export function activeCount(sessions: readonly Session[]): number {
   return sessions.filter(s => !s.offline && s.state !== 'exited').length;
 }
 
-const fold = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+export const fold = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 export function searchSessions(sessions: readonly Session[], query: string, projectName: (s: Session) => string): Session[] {
   const q = fold(query.trim());

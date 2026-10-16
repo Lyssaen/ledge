@@ -10,7 +10,7 @@ import { SHELL_ICONS } from '../shell/icons';
 import { Menu, MenuItem } from '../shell/Menu';
 import { SessionBot, StateBadge } from '../shell/SessionBot';
 import { folderOf, type Filing } from './filing';
-import { machineOf } from './ProjectTable';
+import { machineOf } from '../nav/agents';
 
 /** « Sans projet » (observatory.tsx, `unassigned-zone` in atelier mode): the agents Ledge ties to no project wait in a
  *  taped-off area, one card each. A card drags onto a table or a sidebar project, or « Ranger dans… » files it (filing). */
