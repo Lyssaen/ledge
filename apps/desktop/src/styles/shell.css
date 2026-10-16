@@ -131,4 +131,6 @@
 .shortcut-list kbd{font-size:10px!important;flex-shrink:0}
 .palette-results .empty-attention{padding:16px 10px;font-size:12px;color:var(--muted-foreground)}
 /* observatory.css line 3: the toast (filing's outcome, task 6). */
+/* The toast's live region, always there: it takes no room (the toast inside it is fixed to the window). */
+.toast-region{position:fixed;width:0;height:0}
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);padding:12px 18px;background:var(--popover);border:1px solid var(--input);box-shadow:var(--shadow-overlay);border-radius:var(--radius-md);font-size:12px;z-index:10;max-width:90vw}

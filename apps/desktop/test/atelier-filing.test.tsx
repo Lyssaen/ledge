@@ -12,7 +12,7 @@ import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
 import { LangProvider } from '../src/i18n/lang';
 import { fileSession, ruleFor, useFiling } from '../src/atelier/filing';
-import { useToast } from '../src/shell/Toast';
+import { Toast, useToast } from '../src/shell/Toast';
 
 const named = (name: string) => Object.assign(new Error(name), { name });
 const projects: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
@@ -125,6 +125,18 @@ describe('useFiling', () => {
 
 describe('useToast', () => {
   afterEach(() => vi.useRealTimers());
+  it('the live region is there before any notice, empty, and the notice appears inside it (so it is announced)', () => {
+    const { rerender } = render(<Toast notice={null} />);
+    const region = screen.getByRole('status');
+    expect(region).toBeEmptyDOMElement();
+    expect(document.querySelector('.toast')).toBeNull();
+    rerender(<Toast notice="Kit joins the Ledge table." />);
+    expect(screen.getByRole('status')).toBe(region);
+    expect(region.querySelector('.toast')).toHaveTextContent('Kit joins the Ledge table.');
+    rerender(<Toast notice={null} />);
+    expect(screen.getByRole('status')).toBe(region);
+    expect(region).toBeEmptyDOMElement();
+  });
   it('shows a notice for 6 s by default; a new one restarts the clock', () => {
     vi.useFakeTimers();
     const { result } = renderHook(() => useToast());

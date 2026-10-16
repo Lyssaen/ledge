@@ -14,7 +14,8 @@ export function useToast(ms = 6000): { notice: string | null; notify(text: strin
   return { notice: toast?.text ?? null, notify };
 }
 
-/** The mockup's toast (observatory.css `.toast`), at the bottom of the window. */
-export function Toast({ notice }: { notice: string | null }): JSX.Element | null {
-  return notice === null ? null : <div className="toast" role="status">{notice}</div>;
+/** The mockup's toast (observatory.css `.toast`), at the bottom of the window. The live region is always mounted, empty
+ *  without a notice: a region that mounts already holding its text may not be announced. */
+export function Toast({ notice }: { notice: string | null }): JSX.Element {
+  return <div className="toast-region" role="status">{notice !== null && <div className="toast">{notice}</div>}</div>;
 }
