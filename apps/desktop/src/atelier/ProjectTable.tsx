@@ -126,7 +126,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
             <button role="menuitem" aria-label={t.atelier.newSessionAt(name)} onClick={() => choose({ type: 'modal', modal: { kind: 'launch', project: id } })}>
               <span><Icon d={ICONS.plus.d} size={13} />{t.atelier.newSession}</span>
             </button>
-            <button role="menuitem" aria-label={t.atelier.isolate(name)} onClick={() => choose(isolated ? { type: 'home' } : { type: 'home', project: id })}>
+            <button role="menuitem" aria-label={isolated ? t.atelier.showAll : t.atelier.isolate(name)} onClick={() => choose(isolated ? { type: 'home' } : { type: 'home', project: id })}>
               <span><Icon d={ICONS.expand.d} size={13} />{isolated ? t.atelier.showAll : t.atelier.isolateLabel}</span>
             </button>
           </div>
@@ -168,7 +168,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
             <button key={s.id} style={{ left: at(x - 56) }} data-agent={s.id} aria-label={t.atelier.seat(s.name, taskOf(s), machineOf(s))} onClick={() => dispatch({ type: 'open', id: s.id })}
               className={cls('agent-seat', `place-${side}`, seated === s.id && 'just-seated', focusedId === s.id && 'keyboard-selected', s.offline ? 'seat-offline' : state === 'working' && 'seat-working')}>
               {bot(s, 64)}
-              <strong title={s.name}>{s.name}{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>
+              <strong><span className="seat-name" title={s.name}>{s.name}</span>{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>
               <span className="seat-machine" title={machineOf(s)}>{machineOf(s)}</span>
               {s.offline ? <Badge state="readonly" label={t.atelier.offline} /> : <Badge state={state} />}
             </button>

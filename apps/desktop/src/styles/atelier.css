@@ -305,8 +305,11 @@
 
 /* The app's own reduced-motion setting stills the plants as the OS one does (`office-reduced` on .office-shell). */
 .office-reduced .plants *{animation:none!important}
-/* A long agent or machine name stays on one line with « … », so a seat never grows into the table (full name in its title). */
-.agent-seat>strong{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* A long agent or machine name stays on one line with « … », so a seat never grows into the table (full name in its title).
+   The name is clamped on its own, so the « Alt n » hint beside it is never cut with it. */
+.agent-seat>strong{display:flex;align-items:baseline;max-width:100%;min-width:0;white-space:nowrap}
+.seat-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-seat .seat-shortcut{flex-shrink:0}
 .office-shell .agent-seat .seat-machine{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* Third part (task 5): the fitted mosaic, zoom and pan. */

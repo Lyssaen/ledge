@@ -144,10 +144,15 @@ describe('the atelier', () => {
     const machine = seat.querySelector('.seat-machine')!;
     expect(machine.textContent).not.toBe('');
     expect(machine).toHaveAttribute('title', machine.textContent);
-    for (const selector of ['.agent-seat>strong', '.office-shell .agent-seat .seat-machine']) {
+    for (const selector of ['.seat-name', '.office-shell .agent-seat .seat-machine']) {
       const rule = declarations('atelier.css', selector);
-      for (const decl of ['max-width:100%', 'overflow:hidden', 'text-overflow:ellipsis', 'white-space:nowrap']) expect(rule).toContain(decl);
+      for (const decl of ['overflow:hidden', 'text-overflow:ellipsis', 'white-space:nowrap']) expect(rule).toContain(decl);
     }
+    expect(declarations('atelier.css', '.office-shell .agent-seat .seat-machine')).toContain('max-width:100%');
+    expect(declarations('atelier.css', '.seat-name')).toContain('min-width:0');
+    // The name shrinks inside a row capped at the seat's width; the « Alt n » hint keeps its size.
+    for (const decl of ['display:flex', 'max-width:100%']) expect(declarations('atelier.css', '.agent-seat>strong')).toContain(decl);
+    expect(declarations('atelier.css', '.agent-seat .seat-shortcut')).toContain('flex-shrink:0');
   });
   it('Enter on a focused button keeps its own action: the chosen agent is not opened', async () => {
     const { user } = await boot();

@@ -97,6 +97,26 @@ it('the table menu: edit, new session at this table, isolate; Escape closes only
   expect(onWindow).not.toHaveBeenCalled();
   window.removeEventListener('keydown', onWindow);
 });
+it('isolated, the menu offers Show every project, and says so to a screen reader too', async () => {
+  const { dispatch } = renderTable([main('a')], { isolated: true });
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Actions of project Ledge' }));
+  const item = screen.getByRole('menuitem', { name: 'Show every project' });
+  expect(item).toHaveTextContent('Show every project');
+  expect(screen.queryByRole('menuitem', { name: /Isolate/ })).toBeNull();
+  await user.click(item);
+  expect(dispatch).toHaveBeenCalledWith({ type: 'home' });
+});
+it("a seat's name is clamped on its own: the Alt n hint is its sibling, never cut with it", () => {
+  renderTable([main('otto', { name: 'Otto with a very long name indeed' })]);
+  const strong = screen.getByRole('button', { name: /^Otto with/ }).querySelector('strong')!;
+  const name = strong.querySelector(':scope > span.seat-name')!;
+  expect(name).toHaveTextContent('Otto with a very long name indeed');
+  expect(name).toHaveAttribute('title', 'Otto with a very long name indeed');
+  expect(name.nextElementSibling).toHaveClass('seat-shortcut');
+  expect(name.nextElementSibling).toHaveTextContent('Alt 1');
+  expect(name.querySelector('.seat-shortcut')).toBeNull();
+});
 it('a seat opens its session, a helper seat its parent', async () => {
   const { dispatch } = renderTable([main('otto', { name: 'Otto', helpers: [helper('h1')] })]);
   await userEvent.click(screen.getByRole('button', { name: /^Otto,/ }));
