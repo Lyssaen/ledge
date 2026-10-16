@@ -117,10 +117,10 @@ it("a seat's name is clamped on its own: the Alt n hint is its sibling, never cu
   expect(name.nextElementSibling).toHaveTextContent('Alt 1');
   expect(name.querySelector('.seat-shortcut')).toBeNull();
 });
-it('a seat opens its session, a helper seat its parent', async () => {
+it('a seat opens its session, a helper seat its page', async () => {
   const { dispatch } = renderTable([main('otto', { name: 'Otto', helpers: [helper('h1')] })]);
   await userEvent.click(screen.getByRole('button', { name: /^Otto,/ }));
   await userEvent.click(screen.getByRole('button', { name: /subagent of Otto/ }));
-  expect(dispatch.mock.calls.map(c => c[0])).toEqual([{ type: 'open', id: 'local:otto' }, { type: 'open', id: 'local:otto' }]);
+  expect(dispatch.mock.calls.map(c => c[0])).toEqual([{ type: 'open', id: 'local:otto' }, { type: 'open', id: 'local:otto', helper: 'h1' }]);
 });
 });

@@ -8,7 +8,8 @@ export type SectionId = 'general' | 'appearance' | 'notifications' | 'sounds' | 
 export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'notifications', 'sounds', 'machines', 'projects', 'shortcuts', 'about'];
 export type Place =
   | { kind: 'overview'; view: View; project: ProjectFilter }
-  | { kind: 'session'; id: string; view: View; project: ProjectFilter }
+  /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre » de la Liste). */
+  | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; view: View; project: ProjectFilter }
   | { kind: 'settings'; section: SectionId; back: Exclude<Place, { kind: 'settings' }> };
 export type Modal =
   | { kind: 'search' } | { kind: 'shortcuts' }
@@ -19,7 +20,7 @@ export interface NavState { place: Place; modal: Modal; chat: boolean; fullscree
 export type NavAction =
   | { type: 'home'; project?: ProjectFilter; view?: View }
   | { type: 'view'; view: View }
-  | { type: 'open'; id: string }
+  | { type: 'open'; id: string; helper?: string; focus?: 'reply' }
   | { type: 'settings'; section?: SectionId }
   | { type: 'modal'; modal: Modal }
   | { type: 'chat'; open?: boolean }
@@ -47,7 +48,7 @@ export function navReducer(s: NavState, a: NavAction): NavState {
     }
     case 'open': {
       const b = baseOf(place);
-      return { ...s, place: { kind: 'session', id: a.id, view: b.view, project: b.project }, modal: null, chat: false };
+      return { ...s, place: { kind: 'session', id: a.id, ...(a.helper !== undefined && { helper: a.helper }), ...(a.focus !== undefined && { focus: a.focus }), view: b.view, project: b.project }, modal: null, chat: false };
     }
     case 'settings':
       return { ...s, place: { kind: 'settings', section: a.section ?? 'general', back: baseOf(place) }, modal: null, chat: false };

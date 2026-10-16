@@ -253,7 +253,7 @@ describe('the List', () => {
     render(
       <LangProvider lang="fr">
         <List nav={initialNav({ view: 'list', helpers: true, paused: false })} dispatch={dispatch} order={order} projects={PROJECTS}
-          projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} decisions={decisions} filing={idle} />
+          projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} decisions={decisions} filing={idle} waits={new Map()} />
       </LangProvider>
     );
     expect(document.querySelector('.list-foot')).toHaveTextContent('JK parcourir · Entrée ouvrir · F filtrer · les demandes en attente passent en tête de chaque groupe.');
@@ -278,7 +278,7 @@ describe('the List', () => {
   });
   it('no session at all: New session launches without a project', async () => {
     const dispatch = vi.fn();
-    render(<List nav={initialNav({ view: 'list', helpers: true, paused: false })} dispatch={dispatch} order={[]} projects={PROJECTS} projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} decisions={decisions} filing={idle} />);
+    render(<List nav={initialNav({ view: 'list', helpers: true, paused: false })} dispatch={dispatch} order={[]} projects={PROJECTS} projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} decisions={decisions} filing={idle} waits={new Map()} />);
     await userEvent.setup().click(screen.getByRole('button', { name: 'New session' }));
     expect(dispatch).toHaveBeenLastCalledWith({ type: 'modal', modal: { kind: 'launch' } });
   });

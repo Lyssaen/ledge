@@ -35,6 +35,34 @@ describe('the List keys', () => {
     await user.keyboard('{Enter}');
     expect(banner().getByText('Otto')).toBeVisible();
   });
+  it('↓ / ↑ walk like J / K; K with nothing chosen takes the last row', async () => {
+    const { user } = await boot({ sessions: listSessions(), list: true });
+    await user.keyboard('k'); expect(row('Kit')).toHaveFocus();
+    await user.keyboard('{ArrowUp}'); expect(row('Nova')).toHaveFocus();
+    await user.keyboard('{ArrowDown}'); expect(row('Kit')).toHaveFocus();
+  });
+  it('an empty List takes neither J nor K', async () => {
+    const { user } = await boot({ sessions: [], list: true });
+    await user.keyboard('jk');
+    expect(document.querySelector('.lrow')).toBeNull();
+    expect(document.activeElement).toBe(document.body);
+  });
+  it('Enter on a subagent row opens the subagent', async () => {
+    const { user } = await boot({ sessions: listSessions(), list: true });
+    await user.click(within(row('Otto')).getByRole('button', { name: 'Show 1 subagent' }));
+    screen.getByRole('listitem', { name: /subagent of Otto/ }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('heading', { name: 'Lire le code' })).toBeVisible();
+  });
+  it('a wait keeps its start across a session round trip, though the pane refreshed the activity', async () => {
+    const { d, user } = await boot({ sessions: listSessions(), list: true });
+    expect(row('Otto').querySelector('.r-when')).toHaveTextContent('for 12 min');
+    await user.click(row('Otto'));
+    d.upsert({ ...listSessions()[0]!, lastActivityAt: new Date().toISOString() });
+    await waitFor(() => expect(banner().getByText('Otto')).toBeVisible());
+    await user.keyboard('{Escape}');
+    expect(row('Otto').querySelector('.r-when')).toHaveTextContent('for 12 min');
+  });
   it('↓ from the filter stops on the first row: the document handler does not take the same key as a J', async () => {
     const { user } = await boot({ sessions: listSessions(), list: true });
     await user.keyboard('f');

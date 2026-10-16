@@ -10,6 +10,7 @@ import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import type { Filing } from './filing';
 import { Plants } from './Plants';
 import { RUG_SIDE, helperState, layoutTable, noteX, sheetState, tableBranch, type Side } from './layout';
+import { cls } from '../shell/cls';
 
 export interface ProjectTableProps {
   project: Project;
@@ -30,7 +31,6 @@ export interface ProjectTableProps {
   filing: Filing;
 }
 
-const cls = (...names: (string | false | null | undefined)[]) => names.filter(Boolean).join(' ');
 
 /** The mockup's « … » glyph (observatory.tsx, room-heading). */
 const DOTS = ['M5 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M12 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M19 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z'];
@@ -152,7 +152,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
         })}
         {ends.map(({ helper: h, parent, end, slot, count }) => (
           <button key={`${parent.id}:${h.id}`} style={{ left: end === 'left' ? at(-70) : at(length + 8), right: 'auto', top: count > 1 ? (slot ? 232 : 126) : undefined }}
-            className={`agent-seat helper-seat end-${end}`} aria-label={t.atelier.helperSeat(h.kind, parent.name, h.task)} title={h.task} onClick={() => dispatch({ type: 'open', id: parent.id })}>
+            className={`agent-seat helper-seat end-${end}`} aria-label={t.atelier.helperSeat(h.kind, parent.name, h.task)} title={h.task} onClick={() => dispatch({ type: 'open', id: parent.id, helper: h.id })}>
             {helperBot(h, parent, 36)}
             <strong>{h.kind}</strong>
             <span className="seat-meta">↳ {parent.name}</span>

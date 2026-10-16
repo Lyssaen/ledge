@@ -6,8 +6,8 @@ import { useI18n } from '../i18n/lang';
 import type { NavAction } from '../nav/state';
 import { SHELL_ICONS } from '../shell/icons';
 import type { Bucket, ListGroup as Group } from './model';
+import { cls } from '../shell/cls';
 
-const cls = (...names: (string | false | null | undefined)[]) => names.filter(Boolean).join(' ');
 const QUIET: readonly Bucket[] = ['running', 'done', 'offline'];
 
 export interface ListGroupProps {

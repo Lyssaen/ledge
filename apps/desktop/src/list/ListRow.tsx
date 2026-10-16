@@ -16,8 +16,8 @@ import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import { bucketOf, helperBucket, quickActions, repoOf, type GroupBy, type ListRow as Row } from './model';
 import type { Density } from './prefs';
 import { whenOf } from './time';
+import { cls } from '../shell/cls';
 
-const cls = (...names: (string | false | null | undefined)[]) => names.filter(Boolean).join(' ');
 
 /** Marks the filter's match inside a label (list.tsx's `Hl`), when the accents fold character for character. */
 export function Hl({ text, q }: { text: string; q: string }): JSX.Element {
@@ -74,9 +74,9 @@ export function ListRow({ row, selected, onChoose, group, density, text, now, wa
   const ctx = group === 'machine' ? projectName : machine;
   const when = helper ? null : whenOf(session, waits.get(session.id), now, t.list.when);
   const label = helper ? t.atelier.helperSeat(helper.kind, session.name, helper.task) : t.list.row(name, task, t.list.buckets[bucket].toLowerCase(), ctx);
-  const open = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('button,a')) dispatch({ type: 'open', id: session.id }); };
+  const open = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('button,a')) dispatch(helper ? { type: 'open', id: session.id, helper: helper.id } : { type: 'open', id: session.id }); };
   const size = helper || density === 'tight' ? 24 : 32;
-  // A subagent's row only opens its parent; offline, read-only or a plan to review: only « Ouvrir » too.
+  // A subagent's row opens its page; offline, read-only or a plan to review: only « Ouvrir » too.
   const quick = helper ? { decide: false, reply: false } : quickActions(session);
   const busy = decisions.busy(session.id);
   // An agent of « Sans projet »: it drags onto a project's group, or « Ranger dans… » files it.
@@ -116,7 +116,7 @@ export function ListRow({ row, selected, onChoose, group, density, text, now, wa
           <Button size="sm" disabled={busy} onClick={() => decisions.decide(session, 'deny')}>{t.list.deny}</Button>
         </>}
         {/* Lot 6 puts the focus on the reply. */}
-        {quick.reply && <Button variant="primary" size="sm" onClick={openSession}>{t.list.reply}</Button>}
+        {quick.reply && <Button variant="primary" size="sm" onClick={() => dispatch({ type: 'open', id: session.id, focus: 'reply' })}>{t.list.reply}</Button>}
         {loose && <MoveTo session={session} projects={projects?.projects ?? []} filing={filing} dispatch={dispatch} open={menuOpen} onOpenChange={o => onMoving(o ? row.key : null)} className="lrow-menu assign-wrap" flip />}
         <Button variant="ghost" size="sm" className="r-open" title={t.list.openTitle} onClick={openSession}>
           {t.list.open}{!(quick.decide || quick.reply || loose) && <Kbd>{t.list.enter}</Kbd>}

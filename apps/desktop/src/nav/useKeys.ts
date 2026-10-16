@@ -8,7 +8,7 @@ const typing = (el: Element | null): boolean => {
   return el.matches('input, textarea, select') || el.isContentEditable || el.getAttribute('contenteditable') === 'true';
 };
 
-/** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work;
+/** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work (Escape after the dialog and the chat, offered to the screen before navigation);
  *  the single keys stay out of the way of dialogs, fields and the chat. */
 export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys }): void {
   const latest = useRef({ dispatch, ctx });
@@ -21,7 +21,11 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       const key = e.key.toLowerCase();
       if (mod && !e.altKey && key === 'k') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'search' } }); return; }
       if (mod && !e.altKey && e.key === ',') { e.preventDefault(); dispatch({ type: 'settings' }); return; }
-      if (e.key === 'Escape') { e.preventDefault(); dispatch({ type: 'escape' }); return; }
+      if (e.key === 'Escape') {
+        // A dialog, then the chat, close first; then the screen may take it (even while typing: it decides); else navigation.
+        if (!state.modal && !state.chat && screen.current?.(e)) { e.preventDefault(); return; }
+        e.preventDefault(); dispatch({ type: 'escape' }); return;
+      }
       if (state.modal?.kind === 'search') return;
       if (state.modal || state.chat || typing(document.activeElement)) return;
 

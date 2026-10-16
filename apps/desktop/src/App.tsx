@@ -6,6 +6,7 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { LangProvider, loadLang, useI18n, type Lang } from './i18n/lang';
 import { useFleet } from './fleet/useFleet';
 import { useDecisions } from './fleet/decisions';
+import { useWaits } from './fleet/waits';
 import { useAlerts } from './notify/useAlerts';
 import { getDnd, setDnd, useDnd } from './notify/prefs';
 import { onTrayAction, setTrayLabels } from './tauri/bridge';
@@ -65,6 +66,7 @@ function Shell({ client }: { client?: DaemonClient }) {
     const id = projectIdOf(s);
     return (id && projects?.projects.find(p => p.id === id)?.name) || t.side.unassigned;
   }, [projectIdOf, projects, t]);
+  const waits = useWaits(sessions);
   const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
   // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
   const { notice, notify } = useToast();
@@ -93,9 +95,9 @@ function Shell({ client }: { client?: DaemonClient }) {
         <section className="workspace">
           <TopBar nav={nav} dispatch={dispatch} session={session} projects={projects} projectIdOf={projectIdOf} />
           {place.kind === 'settings' ? <Pending title={t.sections[place.section]} />
-            : session ? <Pending title={taskOf(session)} />
+            : session ? <Pending title={place.kind === 'session' && place.helper !== undefined ? session.helpers.find(h => h.id === place.helper)?.task ?? taskOf(session) : taskOf(session)} />
             : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
-            : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} decisions={decisions} filing={filing} />}
+            : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} decisions={decisions} filing={filing} waits={waits} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} />}
         </section>
         {nav.chat && (

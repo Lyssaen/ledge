@@ -22,6 +22,20 @@ describe('nav state', () => {
     expect(s.place).toEqual({ kind: 'session', id: 'local:otto', view: 'list', project: 'ledge' });
     expect(navReducer(s, { type: 'escape' }).place).toEqual({ kind: 'overview', view: 'list', project: 'ledge' });
   });
+  it('open may name a subagent and ask for the reply; the next open forgets both', () => {
+    const base = s0;
+    const s = navReducer(base, { type: 'open', id: 'local:otto', helper: 'h1' });
+    expect(s.place).toEqual({ kind: 'session', id: 'local:otto', helper: 'h1', view: 'atelier', project: 'all' });
+    const r = navReducer(s, { type: 'open', id: 'local:kit', focus: 'reply' });
+    expect(r.place).toEqual({ kind: 'session', id: 'local:kit', focus: 'reply', view: 'atelier', project: 'all' });
+    expect(navReducer(r, { type: 'open', id: 'local:kit' }).place).toEqual({ kind: 'session', id: 'local:kit', view: 'atelier', project: 'all' });
+    expect(navReducer(s, { type: 'escape' }).place).toEqual({ kind: 'overview', view: 'atelier', project: 'all' });
+  });
+  it('a subagent page stays while its parent exists', () => {
+    const s = navReducer(s0, { type: 'open', id: 'local:otto', helper: 'gone' });
+    expect(reconcile(s, [fakeSession('local:otto')], null)).toBe(s);
+    expect(reconcile(s, [], null).place).toEqual({ kind: 'overview', view: 'atelier', project: 'all' });
+  });
   it('settings remember where they were opened from; a section change keeps it', () => {
     const inSession = navReducer(s0, { type: 'open', id: 'local:otto' });
     let s = navReducer(inSession, { type: 'settings' });

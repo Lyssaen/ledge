@@ -16,7 +16,7 @@ import { ListRow } from './ListRow';
 import { ListToolbar } from './ListToolbar';
 import { listModel, walkRows, type Chip, type ListCtx } from './model';
 import { loadListPrefs, saveListPrefs } from './prefs';
-import { trackWaits, type Wait } from './time';
+import type { Wait } from './time';
 
 export interface ListProps {
   nav: NavState;
@@ -30,6 +30,8 @@ export interface ListProps {
   decisions: Decisions;
   /** Putting an agent away (lot 4), shared with the atelier and the sidebar. */
   filing: Filing;
+  /** The start of each wait, kept by the shell (useWaits). */
+  waits: ReadonlyMap<string, Wait>;
 }
 
 const toggle = (set: ReadonlySet<string>, key: string): Set<string> => {
@@ -41,7 +43,7 @@ const toggle = (set: ReadonlySet<string>, key: string): Set<string> => {
 /** The List (list.tsx, `SessionList`): every session as an aligned row, grouped by project, machine or state, what
  *  awaits a decision first in each group. Grouping and density are remembered (`desktop.list`); the text filter, the
  *  chip, the collapsed groups and the unfolded subagents live here and start over when the List unmounts. */
-export function List({ nav, dispatch, order, projects, projectIdOf, machines, decisions, filing }: ListProps): JSX.Element {
+export function List({ nav, dispatch, order, projects, projectIdOf, machines, decisions, filing, waits: waitStarts }: ListProps): JSX.Element {
   const { t } = useI18n();
   const [prefs, setPrefs] = useStored(loadListPrefs, saveListPrefs);
   const [text, setText] = useState('');
@@ -59,11 +61,7 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines, de
     const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
-  const tracked = useRef<ReadonlyMap<string, Wait>>(new Map());
-  const waits = useMemo(() => {
-    tracked.current = trackWaits(tracked.current, order);
-    return new Map([...tracked.current].map(([id, w]) => [id, w.since]));
-  }, [order]);
+  const waits = useMemo(() => new Map([...waitStarts].map(([id, w]) => [id, w.since])), [waitStarts]);
 
   // The sticky group headers sit under the toolbar, whose height changes when it wraps.
   const rootRef = useRef<HTMLDivElement>(null);
@@ -125,7 +123,7 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines, de
     const chosen = walk.find(r => r.key === focusedId);
     // A focused button or link keeps its own Entrée.
     if (e.key === 'Enter' && chosen && !target?.closest('button,a,input')) {
-      dispatch({ type: 'open', id: chosen.kind === 'main' ? chosen.session.id : chosen.parent.id });
+      dispatch(chosen.kind === 'main' ? { type: 'open', id: chosen.session.id } : { type: 'open', id: chosen.parent.id, helper: chosen.helper.id });
       return true;
     }
     return false;

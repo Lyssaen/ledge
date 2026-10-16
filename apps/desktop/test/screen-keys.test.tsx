@@ -32,9 +32,31 @@ describe('screen keys', () => {
     rerender(<Harness state={{ ...base, chat: true }} keys={{ current: handler }} dispatch={dispatch} />);
     fireEvent.keyDown(document.body, { key: 'j' });
     rerender(<Harness state={base} keys={{ current: handler }} dispatch={dispatch} />);
-    fireEvent.keyDown(document.body, { key: 'Escape' });
     fireEvent.keyDown(document.body, { key: '1', altKey: true });
     expect(handler).not.toHaveBeenCalled();
+  });
+  it('Escape goes to the screen after a dialog and the chat, before navigation; a screen that takes it keeps the place', () => {
+    const handler = vi.fn((e: KeyboardEvent) => e.key === 'Escape');
+    const dispatch = vi.fn();
+    const { rerender } = render(<Harness state={base} keys={{ current: handler }} dispatch={dispatch} />);
+    expect(fireEvent.keyDown(document.body, { key: 'Escape' })).toBe(false);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(dispatch).not.toHaveBeenCalled();
+    screen.getByRole('textbox', { name: 'field' }).focus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(handler).toHaveBeenCalledTimes(2);                                   // the screen decides, even while typing
+    (document.activeElement as HTMLElement).blur();
+    rerender(<Harness state={{ ...base, modal: { kind: 'shortcuts' } }} keys={{ current: handler }} dispatch={dispatch} />);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    rerender(<Harness state={{ ...base, chat: true }} keys={{ current: handler }} dispatch={dispatch} />);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(dispatch.mock.calls).toEqual([[{ type: 'escape' }], [{ type: 'escape' }]]);
+  });
+  it('a screen that declines Escape lets navigation have it', () => {
+    const dispatch = vi.fn();
+    render(<Harness state={base} keys={{ current: () => false }} dispatch={dispatch} />);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
     expect(dispatch).toHaveBeenCalledWith({ type: 'escape' });
   });
   it('Ctrl K still opens the search while typing, under a dialog or with the chat open; J reaches the screen again once they close', () => {
