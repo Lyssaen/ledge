@@ -17,6 +17,11 @@ export function mainOrder(sessions: readonly Session[], projects: Projects | nul
   return [...sessions].sort((x, y) => rank(x) - rank(y) || at(x) - at(y) || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
 }
 
+/** Agents principaux ni hors ligne ni terminés : le compteur « Atelier » et la bulle de Ledge. */
+export function activeCount(sessions: readonly Session[]): number {
+  return sessions.filter(s => !s.offline && s.state !== 'exited').length;
+}
+
 const fold = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 export function searchSessions(sessions: readonly Session[], query: string, projectName: (s: Session) => string): Session[] {

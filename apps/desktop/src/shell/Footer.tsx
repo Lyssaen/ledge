@@ -11,9 +11,9 @@ export function Footer({ dispatch, localDown }: { dispatch: (a: NavAction) => vo
         <span><i className={localDown ? 'connection-dot off' : 'connection-dot'} />{t.foot.sessions}</span>
       </div>
       <div className="keyboard-footer">
-        <button onClick={() => dispatch({ type: 'modal', modal: 'search' })}><Kbd>Ctrl K</Kbd> {t.foot.search}</button>
+        <button onClick={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}><Kbd>Ctrl K</Kbd> {t.foot.search}</button>
         <button onClick={() => dispatch({ type: 'chat', open: true })}><Kbd>/</Kbd> {t.foot.chat}</button>
-        <button onClick={() => dispatch({ type: 'modal', modal: 'shortcuts' })}><Kbd>?</Kbd> {t.foot.shortcuts}</button>
+        <button onClick={() => dispatch({ type: 'modal', modal: { kind: 'shortcuts' } })}><Kbd>?</Kbd> {t.foot.shortcuts}</button>
       </div>
     </footer>
   );

@@ -20,7 +20,7 @@ const fr = {
   sections: { general: 'Général', appearance: 'Apparence', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', projects: 'Projets', shortcuts: 'Raccourcis', about: 'À propos' } as Record<SectionId, string>,
   pending: 'Cet écran arrive bientôt.',
   close: 'Fermer',
-  modalTitles: { launch: 'Nouvelle session', project: 'Nouveau projet' },
+  modalTitles: { launch: 'Nouvelle session', project: 'Nouveau projet', editProject: 'Modifier le projet' },
   search: {
     title: 'Aller à une session', placeholder: 'Agent, tâche, projet ou machine…', empty: 'Aucune session ne correspond à cette recherche.', results: 'Sessions',
     browse: 'Parcourir', open: 'Ouvrir', closeKey: 'Fermer', enter: 'Entrée', escape: 'Échap'
@@ -39,12 +39,6 @@ const fr = {
     failed: (name: string) => `${name} a rencontré une erreur`,
     manyTitle: 'Votre équipe',
     many: (n: number) => `${n} sessions vous attendent ou ont terminé`
-  },
-  status: {
-    sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
-    // A machine is feminine (« la machine »), as in the mockup: « Devbox connectée », « Devbox déconnectée »; the local one is « Local connecté ».
-    connected: (name: string, isLocal = false) => isLocal ? `${name} connecté` : `${name} connectée`,
-    disconnected: (name: string, isLocal = false) => isLocal ? `${name} déconnecté` : `${name} déconnectée`
   },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
@@ -68,7 +62,7 @@ const en: typeof fr = {
   sections: { general: 'General', appearance: 'Appearance', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Shortcuts', about: 'About' },
   pending: 'This screen is coming soon.',
   close: 'Close',
-  modalTitles: { launch: 'New session', project: 'New project' },
+  modalTitles: { launch: 'New session', project: 'New project', editProject: 'Edit project' },
   search: {
     title: 'Go to a session', placeholder: 'Agent, task, project or machine…', empty: 'No session matches this search.', results: 'Sessions',
     browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc'
@@ -87,11 +81,6 @@ const en: typeof fr = {
     failed: (name) => `${name} ran into an error`,
     manyTitle: 'Your team',
     many: (n) => `${n} sessions need you or have finished`
-  },
-  status: {
-    sessions: (n) => `${n} ${pluralEn(n, 'session', 'sessions')}`,
-    connected: (name, _isLocal) => `${name} connected`,
-    disconnected: (name, _isLocal) => `${name} disconnected`
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },

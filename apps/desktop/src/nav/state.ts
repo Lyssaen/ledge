@@ -10,10 +10,14 @@ export type Place =
   | { kind: 'overview'; view: View; project: ProjectFilter }
   | { kind: 'session'; id: string; view: View; project: ProjectFilter }
   | { kind: 'settings'; section: SectionId; back: Exclude<Place, { kind: 'settings' }> };
-export type Modal = 'search' | 'shortcuts' | 'launch' | 'project' | null;
+export type Modal =
+  | { kind: 'search' } | { kind: 'shortcuts' }
+  | { kind: 'launch'; project?: string }               // project : la table ou le projet d'où on l'a demandée (lot 7)
+  | { kind: 'project'; edit?: string; file?: string }  // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8)
+  | null;
 export interface NavState { place: Place; modal: Modal; chat: boolean; fullscreen: boolean; helpers: boolean; paused: boolean }
 export type NavAction =
-  | { type: 'home'; project?: ProjectFilter }
+  | { type: 'home'; project?: ProjectFilter; view?: View }
   | { type: 'view'; view: View }
   | { type: 'open'; id: string }
   | { type: 'settings'; section?: SectionId }
@@ -35,7 +39,7 @@ export function navReducer(s: NavState, a: NavAction): NavState {
   switch (a.type) {
     case 'home': {
       const b = baseOf(place);
-      return { ...s, place: { kind: 'overview', view: b.view, project: a.project ?? 'all' } };
+      return { ...s, place: { kind: 'overview', view: a.view ?? b.view, project: a.project ?? 'all' } };
     }
     case 'view': {
       const b = baseOf(place);
@@ -49,7 +53,7 @@ export function navReducer(s: NavState, a: NavAction): NavState {
       return { ...s, place: { kind: 'settings', section: a.section ?? 'general', back: baseOf(place) }, modal: null, chat: false };
     case 'modal': return { ...s, modal: a.modal };
     case 'chat': return { ...s, chat: a.open ?? !s.chat };
-    case 'fullscreen': return { ...s, fullscreen: a.on };
+    case 'fullscreen': return s.fullscreen === a.on ? s : { ...s, fullscreen: a.on };
     case 'helpers': return { ...s, helpers: !s.helpers };
     case 'paused': return { ...s, paused: !s.paused };
     case 'escape': {

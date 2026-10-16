@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Projects, Session } from '@ledge/protocol';
 import { projectOf } from '@ledge/fleet';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { dotOf, mainOrder, searchSessions } from '../src/nav/agents';
+import { activeCount, dotOf, mainOrder, searchSessions } from '../src/nav/agents';
 
 const projects: Projects = { projects: [
   { id: 'b', name: 'Payment Service', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/pay' }] },
@@ -36,5 +36,8 @@ describe('nav agents', () => {
     expect(['working', 'waiting_permission', 'waiting_input', 'exited', 'idle', 'error', 'starting'].map(state => dotOf(fakeSession('x', { state: state as Session['state'] }))))
       .toEqual(['working', 'approval', 'question', 'done', 'done', 'error', 'working']);
     expect(dotOf(fakeSession('x', { state: 'waiting_permission', offline: true }))).toBe('offline');
+  });
+  it('counts the active main agents', () => {
+    expect(activeCount([fakeSession('a'), fakeSession('b', { state: 'exited' }), fakeSession('c', { offline: true }), fakeSession('d', { state: 'idle' })])).toBe(2);
   });
 });

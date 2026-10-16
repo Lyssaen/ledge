@@ -1,4 +1,4 @@
-import { projectOf, type MachineState } from '@ledge/fleet';
+import { type MachineState } from '@ledge/fleet';
 import { PROJECT_COLORS, type Projects, type Session } from '@ledge/protocol';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Button } from '@ledge/ui/ui/Button';
@@ -6,7 +6,7 @@ import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
-import { dotOf, mainOrder } from '../nav/agents';
+import { activeCount, dotOf } from '../nav/agents';
 import type { NavAction, NavState } from '../nav/state';
 import { SHELL_ICONS } from './icons';
 import { useTheme } from './theme';
@@ -15,16 +15,14 @@ const needsYou = (s: Session) => { const d = dotOf(s); return d === 'approval' |
 
 /** The mockup's sidebar: Ledge, New session and search, the views, the projects with their agents' dots, « Sans projet »,
  *  the machines and Settings. Dropping an agent on a project comes with lot 4. */
-export function Sidebar({ nav, dispatch, sessions, machines, projects }: { nav: NavState; dispatch: (a: NavAction) => void; sessions: readonly Session[]; machines: readonly MachineState[]; projects: Projects | null }) {
+export function Sidebar({ nav, dispatch, sessions, machines, projects, order, projectIdOf }: { nav: NavState; dispatch: (a: NavAction) => void; sessions: readonly Session[]; machines: readonly MachineState[]; projects: Projects | null; order: readonly Session[]; projectIdOf: (s: Session) => string | null }) {
   const { t } = useI18n();
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
   const { place } = nav;
   const filter = place.kind === 'overview' ? place.project : null;
-  const ordered = mainOrder(sessions, projects);
-  const projectIdOf = (s: Session) => (projects ? projectOf(s, projects) : null);
-  const unassigned = ordered.filter(s => projectIdOf(s) === null);
-  const active = sessions.filter(s => !s.offline && s.state !== 'exited').length;
+  const unassigned = order.filter(s => projectIdOf(s) === null);
+  const active = activeCount(sessions);
   const inSettings = place.kind === 'settings';
   return (
     <aside className="sidebar" aria-label={t.side.label}>
@@ -34,10 +32,10 @@ export function Sidebar({ nav, dispatch, sessions, machines, projects }: { nav: 
         <span className="spacer" />
       </div>
       <div className="side-actions">
-        <Button variant="primary" onClick={() => dispatch({ type: 'modal', modal: 'launch' })}>
+        <Button variant="primary" onClick={() => dispatch({ type: 'modal', modal: { kind: 'launch' } })}>
           <Icon d={ICONS.plus.d} /><span>{t.side.newSession}</span><Kbd>N</Kbd>
         </Button>
-        <button className="side-search" onClick={() => dispatch({ type: 'modal', modal: 'search' })} aria-label={t.side.searchLabel}>
+        <button className="side-search" onClick={() => dispatch({ type: 'modal', modal: { kind: 'search' } })} aria-label={t.side.searchLabel}>
           <Icon d={SHELL_ICONS.search} size={14} /><span>{t.side.search}</span><Kbd>Ctrl K</Kbd>
         </button>
       </div>
@@ -53,11 +51,11 @@ export function Sidebar({ nav, dispatch, sessions, machines, projects }: { nav: 
         <div className="side-group">
           <div className="side-label">
             <span>{t.side.projects}</span>
-            <button aria-label={t.side.newProject} onClick={() => dispatch({ type: 'modal', modal: 'project' })}><Icon d={ICONS.plus.d} size={13} /></button>
+            <button aria-label={t.side.newProject} onClick={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}><Icon d={ICONS.plus.d} size={13} /></button>
           </div>
           <nav aria-label={t.side.projects}>
             {(projects?.projects ?? []).map(p => {
-              const team = ordered.filter(s => projectIdOf(s) === p.id);
+              const team = order.filter(s => projectIdOf(s) === p.id);
               return (
                 <button key={p.id} className={`side-row side-project ${filter === p.id ? 'active' : ''}`} onClick={() => dispatch({ type: 'home', project: p.id })}>
                   <i className="side-swatch" style={{ background: PROJECT_COLORS[p.color] }} />

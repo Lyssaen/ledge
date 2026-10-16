@@ -33,7 +33,7 @@ describe('nav state', () => {
   it('escape closes one layer at a time: modal, chat, settings, session, filter, fullscreen', () => {
     let s = navReducer(s0, { type: 'home', project: 'ledge' });
     s = navReducer(s, { type: 'open', id: 'local:otto' });
-    s = navReducer(navReducer(navReducer(navReducer(s, { type: 'fullscreen', on: true }), { type: 'settings' }), { type: 'chat' }), { type: 'modal', modal: 'search' });
+    s = navReducer(navReducer(navReducer(navReducer(s, { type: 'fullscreen', on: true }), { type: 'settings' }), { type: 'chat' }), { type: 'modal', modal: { kind: 'search' } });
     const steps: NavState[] = [];
     for (let i = 0; i < 7; i++) { s = navReducer(s, { type: 'escape' }); steps.push(s); }
     expect(steps.map(x => [x.modal, x.chat, x.place.kind, x.place.kind !== 'settings' ? x.place.project : '-', x.fullscreen])).toEqual([
@@ -72,5 +72,12 @@ describe('nav state', () => {
     const st = navReducer(inSession, { type: 'settings' });
     const r = reconcile(st, [], null);
     expect(r.place).toEqual({ kind: 'settings', section: 'general', back: { kind: 'overview', view: 'atelier', project: 'all' } });
+  });
+  it('home may switch the view too (the « +N » pill opens the List on its project)', () => {
+    expect(navReducer(s0, { type: 'home', project: 'ledge', view: 'list' }).place).toEqual({ kind: 'overview', view: 'list', project: 'ledge' });
+  });
+  it('dialogs carry their target; full screen off when already off changes nothing', () => {
+    expect(navReducer(s0, { type: 'modal', modal: { kind: 'launch', project: 'ledge' } }).modal).toEqual({ kind: 'launch', project: 'ledge' });
+    expect(navReducer(s0, { type: 'fullscreen', on: false })).toBe(s0);
   });
 });

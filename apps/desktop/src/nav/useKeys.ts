@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Session } from '@ledge/protocol';
 import type { NavAction, NavState } from './state';
+import type { ScreenKeys } from './screenKeys';
 
 const typing = (el: Element | null): boolean => {
   if (!(el instanceof HTMLElement)) return false;
@@ -9,19 +10,19 @@ const typing = (el: Element | null): boolean => {
 
 /** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work;
  *  the single keys stay out of the way of dialogs, fields and the chat. */
-export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[] }): void {
+export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys }): void {
   const latest = useRef({ dispatch, ctx });
   latest.current = { dispatch, ctx };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.isComposing) return;
-      const { dispatch, ctx: { state, order } } = latest.current;
+      const { dispatch, ctx: { state, order, screen } } = latest.current;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
-      if (mod && !e.altKey && key === 'k') { e.preventDefault(); dispatch({ type: 'modal', modal: 'search' }); return; }
+      if (mod && !e.altKey && key === 'k') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'search' } }); return; }
       if (mod && !e.altKey && e.key === ',') { e.preventDefault(); dispatch({ type: 'settings' }); return; }
       if (e.key === 'Escape') { e.preventDefault(); dispatch({ type: 'escape' }); return; }
-      if (state.modal === 'search') return;
+      if (state.modal?.kind === 'search') return;
       if (state.modal || state.chat || typing(document.activeElement)) return;
 
       const { place } = state;
@@ -43,9 +44,10 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
         return;
       }
       if (mod || e.altKey) return;
+      if (screen.current?.(e)) { e.preventDefault(); return; }
       if (e.key === '/') { e.preventDefault(); dispatch({ type: 'chat', open: true }); }
-      else if (e.key === '?') { e.preventDefault(); dispatch({ type: 'modal', modal: 'shortcuts' }); }
-      else if (key === 'n' && !e.shiftKey && place.kind === 'overview') { e.preventDefault(); dispatch({ type: 'modal', modal: 'launch' }); }
+      else if (e.key === '?') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'shortcuts' } }); }
+      else if (key === 'n' && !e.shiftKey && place.kind === 'overview') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'launch' } }); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

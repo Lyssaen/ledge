@@ -11,6 +11,7 @@ import { onTrayAction, setTrayLabels } from './tauri/bridge';
 import { useAppearance } from './shell/theme';
 import { initialNav, navReducer, reconcile, type NavAction, type NavState } from './nav/state';
 import { loadOverview, saveOverview } from './nav/overview';
+import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { mainOrder, taskOf } from './nav/agents';
 import { useKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
@@ -20,7 +21,7 @@ import { Pending } from './shell/Pending';
 import { Modal } from './shell/Modal';
 import { SearchPalette } from './shell/SearchPalette';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
-import { setWindowFullscreen } from './shell/fullscreen';
+import { onFullscreenLeft, setWindowFullscreen } from './shell/fullscreen';
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
@@ -38,7 +39,7 @@ function Shell({ client }: { client?: DaemonClient }) {
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
   useEffect(() => onTrayAction(action => {
     if (action === 'dnd') setDnd(!getDnd());
-    else if (action === 'new') dispatch({ type: 'modal', modal: 'launch' });
+    else if (action === 'new') dispatch({ type: 'modal', modal: { kind: 'launch' } });
   }), []);
   // The tray speaks the app's language and names the way back from do not disturb.
   const [dnd] = useDnd();
@@ -60,7 +61,10 @@ function Shell({ client }: { client?: DaemonClient }) {
     return (id && projects?.projects.find(p => p.id === id)?.name) || t.side.unassigned;
   }, [projectIdOf, projects, t]);
   const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
-  useKeys(dispatch, { state: nav, order });
+  const screenKeys = useRef<ScreenKeys>({ current: null }).current;
+  useKeys(dispatch, { state: nav, order, screen: screenKeys });
+  // The window may leave full screen by itself (Escape in a browser, the OS): the layout follows.
+  useEffect(() => onFullscreenLeft(() => dispatch({ type: 'fullscreen', on: false })), []);
   // The window follows the full screen state (not at mount: nothing was asked yet).
   const fullscreenSeen = useRef(nav.fullscreen);
   useEffect(() => {
@@ -73,9 +77,9 @@ function Shell({ client }: { client?: DaemonClient }) {
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
 
   return (
-    <>
+    <ScreenKeysContext.Provider value={screenKeys}>
       <div className={`application ${nav.fullscreen ? 'immersive' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={nav.modal !== null}>
-        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} machines={machines} projects={projects} />
+        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} />
         <section className="workspace">
           <TopBar nav={nav} dispatch={dispatch} session={session} projects={projects} projectIdOf={projectIdOf} />
           {place.kind === 'settings' ? <Pending title={t.sections[place.section]} />
@@ -94,14 +98,13 @@ function Shell({ client }: { client?: DaemonClient }) {
           </aside>
         )}
       </div>
-      {nav.modal === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
-      {nav.modal === 'shortcuts' && <ShortcutsHelp onClose={close} />}
-      {(nav.modal === 'launch' || nav.modal === 'project') && (
-        <Modal title={t.modalTitles[nav.modal]} wide onClose={close}>
-          <Pending title={t.modalTitles[nav.modal]} />
-        </Modal>
-      )}
-    </>
+      {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
+      {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
+      {(nav.modal?.kind === 'launch' || nav.modal?.kind === 'project') && (() => {
+        const title = nav.modal.kind === 'project' && nav.modal.edit !== undefined ? t.modalTitles.editProject : t.modalTitles[nav.modal.kind];
+        return <Modal title={title} wide onClose={close}><Pending title={title} /></Modal>;
+      })()}
+    </ScreenKeysContext.Provider>
   );
 }
 

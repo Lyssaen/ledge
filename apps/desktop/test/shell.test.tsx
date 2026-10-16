@@ -169,4 +169,15 @@ describe('the Atelier shell', () => {
     for (const d of ['white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis', 'min-width:0', 'max-width:180px']) expect(rule).toContain(d);
     expect(within(screen.getByRole('banner')).getByText('Migrate the ledger')).toHaveAttribute('title', 'Migrate the ledger');
   });
+  it('leaving full screen from outside (the browser, the OS) leaves the immersive layout', async () => {
+    const { user } = await boot();
+    await user.click(screen.getByRole('button', { name: 'Full screen' }));
+    expect(document.querySelector('.application')).toHaveClass('immersive');
+    document.dispatchEvent(new Event('fullscreenchange'));
+    await waitFor(() => expect(document.querySelector('.application')).not.toHaveClass('immersive'));
+  });
+  it('the rules lot 3 ported for nothing are gone', () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/shell.css'), 'utf8');
+    expect(css).not.toMatch(/workspace-footer > span|data-variant=outline\]|\(lot 5\)/);
+  });
 });

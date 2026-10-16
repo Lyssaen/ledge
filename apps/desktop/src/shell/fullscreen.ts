@@ -11,3 +11,26 @@ export async function setWindowFullscreen(on: boolean): Promise<void> {
     else if (document.fullscreenElement) await document.exitFullscreen();
   } catch { /* refused or unsupported */ }
 }
+
+/** Appelle `cb` quand la fenêtre quitte le plein écran d'elle-même : `fullscreenchange` sans élément dans un navigateur,
+ *  `onResized` puis `isFullscreen() === false` dans Tauri. Renvoie la désinscription, sûre même avant la fin de l'inscription Tauri. */
+export function onFullscreenLeft(cb: () => void): () => void {
+  if (!isTauri()) {
+    const onChange = () => { if (!document.fullscreenElement) cb(); };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }
+  let stopped = false;
+  let unlisten: (() => void) | null = null;
+  void (async () => {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      const win = getCurrentWindow();
+      const un = await win.onResized(() => {
+        void win.isFullscreen().then(on => { if (!on && !stopped) cb(); }, () => {});
+      });
+      if (stopped) un(); else unlisten = un;
+    } catch { /* no window API */ }
+  })();
+  return () => { stopped = true; unlisten?.(); unlisten = null; };
+}
