@@ -111,6 +111,7 @@ describe('the Atelier shell', () => {
     await user.click(side.getByRole('button', { name: /^Ledge/ }));
     d.projects({ projects: [], rules: [] });
     await waitFor(() => expect(within(screen.getByRole('banner')).queryByRole('button', { name: 'Remove the filter: show every project' })).toBeNull());
+    expect(within(screen.getByRole('banner')).getByText('Atelier')).toBeVisible();
   });
 
   it('the footer says local and SSH sessions, and has no island state', async () => {

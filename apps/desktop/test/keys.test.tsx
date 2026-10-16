@@ -33,7 +33,7 @@ async function boot() {
   const side = within(await screen.findByRole('complementary', { name: /sidebar/i }));
   await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent('3'));
   await side.findByRole('button', { name: /^Ledge/ });
-  return { side, user: userEvent.setup() };
+  return { d, side, user: userEvent.setup() };
 }
 const banner = () => within(screen.getByRole('banner'));
 
@@ -128,5 +128,46 @@ describe('global shortcuts', () => {
     expect(document.querySelector('.application')).toHaveClass('immersive');
     await user.keyboard('{Escape}');
     expect(document.querySelector('.application')).not.toHaveClass('immersive');
+  });
+
+  it('focus goes back to the opener when the search closes, with the button or with Ctrl K', async () => {
+    const { side, user } = await boot();
+    const btn = side.getByRole('button', { name: 'Search a session' });
+    await user.click(btn);
+    expect(screen.getByRole('combobox')).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(btn).toHaveFocus();
+    btn.focus();
+    await user.keyboard('{Control>}k{/Control}');
+    await user.keyboard('{Escape}');
+    expect(btn).toHaveFocus();
+  });
+});
+
+describe('the fleet corrects the place', () => {
+  it('an open agent that disappears sends the crumb back to the filtered overview; an offline one stays open', async () => {
+    const { d, side, user } = await boot();
+    await user.click(side.getByRole('button', { name: /^Ledge/ }));
+    await user.keyboard('{Alt>}1{/Alt}');
+    expect(banner().getByText('Otto')).toBeVisible();
+    d.remove('otto');
+    await waitFor(() => expect(banner().getByRole('button', { name: 'Remove the filter: show every project' })).toBeVisible());
+    expect(banner().queryByText('Otto')).toBeNull();
+    await user.click(side.getByRole('button', { name: /Atelier/ }));
+    await user.keyboard('{Alt>}1{/Alt}');
+    expect(banner().getByText('Nova')).toBeVisible();
+    d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/pay', state: 'working', offline: true }));
+    await new Promise(r => setTimeout(r, 200));
+    expect(banner().getByText('Nova')).toBeVisible();
+  });
+
+  it('a daemon that never sends projects still gives a working shell', async () => {
+    const d = await createMockDaemon(); daemons.push(d);
+    d.machines([{ id: 'local', label: 'Local' }]);
+    d.upsert(fakeSession('otto', { name: 'Otto' }));
+    render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
+    const side = within(await screen.findByRole('complementary', { name: /sidebar/i }));
+    await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent('1'));
+    expect(banner().getByText('Atelier')).toBeVisible();
   });
 });

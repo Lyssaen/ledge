@@ -30,6 +30,16 @@ describe('the shell on the real fleet', () => {
     expect(side.getByRole('button', { name: /Local/ }).querySelector('.machine-dot')).toHaveClass('off');
   });
 
+  it('the footer connection dot is off when the local daemon is down, on when connected', async () => {
+    const d = await daemon();
+    const ok = render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
+    await waitFor(() => expect(within(screen.getByRole('complementary', { name: 'Sidebar' })).getByRole('button', { name: /Local/ })).toHaveTextContent('agents'));
+    expect(within(screen.getByRole('contentinfo')).getByText('Local and SSH sessions').querySelector('.connection-dot')).not.toHaveClass('off');
+    ok.unmount();
+    render(<App client={createDesktopFleet({ WebSocketImpl: DeadSocket })} />);
+    await waitFor(() => expect(within(screen.getByRole('contentinfo')).getByText('Local and SSH sessions').querySelector('.connection-dot')).toHaveClass('off'), { timeout: 6000 });
+  }, 12000);
+
   it('speaks the stored language from the first render', async () => {
     localStorage.setItem('desktop.lang', 'fr');
     const d = await daemon();

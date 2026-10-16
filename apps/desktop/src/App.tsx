@@ -85,7 +85,7 @@ function Shell({ client }: { client?: DaemonClient }) {
                 <Pending title={view === 'list' ? t.crumb.list : t.crumb.atelier} />
               </div>
             )}
-          {onOverview && <Footer dispatch={dispatch} />}
+          {onOverview && <Footer dispatch={dispatch} localDown={localDown} />}
         </section>
         {nav.chat && (
           <aside className="ledge-chat-panel" aria-label={t.side.chat}>

@@ -66,4 +66,11 @@ describe('nav state', () => {
     saveOverview({ view: 'list', helpers: false, paused: false });
     expect(loadOverview()).toEqual({ view: 'list', helpers: false, paused: false });
   });
+
+  it('reconcile repairs the back of a settings place whose session is gone', () => {
+    const inSession = navReducer(s0, { type: 'open', id: 'local:otto' });
+    const st = navReducer(inSession, { type: 'settings' });
+    const r = reconcile(st, [], null);
+    expect(r.place).toEqual({ kind: 'settings', section: 'general', back: { kind: 'overview', view: 'atelier', project: 'all' } });
+  });
 });

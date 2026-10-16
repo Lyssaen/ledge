@@ -11,6 +11,7 @@
 .breadcrumb strong { font-weight: 500; color: var(--foreground); }
 .header-actions { display: flex; align-items: center; gap: 8px; }
 .connection-dot { width: 5px; height: 5px; background: var(--success); border-radius: 50%; display: inline-block; }
+.connection-dot.off { background: none; border: 1px solid var(--muted-foreground); box-sizing: border-box; }
 .overview-scroll { overflow: auto; flex: 1; min-height: 0; padding: 6px 26px 24px; }
 .workspace-footer { height: 34px; flex-shrink: 0; border-top: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 10px; color: var(--muted-foreground); }
 .workspace-footer > span:first-child { display: flex; align-items: center; gap: 6px; }
