@@ -2,8 +2,11 @@ import { z } from 'zod';
 import { SshAliasSchema } from './ssh.js';
 
 /** A configured machine, as both fronts list it: the local daemon first, then SSH aliases (spec 2026-10-14 §5). */
+/** A machine's id, as the machines list, the projects' repos and the folder rules name it. */
+export const MachineIdSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
+
 export const MachineSchema = z.object({
-  id: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
+  id: MachineIdSchema,
   label: z.string().trim().min(1).max(80),
   ssh: SshAliasSchema.optional()
 });

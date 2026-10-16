@@ -5,6 +5,7 @@ import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from '
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
 import { SshAliasSchema } from './ssh.js';
 import { MachinesSchema } from './machines.js';
+import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
 
 export const PROTOCOL_PORT = 47831;
@@ -89,6 +90,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('update.failed'), version: z.string(), reason: UpdateFailureSchema, detail: z.string().optional(), command: z.string().optional() }),
   /** The shared machines list (spec 2026-10-14 §5), sent to local clients only. */
   z.object({ type: z.literal('machines'), machines: MachinesSchema }),
+  /** The local daemon's projects and folder rules (spec 2026-10-16 build §5), sent to local clients only. */
+  z.object({ type: z.literal('projects'), projects: ProjectsSchema }),
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional() })
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
@@ -130,7 +133,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** Installs `@paradow/ledge@version` and restarts the service (spec 2026-10-12 auto-update §6). */
   z.object({ type: z.literal('update.daemon'), version: z.string().regex(SEMVER) }),
   /** Replaces the daemon's machines list (first connected front wins); refused unless valid. */
-  z.object({ type: z.literal('machines.set'), machines: MachinesSchema })
+  z.object({ type: z.literal('machines.set'), machines: MachinesSchema }),
+  /** Replaces the local daemon's projects and rules as a whole; refused unless valid. */
+  z.object({ type: z.literal('projects.set'), projects: ProjectsSchema })
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
