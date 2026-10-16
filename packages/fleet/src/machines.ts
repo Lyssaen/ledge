@@ -1,6 +1,6 @@
 import { MachinesSchema, type Machine } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
-import { parseServerMessage, type ClientMessage, type DaemonInfo, type Recent, type Session, type ServerMessage } from '@ledge/protocol';
+import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
 
 /** The url exists for `local` only: set by the fleet, never persisted nor sent. */
@@ -29,6 +29,10 @@ export interface Fleet {
   sendTo(machine: string, msg: ClientMessage): boolean;
   /** Every daemon message, unqualified, with the machine it came from. */
   onMachineMessage(fn: (machine: string, m: ServerMessage) => void): () => void;
+  /** The local daemon's projects and folder rules (build spec §5): null until it sends them, kept while it is down. */
+  projects(): Projects | null;
+  /** Asks the local daemon to replace them; applied on its broadcast. Throws when invalid, or `DaemonOffline` when not connected. */
+  setProjects(next: Projects): void;
 }
 export const LOCAL_MACHINE: MachineConfig = { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' };
 /** The shared list rules live in the protocol; the fleet only pins the local URL (spec §5.1). */
@@ -92,4 +96,9 @@ const noopSubscribe = () => () => {};
 const emptySnapshot = () => EMPTY;
 export function useMachines(client: DaemonClient): MachineState[] {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.machines ?? emptySnapshot, emptySnapshot);
+}
+const nullSnapshot = () => null;
+/** The local daemon's projects, null until it sends them. */
+export function useProjects(client: DaemonClient): Projects | null {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.projects ?? nullSnapshot, nullSnapshot);
 }

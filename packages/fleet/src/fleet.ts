@@ -1,4 +1,4 @@
-import { ChatTurnSchema, type ChatTurn, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
+import { ChatTurnSchema, ProjectsSchema, type ChatTurn, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
 
@@ -29,6 +29,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const documents = new Map<string, string>();
   const operations = new Map<string, string>();
   let source: 'daemon' | 'local' = 'local';
+  /** The local daemon's projects (build spec §5); the last ones stay while it is down. */
+  let projects: Projects | null = null;
   let routing: PendingRoute | null = null, resetAt = '', lastStatus: DaemonStatus = 'connecting';
   const emit = (m: ServerMessage) => messages.forEach(fn => fn(m));
   const day = () => new Date().toISOString().slice(0, 10);
@@ -115,6 +117,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (next.length === 1 && mine.length > 1) { p.client.send({ type: 'machines.set', machines: toWire(mine) }); return; }
       try { localStorage.removeItem(MACHINES_KEY); } catch { /* ignore */ }
       apply(next);
+      return;
+    }
+    // The local daemon's projects are consumed here, never relayed; from a remote machine they are ignored (private to their host).
+    if (m.type === 'projects') {
+      if (machine !== 'local') return;
+      projects = m.projects; listeners.forEach(fn => fn());
       return;
     }
     machineMessages.forEach(fn => fn(machine, m));
@@ -257,7 +265,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       documentMachine(id) { return splitId(id)?.machine; },
       localSnapshot: () => peers.get('local')?.snapshot ?? null,
       sendTo(machine, msg) { const p = peers.get(machine); if (!available(p)) return false; p!.client.send(msg); return true; },
-      onMachineMessage(fn) { machineMessages.add(fn); return () => { machineMessages.delete(fn); }; }
+      onMachineMessage(fn) { machineMessages.add(fn); return () => { machineMessages.delete(fn); }; },
+      projects: () => projects,
+      setProjects(next) {
+        const valid = ProjectsSchema.parse(next);
+        const local = peers.get('local')!.client;
+        if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
+        local.send({ type: 'projects.set', projects: valid });
+      }
     }
   };
   publish();

@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { parseClientMessage, type ClientMessage, type DaemonInfo, type Machines, type Recent, type ServerMessage, type Session } from '@ledge/protocol';
+import { parseClientMessage, type ClientMessage, type DaemonInfo, type Machines, type Projects, type Recent, type ServerMessage, type Session } from '@ledge/protocol';
 
 export async function createMockDaemon(opts: { port?: number } = {}) {
   const wss = new WebSocketServer({ host: '127.0.0.1', port: opts.port ?? 0 });
@@ -11,13 +11,15 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
   const extras: { recents?: Recent[]; launcher?: string[]; daemon?: DaemonInfo } = {};
   const bc = (m: ServerMessage) => { for (const c of wss.clients) if (c.readyState === WebSocket.OPEN) c.send(JSON.stringify(m)); };
   let machinesList: Machines | undefined;
+  let projectsState: Projects | undefined;
   const snapshot = (): ServerMessage => ({ type: 'snapshot', sessions: [...sessions.values()], ...extras });
   /** The last client to send anything: a reply (`session.launched`, an `error` for a launch) goes to it alone. */
   let last: WebSocket | null = null;
   wss.on('connection', ws => {
     ws.send(JSON.stringify(snapshot()));
     if (machinesList) ws.send(JSON.stringify({ type: 'machines', machines: machinesList })); // like the daemon, right after the snapshot
-    ws.on('message', d => { last = ws; try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify(snapshot())); } catch { /* ignore */ } });
+    if (projectsState) ws.send(JSON.stringify({ type: 'projects', projects: projectsState })); // then the projects
+    ws.on('message', d => { last = ws; try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify(snapshot())); if (m.type === 'projects.set') { projectsState = m.projects; bc({ type: 'projects', projects: m.projects }); } } catch { /* ignore */ } });
   });
   return {
     get clientCount() { return [...wss.clients].filter(c => c.readyState === WebSocket.OPEN).length; },
@@ -27,6 +29,8 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     preview(id: string, lines: string[]) { bc({ type: 'session.preview', id, lines }); },
     /** The daemon's machines list (spec 2026-10-14 §5.2), pushed to every client. */
     machines(list: Machines) { machinesList = list; bc({ type: 'machines', machines: list }); },
+    /** The local daemon's projects (build spec §5), pushed to every client; a client's projects.set is stored and broadcast back. */
+    projects(state: Projects) { projectsState = state; bc({ type: 'projects', projects: state }); },
     recents(recents: Recent[]) { extras.recents = recents; bc({ type: 'recents', recents }); },
     /** Answers the last requester's `session.launch`: the new session is broadcast, then `session.launched` is replied. */
     launched(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); last?.send(JSON.stringify({ type: 'session.launched', id: s.id })); },
