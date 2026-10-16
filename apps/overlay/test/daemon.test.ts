@@ -157,4 +157,18 @@ describe('daemon client + store', () => {
     daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('b')] });
     expect(daemonStore.getState().threads.size).toBe(0);
   });
+
+  it('offers the daemon token as a websocket subprotocol and omits it when there is none', () => {
+    const seen: Array<string | string[] | undefined> = [];
+    class Capture {
+      onopen: (() => void) | null = null; onclose: (() => void) | null = null; onerror: (() => void) | null = null;
+      onmessage: null | ((ev: { data: unknown }) => void) = null; readyState = 1;
+      constructor(_url: string, protocols?: string | string[]) { seen.push(protocols); }
+      send() {}
+      close() {}
+    }
+    createDaemonClient({ url: 'ws://127.0.0.1:9', token: 'ab', WebSocketImpl: Capture as never }).connect();
+    createDaemonClient({ url: 'ws://127.0.0.1:9', WebSocketImpl: Capture as never }).connect();
+    expect(seen).toEqual([['ledge.ab'], undefined]);
+  });
 });

@@ -2,11 +2,16 @@ import type { Readable, Writable } from 'node:stream';
 import WebSocket from 'ws';
 import { PROTOCOL_PORT, parseClientMessage, parseServerMessage } from '@ledge/protocol';
 import { MAX_FRAME, readFrames } from '../transport/frames.js';
+import { readDaemonToken } from '../auth.js';
 
-/** Application protocol over SSH stdin/stdout. Fixed local Ledge endpoint; no arbitrary TCP forwarding. */
-export function bridge(opts: { input?: Readable; output?: Writable; port?: number } = {}): Promise<void> {
+/** Application protocol over SSH stdin/stdout. Fixed local Ledge endpoint; no arbitrary TCP forwarding.
+ *  Presents this machine's daemon token when `~/.ledge/token` exists (the remote `ledge bridge` reads the remote file). */
+export function bridge(opts: { input?: Readable; output?: Writable; port?: number; token?: string | null } = {}): Promise<void> {
   const input = opts.input ?? process.stdin, output = opts.output ?? process.stdout;
-  const ws = new WebSocket(`ws://127.0.0.1:${opts.port ?? PROTOCOL_PORT}`, { maxPayload: MAX_FRAME, handshakeTimeout: 10_000 });
+  const token = opts.token === undefined ? readDaemonToken() : opts.token || undefined;
+  const ws = new WebSocket(`ws://127.0.0.1:${opts.port ?? PROTOCOL_PORT}`, {
+    maxPayload: MAX_FRAME, handshakeTimeout: 10_000, ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {})
+  });
   return new Promise((resolve, reject) => {
     let settled = false, off = () => {};
     const finish = (error?: Error) => {

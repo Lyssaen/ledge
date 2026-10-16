@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { createDaemonClient } from './daemon/client';
+import { useEffect, useState } from 'react';
+import { createDaemonClient, type DaemonClient } from './daemon/client';
 import { createFleetClient } from './daemon/fleet';
 import { loadMachines } from './daemon/machines';
 import { attachClient } from './daemon/store';
 import { Surface } from './surface/Surface';
 import { useUpdate } from './update/useUpdate';
-import { getAutostart, isTauri, listMonitors, screenHeight, screenWidth, setAutostart, setMonitor, setTrayLabels } from './tauri/bridge';
+import { daemonToken, getAutostart, isTauri, listMonitors, screenHeight, screenWidth, setAutostart, setMonitor, setTrayLabels } from './tauri/bridge';
 import { autoScale, loadScale, migrateLegacyScale, resolveScale, saveScale, type ScaleTarget, type UiScale } from './scale';
 import { loadMonitor, saveMonitor, type MonitorInfo } from './monitor';
 import { LangProvider, loadLang, messagesFor, saveLang, type Lang } from './i18n/lang';
@@ -13,10 +13,36 @@ import { createWebAudioPlayer } from './sounds/player';
 import { applyAccent, loadAccent, saveAccent } from './accent';
 import { loadIslandPosition, saveIslandPosition, loadDiscreet, saveDiscreet, type IslandPosition } from './island';
 
+function browserDaemonToken(): string | undefined {
+  const token = import.meta.env.VITE_LEDGE_TOKEN;
+  return typeof token === 'string' && /^[0-9a-f]{64}$/.test(token) ? token : undefined;
+}
+
 export function App() {
-  // An isolated browser demo can point at a fake daemon without disturbing the live WSL daemon.
-  const client = useMemo(() => import.meta.env.DEV && import.meta.env.VITE_LEDGE_DEMO_WS
-    ? createDaemonClient({ url: import.meta.env.VITE_LEDGE_DEMO_WS }) : createFleetClient(loadMachines()), []);
+  // An isolated browser demo points at a fake daemon and never needs the token. Under Tauri the token is read from
+  // WSL before the first socket; the browser (tests included) connects immediately, with VITE_LEDGE_TOKEN when set.
+  const demo = import.meta.env.DEV && import.meta.env.VITE_LEDGE_DEMO_WS ? String(import.meta.env.VITE_LEDGE_DEMO_WS) : '';
+  const [client, setClient] = useState<DaemonClient | null>(() => {
+    if (demo) return createDaemonClient({ url: demo });
+    if (isTauri()) return null;
+    return createFleetClient(loadMachines(), createDaemonClient, browserDaemonToken());
+  });
+  useEffect(() => {
+    if (client || demo) return undefined;
+    let live = true;
+    let created: DaemonClient | undefined;
+    void daemonToken().then(token => {
+      if (!live) return;
+      created = createFleetClient(loadMachines(), createDaemonClient, token ?? undefined);
+      setClient(created);
+    });
+    return () => { live = false; created?.close(); };
+  }, [client, demo]);
+  if (!client) return null;
+  return <AppShell client={client} />;
+}
+
+function AppShell({ client }: { client: DaemonClient }) {
   // The work-area height in logical px. The page is never zoomed: each layer applies its own scale.
   const [workH, setWorkH] = useState(window.innerHeight);
   const [workW, setWorkW] = useState(window.innerWidth);

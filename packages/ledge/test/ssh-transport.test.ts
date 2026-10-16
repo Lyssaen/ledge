@@ -10,6 +10,7 @@ import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
+import { readDaemonToken } from '../src/auth.js';
 
 const cleanup: (() => void | Promise<void>)[] = [];
 afterEach(async () => { for (const fn of cleanup.splice(0).reverse()) await fn(); });
@@ -80,14 +81,15 @@ describe('SSH application transport', () => {
     const called: string[] = [];
     const srv = await startServer({ store: new Store(), tmux, port: 0, ssh: (ws, alias) => { called.push(alias); ws.send(JSON.stringify({ type: 'snapshot', sessions: [] })); } });
     cleanup.push(() => srv.close());
-    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ssh/server`), got: unknown[] = [];
+    const headers = { Authorization: `Bearer ${readDaemonToken()}` };
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ssh/server`, { headers }), got: unknown[] = [];
     ws.on('message', b => got.push(JSON.parse(String(b)))); cleanup.push(() => ws.terminate());
     await until(() => got.length === 1);
     srv.broadcast({ type: 'error', message: 'local-only' });
     await new Promise(r => setTimeout(r, 40)); expect(got).toEqual([{ type: 'snapshot', sessions: [] }]);
     expect(called).toEqual(['server']);
-    for (const [path, origin] of [['/ssh/-flag', undefined], ['/ssh/server', 'https://evil.example']]) {
-      const bad = new WebSocket(`ws://127.0.0.1:${srv.port}${path}`, { origin });
+    for (const [path, origin] of [['/ssh/-flag', undefined], ['/ssh/server', 'https://evil.example']] as const) {
+      const bad = new WebSocket(`ws://127.0.0.1:${srv.port}${path}`, { headers, ...(origin ? { origin } : {}) });
       await expect(once(bad, 'open')).rejects.toThrow('401');
     }
     expect(called).toEqual(['server']);

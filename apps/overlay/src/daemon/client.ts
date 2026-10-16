@@ -8,9 +8,9 @@ export interface DaemonClient {
   onMessage(fn: (m: ServerMessage) => void): () => void; onStatus(fn: (s: DaemonStatus) => void): () => void;
 }
 type WsLike = { send(data: string): void; close(): void; onopen: null | (() => void); onclose: null | (() => void); onerror: null | (() => void); onmessage: null | ((ev: { data: unknown }) => void); readyState: number };
-type WsCtor = new (url: string) => WsLike;
+type WsCtor = new (url: string, protocols?: string | string[]) => WsLike;
 
-export function createDaemonClient(opts: { url: string; WebSocketImpl?: WsCtor; minBackoffMs?: number; maxBackoffMs?: number }): DaemonClient {
+export function createDaemonClient(opts: { url: string; token?: string; WebSocketImpl?: WsCtor; minBackoffMs?: number; maxBackoffMs?: number }): DaemonClient {
   const Ws = (opts.WebSocketImpl ?? (globalThis as unknown as { WebSocket: WsCtor }).WebSocket);
   const min = opts.minBackoffMs ?? 2000, max = opts.maxBackoffMs ?? 30000;
   let ws: WsLike | null = null, status: DaemonStatus = 'connecting', backoff = min, timer: ReturnType<typeof setTimeout> | null = null, closed = false;
@@ -20,7 +20,8 @@ export function createDaemonClient(opts: { url: string; WebSocketImpl?: WsCtor; 
   function open() {
     if (closed) return;
     setStatus(status === 'open' ? 'connecting' : status);
-    const sock = new Ws(opts.url); ws = sock;
+    const protocols = opts.token ? [`ledge.${opts.token}`] : undefined;
+    const sock = protocols ? new Ws(opts.url, protocols) : new Ws(opts.url); ws = sock;
     sock.onopen = () => { if (ws !== sock) return; setStatus('open'); };
     sock.onmessage = ev => { if (ws !== sock) return; try { const m = parseServerMessage(JSON.parse(String(ev.data))); if (m.type === 'snapshot') backoff = min; msgFns.forEach(f => f(m)); } catch { /* ignore malformed */ } };
     sock.onerror = () => { /* onclose follows */ };

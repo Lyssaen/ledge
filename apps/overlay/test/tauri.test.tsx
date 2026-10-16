@@ -67,6 +67,17 @@ describe('bridge', () => {
     await Promise.resolve();
     expect(native.invoke).not.toHaveBeenCalled();
     expect(native.listeners.size).toBe(0);
+    await expect(b.daemonToken()).resolves.toBeNull();
+    expect(native.invoke).not.toHaveBeenCalled();
+  });
+
+  it('reads the daemon token from the shell only under Tauri', async () => {
+    enterTauri(); const b = await loadBridge();
+    native.invoke.mockResolvedValueOnce('ab'.repeat(32));
+    await expect(b.daemonToken()).resolves.toBe('ab'.repeat(32));
+    expect(native.invoke).toHaveBeenCalledWith('daemon_token', undefined);
+    native.invoke.mockResolvedValueOnce('not-a-token');
+    await expect(b.daemonToken()).resolves.toBeNull();
   });
 
   it('set_frame takes left, top, width and height, once per distinct frame and in call order', async () => {
