@@ -167,6 +167,18 @@ describe('the filing styles', () => {
     expect(declarations('sidebar.css', '.is-dragging .side-project:not(.drop-over)')).toBe('outline:1pxdashedvar(--input);outline-offset:-1px');
     expect(declarations('shell.css', '.toast')).toContain('position:fixed');
   });
+  it('a long name in the drop hint is cut inside the label; a long task wraps on its sheet; a long menu scrolls', () => {
+    const hint = declarations('atelier.css', '.drop-hint');
+    for (const decl of ['min-width:0', 'overflow:hidden', 'text-overflow:ellipsis', 'white-space:nowrap']) expect(hint).toContain(decl);
+    // its flex parent is capped by the rug, and the label's names shrink too
+    expect(declarations('atelier.css', '.office-shell .office-rug .room-heading')).toContain('max-width:calc(100%-28px)');
+    expect(declarations('atelier.css', '.heading-names')).toContain('min-width:0');
+    expect(declarations('atelier.css', '.task-sheet p')).toContain('overflow-wrap:anywhere');
+    const menu = declarations('atelier.css', '.assign-menu');
+    expect(menu).toContain('max-height:min(60vh,320px)');
+    expect(menu).toContain('overflow:auto');
+    expect(declarations('atelier.css', '.assign-menu button')).toContain('flex-shrink:0');
+  });
 });
 
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
