@@ -16,6 +16,15 @@ describe('nav agents', () => {
     expect(mainOrder(list, projects).map(x => x.id)).toEqual(['local:nova', 'local:rio', 'local:otto', 'local:kit']);
     expect(mainOrder(list, null).map(x => x.id)).toEqual(['local:rio', 'local:kit', 'local:otto', 'local:nova']);
   });
+  it('breaks start-time ties by id and survives an invalid start time', () => {
+    const same = '2026-10-16T09:00:00.000Z';
+    const tied = [s('zed', '/w/ledge', same), s('amy', '/w/ledge', same)];
+    expect(mainOrder(tied, projects).map(x => x.id)).toEqual(['local:amy', 'local:zed']);
+    const bad = [s('zed', '/w/ledge', 'nope'), s('amy', '/w/ledge', same), s('bob', '/w/ledge', 'nope')];
+    const a = mainOrder(bad, projects).map(x => x.id);
+    expect(a).toEqual(mainOrder([...bad].reverse(), projects).map(x => x.id));
+    expect(a).toEqual(['local:bob', 'local:zed', 'local:amy']);
+  });
   it('searches name, task, harness, machine and project without accents or case', () => {
     const named = (x: Session) => (projectOf(x, projects) === 'a' ? 'Ledge' : projectOf(x, projects) === 'b' ? 'Payment Service' : 'Sans projet');
     const one = [s('otto', '/w/ledge', '2026-10-16T09:00:00.000Z', { name: 'Otto', topic: 'Préparer la migration', tool: 'codex', machineName: 'Dev SSH' })];

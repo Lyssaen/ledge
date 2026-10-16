@@ -5,7 +5,7 @@ const TOOLS: Record<Session['tool'], string> = { claude: 'Claude Code', codex: '
 export const toolName = (tool: Session['tool']): string => TOOLS[tool];
 export const taskOf = (s: Session): string => s.topic ?? s.title;
 
-/** Agents grouped by project in the projects' order, « Sans projet » last (also for a project that is gone), oldest first within a group. */
+/** Agents grouped by project in the projects' order, « Sans projet » last (also for a project that is gone), oldest first (then by id) within a group. */
 export function mainOrder(sessions: readonly Session[], projects: Projects | null): Session[] {
   const rank = (s: Session): number => {
     if (!projects) return 0;
@@ -13,7 +13,8 @@ export function mainOrder(sessions: readonly Session[], projects: Projects | nul
     const i = id === null ? -1 : projects.projects.findIndex(p => p.id === id);
     return i < 0 ? projects.projects.length : i;
   };
-  return [...sessions].sort((x, y) => rank(x) - rank(y) || Date.parse(x.startedAt) - Date.parse(y.startedAt));
+  const at = (s: Session) => Date.parse(s.startedAt) || 0;
+  return [...sessions].sort((x, y) => rank(x) - rank(y) || at(x) - at(y) || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
 }
 
 const fold = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
