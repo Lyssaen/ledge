@@ -1,15 +1,7 @@
 import type { Page } from '@playwright/test';
-import type { Projects } from '@ledge/protocol';
 import { test, expect } from './fixtures';
-import { eight, fakeDaemon, session } from './daemon';
+import { eight, fakeDaemon, session, twoProjects } from './daemon';
 
-const twoProjects: Projects = {
-  projects: [
-    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] },
-    { id: 'website', name: 'Website', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/website' }] }
-  ],
-  rules: []
-};
 const kit = session('kit', { name: 'Kit', cwd: '/tmp/scratch', project: 'scratch' });
 const helper = (id: string) => ({ id, kind: 'Explore', task: `Task ${id}`, state: 'working' as const });
 const crowd = [
@@ -120,6 +112,8 @@ test('a crowded table: six seats, four at the ends, +N opens the List on the pro
   await table.getByRole('button', { name: /\+3 at this table/ }).click();
   await expect(page.getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('banner').getByText('Ledge')).toBeVisible();
+  await expect(page.locator('.lgroup')).toHaveCount(1);
+  await expect(page.getByRole('region', { name: 'Ledge' }).getByRole('listitem')).toHaveCount(8);
 });
 
 test('a long project name on the rug is cut with an ellipsis and stays inside the rug', async ({ page }) => {

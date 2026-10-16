@@ -55,6 +55,7 @@ export function ListToolbar({ barRef, inputRef, onClear, onFirst, text, onText, 
       if (text !== '' || chip !== 'all') onClear(); else e.currentTarget.blur();
     } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();   // the focus moves to the first row: the document's J / K / Enter handler must not take this same key as its own
       onFirst();
     }
   };

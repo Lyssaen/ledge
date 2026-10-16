@@ -1,14 +1,6 @@
-import type { Projects } from '@ledge/protocol';
 import { test, expect } from './fixtures';
-import { eight, fakeDaemon } from './daemon';
+import { eight, fakeDaemon, twoProjects } from './daemon';
 
-const twoProjects: Projects = {
-  projects: [
-    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] },
-    { id: 'website', name: 'Website', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/website' }] }
-  ],
-  rules: []
-};
 
 test('projects from the daemon in the sidebar, a filter from a click, cleared with Escape', async ({ page }) => {
   await fakeDaemon(page, eight, { projects: twoProjects });

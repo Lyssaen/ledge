@@ -29,6 +29,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       try { msg = JSON.parse(String(m)); } catch { return; }
       received.push(msg);
       if (msg.type === 'projects.set') { projects = msg.projects; ws.send(JSON.stringify({ type: 'projects', projects })); }
+      if (msg.type === 'session.decide') { const s = sessions.get(msg.id); if (s) { const { pending: _p, ...rest } = s; const next = { ...rest, state: 'working' as const }; sessions.set(s.id, next); ws.send(JSON.stringify({ type: 'session.updated', session: next })); } }
       if (msg.type === 'machines.set') { machines = msg.machines; ws.send(JSON.stringify({ type: 'machines', machines })); }
     });
   });
@@ -72,6 +73,14 @@ export async function fakeRemote(page: Page, alias: string, initial: Session[], 
     reopen(next: Session[] = sessions) { sessions = next; up = true; }
   };
 }
+
+export const twoProjects: Projects = {
+  projects: [
+    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] },
+    { id: 'website', name: 'Website', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/website' }] }
+  ],
+  rules: []
+};
 
 /** Eight agents on two projects, three LEDGE-42, three WEB-18, two with a request waiting. */
 export const eight = [
