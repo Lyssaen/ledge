@@ -17,12 +17,15 @@ import { ReplyCard, inline } from './ReplyCard';
 import { Thread } from './Thread';
 import { helperRows, type HelperRow } from '../thread/turns';
 import type { DocumentReference } from '../documents/references';
+import { TerminalBand, TerminalPane, TerminalRail } from './TerminalBand';
 
 const mono = "'Geist Mono', ui-monospace, monospace";
 const well: React.CSSProperties = { fontFamily: mono, fontSize: 13, lineHeight: '20px', padding: '10px 12px', background: 'var(--sidebar)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' };
 const rule = '1px solid var(--sidebar-border)';
 /** Fixed parts of the view: its header and the reply area under the content. */
 export const SESSION_HEADER_H = 60;
+/** Reading mode: the body is at least this tall, so the terminal alongside the thread shows its lines. */
+export const READING_TERMINAL_H = 600;
 
 /** The last reply is shown when nothing is asked and the agent waits (or ended) on it: "your turn". */
 export const shownReply = (s: Session) => (!s.pending && (s.state === 'idle' || s.state === 'exited') ? s.lastReply : undefined);
@@ -82,19 +85,33 @@ function QuestionCard({ pending, onReply, disabled, freeText, t }: { pending: Pe
 
 const HELPER_STATE: Record<Helper['state'], BotState> = { starting: 'starting', working: 'working', waiting_input: 'question', waiting_permission: 'approval', idle: 'idle', exited: 'done', error: 'error' };
 
-/** Spec 2026-10-13 §6: the current turn's helpers under the title, 20 px bots in a tree whose last branch ends in └; each
- *  row opens the helper's own thread. */
-function HelpersTree({ parent, helpers, t, theme, paused, frozen, reducedMotion, onOpen }: { parent: Session; helpers: HelperRow[]; t: Messages; theme: 'dark' | 'light'; paused: boolean; frozen?: boolean; reducedMotion?: boolean; onOpen?: (id: string) => void }) {
+/** Over the reply field, the tree keeps this many helpers, the latest; the older ones fold into a "+N more" line. */
+const HELPERS_SHOWN = 4;
+
+/** Spec 2026-10-13 §6: the current turn's helpers, 20 px bots in a tree; each row opens the helper's own thread. `up`
+ *  (over the reply field): the tree grows from the field, opens on ┌ and keeps the latest helpers, the newest just above
+ *  the field. `down` (under the title, a read-only session that has no field): its last branch ends in └. */
+function HelpersTree({ parent, helpers, direction, t, theme, paused, frozen, reducedMotion, onOpen }: { parent: Session; helpers: HelperRow[]; direction: 'up' | 'down'; t: Messages; theme: 'dark' | 'light'; paused: boolean; frozen?: boolean; reducedMotion?: boolean; onOpen?: (id: string) => void }) {
+  const up = direction === 'up';
+  const hidden = up ? Math.max(0, helpers.length - HELPERS_SHOWN) : 0;
+  const shown = helpers.slice(hidden);
+  const branch = { color: 'var(--muted-foreground)', width: 14, flexShrink: 0 } as const;
   return (
-    <ul data-helpers aria-label={t.session.helpers} style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {helpers.map((h, i) => {
-        const st = HELPER_STATE[h.state]; const seed = `${parent.id}:${h.id}`; const last = i === helpers.length - 1;
+    <ul data-helpers data-direction={direction} aria-label={t.session.helpers} style={{ listStyle: 'none', margin: up ? 0 : '10px 0 0', padding: up ? '2px 0 4px 2px' : 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {hidden > 0 && (
+        <li data-helpers-more style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
+          <span aria-hidden="true" data-branch className="mono" style={branch}>┌</span><span>{t.session.helpersMore(hidden)}</span>
+        </li>
+      )}
+      {shown.map((h, i) => {
+        const st = HELPER_STATE[h.state]; const seed = `${parent.id}:${h.id}`; const last = i === shown.length - 1;
         const stateLabel = h.state === 'exited' ? t.thread.helperDone : t.botLabel[st];
+        const mark = up ? (i === 0 && !hidden ? '┌' : '├') : last ? '└' : '├';
         return (
           <li key={h.id} style={{ minWidth: 0 }}>
             <button type="button" data-helper data-helper-id={h.id} data-last={last ? 'true' : undefined} aria-label={`${h.task} · ${t.thread.helperOpen}`} onClick={() => onOpen?.(h.id)}
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0, padding: 0, background: 'none', border: 0, textAlign: 'left', font: 'inherit', fontSize: 12, lineHeight: '16px', color: 'var(--sidebar-foreground)', cursor: 'pointer', borderRadius: 4 }}>
-              <span aria-hidden="true" className="mono" style={{ width: 14, flexShrink: 0, color: 'var(--muted-foreground)' }}>{last ? '└' : '├'}</span>
+              <span aria-hidden="true" data-branch className="mono" style={branch}>{mark}</span>
               <Bot seed={seed} tool={parent.tool} state={st} pose={poseFor(seed, st)} size={20} theme={theme} paused={paused} frozen={frozen} reducedMotion={reducedMotion} />
               <span data-helper-task style={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.task}</span>
               <span style={{ flexShrink: 0, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{h.kind} · {stateLabel}</span>
@@ -150,10 +167,13 @@ export function SessionView(p: SessionViewProps) {
   // The preview follows its latest line, like a terminal: on open, and on each update unless the user scrolled up to read.
   const termRef = useRef<HTMLPreElement>(null);
   const stuck = useRef(true);
+  // Reading mode puts the terminal alongside the thread; it folds into a rail to give the thread the width.
+  const [termOpen, setTermOpen] = useState(true);
+  const termShown = p.reading && termOpen && p.preview.length > 0;
   const termFor = useRef(s.id);
   if (termFor.current !== s.id) { termFor.current = s.id; stuck.current = true; }
   const toBottom = () => { const el = termRef.current; if (el) el.scrollTop = el.scrollHeight; };
-  useLayoutEffect(() => { if (stuck.current) toBottom(); }, [p.preview, visible, p.reading]);
+  useLayoutEffect(() => { if (stuck.current) toBottom(); }, [p.preview, visible, termShown]);
   // The conversation reads the same way: it opens on its end and follows each new item, unless the user scrolled up to
   // read the history; back at the end, it follows again. Content that grows on its own (a card unfolding) is followed too.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -186,7 +206,6 @@ export function SessionView(p: SessionViewProps) {
   const badgeState = s.state === 'error' ? 'error' : pending ? (pending.kind === 'question' ? 'question' : 'approval') : st;
   const title = pending
     ? (pending.kind === 'question' ? pending.text : pending.kind === 'diff' ? t.session.title.diff(s.name) : pending.kind === 'plan' ? t.session.title.plan(s.name) : t.session.title.permission(s.name))
-    : doc?.title ? doc.title
     : readOnly ? t.session.title.readonly
     : s.state === 'exited' ? t.session.title.exited : s.state === 'error' ? t.session.title.error : s.state === 'idle' && !busy ? t.session.title.idle : s.state === 'starting' ? t.session.title.starting : t.session.title.working;
   const failureText = (s.state === 'error' || p.failure) && pending ? t.session.failed(p.failure ?? s.lastError ?? t.notTaken) : null;
@@ -202,6 +221,8 @@ export function SessionView(p: SessionViewProps) {
         <Button variant="ghost" size="icon" aria-label={t.session.close} title={t.session.close} onClick={p.onClose} style={{ width: 32, height: 32, flexShrink: 0, color: 'var(--sidebar-foreground)' }}><Icon {...ICONS.close} /></Button>
       </div>
 
+      <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex' }}>
+      <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <div ref={scrollRef} data-scroll onScroll={e => { const el = e.currentTarget; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4; }} className="ledge-scroll" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         <div ref={p.contentRef} data-session-content style={{ display: 'flex', flexDirection: 'column', padding: '18px 16px 16px', fontSize: p.reading ? 14 : undefined, lineHeight: p.reading ? '21px' : undefined }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
@@ -209,15 +230,17 @@ export function SessionView(p: SessionViewProps) {
             {readOnly ? <Badge state="readonly" tone={badgeState} caps /> : <Badge state={badgeState} caps />}
           </div>
           <h2 style={{ margin: 0, fontSize: 18, lineHeight: '26px', fontWeight: 650, letterSpacing: '-0.01em', overflowWrap: 'anywhere' }}>{title}</h2>
-          {rows.length > 0 && <HelpersTree parent={s} helpers={rows} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
+          {readOnly && rows.length > 0 && <HelpersTree parent={s} helpers={rows} direction="down" t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
           {p.thread !== undefined
             // The current answer is the card below when there is one, or the plan the request shows; otherwise (a request waits) it reads in the thread.
-            ? <Thread session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} hideCurrentReply={!!(reply && doc) || (!!pending?.body && pending.body === s.lastReply?.text)} />
+            ? <Thread session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} onDocument={p.onDocument} hideCurrentReply={!!(reply && doc) || (!!pending?.body && pending.body === s.lastReply?.text)} />
             : <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '12px 0 0' }}>{t.thread.loading}</p>}
           {reply && doc && <>
             <span data-reply-meta style={{ marginTop: 6, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
               {t.reply.finished(s.name, relativeTime(reply.at, p.now, t))}
             </span>
+            {/* The reply's own heading opens it, next to its card: above the whole thread it read as lost. */}
+            {doc.title && <h3 data-reply-title style={{ margin: '10px 0 0', fontSize: 16, lineHeight: '22px', fontWeight: 650, overflowWrap: 'anywhere' }}>{inline(doc.title, 0, undefined, p.onDocument)}</h3>}
             {doc.lead && <p data-reply-lead style={{ margin: '10px 0 0', fontSize: 14, lineHeight: '21px', color: 'var(--sidebar-foreground)', overflowWrap: 'anywhere' }}>{inline(doc.lead, 0, undefined, p.onDocument)}</p>}
             <div style={{ marginTop: 14 }}>
               <ReplyCard key={reply.at} doc={doc} raw={reply.text} t={t} onDraft={p.onDraft} onFocusReply={() => replyField.current?.focus()} onDocument={p.onDocument} onSend={readOnly || replyOff ? undefined : p.onReply} />
@@ -256,19 +279,17 @@ export function SessionView(p: SessionViewProps) {
             ))}
           </div>
 
-          {p.preview.length > 0 && <details className="ledge-terminal" open={(!pending && !reply) || p.reading} onToggle={e => { if ((e.currentTarget as HTMLDetailsElement).open) { stuck.current = true; toBottom(); } }} style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-            <summary style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--well)', fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
-              <span data-caret aria-hidden="true" style={{ display: 'inline-flex', transition: transition([['transform', 'hover']]) }}><Icon size={12} {...ICONS.chevronRight} /></span>
-              <span style={{ color: 'var(--sidebar-foreground)' }}>{t.session.terminal}</span><span>· {t.session.terminalNote}</span>
-            </summary>
-            <pre ref={termRef} data-terminal onScroll={e => { const el = e.currentTarget; stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4; }} className="mono ledge-scroll" style={{ margin: 0, padding: '10px 12px', maxHeight: p.reading ? 360 : 200, overflow: 'auto', fontSize: 12, lineHeight: '18px', color: 'var(--muted-foreground)', background: 'var(--well)', borderTop: '1px solid var(--border)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{p.preview.map((l, i) => <div key={i}>{l || ' '}</div>)}</pre>
-          </details>}
         </div>
       </div>
 
+      <div ref={p.replyRef} style={{ flexShrink: 0 }}>
+      {/* Compact view: the terminal is a strip over the reply field; reading mode shows it whole, alongside. */}
+      {!p.reading && p.preview.length > 0 && <TerminalBand session={s} lines={p.preview} t={t} onOpen={p.onToggleReading} />}
       {/* A session started without Ledge cannot be written to: the mockup drops the reply area, the note above says why. */}
       {!readOnly && (
-        <div ref={p.replyRef} data-reply-area style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px 10px', flexShrink: 0, borderTop: rule }}>
+        <div data-reply-area style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px 10px', borderTop: rule }}>
+          {/* The helpers stay in view over the field, whatever the thread's scroll. */}
+          {rows.length > 0 && <HelpersTree parent={s} helpers={rows} direction="up" t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
             <textarea ref={replyField} data-reply rows={1} className="ledge-field" placeholder={t.session.replyPlaceholder(s.name)} aria-label={t.session.replyLabel(s.name)} aria-describedby="ledge-reply-hint" value={p.draft}
               onChange={e => p.onDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDraft(); } }}
@@ -284,6 +305,11 @@ export function SessionView(p: SessionViewProps) {
           </div>
         </div>
       )}
+      </div>
+      </div>
+      {termShown && <TerminalPane session={s} lines={p.preview} t={t} preRef={termRef} onScroll={el => { stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4; }} onFold={() => setTermOpen(false)} />}
+      {p.reading && !termOpen && p.preview.length > 0 && <TerminalRail session={s} t={t} onUnfold={() => { stuck.current = true; setTermOpen(true); }} />}
+      </div>
     </div>
   );
 }

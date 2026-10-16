@@ -2,8 +2,9 @@ import { test, expect, layer, expectMode, ready } from './fixtures';
 import { fakeDaemon } from './daemon';
 import { overview, openList, restInside } from './scenarios';
 
-/* The terminal preview ("Aperçu du terminal") shows what the daemon sends: the agent's recent conversation,
-   scrolled to its latest line. French, as the user runs it. */
+/* The terminal shows what the daemon sends: the agent's recent conversation. In the compact view a strip over the
+   reply field gives its latest line (the last 8 on hover); reading mode shows it whole alongside the thread, scrolled
+   to its latest line. French, as the user runs it. */
 test.use({ lang: 'fr', viewport: { width: 1600, height: 1000 } });
 
 /** What the daemon sends for a Claude Code pane: the conversation, without the input box (packages/ledge buildPreview). */
@@ -32,9 +33,14 @@ test('the conversation preview opens on its latest line and follows updates', as
   await restInside(page);
 
   const view = layer(page, 'session');
-  // A pending request keeps the preview folded: expand it.
-  const summary = view.getByText('Aperçu du terminal');
-  await summary.click();
+  // The strip: the request waits, it says so; hovering shows the last lines, a click opens reading mode.
+  const band = view.locator('[data-terminal-band]');
+  await expect(band).toHaveAttribute('data-tone', 'approval');
+  await expect(band).toContainText('Attend votre accord');
+  await band.hover();
+  await expect(view.locator('[data-terminal-peek]')).toContainText('✻ Brewed for 42s · done 1:12 PM');
+  await band.click();
+  await expect(view.getByRole('button', { name: 'Mode lecture' })).toHaveAttribute('aria-pressed', 'true');
   const pre = view.locator('pre[data-terminal]');
   await expect(pre).toBeVisible();
   await expect(pre).toContainText('● Bash(pnpm --filter overlay test)');
@@ -51,4 +57,13 @@ test('the conversation preview opens on its latest line and follows updates', as
   // An update keeps it on the latest line.
   d.preview('otto', [...conversation, '', '● Nouvelle réponse de l’agent après la mise à jour.']);
   await expect(pre.getByText('● Nouvelle réponse de l’agent après la mise à jour.')).toBeInViewport();
+
+  // Folded into a rail, reopened on its latest line; T leaves reading mode, the strip is back.
+  await view.getByRole('button', { name: 'Replier le terminal' }).click();
+  await expect(pre).toHaveCount(0);
+  await view.getByRole('button', { name: 'Rouvrir le terminal' }).click();
+  await expect(pre.getByText('● Nouvelle réponse de l’agent après la mise à jour.')).toBeInViewport();
+  await page.keyboard.press('t');
+  await expect(band).toBeVisible();
+  await expect(pre).toHaveCount(0);
 });

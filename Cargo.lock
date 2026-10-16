@@ -2067,7 +2067,7 @@ dependencies = [
 
 [[package]]
 name = "ledge-overlay"
-version = "0.5.2"
+version = "0.5.4"
 dependencies = [
  "ledge-native",
  "serde",

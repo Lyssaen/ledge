@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import Markdown from 'react-markdown';
+import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { openUrl } from '../tauri/bridge';
 import { parseDocumentReference, type DocumentReference } from './references';
@@ -34,7 +34,46 @@ export function documentHeadings(root: Node): DocumentHeading[] {
   visit(root); return headings;
 }
 
-/** HTML is never parsed. Images are rendered as text, so their URLs are never fetched. */
+/** `==text==` becomes a highlight (<mark>), as most Markdown editors read it; GFM has no such mark. Inline code and code
+ *  blocks are left alone, and the mark does not span other inline marks. */
+const HIGHLIGHT = /==(?=\S)([^=\n]*?\S)==/g;
+export function remarkHighlight() {
+  const visit = (n: Node) => {
+    if (!n.children) return;
+    n.children = n.children.flatMap(c => {
+      if (c.type !== 'text' || !c.value?.includes('==')) { visit(c); return [c]; }
+      const out: Node[] = []; let last = 0;
+      for (const m of c.value.matchAll(HIGHLIGHT)) {
+        if (m.index > last) out.push({ type: 'text', value: c.value.slice(last, m.index) });
+        out.push({ type: 'highlight', data: { hName: 'mark' }, children: [{ type: 'text', value: m[1]! }] } as Node);
+        last = m.index + m[0].length;
+      }
+      if (last === 0) return [c];
+      if (last < c.value.length) out.push({ type: 'text', value: c.value.slice(last) });
+      return out;
+    });
+  };
+  return (tree: Node) => visit(tree);
+}
+
+/** Links open where Ledge can: a Markdown document in the reader, a web address in the browser, an anchor in place.
+ *  Without a reader, a document link stays text. Images are rendered as text, so their URLs are never fetched. */
+export function markdownComponents(onDocument?: (ref: DocumentReference) => void): Components {
+  return {
+    a({ href, children }) {
+      if (!href) return <span>{children}</span>;
+      if (href.startsWith('#')) return <a href={href} onClick={e => { e.preventDefault(); document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView(); }}>{children}</a>;
+      const ref = parseDocumentReference(href);
+      if (ref) return onDocument ? <a href={href} onClick={e => { e.preventDefault(); onDocument(ref); }}>{children}</a> : <span>{children}</span>;
+      if (/^https?:\/\//i.test(href)) return <a href={href} onClick={e => { e.preventDefault(); void openUrl(href); }}>{children}</a>;
+      return <span>{children}</span>;
+    },
+    img({ alt, src }) { return <span className="ledge-document-image">{alt || 'Image'}{src ? ` (${src})` : ''}</span>; },
+    input({ type, checked }) { return type === 'checkbox' ? <input type="checkbox" checked={checked} readOnly disabled /> : null; }
+  };
+}
+
+/** HTML is never parsed. */
 export function MarkdownDocument({ text, onDocument, onHeadings }: { text: string; onDocument: (ref: DocumentReference) => void; onHeadings: (headings: DocumentHeading[]) => void }) {
   const { source, headings, plugin } = useMemo(() => {
     const heads: DocumentHeading[] = [];
@@ -43,18 +82,16 @@ export function MarkdownDocument({ text, onDocument, onHeadings }: { text: strin
     return { source, headings: heads, plugin };
   }, [text]);
   useEffect(() => { onHeadings(headings); }, [headings, onHeadings]);
+  const components = useMemo(() => markdownComponents(onDocument), [onDocument]);
   return <div className="ledge-document" data-document-body>
-    <Markdown remarkPlugins={[remarkGfm, plugin]} components={{
-      a({ href, children }) {
-        if (!href) return <span>{children}</span>;
-        if (href.startsWith('#')) return <a href={href} onClick={e => { e.preventDefault(); document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView(); }}>{children}</a>;
-        const ref = parseDocumentReference(href);
-        if (ref) return <a href={href} onClick={e => { e.preventDefault(); onDocument(ref); }}>{children}</a>;
-        if (/^https?:\/\//i.test(href)) return <a href={href} onClick={e => { e.preventDefault(); void openUrl(href); }}>{children}</a>;
-        return <span>{children}</span>;
-      },
-      img({ alt, src }) { return <span className="ledge-document-image">{alt || 'Image'}{src ? ` (${src})` : ''}</span>; },
-      input({ type, checked }) { return type === 'checkbox' ? <input type="checkbox" checked={checked} readOnly disabled /> : null; }
-    }}>{source}</Markdown>
+    <Markdown remarkPlugins={[remarkGfm, remarkHighlight, plugin]} components={components}>{source}</Markdown>
+  </div>;
+}
+
+/** An agent's message inside a session's thread: the same Markdown as a document, set at the thread's size. */
+export function ThreadMarkdown({ text, onDocument }: { text: string; onDocument?: (ref: DocumentReference) => void }) {
+  const components = useMemo(() => markdownComponents(onDocument), [onDocument]);
+  return <div className="ledge-thread-md" data-markdown>
+    <Markdown remarkPlugins={[remarkGfm, remarkHighlight]} components={components}>{text}</Markdown>
   </div>;
 }

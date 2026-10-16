@@ -37,7 +37,6 @@ const UNESCAPED_PIPE = /(?<!\\)\|/;
 const QUOTE = /^\s*>\s?(.*)$/;
 const alignOf = (sep: string): Align => sep.startsWith(':') && sep.endsWith(':') ? 'center' : sep.endsWith(':') ? 'right' : 'left';
 const cells = (line: string) => line.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(UNESCAPED_PIPE).map(c => c.trim().replace(/\\\|/g, '|'));
-const TITLE_MAX = 110;
 const OPTION_MAX = 80;
 
 const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -268,8 +267,9 @@ export function parseReply(text: string, opts: { plan?: boolean } = {}): ReplyDo
   let title: string | undefined;
   let lead: string | undefined;
   const first = raw[0];
+  // Only a heading is a title. Since the thread became continuous (2026-10-14) the title sits above the whole thread,
+  // far from the reply: a plain first line taken out as the title (often the line that links the work) read as lost.
   if (first?.type === 'h') { title = first.text; raw.shift(); }
-  else if (first?.type === 'p' && raw.length > 1 && first.text.length <= TITLE_MAX && !/[:?？]$/.test(first.text) && raw[1]!.type !== 'code') { title = first.text; raw.shift(); }
   if (title && raw[0]?.type === 'p' && !isQuestion(raw[0].text)) { lead = raw[0].text; raw.shift(); }
 
   const sections: Section[] = [];

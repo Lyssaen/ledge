@@ -201,10 +201,15 @@ describe('parseReply', () => {
     const d = parseReply('**Laquelle préférez-vous ?** Dites-moi aussi le volume attendu.');
     expect(d.questions).toEqual([{ text: '**Laquelle préférez-vous ?** Dites-moi aussi le volume attendu.', options: [] }]);
   });
-  it('a short first line followed by more content is the title; a one-liner stays a paragraph', () => {
+  it('a plain first line is never taken out as the title: it stays the reply\'s first paragraph', () => {
     const d = parseReply('Done, the tests pass.\n\nI changed `a.ts` and `b.ts`.\n\n- a.ts: the fix\n- b.ts: its test');
-    expect(d.title).toBe('Done, the tests pass.');
-    expect(d.lead).toBe('I changed `a.ts` and `b.ts`.');
+    expect(d.title).toBeUndefined();
+    expect(d.lead).toBeUndefined();
+    expect(d.sections[0]!.blocks.slice(0, 2)).toEqual([{ type: 'p', text: 'Done, the tests pass.' }, { type: 'p', text: 'I changed `a.ts` and `b.ts`.' }]);
+    // The "payment" session: the link to the page was the first line, shown only in the header above the whole thread.
+    const link = parseReply('J\'ai documenté le mécanisme sur une page : https://claude.ai/artifact/AbCdEf0123456789xyzQrS\n\nLa page est privée.\n\nElle contient :\n- les deux entités');
+    expect(link.title).toBeUndefined();
+    expect(link.sections[0]!.blocks[0]).toEqual({ type: 'p', text: 'J\'ai documenté le mécanisme sur une page : https://claude.ai/artifact/AbCdEf0123456789xyzQrS' });
     const one = parseReply('I created the folder as asked.');
     expect(one.title).toBeUndefined();
     expect(one.structured).toBe(false);
@@ -234,7 +239,8 @@ describe('parseReply', () => {
   });
   it('reads a pipe table into a header and rows; cells keep inline markdown and escaped pipes', () => {
     const d = parseReply('Results\n\n| Suite | Result |\n|:---|---:|\n| overlay typecheck + `vitest` | pass |\n| a \\| b | 507 tests, 17 files, pass |\n\nDone.');
-    expect(d.title).toBe('Results');
+    expect(d.title).toBeUndefined();
+    expect(d.sections[0]!.blocks.shift()).toEqual({ type: 'p', text: 'Results' });
     expect(d.sections[0]!.blocks[0]).toEqual({ type: 'table', header: ['Suite', 'Result'], rows: [['overlay typecheck + `vitest`', 'pass'], ['a | b', '507 tests, 17 files, pass']], align: ['left', 'right'] });
     expect(d.sections[0]!.blocks[1]).toEqual({ type: 'p', text: 'Done.' });
     expect(d.structured).toBe(true);
@@ -246,8 +252,9 @@ describe('parseReply', () => {
   });
   it('quoted lines become a quote block with their own paragraphs and lists; a heading inside reads as a paragraph', () => {
     const d = parseReply('Note\n\n> Première ligne\n> suite\n>\n> - a\n> - b\n\nAprès.');
-    expect(d.sections[0]!.blocks[0]).toEqual({ type: 'quote', blocks: [{ type: 'p', text: 'Première ligne suite' }, { type: 'list', ordered: false, items: [{ text: 'a', sub: [] }, { text: 'b', sub: [] }] }] });
-    expect(d.sections[0]!.blocks[1]).toEqual({ type: 'p', text: 'Après.' });
+    expect(d.sections[0]!.blocks[0]).toEqual({ type: 'p', text: 'Note' });
+    expect(d.sections[0]!.blocks[1]).toEqual({ type: 'quote', blocks: [{ type: 'p', text: 'Première ligne suite' }, { type: 'list', ordered: false, items: [{ text: 'a', sub: [] }, { text: 'b', sub: [] }] }] });
+    expect(d.sections[0]!.blocks[2]).toEqual({ type: 'p', text: 'Après.' });
     expect(parseReply('> ## Titre\n> texte').sections[0]!.blocks[0]).toEqual({ type: 'quote', blocks: [{ type: 'p', text: 'Titre' }, { type: 'p', text: 'texte' }] });
     expect(parseReply('> Vraiment ?').questions).toHaveLength(0);
   });

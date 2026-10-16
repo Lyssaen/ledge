@@ -26,9 +26,12 @@ describe('<SessionView>', () => {
     expect(row).toHaveTextContent('Explore · Working');
     fireEvent.click(row);
     expect(onOpenHelper).toHaveBeenCalledWith('h1');
-    // The thread comes before the reply card and the ask fold.
+    // The helpers sit over the reply field, out of the scrolling thread, so a long thread never hides them.
     const helpersEl = container.querySelector('[data-helpers]')!; const threadEl = container.querySelector('[data-thread]')!;
-    expect(helpersEl.compareDocumentPosition(threadEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(threadEl.compareDocumentPosition(helpersEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.querySelector('[data-scroll]')).not.toContainElement(helpersEl as HTMLElement);
+    expect(container.querySelector('[data-reply-area]')).toContainElement(helpersEl as HTMLElement);
+    expect(helpersEl.compareDocumentPosition(container.querySelector('[data-reply]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // h1 ends: its row leaves, h2 stays; the live tool line is still the turn's last line, under what the agent said.
     rerender(<SessionView {...base} session={fakeSession('a', { state: 'working', helpers: [] })} thread={thread.map(i => (i.id === 'h1' ? { ...i, state: 'exited' as const } : i))} onOpenHelper={onOpenHelper} />);
     expect([...container.querySelectorAll('[data-helper]')].map(e => e.getAttribute('data-helper-id'))).toEqual(['h2']);
@@ -73,7 +76,7 @@ describe('<SessionView>', () => {
     expect(container.textContent).not.toMatch(/\d+ (done|question)/);
     expect(container.querySelector('[data-thread][data-empty]')).toBeInTheDocument();
   });
-  it('lists the live helpers under the title and keeps an idle parent "in progress" while one works', () => {
+  it('lists the live helpers over the reply field and keeps an idle parent "in progress" while one works', () => {
     const helpers = [
       { id: 'h0', kind: 'Explore', task: 'find reducer consumers', state: 'exited' as const },
       { id: 'h1', kind: 'general-purpose', task: 'review task 1', state: 'working' as const },
@@ -93,10 +96,30 @@ describe('<SessionView>', () => {
     expect(rows[1]!.querySelector('[data-helper-task]')).toBeEmptyDOMElement();
     expect(rows[1]).toHaveTextContent('Explore · Needs your approval');
     expect(rows[1]).toHaveAttribute('data-last', 'true');
+    // The tree grows up from the field: it opens on ┌, every other row branches off ├ towards the field below.
+    expect([...tree.querySelectorAll('[data-branch]')].map(e => e.textContent)).toEqual(['┌', '├']);
     expect(tree.querySelectorAll('svg')).toHaveLength(2);
     rerender(<SessionView {...base} session={fakeSession('a', { state: 'idle', helpers: helpers.map(h => ({ ...h, state: 'exited' as const })) })} />);
     expect(screen.queryByRole('list', { name: 'Subagents' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Waiting for your instructions.');
+  });
+  it('keeps the four latest helpers over the field and folds the older ones into a "+N more" line', () => {
+    const helpers = Array.from({ length: 6 }, (_, i) => ({ id: `h${i}`, kind: 'Explore', task: `task ${i}`, state: 'working' as const }));
+    render(<SessionView {...base} session={fakeSession('a', { state: 'working', helpers })} />);
+    const tree = screen.getByRole('list', { name: 'Subagents' });
+    expect([...tree.querySelectorAll('[data-helper]')].map(e => e.getAttribute('data-helper-id'))).toEqual(['h2', 'h3', 'h4', 'h5']);
+    expect(tree.querySelector('[data-helpers-more]')).toHaveTextContent('+2 more');
+    expect([...tree.querySelectorAll('[data-branch]')].map(e => e.textContent)).toEqual(['┌', '├', '├', '├', '├']);
+  });
+  it('a read-only session has no reply field: its helpers stay under the title, top-down', () => {
+    const helpers = [
+      { id: 'h1', kind: 'Explore', task: 'one', state: 'working' as const },
+      { id: 'h2', kind: 'Explore', task: 'two', state: 'working' as const }
+    ];
+    const { container } = render(<SessionView {...base} session={fakeSession('a', { state: 'working', source: 'hook_only', helpers })} />);
+    const tree = screen.getByRole('list', { name: 'Subagents' });
+    expect(container.querySelector('[data-scroll]')).toContainElement(tree);
+    expect([...tree.querySelectorAll('[data-branch]')].map(e => e.textContent)).toEqual(['├', '└']);
   });
   it('shows a permission card and sends the decision', () => {
     const onDecide = vi.fn();
@@ -107,7 +130,8 @@ describe('<SessionView>', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Deny' })); expect(onDecide).toHaveBeenCalledWith('deny');
     fireEvent.click(screen.getByRole('button', { name: 'Approve' })); expect(onDecide).toHaveBeenLastCalledWith('accept');
     expect(screen.getByRole('checkbox', { name: 'Always for this session' })).toBeDisabled();
-    expect(screen.getByText('Do you want to proceed?')).toBeInTheDocument();
+    // The terminal strip says what waits; its lines show on hover or in reading mode.
+    expect(document.querySelector('[data-terminal-band]')).toHaveAttribute('data-tone', 'approval');
   });
   it('a plan request shows the whole plan, rendered and scrollable, above its decision', () => {
     const body = '# Add Red Banner\n\n1. Create banner.html with a red banner.\n2. Check it renders red.\n\n## Verification\n\n- banner.html exists';
@@ -226,25 +250,25 @@ describe('<SessionView>', () => {
     const idle = fakeSession('c', { state: 'idle' });
     it('renders the lines as received, one per row, in a monospace wrapping block', () => {
       const lines = ['❯ list the files', '', '● Bash(ls src)', '  ⎿  client.ts'];
-      const { container } = render(<SessionView {...base} session={idle} preview={lines} />);
+      const { container } = render(<SessionView {...base} session={idle} preview={lines} reading />);
       const pre = container.querySelector('pre[data-terminal]') as HTMLElement;
       expect([...pre.children].map(c => c.textContent)).toEqual(['❯ list the files', ' ', '● Bash(ls src)', '  ⎿  client.ts']);
       expect(pre).toHaveClass('mono'); expect(pre).toHaveClass('ledge-scroll');
       expect(pre).toHaveStyle({ whiteSpace: 'pre-wrap' });
     });
     it('follows the latest line on update, but not while the user has scrolled up to read', () => {
-      const { container, rerender } = render(<SessionView {...base} session={idle} preview={['a']} />);
+      const { container, rerender } = render(<SessionView {...base} session={idle} preview={['a']} reading />);
       const pre = container.querySelector('pre[data-terminal]') as HTMLElement;
       const g = geometry(pre, 600);
-      rerender(<SessionView {...base} session={idle} preview={['a', 'b']} />);
+      rerender(<SessionView {...base} session={idle} preview={['a', 'b']} reading />);
       expect(g.top).toBe(600);
       pre.scrollTop = 100; fireEvent.scroll(pre);
       g.height = 700;
-      rerender(<SessionView {...base} session={idle} preview={['a', 'b', 'c']} />);
+      rerender(<SessionView {...base} session={idle} preview={['a', 'b', 'c']} reading />);
       expect(g.top).toBe(100);
       pre.scrollTop = 500; fireEvent.scroll(pre);
       g.height = 800;
-      rerender(<SessionView {...base} session={idle} preview={['a', 'b', 'c', 'd']} />);
+      rerender(<SessionView {...base} session={idle} preview={['a', 'b', 'c', 'd']} reading />);
       expect(g.top).toBe(800);
     });
     it('the conversation follows its end on each new item, but not while the user has scrolled up to read', () => {
@@ -265,15 +289,39 @@ describe('<SessionView>', () => {
       rerender(<SessionView {...base} session={working} thread={[msg(1), msg(2), msg(3), msg(4)]} />);
       expect(g.top).toBe(800);
     });
-    it('opening the collapsed preview scrolls it to its last line', () => {
-      const { container } = render(<SessionView {...base} session={perm} />);
-      const details = container.querySelector('details.ledge-terminal') as HTMLDetailsElement;
-      expect(details.open).toBe(false);
+    it('compact view: a strip with the latest line, the last 8 lines on hover, reading mode on click', () => {
+      const onToggleReading = vi.fn();
+      const lines = ['❯ run the tests', '', ...Array.from({ length: 9 }, (_, i) => `  ✓ suite ${i + 1}`), '', '❯'];
+      const { container } = render(<SessionView {...base} session={fakeSession('w', { state: 'working' })} preview={lines} onToggleReading={onToggleReading} />);
+      const band = container.querySelector('[data-terminal-band]') as HTMLElement;
+      expect(band).toHaveAttribute('data-tone', 'working');
+      expect(band.querySelector('[data-band-text]')).toHaveTextContent(/^✓ suite 9$/); // the bare prompt and blanks are skipped
+      expect(container.querySelector('[data-terminal-peek]')).toBeNull();
+      fireEvent.mouseEnter(band);
+      const peek = container.querySelector('[data-terminal-peek]') as HTMLElement;
+      expect(peek).toHaveTextContent('suite 4'); expect(peek).not.toHaveTextContent('suite 3');
+      fireEvent.mouseLeave(band);
+      expect(container.querySelector('[data-terminal-peek]')).toBeNull();
+      fireEvent.click(band);
+      expect(onToggleReading).toHaveBeenCalledTimes(1);
+    });
+    it('the strip takes the state: an approval names the command, an error reads red', () => {
+      const { container, rerender } = render(<SessionView {...base} session={perm} />);
+      const band = () => container.querySelector('[data-terminal-band]') as HTMLElement;
+      expect(band()).toHaveAttribute('data-tone', 'approval');
+      expect(band().querySelector('[data-band-text]')).toHaveTextContent(`Waiting for your approval · ${perm.pending!.text.split('\n')[0]}`);
+      rerender(<SessionView {...base} session={fakeSession('e', { state: 'error' })} />);
+      expect(band()).toHaveAttribute('data-tone', 'error');
+    });
+    it('reading mode: the terminal alongside, folded into a rail and reopened on its last line', () => {
+      const { container } = render(<SessionView {...base} session={perm} reading />);
+      expect(container.querySelector('[data-terminal-band]')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Fold the terminal' }));
+      expect(container.querySelector('pre[data-terminal]')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Reopen the terminal' }));
       const pre = container.querySelector('pre[data-terminal]') as HTMLElement;
-      const g = geometry(pre, 900);
-      pre.scrollTop = 0; fireEvent.scroll(pre);
-      details.open = true; fireEvent(details, new Event('toggle'));
-      expect(g.top).toBe(900);
+      expect(pre).toHaveTextContent('Do you want to proceed?');
+      expect(container.querySelector('[data-terminal-rail]')).toBeNull();
     });
   });
   describe('remove from list', () => {
