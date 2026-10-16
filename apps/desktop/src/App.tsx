@@ -18,6 +18,7 @@ import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { Pending } from './shell/Pending';
+import { Atelier } from './atelier/Atelier';
 import { Modal } from './shell/Modal';
 import { SearchPalette } from './shell/SearchPalette';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
@@ -84,9 +85,10 @@ function Shell({ client }: { client?: DaemonClient }) {
           <TopBar nav={nav} dispatch={dispatch} session={session} projects={projects} projectIdOf={projectIdOf} />
           {place.kind === 'settings' ? <Pending title={t.sections[place.section]} />
             : session ? <Pending title={taskOf(session)} />
+            : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} />
             : (
-              <div className="overview-scroll" id={`view-panel-${view}`} role="tabpanel" aria-labelledby={`view-tab-${view}`}>
-                <Pending title={view === 'list' ? t.crumb.list : t.crumb.atelier} />
+              <div className="overview-scroll" id="view-panel-list" role="tabpanel" aria-labelledby="view-tab-list">
+                <Pending title={t.crumb.list} />
               </div>
             )}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} />}

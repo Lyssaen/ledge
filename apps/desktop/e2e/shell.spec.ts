@@ -43,7 +43,7 @@ test('at 1000 px the top bar stays on one line with a long project name', async 
   await page.setViewportSize({ width: 1000, height: 700 });
   await fakeDaemon(page, eight, { projects: { projects: [{ id: 'ledge', name: 'Payment Service Platform Migration Europe', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] } });
   await page.goto('/');
-  await page.getByRole('button', { name: /Payment Service Platform/ }).click();
+  await page.locator('aside.sidebar').getByRole('button', { name: /Payment Service Platform/ }).click();   // the atelier's rug names the project too
   const full = 'Payment Service Platform Migration Europe';
   const banner = page.getByRole('banner');
   await expect(banner.getByText(/Payment Service Platform/)).toBeVisible();

@@ -50,7 +50,18 @@ const fr = {
     more: (n: number) => `+${n} à cette table`, moreTitle: 'Voir tous les agents du projet dans la liste',
     seat: (name: string, task: string, machine: string) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind: string, parent: string, task: string) => `${kind}, sous-agent de ${parent} : ${task}`,
-    offline: 'Hors ligne'
+    offline: 'Hors ligne',
+    desk: 'Parler à Ledge',
+    watching: (n: number) => plural(n, `Je veille sur ${n} agent.`, `Je veille sur ${n} agents.`),
+    listening: 'Je vous écoute.',
+    assistant: 'Votre assistant',
+    unassignedHint: 'Ledge ne relie ces sessions à aucun projet. Glissez-les vers une table, ou utilisez « Ranger dans… ».',
+    empty: {
+      title: (name: string) => `Aucun agent à la table ${name}`,
+      body: (where: string) => `La table apparaîtra dès qu'une session démarre dans ${where}.`,
+      noRepo: 'ce projet'
+    },
+    legend: { working: 'En cours', approval: 'Votre accord', question: 'Une question', done: 'Terminé ou hors ligne', helper: 'Un petit bot est un sous-agent.' }
   },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
@@ -104,7 +115,18 @@ const en: typeof fr = {
     more: (n) => `+${n} at this table`, moreTitle: 'See every agent of the project in the list',
     seat: (name, task, machine) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind, parent, task) => `${kind}, subagent of ${parent}: ${task}`,
-    offline: 'Offline'
+    offline: 'Offline',
+    desk: 'Talk to Ledge',
+    watching: (n) => pluralEn(n, `I'm watching over ${n} agent.`, `I'm watching over ${n} agents.`),
+    listening: "I'm listening.",
+    assistant: 'Your assistant',
+    unassignedHint: 'Ledge links these sessions to no project. Drag them onto a table, or use “Move to…”.',
+    empty: {
+      title: (name) => `No agent at the ${name} table`,
+      body: (where) => `The table will appear as soon as a session starts in ${where}.`,
+      noRepo: 'this project'
+    },
+    legend: { working: 'Running', approval: 'Your approval', question: 'A question', done: 'Done or offline', helper: 'A small bot is a subagent.' }
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },

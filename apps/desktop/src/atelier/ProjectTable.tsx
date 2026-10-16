@@ -30,7 +30,7 @@ export interface ProjectTableProps {
 }
 
 /** The machine an agent runs on: the fleet's label, else its id. */
-const machineOf = (s: Session): string => s.machineName ?? s.machineId ?? 'local';
+export const machineOf = (s: Session): string => s.machineName ?? s.machineId ?? 'local';
 const cls = (...names: (string | false | null | undefined)[]) => names.filter(Boolean).join(' ');
 
 /** The mockup's « … » glyph (observatory.tsx, room-heading). */
@@ -164,8 +164,8 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
             <button key={s.id} style={{ left: at(x - 56) }} data-agent={s.id} aria-label={t.atelier.seat(s.name, taskOf(s), machineOf(s))} onClick={() => dispatch({ type: 'open', id: s.id })}
               className={cls('agent-seat', `place-${side}`, seated === s.id && 'just-seated', focusedId === s.id && 'keyboard-selected', s.offline ? 'seat-offline' : state === 'working' && 'seat-working')}>
               {bot(s, 64)}
-              <strong>{s.name}{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>
-              <span className="seat-machine">{machineOf(s)}</span>
+              <strong title={s.name}>{s.name}{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>
+              <span className="seat-machine" title={machineOf(s)}>{machineOf(s)}</span>
               {s.offline ? <Badge state="readonly" label={t.atelier.offline} /> : <Badge state={state} />}
             </button>
           );
