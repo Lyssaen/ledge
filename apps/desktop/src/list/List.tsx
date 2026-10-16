@@ -4,7 +4,7 @@ import { PROJECT_COLORS, type Projects, type Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { Kbd } from '@ledge/ui/ui/Kbd';
-import { folderOf } from '../atelier/filing';
+import { folderOf, type Filing } from '../atelier/filing';
 import type { Decisions } from '../fleet/decisions';
 import { useI18n } from '../i18n/lang';
 import { useScreenKeys } from '../nav/screenKeys';
@@ -28,6 +28,8 @@ export interface ListProps {
   machines: readonly MachineState[];
   /** The quick Allow / Deny (App's useDecisions, shared with the session in lot 6). */
   decisions: Decisions;
+  /** Putting an agent away (lot 4), shared with the atelier and the sidebar. */
+  filing: Filing;
 }
 
 const toggle = (set: ReadonlySet<string>, key: string): Set<string> => {
@@ -39,13 +41,16 @@ const toggle = (set: ReadonlySet<string>, key: string): Set<string> => {
 /** The List (list.tsx, `SessionList`): every session as an aligned row, grouped by project, machine or state, what
  *  awaits a decision first in each group. Grouping and density are remembered (`desktop.list`); the text filter, the
  *  chip, the collapsed groups and the unfolded subagents live here and start over when the List unmounts. */
-export function List({ nav, dispatch, order, projects, projectIdOf, machines, decisions }: ListProps): JSX.Element {
+export function List({ nav, dispatch, order, projects, projectIdOf, machines, decisions, filing }: ListProps): JSX.Element {
   const { t } = useI18n();
   const [prefs, setPrefs] = useStored(loadListPrefs, saveListPrefs);
   const [text, setText] = useState('');
   const [chip, setChip] = useState<Chip>('all');
   // Group keys: a fleet update rebuilds the groups, never unfolds them.
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  // The row whose « Ranger dans… » menu is open; it goes when that agent leaves « Sans projet ».
+  const [moving, setMoving] = useState<string | null>(null);
+  useEffect(() => { if (moving !== null && !order.some(s => s.id === moving && projectIdOf(s) === null)) setMoving(null); }, [moving, order, projectIdOf]);
   const [toggled, setToggled] = useState<ReadonlySet<string>>(() => new Set());
 
   // The activity column: a clock refreshed every 30 s, and the start of each wait kept across PaneChanged refreshes.
@@ -172,10 +177,10 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines, de
         <ListToolbar barRef={barRef} inputRef={inputRef} onClear={clear} onFirst={() => { if (walk[0]) choose(walk[0].key); }} text={text} onText={setText} chip={chip} onChip={setChip} counts={model.counts}
           group={group} onGroup={g => setPrefs(p => ({ ...p, group: g }))} density={density} onDensity={d => setPrefs(p => ({ ...p, density: d }))} />
         {empty ?? model.groups.map(g => (
-          <ListGroup key={g.key} group={g} collapsed={collapsed.has(g.key)} filtering={model.filtering} onToggle={() => setCollapsed(s => toggle(s, g.key))} dispatch={dispatch}>
+          <ListGroup key={g.key} group={g} collapsed={collapsed.has(g.key)} filtering={model.filtering} onToggle={() => setCollapsed(s => toggle(s, g.key))} dispatch={dispatch} filing={filing}>
             {g.rows.map(r => (
               <ListRow key={r.key} row={r} selected={focusedId === r.key} onChoose={setFocusedId} group={group} density={density} text={text} now={now} waits={waits} projects={projects}
-                projectIdOf={projectIdOf} paused={nav.paused} dispatch={dispatch} onToggleKids={onToggleKids} decisions={decisions} />
+                projectIdOf={projectIdOf} paused={nav.paused} dispatch={dispatch} onToggleKids={onToggleKids} decisions={decisions} filing={filing} moving={moving} onMoving={setMoving} />
             ))}
           </ListGroup>
         ))}

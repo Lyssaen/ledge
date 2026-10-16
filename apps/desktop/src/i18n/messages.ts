@@ -93,6 +93,9 @@ const fr = {
       done: (n: number) => plural(n, `${n} terminé`, `${n} terminés`), offline: (n: number) => `${n} hors ligne`
     } as Record<Bucket, (n: number) => string>,
     unassignedHelp: 'Glissez vers un projet, ou « Ranger dans… ».',
+    grip: 'Glisser vers un projet',
+    dropHelp: 'Déposez sur un projet de la barre latérale ou sur son groupe.',
+    dropNow: (name: string) => `Lâcher pour ranger ${name}`,
     row: (name: string, task: string, state: string, ctx: string) => `${name}, ${task}, ${state}, ${ctx}`,
     kids: {
       show: (n: number) => plural(n, `Afficher ${n} sous-agent`, `Afficher ${n} sous-agents`),
@@ -213,6 +216,9 @@ const en: typeof fr = {
     newSessionIn: (name) => `New session in ${name}`,
     tally: { decide: (n) => `${n} to decide`, running: (n) => `${n} running`, done: (n) => `${n} done`, offline: (n) => `${n} offline` },
     unassignedHelp: 'Drag onto a project, or use “Move to…”.',
+    grip: 'Drag onto a project',
+    dropHelp: 'Drop on a project in the sidebar or on its group.',
+    dropNow: (name) => `Drop to move ${name}`,
     row: (name, task, state, ctx) => `${name}, ${task}, ${state}, ${ctx}`,
     kids: {
       show: (n) => pluralEn(n, `Show ${n} subagent`, `Show ${n} subagents`),

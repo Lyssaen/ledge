@@ -1,15 +1,14 @@
 import { useEffect, useState, type JSX } from 'react';
 import type { Project, Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
-import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
 import { SHELL_ICONS } from '../shell/icons';
-import { Menu, MenuItem } from '../shell/Menu';
 import { SessionBot, StateBadge } from '../shell/SessionBot';
-import { folderOf, type Filing } from './filing';
+import type { Filing } from './filing';
+import { MoveTo } from './MoveTo';
 import { machineOf } from '../nav/agents';
 
 /** « Sans projet » (observatory.tsx, `unassigned-zone` in atelier mode): the agents Ledge ties to no project wait in a
@@ -49,22 +48,7 @@ export function Unassigned({ sessions, order, focusedId, paused, dispatch, filin
               <div className="unassigned-actions">
                 <StateBadge state={botState(s)} offline={!!s.offline} />
                 <span className="spacer" />
-                <Menu open={open} onOpenChange={o => setAssigning(o ? s.id : null)} label={t.filing.moveTo} className="assign-wrap" menuClassName="assign-menu"
-                  trigger={tr => (
-                    <Button variant="outline" size="sm" {...tr}>
-                      <Icon d={ICONS.folder.d} size={13} />{t.filing.moveTo}
-                    </Button>
-                  )}>
-                  {projects.map(p => (
-                    <MenuItem key={p.id} onSelect={() => filing.file(s, p.id)}>
-                      {p.name}<small>{p.repos.map(r => folderOf(r.path)).join(' · ')}</small>
-                    </MenuItem>
-                  ))}
-                  <MenuItem className="assign-new" onSelect={() => dispatch({ type: 'modal', modal: { kind: 'project', file: s.id } })}>
-                    <span><Icon d={ICONS.plus.d} size={12} />{t.filing.newProject}</span>
-                    <small>{t.filing.from(s.cwd)}</small>
-                  </MenuItem>
-                </Menu>
+                <MoveTo session={s} projects={projects} filing={filing} dispatch={dispatch} open={open} onOpenChange={o => setAssigning(o ? s.id : null)} className="assign-wrap" />
               </div>
             </div>
           );

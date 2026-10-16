@@ -4,6 +4,8 @@ import { botState } from '@ledge/ui/bots/poseFor';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { Kbd } from '@ledge/ui/ui/Kbd';
+import type { Filing } from '../atelier/filing';
+import { MoveTo } from '../atelier/MoveTo';
 import { helperState } from '../atelier/layout';
 import type { Decisions } from '../fleet/decisions';
 import { useI18n } from '../i18n/lang';
@@ -47,12 +49,16 @@ export interface ListRowProps {
   onToggleKids: (id: string) => void;
   /** Allow / Deny: in flight, just landed. */
   decisions: Decisions;
+  filing: Filing;
+  /** The row whose « Ranger dans… » menu is open (a row key). */
+  moving: string | null;
+  onMoving: (key: string | null) => void;
 }
 
 /** One row of the List (list.tsx, `row`): bot, name (and the subagents' count), task and repository, badge, machine
  *  (or project when grouped by machine), activity. A subagent's row sits under its parent: its parent's machine, no clock
  *  of its own, and opening it opens the parent's session. */
-export function ListRow({ row, selected, onChoose, group, density, text, now, waits, projects, projectIdOf, paused, dispatch, onToggleKids, decisions }: ListRowProps): JSX.Element {
+export function ListRow({ row, selected, onChoose, group, density, text, now, waits, projects, projectIdOf, paused, dispatch, onToggleKids, decisions, filing, moving, onMoving }: ListRowProps): JSX.Element {
   const { t } = useI18n();
   const session = row.kind === 'main' ? row.session : row.parent;
   const helper = row.kind === 'helper' ? row.helper : null;
@@ -73,11 +79,17 @@ export function ListRow({ row, selected, onChoose, group, density, text, now, wa
   // A subagent's row only opens its parent; offline, read-only or a plan to review: only « Ouvrir » too.
   const quick = helper ? { decide: false, reply: false } : quickActions(session);
   const busy = decisions.busy(session.id);
+  // An agent of « Sans projet »: it drags onto a project's group, or « Ranger dans… » files it.
+  const loose = row.kind === 'main' && id === null;
+  const menuOpen = loose && moving === row.key;
+  const drag = loose ? filing.dragProps(session) : null;
   const openSession = () => dispatch({ type: 'open', id: session.id });
 
   return (
     <div role="listitem" tabIndex={0} data-agent={row.key} aria-label={label} onClick={open} onFocus={() => onChoose(row.key)}
-      className={cls('lrow', selected && 'keyboard-selected', `b-${bucket}`, `s-${state}`, helper && 'child', row.kind === 'helper' && row.last && 'last', row.kind === 'main' && row.context && 'context', !helper && decisions.landed === session.id && 'flash')}>
+      {...drag} onDragStart={drag ? e => { onMoving(null); drag.onDragStart(e); } : undefined}
+      className={cls('lrow', loose && filing.dragging?.id === session.id && 'is-dragged', menuOpen && 'menu-open', selected && 'keyboard-selected', `b-${bucket}`, `s-${state}`, helper && 'child', row.kind === 'helper' && row.last && 'last', row.kind === 'main' && row.context && 'context', !helper && decisions.landed === session.id && 'flash')}>
+      {loose && <span className="drag-grip" title={t.list.grip} aria-hidden="true"><i /><i /><i /><i /><i /><i /></span>}
       <span className="r-bot">{helper ? <HelperBot helper={helper} parent={session} size={size} paused={paused} /> : <SessionBot session={session} size={size} paused={paused} />}</span>
       <span className="r-name">
         <strong><Hl text={name} q={text} /></strong>
@@ -105,8 +117,9 @@ export function ListRow({ row, selected, onChoose, group, density, text, now, wa
         </>}
         {/* Lot 6 puts the focus on the reply. */}
         {quick.reply && <Button variant="primary" size="sm" onClick={openSession}>{t.list.reply}</Button>}
+        {loose && <MoveTo session={session} projects={projects?.projects ?? []} filing={filing} dispatch={dispatch} open={menuOpen} onOpenChange={o => onMoving(o ? row.key : null)} className="lrow-menu assign-wrap" flip />}
         <Button variant="ghost" size="sm" className="r-open" title={t.list.openTitle} onClick={openSession}>
-          {t.list.open}{!(quick.decide || quick.reply) && <Kbd>{t.list.enter}</Kbd>}
+          {t.list.open}{!(quick.decide || quick.reply || loose) && <Kbd>{t.list.enter}</Kbd>}
         </Button>
       </span>
     </div>

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import type { Filing } from '../src/atelier/filing';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
@@ -23,6 +24,9 @@ const row = (name: string) => screen.getByRole('listitem', { name: new RegExp(`^
 const head = (name: string) => within(document.querySelector<HTMLElement>(`.lgroup[aria-label="${name}"] .lgroup-head`)!);
 const decisions: Decisions = { busy: () => false, landed: null, decide: () => false };
 const chip = (name: RegExp) => within(screen.getByRole('group', { name: 'Filter by state' })).getByRole('button', { name });
+
+/** A filing that never drags. */
+const idle: Filing = { dragging: null, over: null, seated: null, dragProps: () => ({ draggable: true, onDragStart() {}, onDragEnd() {} }), dropProps: () => ({ onDragOver() {}, onDragLeave() {}, onDrop() {} }), file() {} };
 
 describe('the List', () => {
   it('groups by project, Sans projet last, what waits first in its group, with its stripe', async () => {
@@ -241,7 +245,7 @@ describe('the List', () => {
     render(
       <LangProvider lang="fr">
         <List nav={initialNav({ view: 'list', helpers: true, paused: false })} dispatch={dispatch} order={order} projects={PROJECTS}
-          projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} decisions={decisions} />
+          projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} decisions={decisions} filing={idle} />
       </LangProvider>
     );
     expect(document.querySelector('.list-foot')).toHaveTextContent('JK parcourir · Entrée ouvrir · F filtrer · les demandes en attente passent en tête de chaque groupe.');
@@ -266,7 +270,7 @@ describe('the List', () => {
   });
   it('no session at all: New session launches without a project', async () => {
     const dispatch = vi.fn();
-    render(<List nav={initialNav({ view: 'list', helpers: true, paused: false })} dispatch={dispatch} order={[]} projects={PROJECTS} projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} decisions={decisions} />);
+    render(<List nav={initialNav({ view: 'list', helpers: true, paused: false })} dispatch={dispatch} order={[]} projects={PROJECTS} projectIdOf={x => projectOf(x, PROJECTS)} machines={[]} decisions={decisions} filing={idle} />);
     await userEvent.setup().click(screen.getByRole('button', { name: 'New session' }));
     expect(dispatch).toHaveBeenLastCalledWith({ type: 'modal', modal: { kind: 'launch' } });
   });
