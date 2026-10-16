@@ -30,6 +30,8 @@
 .side-dots .dot-question{background:var(--warning);box-shadow:0 0 0 2px color-mix(in srgb,var(--warning) 30%,transparent)}
 .side-dots .dot-done{background:var(--muted-foreground);opacity:.5}
 .side-dots .dot-offline{background:none;border:1px solid var(--muted-foreground);opacity:.7}
+/* Not in the mockup: an agent in error is red like its badge, without the halo that marks an approval. */
+.side-dots .dot-error{background:var(--danger-text)}
 .side-unassigned{border:1px dashed transparent}
 .side-unassigned:not(.active){border-color:var(--border)}
 .side-alert{width:6px;height:6px;border-radius:50%;background:var(--warning)}

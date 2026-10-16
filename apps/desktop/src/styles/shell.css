@@ -96,6 +96,9 @@
 /* settings.css: the crumb link's size and corners. */
 .crumb-link { font-size: 12px; color: var(--muted-foreground); border-radius: 4px; }
 .crumb-link:hover { color: var(--foreground); }
+/* Not in the mockup (spec: long names end with « … », the top bar never wraps): a crumb link keeps one line up to 180 px,
+   with its full name in `title`, and does not shrink, so the session's task gives way first. */
+.breadcrumb .crumb-link { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 180px; flex-shrink: 0; }
 
 /* launch.css: the dialog widths and the chat panel. */
 .modal.composer-modal { width: 640px; }
