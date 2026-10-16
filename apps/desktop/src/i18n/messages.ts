@@ -1,6 +1,6 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
-import type { Bucket } from '../list/model';
+import type { Bucket, GroupBy } from '../list/model';
 
 /** French counts 0 and 1 as singular, English only 1. */
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -81,6 +81,34 @@ const fr = {
   },
   list: {
     buckets: { decide: 'À décider', running: 'En cours', done: 'Terminés', offline: 'Hors ligne' } as Record<Bucket, string>,
+    filter: 'Filtrer les sessions', filterPlaceholder: 'Agent, tâche, machine, dépôt…', clearFilter: 'Effacer le filtre',
+    chips: 'Filtrer par état', all: 'Tous',
+    groupBy: 'Grouper par', groupLabel: 'Grouper', groups: { project: 'Projet', machine: 'Machine', state: 'État' } as Record<GroupBy, string>,
+    comfy: 'Lignes confortables', tight: 'Lignes compactes',
+    collapse: (name: string) => `Replier ${name}`, expand: (name: string) => `Déplier ${name}`, only: (name: string) => `Voir seulement ${name}`,
+    branch: (b: string) => `Branche ${b}`,
+    newSessionIn: (name: string) => `Nouvelle session dans ${name}`,
+    tally: {
+      decide: (n: number) => `${n} à décider`, running: (n: number) => `${n} en cours`,
+      done: (n: number) => plural(n, `${n} terminé`, `${n} terminés`), offline: (n: number) => `${n} hors ligne`
+    } as Record<Bucket, (n: number) => string>,
+    unassignedHelp: 'Glissez vers un projet, ou « Ranger dans… ».',
+    row: (name: string, task: string, state: string, ctx: string) => `${name}, ${task}, ${state}, ${ctx}`,
+    kids: {
+      show: (n: number) => plural(n, `Afficher ${n} sous-agent`, `Afficher ${n} sous-agents`),
+      hide: (n: number) => plural(n, `Masquer ${n} sous-agent`, `Masquer ${n} sous-agents`),
+      count: (n: number) => plural(n, `${n} sous-agent`, `${n} sous-agents`)
+    },
+    empty: {
+      projectTitle: (name: string) => `Aucune session dans ${name}`,
+      projectBody: (where: string) => `Le projet se remplira dès qu’une session démarre dans ${where}.`,
+      noneTitle: 'Aucune session', noneBody: 'Lancez une session pour la voir ici.',
+      noMatch: 'Aucune session ne correspond', clear: 'Effacer les filtres',
+      /** `chip`: the chosen chip's label in lower case, null for « Tous ». */
+      noMatchBody: (q: string, chip: string | null) => (q && chip ? `Rien pour « ${q} » parmi les sessions « ${chip} ».` : q ? `Rien pour « ${q} ».` : `Rien parmi les sessions « ${chip} ».`)
+    },
+    foot: { walk: 'parcourir', open: 'ouvrir', filter: 'filtrer', note: 'les demandes en attente passent en tête de chaque groupe.' },
+    enter: 'Entrée',
     when: {
       now: 'à l’instant', wait: (d: string) => `depuis ${d}`, ago: (d: string) => `il y a ${d}`,
       requestNow: 'Demande reçue à l’instant', waitTitle: (d: string) => `En attente depuis ${d}`,
@@ -171,6 +199,30 @@ const en: typeof fr = {
   },
   list: {
     buckets: { decide: 'To decide', running: 'Running', done: 'Done', offline: 'Offline' },
+    filter: 'Filter the sessions', filterPlaceholder: 'Agent, task, machine, repository…', clearFilter: 'Clear the filter',
+    chips: 'Filter by state', all: 'All',
+    groupBy: 'Group by', groupLabel: 'Group', groups: { project: 'Project', machine: 'Machine', state: 'State' },
+    comfy: 'Comfortable rows', tight: 'Compact rows',
+    collapse: (name) => `Collapse ${name}`, expand: (name) => `Expand ${name}`, only: (name) => `Show only ${name}`,
+    branch: (b) => `Branch ${b}`,
+    newSessionIn: (name) => `New session in ${name}`,
+    tally: { decide: (n) => `${n} to decide`, running: (n) => `${n} running`, done: (n) => `${n} done`, offline: (n) => `${n} offline` },
+    unassignedHelp: 'Drag onto a project, or use “Move to…”.',
+    row: (name, task, state, ctx) => `${name}, ${task}, ${state}, ${ctx}`,
+    kids: {
+      show: (n) => pluralEn(n, `Show ${n} subagent`, `Show ${n} subagents`),
+      hide: (n) => pluralEn(n, `Hide ${n} subagent`, `Hide ${n} subagents`),
+      count: (n) => pluralEn(n, `${n} subagent`, `${n} subagents`)
+    },
+    empty: {
+      projectTitle: (name) => `No session in ${name}`,
+      projectBody: (where) => `The project will fill as soon as a session starts in ${where}.`,
+      noneTitle: 'No session', noneBody: 'Start a session to see it here.',
+      noMatch: 'No session matches', clear: 'Clear the filters',
+      noMatchBody: (q, chip) => (q && chip ? `Nothing for “${q}” among the “${chip}” sessions.` : q ? `Nothing for “${q}”.` : `Nothing among the “${chip}” sessions.`)
+    },
+    foot: { walk: 'browse', open: 'open', filter: 'filter', note: 'pending requests come first in each group.' },
+    enter: 'Enter',
     when: {
       now: 'just now', wait: (d) => `for ${d}`, ago: (d) => `${d} ago`,
       requestNow: 'Request received just now', waitTitle: (d) => `Waiting for ${d}`,

@@ -167,10 +167,12 @@ describe('the atelier', () => {
     await user.click(side.getByRole('button', { name: /^Docs/ }));
     expect(document.querySelector('.empty-project')).toHaveTextContent('The table will appear as soon as a session starts in docs.');
   });
-  it('the List view is still pending', async () => {
+  it('the List tab shows the list', async () => {
     const { user } = await boot();
     await user.click(screen.getByRole('tab', { name: 'List' }));
-    expect(screen.getByRole('region', { name: 'List' })).toBeVisible();
+    expect(screen.getByRole('tabpanel', { name: 'List' })).toBeVisible();
+    expect(document.querySelector('.list-view')).not.toBeNull();
+    expect(screen.queryByText('This screen is coming soon.')).toBeNull();
     expect(document.querySelector('.office-shell')).toBeNull();
   });
 });

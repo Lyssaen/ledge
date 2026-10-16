@@ -19,6 +19,7 @@ import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { Pending } from './shell/Pending';
 import { Atelier } from './atelier/Atelier';
+import { List } from './list/List';
 import { Modal } from './shell/Modal';
 import { SearchPalette } from './shell/SearchPalette';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
@@ -30,7 +31,7 @@ import { useFiling } from './atelier/filing';
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
 const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'reconcile' ? reconcile(s, a.sessions, a.projects) : navReducer(s, a));
 
-/** The Atelier's shell: sidebar, top bar, the current place (each screen waits for its lot), footer, chat and dialogs;
+/** The Atelier's shell: sidebar, top bar, the current place (the atelier, the List; the other screens wait for their lot), footer, chat and dialogs;
  *  the real fleet, toasts and sounds, and the tray. */
 function Shell({ client }: { client?: DaemonClient }) {
   const { sessions, machines, status, localDown, fleet, client: fleetClient } = useFleet(client);
@@ -91,11 +92,7 @@ function Shell({ client }: { client?: DaemonClient }) {
           {place.kind === 'settings' ? <Pending title={t.sections[place.section]} />
             : session ? <Pending title={taskOf(session)} />
             : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
-            : (
-              <div className="overview-scroll" id="view-panel-list" role="tabpanel" aria-labelledby="view-tab-list">
-                <Pending title={t.crumb.list} />
-              </div>
-            )}
+            : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} />}
         </section>
         {nav.chat && (

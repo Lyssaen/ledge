@@ -10,6 +10,7 @@ import type { Projects, Session } from '@ledge/protocol';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
+import { activeCount } from '../src/nav/agents';
 
 /** jsdom loads no stylesheet: the declarations of the top-level rules naming `selector` in one of the app's sheets (@media and @container blocks removed). */
 export function declarations(sheet: string, selector: string): string {
@@ -41,6 +42,20 @@ export const DEFAULT_SESSIONS: Session[] = [
   fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input' })
 ];
 
+/** La Liste du lot 5 : Otto (Ledge, permission, depuis 12 min, branche desktop, un sous-agent Explore « Lire le code »), Bix (Ledge, terminé, il y a 90 min),
+ *  Rio (Ledge, hors ligne, il y a 3 jours), Nova (pay, au travail, il y a 3 min), Kit (/tmp, question, à l'instant). Heures relatives à l'appel. */
+export function listSessions(): Session[] {
+  const now = Date.now();
+  const ago = (min: number) => new Date(now - min * 60_000).toISOString();
+  return [
+    fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' }, lastActivityAt: ago(12), branch: 'desktop', topic: 'Câbler la liste', helpers: [{ id: 'h1', kind: 'Explore', task: 'Lire le code', state: 'working' }] }),
+    fakeSession('bix', { name: 'Bix', cwd: '/w/ledge', state: 'exited', lastActivityAt: ago(90), topic: 'Relire la PR' }),
+    fakeSession('rio', { name: 'Rio', cwd: '/w/ledge', state: 'working', offline: true, lastActivityAt: ago(3 * 24 * 60), topic: 'Migrer la base' }),
+    fakeSession('nova', { name: 'Nova', cwd: '/w/pay', state: 'working', lastActivityAt: ago(3), topic: 'Payer en euros' }),
+    fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input', pending: { kind: 'question', text: 'Quel port ?', source: 'hook' }, lastActivityAt: ago(0), topic: 'Essayer une idée' })
+  ];
+}
+
 export type MockDaemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: MockDaemon[] = [];
 
@@ -50,7 +65,8 @@ export async function closeDaemons(): Promise<void> {
 }
 
 /** Mounts the app on a mock daemon (machines Local and Dev SSH). `list` writes `desktop.overview` on the List before rendering.
- *  Ready once the last project's row is in the sidebar and, with sessions, the first one's name is shown. */
+ *  Ready once the Atelier counter shows the active sessions, the last project's row is in the sidebar and, with sessions,
+ *  the first one is shown (its seat in the atelier, its row in the List). */
 export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false }: { sessions?: Session[]; projects?: Projects; list?: boolean } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
   const d = await createMockDaemon(); daemons.push(d);
   d.machines([{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }]);
@@ -60,9 +76,9 @@ export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, l
   const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
   const view = render(createElement(App as ComponentType<{ client?: DaemonClient }>, { client }));
   const side = within(await screen.findByRole('complementary', { name: /sidebar/i }));
-  await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(sessions.length)));
+  await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(sessions))));
   const last = projects.projects[projects.projects.length - 1]!;
   await side.findByRole('button', { name: new RegExp(`^${last.name}`) });
-  if (sessions.length > 0) await screen.findByRole('button', { name: new RegExp(`^${sessions[0]!.name},`) });
+  if (sessions.length > 0) await screen.findByRole(list ? 'listitem' : 'button', { name: new RegExp(`^${sessions[0]!.name},`) });
   return { d, side, view, client, user: userEvent.setup() };
 }

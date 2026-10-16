@@ -37,7 +37,7 @@ describe('the Atelier shell', () => {
   it('the view tabs switch Atelier / List and the choice survives a remount', async () => {
     const { view, user, client } = await boot({ projects: TWO_PROJECTS });
     await user.click(screen.getByRole('tab', { name: 'List' }));
-    expect(screen.getByRole('region', { name: 'List' })).toBeVisible();      // Pending
+    expect(screen.getByRole('tabpanel', { name: 'List' })).toBeVisible();
     expect(JSON.parse(localStorage.getItem('desktop.overview')!)).toMatchObject({ view: 'list' });
     view.unmount();
     render(<App client={client} />);
@@ -49,7 +49,7 @@ describe('the Atelier shell', () => {
     screen.getByRole('tab', { name: 'Atelier' }).focus();
     await user.keyboard('{ArrowRight}');
     expect(screen.getByRole('tab', { name: 'List' })).toHaveFocus();
-    expect(screen.getByRole('region', { name: 'List' })).toBeVisible();
+    expect(screen.getByRole('tabpanel', { name: 'List' })).toBeVisible();
   });
 
   it('helpers and animation toggles are pressed buttons, remembered', async () => {
