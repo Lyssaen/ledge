@@ -149,7 +149,7 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines, de
       );
     }
     if (model.groups.length > 0) return null;
-    if (model.total === 0) {
+    if (model.total === 0 && !(filter === 'none' && order.length > 0)) {
       return (
         <div className="list-empty">
           <Icon d={SHELL_ICONS.search} size={20} />
@@ -163,7 +163,7 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines, de
       <div className="list-empty">
         <Icon d={SHELL_ICONS.search} size={20} />
         <h2>{t.list.empty.noMatch}</h2>
-        <p className="muted">{t.list.empty.noMatchBody(text.trim(), chip === 'all' ? null : t.list.buckets[chip].toLowerCase())}</p>
+        <p className="muted">{t.list.empty.noMatchBody(text.trim(), chip === 'all' ? null : t.list.buckets[chip].toLowerCase(), filter === 'none' ? t.side.unassigned : null)}</p>
         <Button onClick={clear}>{t.list.empty.clear}</Button>
       </div>
     );

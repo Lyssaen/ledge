@@ -107,8 +107,8 @@ const fr = {
       projectBody: (where: string) => `Le projet se remplira dès qu’une session démarre dans ${where}.`,
       noneTitle: 'Aucune session', noneBody: 'Lancez une session pour la voir ici.',
       noMatch: 'Aucune session ne correspond', clear: 'Effacer les filtres',
-      /** `chip`: the chosen chip's label in lower case, null for « Tous ». */
-      noMatchBody: (q: string, chip: string | null) => (q && chip ? `Rien pour « ${q} » parmi les sessions « ${chip} ».` : q ? `Rien pour « ${q} ».` : `Rien parmi les sessions « ${chip} ».`)
+      /** `chip`: the chosen chip's label in lower case, null for « Tous ». `none`: « Sans projet » when that project filter is on and nothing else narrows the List. */
+      noMatchBody: (q: string, chip: string | null, none: string | null = null) => (!q && !chip && none ? `Rien dans « ${none} ».` : q && chip ? `Rien pour « ${q} » parmi les sessions « ${chip} ».` : q ? `Rien pour « ${q} ».` : `Rien parmi les sessions « ${chip} ».`)
     },
     foot: { walk: 'parcourir', open: 'ouvrir', filter: 'filtrer', note: 'les demandes en attente passent en tête de chaque groupe.' },
     enter: 'Entrée',
@@ -230,7 +230,7 @@ const en: typeof fr = {
       projectBody: (where) => `The project will fill as soon as a session starts in ${where}.`,
       noneTitle: 'No session', noneBody: 'Start a session to see it here.',
       noMatch: 'No session matches', clear: 'Clear the filters',
-      noMatchBody: (q, chip) => (q && chip ? `Nothing for “${q}” among the “${chip}” sessions.` : q ? `Nothing for “${q}”.` : `Nothing among the “${chip}” sessions.`)
+      noMatchBody: (q, chip, none) => (!q && !chip && none ? `Nothing in “${none}”.` : q && chip ? `Nothing for “${q}” among the “${chip}” sessions.` : q ? `Nothing for “${q}”.` : `Nothing among the “${chip}” sessions.`)
     },
     foot: { walk: 'browse', open: 'open', filter: 'filter', note: 'pending requests come first in each group.' },
     enter: 'Enter',

@@ -95,6 +95,14 @@ describe('the List', () => {
     expect(rowsOf('Ledge')).toEqual(['Otto']);
     expect(head('Ledge').getByText('1/3')).toHaveClass('g-count');
   });
+  it('the Sans projet filter on with no loose session left: the empty state names Sans projet, not « No session / Start a session »', async () => {
+    const { d, side, user } = await boot({ sessions: listSessions(), list: true });
+    await user.click(side.getByRole('button', { name: /^No project/ }));
+    d.upsert(fakeSession('kit', { name: 'Kit', cwd: '/w/ledge', state: 'waiting_input' }));
+    expect(await screen.findByRole('heading', { name: 'No session matches' })).toBeVisible();
+    expect(screen.getByText('Nothing in “No project”.')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'No session' })).toBeNull();
+  });
   it('filters combined down to nothing: the empty state names them, Clear keeps the project filter, the chosen chip stays', async () => {
     const { side, user } = await boot({ sessions: listSessions(), list: true });
     await user.click(side.getByRole('button', { name: /^Ledge/ }));
