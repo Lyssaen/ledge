@@ -1,5 +1,5 @@
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { ClientMessage, DaemonInfo, Machines, Recent, Session } from '@ledge/protocol';
+import type { ClientMessage, DaemonInfo, Machines, Projects, Recent, Session } from '@ledge/protocol';
 
 export const T0 = new Date(Date.now() - 5 * 60_000).toISOString();
 /** A local daemon that can route the chat between machines (spec 2026-10-14 §5.3): the fleet coordinates through it. */
@@ -11,10 +11,11 @@ export function session(id: string, extra: Partial<Session> = {}): Session {
 /** Simulates the local ledge daemon inside the page: a snapshot, then the machines list, and a `push` for later updates.
  *  Like the daemon (spec §5.3) it keeps the machines list: `machines.set` replaces it and is broadcast back as `machines`,
  *  and every new connection (reload, reconnect) gets the current list. The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects } = {}) {
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
   let machines: Machines = extras.machines ?? [{ id: 'local', label: 'Local' }];
+  let projects: Projects | undefined = extras.projects;
   let socket: WebSocketRoute | null = null;
   let up = true;
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
@@ -22,10 +23,12 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     socket = ws;
     ws.send(JSON.stringify({ type: 'snapshot', sessions: [...sessions.values()], ...(extras.launcher ? { launcher: extras.launcher } : {}), ...(extras.recents ? { recents: extras.recents } : {}), ...(extras.daemon ? { daemon: extras.daemon } : {}) }));
     ws.send(JSON.stringify({ type: 'machines', machines }));
+    if (projects) ws.send(JSON.stringify({ type: 'projects', projects }));
     ws.onMessage(m => {
       let msg: ClientMessage;
       try { msg = JSON.parse(String(m)); } catch { return; }
       received.push(msg);
+      if (msg.type === 'projects.set') { projects = msg.projects; ws.send(JSON.stringify({ type: 'projects', projects })); }
       if (msg.type === 'machines.set') { machines = msg.machines; ws.send(JSON.stringify({ type: 'machines', machines })); }
     });
   });
