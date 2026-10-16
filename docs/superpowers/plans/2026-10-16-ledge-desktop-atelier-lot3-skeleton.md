@@ -181,7 +181,7 @@ it('settings remember where they were opened from; a section change keeps it', (
 it('escape closes one layer at a time: modal, chat, settings, session, filter, fullscreen', () => {
   let s = navReducer(s0, { type: 'home', project: 'ledge' });
   s = navReducer(s, { type: 'open', id: 'local:otto' });
-  s = navReducer(navReducer(navReducer(navReducer(s, { type: 'fullscreen', on: true }), { type: 'chat' }), { type: 'settings' }), { type: 'modal', modal: 'search' });
+  s = navReducer(navReducer(navReducer(navReducer(s, { type: 'fullscreen', on: true }), { type: 'settings' }), { type: 'chat' }), { type: 'modal', modal: 'search' });
   const steps: NavState[] = [];
   for (let i = 0; i < 7; i++) { s = navReducer(s, { type: 'escape' }); steps.push(s); }
   expect(steps.map(x => [x.modal, x.chat, x.place.kind, x.place.kind !== 'settings' ? x.place.project : '-', x.fullscreen])).toEqual([
