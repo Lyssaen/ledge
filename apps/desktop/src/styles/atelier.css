@@ -1,0 +1,210 @@
+/* The atelier, ported from the frozen mockup with its selectors unchanged (docs/mockups/desktop-observatory).
+   Two intended differences: the project colour comes from `--project` on `.project-room` (no `[data-project=…]` rules),
+   and the rejected decorations (wall, window, shelf, clock, cup, office/room plants, table conversations, room footer)
+   are never ported (spec § 2.1). */
+
+/* observatory.css, line 3: the room, its heading, the scene, the table and the seats. */
+.project-room{min-width:0;border:1px solid var(--border);border-radius:var(--radius-xl);background:var(--sidebar);overflow:hidden}
+.room-heading{display:flex;align-items:center;padding:13px 16px;gap:8px;border-bottom:1px solid var(--border);font-size:12px}
+.room-heading>svg{color:var(--muted-foreground)}
+.room-heading strong{font-weight:500}
+.table-scene{height:432px;position:relative;background:var(--sidebar)}
+.worktable{position:absolute;top:158px;left:13%;right:13%;height:122px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:var(--secondary);border:1px solid var(--input);border-radius:60px;box-shadow:0 6px 0 var(--well),0 7px 0 var(--border)}
+.worktable>svg{color:var(--muted-foreground);width:16px;height:16px}
+.worktable strong{font-size:15px;font-weight:500}
+.worktable>span{font-size:10px;color:var(--muted-foreground)}
+.agent-seat{position:absolute;width:130px;display:flex;flex-direction:column;align-items:center;border-radius:var(--radius-md);padding:4px 2px;gap:2px;z-index:1}
+.agent-seat:hover{background:var(--sidebar-accent)}
+.agent-seat>strong{font-size:13px;font-weight:500;line-height:19px}
+.seat-meta{font-size:10px;line-height:16px;color:var(--muted-foreground);margin-bottom:2px}
+.helper-seat{width:90px}
+.helper-seat>strong{font-size:11px;line-height:16px}
+.helper-seat .seat-meta{font-size:10px}
+
+/* The table's « … » menu (observatory.css line 3 `.icon-action`; office.css lines 2 and 41-44; projects.css lines 92-98, 119). */
+.icon-action{display:inline-flex;align-items:center;justify-content:center;color:var(--muted-foreground);padding:2px;border-radius:4px}
+.icon-action:hover{color:var(--foreground)}
+.project-conversations{font-size:12px;font-weight:500;padding:0}
+.project-conversations:hover{text-decoration:underline;text-underline-offset:3px}
+.assign-menu{position:absolute;right:0;bottom:calc(100% + 4px);z-index:20;min-width:190px;padding:4px;display:flex;flex-direction:column;background:var(--popover);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay)}
+.assign-menu button{display:flex;flex-direction:column;align-items:flex-start;padding:6px 8px;border-radius:var(--radius-sm);font-size:12px;text-align:left}
+.assign-menu button:hover,.assign-menu button:focus-visible{background:var(--accent)}
+.assign-menu small{font-size:10px;color:var(--muted-foreground)}
+.room-menu-wrap{position:relative;display:inline-flex}
+.room-menu{right:-4px;min-width:200px}
+.room-menu button>span{display:flex;align-items:center;gap:8px}
+.room-menu button svg{color:var(--muted-foreground)}
+.project-room:has(.room-menu){z-index:6}
+.office-shell .office-rug .room-menu{transform:skewY(4deg);transform-origin:right bottom}
+
+/* office.css, line 3: the shortcut hint, keyboard selection, the shell, the rug, the chairs, pause and full screen. */
+.seat-shortcut{display:none;font-family:'Geist Mono',monospace;font-size:9px;color:var(--muted-foreground);margin-left:5px}
+.agent-seat:hover .seat-shortcut,.agent-seat:focus-visible .seat-shortcut,.keyboard-selected .seat-shortcut{display:inline}
+.keyboard-selected{outline:2px solid var(--ring);outline-offset:2px}
+.office-shell{--office-wood:color-mix(in srgb,var(--secondary) 88%,var(--warning));--office-leaf:color-mix(in srgb,var(--success) 55%,var(--sidebar));--office-floor:color-mix(in srgb,var(--sidebar) 97%,var(--warning));position:relative;border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;background:repeating-linear-gradient(90deg,transparent 0,transparent 89px,var(--border) 90px,transparent 91px),repeating-linear-gradient(0deg,transparent 0,transparent 89px,var(--border) 90px,transparent 91px),var(--office-floor);box-shadow:inset 0 -2px 10px color-mix(in srgb,var(--foreground) 3%,transparent)}
+.office-shell .project-grid{gap:0;padding:25px 18px 0}
+.office-shell .project-room{background:none;border:0;border-radius:0;overflow:visible;position:relative}
+.office-shell .room-heading{position:relative;border:0;width:max-content;max-width:95%;margin:auto;padding:6px 12px;background:var(--sidebar);border:1px solid var(--input);box-shadow:0 3px 0 var(--border);border-radius:var(--radius-md);z-index:2;gap:9px}
+.office-shell .room-heading .spacer{width:16px;flex:initial}
+.office-shell .room-heading strong{font-size:12px}
+.office-shell .table-scene{height:442px;background:none;max-width:none}
+.office-rug{position:absolute;left:3%;right:3%;top:80px;bottom:20px;border:1px solid color-mix(in srgb,var(--info) 14%,var(--border));border-radius:38px 24px 38px 24px;background:repeating-linear-gradient(0deg,transparent 0,transparent 4px,color-mix(in srgb,var(--info) 2%,transparent) 5px),color-mix(in srgb,var(--info) 5%,var(--sidebar));box-shadow:0 4px 0 color-mix(in srgb,var(--foreground) 4%,transparent);transform:skewY(-4deg)}
+.office-shell .worktable{top:157px;height:123px;left:14%;right:14%;border-radius:18px;transform:skewY(-4deg);background:linear-gradient(150deg,color-mix(in srgb,var(--office-wood) 90%,var(--foreground)),var(--office-wood));border:1px solid color-mix(in srgb,var(--warning) 18%,var(--input));box-shadow:0 7px 0 var(--secondary),0 8px 0 var(--input),7px 18px 13px color-mix(in srgb,var(--foreground) 8%,transparent);padding:0 70px;z-index:1;gap:2px}
+.office-shell .worktable:before,.office-shell .worktable:after{content:'';position:absolute;bottom:-27px;height:21px;width:7px;background:var(--muted-foreground);opacity:.35;z-index:-1;border-radius:0 0 2px 2px}
+.office-shell .worktable:before{left:20px}
+.office-shell .worktable:after{right:20px}
+.office-shell .worktable>svg,.office-shell .worktable>strong,.office-shell .worktable>span{display:none}
+.office-shell .agent-seat{z-index:3;width:125px}
+.office-shell .helper-seat{width:86px}
+.office-shell .agent-seat:hover{background:color-mix(in srgb,var(--sidebar-accent) 85%,transparent)}
+.office-chair{position:absolute;width:55px;height:35px;border:1px solid var(--input);border-radius:16px 16px 9px 9px;background:linear-gradient(var(--secondary),var(--muted));box-shadow:0 5px 0 var(--well),0 6px 0 var(--border),3px 10px 8px color-mix(in srgb,var(--foreground) 10%,transparent);transform:skewY(-4deg)}
+.office-chair:before{content:'';position:absolute;left:5px;right:5px;top:-12px;height:14px;border-radius:8px;background:var(--muted);border:1px solid var(--input)}
+.office-paused *{animation-play-state:paused!important}
+.immersive .office-shell .table-scene{height:442px}
+.immersive .office-shell .worktable{top:157px}
+
+/* office.css, lines 11-22: the sheets on the table. */
+/* Table top: one sheet per agent, in the table's own plane (it inherits the skew). */
+.table-top{position:absolute;inset:0;pointer-events:none}
+.task-sheet{--sheet:color-mix(in srgb,var(--card) 86%,var(--foreground));position:absolute;width:84px;min-height:46px;padding:7px 8px 8px;border-radius:2px;background:linear-gradient(transparent 0 16px,transparent 16px),var(--sheet);border:1px solid var(--input);box-shadow:2px 3px 0 color-mix(in srgb,var(--foreground) 12%,transparent)}
+:root[data-theme=light] .task-sheet{--sheet:var(--card)}
+.task-sheet p{margin:0;font-size:9px;line-height:12px;color:var(--card-foreground);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.task-sheet:after{content:'';position:absolute;left:8px;right:16px;bottom:7px;height:1px;background:var(--input)}
+.sheet-flag{position:absolute;top:-5px;right:7px;width:14px;height:13px;border-radius:1px;background:var(--sidebar-primary);box-shadow:1px 1px 0 color-mix(in srgb,var(--foreground) 15%,transparent)}
+.sheet-question .sheet-flag{background:var(--warning)}
+.sheet-stamp{position:absolute;right:5px;bottom:3px;width:16px;height:16px;display:grid;place-items:center;border:1.5px solid var(--success);border-radius:50%;color:var(--success);font:600 9px/1 'Geist',sans-serif;font-style:normal;transform:rotate(-12deg)}
+.sheet-done p,.sheet-offline p{color:var(--muted-foreground)}
+.sheet-offline{border-style:dashed;opacity:.6}
+
+/* office.css, line 52. */
+.sheet-done p{padding-right:14px}
+
+/* office.css, lines 54-102: places, ends, sheets and post-its; tables that grow with their agents. */
+/* Places around a table; sub-agents take the table ends. */
+.office-shell .agent-seat{width:112px}
+.office-shell .place-tl,.office-shell .place-tr,.office-shell .place-tc{top:10px}
+.office-shell .place-bl,.office-shell .place-br,.office-shell .place-bc{top:286px}
+.office-shell .place-tl,.office-shell .place-bl{left:calc(30% - 56px)}
+.office-shell .place-tr,.office-shell .place-br{left:calc(70% - 56px)}
+.office-shell .place-tc,.office-shell .place-bc{left:calc(50% - 56px)}
+.chair-tl,.chair-tr,.chair-tc{top:56px}
+.chair-bl,.chair-br,.chair-bc{top:328px}
+.chair-tl,.chair-bl{left:calc(30% - 27px)}
+.chair-tr,.chair-br{left:calc(70% - 27px)}
+.chair-tc,.chair-bc{left:calc(50% - 27px)}
+.office-shell .helper-seat{width:62px;top:180px}
+.office-shell .helper-seat>strong{font-size:11px;line-height:15px}
+.office-shell .end-left{left:calc(7% - 31px)}
+.office-shell .end-right{left:auto;right:calc(7% - 31px)}
+.sheet-tl,.sheet-tr,.sheet-tc{top:9px}
+.sheet-bl,.sheet-br,.sheet-bc{bottom:9px}
+.sheet-tl,.sheet-bl{left:calc(22% - 42px)}
+.sheet-tr,.sheet-br{left:calc(78% - 42px)}
+.sheet-tc,.sheet-bc{left:calc(50% - 42px)}
+.sheet-tl{transform:rotate(-3deg)}.sheet-tr{transform:rotate(2deg)}.sheet-tc{transform:rotate(-1deg)}
+.sheet-bl{transform:rotate(2deg)}.sheet-br{transform:rotate(-2deg)}.sheet-bc{transform:rotate(1.5deg)}
+.footer-branch{font-family:'Geist Mono',monospace;margin-left:8px}
+@media(max-width:1250px) and (min-width:1001px){.office-shell .worktable{left:18%;right:18%}.office-shell .end-left{left:calc(9% - 31px)}.office-shell .end-right{right:calc(9% - 31px)}.sheet-tl,.sheet-bl{left:calc(24% - 42px)}.sheet-tr,.sheet-br{left:calc(76% - 42px)}.task-sheet{width:78px}}
+.office-shell .agent-seat .seat-machine{font:10px/14px 'Geist Mono',monospace;color:var(--muted-foreground);margin-bottom:2px}
+.heading-branch{font:10px 'Geist Mono',monospace;color:var(--muted-foreground);margin-left:4px}
+.office-shell .room-heading .spacer{width:8px}
+/* A sub-agent's sticky note, laid next to its parent's sheet. */
+.sheet-note{position:absolute;width:52px;min-height:40px;padding:5px 6px 6px;border-radius:1px;background:color-mix(in srgb,var(--warning) 26%,var(--card));border:1px solid color-mix(in srgb,var(--warning) 35%,var(--input));box-shadow:1px 2px 0 color-mix(in srgb,var(--foreground) 14%,transparent);z-index:1}
+:root[data-theme=light] .sheet-note{background:color-mix(in srgb,#facc15 30%,var(--card))}
+.sheet-note p{font-size:8px!important;line-height:10px!important;-webkit-line-clamp:3!important}
+.sheet-note .sheet-flag{top:-4px;right:4px;width:10px;height:9px}
+.sheet-note .sheet-stamp{width:13px;height:13px;font-size:7px;right:3px;bottom:2px}
+/* Tables grow with their agents: rooms take the width of their table and wrap. */
+.office-shell .project-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:0 12px}
+.office-shell .project-room{flex:1 1 var(--room);min-width:min(var(--room),100%);max-width:none!important;margin:0 0 8px}
+.office-shell .place-t{top:10px}
+.office-shell .place-b{top:286px}
+.chair-t{top:56px}.chair-b{top:328px}
+.sheet-t{top:9px;transform:rotate(-2deg)}
+.sheet-b{bottom:9px;transform:rotate(2deg)}
+.sheet-t:nth-child(4n+3){transform:rotate(1.5deg)}.sheet-b:nth-child(4n){transform:rotate(-1.5deg)}
+.office-shell .table-scene{overflow:visible}
+.note-t{top:12px;transform:rotate(5deg)}.note-b{bottom:12px;transform:rotate(-5deg)}
+
+/* office.css, lines 146-151. */
+/* The project's label is woven into the rug, bottom-left; it shares the rug's skew. */
+.office-shell .office-rug .room-heading{position:absolute;left:14px;bottom:12px;margin:0;width:auto;max-width:calc(100% - 28px);padding:5px 6px 5px 10px;gap:6px;background:color-mix(in srgb,var(--sidebar) 88%,transparent);border:1px solid var(--input);box-shadow:0 2px 0 var(--border);border-radius:var(--radius-md);z-index:4}
+.office-shell .office-rug .room-heading .spacer{width:2px}
+.office-shell .office-rug .room-heading strong,.office-shell .office-rug .project-conversations{font-size:12px;font-weight:500}
+.office-shell .table-scene{height:490px}
+
+/* office.css, lines 155-171. */
+/* Wider, flatter rugs: the label sits in the free bottom-left corner, and a long name is cut. */
+.office-shell .office-rug{top:-6px!important;bottom:6px!important}
+.office-shell .table-scene{height:446px!important}
+.office-shell .office-rug .room-heading{left:14px;bottom:10px;max-width:206px;padding:4px 4px 4px 9px;gap:5px}
+.office-shell .office-rug .project-conversations{flex-shrink:0;min-width:0;max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.office-shell .office-rug .heading-branch{flex:0 1 auto;min-width:0;max-width:64px;margin-left:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.office-shell .office-rug .room-heading>svg,.office-shell .office-rug .room-heading .icon-action{flex-shrink:0}
+.office-shell .office-rug .room-heading .side-swatch{margin:0 2px 0 0}
+.office-shell .office-rug .room-heading .icon-action{width:22px;height:22px}
+.heading-names{display:flex;align-items:baseline;gap:4px;min-width:0}
+.office-shell .office-rug .heading-names{flex-direction:column;align-items:flex-start;gap:0;line-height:14px}
+.office-shell .office-rug .heading-branch{max-width:118px;font-size:9px;line-height:12px}
+/* Rugs now reach the top seats; with the skew, rows need air between them. */
+.office-shell .project-room{margin:26px 0 30px!important}
+/* Full screen: no width cap, the zoom computed in App fills the screen. */
+.immersive .office-shell .project-grid{max-width:none}
+
+/* office.css, lines 279-287: the post-it count and « +N à cette table ». */
+/* Several sub-agents on one parent: the sticky note counts the others. */
+.note-more{position:absolute;right:-6px;bottom:-6px;min-width:16px;height:14px;padding:0 3px;border-radius:999px;background:var(--card);border:1px solid var(--input);font:600 8px/12px 'Geist Mono',monospace;font-style:normal;text-align:center;color:var(--foreground)}
+/* Overflow, on the rug's bottom-right corner (mirror of the project label): who else sits at this table. */
+.office-rug .table-more{position:absolute;right:14px;bottom:10px;z-index:4;display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 10px 0 5px;border:1px solid var(--input);border-radius:999px;background:color-mix(in srgb,var(--sidebar) 90%,transparent);box-shadow:0 2px 0 var(--border);font-size:11px;font-weight:500;color:var(--muted-foreground);white-space:nowrap}
+.office-rug .table-more:hover{color:var(--foreground);border-color:var(--ring)}
+.office-rug .table-more:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.more-faces{display:flex}
+.more-faces i{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--secondary);border:1.5px solid var(--sidebar);margin-left:-7px;overflow:hidden}
+.more-faces i:first-child{margin-left:0}
+
+/* decor.css, whole: the plants. */
+/* Plants around the tables: several species, in different free spots of each rug. */
+.plants{position:absolute;top:-6px;bottom:6px;pointer-events:none;z-index:2;--p-line:var(--input);--p-leaf:color-mix(in srgb,var(--success) 70%,#14532d);--p-leaf-2:color-mix(in srgb,var(--success) 55%,#365314);--p-pot:linear-gradient(110deg,var(--muted-foreground),var(--secondary))}
+.plant-spot{position:absolute;display:block}
+.plant-spot>span{position:relative;display:block}
+.plant-spot.flip>span{transform:scaleX(-1)}
+.plants i,.plants b,.plants em{position:absolute;display:block}
+.spot-tl{left:14px;top:8px}
+.spot-tr{right:14px;top:8px}
+.spot-br{right:18px;bottom:10px}
+.spot-ml{left:10px;top:calc(50% - 26px)}
+.spot-mr{right:10px;top:calc(50% - 26px)}
+/* Shared pot */
+.plants b{bottom:0;border:1px solid var(--p-line);border-radius:3px 3px 8px 8px;background:var(--p-pot);box-shadow:3px 5px 3px color-mix(in srgb,var(--foreground) 10%,transparent)}
+.p-monstera{width:58px;height:64px}
+.p-monstera b{left:16px;width:26px;height:20px}
+.p-monstera i{bottom:16px;left:24px;width:20px;height:30px;transform-origin:bottom center;border-radius:80% 10% 80% 10%;background:var(--p-leaf);border:1px solid color-mix(in srgb,var(--success) 40%,var(--border));animation:p-sway 6s ease-in-out infinite}
+.p-monstera i:nth-child(1){transform:rotate(-55deg)}.p-monstera i:nth-child(2){transform:rotate(-20deg);height:38px}.p-monstera i:nth-child(3){transform:rotate(15deg);height:36px;animation-delay:-2s}.p-monstera i:nth-child(4){transform:rotate(50deg)}.p-monstera i:nth-child(5){transform:rotate(-82deg);height:22px}
+.p-fern{width:62px;height:50px}
+.p-fern b{left:19px;width:24px;height:16px;border-radius:50% 50% 8px 8px/20% 20% 8px 8px}
+.p-fern i{left:29px;bottom:12px;width:5px;height:34px;transform-origin:bottom center;border-radius:50%;background:repeating-linear-gradient(0deg,var(--p-leaf-2) 0 3px,transparent 3px 5px),var(--p-leaf-2);opacity:.95;animation:p-sway 7s ease-in-out infinite}
+.p-fern i:nth-child(1){transform:rotate(-70deg);height:28px}.p-fern i:nth-child(2){transform:rotate(-45deg)}.p-fern i:nth-child(3){transform:rotate(-18deg);height:36px}.p-fern i:nth-child(4){transform:rotate(4deg);height:38px;animation-delay:-3s}.p-fern i:nth-child(5){transform:rotate(26deg);height:34px}.p-fern i:nth-child(6){transform:rotate(50deg)}.p-fern i:nth-child(7){transform:rotate(72deg);height:26px}
+.p-snake{width:36px;height:66px}
+.p-snake b{left:5px;width:26px;height:18px;border-radius:3px}
+.p-snake i{bottom:16px;width:8px;border-radius:50% 50% 2px 2px/90% 90% 2px 2px;background:linear-gradient(90deg,color-mix(in srgb,#eab308 50%,var(--p-leaf)) 0 15%,var(--p-leaf) 15% 85%,color-mix(in srgb,#eab308 50%,var(--p-leaf)) 85%)}
+.p-snake i:nth-child(1){left:6px;height:34px;transform:rotate(-10deg)}.p-snake i:nth-child(2){left:13px;height:48px}.p-snake i:nth-child(3){left:20px;height:40px;transform:rotate(8deg)}.p-snake i:nth-child(4){left:25px;height:26px;transform:rotate(18deg)}
+.p-ficus{width:48px;height:80px}
+.p-ficus b{left:12px;width:24px;height:18px}
+.p-ficus em{left:23px;bottom:16px;width:3px;height:34px;background:color-mix(in srgb,#78350f 70%,var(--muted-foreground));border-radius:2px}
+.p-ficus i{width:28px;height:24px;border-radius:50%;background:radial-gradient(circle at 35% 35%,color-mix(in srgb,var(--p-leaf) 70%,#bef264),var(--p-leaf));border:1px solid color-mix(in srgb,var(--success) 35%,var(--border));animation:p-sway 8s ease-in-out infinite}
+.p-ficus i:nth-child(1){left:4px;top:8px}.p-ficus i:nth-child(2){left:18px;top:0;animation-delay:-2s}.p-ficus i:nth-child(3){left:14px;top:18px;width:24px;height:20px}.p-ficus i:nth-child(4){left:0;top:24px;width:20px;height:16px;animation-delay:-5s}
+.p-succulent{width:44px;height:32px}
+.p-succulent b{left:4px;width:36px;height:14px;border-radius:4px 4px 12px 12px;background:color-mix(in srgb,var(--info) 30%,var(--secondary))}
+.p-succulent i{bottom:10px;width:12px;height:16px;border-radius:50% 50% 50% 50%/70% 70% 30% 30%;background:color-mix(in srgb,#5eead4 40%,var(--p-leaf));border:1px solid color-mix(in srgb,var(--success) 35%,var(--border));transform-origin:bottom center}
+.p-succulent i:nth-child(1){left:6px;transform:rotate(-40deg)}.p-succulent i:nth-child(2){left:12px;transform:rotate(-15deg);height:19px}.p-succulent i:nth-child(3){left:17px;height:21px}.p-succulent i:nth-child(4){left:22px;transform:rotate(15deg);height:19px}.p-succulent i:nth-child(5){left:27px;transform:rotate(40deg)}
+@keyframes p-sway{0%,100%{rotate:0deg}50%{rotate:3deg}}
+.office-paused .plants *{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.plants *{animation:none!important}}
+/* The plants' layer follows the rug's skew so each spot sits on the rug; each plant is counter-skewed to stand upright. */
+.plants{transform:skewY(-4deg)}
+.plant-spot>span{transform:skewY(4deg)}
+.plant-spot.flip>span{transform:skewY(4deg) scaleX(-1)}
+.spot-tl{left:20px;top:16px}.spot-tr{right:20px;top:16px}.spot-br{right:22px;bottom:18px}.spot-ml{left:16px}.spot-mr{right:16px}
+
+/* The project's colour, from `--project` (in place of the mockup's `[data-project=…]` rules). */
+.office-shell .office-rug{border-color:color-mix(in srgb,var(--project) 18%,var(--border));background:color-mix(in srgb,var(--project) 5%,var(--sidebar))}

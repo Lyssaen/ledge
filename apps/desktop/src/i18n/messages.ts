@@ -40,6 +40,18 @@ const fr = {
     manyTitle: 'Votre équipe',
     many: (n: number) => `${n} sessions vous attendent ou ont terminé`
   },
+  atelier: {
+    table: (name: string) => `Table ${name}`,
+    conversations: (name: string) => `Conversations du projet ${name}`,
+    actions: (name: string) => `Actions du projet ${name}`, actionsTitle: 'Actions du projet',
+    edit: 'Modifier le projet',
+    newSession: 'Nouvelle session', newSessionAt: (name: string) => `Nouvelle session à la table ${name}`,
+    isolate: (name: string) => `Isoler le projet ${name}`, isolateLabel: 'Isoler cette table', showAll: 'Voir tous les projets',
+    more: (n: number) => `+${n} à cette table`, moreTitle: 'Voir tous les agents du projet dans la liste',
+    seat: (name: string, task: string, machine: string) => `${name}, ${task}, ${machine}`,
+    helperSeat: (kind: string, parent: string, task: string) => `${kind}, sous-agent de ${parent} : ${task}`,
+    offline: 'Hors ligne'
+  },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
   botReadOnly: 'Lecture seule',
@@ -81,6 +93,18 @@ const en: typeof fr = {
     failed: (name) => `${name} ran into an error`,
     manyTitle: 'Your team',
     many: (n) => `${n} sessions need you or have finished`
+  },
+  atelier: {
+    table: (name) => `${name} table`,
+    conversations: (name) => `Conversations of project ${name}`,
+    actions: (name) => `Actions of project ${name}`, actionsTitle: 'Project actions',
+    edit: 'Edit project',
+    newSession: 'New session', newSessionAt: (name) => `New session at the ${name} table`,
+    isolate: (name) => `Isolate project ${name}`, isolateLabel: 'Isolate this table', showAll: 'Show every project',
+    more: (n) => `+${n} at this table`, moreTitle: 'See every agent of the project in the list',
+    seat: (name, task, machine) => `${name}, ${task}, ${machine}`,
+    helperSeat: (kind, parent, task) => `${kind}, subagent of ${parent}: ${task}`,
+    offline: 'Offline'
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },

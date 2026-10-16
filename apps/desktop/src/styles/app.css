@@ -2,6 +2,7 @@
 @import "@ledge/ui/styles/base.css";
 @import "./shell.css";
 @import "./sidebar.css";
+@import "./atelier.css";
 
 /* All UI colors come from Ledge's unchanged tokens.css snapshot. */
 :root { font-family: 'Geist', 'Segoe UI', system-ui, sans-serif; font-synthesis: none; color: var(--foreground); background: var(--background); --grow: cubic-bezier(.2,.8,.2,1); }
