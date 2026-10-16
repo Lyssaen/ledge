@@ -1,12 +1,18 @@
 import { isTauri } from '../tauri/bridge';
 
+/** True once an answer of the window said « full screen » and the way out has not been seen yet (shared by both functions). */
+let armed = false;
+
 /** Puts the window in or out of full screen: the native window in Tauri, the page (Fullscreen API) in a browser.
  *  Never throws: a refusal leaves the window as it was. */
 export async function setWindowFullscreen(on: boolean): Promise<void> {
   try {
     if (isTauri()) {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      await getCurrentWindow().setFullscreen(on);
+      const win = getCurrentWindow();
+      await win.setFullscreen(on);
+      // Some window managers send no resize after the flip: seed the edge of onFullscreenLeft from the window itself.
+      if (on) armed ||= await win.isFullscreen(); else armed = false;
     } else if (on) await document.documentElement.requestFullscreen();
     else if (document.fullscreenElement) await document.exitFullscreen();
   } catch { /* refused or unsupported */ }
@@ -26,17 +32,15 @@ export function onFullscreenLeft(cb: () => void): () => void {
     try {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
       const win = getCurrentWindow();
-      // Edge-triggered: only a true -> false change actually observed counts, and only the latest answer is heard
-      // (an early resize while entering full screen reports false, and answers may arrive out of order).
-      let was = false;
+      // Edge-triggered: every answer arms the edge (a stale `true` included), only the latest answer can fire it,
+      // and an early resize while entering full screen (false) fires nothing as long as nothing was armed.
       let latest = 0;
       const un = await win.onResized(() => {
         const mine = ++latest;
         void win.isFullscreen().then(on => {
-          if (mine !== latest || stopped) return;
-          const left = was && !on;
-          was = on;
-          if (left) cb();
+          if (stopped) return;
+          if (on) armed = true;
+          else if (mine === latest && armed) { armed = false; cb(); }
         }, () => {});
       });
       if (stopped) un(); else unlisten = un;
