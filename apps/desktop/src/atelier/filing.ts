@@ -90,7 +90,22 @@ export function useFiling(o: { fleet: Pick<Fleet, 'setProjects'>; projects: Proj
     return () => clearTimeout(timer);
   }, [seated]);
 
-  const stop = () => { carried.current = null; setDragging(null); setOver(null); };
+  const stop = useCallback(() => { carried.current = null; setDragging(null); setOver(null); }, []);
+  // The dragged card unmounted mid-drag (its agent filed elsewhere, gone, now covered by a repo): its dragend fires on a
+  // detached node React never hears, so the drag stops here, and nothing is left carried for a later drop.
+  useEffect(() => {
+    if (dragging !== null && !sessions.some(s => s.id === dragging.id && projectIdOf(s) === null)) stop();
+  }, [dragging, sessions, projectIdOf, stop]);
+  // The safety net: any drag that ends, or drops, stops ours. The drop waits a turn so the target under it files first.
+  useEffect(() => {
+    if (dragging === null) return;
+    let later: ReturnType<typeof setTimeout> | undefined;
+    const end = () => stop();
+    const drop = () => { clearTimeout(later); later = setTimeout(stop, 0); };
+    window.addEventListener('dragend', end, true);
+    window.addEventListener('drop', drop, true);
+    return () => { window.removeEventListener('dragend', end, true); window.removeEventListener('drop', drop, true); clearTimeout(later); };
+  }, [dragging, stop]);
   const dragProps = (s: Session) => ({
     draggable: true as const,
     onDragStart(e: DragEvent) {

@@ -251,6 +251,56 @@ describe('putting an agent away', () => {
     expect(d.received.some(m => m.type === 'projects.set')).toBe(false);
   });
 
+  it('the dragged agent goes away mid-drag: the drag stops, and a later drop on a table files nothing', async () => {
+    const { d } = await boot();
+    const card = document.querySelector('.unassigned-card')!;
+    const dt = transfer();
+    fireEvent.dragStart(card, { dataTransfer: dt });
+    expect(document.querySelector('.application')).toHaveClass('is-dragging');
+    d.remove('kit');
+    await waitFor(() => expect(document.querySelector('.application')).not.toHaveClass('is-dragging'));
+    expect(screen.queryByText('Drop here')).toBeNull();
+    expect(screen.queryByText('Drop on a project to move Kit there.')).toBeNull();
+    const table = screen.getByRole('region', { name: 'Ledge table' });
+    fireEvent.dragOver(table, { dataTransfer: dt });
+    expect(table).not.toHaveClass('drop-over');
+    fireEvent.drop(table, { dataTransfer: dt });
+    await new Promise(r => setTimeout(r, 50));
+    expect(d.received.some(m => m.type === 'projects.set')).toBe(false);
+  });
+
+  it('the dragged agent is now covered by a project (a repo): the drag stops', async () => {
+    const { d } = await boot();
+    fireEvent.dragStart(document.querySelector('.unassigned-card')!, { dataTransfer: transfer() });
+    d.projects({ ...projects3, projects: projects3.projects.map(p => (p.id === 'docs' ? { ...p, repos: [...p.repos, { machine: 'local', path: '/tmp' }] } : p)) });
+    await waitFor(() => expect(within(screen.getByRole('region', { name: 'Docs table' })).getByRole('button', { name: /^Kit,/ })).toBeVisible());
+    expect(document.querySelector('.application')).not.toHaveClass('is-dragging');
+  });
+
+  it('a dragend the card never hears (caught on the window) stops the drag; a drop from outside the app files nothing', async () => {
+    const { d } = await boot();
+    fireEvent.dragStart(document.querySelector('.unassigned-card')!, { dataTransfer: transfer() });
+    expect(document.querySelector('.application')).toHaveClass('is-dragging');
+    fireEvent.dragEnd(window);
+    expect(document.querySelector('.application')).not.toHaveClass('is-dragging');
+    const table = screen.getByRole('region', { name: 'Ledge table' });
+    fireEvent.dragOver(table, { dataTransfer: transfer() });
+    fireEvent.drop(table, { dataTransfer: transfer() });
+    await new Promise(r => setTimeout(r, 50));
+    expect(d.received.some(m => m.type === 'projects.set')).toBe(false);
+  });
+
+  it('a drop the window catches first still lets the table file the agent, then the drag is over', async () => {
+    const { d } = await boot();
+    const dt = transfer();
+    fireEvent.dragStart(document.querySelector('.unassigned-card')!, { dataTransfer: dt });
+    const table = screen.getByRole('region', { name: 'Ledge table' });
+    fireEvent.dragOver(table, { dataTransfer: dt });
+    fireEvent.drop(table, { dataTransfer: dt });
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'projects.set', projects: { projects: projects3.projects, rules: [{ machine: 'local', path: '/tmp', project: 'ledge' }] } }));
+    expect(document.querySelector('.application')).not.toHaveClass('is-dragging');
+  });
+
   it('Move to… files Kit; New project… opens the project dialog; Escape closes only the menu', async () => {
     const { side, user } = await boot();
     await user.click(side.getByRole('button', { name: /No project/ }));            // filter « Sans projet »
