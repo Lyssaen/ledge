@@ -1,33 +1,297 @@
 {
   "v": 3,
-  "createdOnFiles": { "v": 1, "at": "2026-10-14T10:00:00Z" },
-  "title": "Ledge mobile",
-  "launch": { "view": "canvas", "page": "v2" },
-  "pages": [
-    { "id": "v2", "name": "V2 · pensée mobile" },
-    { "id": "v1", "name": "V1 · portage de l'overlay" }
-  ],
+  "attachments": {},
   "boards": {
-    "Inbox.dc.html": { "x": 0, "y": 0, "w": 390, "h": 844, "title": "1 · À traiter", "is_interactive": true, "radius": 44, "page": "v2" },
-    "Risk.dc.html": { "x": 470, "y": 0, "w": 390, "h": 844, "title": "2 · Commande à risque", "radius": 44, "page": "v2" },
-    "Thread.dc.html": { "x": 940, "y": 0, "w": 390, "h": 844, "title": "3 · Fil d'un agent", "is_interactive": true, "radius": 44, "page": "v2" },
-    "Terminal.dc.html": { "x": 1410, "y": 0, "w": 390, "h": 844, "title": "4 · Terminal en panneau", "is_interactive": true, "radius": 44, "page": "v2" },
-    "Agents.dc.html": { "x": 1880, "y": 0, "w": 390, "h": 844, "title": "5 · Agents", "is_interactive": true, "radius": 44, "page": "v2" },
-    "Offline.dc.html": { "x": 2350, "y": 0, "w": 390, "h": 844, "title": "6 · PC en veille", "radius": 44, "page": "v2" },
-    "Notification.dc.html": { "x": 2820, "y": 0, "w": 390, "h": 844, "title": "7 · Notification push", "radius": 44, "page": "v2" },
-    "Pairing.dc.html": { "x": 3290, "y": 0, "w": 390, "h": 844, "title": "8 · Appairer le téléphone", "radius": 44, "page": "v2" },
-    "Main.dc.html": { "x": 0, "y": 0, "w": 390, "h": 844, "title": "1 · Sessions", "is_interactive": true, "radius": 44, "page": "v1" },
-    "Permission.dc.html": { "x": 470, "y": 0, "w": 390, "h": 844, "title": "2 · Une permission", "is_interactive": true, "radius": 44, "page": "v1" },
-    "Question.dc.html": { "x": 940, "y": 0, "w": 390, "h": 844, "title": "3 · Une question", "is_interactive": true, "radius": 44, "page": "v1" },
-    "Continue.dc.html": { "x": 1410, "y": 0, "w": 390, "h": 844, "title": "4 · Continuer la session", "is_interactive": true, "radius": 44, "page": "v1" },
-    "Sent.dc.html": { "x": 1880, "y": 0, "w": 390, "h": 844, "title": "5 · Après l'envoi", "is_interactive": true, "radius": 44, "page": "v1" }
+    "Agents.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "v2",
+      "radius": 44,
+      "title": "5 · Agents",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "Continue.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "v1",
+      "radius": 44,
+      "title": "4 · Continuer la session",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Inbox.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "v2",
+      "radius": 44,
+      "title": "1 · À traiter",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "v1",
+      "radius": 44,
+      "title": "1 · Sessions",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Notification.dc.html": {
+      "h": 844,
+      "page": "v2",
+      "radius": 44,
+      "title": "7 · Notification push",
+      "w": 390,
+      "x": 2820,
+      "y": 0
+    },
+    "Offline.dc.html": {
+      "h": 844,
+      "page": "v2",
+      "radius": 44,
+      "title": "6 · PC en veille",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "Permission.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "v1",
+      "radius": 44,
+      "title": "2 · Une permission",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Question.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "v1",
+      "radius": 44,
+      "title": "3 · Une question",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Risk.dc.html": {
+      "h": 844,
+      "page": "v2",
+      "radius": 44,
+      "title": "2 · Commande à risque",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Sent.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "v1",
+      "radius": 44,
+      "title": "5 · Après l'envoi",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "Terminal.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "v2",
+      "radius": 44,
+      "title": "4 · Terminal en panneau",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Thread.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "v2",
+      "radius": 44,
+      "title": "3 · Fil d'un agent",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Login.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "1 · Se connecter avec GitHub",
+      "radius": 44,
+      "page": "v3"
+    },
+    "Compare.dc.html": {
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "2 · Comparer le code",
+      "radius": 44,
+      "page": "v3",
+      "is_interactive": true
+    },
+    "Denied.dc.html": {
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "3 · Compte non autorisé",
+      "radius": 44,
+      "page": "v3"
+    },
+    "KeyChanged.dc.html": {
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "4 · Clé du PC changée",
+      "radius": 44,
+      "page": "v3"
+    },
+    "Update.dc.html": {
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "5 · Nouvelle version",
+      "radius": 44,
+      "page": "v3"
+    },
+    "OverlayMobile.dc.html": {
+      "x": 0,
+      "y": 1300,
+      "w": 420,
+      "h": 680,
+      "title": "8 · Overlay · Réglages › Mobile",
+      "is_interactive": true,
+      "page": "v3"
+    },
+    "OverlayConfirm.dc.html": {
+      "x": 500,
+      "y": 1300,
+      "w": 420,
+      "h": 480,
+      "title": "9 · Overlay · Un appareil demande l'accès",
+      "is_interactive": true,
+      "page": "v3"
+    },
+    "AppIcon.dc.html": {
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "6 · Icône de l'app et favicon",
+      "radius": 44,
+      "page": "v3"
+    },
+    "Chat.dc.html": {
+      "x": 2820,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "7 · Demander à Ledge",
+      "is_interactive": true,
+      "radius": 44,
+      "page": "v3"
+    }
   },
-  "order": ["Inbox.dc.html", "Risk.dc.html", "Thread.dc.html", "Terminal.dc.html", "Agents.dc.html", "Offline.dc.html", "Notification.dc.html", "Pairing.dc.html", "Main.dc.html", "Permission.dc.html", "Question.dc.html", "Continue.dc.html", "Sent.dc.html"],
-  "notes": {
-    "title": { "x": 0, "y": -300, "text": "Ledge mobile · V1, le portage de l'overlay", "kind": "title1", "maxW": 2270, "page": "v1" },
-    "titlev2": { "x": 0, "y": -300, "text": "Ledge mobile · V2, une messagerie avec tes agents", "kind": "title1", "maxW": 3680, "page": "v2" }
+  "createdOnFiles": {
+    "at": "2026-10-14T10:00:00Z",
+    "v": 1
   },
   "designSystems": [
-    { "title": "Shadcn Red", "namespace": "shadcn-red", "artifact": "https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV", "version": "1791734754-2174", "copiedAt": "2026-10-14T10:00:00Z" }
-  ]
+    {
+      "artifact": "https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV",
+      "copiedAt": "2026-10-14T10:00:00Z",
+      "namespace": "shadcn-red",
+      "title": "Shadcn Red",
+      "version": "1791734754-2174"
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "v3"
+  },
+  "notes": {
+    "title": {
+      "kind": "title1",
+      "maxW": 2270,
+      "page": "v1",
+      "text": "Ledge mobile · V1, le portage de l'overlay",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "titlev2": {
+      "kind": "title1",
+      "maxW": 3210,
+      "page": "v2",
+      "text": "Ledge mobile · V2, une messagerie avec tes agents",
+      "w": 240,
+      "x": 0,
+      "y": -306
+    },
+    "titlev3": {
+      "x": 0,
+      "y": -306,
+      "text": "Ledge mobile · V3, compte GitHub et liaison par code",
+      "kind": "title1",
+      "maxW": 3210,
+      "page": "v3"
+    },
+    "titlev3pc": {
+      "x": 0,
+      "y": 1000,
+      "text": "Sur le PC",
+      "kind": "title1",
+      "maxW": 920,
+      "page": "v3"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Permission.dc.html",
+    "Question.dc.html",
+    "Continue.dc.html",
+    "Sent.dc.html",
+    "Inbox.dc.html",
+    "Risk.dc.html",
+    "Thread.dc.html",
+    "Terminal.dc.html",
+    "Agents.dc.html",
+    "Offline.dc.html",
+    "Notification.dc.html",
+    "Login.dc.html",
+    "Compare.dc.html",
+    "Denied.dc.html",
+    "KeyChanged.dc.html",
+    "Update.dc.html",
+    "OverlayMobile.dc.html",
+    "OverlayConfirm.dc.html",
+    "AppIcon.dc.html",
+    "Chat.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "v3",
+      "name": "V3 · compte et liaison"
+    },
+    {
+      "id": "v2",
+      "name": "V2 · pensée mobile"
+    },
+    {
+      "id": "v1",
+      "name": "V1 · portage de l'overlay"
+    }
+  ],
+  "title": "Ledge mobile"
 }

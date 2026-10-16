@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Nouvelle version</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:56px;padding:0 16px;border-radius:12px;font:600 16px/20px 'Geist',system-ui,sans-serif;box-sizing:border-box;cursor:pointer}
+.btn-primary{background:#9f0712;color:#fef2f2;border:0}.btn-primary:hover{background:#82181a}.btn-outline{background:transparent;color:#fafafa;border:1px solid #ffffff26}.btn-outline:hover{background:#262626}
+</style>
+</helmet>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+  <div aria-hidden="true" style="padding: 56px 20px 12px; opacity: 0.35;">
+    <div style="font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.025em;">À traiter</div>
+    <div style="font-size: 13px; color: #a1a1a1;">Tout est calme</div>
+  </div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: #000000a6;"></div>
+
+  <section role="dialog" aria-modal="true" aria-labelledby="up-title" style="position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; gap: 16px; padding: 12px 20px 34px; border-radius: 28px 28px 0 0; background: #171717; border-top: 1px solid #ffffff1a;">
+    <span aria-hidden="true" style="align-self: center; width: 36px; height: 5px; border-radius: 9999px; background: #525252;"></span>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <h2 id="up-title" style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em;">Nouvelle version · 0.6.0</h2>
+      <p style="margin: 0; color: #a1a1a1;">Le serveur propose une mise à jour de l'app. Rien ne change tant que vous ne l'acceptez pas.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 14px; background: #0a0a0a; border: 1px solid #ffffff1a;">
+      <span style="font-size: 12px; line-height: 16px; color: #a1a1a1;">Empreinte de cette version</span>
+      <code class="mono" style="font-size: 15px; line-height: 22px; letter-spacing: 0.02em; word-spacing: 4px;">3f9a c21e 70bd 44e1 9a02 d5c8</code>
+      <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: #a1a1a1;">Actuelle : <span class="mono">0.5.4 · 8e17 02af</span></span>
+    </div>
+
+    <a href="#" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: #fafafa; font-weight: 500;">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px;"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>
+      Comparer avec la release v0.6.0 sur GitHub
+    </a>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+      <a href="Inbox.dc.html" class="btn btn-outline">Plus tard</a>
+      <a href="Inbox.dc.html" class="btn btn-primary">Mettre à jour</a>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

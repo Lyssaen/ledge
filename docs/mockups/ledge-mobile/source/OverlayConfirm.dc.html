@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Overlay · Nouvel appareil</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#0a0a0a}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.hint{font-size:12px;line-height:16px;color:#a1a1a1}
+.b{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:8px;font:500 13px/18px 'Geist',system-ui,sans-serif;box-sizing:border-box;cursor:pointer;white-space:nowrap}
+.b-primary{background:#9f0712;color:#fef2f2;border:0}.b-primary:hover{background:#82181a}
+.b-outline{background:transparent;color:#fafafa;border:1px solid #ffffff26}.b-outline:hover{background:#262626}
+.resident{overflow:visible;filter:drop-shadow(0 0 4px #ee9c87a6) drop-shadow(0 0 12px #8bc7b661)}.r-shell{fill:#566365;stroke:#91a2a272;stroke-width:1.2}.r-foot{fill:#313b3e}.r-ant{fill:none;stroke:#313b3e;stroke-width:3;stroke-linecap:round}.r-visor{fill:#182224}.r-eye{fill:#ffc3a8}.r-shine{fill:none;stroke:#ffffff50;stroke-width:1.5;stroke-linecap:round}.r-line{fill:none;stroke:#ffc3a8;stroke-width:3;stroke-linecap:round}.resident.off{filter:none}.resident.off .r-eye{fill:#a8abaa}.resident.off .r-line{stroke:#a8abaa}
+</style>
+</helmet>
+<div style="width: 420px; height: 100vh; max-height: 480px; box-sizing: border-box; background: #0a0a0a; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 13px; line-height: 20px; padding: 0 12px 12px; overflow: hidden;">
+  <div aria-hidden="true" style="width: 180px; height: 30px; margin: 0 auto; background: #000; border-radius: 0 0 16px 16px;"></div>
+
+  <sc-if value="{{ isAsk }}" hint-placeholder-val="{{ true }}">
+    <section role="alertdialog" aria-labelledby="dev-title" style="margin-top: 8px; display: flex; flex-direction: column; gap: 14px; border-radius: 14px; background: #171717; border: 1px solid #ffffff1a; box-shadow: 0 20px 40px -12px rgba(0,0,0,0.7); padding: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <svg class="resident" width="36" height="36" viewBox="0 0 96 96" role="img" aria-label="Ledge"><path class="r-ant" d="M48 23v-9"></path><circle class="r-eye" cx="48" cy="12" r="3"></circle><rect class="r-foot" x="30" y="74" width="12" height="8" rx="4"></rect><rect class="r-foot" x="54" y="74" width="12" height="8" rx="4"></rect><path class="r-shell" d="M23 33Q25 21 40 21h16q15 0 17 12l5 23q4 22-17 22H35Q14 78 18 56Z"></path><path class="r-shine" d="M28 34q3-7 14-7h12"></path><rect class="r-visor" x="25" y="37" width="46" height="27" rx="12"></rect><g class="r-eye"><rect x="35" y="44" width="6" height="12" rx="3"></rect><rect x="55" y="44" width="6" height="12" rx="3"></rect></g></svg>
+        <span style="display: flex; flex-direction: column; flex-grow: 1;">
+          <h1 id="dev-title" style="margin: 0; font-size: 14px; line-height: 18px; font-weight: 600;">Un appareil demande l'accès</h1>
+          <span class="hint">iPad · Safari · @paradow · à l'instant</span>
+        </span>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px; border-radius: 10px; background: #0a0a0a; border: 1px solid #ffffff26;">
+        <div class="mono" aria-label="Code de liaison 482 107" style="font-size: 30px; line-height: 36px; font-weight: 600; letter-spacing: 0.08em;">482 107</div>
+        <span class="hint">Le même code doit s'afficher sur l'appareil.</span>
+      </div>
+      <p class="hint" style="margin: 0;">Approuvé, il pourra lire vos sessions, approuver des demandes et écrire aux agents.</p>
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button type="button" class="b b-outline" onClick="{{ deny }}">Refuser</button>
+        <button type="button" class="b b-primary" onClick="{{ approve }}">Approuver</button>
+      </div>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="margin-top: 8px; display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 8px 0 14px; border-radius: 14px; background: #171717; border: 1px solid #ffffff1a;">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: {{ doneColor }};"><path d="{{ donePath }}"></path></svg>
+      <span style="flex-grow: 1;">{{ doneText }}</span>
+      <button type="button" class="b b-outline" onClick="{{ reset }}" style="height: 32px;">Rejouer</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":420,"height":480}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { result: null };
+  }
+  renderVals() {
+    const r = this.state.result;
+    return {
+      isAsk: r === null,
+      isDone: r !== null,
+      doneText: r === 'ok' ? 'iPad · Safari est lié à ce PC' : 'Demande refusée · l\'appareil n\'a rien reçu',
+      doneColor: r === 'ok' ? '#34d399' : '#a1a1a1',
+      donePath: r === 'ok' ? 'M20 6 9 17l-5-5' : 'M18 6 6 18M6 6l12 12',
+      approve: () => this.setState({ result: 'ok' }),
+      deny: () => this.setState({ result: 'no' }),
+      reset: () => this.setState({ result: null }),
+    };
+  }
+}
+</script>
+</body>
+</html>
