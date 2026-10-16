@@ -44,7 +44,14 @@ test('at 1000 px the top bar stays on one line with a long project name', async 
   await fakeDaemon(page, eight, { projects: { projects: [{ id: 'ledge', name: 'Payment Service Platform Migration Europe', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] } });
   await page.goto('/');
   await page.getByRole('button', { name: /Payment Service Platform/ }).click();
-  const box = await page.getByRole('banner').boundingBox();
+  const full = 'Payment Service Platform Migration Europe';
+  const banner = page.getByRole('banner');
+  await expect(banner.getByText(/Payment Service Platform/)).toBeVisible();
+  const crumb = banner.locator('.project-filter span[title]');
+  await expect(crumb).toHaveAttribute('title', full);
+  await expect(page.locator('aside.sidebar .side-project span[title]').first()).toHaveAttribute('title', full);
+  expect(await crumb.evaluate(el => el.scrollWidth > el.clientWidth), 'the visible crumb text is clipped').toBe(true);
+  const box = await banner.boundingBox();
   expect(box!.height).toBeLessThanOrEqual(57);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
