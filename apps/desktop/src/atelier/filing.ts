@@ -41,6 +41,8 @@ export interface Filing {
 }
 
 const SEATED_MS = 1600;
+/** How long a sent rule waits for the broadcast that applies it. */
+const UNCONFIRMED_MS = 8000;
 
 /** The drag and drop of observatory.tsx (`dragProps`, `dropProps`, `assign`), on the real fleet: a drop or « Ranger dans… »
  *  writes the rule; once a broadcast places the session in that project, the toast says so and the agent pops into its seat.
@@ -53,20 +55,30 @@ export function useFiling(o: { fleet: Pick<Fleet, 'setProjects'>; projects: Proj
   const [seated, setSeated] = useState<string | null>(null);
   // The drag being carried, read by the targets' handlers whatever render they come from.
   const carried = useRef<Session | null>(null);
-  // Sent rules waiting for their broadcast: session id → project id.
-  const waiting = useRef(new Map<string, string>());
+  // Sent rules waiting for their broadcast: session id → the project and the clock that gives up on it.
+  const waiting = useRef(new Map<string, { projectId: string; timer: ReturnType<typeof setTimeout> }>());
+  useEffect(() => () => { for (const { timer } of waiting.current.values()) clearTimeout(timer); waiting.current.clear(); }, []);
 
   const file = useCallback((s: Session, projectId: string) => {
     const result = fileSession(fleet, projects, s, projectId);
-    if (result === 'sent') waiting.current.set(s.id, projectId);
-    else notify(t.filing[result](s.name));
+    if (result !== 'sent') { notify(t.filing[result](s.name)); return; }
+    const before = waiting.current.get(s.id);
+    if (before) clearTimeout(before.timer);
+    // A rule the daemon took but never applied (a write that failed, a socket dropped after the send): say so, forget it.
+    const timer = setTimeout(() => {
+      if (waiting.current.get(s.id)?.timer !== timer) return;
+      waiting.current.delete(s.id);
+      notify(t.filing.unconfirmed(s.name));
+    }, UNCONFIRMED_MS);
+    waiting.current.set(s.id, { projectId, timer });
   }, [fleet, projects, notify, t]);
 
   // A broadcast placed a waiting session in its project: say so, seat it, forget it.
   useEffect(() => {
-    for (const [id, projectId] of waiting.current) {
+    for (const [id, { projectId, timer }] of waiting.current) {
       const s = sessions.find(x => x.id === id);
       if (!s || projectIdOf(s) !== projectId) continue;
+      clearTimeout(timer);
       waiting.current.delete(id);
       notify(t.filing.joined(s.name, projects?.projects.find(p => p.id === projectId)?.name ?? projectId));
       setSeated(id);

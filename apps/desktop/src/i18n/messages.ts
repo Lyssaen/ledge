@@ -71,7 +71,8 @@ const fr = {
     joined: (name: string, table: string) => `${name} rejoint la table ${table}. Ledge s'en souviendra pour ce dossier.`,
     offline: (name: string) => `Impossible de ranger ${name} : le daemon Ledge local n'est pas joignable.`,
     outdated: (name: string) => `Impossible de ranger ${name} : mettez à jour le daemon Ledge local, il ne connaît pas encore les projets.`,
-    invalid: (name: string) => `Impossible de ranger ${name} : Ledge ne peut pas mémoriser ce dossier.`
+    invalid: (name: string) => `Impossible de ranger ${name} : Ledge ne peut pas mémoriser ce dossier.`,
+    unconfirmed: (name: string) => `${name} n'a pas été rangé : Ledge n'a pas confirmé. Réessayez.`
   },
   zoom: {
     bar: "Zoom de l'atelier", out: 'Dézoomer', outTitle: 'Dézoomer (−)', in: 'Zoomer', inTitle: 'Zoomer (+)',
@@ -150,7 +151,8 @@ const en: typeof fr = {
     joined: (name, table) => `${name} joins the ${table} table. Ledge will remember this folder.`,
     offline: (name) => `${name} could not be moved: the local Ledge daemon is not reachable.`,
     outdated: (name) => `${name} could not be moved: update the local Ledge daemon, it does not know projects yet.`,
-    invalid: (name) => `${name} could not be moved: Ledge cannot remember this folder.`
+    invalid: (name) => `${name} could not be moved: Ledge cannot remember this folder.`,
+    unconfirmed: (name) => `${name} was not moved: Ledge did not confirm. Try again.`
   },
   zoom: {
     bar: 'Atelier zoom', out: 'Zoom out', outTitle: 'Zoom out (−)', in: 'Zoom in', inTitle: 'Zoom in (+)',

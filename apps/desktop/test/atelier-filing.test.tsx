@@ -67,6 +67,50 @@ describe('useFiling', () => {
     expect(notify).toHaveBeenCalledOnce();
   });
 
+  it('a rule Ledge never confirms: after 8 s, says so in plain words; nothing moves, nothing is seated', () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    const fleet = { setProjects: vi.fn() };
+    const { result, unmount } = renderHook(() => useFiling({ fleet, projects, sessions: [kit], projectIdOf: () => null, notify }), { wrapper });
+    act(() => result.current.file(kit, 'ledge'));
+    act(() => { vi.advanceTimersByTime(7999); });
+    expect(notify).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(notify).toHaveBeenCalledExactlyOnceWith('Kit was not moved: Ledge did not confirm. Try again.');
+    expect(result.current.seated).toBeNull();
+    // Forgotten: nothing more is said later.
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(notify).toHaveBeenCalledOnce();
+    // Unmounted while waiting: no timer outlives the hook.
+    act(() => result.current.file(kit, 'ledge'));
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('a broadcast within 8 s: the joined toast only, never the unconfirmed one', () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    const fleet = { setProjects: vi.fn() };
+    const ruled: Projects = { ...projects, rules: [{ machine: 'local', path: '/w/ledge/tools', project: 'ledge' }] };
+    const { result, rerender } = renderHook((p: Projects) => useFiling({ fleet, projects: p, sessions: [kit], projectIdOf: s => projectOf(s, p), notify }),
+      { wrapper, initialProps: { ...projects, projects: [] } as Projects });
+    act(() => result.current.file(kit, 'ledge'));
+    act(() => { vi.advanceTimersByTime(5000); });
+    rerender(ruled);
+    act(() => { vi.advanceTimersByTime(10_000); });
+    expect(notify).toHaveBeenCalledExactlyOnceWith('Kit joins the Ledge table. Ledge will remember this folder.');
+  });
+
+  it('the French unconfirmed message', () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    const fr = ({ children }: { children: ReactNode }) => <LangProvider lang="fr">{children}</LangProvider>;
+    const { result } = renderHook(() => useFiling({ fleet: { setProjects: vi.fn() }, projects, sessions: [kit], projectIdOf: () => null, notify }), { wrapper: fr });
+    act(() => result.current.file(kit, 'ledge'));
+    act(() => { vi.advanceTimersByTime(8000); });
+    expect(notify).toHaveBeenCalledWith("Kit n'a pas été rangé : Ledge n'a pas confirmé. Réessayez.");
+  });
+
   it('a target refuses a drag that did not start in the app', () => {
     const fleet = { setProjects: vi.fn() };
     const { result } = renderHook(() => useFiling({ fleet, projects, sessions: [kit], projectIdOf: () => null, notify: vi.fn() }), { wrapper });
