@@ -283,3 +283,35 @@
 /* A long agent or machine name stays on one line with « … », so a seat never grows into the table (full name in its title). */
 .agent-seat>strong{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .office-shell .agent-seat .seat-machine{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Third part (task 5): the fitted mosaic, zoom and pan. */
+
+/* office.css, lines 175-196 and 202-204 (197-201, the pinned legend, are above; 183 `.workspace{position:relative}` is in shell.css). */
+.immersive .office-shell .ledge-corner{padding-top:14px}
+/* Atelier: Ledge's desk, the tables and "Sans projet" are tiles of one mosaic that fills the space (zoom set in App). */
+.overview-scroll.atelier .office-shell{display:flex;flex-wrap:wrap;align-content:space-evenly;justify-content:center;gap:0 12px;padding:44px 56px}
+.overview-scroll.atelier .office-shell .project-grid{display:contents}
+.overview-scroll.atelier .office-shell .ledge-corner{flex:0 0 230px;align-self:center;padding:0}
+.overview-scroll.atelier .office-shell .unassigned-zone{flex:1 1 420px;margin:26px 0 30px}
+.overview-scroll.atelier .office-shell .unassigned-list{grid-template-columns:1fr}
+/* Navigating the atelier like a canvas: zoom controls, drag to pan. */
+.zoom-controls{position:absolute;right:28px;bottom:58px;z-index:6;display:flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--border);border-radius:var(--radius-lg);background:color-mix(in srgb,var(--popover) 92%,transparent);backdrop-filter:blur(6px);box-shadow:var(--shadow-overlay)}
+.zoom-controls .ledge-btn{font-size:15px}
+.zoom-level{min-width:52px;height:30px;font:12px 'Geist Mono',monospace;color:var(--foreground);border-radius:var(--radius-sm)}
+.zoom-level:hover{background:var(--accent)}
+.zoom-sep{width:1px;height:18px;background:var(--border);margin:0 4px}
+.zoom-hint{font-size:10px;color:var(--muted-foreground);padding:0 8px 0 6px;white-space:nowrap}
+@media(max-width:1250px){.zoom-hint{display:none}}
+.overview-scroll.atelier.can-pan,.overview-scroll.atelier.can-pan *{cursor:grab!important}
+.overview-scroll.atelier.panning,.overview-scroll.atelier.panning *{cursor:grabbing!important;user-select:none}
+/* The floor grid belongs to the view, not the content: it fills the whole area and never zooms or moves
+   (default background attachment on the scroller); only the content scales and pans over it. */
+.overview-scroll.atelier{--office-floor:color-mix(in srgb,var(--sidebar) 97%,var(--warning));padding:0!important;background:repeating-linear-gradient(90deg,transparent 0,transparent 89px,var(--border) 90px,transparent 91px),repeating-linear-gradient(0deg,transparent 0,transparent 89px,var(--border) 90px,transparent 91px),var(--office-floor);box-shadow:inset 0 -2px 10px color-mix(in srgb,var(--foreground) 3%,transparent);border-top:1px solid var(--border)}
+.overview-scroll.atelier .office-shell{background:none!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}
+.overview-scroll.atelier.fitted{overflow:hidden}
+/* Room for the pinned legend and zoom bar, outside the zoom (the floor grid still covers it). */
+.overview-scroll.atelier{padding-bottom:76px!important}
+/* office.css, lines 219-221, with the app's `.application` in place of the mockup's `.prototype`. */
+.zoom-controls{z-index:12}.overview-scroll.atelier .workspace-legend{z-index:11}
+/* With the chat docked the workspace narrows: the zoom bar drops its hint and the legend its footnote so they never meet. */
+.application:has(.ledge-chat-panel) .zoom-hint,.application:has(.ledge-chat-panel) .workspace-legend>span:last-child{display:none}
