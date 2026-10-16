@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { createI18n, useUiCopy, type UiCopy } from '../src/i18n/lang';
 
-const copy = (name: string): UiCopy => ({ botLabel: { starting: name, working: name, approval: name, question: name, idle: name, done: name, error: name, readonly: name }, botReadOnly: name, botNotLive: name, residentName: name, residentOffline: name });
+const copy = (name: string): UiCopy => ({ stateLabel: { starting: name, working: name, approval: name, question: name, idle: name, done: name, error: name, readonly: name }, botLabel: { starting: name, working: name, approval: name, question: name, idle: name, done: name, error: name, readonly: name }, botReadOnly: name, botNotLive: name, residentName: name, residentOffline: name });
 const fr = { hello: 'Bonjour', ui: copy('fr') }; const en = { hello: 'Hello', ui: copy('en') };
 const make = (prefix = 'ledge') => createI18n({ langs: ['fr', 'en'] as const, messages: { fr, en }, fallback: 'fr', prefix, uiCopy: m => m.ui });
 

@@ -3,7 +3,7 @@ import { render } from '@testing-library/react';
 import { Bot } from '../src/bots/Bot';
 import { createI18n, type UiCopy } from '../src/i18n/lang';
 
-const copy = (s: string): UiCopy => ({ botLabel: { starting: s, working: s, approval: s, question: s, idle: s, done: s, error: s, readonly: s }, botReadOnly: `${s}-ro`, botNotLive: `${s}-frozen`, residentName: s, residentOffline: s });
+const copy = (s: string): UiCopy => ({ stateLabel: { starting: s, working: s, approval: s, question: s, idle: s, done: s, error: s, readonly: s }, botLabel: { starting: s, working: s, approval: s, question: s, idle: s, done: s, error: s, readonly: s }, botReadOnly: `${s}-ro`, botNotLive: `${s}-frozen`, residentName: s, residentOffline: s });
 const i18n = createI18n({ langs: ['fr', 'en'] as const, messages: { fr: copy('fr'), en: copy('en') }, fallback: 'fr', prefix: 'ledge', uiCopy: m => m });
 beforeEach(() => localStorage.clear());
 

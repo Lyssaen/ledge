@@ -15,6 +15,7 @@
     "./bots/useBotMotion": "./src/bots/useBotMotion.ts",
     "./bots/*": "./src/bots/*",
     "./sounds/*": "./src/sounds/*.ts",
+    "./ui/*": "./src/ui/*.tsx",
     "./i18n/lang": "./src/i18n/lang.tsx",
     "./i18n/copy": "./src/i18n/copy.tsx",
     "./styles/*": "./src/styles/*",
