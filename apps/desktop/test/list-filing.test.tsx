@@ -75,4 +75,18 @@ describe('filing from Sans projet in the List', () => {
     await user.click(trigger);
     expect(screen.getByRole('menu', { name: 'Move to…' })).not.toHaveClass('up');
   });
+  it('F while a Move to… menu is open closes it and focuses the filter; Escape then clears the filter, not the menu', async () => {
+    const { user } = await boot({ sessions: listSessions(), list: true });
+    await user.click(within(row('Kit')).getByRole('button', { name: 'Move to…' }));
+    expect(screen.getByRole('menu', { name: 'Move to…' })).toBeVisible();
+    await user.keyboard('f');
+    expect(screen.queryByRole('menu')).toBeNull();
+    const filter = screen.getByRole('textbox', { name: 'Filter the sessions' });
+    expect(filter).toHaveFocus();
+    await user.keyboard('zz');
+    expect(filter).toHaveValue('zz');
+    await user.keyboard('{Escape}');
+    expect(filter).toHaveValue('');
+    expect(filter).toHaveFocus();
+  });
 });

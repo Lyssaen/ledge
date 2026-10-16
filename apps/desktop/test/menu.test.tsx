@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Menu, MenuItem } from '../src/shell/Menu';
 
@@ -48,5 +48,20 @@ describe('Menu', () => {
     await user.click(trigger);
     fireEvent.mouseDown(screen.getByRole('button', { name: 'Elsewhere' }));
     expect(screen.queryByRole('menu')).toBeNull();
+  });
+  it('Tab out of an open menu, or focusing a control outside, closes it and leaves the focus where it went', async () => {
+    const { user, trigger } = setup();
+    await user.click(trigger);
+    await user.tab(); await user.tab();
+    expect(screen.getByRole('menu')).toBeVisible();
+    await user.tab();
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(trigger).not.toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus();
+    await user.click(trigger);
+    expect(screen.getByRole('menu')).toBeVisible();
+    act(() => screen.getByRole('button', { name: 'Elsewhere' }).focus());
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus();
   });
 });

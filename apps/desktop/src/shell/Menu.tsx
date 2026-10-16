@@ -19,7 +19,7 @@ export interface MenuProps {
 /** Closes the menu and gives the focus back to its button. */
 const CloseMenu = createContext<() => void>(() => {});
 
-/** One menu for every « … » and « Ranger dans… »: a mousedown outside closes it, Escape closes it and goes no further
+/** One menu for every « … » and « Ranger dans… »: a mousedown outside or the focus leaving closes it, Escape closes it and goes no further
  *  (captured on the window, so the global keys never see it), the arrows, Home and End move between its items. */
 export function Menu({ open, onOpenChange, label, className, menuClassName, flip, trigger, children }: MenuProps): JSX.Element {
   const wrap = useRef<HTMLSpanElement>(null);
@@ -29,6 +29,8 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
   const close = () => { onOpenChange(false); button.current?.focus(); };
   const closeRef = useRef(close);
   closeRef.current = close;
+  const changeRef = useRef(onOpenChange);
+  changeRef.current = onOpenChange;
 
   useLayoutEffect(() => {
     if (!open || !flip) { setUp(false); return; }
@@ -42,12 +44,12 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
 
   useEffect(() => {
     if (!open) return;
-    const outside = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) onOpenChange(false); };
+    const outside = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) changeRef.current(false); };
     const escape = (e: KeyboardEvent) => { if (e.key !== 'Escape') return; e.preventDefault(); e.stopPropagation(); closeRef.current(); };
     document.addEventListener('mousedown', outside);
     window.addEventListener('keydown', escape, true);
     return () => { document.removeEventListener('mousedown', outside); window.removeEventListener('keydown', escape, true); };
-  }, [open, onOpenChange]);
+  }, [open]);
 
   const onKeyDown = (e: ReactKeyboardEvent) => {
     const items = [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
@@ -64,7 +66,8 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
   };
 
   return (
-    <span className={className} ref={wrap}>
+    // The focus leaving for a control outside (Tab, or a key like F that moves it) closes the menu, and stays where it went.
+    <span className={className} ref={wrap} onBlur={e => { if (open && e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) changeRef.current(false); }}>
       {trigger({ ref: button, 'aria-haspopup': 'menu', 'aria-expanded': open, onClick: () => onOpenChange(!open) })}
       {open && (
         <CloseMenu.Provider value={() => closeRef.current()}>
