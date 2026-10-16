@@ -77,7 +77,7 @@ L'archive exigeait une confirmation WebAuthn (Face ID) pour les demandes à haut
 - Le daemon a déjà le chat (`chat.ask`, `chat.cancel`, `chat.reset`, `chat.step`, `chat.delta`, `chat.done`, `chat.error`, `chat.history`, cartes de proposition et de relais, fichier du jour `~/.ledge/chat.json`). Il faut le rendre multi-fil : chaque message de chat porte un identifiant de fil, l'overlay garde le sien, le téléphone a le sien. *(mon choix : un fil par appareil lié ; avec un seul téléphone, c'est « le fil du téléphone »)* Les questions d'un fil n'apparaissent jamais dans l'autre.
 - Ces opérations rejoignent la liste blanche de ce que le téléphone peut envoyer et recevoir, dans les mêmes enveloppes chiffrées. Lancer une session ou envoyer une consigne depuis une carte sont des écritures : elles passent par la même politique de risque que le reste.
 - *(mon choix)* Si l'app est en arrière-plan quand une réponse se termine, un push « Ledge a répondu » ouvre le fil.
-- Maquette : écran « 8 · Demander à Ledge » de la page V2.
+- Maquette : écran « 7 · Demander à Ledge » de la page V3.
 
 ### Notifications push
 
