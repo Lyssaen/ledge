@@ -51,6 +51,9 @@ describe('Desktop Tauri config', () => {
     expect(caps.permissions).toContain('updater:default'); expect(caps.permissions).toContain('process:allow-restart');
     expect(main).toContain('tauri_plugin_updater::Builder::new().build()'); expect(main).toContain('tauri_plugin_process::init()');
   });
+  it('lets HTML5 drag and drop reach the page (native file drop off, or WebView2 swallows dragover/drop)', () => {
+    expect(conf.app.windows[0].dragDropEnabled).toBe(false);
+  });
   it('may switch the window to full screen and ask whether it is', () => {
     expect(caps.permissions).toContain('core:window:allow-set-fullscreen');
     expect(caps.permissions).toContain('core:window:allow-is-fullscreen');
