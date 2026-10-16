@@ -1,0 +1,49 @@
+/* Plants around the tables: several species, in different free spots of each rug. */
+.plants{position:absolute;top:-6px;bottom:6px;pointer-events:none;z-index:2;--p-line:var(--input);--p-leaf:color-mix(in srgb,var(--success) 70%,#14532d);--p-leaf-2:color-mix(in srgb,var(--success) 55%,#365314);--p-pot:linear-gradient(110deg,var(--muted-foreground),var(--secondary))}
+.plant-spot{position:absolute;display:block}
+.plant-spot>span{position:relative;display:block}
+.plant-spot.flip>span{transform:scaleX(-1)}
+.plants i,.plants b,.plants em{position:absolute;display:block}
+.spot-tl{left:14px;top:8px}
+.spot-tr{right:14px;top:8px}
+.spot-br{right:18px;bottom:10px}
+.spot-ml{left:10px;top:calc(50% - 26px)}
+.spot-mr{right:10px;top:calc(50% - 26px)}
+/* Shared pot */
+.plants b{bottom:0;border:1px solid var(--p-line);border-radius:3px 3px 8px 8px;background:var(--p-pot);box-shadow:3px 5px 3px color-mix(in srgb,var(--foreground) 10%,transparent)}
+
+.p-monstera{width:58px;height:64px}
+.p-monstera b{left:16px;width:26px;height:20px}
+.p-monstera i{bottom:16px;left:24px;width:20px;height:30px;transform-origin:bottom center;border-radius:80% 10% 80% 10%;background:var(--p-leaf);border:1px solid color-mix(in srgb,var(--success) 40%,var(--border));animation:p-sway 6s ease-in-out infinite}
+.p-monstera i:nth-child(1){transform:rotate(-55deg)}.p-monstera i:nth-child(2){transform:rotate(-20deg);height:38px}.p-monstera i:nth-child(3){transform:rotate(15deg);height:36px;animation-delay:-2s}.p-monstera i:nth-child(4){transform:rotate(50deg)}.p-monstera i:nth-child(5){transform:rotate(-82deg);height:22px}
+
+
+.p-fern{width:62px;height:50px}
+.p-fern b{left:19px;width:24px;height:16px;border-radius:50% 50% 8px 8px/20% 20% 8px 8px}
+.p-fern i{left:29px;bottom:12px;width:5px;height:34px;transform-origin:bottom center;border-radius:50%;background:repeating-linear-gradient(0deg,var(--p-leaf-2) 0 3px,transparent 3px 5px),var(--p-leaf-2);opacity:.95;animation:p-sway 7s ease-in-out infinite}
+.p-fern i:nth-child(1){transform:rotate(-70deg);height:28px}.p-fern i:nth-child(2){transform:rotate(-45deg)}.p-fern i:nth-child(3){transform:rotate(-18deg);height:36px}.p-fern i:nth-child(4){transform:rotate(4deg);height:38px;animation-delay:-3s}.p-fern i:nth-child(5){transform:rotate(26deg);height:34px}.p-fern i:nth-child(6){transform:rotate(50deg)}.p-fern i:nth-child(7){transform:rotate(72deg);height:26px}
+
+.p-snake{width:36px;height:66px}
+.p-snake b{left:5px;width:26px;height:18px;border-radius:3px}
+.p-snake i{bottom:16px;width:8px;border-radius:50% 50% 2px 2px/90% 90% 2px 2px;background:linear-gradient(90deg,color-mix(in srgb,#eab308 50%,var(--p-leaf)) 0 15%,var(--p-leaf) 15% 85%,color-mix(in srgb,#eab308 50%,var(--p-leaf)) 85%)}
+.p-snake i:nth-child(1){left:6px;height:34px;transform:rotate(-10deg)}.p-snake i:nth-child(2){left:13px;height:48px}.p-snake i:nth-child(3){left:20px;height:40px;transform:rotate(8deg)}.p-snake i:nth-child(4){left:25px;height:26px;transform:rotate(18deg)}
+
+.p-ficus{width:48px;height:80px}
+.p-ficus b{left:12px;width:24px;height:18px}
+.p-ficus em{left:23px;bottom:16px;width:3px;height:34px;background:color-mix(in srgb,#78350f 70%,var(--muted-foreground));border-radius:2px}
+.p-ficus i{width:28px;height:24px;border-radius:50%;background:radial-gradient(circle at 35% 35%,color-mix(in srgb,var(--p-leaf) 70%,#bef264),var(--p-leaf));border:1px solid color-mix(in srgb,var(--success) 35%,var(--border));animation:p-sway 8s ease-in-out infinite}
+.p-ficus i:nth-child(1){left:4px;top:8px}.p-ficus i:nth-child(2){left:18px;top:0;animation-delay:-2s}.p-ficus i:nth-child(3){left:14px;top:18px;width:24px;height:20px}.p-ficus i:nth-child(4){left:0;top:24px;width:20px;height:16px;animation-delay:-5s}
+
+.p-succulent{width:44px;height:32px}
+.p-succulent b{left:4px;width:36px;height:14px;border-radius:4px 4px 12px 12px;background:color-mix(in srgb,var(--info) 30%,var(--secondary))}
+.p-succulent i{bottom:10px;width:12px;height:16px;border-radius:50% 50% 50% 50%/70% 70% 30% 30%;background:color-mix(in srgb,#5eead4 40%,var(--p-leaf));border:1px solid color-mix(in srgb,var(--success) 35%,var(--border));transform-origin:bottom center}
+.p-succulent i:nth-child(1){left:6px;transform:rotate(-40deg)}.p-succulent i:nth-child(2){left:12px;transform:rotate(-15deg);height:19px}.p-succulent i:nth-child(3){left:17px;height:21px}.p-succulent i:nth-child(4){left:22px;transform:rotate(15deg);height:19px}.p-succulent i:nth-child(5){left:27px;transform:rotate(40deg)}
+
+@keyframes p-sway{0%,100%{rotate:0deg}50%{rotate:3deg}}
+.office-paused .plants *{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.plants *{animation:none!important}}
+/* The plants' layer follows the rug's skew so each spot sits on the rug; each plant is counter-skewed to stand upright. */
+.plants{transform:skewY(-4deg)}
+.plant-spot>span{transform:skewY(4deg)}
+.plant-spot.flip>span{transform:skewY(4deg) scaleX(-1)}
+.spot-tl{left:20px;top:16px}.spot-tr{right:20px;top:16px}.spot-br{right:22px;bottom:18px}.spot-ml{left:16px}.spot-mr{right:16px}

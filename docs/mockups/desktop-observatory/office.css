@@ -1,0 +1,309 @@
+/* A small office diorama, built from the same semantic colours as the application. */
+.project-conversations{font-size:12px;font-weight:500;padding:0}.project-conversations:hover{text-decoration:underline;text-underline-offset:3px}.office-shell .coffee-cup{right:13%;top:192px}
+.session-search-button{display:flex;align-items:center;gap:8px;width:100%;height:35px;margin-top:9px;padding:0 9px!important;border:1px solid var(--border)!important;border-radius:var(--radius-md);font-size:11px;color:var(--muted-foreground)}.session-search-button>span{flex:1}.session-search-button kbd{font-size:9px!important}.primary-nav{margin:17px 0 23px}.ledge-chat-nav{display:flex;align-items:center;gap:8px;margin:25px 0 0;padding:12px 6px!important;width:100%;border-top:1px solid var(--border)!important;border-bottom:1px solid var(--border)!important}.ledge-chat-nav>span{flex:1;font-size:12px}.ledge-chat-nav small{display:block;font-size:9px;color:var(--muted-foreground);margin-top:1px}.ledge-chat-nav:hover,.ledge-chat-nav.active{background:var(--sidebar-accent)}.sidebar-note{margin-top:20px}.keyboard-footer{display:flex;gap:16px;align-items:center}.keyboard-footer button{display:flex;align-items:center;gap:6px;color:var(--muted-foreground);font-size:10px}.keyboard-footer kbd{font-size:9px!important;height:17px!important}.seat-shortcut{display:none;font-family:'Geist Mono',monospace;font-size:9px;color:var(--muted-foreground);margin-left:5px}.agent-seat:hover .seat-shortcut,.agent-seat:focus-visible .seat-shortcut,.keyboard-selected .seat-shortcut{display:inline}.keyboard-selected{outline:2px solid var(--ring);outline-offset:2px}.office-shell{--office-wood:color-mix(in srgb,var(--secondary) 88%,var(--warning));--office-leaf:color-mix(in srgb,var(--success) 55%,var(--sidebar));--office-floor:color-mix(in srgb,var(--sidebar) 97%,var(--warning));position:relative;border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;background:repeating-linear-gradient(90deg,transparent 0,transparent 89px,var(--border) 90px,transparent 91px),repeating-linear-gradient(0deg,transparent 0,transparent 89px,var(--border) 90px,transparent 91px),var(--office-floor);box-shadow:inset 0 -2px 10px color-mix(in srgb,var(--foreground) 3%,transparent)}.office-shell:before{content:'';position:absolute;left:0;top:72px;bottom:0;width:10px;background:var(--secondary);border-right:1px solid var(--input);z-index:1;pointer-events:none}.office-wall{height:76px;position:relative;display:flex;align-items:center;justify-content:space-between;padding:0 35px;gap:25px;background:linear-gradient(180deg,var(--secondary),var(--sidebar));border-bottom:9px solid var(--muted);box-shadow:0 1px 0 var(--input),0 9px 18px color-mix(in srgb,var(--foreground) 4%,transparent)}.wall-sign{min-width:120px;display:flex;flex-direction:column;gap:3px}.wall-sign>span{font-size:15px;font-weight:600;letter-spacing:5px;color:var(--sidebar-foreground)}.wall-sign small{font-size:6px;letter-spacing:1.5px;color:var(--muted-foreground)}.office-window{height:45px;width:36%;display:flex;background:linear-gradient(150deg,color-mix(in srgb,var(--info) 21%,var(--background)),color-mix(in srgb,var(--info) 5%,var(--background)));border:4px solid var(--well);box-shadow:0 0 0 1px var(--input),0 4px 0 var(--border);transform:skewX(-5deg);overflow:hidden}.office-window>i{flex:1;border-right:3px solid var(--well);background:linear-gradient(125deg,transparent 30%,color-mix(in srgb,var(--info) 10%,transparent) 31%,color-mix(in srgb,var(--info) 10%,transparent) 50%,transparent 51%)}.office-window>i:last-child{border:0}.wall-shelf{height:46px;min-width:160px;position:relative;display:flex;align-items:end;justify-content:space-between;border-bottom:5px solid var(--office-wood);box-shadow:0 3px 0 var(--border)}.shelf-books{display:flex;gap:3px;align-items:end}.shelf-books i{width:9px;height:21px;border:1px solid var(--input);background:color-mix(in srgb,var(--info) 25%,var(--secondary));border-radius:2px}.shelf-books i:nth-child(2){height:27px;background:color-mix(in srgb,var(--sidebar-primary) 22%,var(--secondary));transform:rotate(-9deg)}.shelf-books i:nth-child(3){height:23px;background:var(--secondary)}.shelf-books i:nth-child(4){height:30px;background:color-mix(in srgb,var(--warning) 22%,var(--secondary))}.wall-clock{width:29px;height:29px;border:3px solid var(--input);background:var(--sidebar);border-radius:50%;position:relative;margin-bottom:6px}.wall-clock i{position:absolute;left:11px;top:5px;width:1px;height:9px;background:var(--muted-foreground)}.wall-clock b{position:absolute;left:11px;top:13px;width:7px;height:1px;background:var(--sidebar-primary)}.office-shell .project-grid{gap:0;padding:25px 18px 0}.office-shell .project-room{background:none;border:0;border-radius:0;overflow:visible;position:relative}.office-shell .room-heading{position:relative;border:0;width:max-content;max-width:95%;margin:auto;padding:6px 12px;background:var(--sidebar);border:1px solid var(--input);box-shadow:0 3px 0 var(--border);border-radius:var(--radius-md);z-index:2;gap:9px}.office-shell .room-heading .spacer{width:16px;flex:initial}.office-shell .room-heading strong{font-size:12px}.office-shell .table-scene{height:442px;background:none;max-width:none}.office-rug{position:absolute;left:3%;right:3%;top:80px;bottom:20px;border:1px solid color-mix(in srgb,var(--info) 14%,var(--border));border-radius:38px 24px 38px 24px;background:repeating-linear-gradient(0deg,transparent 0,transparent 4px,color-mix(in srgb,var(--info) 2%,transparent) 5px),color-mix(in srgb,var(--info) 5%,var(--sidebar));box-shadow:0 4px 0 color-mix(in srgb,var(--foreground) 4%,transparent);transform:skewY(-4deg)}.office-shell [data-project=commerce] .office-rug{border-color:color-mix(in srgb,var(--success) 16%,var(--border));background:color-mix(in srgb,var(--success) 5%,var(--sidebar))}.office-shell [data-project=studio] .office-rug{border-color:color-mix(in srgb,var(--warning) 16%,var(--border));background:color-mix(in srgb,var(--warning) 5%,var(--sidebar))}.office-shell .worktable{top:157px;height:123px;left:14%;right:14%;border-radius:18px;transform:skewY(-4deg);background:linear-gradient(150deg,color-mix(in srgb,var(--office-wood) 90%,var(--foreground)),var(--office-wood));border:1px solid color-mix(in srgb,var(--warning) 18%,var(--input));box-shadow:0 7px 0 var(--secondary),0 8px 0 var(--input),7px 18px 13px color-mix(in srgb,var(--foreground) 8%,transparent);padding:0 70px;z-index:1;gap:2px}.office-shell .worktable:before,.office-shell .worktable:after{content:'';position:absolute;bottom:-27px;height:21px;width:7px;background:var(--muted-foreground);opacity:.35;z-index:-1;border-radius:0 0 2px 2px}.office-shell .worktable:before{left:20px}.office-shell .worktable:after{right:20px}.office-shell .worktable>svg,.office-shell .worktable>strong,.office-shell .worktable>span{display:none}.office-shell .worktable .table-conversations{font-size:9px;line-height:14px;text-align:center;z-index:2;border:1px solid var(--input);background:var(--sidebar);border-radius:6px;padding:5px 7px;position:absolute;left:32%;right:32%;top:44px;color:var(--foreground)}.office-shell .agent-seat{z-index:3;width:125px}.office-shell .helper-seat{width:86px}.office-shell .agent-seat:hover{background:color-mix(in srgb,var(--sidebar-accent) 85%,transparent)}.office-chair{position:absolute;width:55px;height:35px;border:1px solid var(--input);border-radius:16px 16px 9px 9px;background:linear-gradient(var(--secondary),var(--muted));box-shadow:0 5px 0 var(--well),0 6px 0 var(--border),3px 10px 8px color-mix(in srgb,var(--foreground) 10%,transparent);transform:skewY(-4deg)}.office-chair:before{content:'';position:absolute;left:5px;right:5px;top:-12px;height:14px;border-radius:8px;background:var(--muted);border:1px solid var(--input)}.office-plant{position:relative;display:block;width:38px;height:50px;flex-shrink:0;pointer-events:none}.office-plant i{position:absolute;bottom:17px;left:14px;width:11px;height:29px;background:var(--office-leaf,var(--success));border:1px solid color-mix(in srgb,var(--success) 30%,var(--border));border-radius:90% 10% 90% 10%;transform-origin:bottom}.office-plant i:nth-child(1){transform:rotate(-42deg)}.office-plant i:nth-child(2){transform:rotate(38deg);height:32px}.office-plant i:nth-child(3){transform:rotate(-10deg);height:37px}.office-plant i:nth-child(4){transform:rotate(65deg);height:22px}.office-plant b{position:absolute;bottom:0;left:6px;width:27px;height:22px;background:linear-gradient(110deg,var(--muted-foreground),var(--secondary));border:1px solid var(--input);border-radius:3px 3px 9px 9px;box-shadow:3px 6px 3px color-mix(in srgb,var(--foreground) 10%,transparent)}.wall-shelf .office-plant{transform:scale(.6);transform-origin:bottom}.room-plant{position:absolute;top:278px;left:4%;transform:rotate(-8deg);z-index:2}.office-shell .room-footer{border:0;text-align:center;margin:4px 10px 0;padding:9px;font-size:9px;background:color-mix(in srgb,var(--sidebar) 75%,transparent);border-radius:6px}.office-shell .room-footer>span{display:none}.office-shell .room-footer>div{justify-content:center;margin:0}.office-paused *{animation-play-state:paused!important}.immersive .office-shell .table-scene{height:442px}.immersive .office-shell .worktable{top:157px}
+.ledge-chat-drawer{position:fixed;z-index:4;right:0;top:32px;bottom:0;width:430px;max-width:100vw;background:var(--sidebar);border-left:1px solid var(--input);box-shadow:var(--shadow-overlay);display:flex;flex-direction:column}.immersive .ledge-chat-drawer{top:0}.chat-drawer-note{height:33px;display:flex;align-items:center;justify-content:space-between;padding:0 15px;font-size:10px;color:var(--muted-foreground);border-bottom:1px solid var(--border)}.chat-drawer-note button{font-size:10px;color:var(--sidebar-primary)}.chat-drawer-content{position:relative;min-height:0;flex:1}.chat-drawer-content a{color:var(--sidebar-primary)}.command-palette{width:650px}.palette-search{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);color:var(--muted-foreground)}.palette-search input{width:100%;border:0;background:transparent;padding:4px 0;font-size:14px}.palette-results{max-height:440px;overflow:auto;padding:6px}.palette-results button{display:flex;align-items:center;width:100%;padding:12px 10px;gap:12px;border-radius:var(--radius-md)}.palette-results button[aria-selected=true]{background:var(--sidebar-accent);outline:1px solid var(--input)}.palette-results button>span:not([data-badge]){flex:1;min-width:0}.palette-results strong{font-size:13px;font-weight:500}.palette-results small{display:block;font-size:11px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.palette-results strong small{display:inline}.palette-results kbd{font-size:10px!important}.palette-footer{display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid var(--border);font-size:10px;color:var(--muted-foreground)}.shortcut-list{padding:8px 20px 20px}.shortcut-list>p{font-size:11px;line-height:18px;color:var(--muted-foreground);margin:12px 0}.shortcut-list>div{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:10px 0;border-bottom:1px solid var(--border);font-size:12px}.shortcut-list kbd{font-size:10px!important;flex-shrink:0}
+@media(prefers-reduced-motion:reduce){.office-shell *{animation:none!important;transition:none!important}}
+@media(max-width:1250px){.office-shell .project-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.office-shell .project-room:last-child:nth-child(odd){grid-column:auto}.office-shell .room-heading{padding:5px 8px}.office-shell .worktable{left:4%;right:4%}.office-shell .agent-seat{width:106px}.office-shell .helper-seat{width:76px}.office-shell .agent-seat>[data-badge]{font-size:10px!important;padding:0 5px!important}.office-shell .office-rug{left:0;right:0}.office-shell .worktable .table-conversations{left:32%;right:28%;font-size:8px}.office-wall{padding:0 22px;gap:12px}.wall-shelf{min-width:105px}.wall-sign{min-width:95px}.office-shell .project-grid.focused{grid-template-columns:minmax(300px,620px)}}
+@media(max-width:1000px){.office-shell .project-grid{grid-template-columns:1fr}.office-shell .project-room{max-width:480px;width:100%;margin:0 auto 25px}.office-shell .table-scene{max-width:none!important}.office-shell .project-room:last-child{margin-bottom:0}.office-shell .worktable{left:14%;right:14%}.office-shell .office-rug{left:3%;right:3%}.office-shell .agent-seat{width:125px}.office-shell .helper-seat{width:86px}.wall-shelf{min-width:80px}.wall-shelf .office-plant{display:none}.wall-sign{min-width:80px}.wall-sign>span{font-size:12px}.wall-sign small{font-size:5px}.office-window{width:40%}.keyboard-footer{gap:10px}.keyboard-footer button{font-size:0;gap:0}}
+@media(max-width:850px){.session-search-button{font-size:0;padding:0!important;justify-content:center}.session-search-button>span,.session-search-button kbd{display:none}.ledge-chat-nav{justify-content:center}.ledge-chat-nav>span,.ledge-chat-nav kbd{display:none}.office-wall{padding:0 17px}.office-shell .project-grid{padding:20px 12px 0}.office-shell .project-grid.focused{grid-template-columns:1fr}}
+@media(max-width:540px){.office-wall{gap:10px;height:65px}.wall-shelf{min-width:48px}.shelf-books{display:none}.office-shell:before{top:61px;width:5px}.office-shell .worktable .table-conversations{left:33%;right:29%;font-size:8px}.office-shell .room-footer{font-size:9px}.office-shell .agent-seat>[data-badge]{font-size:10px!important}.office-shell .worktable{left:7%;right:7%}.palette-results button{gap:8px;padding:11px 6px}.palette-results button>kbd{display:none}.palette-results [data-badge]{font-size:10px!important}.shortcut-list>div{font-size:11px}.shortcut-list kbd{font-size:9px!important}.ledge-chat-drawer{width:100%;top:32px}}
+
+/* Table top: one sheet per agent, in the table's own plane (it inherits the skew). */
+.table-top{position:absolute;inset:0;pointer-events:none}
+
+.task-sheet{--sheet:color-mix(in srgb,var(--card) 86%,var(--foreground));position:absolute;width:84px;min-height:46px;padding:7px 8px 8px;border-radius:2px;background:linear-gradient(transparent 0 16px,transparent 16px),var(--sheet);border:1px solid var(--input);box-shadow:2px 3px 0 color-mix(in srgb,var(--foreground) 12%,transparent)}
+:root[data-theme=light] .task-sheet{--sheet:var(--card)}
+.task-sheet p{margin:0;font-size:9px;line-height:12px;color:var(--card-foreground);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.task-sheet:after{content:'';position:absolute;left:8px;right:16px;bottom:7px;height:1px;background:var(--input)}
+.sheet-flag{position:absolute;top:-5px;right:7px;width:14px;height:13px;border-radius:1px;background:var(--sidebar-primary);box-shadow:1px 1px 0 color-mix(in srgb,var(--foreground) 15%,transparent)}
+.sheet-question .sheet-flag{background:var(--warning)}
+.sheet-stamp{position:absolute;right:5px;bottom:3px;width:16px;height:16px;display:grid;place-items:center;border:1.5px solid var(--success);border-radius:50%;color:var(--success);font:600 9px/1 'Geist',sans-serif;font-style:normal;transform:rotate(-12deg)}
+.sheet-done p,.sheet-offline p{color:var(--muted-foreground)}
+.sheet-offline{border-style:dashed;opacity:.6}
+
+/* Agents Ledge cannot tie to a project wait in a taped-off area, standing, until they are filed. */
+.unassigned-zone{margin:22px 30px 28px;padding:14px 16px 16px;border:1.5px dashed var(--input);border-radius:var(--radius-xl);background:color-mix(in srgb,var(--sidebar) 70%,transparent);position:relative}
+.compact.unassigned-zone,.unassigned-zone.compact{margin:16px 0 0;background:var(--sidebar);border-style:dashed}
+.unassigned-heading{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.unassigned-heading>svg{color:var(--muted-foreground);align-self:center}
+.unassigned-heading h2{font-size:13px;font-weight:500;margin:0}
+.unassigned-heading .muted{font-size:11px}
+.unassigned-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.unassigned-card{display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card)}
+.unassigned-open{display:flex;align-items:center;gap:10px;min-width:0;text-align:left;border-radius:var(--radius-md);padding:2px}
+.unassigned-open:hover{background:var(--sidebar-accent)}
+.unassigned-copy{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.unassigned-copy strong{font-size:12px;font-weight:500}
+.unassigned-copy>span{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.unassigned-copy code{font:10px/14px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.unassigned-card:hover .seat-shortcut,.unassigned-card.keyboard-selected .seat-shortcut{display:inline}
+.assign-wrap{position:relative;flex-shrink:0}
+.assign-menu{position:absolute;right:0;bottom:calc(100% + 4px);z-index:20;min-width:190px;padding:4px;display:flex;flex-direction:column;background:var(--popover);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay)}
+.assign-menu button{display:flex;flex-direction:column;align-items:flex-start;padding:6px 8px;border-radius:var(--radius-sm);font-size:12px;text-align:left}
+.assign-menu button:hover,.assign-menu button:focus-visible{background:var(--accent)}
+.assign-menu small{font-size:10px;color:var(--muted-foreground)}
+.unassigned-nav{position:relative}
+.unassigned-nav>small{margin-left:auto;font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+@media(max-width:700px){.unassigned-zone{margin:18px 0 20px}.unassigned-list{grid-template-columns:1fr}}
+
+.unassigned-actions{display:flex;align-items:center;gap:8px;padding:6px 2px 0;border-top:1px solid var(--border)}
+
+
+.sheet-done p{padding-right:14px}
+
+/* Places around a table; sub-agents take the table ends. */
+.office-shell .agent-seat{width:112px}
+.office-shell .place-tl,.office-shell .place-tr,.office-shell .place-tc{top:10px}
+.office-shell .place-bl,.office-shell .place-br,.office-shell .place-bc{top:286px}
+.office-shell .place-tl,.office-shell .place-bl{left:calc(30% - 56px)}
+.office-shell .place-tr,.office-shell .place-br{left:calc(70% - 56px)}
+.office-shell .place-tc,.office-shell .place-bc{left:calc(50% - 56px)}
+.chair-tl,.chair-tr,.chair-tc{top:56px}
+.chair-bl,.chair-br,.chair-bc{top:328px}
+.chair-tl,.chair-bl{left:calc(30% - 27px)}
+.chair-tr,.chair-br{left:calc(70% - 27px)}
+.chair-tc,.chair-bc{left:calc(50% - 27px)}
+.office-shell .helper-seat{width:62px;top:180px}
+.office-shell .helper-seat>strong{font-size:11px;line-height:15px}
+.office-shell .end-left{left:calc(7% - 31px)}
+.office-shell .end-right{left:auto;right:calc(7% - 31px)}
+.sheet-tl,.sheet-tr,.sheet-tc{top:9px}
+.sheet-bl,.sheet-br,.sheet-bc{bottom:9px}
+.sheet-tl,.sheet-bl{left:calc(22% - 42px)}
+.sheet-tr,.sheet-br{left:calc(78% - 42px)}
+.sheet-tc,.sheet-bc{left:calc(50% - 42px)}
+.sheet-tl{transform:rotate(-3deg)}.sheet-tr{transform:rotate(2deg)}.sheet-tc{transform:rotate(-1deg)}
+.sheet-bl{transform:rotate(2deg)}.sheet-br{transform:rotate(-2deg)}.sheet-bc{transform:rotate(1.5deg)}
+.room-plant{top:300px;left:1%}
+.footer-branch{font-family:'Geist Mono',monospace;margin-left:8px}
+@media(max-width:1250px) and (min-width:1001px){.office-shell .worktable{left:18%;right:18%}.office-shell .end-left{left:calc(9% - 31px)}.office-shell .end-right{right:calc(9% - 31px)}.sheet-tl,.sheet-bl{left:calc(24% - 42px)}.sheet-tr,.sheet-br{left:calc(76% - 42px)}.task-sheet{width:78px}}
+.office-shell .agent-seat .seat-machine{font:10px/14px 'Geist Mono',monospace;color:var(--muted-foreground);margin-bottom:2px}
+.heading-branch{font:10px 'Geist Mono',monospace;color:var(--muted-foreground);margin-left:4px}
+.office-shell .room-heading .spacer{width:8px}
+/* A sub-agent's sticky note, laid next to its parent's sheet. */
+.sheet-note{position:absolute;width:52px;min-height:40px;padding:5px 6px 6px;border-radius:1px;background:color-mix(in srgb,var(--warning) 26%,var(--card));border:1px solid color-mix(in srgb,var(--warning) 35%,var(--input));box-shadow:1px 2px 0 color-mix(in srgb,var(--foreground) 14%,transparent);z-index:1}
+:root[data-theme=light] .sheet-note{background:color-mix(in srgb,#facc15 30%,var(--card))}
+.sheet-note p{font-size:8px!important;line-height:10px!important;-webkit-line-clamp:3!important}
+.sheet-note .sheet-flag{top:-4px;right:4px;width:10px;height:9px}
+.sheet-note .sheet-stamp{width:13px;height:13px;font-size:7px;right:3px;bottom:2px}
+
+/* Tables grow with their agents: rooms take the width of their table and wrap. */
+.office-shell .project-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:0 12px}
+.office-shell .project-room{flex:1 1 var(--room);min-width:min(var(--room),100%);max-width:none!important;margin:0 0 8px}
+.office-shell .place-t{top:10px}
+.office-shell .place-b{top:286px}
+.chair-t{top:56px}.chair-b{top:328px}
+.sheet-t{top:9px;transform:rotate(-2deg)}
+.sheet-b{bottom:9px;transform:rotate(2deg)}
+.sheet-t:nth-child(4n+3){transform:rotate(1.5deg)}.sheet-b:nth-child(4n){transform:rotate(-1.5deg)}
+
+.office-shell .room-plant{top:300px}
+.office-shell .table-scene{overflow:visible}
+.note-t{top:12px;transform:rotate(5deg)}.note-b{bottom:12px;transform:rotate(-5deg)}
+.office-shell:before{display:none}
+.office-shell .project-grid{padding-top:30px}
+.office-shell [data-project=atlas] .office-rug{border-color:color-mix(in srgb,#8b5cf6 18%,var(--border));background:color-mix(in srgb,#8b5cf6 5%,var(--sidebar))}
+.office-shell [data-project=mobile] .office-rug{border-color:color-mix(in srgb,#14b8a6 18%,var(--border));background:color-mix(in srgb,#14b8a6 5%,var(--sidebar))}
+/* Drag and drop: every table becomes a target; the hovered one lights up. */
+.unassigned-card{position:relative;cursor:grab;padding-left:22px}
+.unassigned-card:active{cursor:grabbing}
+.unassigned-card.is-dragged{opacity:.4;border-style:dashed}
+.drag-grip{position:absolute;left:7px;top:50%;transform:translateY(-50%);display:grid;grid-template-columns:repeat(2,3px);gap:3px}
+.drag-grip i{width:3px;height:3px;border-radius:50%;background:var(--muted-foreground);opacity:.6}
+.unassigned-card:hover .drag-grip i{opacity:1}
+.is-dragging .office-shell .office-rug{outline:1.5px dashed var(--ring);outline-offset:6px;transition:outline-color .15s,background .15s}
+.office-shell .drop-over .office-rug{outline:2px solid var(--sidebar-primary);background:color-mix(in srgb,var(--sidebar-primary) 9%,var(--sidebar))!important}
+.is-dragging .project-room.drop-over .room-heading{border-color:var(--sidebar-primary)}
+.drop-hint{font-size:10px;padding:1px 7px;border-radius:999px;border:1px dashed var(--ring);color:var(--muted-foreground);margin-left:6px;white-space:nowrap}
+.drop-over .drop-hint{border-style:solid;border-color:var(--sidebar-primary);color:var(--foreground);background:color-mix(in srgb,var(--sidebar-primary) 18%,transparent)}
+.compact .project-room.drop-over{outline:2px solid var(--sidebar-primary)}
+.just-seated{animation:seat-pop .9s cubic-bezier(.3,1.6,.5,1)}
+.just-seated:after{content:'';position:absolute;inset:-6px;border-radius:var(--radius-lg);border:2px solid var(--sidebar-primary);animation:seat-ring 1.4s ease-out forwards;pointer-events:none}
+@keyframes seat-pop{0%{transform:translateY(-26px) scale(.7);opacity:0}100%{transform:none;opacity:1}}
+@keyframes seat-ring{0%{opacity:1}100%{opacity:0;transform:scale(1.15)}}
+@media(prefers-reduced-motion:reduce){.just-seated,.just-seated:after{animation:none}}
+/* Ledge's own little desk, at the head of the room: a click opens the chat. */
+.ledge-corner{display:flex;justify-content:center;padding:26px 0 4px}
+.ledge-desk{position:relative;display:flex;flex-direction:column;align-items:center;width:200px;padding:4px 0 8px!important;border-radius:var(--radius-xl)}
+.ledge-desk:hover .mini-desk,.ledge-desk.active .mini-desk{box-shadow:0 6px 0 var(--secondary),0 7px 0 var(--input),0 0 0 2px color-mix(in srgb,var(--sidebar-primary) 45%,transparent),5px 14px 12px color-mix(in srgb,var(--foreground) 8%,transparent)}
+.ledge-desk:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.ledge-bubble{position:absolute;left:calc(50% + 52px);top:2px;display:flex;align-items:center;gap:6px;white-space:nowrap;padding:5px 9px;font-size:11px;border:1px solid var(--input);border-radius:10px 10px 10px 2px;background:var(--popover);color:var(--popover-foreground);box-shadow:0 3px 0 var(--border);z-index:2}
+.ledge-bubble kbd{font-size:9px!important;height:16px!important}
+.ledge-seat{position:relative;z-index:1;margin-bottom:-30px}
+.mini-desk{position:relative;z-index:2;display:block;width:150px;height:46px;border-radius:12px;transform:skewY(-4deg);background:linear-gradient(150deg,color-mix(in srgb,var(--office-wood) 90%,var(--foreground)),var(--office-wood));border:1px solid color-mix(in srgb,var(--warning) 18%,var(--input));box-shadow:0 6px 0 var(--secondary),0 7px 0 var(--input),5px 14px 12px color-mix(in srgb,var(--foreground) 8%,transparent);transition:box-shadow .15s}
+.mini-desk:before,.mini-desk:after{content:'';position:absolute;bottom:-20px;height:15px;width:6px;background:var(--muted-foreground);opacity:.35;border-radius:0 0 2px 2px}
+.mini-desk:before{left:16px}.mini-desk:after{right:16px}
+.mini-sheet{position:absolute;top:9px;left:22px;width:30px;height:22px;border-radius:2px;background:color-mix(in srgb,var(--card) 86%,var(--foreground));border:1px solid var(--input);transform:rotate(-6deg);box-shadow:1px 2px 0 color-mix(in srgb,var(--foreground) 12%,transparent)}
+:root[data-theme=light] .mini-sheet{background:var(--card)}
+.mini-sheet.two{left:46px;top:13px;transform:rotate(5deg);background:color-mix(in srgb,var(--warning) 26%,var(--card))}
+.mini-mug{position:absolute;top:12px;right:28px;width:11px;height:13px;border-radius:2px 2px 4px 4px;background:var(--card);border:1px solid var(--input)}
+.mini-lamp{position:absolute;top:-14px;right:10px;width:16px;height:9px;border-radius:9px 9px 2px 2px;background:color-mix(in srgb,var(--warning) 35%,var(--muted));border:1px solid var(--muted-foreground);transform:rotate(14deg)}
+.ledge-desk.active .mini-lamp{background:var(--warning);box-shadow:0 6px 14px color-mix(in srgb,var(--warning) 55%,transparent)}
+.ledge-desk>strong{margin-top:22px;font-size:12px;font-weight:500}
+.ledge-desk>small{font-size:10px;color:var(--muted-foreground)}
+.office-shell .ledge-corner+.project-grid{padding-top:8px}
+@media(max-width:700px){.ledge-bubble{display:none}}
+/* The project's label is woven into the rug, bottom-left; it shares the rug's skew. */
+.office-shell .office-rug .room-heading{position:absolute;left:14px;bottom:12px;margin:0;width:auto;max-width:calc(100% - 28px);padding:5px 6px 5px 10px;gap:6px;background:color-mix(in srgb,var(--sidebar) 88%,transparent);border:1px solid var(--input);box-shadow:0 2px 0 var(--border);border-radius:var(--radius-md);z-index:4}
+.office-shell .office-rug .room-heading .spacer{width:2px}
+.office-shell .office-rug .room-heading strong,.office-shell .office-rug .project-conversations{font-size:12px;font-weight:500}
+.office-shell .room-plant{top:60px!important}
+.office-shell .table-scene{height:490px}
+.empty-project{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;margin:40px auto;max-width:420px;padding:28px;border:1.5px dashed var(--input);border-radius:var(--radius-xl)}
+.empty-project h2{margin:0;font-size:15px;font-weight:500}
+.empty-project p{margin:0 0 8px;font-size:12px;color:var(--muted-foreground)}
+/* Wider, flatter rugs: the label sits in the free bottom-left corner, and a long name is cut. */
+.office-shell .office-rug{top:-6px!important;bottom:6px!important}
+.office-shell .table-scene{height:446px!important}
+.office-shell .office-rug .room-heading{left:14px;bottom:10px;max-width:206px;padding:4px 4px 4px 9px;gap:5px}
+.office-shell .office-rug .project-conversations{flex-shrink:0;min-width:0;max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.office-shell .office-rug .heading-branch{flex:0 1 auto;min-width:0;max-width:64px;margin-left:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.office-shell .office-rug .room-heading>svg,.office-shell .office-rug .room-heading .icon-action{flex-shrink:0}
+.office-shell .room-plant{top:74px!important}
+.office-shell .office-rug .room-heading .side-swatch{margin:0 2px 0 0}
+.office-shell .office-rug .room-heading .icon-action{width:22px;height:22px}
+.heading-names{display:flex;align-items:baseline;gap:4px;min-width:0}
+.office-shell .office-rug .heading-names{flex-direction:column;align-items:flex-start;gap:0;line-height:14px}
+.office-shell .office-rug .heading-branch{max-width:118px;font-size:9px;line-height:12px}
+/* Rugs now reach the top seats; with the skew, rows need air between them. */
+.office-shell .project-room{margin:26px 0 30px!important}
+/* Full screen: no width cap, the zoom computed in App fills the screen. */
+.immersive .office-shell .project-grid{max-width:none}
+.fit-note{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);margin-right:6px}
+
+.immersive .view-toolbar{padding-top:10px}
+.immersive .office-shell .ledge-corner{padding-top:14px}
+/* Atelier: Ledge's desk, the tables and "Sans projet" are tiles of one mosaic that fills the space (zoom set in App). */
+.overview-scroll.atelier .office-shell{display:flex;flex-wrap:wrap;align-content:space-evenly;justify-content:center;gap:0 12px;padding:44px 56px}
+.overview-scroll.atelier .office-shell .project-grid{display:contents}
+.overview-scroll.atelier .office-shell .ledge-corner{flex:0 0 230px;align-self:center;padding:0}
+.overview-scroll.atelier .office-shell .unassigned-zone{flex:1 1 420px;margin:26px 0 30px}
+.overview-scroll.atelier .office-shell .unassigned-list{grid-template-columns:1fr}
+/* Navigating the atelier like a canvas: zoom controls, drag to pan. */
+.workspace{position:relative}
+.zoom-controls{position:absolute;right:28px;bottom:58px;z-index:6;display:flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--border);border-radius:var(--radius-lg);background:color-mix(in srgb,var(--popover) 92%,transparent);backdrop-filter:blur(6px);box-shadow:var(--shadow-overlay)}
+.zoom-controls .ledge-btn{font-size:15px}
+.zoom-level{min-width:52px;height:30px;font:12px 'Geist Mono',monospace;color:var(--foreground);border-radius:var(--radius-sm)}
+.zoom-level:hover{background:var(--accent)}
+.zoom-sep{width:1px;height:18px;background:var(--border);margin:0 4px}
+.zoom-hint{font-size:10px;color:var(--muted-foreground);padding:0 8px 0 6px;white-space:nowrap}
+@media(max-width:1250px){.zoom-hint{display:none}}
+.overview-scroll.atelier.can-pan,.overview-scroll.atelier.can-pan *{cursor:grab!important}
+.overview-scroll.atelier.panning,.overview-scroll.atelier.panning *{cursor:grabbing!important;user-select:none}
+/* The floor grid belongs to the view, not the content: it fills the whole area and never zooms or moves
+   (default background attachment on the scroller); only the content scales and pans over it. */
+.overview-scroll.atelier{--office-floor:color-mix(in srgb,var(--sidebar) 97%,var(--warning));padding:0!important;background:repeating-linear-gradient(90deg,transparent 0,transparent 89px,var(--border) 90px,transparent 91px),repeating-linear-gradient(0deg,transparent 0,transparent 89px,var(--border) 90px,transparent 91px),var(--office-floor);box-shadow:inset 0 -2px 10px color-mix(in srgb,var(--foreground) 3%,transparent);border-top:1px solid var(--border)}
+.overview-scroll.atelier .office-shell{background:none!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}
+.overview-scroll.atelier .workspace-legend{padding:12px 26px 14px}
+/* The legend is pinned to the page's bottom-left corner, out of the zoomed and panned content
+   (its containing block is .workspace, so the scroller neither scrolls nor clips it). */
+.overview-scroll.atelier .workspace-legend{position:absolute;left:28px;bottom:58px;z-index:6;padding:8px 14px!important;gap:14px;border:1px solid var(--border);border-radius:var(--radius-lg);background:color-mix(in srgb,var(--popover) 92%,transparent);backdrop-filter:blur(6px);box-shadow:var(--shadow-overlay)}
+.overview-scroll.atelier .workspace-legend .spacer{display:none}
+.overview-scroll.atelier.fitted{overflow:hidden}
+/* Room for the pinned legend and zoom bar, outside the zoom (the floor grid still covers it). */
+.overview-scroll.atelier{padding-bottom:76px!important}
+/* Heading carries the view controls now that the project select is gone; a single project gets a way back. */
+.view-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+.view-title{min-width:0}
+.view-actions{display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:auto}
+.view-actions-sep{width:1px;height:20px;background:var(--border);margin:0 6px}
+/* A single project is a filter on the atelier: a chip in the project's colour next to the title, × (or Échap) clears it. */
+.title-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.project-filter{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 4px 0 10px;border:1px solid var(--input);border-radius:999px;background:var(--secondary);font-size:13px;font-weight:500}
+.project-filter .side-swatch{margin:0}
+.project-filter .filter-none{width:9px;height:9px;border-radius:3px;border:1.5px dashed var(--muted-foreground)}
+.project-filter button{width:22px;height:22px;display:grid;place-items:center;border-radius:999px;color:var(--muted-foreground)}
+.project-filter button:hover{background:var(--accent);color:var(--foreground)}
+.project-filter button:focus-visible{outline:2px solid var(--ring)}
+.crumb-link{color:var(--muted-foreground)}.crumb-link:hover{color:var(--foreground);text-decoration:underline;text-underline-offset:3px}
+.zoom-controls{z-index:12}.overview-scroll.atelier .workspace-legend{z-index:11}
+/* With the chat docked the workspace narrows: the zoom bar drops its hint and the legend its footnote so they never meet. */
+.prototype:has(.ledge-chat-panel) .zoom-hint,.prototype:has(.ledge-chat-panel) .workspace-legend>span:last-child{display:none}
+/* The page heading is gone: the breadcrumb says where we are, and the view controls sit in the top bar. */
+.app-header{gap:12px}
+.app-header .breadcrumb{min-width:0;flex-shrink:1}
+.header-view{display:flex;align-items:center;gap:2px;margin-left:auto;flex-shrink:0}
+.header-view .view-tabs [role=tablist]{height:32px}
+.header-view+.header-actions{margin-left:8px}
+.app-header .project-filter{height:26px;font-size:12px}
+@media(max-width:1250px){.header-view>.ledge-btn{padding-inline:8px}}
+@media(max-width:1100px){.app-header .overlay-state{display:none}}
+.app-header .project-filter>span,.app-header .ledge-btn,.side-actions .ledge-btn{white-space:nowrap}
+@media(max-width:1250px){.side-actions .ledge-btn kbd{display:none}.app-header .header-actions>.ledge-btn[data-variant=outline]{font-size:0;gap:0;padding:0 9px}.app-header .header-actions>.ledge-btn[data-variant=outline] svg{margin:0}}
+.app-header .breadcrumb{overflow:hidden}
+.app-header .project-filter{min-width:0}.app-header .project-filter>span{overflow:hidden;text-overflow:ellipsis;max-width:180px}
+@media(max-width:1250px){.header-view .long-label{display:none}}
+.header-view .short-label{display:none}
+@media(max-width:1250px){.header-view .short-label{display:inline}}
+/* Top bar, icon-only and grouped: view (Atelier / Liste) · display (sub-agents, freeze) · tools (search, chat, help) · full screen. */
+.header-view{gap:4px}
+.icon-tabs{display:flex;padding:2px;gap:2px;border-radius:var(--radius-md);background:var(--muted);border:1px solid var(--input)}
+.icon-tabs button{width:32px;height:28px;display:grid;place-items:center;border-radius:calc(var(--radius-md) - 2px);color:var(--muted-foreground)}
+.icon-tabs button:hover{color:var(--foreground)}
+.icon-tabs button[aria-selected=true]{background:var(--background);color:var(--foreground);box-shadow:0 1px 2px color-mix(in srgb,var(--foreground) 12%,transparent)}
+.icon-tabs button:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+.header-view .ledge-btn[aria-pressed=true]{color:var(--foreground)}
+.header-view .ledge-btn[aria-pressed=false]{color:var(--muted-foreground)}
+.header-actions{display:flex;align-items:center;gap:2px}
+.header-actions .view-actions-sep{margin:0 6px}
+.footer-status{display:flex;align-items:center;gap:16px}
+.footer-status>span{display:flex;align-items:center;gap:6px}
+.workspace-footer .overlay-state{display:inline-flex!important;align-items:center;gap:6px;font-size:10px;color:var(--muted-foreground)}
+.workspace-footer .overlay-state:hover{color:var(--foreground)}
+/* Session page: the project's agents in a rail on the left, the conversation, and the terminal only when asked for. */
+.conversation-workspace{grid-template-columns:240px minmax(0,1fr)!important}
+.conversation-workspace.with-terminal{grid-template-columns:240px minmax(0,1.15fr) minmax(0,1fr)!important}
+.project-rail{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--border);background:var(--sidebar)}
+.rail-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);font-size:12px;font-weight:500}
+.rail-head>span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail-head small{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.rail-head .side-swatch{margin:0}.rail-head .filter-none{width:9px;height:9px;border-radius:3px;border:1.5px dashed var(--muted-foreground)}
+.rail-list{flex:1;overflow:auto;padding:6px;display:flex;flex-direction:column;gap:2px}
+.rail-agent{position:relative;display:flex;align-items:center;gap:9px;width:100%;padding:6px 8px;border-radius:var(--radius-md);text-align:left;color:var(--muted-foreground)}
+.rail-agent:hover{background:var(--sidebar-accent);color:var(--foreground)}
+.rail-agent.current{background:var(--sidebar-accent);color:var(--foreground);box-shadow:inset 2px 0 0 var(--sidebar-primary)}
+.rail-agent>span{flex:1;min-width:0;display:flex;flex-direction:column}
+.rail-agent strong{font-size:12px;font-weight:500;color:var(--foreground)}
+.rail-agent small{font-size:11px;line-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail-agent.child{padding-left:24px}
+.rail-agent.child:before{content:'';position:absolute;left:14px;top:0;bottom:50%;width:7px;border-left:1px solid var(--input);border-bottom:1px solid var(--input);border-bottom-left-radius:4px}
+.rail-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--info)}
+.rail-dot.approval{background:var(--sidebar-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--sidebar-primary) 25%,transparent)}
+.rail-dot.question{background:var(--warning);box-shadow:0 0 0 3px color-mix(in srgb,var(--warning) 25%,transparent)}
+.rail-dot.done{background:var(--muted-foreground);opacity:.5}.rail-dot.off{background:none;border:1px solid var(--muted-foreground)}
+.rail-new{display:flex;align-items:center;gap:6px;margin:6px;padding:8px;border:1px dashed var(--input);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground)}
+.rail-new:hover{color:var(--foreground);border-color:var(--ring)}
+.session-identity .ledge-btn{margin-left:10px}
+@media(max-width:1000px){.conversation-workspace,.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1fr)!important}.project-rail{display:none}}
+.session-heading{padding-top:18px}
+/* Several sub-agents on one parent: the sticky note counts the others. */
+.note-more{position:absolute;right:-6px;bottom:-6px;min-width:16px;height:14px;padding:0 3px;border-radius:999px;background:var(--card);border:1px solid var(--input);font:600 8px/12px 'Geist Mono',monospace;font-style:normal;text-align:center;color:var(--foreground)}
+/* Overflow, on the rug's bottom-right corner (mirror of the project label): who else sits at this table. */
+.office-rug .table-more{position:absolute;right:14px;bottom:10px;z-index:4;display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 10px 0 5px;border:1px solid var(--input);border-radius:999px;background:color-mix(in srgb,var(--sidebar) 90%,transparent);box-shadow:0 2px 0 var(--border);font-size:11px;font-weight:500;color:var(--muted-foreground);white-space:nowrap}
+.office-rug .table-more:hover{color:var(--foreground);border-color:var(--ring)}
+.office-rug .table-more:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.more-faces{display:flex}
+.more-faces i{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--secondary);border:1.5px solid var(--sidebar);margin-left:-7px;overflow:hidden}
+.more-faces i:first-child{margin-left:0}
+/* Sub-agents live only in the rail, grouped under their parent behind a "Sous-agents" caption and a tree line. */
+.rail-kids{position:relative;margin:0 0 4px 20px;padding:2px 0 2px 10px;border-left:1px dashed var(--input);border-radius:0 0 0 6px;transition:background .3s}
+.rail-kids-label{display:flex;align-items:center;gap:5px;padding:3px 6px 2px;font:500 10px/14px 'Geist Mono',monospace;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-foreground)}
+.rail-kids .rail-agent.child{padding-left:8px}
+.rail-kids .rail-agent.child:before{display:none}
+.rail-kids .rail-agent.child strong{font-weight:400}
+.rail-flash{animation:rail-flash 1.4s ease-out}
+@keyframes rail-flash{0%,40%{background:color-mix(in srgb,var(--sidebar-primary) 16%,transparent);border-left-color:var(--sidebar-primary)}100%{background:transparent}}
+@media(prefers-reduced-motion:reduce){.rail-flash{animation:none;background:color-mix(in srgb,var(--sidebar-primary) 10%,transparent)}}
+.kids-pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--muted-foreground)}
+.kids-pill:hover{color:var(--foreground);border-color:var(--input)}
+.kids-pill:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+/* Session in the top bar: the breadcrumb ends with the agent and its task; status and the terminal toggle sit on the right. */
+.crumb-session{display:inline-flex;align-items:center;gap:7px;min-width:0}
+.crumb-session>strong{flex-shrink:0}
+.crumb-task{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted-foreground);font-size:13px}
+.crumb-task:before{content:'·';margin-right:7px;color:var(--muted-foreground)}
+.header-session{gap:6px}
+.header-session .ledge-btn[aria-pressed=true]{background:var(--accent);color:var(--foreground)}
+.pane-meta{margin-left:10px;font-size:10px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.app-header .breadcrumb{flex:1 1 auto}
+.crumb-parent{display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
