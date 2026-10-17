@@ -19,6 +19,7 @@ export const en: Messages = {
   foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts' },
   sections: { general: 'General', appearance: 'Appearance', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Shortcuts', about: 'About' },
   pending: 'This screen is coming soon.',
+  chunkFailed: 'This part of Ledge could not load. Restart the app.',
   close: 'Close',
   modalTitles: { launch: 'New session' },
   search: {

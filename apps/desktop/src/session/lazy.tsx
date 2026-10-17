@@ -1,4 +1,5 @@
 import { lazy, Suspense, type JSX } from 'react';
+import { ChunkBoundary } from '../shell/ChunkBoundary';
 import type { WorkspaceProps } from './Workspace';
 
 type WorkspaceModule = typeof import('./Workspace');
@@ -16,7 +17,7 @@ const Page = lazy(() => (loaded
   ? { then: (ok: (m: Loaded) => void) => ok({ default: loaded!.Workspace }) } as PromiseLike<Loaded> as Promise<Loaded>
   : loadWorkspace().then(m => ({ default: m.Workspace }))));
 
-/** The session place, behind a sober wait (an empty workspace) the first time its chunk is fetched. */
+/** The session place, behind a sober wait (an empty workspace) the first time its chunk is fetched; a chunk that fails to load leaves a note (ChunkBoundary). */
 export function SessionPlace(props: WorkspaceProps): JSX.Element {
-  return <Suspense fallback={<div className="conversation-workspace" aria-busy="true" />}><Page {...props} /></Suspense>;
+  return <ChunkBoundary><Suspense fallback={<div className="conversation-workspace" aria-busy="true" />}><Page {...props} /></Suspense></ChunkBoundary>;
 }

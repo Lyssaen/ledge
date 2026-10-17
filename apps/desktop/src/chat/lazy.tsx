@@ -1,4 +1,5 @@
 import { lazy, Suspense, type JSX } from 'react';
+import { ChunkBoundary } from '../shell/ChunkBoundary';
 import type { ChatPanelProps } from './ChatPanel';
 
 type ChatModule = typeof import('./ChatPanel');
@@ -16,8 +17,12 @@ const Panel = lazy(() => (loaded
   ? { then: (ok: (m: Loaded) => void) => ok({ default: loaded!.ChatPanel }) } as PromiseLike<Loaded> as Promise<Loaded>
   : loadChat().then(m => ({ default: m.ChatPanel }))));
 
-/** The docked chat, behind a sober wait (the empty column) the first time its chunk is fetched. */
+/** The docked chat, behind a sober wait (the empty column) the first time its chunk is fetched; a chunk that fails to load leaves a note (ChunkBoundary). */
 export function ChatPlace(props: ChatPanelProps & { label: string }): JSX.Element {
   const { label, ...rest } = props;
-  return <Suspense fallback={<aside className="ledge-chat-panel" aria-label={label} aria-busy="true" />}><Panel {...rest} /></Suspense>;
+  return (
+    <ChunkBoundary around={note => <aside className="ledge-chat-panel" aria-label={label}>{note}</aside>}>
+      <Suspense fallback={<aside className="ledge-chat-panel" aria-label={label} aria-busy="true" />}><Panel {...rest} /></Suspense>
+    </ChunkBoundary>
+  );
 }

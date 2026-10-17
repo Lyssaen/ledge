@@ -1,4 +1,5 @@
 import { lazy, Suspense, type JSX } from 'react';
+import { ChunkBoundary } from '../shell/ChunkBoundary';
 
 type EditorModule = typeof import('./ProjectEditor');
 export type ProjectEditorProps = Parameters<EditorModule['ProjectEditor']>[0];
@@ -16,7 +17,7 @@ const Editor = lazy(() => (loaded
   ? { then: (ok: (m: Loaded) => void) => ok({ default: loaded!.ProjectEditor }) } as PromiseLike<Loaded> as Promise<Loaded>
   : loadEditor().then(m => ({ default: m.ProjectEditor }))));
 
-/** The project editor, behind a sober wait (an empty editor) the first time its chunk is fetched. */
+/** The project editor, behind a sober wait (an empty editor) the first time its chunk is fetched; a chunk that fails to load leaves a note (ChunkBoundary). */
 export function EditorPlace(props: ProjectEditorProps): JSX.Element {
-  return <Suspense fallback={<div className="pe" aria-busy="true" />}><Editor {...props} /></Suspense>;
+  return <ChunkBoundary><Suspense fallback={<div className="pe" aria-busy="true" />}><Editor {...props} /></Suspense></ChunkBoundary>;
 }
