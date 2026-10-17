@@ -103,6 +103,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const showChanges = useCallback((path: string) => { setFile(path); setView('changes'); }, []);
   const showInThread = useCallback((toolId: string) => {
     returning.current = 'aim';
+    // Aimed at an action, the reader no longer follows the end: the thread growing around it must not take the view away.
+    follow.current = false;
     setListOpen(false);
     setFlash(toolId);
     setView('thread');
@@ -245,14 +247,15 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     setAtBottom(follow.current);
   }, [items, loaded, memo.scroll, view]);
   // The column or what is in it changed size without a scroll (a new item, the pinned card, the pane narrowing the column):
-  // the end may now lie below the view, and « Aller au plus récent » says so. Nothing scrolls here and following is left
-  // as it was: at the end, the next item still comes into view; higher up, the view never jumps.
+  // a reader at the end keeps the end in view (lot 6a's rule); higher up, the view never moves and the end, now below it,
+  // is said by « Aller au plus récent ».
   const resized = useRef<ResizeObserver | null>(null);
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
       if (!opened.current || el.hidden || el.clientHeight === 0) return;
+      if (follow.current) el.scrollTop = el.scrollHeight;
       setAtBottom(atEnd(el));
     });
     resized.current = ro;

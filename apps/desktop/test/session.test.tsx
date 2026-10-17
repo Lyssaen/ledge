@@ -199,30 +199,46 @@ describe('the session page', () => {
     await waitFor(() => expect(thread().queryByRole('button', { name: 'Go to the latest message' })).toBeNull());
   });
 
-  it('« Go to the latest message » also comes when the thread grows below the view without a scroll, and the view stays', async () => {
+  /** The thread with a stubbed ResizeObserver and a geometry the test drives: 500 px shown, `height` in all, read from `top`. */
+  async function resizable() {
     const watched = new Set<Element>(); const calls: Array<() => void> = [];
     vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { calls.push(cb); } observe(e: Element) { watched.add(e); } unobserve() {} disconnect() {} });
+    await openOtto();
+    await thread().findByText('Corrige-les');
+    const el = document.querySelector<HTMLElement>('.session-thread')!;
+    const g = { top: 1500, height: 2000 };
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => g.height });
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: 500 });
+    Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => g.top, set: (v: number) => { g.top = v; } });
+    const resized = () => act(() => { for (const cb of calls) cb(); });
+    const latest = () => thread().queryByRole('button', { name: 'Go to the latest message' });
+    return { el, g, watched, resized, latest };
+  }
+
+  it('at the end, the thread keeps the end in view when its column resizes (the pinned card comes): no button', async () => {
     try {
-      await openOtto();
-      await thread().findByText('Corrige-les');
-      const el = document.querySelector<HTMLElement>('.session-thread')!;
+      const { el, g, watched, resized, latest } = await resizable();
       // The thread's column and what is in it are watched: a new item, a card that grows.
       expect(watched.has(el)).toBe(true);
       expect(watched.has(el.querySelector('.turn')!)).toBe(true);
-      let top = 1500; let height = 2000;
-      Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => height });
-      Object.defineProperty(el, 'clientHeight', { configurable: true, value: 500 });
-      Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => top, set: (v: number) => { top = v; } });
-      const resized = () => act(() => { for (const cb of calls) cb(); });
       resized();
-      expect(thread().queryByRole('button', { name: 'Go to the latest message' })).toBeNull();
-      height = 2300;                                     // the pinned card came, the pane narrowed the column, an item grew
+      expect(latest()).toBeNull();
+      g.height = 2300;                                   // the pinned card came, the pane narrowed the column, an item grew
       resized();
-      expect(thread().getByRole('button', { name: 'Go to the latest message' })).toBeVisible();
-      expect(top).toBe(1500);                            // no jump
-      top = 1800;
+      expect(g.top).toBe(2300);                          // still at the end
+      expect(latest()).toBeNull();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('higher up, growth below the view brings « Go to the latest message » and the view stays', async () => {
+    try {
+      const { el, g, resized, latest } = await resizable();
+      g.top = 200; fireEvent.scroll(el);                 // the reader went up: not following
+      expect(await thread().findByRole('button', { name: 'Go to the latest message' })).toBeVisible();
+      g.height = 2300;                                   // the thread grows below the view
       resized();
-      expect(thread().queryByRole('button', { name: 'Go to the latest message' })).toBeNull();
+      expect(latest()).toBeVisible();
+      expect(g.top).toBe(200);                           // no jump
     } finally { vi.unstubAllGlobals(); }
   });
 

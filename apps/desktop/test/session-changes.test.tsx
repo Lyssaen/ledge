@@ -1,5 +1,5 @@
-import { afterEach, expect, it } from 'vitest';
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import type { Session, ThreadItem } from '@ledge/protocol';
 import { boot, closeDaemons, declarations, listSessions, ottoThread } from './helpers';
 
@@ -124,4 +124,23 @@ it('nothing changed: said plainly, and Cursor named as the one that does not tel
 it('a renamed file wears the colour of an edited one', () => {
   expect(declarations('session.css', '.change-rename')).toBe(declarations('session.css', '.change-edit'));
   expect(declarations('session.css', '.change-rename')).toContain('color:var(--warning)');
+});
+
+it('« turn 2 » aims at the action: the thread growing as its fold opens does not snap the view back to the end', async () => {
+  const calls: Array<() => void> = [];
+  vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { calls.push(cb); } observe() {} unobserve() {} disconnect() {} });
+  try {
+    const { user } = await openOtto();
+    const el = document.querySelector<HTMLElement>('.session-thread')!;
+    const g = { top: 1500, height: 2000 };
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => g.height });
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: 500 });
+    Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => g.top, set: (v: number) => { g.top = v; } });
+    await user.click(tab(/^Changes/));
+    await user.click(within(pane()).getByRole('button', { name: /^Edit · turn 2/ }));
+    g.top = 900;                                         // the flash brought the action to the middle
+    g.height = 2200;                                     // its fold opened
+    act(() => { for (const cb of calls) cb(); });
+    expect(g.top).toBe(900);
+  } finally { vi.unstubAllGlobals(); }
 });
