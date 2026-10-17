@@ -30,7 +30,9 @@ if (agent === 'codex') {
   say({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't2', name: 'Read', input: { file_path: process.cwd() + '/pane-a.txt' } }] } });
   if (mode === 'slow') await new Promise(r => setTimeout(r, 5000));
   for (const t of ['Deux ', 'compagnons ', 'travaillent.']) say({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: t } } });
-  // FAKE_ANSWER replaces the final text (a proposal block, say); `folders` answers with the folders.md Ledge was given.
-  const answer = mode === 'folders' ? readFileSync(process.cwd() + '/folders.md', 'utf8') : env.FAKE_ANSWER ?? 'Deux compagnons travaillent. Question : ' + q.trim();
+  // FAKE_ANSWER replaces the final text (a proposal block, say); `folders` answers with the folders.md Ledge was given, `projects`
+  // with its projects.md (or says there is none).
+  const file = name => { try { return readFileSync(process.cwd() + '/' + name, 'utf8'); } catch { return `(no ${name})`; } };
+  const answer = mode === 'folders' ? file('folders.md') : mode === 'projects' ? file('projects.md') : env.FAKE_ANSWER ?? 'Deux compagnons travaillent. Question : ' + q.trim();
   say({ type: 'result', subtype: 'success', is_error: false, result: answer, session_id: sid });
 }

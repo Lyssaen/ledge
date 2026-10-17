@@ -72,7 +72,7 @@ const under = (cwd: string, path: string) => path === '/' || cwd === path || cwd
 
 /**
  * The project a session belongs to (build spec §5): among the repos and rules of the session's machine whose folder holds its
- * `cwd`, the deepest wins; on the same folder a rule (the user put the agent away) wins over a repo. `null`: « Sans projet ».
+ * `cwd`, the deepest wins; on the same folder a rule (the user put the agent away) wins over a repo. `null`: no project.
  */
 export function projectOf(session: Pick<Session, 'machineId' | 'cwd'>, state: Projects): string | null {
   const machine = session.machineId ?? 'local';

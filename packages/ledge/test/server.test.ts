@@ -1241,6 +1241,21 @@ describe('projects', () => {
     expect(existsSync(paths().projects)).toBe(false);
     a.close(); b.close(); await s.close();
   });
+  it('the chat reads the projects the daemon holds at each question: a later projects.set is in the next context', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, agentEnv: async () => ({ ...process.env, FAKE_CLAUDE_MODE: 'projects' }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
+    const ws = await open(s.port); const got = collect(ws);
+    await until(() => got.some(m => m.type === 'projects'));
+    const answer = async (qid: string) => {
+      ws.send(JSON.stringify({ type: 'chat.ask', qid, text: 'Which projects?', tool: 'claude' }));
+      await until(() => got.some(m => m.type === 'chat.done' && m.qid === qid));
+      return (got.find(m => m.type === 'chat.done' && m.qid === qid) as Extract<ServerMessage, { type: 'chat.done' }>).text;
+    };
+    expect(await answer('q1')).toBe('(no projects.md)');
+    ws.send(JSON.stringify({ type: 'projects.set', projects: projectsState }));
+    await until(() => got.filter(m => m.type === 'projects').length === 2);
+    expect(await answer('q2')).toContain('## Ledge');
+    ws.close(); await s.close();
+  });
   it('honours a projects file given at start', async () => {
     const f = join(mkdtempSync(join(tmpdir(), 'ledge-projects-srv-')), 'projects.json');
     writeProjects(projectsState as Projects, f);

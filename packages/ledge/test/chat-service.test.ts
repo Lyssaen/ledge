@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { ServerMessage, Session } from '@ledge/protocol';
+import type { Projects, ServerMessage, Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createChat } from '../src/chat/service.js';
 
@@ -43,6 +43,26 @@ describe('chat service', () => {
     const chat = createChat({ store, tmux, home, today: () => '2026-10-11', env: async () => ({ ...process.env }), bin: [process.execPath, FAKE], spawn, ...extra });
     return { chat, spawned, store, home };
   }
+
+  it('reads the daemon’s projects at each question: a change between two questions is in the next context', async () => {
+    let home = '';
+    const seen: (string | null)[] = [];
+    const spawn = ((file: string, a: string[], o: object) => {
+      const f = join(home, 'chat', 'context', 'projects.md');
+      seen.push(existsSync(f) ? readFileSync(f, 'utf8') : null);
+      return nodeSpawn(file, a, o as never);
+    }) as unknown as typeof nodeSpawn;
+    let projects: Projects = { projects: [], rules: [] };
+    let reads = 0;
+    const s = setup({ spawn, projects: () => { reads++; return projects; } });
+    home = s.home;
+    await s.chat.ask('q1', 'x', () => {});
+    projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+    await s.chat.ask('q2', 'y', () => {});
+    expect(reads).toBe(2);
+    expect(seen[0]).toBeNull();
+    expect(seen[1]).toContain('## Ledge');
+  });
 
   it('reset clears the turns, forgets the day file, and the next question starts a new session (--session-id, not --resume)', async () => {
     const args: string[][] = [];

@@ -42,11 +42,34 @@ describe('writeContext', () => {
     expect(stepFor(join(dir, 'projects.md'), ctx)).toBeNull();
   });
 
-  it('says there is no project when there are none', async () => {
+  it('a daemon without projects nor rules (a remote one) writes no projects.md and no Project line', async () => {
+    for (const projects of [undefined, { projects: [], rules: [] }]) {
+      const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+      await writeContext(dir, { sessions: [mk('a')], ...(projects && { projects }), now: T0, capture: async () => null, git: async () => null });
+      expect(existsSync(join(dir, 'projects.md'))).toBe(false);
+      expect(readFileSync(join(dir, 'sessions.md'), 'utf8')).not.toContain('Project');
+    }
+  });
+
+  it('a daemon without projects writes the very sessions.md it wrote before projects existed', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
     await writeContext(dir, { sessions: [mk('a')], now: T0, capture: async () => null, git: async () => null });
-    expect(readFileSync(join(dir, 'projects.md'), 'utf8')).toContain('No projects.');
-    expect(readFileSync(join(dir, 'sessions.md'), 'utf8')).toContain('- Project: no project');
+    expect(readFileSync(join(dir, 'sessions.md'), 'utf8')).toBe([
+      `# Ledge sessions at ${T0}`, '', 'Each session below lists the files that describe it, in this folder.', '',
+      '## Otto (claude) — working', '- id: a', '- topic: (none yet)', '- folder: /w/ledge', '- repository: ledge', `- started: ${T0}, last activity: ${T0}`, ''
+    ].join('\n'));
+  });
+
+  it('a newline in a project’s name or description forges no heading', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    const forged: Projects = { projects: [{ ...PROJECTS.projects[0]!, name: 'Ledge\n## Forged', description: 'One.\n\n## Also forged\r\nTwo.' }], rules: [] };
+    await writeContext(dir, { sessions: [mk('a')], projects: forged, now: T0, capture: async () => null, git: async () => null });
+    const md = readFileSync(join(dir, 'projects.md'), 'utf8');
+    expect(md.split('\n').filter(l => l.startsWith('#'))).toEqual(['# Projects', '## Ledge ## Forged']);
+    expect(md).toContain('One. ## Also forged Two.');
+    const sessions = readFileSync(join(dir, 'sessions.md'), 'utf8');
+    expect(sessions.split('\n').filter(l => l.startsWith('#'))).toEqual([`# Ledge sessions at ${T0}`, '## Otto (claude) — working']);
+    expect(sessions).toContain('- Project: Ledge ## Forged');
   });
 
   it('gives each session its project in sessions.md', async () => {
