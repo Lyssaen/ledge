@@ -20,6 +20,8 @@ export interface NavState { place: Place; modal: Modal; chat: boolean; fullscree
 export type NavAction =
   | { type: 'home'; project?: ProjectFilter; view?: View }
   | { type: 'view'; view: View }
+  /** Sets the current place's project filter without going anywhere (a session page stays open; in Settings, the place behind). */
+  | { type: 'filter'; project: ProjectFilter }
   | { type: 'open'; id: string; helper?: string; focus?: 'reply' }
   | { type: 'settings'; section?: SectionId }
   | { type: 'modal'; modal: Modal }
@@ -45,6 +47,10 @@ export function navReducer(s: NavState, a: NavAction): NavState {
     case 'view': {
       const b = baseOf(place);
       return { ...s, place: { kind: 'overview', view: a.view, project: b.project } };
+    }
+    case 'filter': {
+      if (baseOf(place).project === a.project) return s;
+      return { ...s, place: place.kind === 'settings' ? { ...place, back: { ...place.back, project: a.project } } : { ...place, project: a.project } };
     }
     case 'open': {
       const b = baseOf(place);

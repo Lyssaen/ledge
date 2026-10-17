@@ -142,6 +142,16 @@ function Shell({ client }: { client?: DaemonClient }) {
       : t.projects.created(name));
   };
 
+  // A deletion the daemon confirmed: the editor closes; a filter on the deleted project goes back to All, wherever we are
+  // (a session page stays open, its agent now elsewhere); the notice says where its agents went.
+  const projectDeleted = (id: string, name: string, moveTo: string | null, agents: number) => {
+    dispatch({ type: 'modal', modal: null });
+    if (base.project === id) dispatch({ type: 'filter', project: 'all' });
+    const d = t.projects.delete;
+    const to = moveTo === null ? null : projects?.projects.find(p => p.id === moveTo)?.name ?? moveTo;
+    notify(d.done(name) + (agents === 0 ? '' : to === null ? d.doneNone(agents) : d.doneMoved(agents, to)));
+  };
+
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={nav.modal !== null}>
@@ -174,7 +184,7 @@ function Shell({ client }: { client?: DaemonClient }) {
       )}
       {nav.modal?.kind === 'project' && (
         <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}`} edit={nav.modal.edit} file={nav.modal.file} projects={projects} sessions={sessions} machines={machines}
-          client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} onClose={close} onSaved={projectSaved} />
+          client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}
       <Toast notice={notice} />
     </ScreenKeysContext.Provider>

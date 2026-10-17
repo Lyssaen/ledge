@@ -334,7 +334,7 @@ describe('the project dialog', () => {
   it('an unknown project to edit closes the dialog at once', () => {
     const onClose = vi.fn();
     render(<LangProvider lang="en"><ProjectDialog edit="nope" projects={PROJECTS} sessions={[]} machines={[]} client={{} as DaemonClient} fleet={{ setProjects: vi.fn() }}
-      projectIdOf={() => null} onClose={onClose} onSaved={vi.fn()} /></LangProvider>);
+      projectIdOf={() => null} onClose={onClose} onSaved={vi.fn()} onDeleted={vi.fn()} /></LangProvider>);
     expect(onClose).toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
   });

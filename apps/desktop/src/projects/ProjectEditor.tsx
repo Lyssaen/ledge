@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
-import type { DaemonClient, Fleet, MachineState } from '@ledge/fleet';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type ReactNode } from 'react';
+import { withoutProject, type DaemonClient, type Fleet, type MachineState } from '@ledge/fleet';
 import { normalizePath, PROJECT_COLORS, type Projects, type Repo, type RepoInfo, type Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -9,7 +9,7 @@ import { ruleFor } from '../atelier/filing';
 import { isUp } from '../launch/model';
 import { useRepoInfo } from '../launch/useRepoInfo';
 import { SessionBot } from '../shell/SessionBot';
-import { afterSave, alsoIn, COLOR_ORDER, draftProblem, saved, type ProjectDraft } from './draft';
+import { afterSave, alsoIn, COLOR_ORDER, deletion, draftProblem, removed, saved, type ProjectDraft } from './draft';
 import { FolderPicker } from './FolderPicker';
 import { ProjectSwatch } from './ProjectSwatch';
 import { useProjectSave } from './useProjectSave';
@@ -17,6 +17,11 @@ import { useProjectSave } from './useProjectSave';
 const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1) || path;
 const repoKey = (machine: string, path: string) => `${machine}\n${normalizePath(path)}`;
 type Known = { exists: boolean; branch: string | null };
+/** `part` in bold within `text` (a name inside a translated sentence). */
+const emphasis = (text: string, part: string): ReactNode => {
+  const i = text.indexOf(part);
+  return i < 0 ? text : <>{text.slice(0, i)}<strong>{part}</strong>{text.slice(i + part.length)}</>;
+};
 
 /** One machine's saved repositories, inspected (useRepoInfo, lot 7): the answer goes up to the editor. */
 function Inspect({ client, machine, paths, onInfos }: { client: DaemonClient; machine: string; paths: readonly string[]; onInfos(machine: string, infos: ReadonlyMap<string, RepoInfo>): void }): null {
@@ -34,8 +39,10 @@ export function ProjectEditor(p: {
   mode: 'new' | 'edit'; initial: ProjectDraft; projects: Projects; sessions: readonly Session[]; machines: readonly MachineState[];
   client: DaemonClient; fleet: Pick<Fleet, 'setProjects'>; projectIdOf(s: Session): string | null; onClose(): void;
   onSaved(id: string, created: boolean, filed: Session[]): void;
-  /** Task 5: deleting the project (« Supprimer le projet »), its agents moved to `moveTo` or left without project. */
-  onDeleted(id: string, moveTo: string | null, agents: number): void;
+  /** The deletion view (« Supprimer le projet », edit mode only): the dialog titles it, hence held there. */
+  deleting: boolean; onDeleting(on: boolean): void;
+  /** A deletion the daemon confirmed: the project (its name as it was), where its agents went (`moveTo`, or null: no project), how many. */
+  onDeleted(id: string, name: string, moveTo: string | null, agents: number): void;
 }): JSX.Element {
   const { t } = useI18n();
   const c = t.projects;
@@ -46,9 +53,19 @@ export function ProjectEditor(p: {
   const [adding, setAdding] = useState(p.mode === 'new' && p.initial.repos.length === 0);
   // What is known of each repository (by machine and path): from the browser when added, from repos.inspect for the saved ones.
   const [known, setKnown] = useState<ReadonlyMap<string, Known>>(() => new Map());
-  const { state, send } = useProjectSave(p.fleet, projects);
+  const { state, send, reset } = useProjectSave(p.fleet, projects);
   const nameRef = useRef<HTMLInputElement>(null);
   useEffect(() => { nameRef.current?.focus(); }, []);
+  // Deleting: where its agents go (null: « Sans projet »). Entering the view focuses that choice; leaving it, « Supprimer le projet ».
+  const [moveTo, setMoveTo] = useState<string | null>(null);
+  const moveRef = useRef<HTMLInputElement>(null);
+  const deleteRef = useRef<HTMLButtonElement>(null);
+  const entered = useRef(p.deleting);
+  useEffect(() => {
+    if (entered.current === p.deleting) return;
+    entered.current = p.deleting;
+    (p.deleting ? moveRef : deleteRef).current?.focus();
+  }, [p.deleting]);
   // The confirmation comes in an effect after the broadcast's render: it reaches the props of that render.
   const latest = useRef(p);
   latest.current = p;
@@ -102,12 +119,74 @@ export function ProjectEditor(p: {
   // Only Ctrl / ⌘ ↵ and the main button save: a plain Enter in a field or on a radio would submit the form implicitly.
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key !== 'Enter') return;
+    // The deletion is only ever confirmed by its own button.
+    if (p.deleting) { if (e.ctrlKey || e.metaKey || e.target instanceof HTMLInputElement) e.preventDefault(); return; }
     if (e.ctrlKey || e.metaKey) { e.preventDefault(); save(); }
     else if (e.target instanceof HTMLInputElement) e.preventDefault();
   };
 
+  // The deletion: what becomes of the agents at its table and of its remembered folders. While the deletion is sent, the view
+  // stays as it was when sent (the broadcast that confirms it no longer holds the project, and the dialog closes right after).
+  const current = projects.projects.find(x => x.id === d.id);
+  const others = projects.projects.filter(x => x.id !== d.id);
+  const target = moveTo === null ? null : others.find(x => x.id === moveTo) ?? others[0] ?? null;
+  const live = current ? { project: current, target, ...deletion(projects, current.id, p.sessions, p.projectIdOf) } : null;
+  const shown = useRef(live);
+  if (!saving) shown.current = live;
+  const doomed = saving ? shown.current : live;
+  const toggle = (on: boolean) => { if (saving) return; reset(); setMoveTo(null); p.onDeleting(on); };
+  const remove = () => {
+    if (saving || !live) return;
+    const { project, agents } = live;
+    const to = live.target?.id ?? null;
+    send(withoutProject(projects, project.id, to), st => removed(st, project.id), () => latest.current.onDeleted(project.id, project.name, to, agents.length));
+  };
+
   const showName = tried && nameProblem;
   const machinesShown = [...new Set(d.repos.map(r => labelOf(r.machine)))].join(', ');
+
+  if (p.deleting) {
+    const dl = c.delete;
+    const n = doomed?.agents.length ?? 0;
+    const names = doomed ? doomed.agents.slice(0, 4).map(s => s.name).join(', ') + (n > 4 ? '…' : '') : '';
+    const rules = doomed?.rules ?? 0;
+    const to = doomed?.target ?? null;
+    const name = doomed?.project.name ?? d.name;
+    return (
+      <form className="pe" onSubmit={e => { e.preventDefault(); remove(); }} onKeyDown={onKeyDown}>
+        <div className="pe-body">
+          <div className="pe-delete" role="alert">
+            <p>{emphasis(dl.lead(name), name)}</p>
+            <ul>
+              <li>{n === 0 ? dl.noAgents : <>{dl.agents(n, names)} {to ? emphasis(dl.toProject(n, to.name), to.name) : dl.toNone(n)}</>}</li>
+              <li>{dl.rules(rules)} {to ? dl.rulesMove(rules) : dl.rulesForget(rules)}</li>
+            </ul>
+            <fieldset className="pe-move">
+              <legend className="composer-label">{dl.their}</legend>
+              <label className={`chip ${!to ? 'selected' : ''}`}>
+                <input ref={moveRef} type="radio" name={`${ids}-move`} checked={!to} onChange={() => setMoveTo(null)} />{dl.none}
+              </label>
+              <label className={`chip ${to ? 'selected' : ''} ${others.length === 0 ? 'disabled' : ''}`}>
+                <input type="radio" name={`${ids}-move`} checked={!!to} disabled={others.length === 0} onChange={() => setMoveTo(others[0]?.id ?? null)} />{dl.moveTo}
+              </label>
+              {to && (
+                <select aria-label={dl.target} value={to.id} onChange={e => setMoveTo(e.target.value)}>
+                  {others.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                </select>
+              )}
+            </fieldset>
+          </div>
+        </div>
+        <footer className="composer-footer">
+          <span className="spacer" />
+          {!live && !saving ? <span className="composer-missing" role="alert">{c.problems.gone}</span>
+            : state.status === 'refused' ? <p className="composer-missing" role="alert">{c.refused[state.reason]}</p> : null}
+          <Button variant="ghost" onClick={() => toggle(false)}>{c.cancel}</Button>
+          <Button variant="primary" type="submit" aria-disabled={!live || saving}>{saving ? c.saving : to ? dl.moveAndDelete : dl.confirm(name)}</Button>
+        </footer>
+      </form>
+    );
+  }
 
   return (
     <form className="pe" onSubmit={e => { e.preventDefault(); save(); }} onKeyDown={onKeyDown}>
@@ -186,7 +265,9 @@ export function ProjectEditor(p: {
         </section>
       </div>
       <footer className="composer-footer">
-        {/* Task 5: in edit mode, « Supprimer le projet » (.pe-delete-btn) comes first, on the left, and leads to p.onDeleted. */}
+        {p.mode === 'edit' && (
+          <Button ref={deleteRef} variant="ghost" className="pe-delete-btn" aria-disabled={saving} onClick={() => toggle(true)}>{c.deleteProject}</Button>
+        )}
         <span className="composer-preview">
           <ProjectSwatch project={{ color: d.color }} />
           <span>

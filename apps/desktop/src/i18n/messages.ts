@@ -284,6 +284,22 @@ const fr = {
     saved: (n: string) => `${n} enregistré.`,
     created: (n: string) => `Projet ${n} créé. Il apparaît dans la barre latérale ; sa table s’ouvrira avec la première session.`,
     createdWith: (n: string, names: readonly string[]) => `Projet ${n} créé. ${new Intl.ListFormat('fr', { type: 'conjunction' }).format(names)} ${plural(names.length, 'rejoint', 'rejoignent')} sa table.`,
+    /** The deletion view (`.pe-delete`): `names` is the agents' names already joined (four at most, then « … »). */
+    delete: {
+      lead: (n: string) => `${n} disparaît de la barre latérale et de l’atelier. Ses dépôts restent intacts sur vos machines.`,
+      noAgents: 'Aucun agent à cette table.',
+      agents: (n: number, names: string) => `${n} agent${plural(n, '', 's')} (${names})`,
+      toNone: (n: number) => `${plural(n, 'passera', 'passeront')} dans « Sans projet ».`,
+      toProject: (n: number, p: string) => `${plural(n, 'rejoindra', 'rejoindront')} ${p}.`,
+      rules: (n: number) => `${n} dossier${plural(n, '', 's')} mémorisé${plural(n, '', 's')}`,
+      rulesForget: (n: number) => plural(n, 'sera oublié.', 'seront oubliés.'),
+      rulesMove: (n: number) => plural(n, 'pointera vers ce projet.', 'pointeront vers ce projet.'),
+      their: 'Ses agents', none: 'Sans projet', moveTo: 'Déplacer vers…', target: 'Projet de destination',
+      confirm: (n: string) => `Supprimer ${n}`, moveAndDelete: 'Déplacer et supprimer',
+      done: (n: string) => `${n} supprimé.`,
+      doneMoved: (k: number, p: string) => ` ${k} agent${plural(k, '', 's')} ${plural(k, 'rejoint', 'rejoignent')} ${p}.`,
+      doneNone: (k: number) => ` ${k} agent${plural(k, '', 's')} ${plural(k, 'passe', 'passent')} dans « Sans projet ».`
+    },
     picker: {
       machines: 'Machine à parcourir', offline: 'hors ligne',
       offlineBody: (m: string) => `${m} est hors ligne. Reconnectez-la dans Réglages › Machines pour parcourir ses dossiers.`,
@@ -567,6 +583,21 @@ const en: typeof fr = {
     saved: (n) => `${n} saved.`,
     created: (n) => `Project ${n} created. It appears in the sidebar; its table opens with the first session.`,
     createdWith: (n, names) => `Project ${n} created. ${new Intl.ListFormat('en', { type: 'conjunction' }).format(names)} ${pluralEn(names.length, 'joins', 'join')} its table.`,
+    delete: {
+      lead: (n) => `${n} disappears from the sidebar and the atelier. Its repositories stay untouched on your machines.`,
+      noAgents: 'No agent at this table.',
+      agents: (n, names) => `${n} ${pluralEn(n, 'agent', 'agents')} (${names})`,
+      toNone: () => 'will move to « No project ».',
+      toProject: (_n, p) => `will join ${p}.`,
+      rules: (n) => `${n} remembered ${pluralEn(n, 'folder', 'folders')}`,
+      rulesForget: () => 'will be forgotten.',
+      rulesMove: () => 'will point to that project.',
+      their: 'Its agents', none: 'No project', moveTo: 'Move to…', target: 'Target project',
+      confirm: (n) => `Delete ${n}`, moveAndDelete: 'Move and delete',
+      done: (n) => `${n} deleted.`,
+      doneMoved: (k, p) => ` ${k} ${pluralEn(k, 'agent', 'agents')} ${pluralEn(k, 'joins', 'join')} ${p}.`,
+      doneNone: (k) => ` ${k} ${pluralEn(k, 'agent', 'agents')} ${pluralEn(k, 'moves', 'move')} to « No project ».`
+    },
     picker: {
       machines: 'Machine to browse', offline: 'offline',
       offlineBody: (m) => `${m} is offline. Reconnect it in Settings › Machines to browse its folders.`,
