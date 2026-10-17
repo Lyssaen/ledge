@@ -199,6 +199,33 @@ describe('the session page', () => {
     await waitFor(() => expect(thread().queryByRole('button', { name: 'Go to the latest message' })).toBeNull());
   });
 
+  it('« Go to the latest message » also comes when the thread grows below the view without a scroll, and the view stays', async () => {
+    const watched = new Set<Element>(); const calls: Array<() => void> = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { calls.push(cb); } observe(e: Element) { watched.add(e); } unobserve() {} disconnect() {} });
+    try {
+      await openOtto();
+      await thread().findByText('Corrige-les');
+      const el = document.querySelector<HTMLElement>('.session-thread')!;
+      // The thread's column and what is in it are watched: a new item, a card that grows.
+      expect(watched.has(el)).toBe(true);
+      expect(watched.has(el.querySelector('.turn')!)).toBe(true);
+      let top = 1500; let height = 2000;
+      Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => height });
+      Object.defineProperty(el, 'clientHeight', { configurable: true, value: 500 });
+      Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => top, set: (v: number) => { top = v; } });
+      const resized = () => act(() => { for (const cb of calls) cb(); });
+      resized();
+      expect(thread().queryByRole('button', { name: 'Go to the latest message' })).toBeNull();
+      height = 2300;                                     // the pinned card came, the pane narrowed the column, an item grew
+      resized();
+      expect(thread().getByRole('button', { name: 'Go to the latest message' })).toBeVisible();
+      expect(top).toBe(1500);                            // no jump
+      top = 1800;
+      resized();
+      expect(thread().queryByRole('button', { name: 'Go to the latest message' })).toBeNull();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('the running action spins; with reduced motion the spinner holds still', async () => {
     vi.stubEnv('VITE_LEDGE_MOTION', '1'); // the suite runs with motion off
     await openOtto();

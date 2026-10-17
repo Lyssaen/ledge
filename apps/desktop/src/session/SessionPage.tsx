@@ -244,6 +244,26 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     pos.current = follow.current ? null : el.scrollTop;
     setAtBottom(follow.current);
   }, [items, loaded, memo.scroll, view]);
+  // The column or what is in it changed size without a scroll (a new item, the pinned card, the pane narrowing the column):
+  // the end may now lie below the view, and « Aller au plus récent » says so. Nothing scrolls here and following is left
+  // as it was: at the end, the next item still comes into view; higher up, the view never jumps.
+  const resized = useRef<ResizeObserver | null>(null);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (!opened.current || el.hidden || el.clientHeight === 0) return;
+      setAtBottom(atEnd(el));
+    });
+    resized.current = ro;
+    ro.observe(el);
+    return () => { ro.disconnect(); resized.current = null; };
+  }, []);
+  // After each render, what the column holds is watched too (observing twice is a no-op).
+  useLayoutEffect(() => {
+    const el = scroller.current; const ro = resized.current;
+    if (el && ro) for (const child of el.children) ro.observe(child);
+  });
   // From a file back to the action that changed it: its fold opens (ActionGroup), it comes to the middle and lights up.
   useEffect(() => {
     if (flash === null || view !== 'thread') return;
