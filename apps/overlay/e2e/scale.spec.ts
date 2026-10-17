@@ -1,7 +1,7 @@
 import { test, expect, surface, layer, expectMode, ready } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 import { hoverHandle } from './scenarios';
-import { islandWidth } from '../src/surface/geometry';
+import { filetWidth } from '../src/surface/geometry';
 
 const team = () => [session('a'), session('b', { name: 'Pim', project: 'speos-api' }), session('c', { name: 'Ada', state: 'waiting_permission', pending: { kind: 'permission', text: 'Run pnpm test', source: 'hook' } })];
 const box = async (l: import('@playwright/test').Locator) => (await l.boundingBox())!;
@@ -16,10 +16,10 @@ test.describe('4K work area', () => {
     await ready(page, 3);
     await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '2');
     await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(3) * 2, 0);
-    const bots = layer(page, 'handle').locator('button:not([data-resident])');
-    await expect.poll(async () => (await box(bots.nth(0))).width).toBeCloseTo(44, 0); // a companion: 22 x 2
-    await expect.poll(async () => (await box(bots.nth(2))).width).toBeCloseTo(44, 0);
+    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(filetWidth([3]) * 2, 0);
+    const bots = layer(page, 'handle').locator('button:not([data-resident]):not(:has([data-update-pip]))');
+    await expect.poll(async () => (await box(bots.nth(0))).width).toBeCloseTo(10, 0); // a dash: 5 x 2
+    await expect.poll(async () => (await box(bots.nth(2))).width).toBeCloseTo(10, 0);
     // Still on the top edge, centred on the real screen.
     const s = await box(surface(page));
     expect(s.y).toBe(0); expect(Math.abs(s.x + s.width / 2 - 1920)).toBeLessThan(4);
@@ -51,7 +51,7 @@ test.describe('4K work area', () => {
     await storeScales(page, { panel: '1.5' });
     const d = await fakeDaemon(page, [session('a'), session('b', { name: 'Pim' })]);
     await ready(page, 2);
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(2) * 2, 0); // the island keeps its Auto 200 %
+    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(filetWidth([2]) * 2, 0); // the notch keeps its Auto 200 %
     d.upsert(session('b', { name: 'Pim', state: 'waiting_permission', pending: { kind: 'permission', text: 'Run pnpm test', source: 'hook' } }));
     await expectMode(page, 'bubble');
     await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(440 * 1.5, 0);
@@ -87,7 +87,7 @@ test.describe('4K work area', () => {
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expectMode(page, 'handle');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(3) * 1.5, 0);
+    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(filetWidth([3]) * 1.5, 0);
     // Windows to 125 % from the list: the list grows, the handle does not.
     await page.keyboard.press('Control+Alt+L');
     await layer(page, 'list').getByRole('button', { name: 'Settings' }).click();
@@ -95,7 +95,7 @@ test.describe('4K work area', () => {
     await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(380 * 1.25, 0);
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(3) * 1.5, 0);
+    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(filetWidth([3]) * 1.5, 0);
     expect(await page.evaluate(() => [localStorage.getItem('ledge.handleScale'), localStorage.getItem('ledge.panelScale')])).toEqual(['1.5', '1.25']);
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '1.5');
@@ -117,6 +117,6 @@ test('at 1920x1080 both Autos stay at 100%', async ({ page }) => {
   await ready(page, 3);
   await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '1');
   await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1');
-  await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(3), 0);
-  await expect.poll(async () => (await box(layer(page, 'handle').locator('button:not([data-resident])').nth(0))).width).toBeCloseTo(22, 0);
+  await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(filetWidth([3]), 0);
+  await expect.poll(async () => (await box(layer(page, 'handle').locator('button:not([data-resident]):not(:has([data-update-pip]))').nth(0))).width).toBeCloseTo(5, 0);
 });

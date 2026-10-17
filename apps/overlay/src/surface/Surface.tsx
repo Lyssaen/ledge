@@ -10,7 +10,7 @@ import { botState, poseFor } from '../bots/poseFor';
 import type { ResidentGesture } from '../bots/ResidentMascot';
 import { groupSessions } from '@ledge/fleet';
 import { displayOrder, headersBefore } from './groups';
-import { ISLAND, LEDGE_ID, scaledLayout, SIZES, SURFACE_CHROME_Y, type IslandPosition, type Layout } from './geometry';
+import { FILET, LEDGE_ID, scaledLayout, SIZES, SURFACE_CHROME_Y, type IslandPosition, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
 import { Handle, type HandleBot } from './Handle';
@@ -501,7 +501,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // The strip shows under a covering window once the island has been folded and left alone for 500 ms; a say
   // still hanging under its speaker keeps the island compact, the strip has no companion to hang it from.
   const strip = useDelayed(discreet && covered && st.mode === 'handle' && !st.hot && !st.hovering && bandPointer === null && !sayShown, STRIP_BACK_MS);
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, dnd, readerExpanded: st.documentExpanded, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, pip: !!updatePip, dnd, readerExpanded: st.documentExpanded, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
   geoRef.current = geo;
   // The shell watches the top band over the island's span (its depth and overhang are the shell's own constants).
   useEffect(() => { setHotZone(Math.round(geo.handle.left), Math.round(geo.handle.w)); }, [geo.handle.left, geo.handle.w]);
@@ -602,13 +602,13 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const statusW = sizes.status.w || STATUS_BOX.w * hs, statusH = sizes.status.h || STATUS_BOX.h * hs;
   const statusLeft = geo.left + geo.w / 2 - statusW / 2, statusTop = geo.h + 6 * hs;
   const saySlot = speaker && speaker.id !== LEDGE_ID ? geo.slots.find(s => s.id === speaker.id) : undefined;
-  const speakerX = saySlot ? saySlot.center : geo.left + (ISLAND.padL + ISLAND.resident / 2) * hs;
+  const speakerX = saySlot ? saySlot.center : geo.left + (FILET.pad + FILET.ledge / 2) * hs;
   const sayLeft = speakerX - SAY_TAIL_X * ps, sayTop = geo.h + 4 * ps;
   if (sayShown) extras.push({ left: sayLeft, top: sayTop, w: sizes.say.w || UNREAD_SAY_BOX.w * ps, h: sizes.say.h || UNREAD_SAY_BOX.h * ps });
   if (unreachable) extras.push({ left: statusLeft, top: statusTop, w: statusW, h: statusH });
   if (coachShown) extras.push({ left: coachLeft, top: coachTop, w: 300 * ps, h: COACHMARK_H * ps });
   // The fillets either side of the surface, where it leaves the top edge.
-  const sr = shoulderR(geo.w, strip);
+  const sr = shoulderR(geo.w, st.mode === 'handle');
   if (sr > 0) extras.push({ left: geo.left - sr, top: 0, w: geo.w + 2 * sr, h: sr });
   const frame = frameOf(geo, extras, { w: screenW, h: screenH });
   useNativeFrame(frame, parseFloat(ms(SETTLE_MS)));
@@ -648,7 +648,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // The entering view follows the shape once it has nearly settled: later on a shrink (back from a session) than on a grow.
   const enter = enterDelay(growing);
 
-  const radius = strip ? 6 : st.mode === 'handle' ? 19 : 22;
+  const radius = st.mode === 'handle' ? 5 : 22;
   const surfaceTransition = ['left', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out`;
   const content = (
     <>
@@ -729,7 +729,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       </div>
 
       {/* Drawn after the surface: each overlaps its edge by a pixel, so no seam shows where they meet. */}
-      <Shoulders left={geo.left} w={geo.w} strip={strip} opacity={unreachable ? 0.6 : 1} transition={surfaceTransition} />
+      <Shoulders left={geo.left} w={geo.w} strip={st.mode === 'handle'} opacity={unreachable ? 0.6 : 1} transition={surfaceTransition} />
 
       {/* Zoomed extras: a zoomed element's own offsets are zoomed too, so their real-px positions are divided back. */}
       <div data-zoom="coachmark" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>

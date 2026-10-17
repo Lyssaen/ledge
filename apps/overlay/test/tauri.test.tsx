@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from './mockDaemon';
 import { frameOf, unionFrame, FRAME_PAD } from '../src/surface/frame';
-import { SHOULDER_R } from '../src/surface/Shoulders';
+import { SHOULDER_R, STRIP_SHOULDER_R } from '../src/surface/Shoulders';
 import { LAUNCH_NOTICE_MS } from '../src/surface/Surface';
 
 // The native side, stubbed: `invoke` records commands, `listen` keeps the handler so a test can emit a shell event,
@@ -308,10 +308,9 @@ describe('<Surface> under Tauri', () => {
 
   it('sends the bounding frame (island plus fillets); the page is drawn in work-area coordinates, never shifted', async () => {
     await mount({ tauri: true });
-    // Two quiet bots plus Ledge on a 1024 px wide jsdom viewport: 117 px wide at x 454, 38 px high on the top edge.
-    expect(surface()).toHaveStyle({ left: '454px', top: '0px', width: '117px', height: '38px' });
-    // Fillets of 12 px either side, 16 px of shadow left and right, 24 px below: (426, 0) 173 x 62.
-    await waitFor(() => expect(lastFrame()).toEqual({ left: 454 - SHOULDER_R - FRAME_PAD.left, top: 0, width: 117 + 2 * SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 38 + FRAME_PAD.bottom }));
+    // Two quiet sessions plus Ledge on a 1024 px wide jsdom viewport: the 40 px filet at x 492, 10 px high.
+    expect(surface()).toHaveStyle({ left: '492px', top: '0px', width: '40px', height: '10px' });
+    await waitFor(() => expect(lastFrame()).toEqual({ left: 492 - STRIP_SHOULDER_R - FRAME_PAD.left, top: 0, width: 40 + 2 * STRIP_SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 10 + FRAME_PAD.bottom }));
     // The window covers the work area and only its region follows the frame: the page needs no offset wrapper.
     expect(content()).toBeNull();
   });
@@ -326,7 +325,7 @@ describe('<Surface> under Tauri', () => {
       return new Promise<undefined>(r => pending.push(() => r(undefined)));
     });
     await mount({ tauri: true });
-    const handleLeft = 454 - SHOULDER_R - FRAME_PAD.left;
+    const handleLeft = 492 - STRIP_SHOULDER_R - FRAME_PAD.left;
     await waitFor(() => expect(seen.at(-1)).toBe(handleLeft));
     await answer();
     // Handle to list: the list is wider, so its frame starts further left and holds the island's; it goes out at once.
@@ -346,11 +345,11 @@ describe('<Surface> under Tauri', () => {
   it('an island at 2x on a 4K work area: the surface and the frame are the 512-unit ones doubled', async () => {
     // A 4K work area (2160 logical px), island 200 %: the island lays out in a 512 x 1080 unit screen and is drawn at 2x.
     await mount({ tauri: true, screenH: 2160, handleScale: 2, panelScale: 1 });
-    expect(surface()).toHaveStyle({ left: '396px', top: '0px', width: '234px', height: '76px' });
+    expect(surface()).toHaveStyle({ left: '472px', top: '0px', width: '80px', height: '20px' });
     expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('2');
     expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1');
-    const left = 396 - SHOULDER_R - FRAME_PAD.left;
-    await waitFor(() => expect(lastFrame()).toEqual({ left, top: 0, width: 234 + 2 * SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 76 + FRAME_PAD.bottom }));
+    const left = 472 - STRIP_SHOULDER_R - FRAME_PAD.left;
+    await waitFor(() => expect(lastFrame()).toEqual({ left, top: 0, width: 80 + 2 * STRIP_SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 20 + FRAME_PAD.bottom }));
     // The windows keep their own scale: the list opens at its base 380 px, centred on the real screen.
     await waitFor(() => expect(native.shortcut).not.toBeNull());
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
@@ -359,17 +358,10 @@ describe('<Surface> under Tauri', () => {
     expect(Math.abs(listLeft + 190 - 512)).toBeLessThanOrEqual(1);
   });
 
-  it('the native cursor event moves Ledge’s gaze outside the narrow webview, and null recentres it', async () => {
-    vi.stubEnv('VITE_LEDGE_MOTION', '1');
+  it('the filet keeps Ledge’s rectangle; a cursor event does not mount a face', async () => {
     await mount({ tauri: true });
-    await waitFor(() => expect([...native.listeners.keys()]).toContain('ledge://cursor-near'));
-    const face = document.querySelector('[data-resident] svg') as SVGSVGElement;
-    // The mascot sits 23 px into the island (x 477), 19 px under the top edge; a cursor 60 px to its right is near.
-    act(() => native.listeners.get('ledge://cursor-near')!({ payload: { x: 454 + 83, y: 19 } }));
-    expect(face).toHaveAttribute('data-near', 'true');
-    expect(face.style.getPropertyValue('--resident-gx')).not.toBe('0px');
-    act(() => native.listeners.get('ledge://cursor-near')!({ payload: null }));
-    expect(face).toHaveAttribute('data-near', 'false');
+    await waitFor(() => expect(document.querySelector('[data-ledge-mark]')).not.toBeNull());
+    expect(document.querySelector('[data-resident] svg')).toBeNull();
   });
 
   it('the Ledge tray opens the list, starts a new session, and toggles DND', async () => {
@@ -399,7 +391,7 @@ describe('<Surface> under Tauri', () => {
     expect(surface()).toHaveAttribute('data-mode', 'handle');
     await waitFor(() => expect(calls('set_outside_watch').at(-1)).toEqual({ on: false }));
     // The shell watches the top band over the island's span (the band's depth and overhang are its own).
-    expect(calls('set_hot_zone').at(-1)).toEqual({ left: 454, width: 117 });
+    expect(calls('set_hot_zone').at(-1)).toEqual({ left: 492, width: 40 });
   });
 
   it('a press outside a keyboard-opened panel folds it without handing focus back over the window just clicked', async () => {

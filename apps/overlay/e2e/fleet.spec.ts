@@ -1,6 +1,6 @@
 import type { WebSocketRoute } from '@playwright/test';
 import type { ClientMessage } from '@ledge/protocol';
-import { islandWidth } from '../src/surface/geometry';
+import { filetWidth } from '../src/surface/geometry';
 import { test, expect, layer, ready, received, surface } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 import { openList, restInside } from './scenarios';
@@ -44,7 +44,7 @@ test('one project, common chat clarification, remote confirmation and disconnect
   await expect(layer(page, 'list').locator('[data-row-id="local:same"]')).toBeVisible();
 });
 
-test('the folded island groups the companions by machine with a pipe between the machines', async ({ page }) => {
+test('the folded notch puts a hairline before each machine', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('ledge.machines', JSON.stringify([
     { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' },
     { id: 'server', label: 'dev-server', url: 'ws://127.0.0.1:47832', ssh: 'dev-server' }
@@ -55,8 +55,18 @@ test('the folded island groups the companions by machine with a pipe between the
   });
   await ready(page, 3);
   const handle = layer(page, 'handle');
-  await expect(surface(page)).toHaveCSS('width', `${islandWidth(3, false, 1)}px`);
-  await expect.poll(() => handle.evaluate(el => [...el.children].flatMap(c => c.hasAttribute('data-machine-separator') ? (getComputedStyle(c).opacity === '1' ? ['|'] : []) : c.hasAttribute('data-resident') ? ['ledge'] : c.tagName === 'BUTTON' ? [c.getAttribute('aria-label')!.split(' ')[0]!] : []))).toEqual(['ledge', 'Ida', 'Kai', '|', 'Nova']);
+  await expect(surface(page)).toHaveCSS('width', `${filetWidth([2, 1])}px`);
+  await expect.poll(() => handle.evaluate(el => {
+    const out: string[] = [];
+    const walk = (node: Element) => {
+      if (node.hasAttribute('data-machine-separator')) { out.push('|'); return; }
+      if (node.hasAttribute('data-resident')) { out.push('ledge'); return; }
+      if (node.tagName === 'BUTTON' && !node.querySelector('[data-update-pip]')) { out.push(node.getAttribute('aria-label')!.split(' ')[0]!); return; }
+      for (const child of node.children) walk(child);
+    };
+    for (const child of el.children) walk(child);
+    return out;
+  })).toEqual(['ledge', '|', 'Ida', 'Kai', '|', 'Nova']);
 });
 
 test('Machines tab: test an SSH alias, see the failure in plain words, then add the server', async ({ page }) => {

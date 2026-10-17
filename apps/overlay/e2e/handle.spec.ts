@@ -1,4 +1,4 @@
-import { islandWidth } from '../src/surface/geometry';
+import { filetWidth } from '../src/surface/geometry';
 import { test, expect, surface, layer, expectMode, received, ready } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 
@@ -10,9 +10,9 @@ test('the handle shows one bot per session', async ({ page }) => {
   await expectMode(page, 'handle');
   await expect(layer(page, 'handle').getByRole('button', { name: 'Pim available, open' })).toBeVisible();
   d.upsert(session('d', { name: 'Zed' }));
-  await expect(layer(page, 'handle').locator('button:not([data-resident])')).toHaveCount(4);
+  await expect(layer(page, 'handle').locator('button:not([data-resident]):not(:has([data-update-pip]))')).toHaveCount(4);
   d.remove('a');
-  await expect(layer(page, 'handle').locator('button:not([data-resident])')).toHaveCount(3);
+  await expect(layer(page, 'handle').locator('button:not([data-resident]):not(:has([data-update-pip]))')).toHaveCount(3);
 });
 
 test('an ask unfolds the bubble after the unfold delay; Approve decides and the bubble folds once the daemon clears it', async ({ page }) => {
@@ -33,5 +33,5 @@ test('an ask unfolds the bubble after the unfold delay; Approve decides and the 
   await expectMode(page, 'bubble');
   d.upsert(session('b', { name: 'Pim', state: 'working' }));
   await expectMode(page, 'handle');
-  await expect(surface(page)).toHaveCSS('width', `${islandWidth(2)}px`);
+  await expect(surface(page)).toHaveCSS('width', `${filetWidth([2])}px`);
 });

@@ -11,8 +11,8 @@ for (const scale of [1, 1.5] as const) test(`the say's tail points at its speake
   // Polled: the companions slide into their slots while the island grows, the balloon waits at the final place.
   const gap = async () => {
     const tail = (await say.locator('[data-tail]').boundingBox())!;
-    const sprite = (await page.locator('[data-layer="handle"]').getByRole('button', { name: /^Ada/ }).locator('[data-sprite]').boundingBox())!;
-    return Math.abs(tail.x + tail.width / 2 - (sprite.x + sprite.width / 2));
+    const dash = (await page.locator('[data-layer="handle"]').getByRole('button', { name: /^Ada/ }).boundingBox())!;
+    return Math.abs(tail.x + tail.width / 2 - (dash.x + dash.width / 2));
   };
   await expect.poll(gap).toBeLessThanOrEqual(0.5);
 });
