@@ -136,6 +136,19 @@ describe('multi-machine connections', () => {
     local.emit({ type: 'folder.listing', requestId: 'f1', path: '/h', parent: '/', entries: [] });
     expect(got.filter(m => m.type === 'folder.listing')).toHaveLength(1);
   });
+  it('a folder.list with machineId and no requestId (an older front) goes to that machine; its untagged listing follows the selected machine', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'folder.list', path: '/w', machineId: 'server' });
+    expect(server.sent).toEqual([{ type: 'folder.list', path: '/w' }]); expect(local.sent).toEqual([]);
+    const listing: ServerMessage = { type: 'folder.listing', path: '/w', parent: '/', entries: ['a'] };
+    server.emit(listing); // Local is selected: an untagged listing from another machine is not relayed
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([]);
+    client.fleet!.select('server');
+    server.emit(listing);
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([listing]);
+    local.emit(listing); // not the selected machine
+    expect(got.filter(m => m.type === 'folder.listing')).toHaveLength(1);
+  });
   it('answers a folder.list for an offline machine with error offline, and for a machine that drops', () => {
     const { client, server, got } = setup();
     client.send({ type: 'folder.list', path: '/w', machineId: 'server', requestId: 'f1' });
