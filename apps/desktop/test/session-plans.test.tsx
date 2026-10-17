@@ -135,3 +135,18 @@ it('a plan without its action (Codex) is read from the request; once answered, i
   expect(side.getByText('Plan : version 0.6.0', { selector: 'strong' })).toBeVisible();
   expect(document.querySelector('.plan-doc-status')).toBeNull();
 });
+it('a plan whose steps are headings: counted, no step shown twice as the intro; a plan without steps says no count', async () => {
+  const headed = '# Plan : version 0.7\n\n### 1. **Lire** le code\n- src/a.ts\n### 2) Écrire les tests\n### 3. Livrer';
+  const prose = '# Plan : nettoyage\n\nRanger le dépôt sans rien casser.';
+  const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : nettoyage', body: prose, source: 'hook' } });
+  const { d, user } = await boot({ sessions: [...listSessions(), pia], list: true });
+  d.thread('pia', [{ ...exit('p1', 'success'), input: JSON.stringify({ plan: headed }) }, { ...exit('p2', 'running'), input: JSON.stringify({ plan: prose }) }]);
+  await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await screen.findAllByText('Proposed plan');
+  expect([...document.querySelectorAll('[data-plan-card="p1"] .plan-steps li')].map(e => e.textContent)).toEqual(['Lire le code', 'Écrire les tests', 'Livrer']);
+  expect(document.querySelector('[data-plan-card="p1"] .plan-intro')).toBeNull();
+  expect(card('p1').getByText('3 steps')).toBeVisible();
+  expect(document.querySelector('[data-plan-card="p2"] .plan-intro')).toHaveTextContent('Ranger le dépôt sans rien casser.');
+  expect(document.querySelector('[data-plan-card="p2"] .plan-card-foot')).not.toHaveTextContent(/steps?/);
+  expect(screen.getByRole('region', { name: 'Plan to approve' })).not.toHaveTextContent(/steps?:/);
+});

@@ -57,8 +57,12 @@ function segmentsOf(items: readonly ThreadItem[]): Segment[] {
 
 export interface PlanDoc { key: string; title: string; markdown: string; steps: string[]; status: 'proposed' | 'approved' | 'revised' }
 
-/** Les étapes numérotées (stepsOf de la maquette : `1. **Titre** — suite` → « Titre », `2. Suite` → « Suite »). */
+/** Les étapes numérotées. Des titres numérotés d'abord (`### 1. Titre`, `## 2) **Titre**` → « Titre », sans ses `**`) : une
+ *  liste numérotée sous eux en détaille une, elle n'en compte pas ; sinon la liste (stepsOf de la maquette :
+ *  `1. **Titre** — suite` → « Titre », `2. Suite` → « Suite »). */
 export function stepsOf(markdown: string): string[] {
+  const headings = [...markdown.matchAll(/^#{1,4}\s*\d+[.)]\s+(.+)$/gm)].map(m => m[1]!.replace(/\*\*/g, '').trim()).filter(Boolean);
+  if (headings.length > 0) return headings;
   return [...markdown.matchAll(/^\d+\. (?:\*\*(.+?)\*\*)?(.*)$/gm)].map(m => (m[1] ?? m[2] ?? '').replace(/^ — /, '').trim());
 }
 

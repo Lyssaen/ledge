@@ -9,8 +9,10 @@ import type { PlanDoc } from './thread';
 /** The card shows this many steps, then « … et n autres étapes ». */
 const SHOWN_STEPS = 3;
 
-/** The first line that is not a heading: what the plan sets out to do (session.tsx renderItem). */
-const introOf = (markdown: string) => markdown.split('\n').find(l => l.trim() !== '' && !l.trimStart().startsWith('#')) ?? '';
+/** The first line that is neither a heading nor a list line: what the plan sets out to do (session.tsx renderItem). A plan
+ *  without prose has none, rather than its first step shown twice. */
+const LIST_LINE = /^\s*(\d+[.)]|[-*+])\s/;
+const introOf = (markdown: string) => markdown.split('\n').find(l => l.trim() !== '' && !l.trimStart().startsWith('#') && !LIST_LINE.test(l)) ?? '';
 
 export interface PlanCardProps {
   plan: PlanDoc;
@@ -44,7 +46,7 @@ export const PlanCard = memo(function PlanCard({ plan, open, onOpen }: PlanCardP
         </ol>
       )}
       <div className="plan-card-foot">
-        <span className="muted">{tp.steps(steps.length)}</span>
+        {steps.length > 0 && <span className="muted">{tp.steps(steps.length)}</span>}
         <span className="spacer" />
         <Button variant={open ? 'secondary' : 'outline'} size="sm" onClick={() => onOpen(key)}>
           {open ? tp.openBeside : tp.readPlan}<Icon d={ICONS.chevronRight.d} size={13} />

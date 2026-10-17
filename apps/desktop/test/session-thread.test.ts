@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ThreadItem, ToolItem } from '@ledge/protocol';
 import { fakeSession, T0 } from '@ledge/fleet/test/mockDaemon';
-import { atEnd, displayIds, exchanges, fmtDur, helperOf, kindOf, pendingPlan, planOf, subagentOf, summarize, timeMark, unreadFrom, verbOf, type Exchange } from '../src/session/thread';
+import { atEnd, displayIds, exchanges, fmtDur, helperOf, kindOf, pendingPlan, planOf, stepsOf, subagentOf, summarize, timeMark, unreadFrom, verbOf, type Exchange } from '../src/session/thread';
 
 const at = (s: number) => new Date(Date.parse(T0) + s * 1000).toISOString();
 const tool = (id: string, s: number, name: string, label: string, extra: Partial<ToolItem> = {}): ToolItem =>
@@ -95,6 +95,12 @@ describe('plans', () => {
     expect([planOf(exit('p1', 'success'))!.status, planOf(exit('p1', 'failed'))!.status, planOf(exit('p1', 'unknown'))!.status]).toEqual(['approved', 'revised', 'revised']);
     expect(planOf({ ...exit('p1', 'running'), tool: 'Bash' })).toBeNull();
     expect(pendingPlan({ kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'pane' })).toMatchObject({ key: 'pending', status: 'proposed', steps: ['Changelog', 'Monter les versions', 'Construire', 'Publier'] });
+  });
+  it('steps numbered as headings count too, without their bold; a numbered list under them is no step of its own', () => {
+    expect(stepsOf('# Plan\n\n### 1. Lire le code\nDétails.\n## 2) **Écrire** les tests\n#### 3.  Livrer')).toEqual(['Lire le code', 'Écrire les tests', 'Livrer']);
+    expect(stepsOf('# Plan\n\n## Context\n\n### 1. Setup\n1. install\n2. configure\n### 2. Ship')).toEqual(['Setup', 'Ship']);
+    expect(stepsOf('# Plan\n\n1. **Changelog** — résumer\n2. Monter')).toEqual(['Changelog', 'Monter']);
+    expect(stepsOf('# Plan\n\nJuste de la prose.\n## Version 2.0\n- une puce')).toEqual([]);
   });
   it('ExitPlanMode leaves its run as a plan segment', () => {
     const xs = exchanges([{ kind: 'prompt', id: 'prompt-3', at: T0, turn: 3, text: 'Prépare la 0.6' }, { ...exit('r', 'success'), id: 'r', tool: 'Read', label: 'a' }, exit('p1', 'running')]);
