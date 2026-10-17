@@ -22,6 +22,10 @@ export interface ThreadProps {
   /** « Session terminée · il y a 2 h », « Plus aucune nouvelle… · il y a 2 h » : `whenOf(…).text`. */
   since: string;
   dispatch(a: NavAction): void;
+  /** The action reached from the Changes view (« tour 2 »), lit for a moment; null: none. */
+  flash: string | null;
+  /** « Voir la modification »: the file in the Changes view. Stable (the page's callback). */
+  onChange(path: string): void;
 }
 
 /** What the agent said: parsed again only when its text changes, never on the page's clock. */
@@ -36,11 +40,13 @@ interface TurnProps {
   /** The clock, for the exchanges whose times count on (an action without a duration); the others get 0 and stay still. */
   now: number;
   unread: string | null; since: string; dispatch(a: NavAction): void;
+  /** The flashed action when it is in this exchange, else null (the others are left alone). */
+  flash: string | null; onChange(path: string): void;
 }
 
 /** One exchange: its time, the prompt as a bubble, the agent named once, then what it said, decided and did. Rendered again
  *  only when what it shows changes: the clock's tick reaches the exchange whose action runs, not the ones before it. */
-const Turn = memo(function Turn({ session, helper, items, x, at, running, last, now, unread, since, dispatch }: TurnProps): JSX.Element {
+const Turn = memo(function Turn({ session, helper, items, x, at, running, last, now, unread, since, dispatch, flash, onChange }: TurnProps): JSX.Element {
   const { t } = useI18n();
   const th = t.session.thread;
   const offline = session.offline === true;
@@ -67,7 +73,8 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
   const segment = (s: Segment): ReactNode => {
     if (s.kind === 'tools') {
       const first = s.tools.find(x => x.id === unread);
-      return <ActionGroup key={s.key} tools={s.tools} now={now} live={!offline} marker={first ? marker(first.id) : null} />;
+      const lit = flash !== null && s.tools.some(x => x.id === flash) ? flash : null;
+      return <ActionGroup key={s.key} tools={s.tools} now={now} live={!offline} marker={first ? marker(first.id) : null} flash={lit} onChange={onChange} />;
     }
     const { item } = s;
     let node: ReactNode;
@@ -99,16 +106,18 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
 
 /** An action whose time counts on with the clock (running, or cut without a duration): its exchange takes every tick. */
 const ticks = (x: Exchange) => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.durationMs === undefined));
+const holds = (x: Exchange, id: string) => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.id === id));
 
 /** The flat thread (session.tsx renderTurn / renderItem): one section per exchange, the frozen or ended note after the last
  *  one. Memoised: the store's changes elsewhere (another session's preview, the chat, an error) leave it alone, its props
  *  being the session, its items and their exchanges, the clock and the page's stable callbacks. */
-export const Thread = memo(function Thread({ session, helper, items, xs, now, unread, since, dispatch }: ThreadProps): JSX.Element {
+export const Thread = memo(function Thread({ session, helper, items, xs, now, unread, since, dispatch, flash, onChange }: ThreadProps): JSX.Element {
   const { lang } = useI18n();
   const offline = session.offline === true;
   return <>{xs.map((x, i) => (
     <Turn key={x.key} session={session} helper={helper} items={items} x={x} at={timeMark(x.at, now, lang)} last={i === xs.length - 1}
       running={!offline && x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running'))}
-      now={ticks(x) ? now : 0} unread={unread} since={since} dispatch={dispatch} />
+      now={ticks(x) ? now : 0} unread={unread} since={since} dispatch={dispatch}
+      flash={flash !== null && holds(x, flash) ? flash : null} onChange={onChange} />
   ))}</>;
 });

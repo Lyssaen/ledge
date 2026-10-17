@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
 import type { ToolItem } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { elapsedMs, SPINNER, SPINNER_STILL, target } from '@ledge/ui/thread/tools';
@@ -6,6 +6,8 @@ import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
+import { parseDiff } from './diff';
+import { Delta } from './DiffView';
 import { fmtDur, kindOf, summarize, verbOf, type Summary as Sum, type ToolKind } from './thread';
 
 const KINDS: readonly ToolKind[] = ['read', 'search', 'command', 'edit'];
@@ -46,20 +48,34 @@ function Summary({ s, open, onToggle }: { s: Sum; open: boolean; onToggle(): voi
   );
 }
 
-/** One action: its mark, kind, verb and target; the target opens its output when there is one. */
-function ActionRow({ tool, now, live, expanded, onExpand }: { tool: ToolItem; now: number; live: boolean; expanded: boolean; onExpand(): void }): JSX.Element {
+interface RowProps {
+  tool: ToolItem; now: number; live: boolean; expanded: boolean; onExpand(): void;
+  /** Lit for a moment: the reader came back to it from « Modifié par ». */
+  flash: boolean;
+  /** « Voir la modification »: its first file in the Changes view. */
+  onChange(path: string): void;
+}
+
+/** One action: its mark, kind, verb and target; the target opens its output when there is one (a label otherwise). A
+ *  successful action that touched a file shows its first file's +/− (when its diff is known) and « Voir la modification »,
+ *  a sibling of the target so the keyboard reaches it even when the target is disabled. */
+function ActionRow({ tool, now, live, expanded, onExpand, flash, onChange }: RowProps): JSX.Element {
   const { t, lang } = useI18n();
   const th = t.session.thread;
   const k = kindOf(tool.tool);
   const detail = tool.status === 'running' ? undefined : tool.error || tool.output || undefined;
   const mark = tool.status === 'running' ? <Spinner live={live} /> : tool.status === 'success' ? '✓' : tool.status === 'failed' ? '✕' : '·';
+  const f = tool.files[0];
+  const delta = useMemo(() => (f?.diff ? parseDiff(f.diff) : null), [f?.diff]);
   return (
-    <div className={cls('action-row', `status-${tool.status}`)} data-tool={tool.id}>
+    <div className={cls('action-row', `status-${tool.status}`, flash && 'flash')} data-tool={tool.id}>
       <div className="action-line">
         <span className={`action-mark mark-${tool.status}`} aria-label={th.marks[tool.status]}>{mark}</span>
         <span className={`action-kind kind-${k}`}><Icon d={KIND_ICON[k]} size={13} /></span>
         <span className="action-verb">{th.verbs[verbOf(tool)]}</span>
         <button type="button" className="action-target mono" title={tool.label} onClick={detail ? onExpand : undefined} aria-expanded={detail ? expanded : undefined} disabled={!detail}>{target(tool) || tool.tool}</button>
+        {delta && <Delta plus={delta.plus} minus={delta.minus} />}
+        {f && tool.status === 'success' && <button type="button" className="action-link" data-short={th.seeChangeShort} onClick={() => onChange(f.path)}>{th.seeChange}</button>}
         <span className="action-time mono">{tool.status === 'unknown' ? th.interrupted : fmtDur(elapsedMs(tool, now), lang)}</span>
       </div>
       {expanded && detail && <pre className={cls('action-output', !!tool.error && 'is-error')}>{detail}</pre>}
@@ -70,16 +86,23 @@ function ActionRow({ tool, now, live, expanded, onExpand }: { tool: ToolItem; no
 /** A run of consecutive actions, folded under its summary. Folded, the failed and interrupted ones stay in sight and the
  *  running one has its live line; a run that is all running shows only that line. `live` false (offline): nothing runs live,
  *  and `now` is the instant the thread froze. */
-export function ActionGroup({ tools, now, live, marker }: { tools: ToolItem[]; now: number; live: boolean; marker?: ReactNode }): JSX.Element {
+export function ActionGroup({ tools, now, live, marker, flash = null, onChange }: {
+  tools: ToolItem[]; now: number; live: boolean; marker?: ReactNode;
+  /** One of these actions, reached from the Changes view: the fold opens and the action lights up. */
+  flash?: string | null;
+  onChange(path: string): void;
+}): JSX.Element {
   const { t, lang } = useI18n();
   const th = t.session.thread;
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => flash !== null);
+  // Before the page looks for the action to scroll it into view.
+  useLayoutEffect(() => { if (flash !== null) setOpen(true); }, [flash]);
   const [shown, setShown] = useState<ReadonlySet<string>>(() => new Set());
   const toggle = (id: string) => setShown(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const s = summarize(tools, now, live);
   const run = s.running;
   const onlyLive = run !== null && tools.every(x => x.status === 'running');
-  const row = (x: ToolItem) => <ActionRow key={x.id} tool={x} now={now} live={live} expanded={shown.has(x.id)} onExpand={() => toggle(x.id)} />;
+  const row = (x: ToolItem) => <ActionRow key={x.id} tool={x} now={now} live={live} expanded={shown.has(x.id)} onExpand={() => toggle(x.id)} flash={x.id === flash} onChange={onChange} />;
   return (
     <div className="action-group">
       {marker}

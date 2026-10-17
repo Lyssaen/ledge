@@ -17,7 +17,7 @@ vi.mock('@ledge/ui/documents/markdown', async importOriginal => {
 
 afterEach(async () => { cleanup(); localStorage.clear(); saveReduced(false); vi.unstubAllEnvs(); vi.useRealTimers(); renders.clear(); await closeDaemons(); });
 
-const thread = () => within(screen.getByRole('region', { name: 'Session thread' }));
+const thread = () => within(screen.getByRole('tabpanel', { name: 'Session thread' }));
 async function openOtto(o: { offline?: boolean; withThread?: boolean } = {}) {
   const sessions = listSessions().map(s => (s.name === 'Otto' && o.offline ? { ...s, offline: true } : s));
   const env = await boot({ sessions, list: true });

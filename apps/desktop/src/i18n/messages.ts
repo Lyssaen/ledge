@@ -3,6 +3,7 @@ import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
 import type { ToolStatus } from '@ledge/protocol';
 import type { ToolKind, Verb } from '../session/thread';
+import type { Change } from '../session/changes';
 
 /** French counts 0 and 1 as singular, English only 1. */
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -136,6 +137,21 @@ const fr = {
       label: (p: string) => `Agents du projet ${p}`, kids: (n: number) => `Sous-agents · ${n}`, kidsOf: (n: string) => `Sous-agents de ${n}`, newHere: 'Nouvelle session ici'
     },
     kidsPill: (n: number) => plural(n, `${n} sous-agent`, `${n} sous-agents`), kidsPillTitle: 'Voir les sous-agents dans la colonne',
+    views: { label: 'Vue de la session', thread: 'Fil', changes: 'Modifications' },
+    changes: {
+      files: 'Fichiers modifiés', count: (n: number) => plural(n, `${n} fichier`, `${n} fichiers`), toggle: (n: number) => `Fichiers · ${n}`,
+      labels: { add: 'Ajouté', edit: 'Modifié', write: 'Réécrit', delete: 'Supprimé', rename: 'Renommé' } as Record<Change, string>,
+      letters: { add: 'A', edit: 'M', write: 'M', delete: 'D', rename: 'R' } as Record<Change, string>,
+      empty: 'Aucun fichier modifié', emptyCursor: 'Cursor Agent ne transmet pas les fichiers qu’il touche.',
+      emptyBody: (n: string) => `${n} n’a encore rien modifié dans cette session.`,
+      copy: 'Copier le chemin', copied: (p: string) => `Chemin copié : ${p}`,
+      prev: 'Fichier précédent', next: 'Fichier suivant',
+      createdBy: 'Créé par', changedBy: 'Modifié par', turn: (n: number) => `tour ${n}`, seeInThread: '· voir dans le fil',
+      diff: 'Différences',
+      gap: (n: number, a: number, b: number) => plural(n, `⋯ ${n} ligne non modifiée (lignes ${a}–${b})`, `⋯ ${n} lignes non modifiées (lignes ${a}–${b})`),
+      unfold: (n: number) => plural(n, `Afficher ${n} ligne inchangée`, `Afficher ${n} lignes inchangées`),
+      cut: 'Diff limité aux 80 premières lignes.', noDiff: 'Ce fichier n’a pas de différence enregistrée.'
+    },
     terminal: {
       title: 'Terminal', empty: 'Aucune sortie reçue pour l’instant.', readOnly: 'Aperçu en lecture seule', offline: 'Hors ligne',
       open: 'Ouvrir dans un terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`
@@ -185,6 +201,7 @@ const fr = {
       verbs: { create: 'Création', delete: 'Suppression', read: 'Lecture', search: 'Recherche', command: 'Commande', edit: 'Modification' } as Record<Verb, string>,
       decided: { accept: 'Accordé', always: 'Toujours autorisé', deny: 'Refusé', unknown: 'Répondu dans le terminal' } as Record<'accept' | 'always' | 'deny' | 'unknown', string>,
       helperLaunched: 'Sous-agent lancé', openHelper: (n: string, task: string) => `Ouvrir ${n} : ${task}`,
+      seeChange: 'Voir la modification', seeChangeShort: 'Voir',
       unread: 'Nouveau depuis votre dernière visite', latest: 'Aller au dernier message',
       lost: (m: string) => `Connexion perdue avec ${m}`,
       lostBody: 'Le fil est figé : ce qui suit est le dernier état connu, l’activité actuelle n’est pas connue.',
@@ -323,6 +340,21 @@ const en: typeof fr = {
       label: (p) => `Agents of the project ${p}`, kids: (n) => `Subagents · ${n}`, kidsOf: (n) => `Subagents of ${n}`, newHere: 'New session here'
     },
     kidsPill: (n) => pluralEn(n, '1 subagent', `${n} subagents`), kidsPillTitle: 'Show the subagents in the rail',
+    views: { label: 'Session view', thread: 'Thread', changes: 'Changes' },
+    changes: {
+      files: 'Changed files', count: (n) => pluralEn(n, '1 file', `${n} files`), toggle: (n) => `Files · ${n}`,
+      labels: { add: 'Added', edit: 'Modified', write: 'Rewritten', delete: 'Deleted', rename: 'Renamed' },
+      letters: { add: 'A', edit: 'M', write: 'M', delete: 'D', rename: 'R' },
+      empty: 'No file changed', emptyCursor: 'Cursor Agent does not report the files it touches.',
+      emptyBody: (n) => `${n} has not changed anything in this session yet.`,
+      copy: 'Copy the path', copied: (p) => `Path copied: ${p}`,
+      prev: 'Previous file', next: 'Next file',
+      createdBy: 'Created by', changedBy: 'Changed by', turn: (n) => `turn ${n}`, seeInThread: '· see it in the thread',
+      diff: 'Differences',
+      gap: (n, a, b) => pluralEn(n, `⋯ 1 unchanged line (line ${a})`, `⋯ ${n} unchanged lines (lines ${a}–${b})`),
+      unfold: (n) => pluralEn(n, 'Show 1 unchanged line', `Show ${n} unchanged lines`),
+      cut: 'Diff limited to the first 80 lines.', noDiff: 'This file has no recorded difference.'
+    },
     terminal: {
       title: 'Terminal', empty: 'No output received yet.', readOnly: 'Read-only preview', offline: 'Offline',
       open: 'Open in a terminal', openFailed: (n) => `${n}’s terminal could not open.`
@@ -371,6 +403,7 @@ const en: typeof fr = {
       verbs: { create: 'Create', delete: 'Delete', read: 'Read', search: 'Search', command: 'Command', edit: 'Edit' },
       decided: { accept: 'Allowed', always: 'Always allowed', deny: 'Denied', unknown: 'Answered in the terminal' },
       helperLaunched: 'Subagent started', openHelper: (n, task) => `Open ${n}: ${task}`,
+      seeChange: 'View the change', seeChangeShort: 'View',
       unread: 'New since your last visit', latest: 'Go to the latest message',
       lost: (m) => `Connection lost with ${m}`,
       lostBody: 'The thread is frozen: what follows is the last known state; what the agent is doing now is not known.',

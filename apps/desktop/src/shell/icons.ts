@@ -24,5 +24,10 @@ export const SHELL_ICONS = {
   pencil: ['M4 20h4L19 9l-4-4L4 16z', 'M13.5 6.5l4 4'],
   chevronDown: ['m6 9 6 6 6-6'],
   arrowDown: ['M12 5v14', 'm19 12-7 7-7-7'],
+  // session.tsx: the view switch (threadIcon, diffIcon), « Copier le chemin », a folded diff's unfold.
+  thread: ['M4 6h16', 'M4 12h10', 'M4 18h13'],
+  diff: ['M12 3v8', 'M8 7h8', 'M8 17h8', 'M5 21h14'],
+  copy: ['M9 9h11v11H9z', 'M5 15H4V4h11v1'],
+  unfold: ['M12 5v14', 'm8 9 4-4 4 4', 'm8 15 4 4 4-4'],
   offline: ['M2 8.8a15 15 0 0 1 4.2-2.6', 'M22 8.8A15 15 0 0 0 10.4 5.1', 'M5 12.6a10 10 0 0 1 5.3-2.5', 'M19 12.6a10 10 0 0 0-2.4-1.6', 'M8.5 16.4a5 5 0 0 1 7 0', 'M12 20h.01', 'M3 3l18 18']
 } as const satisfies Record<string, readonly string[]>;

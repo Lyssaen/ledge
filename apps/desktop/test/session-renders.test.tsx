@@ -17,7 +17,7 @@ vi.mock('../src/session/thread', async importOriginal => {
 
 afterEach(async () => { cleanup(); localStorage.clear(); vi.useRealTimers(); groups.clear(); marks.n = 0; await closeDaemons(); });
 
-const thread = () => within(screen.getByRole('region', { name: 'Session thread' }));
+const thread = () => within(screen.getByRole('tabpanel', { name: 'Session thread' }));
 /** Otto's page with its thread (an action running in the last exchange), the page's clock held still. */
 async function openOtto() {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
