@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ThreadItem, ToolItem } from '@ledge/protocol';
 import { fakeSession, T0 } from '@ledge/fleet/test/mockDaemon';
-import { atEnd, displayIds, exchanges, fmtDur, helperOf, kindOf, summarize, timeMark, unreadFrom, verbOf, type Exchange } from '../src/session/thread';
+import { atEnd, displayIds, exchanges, fmtDur, helperOf, kindOf, pendingPlan, planOf, summarize, timeMark, unreadFrom, verbOf, type Exchange } from '../src/session/thread';
 
 const at = (s: number) => new Date(Date.parse(T0) + s * 1000).toISOString();
 const tool = (id: string, s: number, name: string, label: string, extra: Partial<ToolItem> = {}): ToolItem =>
@@ -78,5 +78,20 @@ describe('session thread model', () => {
     expect(helperOf(otto, items, 'h2')).toEqual({ id: 'h2', kind: 'Review', task: 'Relire', state: 'working' });
     expect(helperOf(otto, items, 'h1')).toEqual({ id: 'h1', kind: 'Explore', task: 'Lire le code', state: 'exited' });
     expect(helperOf(otto, undefined, 'h9')).toBeNull();
+  });
+});
+
+const md = '# Plan : version 0.6.0\n\nPréparer la release.\n\n1. **Changelog** — résumer\n2. Monter les versions\n3. Construire\n4. Publier';
+const exit = (id: string, status: ToolItem['status']): ToolItem => ({ kind: 'tool', id, at: T0, turn: 3, tool: 'ExitPlanMode', label: '# Plan : version 0.6.0', input: JSON.stringify({ plan: md }, null, 2), status, files: [] });
+describe('plans', () => {
+  it('a plan from ExitPlanMode: title, steps, status from the action', () => {
+    expect(planOf(exit('p1', 'running'))).toEqual({ key: 'p1', title: 'Plan : version 0.6.0', markdown: md, steps: ['Changelog', 'Monter les versions', 'Construire', 'Publier'], status: 'proposed' });
+    expect([planOf(exit('p1', 'success'))!.status, planOf(exit('p1', 'failed'))!.status, planOf(exit('p1', 'unknown'))!.status]).toEqual(['approved', 'revised', 'revised']);
+    expect(planOf({ ...exit('p1', 'running'), tool: 'Bash' })).toBeNull();
+    expect(pendingPlan({ kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'pane' })).toMatchObject({ key: 'pending', status: 'proposed', steps: ['Changelog', 'Monter les versions', 'Construire', 'Publier'] });
+  });
+  it('ExitPlanMode leaves its run as a plan segment', () => {
+    const xs = exchanges([{ kind: 'prompt', id: 'prompt-3', at: T0, turn: 3, text: 'Prépare la 0.6' }, { ...exit('r', 'success'), id: 'r', tool: 'Read', label: 'a' }, exit('p1', 'running')]);
+    expect(xs[0]!.segments.map(s => s.kind)).toEqual(['tools', 'plan']);
   });
 });

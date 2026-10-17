@@ -2,8 +2,10 @@ import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
 import type { ToolStatus } from '@ledge/protocol';
-import type { ToolKind, Verb } from '../session/thread';
+import type { PlanDoc, ToolKind, Verb } from '../session/thread';
 import type { Change } from '../session/changes';
+
+type PlanStatus = PlanDoc['status'];
 
 /** French counts 0 and 1 as singular, English only 1. */
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -221,6 +223,17 @@ const fr = {
       lostBody: 'Le fil est figé : ce qui suit est le dernier état connu, l’activité actuelle n’est pas connue.',
       frozenEnd: (s: string) => `Plus aucune nouvelle depuis la perte de connexion · ${s}`, ended: (s: string) => `Session terminée · ${s}`,
       loading: 'Chargement du fil…', empty: 'Rien dans le fil pour l’instant.', notLoaded: 'Le fil n’a pas été chargé avant la perte de connexion.'
+    },
+    plan: {
+      kicker: 'Plan proposé', fallback: 'Plan',
+      statuses: { proposed: 'En attente de votre accord', approved: 'Approuvé', revised: 'Révisé ensuite' } as Record<PlanStatus, string>,
+      more: (n: number) => plural(n, `… et ${n} autre étape`, `… et ${n} autres étapes`), steps: (n: number) => plural(n, `${n} étape`, `${n} étapes`),
+      readPlan: 'Lire le plan', openBeside: 'Ouvert à côté',
+      approved: 'Plan approuvé', approvedAuto: 'Plan approuvé · mode automatique', toRevise: 'Plan à revoir',
+      by: (n: string) => `Plan proposé par ${n}`, tab: (t: string) => `Plan · ${t}`,
+      // « Répondez sous le fil : [Y] approuver · [N] continuer à planifier », the keys drawn as keys.
+      answerHint: { lead: 'Répondez sous le fil :', approve: 'approuver', keep: 'continuer à planifier' },
+      summary: (n: number, s: string) => plural(n, `${n} étape : ${s}`, `${n} étapes : ${s}`)
     }
   },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
@@ -437,6 +450,16 @@ const en: typeof fr = {
       lostBody: 'The thread is frozen: what follows is the last known state; what the agent is doing now is not known.',
       frozenEnd: (s) => `No news since the connection was lost · ${s}`, ended: (s) => `Session ended · ${s}`,
       loading: 'Loading the thread…', empty: 'Nothing in the thread yet.', notLoaded: 'The thread was not loaded before the connection was lost.'
+    },
+    plan: {
+      kicker: 'Proposed plan', fallback: 'Plan',
+      statuses: { proposed: 'Awaiting your approval', approved: 'Approved', revised: 'Revised afterwards' },
+      more: (n) => pluralEn(n, '… and 1 more step', `… and ${n} more steps`), steps: (n) => pluralEn(n, '1 step', `${n} steps`),
+      readPlan: 'Read the plan', openBeside: 'Open beside',
+      approved: 'Plan approved', approvedAuto: 'Plan approved · auto mode', toRevise: 'Plan to revise',
+      by: (n) => `Plan proposed by ${n}`, tab: (t) => `Plan · ${t}`,
+      answerHint: { lead: 'Answer below the thread:', approve: 'approve', keep: 'keep planning' },
+      summary: (n, s) => pluralEn(n, `1 step: ${s}`, `${n} steps: ${s}`)
     }
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },

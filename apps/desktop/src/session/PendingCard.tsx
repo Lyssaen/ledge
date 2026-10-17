@@ -4,6 +4,7 @@ import { Badge } from '@ledge/ui/ui/Badge';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../i18n/lang';
+import { planTitle, stepsOf } from './thread';
 
 /** The mockup's three sorts of request: a permission or a diff is an « approval ». */
 export type Sort = 'approval' | 'plan' | 'question';
@@ -23,8 +24,8 @@ export function alwaysScope(tool: Tool, p: Pending): 'project' | 'edits' | 'sess
   return p.kind === 'diff' || EDITS.has(p.tool ?? '') ? 'edits' : 'project';
 }
 
-/** A plan's title: its first line without the heading marks. */
-const titleOf = (text: string): string => (text.split('\n').find(l => l.trim() !== '') ?? '').replace(/^\s*#+\s*/, '').trim();
+/** The pinned plan sums up this many steps, then « … ». */
+const SUMMED_STEPS = 4;
 
 export type Scope = ReturnType<typeof alwaysScope>;
 
@@ -40,11 +41,18 @@ export interface PendingActions {
 
 /** The request pinned above the reply field (session.tsx `pendingCard`): who asks what, since when, and its answers;
  *  without `actions` (a subagent's page, a read-only session) the answers are only shown, and `relay` says who passes them on. */
-export function PendingCard({ pending, asker, since, actions, relay }: { pending: Pending; asker: string; since: string; actions: PendingActions | null; relay: string | null }): JSX.Element {
+export function PendingCard({ pending, asker, since, actions, relay, onReadPlan }: {
+  pending: Pending; asker: string; since: string; actions: PendingActions | null; relay: string | null;
+  /** « Lire le plan »: the plan in the side pane (its card's, else the request's own). */
+  onReadPlan(): void;
+}): JSX.Element {
   const { t } = useI18n();
   const tp = t.session.pending;
   const sort = sortOf(pending);
-  const title = sort === 'plan' ? tp.plan(asker, titleOf(pending.text))
+  // A plan is read from its markdown (body), else from its summary line.
+  const plan = sort === 'plan' ? pending.body ?? pending.text : '';
+  const steps = sort === 'plan' ? stepsOf(plan) : [];
+  const title = sort === 'plan' ? tp.plan(asker, planTitle(plan))
     : sort === 'question' ? tp.question(asker)
     : COMMANDS.has(pending.tool ?? '') ? tp.command(asker) : pending.kind === 'diff' ? tp.edit(asker) : tp.approval(asker);
   const busy = actions?.busy ?? false;
@@ -54,6 +62,13 @@ export function PendingCard({ pending, asker, since, actions, relay }: { pending
         <Badge state={sort === 'question' ? 'question' : 'approval'} label={sort === 'plan' ? tp.planBadge : undefined} />
         <strong>{title}</strong><span className="spacer" /><span className="muted pending-since">{since}</span>
       </div>
+      {sort === 'plan' && (
+        <p className="pending-summary">
+          {steps.length > 0 && <>{t.session.plan.summary(steps.length, steps.slice(0, SUMMED_STEPS).join(' · ') + (steps.length > SUMMED_STEPS ? ' …' : ''))} </>}
+          {/* Narrow, an action link shows its data-short (session.css): the same words here. */}
+          <button type="button" className="action-link" data-short={t.session.plan.readPlan} onClick={onReadPlan}>{t.session.plan.readPlan}</button>
+        </p>
+      )}
       {sort === 'approval' && (
         <div className="pending-command">{pending.tool && <span className="tool-tag">{pending.tool}</span>}<code>{pending.text}</code></div>
       )}

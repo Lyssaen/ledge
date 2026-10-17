@@ -27,11 +27,13 @@ export interface ReplyProps {
   focusOnArrival: boolean;
   /** The page's screen keys hand R, Y / N and 1…9 to this. */
   keys: MutableRefObject<ScreenKeyHandler | null>;
+  /** The pinned plan's « Lire le plan ». */
+  onReadPlan(): void;
 }
 
 /** The reply area under the thread (session.tsx `replyArea`): the pinned request, then the field, or a note saying why
  *  there is none (offline, read only, a subagent's page). The draft lives in the shell's memory, written at each keystroke. */
-export function Reply({ session, helper, asker, since, decisions, memory, memoKey: key, notify, dispatch, focusOnArrival, keys }: ReplyProps): JSX.Element {
+export function Reply({ session, helper, asker, since, decisions, memory, memoKey: key, notify, dispatch, focusOnArrival, keys, onReadPlan }: ReplyProps): JSX.Element {
   const { t } = useI18n();
   const tp = t.session.pending;
   const tr = t.session.reply;
@@ -124,7 +126,7 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
 
   return (
     <div className="reply-area session-reply">
-      {pending && <PendingCard pending={pending} asker={asker} since={since} actions={actions} relay={helper ? session.name : null} />}
+      {pending && <PendingCard pending={pending} asker={asker} since={since} actions={actions} relay={helper ? session.name : null} onReadPlan={onReadPlan} />}
       {offline ? (
         <div className="reply-note offline">
           <Icon d={SHELL_ICONS.offline} size={15} />

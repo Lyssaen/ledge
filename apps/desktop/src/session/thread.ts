@@ -1,4 +1,4 @@
-import type { FileChange, Helper, HelperItem, Session, ThreadItem, ToolItem } from '@ledge/protocol';
+import type { FileChange, Helper, HelperItem, Pending, Session, ThreadItem, ToolItem } from '@ledge/protocol';
 import { helperThread, turns } from '@ledge/ui/thread/turns';
 import { elapsedMs, liveTool } from '@ledge/ui/thread/tools';
 import { findDocumentReferences } from '@ledge/ui/documents/references';
@@ -25,7 +25,8 @@ export type Segment =
   | { kind: 'tools'; key: string; tools: ToolItem[] }
   | { kind: 'say'; item: Say }
   | { kind: 'decision'; item: Permission }
-  | { kind: 'helper'; item: HelperItem };
+  | { kind: 'helper'; item: HelperItem }
+  | { kind: 'plan'; item: ToolItem; plan: PlanDoc };
 export interface Exchange {
   key: string;
   at: string;
@@ -33,11 +34,14 @@ export interface Exchange {
   segments: Segment[];
 }
 
-/** Les éléments à plat en segments : les actions consécutives se replient, une permission non décidée n'en est pas un. */
+/** Les éléments à plat en segments : les actions consécutives se replient, une action ExitPlanMode en sort (son plan),
+ *  une permission non décidée n'en est pas un. */
 function segmentsOf(items: readonly ThreadItem[]): Segment[] {
   const out: Segment[] = [];
   for (const it of items) {
     if (it.kind === 'tool') {
+      const plan = planOf(it);
+      if (plan) { out.push({ kind: 'plan', item: it, plan }); continue; }
       const last = out.at(-1);
       if (last?.kind === 'tools') last.tools.push(it); else out.push({ kind: 'tools', key: `tools-${it.id}`, tools: [it] });
     } else if (it.kind === 'message' || it.kind === 'reply') out.push({ kind: 'say', item: it });
@@ -45,6 +49,37 @@ function segmentsOf(items: readonly ThreadItem[]): Segment[] {
     else if (it.kind === 'helper') out.push({ kind: 'helper', item: it });
   }
   return out;
+}
+
+export interface PlanDoc { key: string; title: string; markdown: string; steps: string[]; status: 'proposed' | 'approved' | 'revised' }
+
+/** Les étapes numérotées (stepsOf de la maquette : `1. **Titre** — suite` → « Titre », `2. Suite` → « Suite »). */
+export function stepsOf(markdown: string): string[] {
+  return [...markdown.matchAll(/^\d+\. (?:\*\*(.+?)\*\*)?(.*)$/gm)].map(m => (m[1] ?? m[2] ?? '').replace(/^ — /, '').trim());
+}
+
+/** La première ligne non vide, sans ses `#` ni espaces de tête. */
+export function planTitle(markdown: string): string {
+  return (markdown.split('\n').find(l => l.trim() !== '') ?? '').replace(/^\s*#+\s*/, '').trim();
+}
+
+const planDoc = (key: string, markdown: string, status: PlanDoc['status']): PlanDoc =>
+  ({ key, title: planTitle(markdown), markdown, steps: stepsOf(markdown), status });
+
+const PLAN_STATUS: Record<ToolItem['status'], PlanDoc['status']> = { running: 'proposed', success: 'approved', failed: 'revised', unknown: 'revised' };
+
+/** Une action ExitPlanMode : le plan de son entrée (JSON `{ plan }`), key = id ; running → proposed, success → approved,
+ *  failed / unknown → revised. null sinon (une autre action, ou une entrée sans plan lisible : elle reste une action). */
+export function planOf(t: ToolItem): PlanDoc | null {
+  if (t.tool !== 'ExitPlanMode' || t.input === undefined) return null;
+  let plan: unknown;
+  try { plan = (JSON.parse(t.input) as { plan?: unknown } | null)?.plan; } catch { return null; }
+  return typeof plan === 'string' && plan.trim() !== '' ? planDoc(t.id, plan, PLAN_STATUS[t.status]) : null;
+}
+
+/** Le plan d'une demande `plan` (body, sinon text), key 'pending', proposed — Codex et Cursor n'ont pas d'action ExitPlanMode. */
+export function pendingPlan(p: Pending): PlanDoc | null {
+  return p.kind === 'plan' ? planDoc('pending', p.body ?? p.text, 'proposed') : null;
 }
 
 /** Le fil principal par tour (turns : sous-agents écartés, écho de la réponse retiré), ou celui d'un sous-agent (helperThread) :

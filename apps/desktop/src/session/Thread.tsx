@@ -11,9 +11,12 @@ import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import { ActionGroup } from './ActionGroup';
 import { nameOf } from './changes';
+import { PlanCard } from './PlanCard';
 import { docRefs, helperOf, timeMark, type Exchange, type Segment } from './thread';
 
 const CHIP_MARK = { accept: '✓', always: '✓', deny: '✕', unknown: '·' } as const;
+/** A decided plan (ExitPlanMode): approved, or sent back to planning. */
+const PLAN_MARK = { accept: '✓', always: '✓', deny: '↺', unknown: '·' } as const;
 
 export interface ThreadProps {
   session: Session; helper: Helper | null; items: readonly ThreadItem[]; xs: readonly Exchange[];
@@ -30,6 +33,10 @@ export interface ThreadProps {
   onChange(path: string): void;
   /** A document link or card in a message: the document in the side pane. Stable (the page's callback). */
   onDocument(path: string): void;
+  /** The plan whose tab is the pane's active one (« Ouvert à côté »); null: none. */
+  planOpen: string | null;
+  /** « Lire le plan »: the plan in the side pane. Stable (the page's callback). */
+  onPlan(key: string): void;
 }
 
 /** What the agent said, and a card for each document it names (docRefs): parsed again only when its text changes, never on
@@ -61,13 +68,18 @@ interface TurnProps {
   unread: string | null; since: string; dispatch(a: NavAction): void;
   /** The flashed action when it is in this exchange, else null (the others are left alone). */
   flash: string | null; onChange(path: string): void; onDocument(path: string): void;
+  /** The open plan when it is in this exchange, else null. */
+  planOpen: string | null; onPlan(key: string): void;
 }
 
 /** One exchange: its time, the prompt as a bubble, the agent named once, then what it said, decided and did. Rendered again
  *  only when what it shows changes: the clock's tick reaches the exchange whose action runs, not the ones before it. */
-const Turn = memo(function Turn({ session, helper, items, x, at, running, last, now, unread, since, dispatch, flash, onChange, onDocument }: TurnProps): JSX.Element {
+const Turn = memo(function Turn({ session, helper, items, x, at, running, last, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan }: TurnProps): JSX.Element {
   const { t } = useI18n();
   const th = t.session.thread;
+  const tpl = t.session.plan;
+  // Answered in the terminal, a plan's fate is not known: said as any other request's.
+  const planDecided = { accept: tpl.approved, always: tpl.approvedAuto, deny: tpl.toRevise, unknown: th.decided.unknown };
   const offline = session.offline === true;
   const marker = (id: string): ReactNode => id === unread
     ? <div className="unread-marker" role="separator" aria-label={th.unread}><span>{th.unread}</span></div>
@@ -100,8 +112,11 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
     if (s.kind === 'say') node = <Say kind={s.item.kind} text={s.item.text} onDocument={onDocument} />;
     else if (s.kind === 'decision') {
       const d = s.item.decision!;
-      node = <div className={`decision-chip ${d}`}><span className="chip-mark">{CHIP_MARK[d]}</span><span>{th.decided[d]}</span><code>{s.item.text}</code></div>;
-    } else node = helperCard(s.item);
+      node = s.item.tool === 'ExitPlanMode'
+        ? <div className={`decision-chip plan ${d}`}><span className="chip-mark">{PLAN_MARK[d]}</span><span>{planDecided[d]}</span><strong>{s.item.text}</strong></div>
+        : <div className={`decision-chip ${d}`}><span className="chip-mark">{CHIP_MARK[d]}</span><span>{th.decided[d]}</span><code>{s.item.text}</code></div>;
+    } else if (s.kind === 'plan') node = <PlanCard plan={s.plan} open={planOpen === s.plan.key} onOpen={onPlan} />;
+    else node = helperCard(s.item);
     return <Fragment key={item.id}>{marker(item.id)}{node}</Fragment>;
   };
 
@@ -126,17 +141,19 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
 /** An action whose time counts on with the clock (running, or cut without a duration): its exchange takes every tick. */
 const ticks = (x: Exchange) => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.durationMs === undefined));
 const holds = (x: Exchange, id: string) => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.id === id));
+const holdsPlan = (x: Exchange, key: string) => x.segments.some(s => s.kind === 'plan' && s.plan.key === key);
 
 /** The flat thread (session.tsx renderTurn / renderItem): one section per exchange, the frozen or ended note after the last
  *  one. Memoised: the store's changes elsewhere (another session's preview, the chat, an error) leave it alone, its props
  *  being the session, its items and their exchanges, the clock and the page's stable callbacks. */
-export const Thread = memo(function Thread({ session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onDocument }: ThreadProps): JSX.Element {
+export const Thread = memo(function Thread({ session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan }: ThreadProps): JSX.Element {
   const { lang } = useI18n();
   const offline = session.offline === true;
   return <>{xs.map((x, i) => (
     <Turn key={x.key} session={session} helper={helper} items={items} x={x} at={timeMark(x.at, now, lang)} last={i === xs.length - 1}
       running={!offline && x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running'))}
       now={ticks(x) ? now : 0} unread={unread} since={since} dispatch={dispatch}
-      flash={flash !== null && holds(x, flash) ? flash : null} onChange={onChange} onDocument={onDocument} />
+      flash={flash !== null && holds(x, flash) ? flash : null} onChange={onChange} onDocument={onDocument}
+      planOpen={planOpen !== null && holdsPlan(x, planOpen) ? planOpen : null} onPlan={onPlan} />
   ))}</>;
 });

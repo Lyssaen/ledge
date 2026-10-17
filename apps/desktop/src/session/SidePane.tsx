@@ -5,16 +5,29 @@ import { MarkdownDocument, type DocumentHeading } from '@ledge/ui/documents/mark
 import type { DocumentReference } from '@ledge/ui/documents/references';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
+import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { findFile, nameOf, relativeTo, type ChangedFile } from './changes';
 import { Delta, FileDiffs } from './DiffView';
 import { clampSplit } from './prefs';
+import type { PlanDoc } from './thread';
 import { useDocument } from './useDocument';
 
-export type PaneTab = { kind: 'doc'; path: string } | { kind: 'diff'; path: string } | { kind: 'plan'; key: string };   // plan: task 4
+export type PaneTab = { kind: 'doc'; path: string } | { kind: 'diff'; path: string } | { kind: 'plan'; key: string };
 export const tabId = (t: PaneTab): string => `${t.kind}:${t.kind === 'plan' ? t.key : t.path}`;
+
+/** A plan the pane can show, by its key (a card's action id, or 'pending' for the request's own). */
+export interface PanePlan {
+  plan: PlanDoc;
+  /** Who proposed it (« Plan proposé par … »). */
+  by: string;
+  /** Its status is known (false: a request since answered, whose fate the thread does not tell). */
+  known: boolean;
+  /** It is the pinned request, and it can be answered from this page: « Répondez sous le fil : Y · N ». */
+  answer: boolean;
+}
 
 /** « Agrandir » opens the pane this wide; « Réduire » brings it back to the default. */
 const GROWN = 0.65, DEFAULT_SPLIT = 0.5;
@@ -45,6 +58,7 @@ export interface SidePaneProps {
   /** A document link inside a document: its tab. */
   onDocument(path: string): void;
   session: Session; files: readonly ChangedFile[]; client: DaemonClient;
+  plans: ReadonlyMap<string, PanePlan>;
 }
 
 /** The side pane (session.tsx `sidePane`, `paneDoc`, `dragSplit`): the handle, then the documents and changes opened beside
@@ -56,8 +70,14 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
   const tab = tabs.find(x => tabId(x) === active);
   if (!tab) return null;
   // A change is named by its file as it is now (a renamed one by its new name), below the cwd.
-  const pathOf = (x: PaneTab) => (x.kind === 'plan' ? '' : x.kind === 'doc' ? x.path : shownOf(files, x.path, session.cwd));
-  const labelOf = (x: PaneTab) => (x.kind === 'doc' ? nameOf(x.path) : x.kind === 'diff' ? tp.diffLabel(nameOf(pathOf(x))) : x.key);
+  const plan = (key: string) => p.plans.get(key);
+  const pathOf = (x: PaneTab) => {
+    if (x.kind !== 'plan') return x.kind === 'doc' ? x.path : shownOf(files, x.path, session.cwd);
+    const by = plan(x.key)?.by;
+    return by === undefined ? '' : t.session.plan.by(by);
+  };
+  const labelOf = (x: PaneTab) => (x.kind === 'doc' ? nameOf(x.path) : x.kind === 'diff' ? tp.diffLabel(nameOf(pathOf(x)))
+    : t.session.plan.tab(plan(x.key)?.plan.title || t.session.plan.fallback));
 
   // Dragged: the pane takes what is right of the pointer (the pointer captured, so leaving the handle does not let go); the
   // split is written once per value it reaches (to the hundredth), not on every move.
@@ -115,7 +135,7 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
         {/* Keyed by the tab: another one starts at its top, its own document read. */}
         {tab.kind === 'doc' ? <DocTab key={active} path={tab.path} head={head} session={session} client={p.client} onDocument={p.onDocument} />
           : tab.kind === 'diff' ? <DiffTab key={active} path={tab.path} head={head} files={files} cwd={session.cwd} onAllChanges={p.onAllChanges} />
-          : <>{head(tab.key, '')}<div className="side-body" /></>}
+          : <PlanTab key={active} entry={plan(tab.key)} path={pathOf(tab)} head={head} onDocument={p.onDocument} />}
       </aside>
     </>
   );
@@ -140,6 +160,35 @@ function DocTab({ path, head, session, client, onDocument }: { path: string; hea
         {doc.status === 'loading' ? <p className="muted" style={{ padding: 20 }}>{tp.reading}</p>
           : doc.status === 'error' ? <p className="muted" style={{ padding: 20 }}>{errors[doc.code] ?? tp.errors.other}</p>
           : body}
+      </div>
+    </>
+  );
+}
+
+/** A plan (session.tsx `sidePane`, `plan-doc`): its status, and the keys to answer it when it is the pinned request; then
+ *  the plan itself, parsed again only when its text changes. */
+function PlanTab({ entry, path, head, onDocument }: { entry: PanePlan | undefined; path: string; head: Head; onDocument(path: string): void }): JSX.Element {
+  const { t } = useI18n();
+  const tp = t.session.plan;
+  const follow = useCallback((ref: DocumentReference) => onDocument(ref.path), [onDocument]);
+  const text = entry?.plan.markdown ?? null;
+  const body = useMemo(() => (text === null ? null : <MarkdownDocument text={text} onDocument={follow} onHeadings={noHeadings} />), [text, follow]);
+  if (!entry) return <>{head(tp.fallback, path)}<div className="side-body" /></>;
+  const { plan, known, answer } = entry;
+  const hint = tp.answerHint;
+  return (
+    <>
+      {head(plan.title || tp.fallback, path)}
+      <div className="side-body">
+        <div className={cls('plan-doc', known && `status-${plan.status}`)}>
+          {known && (
+            <div className="plan-doc-status">
+              <span className={`plan-status ${plan.status}`}>{tp.statuses[plan.status]}</span>
+              {answer && plan.status === 'proposed' && <span className="muted">{hint.lead} <Kbd>Y</Kbd> {hint.approve} · <Kbd>N</Kbd> {hint.keep}</span>}
+            </div>
+          )}
+          {body}
+        </div>
       </div>
     </>
   );

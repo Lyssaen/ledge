@@ -16,9 +16,9 @@ import { Changes } from './Changes';
 import { memoKey, type SessionMemory } from './memory';
 import { clampSplit } from './prefs';
 import { Reply } from './Reply';
-import { SidePane, tabId, type PaneTab } from './SidePane';
+import { SidePane, tabId, type PanePlan, type PaneTab } from './SidePane';
 import { Thread } from './Thread';
-import { atEnd, displayIds, exchanges, helperOf, unreadFrom } from './thread';
+import { atEnd, displayIds, exchanges, helperOf, pendingPlan, unreadFrom, type PlanDoc } from './thread';
 
 export interface SessionPageProps {
   /** The parent on a subagent's page. */
@@ -124,6 +124,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   }, []);
   const openDoc = useCallback((path: string) => openTab({ kind: 'doc', path }), [openTab]);
   const openDiff = useCallback((path: string) => openTab({ kind: 'diff', path }), [openTab]);
+  const openPlan = useCallback((key: string) => openTab({ kind: 'plan', key }), [openTab]);
   // Its neighbour takes over: the next one, else the one before. A focus in the pane (or already lost) follows: to the tab
   // now active, else the pane, else (the pane closed) the thread; a focus elsewhere stays where it is.
   const refocus = useRef(false);
@@ -137,6 +138,36 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   };
   const active = tabs.find(x => tabId(x) === activeTab);
   const paneShown = active !== undefined && view === 'thread';
+  const planOpen = active?.kind === 'plan' ? active.key : null;
+
+  /* Plans: a card per ExitPlanMode action in the thread, and the pinned request's own ('pending': Codex and Cursor have no
+     such action). The pinned plan is read from the card whose action waits, else from the request. */
+  const askerId = session.pending?.helperId;
+  const asker = askerId === undefined ? session.name : helperOf(session, items, askerId)?.kind ?? session.name;
+  // As Reply shows it: none offline; on a subagent's page, only its own.
+  const shown = offline ? undefined : session.pending;
+  const request = shown?.kind === 'plan' && (helper ? shown.helperId === helper.id : true) ? shown : undefined;
+  const canAnswer = request !== undefined && session.source !== 'hook_only' && !helper;
+  const requestKey = useMemo(() => {
+    let key = 'pending';
+    for (const x of xs) for (const s of x.segments) if (s.kind === 'plan' && s.item.status === 'running') key = s.plan.key;
+    return key;
+  }, [xs]);
+  const requestPlan = useMemo(() => (request ? pendingPlan(request) : null), [request]);
+  // Once answered, the request's plan stays readable in its tab, its fate untold.
+  const [lastRequest, setLastRequest] = useState<{ plan: PlanDoc; by: string } | null>(null);
+  if (requestPlan && (lastRequest?.plan.markdown !== requestPlan.markdown || lastRequest.by !== asker)) setLastRequest({ plan: requestPlan, by: asker });
+  const author = helper?.kind ?? session.name;
+  const plans = useMemo(() => {
+    const m = new Map<string, PanePlan>();
+    for (const x of xs) for (const s of x.segments) {
+      if (s.kind === 'plan') m.set(s.plan.key, { plan: s.plan, by: author, known: true, answer: canAnswer && s.plan.key === requestKey });
+    }
+    if (requestPlan) m.set('pending', { plan: requestPlan, by: asker, known: true, answer: canAnswer && requestKey === 'pending' });
+    else if (lastRequest) m.set('pending', { ...lastRequest, known: false, answer: false });
+    return m;
+  }, [xs, author, asker, canAnswer, requestKey, requestPlan, lastRequest]);
+  const readPlan = useCallback(() => openPlan(requestKey), [openPlan, requestKey]);
   // J / K on a change: the tab moves to the next or previous changed file, in place (onto that file's tab if it has one).
   const stepPane = (d: 1 | -1) => {
     if (active?.kind !== 'diff' || files.length === 0) return;
@@ -265,8 +296,6 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const machine = machineOf(session);
   const since = whenOf(session, undefined, now, t.list.when).text;
   const waitedFor = whenOf(session, p.waits.get(session.id)?.since, now, t.list.when).text;
-  const askerId = session.pending?.helperId;
-  const asker = askerId === undefined ? session.name : helperOf(session, items, askerId)?.kind ?? session.name;
   const place = p.nav.place;
   const kids = helper === null ? session.helpers ?? [] : [];
   return (
@@ -297,7 +326,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
               {items === undefined ? <p className="muted">{offline ? th.notLoaded : th.loading}</p>
                 : xs.length === 0 ? <p className="muted">{th.empty}</p>
                 : <Thread session={session} helper={helper} items={items} xs={xs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
-                    flash={flash} onChange={openDiff} onDocument={openDoc} />}
+                    flash={flash} onChange={openDiff} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan} />}
             </div>
             {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}
             {view === 'changes' && !loaded && <div className="changes-empty"><p className="muted">{offline ? th.notLoaded : th.loading}</p></div>}
@@ -308,11 +337,11 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
             {view === 'thread' && !atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
           </div>
           <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
-            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} />
+            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} />
         </div>
         {paneShown && (
           <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}
-            onAllChanges={showChanges} onDocument={openDoc} session={session} files={files} client={p.client} />
+            onAllChanges={showChanges} onDocument={openDoc} session={session} files={files} client={p.client} plans={plans} />
         )}
       </div>
     </section>
