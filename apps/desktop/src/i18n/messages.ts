@@ -233,7 +233,7 @@ const fr = {
     },
     plan: {
       kicker: 'Plan proposé', fallback: 'Plan',
-      statuses: { proposed: 'En attente de votre accord', approved: 'Approuvé', revised: 'Révisé ensuite' } as Record<PlanStatus, string>,
+      statuses: { proposed: 'En attente de votre accord', open: 'Proposé', approved: 'Approuvé', revised: 'Révisé ensuite' } as Record<PlanStatus, string>,
       more: (n: number) => plural(n, `… et ${n} autre étape`, `… et ${n} autres étapes`), steps: (n: number) => plural(n, `${n} étape`, `${n} étapes`),
       readPlan: 'Lire le plan', openBeside: 'Ouvert à côté',
       approved: 'Plan approuvé', approvedAuto: 'Plan approuvé · mode automatique', toRevise: 'Plan à revoir',
@@ -470,7 +470,7 @@ const en: typeof fr = {
     },
     plan: {
       kicker: 'Proposed plan', fallback: 'Plan',
-      statuses: { proposed: 'Awaiting your approval', approved: 'Approved', revised: 'Revised afterwards' },
+      statuses: { proposed: 'Awaiting your approval', open: 'Proposed', approved: 'Approved', revised: 'Revised afterwards' },
       more: (n) => pluralEn(n, '… and 1 more step', `… and ${n} more steps`), steps: (n) => pluralEn(n, '1 step', `${n} steps`),
       readPlan: 'Read the plan', openBeside: 'Open beside',
       approved: 'Plan approved', approvedAuto: 'Plan approved · auto mode', toRevise: 'Plan to revise',

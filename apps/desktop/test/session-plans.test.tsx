@@ -164,3 +164,35 @@ it('the pinned request reads its own plan: a stale waiting card with another pla
   await user.click(card('p0').getByRole('button', { name: /Read the plan/ }));
   expect(status()).not.toContain('Answer below the thread');
 });
+it('a waiting card no request holds any more is « Proposed », its fate untold, until a later plan revises it; offline, frozen as it was', async () => {
+  const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'hook' } });
+  const { d, user } = await boot({ sessions: [...listSessions(), pia], list: true });
+  d.thread('pia', [exit('p1', 'running')]);
+  await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await user.type(await screen.findByRole('textbox', { name: 'Reply to the agent' }), 'Sans la publication{Enter}');
+  await waitFor(() => expect(d.received.filter(m => m.type === 'session.decide')).toHaveLength(1));
+  d.upsert({ ...pia, state: 'working', pending: undefined, lastActivityAt: new Date().toISOString() });
+  await waitFor(() => expect(card('p1').queryByText('Awaiting your approval')).toBeNull());
+  expect(document.querySelector('[data-plan-card="p1"] .plan-status')).toHaveTextContent(/^Proposed$/);
+  expect(document.querySelector('[data-plan-card="p1"]')).toHaveClass('status-open');
+  await user.click(card('p1').getByRole('button', { name: /Read the plan/ }));
+  expect(status()).toBe('Proposed');
+  const v2 = md.replace('# Plan : version 0.6.0', '# Plan : version 0.6.0 (révisé)');
+  d.threadItem('pia', { ...exit('p2', 'running'), input: JSON.stringify({ plan: v2 }) });
+  d.upsert({ ...pia, pending: { kind: 'plan', text: '# Plan : version 0.6.0 (révisé)', body: v2, source: 'hook' }, lastActivityAt: new Date().toISOString() });
+  await waitFor(() => expect([...document.querySelectorAll('.plan-card')].map(c => c.querySelector('.plan-status')!.textContent)).toEqual(['Revised afterwards', 'Awaiting your approval']));
+  expect(status()).toBe('Revised afterwards');
+  cleanup(); await closeDaemons();
+
+  // Offline: lot 6a's frozen thread, no live status.
+  const off = await boot({ sessions: [...listSessions(), { ...pia, pending: undefined, state: 'working' }], list: true });
+  off.d.thread('pia', [exit('p1', 'running')]);
+  await off.user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await waitFor(() => expect(document.querySelector('[data-plan-card="p1"] .plan-status')).toHaveTextContent(/^Proposed$/));
+  off.d.upsert({ ...pia, pending: undefined, state: 'working', offline: true });
+  await waitFor(() => expect(document.querySelector('[data-plan-card="p1"] .plan-status')).toHaveTextContent('Awaiting your approval'));
+});
+it('a card « Proposed » wears a muted status, without the waiting emphasis', () => {
+  expect(declarations('session.css', '.plan-status.open')).toBe('color:var(--muted-foreground)');
+  expect(declarations('session.css', '.plan-card.status-open')).toBe('');
+});

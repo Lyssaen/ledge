@@ -353,7 +353,7 @@
 .plan-card-head strong{font-weight:600}
 .plan-kicker{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground)}
 .plan-status{font-size:11px;font-weight:500;padding:1px 7px;border-radius:5px;white-space:nowrap;background:color-mix(in srgb,currentColor 10%,transparent)}
-.plan-status.proposed{color:var(--danger-text)}.plan-status.approved{color:var(--success)}.plan-status.revised{color:var(--muted-foreground)}
+.plan-status.proposed{color:var(--danger-text)}.plan-status.approved{color:var(--success)}.plan-status.revised,.plan-status.open{color:var(--muted-foreground)}
 .plan-intro{margin:8px 0 4px;font-size:13px;line-height:20px;color:var(--muted-foreground)}
 .plan-intro .ledge-thread-md{display:block}
 .plan-steps{margin:6px 0 8px;padding-left:22px;font-size:12px;line-height:20px}

@@ -55,7 +55,9 @@ function segmentsOf(items: readonly ThreadItem[]): Segment[] {
   return out;
 }
 
-export interface PlanDoc { key: string; title: string; markdown: string; steps: string[]; status: 'proposed' | 'approved' | 'revised' }
+/** proposed: its action waits (online, only while the request holds it: « En attente de votre accord »); open: its action
+ *  waits but no request holds it any more, its fate untold (« Proposé », set by the page); approved; revised. */
+export interface PlanDoc { key: string; title: string; markdown: string; steps: string[]; status: 'proposed' | 'open' | 'approved' | 'revised' }
 
 /** Les étapes numérotées. Des titres numérotés d'abord (`### 1. Titre`, `## 2) **Titre**` → « Titre », sans ses `**`) : une
  *  liste numérotée sous eux en détaille une, elle n'en compte pas ; sinon la liste (stepsOf de la maquette :
@@ -74,7 +76,7 @@ export function planTitle(markdown: string): string {
 const planDoc = (key: string, markdown: string, status: PlanDoc['status']): PlanDoc =>
   ({ key, title: planTitle(markdown), markdown, steps: stepsOf(markdown), status });
 
-const PLAN_STATUS: Record<ToolItem['status'], PlanDoc['status']> = { running: 'proposed', success: 'approved', failed: 'revised', unknown: 'revised' };
+const PLAN_STATUS: Record<ToolItem['status'], Exclude<PlanDoc['status'], 'open'>> = { running: 'proposed', success: 'approved', failed: 'revised', unknown: 'revised' };
 
 /** Une action ExitPlanMode : le plan de son entrée (JSON `{ plan }`), key = id ; running → proposed, success → approved,
  *  failed / unknown → revised. null sinon (une autre action, ou une entrée sans plan lisible : elle reste une action). */

@@ -20,7 +20,7 @@ import { SidePane, tabId, type PanePlan, type PaneTab } from './SidePane';
 import { Thread } from './Thread';
 import { TodoBar } from './TodoBar';
 import { latestTodos } from './todos';
-import { atEnd, displayIds, exchanges, helperOf, pendingPlan, unreadFrom, type PlanDoc } from './thread';
+import { atEnd, displayIds, exchanges, helperOf, pendingPlan, unreadFrom, type PlanDoc, type Segment } from './thread';
 
 export interface SessionPageProps {
   /** The parent on a subagent's page. */
@@ -174,20 +174,31 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     }
     return byText ?? byTitle ?? 'pending';
   }, [xs, requestPlan, requestFrom, helper?.id]);
+  // Online, a card still proposed that the request does not hold (a deny with a note before the next plan, a plan the
+  // request has moved past) waits for nothing the page can answer: « Proposé », never approved nor revised from this alone.
+  // Offline, the thread stays frozen as lot 6a left it. The other exchanges keep their identity (Turn is memoised).
+  const shownXs = useMemo(() => {
+    if (offline) return xs;
+    const stale = (s: Segment) => s.kind === 'plan' && s.plan.status === 'proposed' && s.plan.key !== requestKey;
+    if (!xs.some(x => x.segments.some(stale))) return xs;
+    return xs.map(x => (x.segments.some(stale)
+      ? { ...x, segments: x.segments.map(s => (s.kind === 'plan' && stale(s) ? { ...s, plan: { ...s.plan, status: 'open' as const } } : s)) }
+      : x));
+  }, [xs, offline, requestKey]);
   // Once answered, the request's plan stays readable in its tab, its fate untold.
   const [lastRequest, setLastRequest] = useState<{ plan: PlanDoc; by: string } | null>(null);
   if (requestPlan && (lastRequest?.plan.markdown !== requestPlan.markdown || lastRequest.by !== asker)) setLastRequest({ plan: requestPlan, by: asker });
   const author = helper?.kind ?? session.name;
   const plans = useMemo(() => {
     const m = new Map<string, PanePlan>();
-    for (const x of xs) for (const s of x.segments) {
+    for (const x of shownXs) for (const s of x.segments) {
       if (s.kind === 'plan') m.set(s.plan.key, { plan: s.plan, by: author, known: true, answer: canAnswer && s.plan.key === requestKey });
     }
     // The request's own tab is the request, whether or not its card has come since.
     if (requestPlan) m.set('pending', { plan: requestPlan, by: asker, known: true, answer: canAnswer });
     else if (lastRequest) m.set('pending', { ...lastRequest, known: false, answer: false });
     return m;
-  }, [xs, author, asker, canAnswer, requestKey, requestPlan, lastRequest]);
+  }, [shownXs, author, asker, canAnswer, requestKey, requestPlan, lastRequest]);
   const readPlan = useCallback(() => openPlan(requestKey), [openPlan, requestKey]);
   // J / K on a change: the tab moves to the next or previous changed file, in place (onto that file's tab if it has one).
   const stepPane = (d: 1 | -1) => {
@@ -369,7 +380,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
               )}
               {items === undefined ? <p className="thread-note muted">{offline ? th.notLoaded : th.loading}</p>
                 : xs.length === 0 ? <p className="thread-note muted">{th.empty}</p>
-                : <Thread session={session} helper={helper} items={items} xs={xs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
+                : <Thread session={session} helper={helper} items={items} xs={shownXs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
                     flash={flash} onChange={openDiff} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan} />}
             </div>
             {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}
