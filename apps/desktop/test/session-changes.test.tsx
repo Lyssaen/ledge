@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import type { Session, ThreadItem } from '@ledge/protocol';
-import { boot, closeDaemons, listSessions, ottoThread } from './helpers';
+import { boot, closeDaemons, declarations, listSessions, ottoThread } from './helpers';
 
 afterEach(async () => { cleanup(); localStorage.clear(); await closeDaemons(); });
 
@@ -54,8 +54,49 @@ it('« turn 2 » goes back to the action in the thread and flashes it; « View t
   await user.click(within(pane()).getByRole('button', { name: /^Edit · turn 2/ }));
   expect(tab(/^Thread/)).toHaveAttribute('aria-selected', 'true');
   expect(document.querySelector('[data-tool="e9"]')).toHaveClass('flash');
-  await user.click(within(document.querySelector<HTMLElement>('[data-tool="e9"]')!).getByRole('button', { name: 'View the change' }));
+  await user.click(within(document.querySelector<HTMLElement>('[data-tool="w1"]')!).getByRole('button', { name: 'View the change' }));
+  expect(tab(/^Changes/)).toHaveAttribute('aria-selected', 'true');
+  expect(pane().querySelector('.file-title code')).toHaveTextContent('docs/guide.md');
+});
+it('« View the change » on an absolute path finds the file a relative path opened', async () => {
+  const { user } = await openOtto([
+    { kind: 'tool', id: 'k1', at: new Date().toISOString(), turn: 2, tool: 'apply_patch', label: 'src/b.ts', status: 'success', files: [{ path: 'src/b.ts', change: 'edit', diff: '@@\n-x\n+y' }] },
+    { kind: 'tool', id: 'k2', at: new Date().toISOString(), turn: 2, tool: 'Edit', label: '/w/ledge/src/b.ts', status: 'success', files: [{ path: '/w/ledge/src/b.ts', change: 'edit', diff: '- y\n+ z' }] }
+  ]);
+  await user.click(tab(/^Changes/));
+  await user.click(within(screen.getByRole('navigation', { name: 'Changed files' })).getByRole('button', { name: /b\.ts/ }));
+  await user.click(within(pane()).getByRole('button', { name: /^Edit · turn 2/ }));
+  await user.click(within(document.querySelector<HTMLElement>('[data-tool="k2"]')!).getByRole('button', { name: 'View the change' }));
+  expect(pane().querySelector('.file-title code')).toHaveTextContent('src/b.ts');
+});
+it('on a narrow page, Escape closes the file list and the page stays; the next Escape leaves it', async () => {
+  const { user } = await openOtto();
+  await user.click(tab(/^Changes/));
+  await user.click(within(pane()).getByRole('button', { name: 'Files · 2' }));
+  const nav = screen.getByRole('navigation', { name: 'Changed files' });
+  expect(nav).toHaveClass('open');
+  await user.keyboard('{Escape}');
+  expect(nav).not.toHaveClass('open');
+  expect(document.querySelector('.session-page')).not.toBeNull();
+  await user.keyboard('{Escape}');
+  expect(document.querySelector('.session-page')).toBeNull();
+});
+it('a held J does not walk the files: only a new press does', async () => {
+  const { user } = await openOtto();
+  await user.click(tab(/^Changes/));
+  fireEvent.keyDown(document.body, { key: 'j', repeat: true });
   expect(pane().querySelector('.file-title code')).toHaveTextContent('src/App.tsx');
+  fireEvent.keyDown(document.body, { key: 'j' });
+  expect(pane().querySelector('.file-title code')).toHaveTextContent('docs/guide.md');
+});
+it('before the thread is there, Changes says what the thread says, and the tab gives no count', async () => {
+  const { user } = await boot({ sessions: listSessions().map(s => (s.name === 'Otto' ? { ...s, offline: true } : s)), list: true });
+  await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await screen.findByText('The thread was not loaded before the connection was lost.');
+  expect(tab(/^Changes/).querySelector('.tab-count')).toBeNull();
+  await user.click(tab(/^Changes/));
+  expect(document.querySelector('.changes-empty')).toHaveTextContent('The thread was not loaded before the connection was lost.');
+  expect(screen.queryByText('No file changed')).toBeNull();
 });
 it('a file without a diff, a cut diff, a renamed file', async () => {
   const { user } = await openOtto([
@@ -77,4 +118,8 @@ it('nothing changed: said plainly, and Cursor named as the one that does not tel
   const { user } = await openOtto([], 'cursor', ottoThread().filter(i => i.id !== 't3'));
   await user.click(tab(/^Changes/));
   expect(screen.getByText('Cursor Agent does not report the files it touches.')).toBeVisible();
+});
+it('a renamed file wears the colour of an edited one', () => {
+  expect(declarations('session.css', '.change-rename')).toBe(declarations('session.css', '.change-edit'));
+  expect(declarations('session.css', '.change-rename')).toContain('color:var(--warning)');
 });

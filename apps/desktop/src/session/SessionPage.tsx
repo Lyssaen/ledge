@@ -78,11 +78,13 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const [listOpen, setListOpen] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const files = useMemo(() => (items ? changedFiles(items, session.cwd, helper?.id) : []), [items, session.cwd, helper?.id]);
-  // The file asked for: by its path, else by an older path of it (an action before a rename); else the first.
+  // The file asked for: by its path, else by its path below the cwd (an absolute path for an entry kept relative), else by an
+  // older path of it (an action before a rename); else the first.
   const current = useMemo(() => {
     if (file === null) return files[0];
-    const old = relativeTo(file, session.cwd);
-    return files.find(f => f.path === file) ?? files.find(f => f.from === old || f.touches.some(x => x.from === old)) ?? files[0];
+    const shown = relativeTo(file, session.cwd);
+    return files.find(f => f.path === file) ?? files.find(f => f.shown === shown)
+      ?? files.find(f => f.from === shown || f.touches.some(x => x.from === shown)) ?? files[0];
   }, [files, file, session.cwd]);
   // Back on the thread: where the reader left it, or (from « tour 2 ») the action, which the flash brings into view.
   const returning = useRef<'restore' | 'aim' | null>(null);
@@ -205,7 +207,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
           {VIEWS.map(({ view: v, icon }) => (
             <button key={v} type="button" role="tab" id={`session-tab-${v}`} aria-selected={view === v} tabIndex={view === v ? 0 : -1}
               onClick={() => switchView(v)} onKeyDown={onTabKey}>
-              <Icon d={icon} size={13} />{t.session.views[v]}{v === 'changes' && <span className="tab-count mono">{files.length}</span>}
+              <Icon d={icon} size={13} />{t.session.views[v]}{v === 'changes' && loaded && <span className="tab-count mono">{files.length}</span>}
             </button>
           ))}
         </div>
@@ -228,7 +230,9 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
                 : <Thread session={session} helper={helper} items={items} xs={xs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
                     flash={flash} onChange={showChanges} />}
             </div>
-            {view === 'changes' && (
+            {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}
+            {view === 'changes' && !loaded && <div className="changes-empty"><p className="muted">{offline ? th.notLoaded : th.loading}</p></div>}
+            {view === 'changes' && loaded && (
               <Changes files={files} current={current?.path ?? null} onFile={setFile} onTouch={showInThread} listOpen={listOpen} onListOpen={setListOpen}
                 session={session} name={helper?.kind ?? session.name} notify={p.notify} />
             )}

@@ -213,7 +213,7 @@
 .file-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
 .change-letter{width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;border-radius:4px;font:600 9px 'Geist Mono',monospace;flex-shrink:0}
 .change-add{color:var(--success);background:color-mix(in srgb,var(--success) 14%,transparent)}
-.change-edit,.change-write{color:var(--warning);background:color-mix(in srgb,var(--warning) 14%,transparent)}
+.change-edit,.change-write,.change-rename{color:var(--warning);background:color-mix(in srgb,var(--warning) 14%,transparent)}
 .change-delete{color:var(--danger-text);background:color-mix(in srgb,var(--destructive) 14%,transparent)}
 .file-pane{min-width:0;min-height:0;display:flex;flex-direction:column}
 .file-head{padding:10px 14px 8px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
