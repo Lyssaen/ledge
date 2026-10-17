@@ -1,5 +1,5 @@
 import type { Pending } from '@ledge/protocol';
-import { NO_ALWAYS, NO_NOTE, flatten, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
 
 // Claude Code 2.x draws a dialog at the bottom of the pane, without a box:
 //
@@ -350,6 +350,7 @@ export const claudeAdapter: Adapter = {
   atRest,
   paneTitle,
   keysFor(decision, pending, pane, note) {
+    if (pane) assertDialogIs(pending, parseTrust(pane) ? 'permission' : parseDialog(pane)?.kind ?? null);
     if (decision === 'always') return digit(alwaysOption(pane));
     if (decision === 'deny') return note ? notePlan(note, pane) : [{ keys: ['Escape'] }];
     const t = pane ? parseTrust(pane) : null;

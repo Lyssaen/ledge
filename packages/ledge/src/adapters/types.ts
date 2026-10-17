@@ -48,5 +48,17 @@ export interface Adapter {
 export const NO_ALWAYS = 'no "always" option in this dialog, answer in the terminal';
 /** A note asked of a dialog where nothing typed would reach the agent (a trust dialog). */
 export const NO_NOTE = 'no place for a note in this dialog, answer in the terminal';
+/** The request the user answered is not the one in front of them any more (another dialog, another request): nothing is typed. */
+export const STALE = 'the request changed, look again';
+/**
+ * Throws STALE when the dialog read on screen is of another kind than the request answered (a plan dialog for a
+ * permission: « always » would pick its auto mode). A diff is answered in a permission dialog. `shown` null (no dialog
+ * read, a pane taller than the capture) keeps each adapter's own fallback.
+ */
+export function assertDialogIs(pending: Pending, shown: PanePromptMatch['kind'] | null): void {
+  if (shown === null) return;
+  const want = pending.kind === 'diff' ? 'permission' : pending.kind;
+  if (shown !== want) throw new Error(STALE);
+}
 /** Tmux.sendText rejects newlines: a reply or a note is flattened to one line, Enter is a separate key step. */
 export const flatten = (text: string) => text.replace(/\s*[\r\n]+\s*/g, ' ').trim();

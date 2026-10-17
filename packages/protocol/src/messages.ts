@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SessionSchema, ToolSchema } from './session.js';
+import { PendingSchema, SessionSchema, ToolSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema } from './chat.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
@@ -114,7 +114,11 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** Takes the card's queued instruction back out of the queue. */
   z.object({ type: z.literal('session.relay.cancel'), qid: z.string().min(1) }),
   /** `always` and `note` only where the harness offers them (`offers`); a note goes with `deny`, for the agent to read. */
-  z.object({ type: z.literal('session.decide'), id: z.string(), decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional() }),
+  z.object({
+    type: z.literal('session.decide'), id: z.string(), decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
+    /** The request the user saw when deciding: refused (the request changed) unless it is still the pending one. Left out by older fronts and the island. */
+    expect: PendingSchema.pick({ kind: true, text: true }).optional()
+  }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),
   z.object({ type: z.literal('session.kill'), id: z.string() }),
   z.object({ type: z.literal('session.interrupt'), id: z.string() }),

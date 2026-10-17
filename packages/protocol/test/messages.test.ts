@@ -244,6 +244,13 @@ describe('decisions beyond accept and deny (lot 6a)', () => {
     expect(() => parseClientMessage({ type: 'session.decide', id: 'a', decision: 'deny', note: 'x'.repeat(4001) })).toThrow();
     expect(parseServerMessage({ type: 'error', id: 'a', message: 'no', request: 'session.reply' })).toEqual({ type: 'error', id: 'a', message: 'no', request: 'session.reply' });
   });
+  it('session.decide carries the request the user saw, optional (the island sends none)', () => {
+    const expected = { kind: 'permission', text: 'npm test' } as const;
+    expect(parseClientMessage({ type: 'session.decide', id: 'a', decision: 'accept', expect: expected })).toEqual({ type: 'session.decide', id: 'a', decision: 'accept', expect: expected });
+    expect(parseClientMessage({ type: 'session.decide', id: 'a', decision: 'accept' })).not.toHaveProperty('expect');
+    expect(() => parseClientMessage({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'maybe', text: 'x' } })).toThrow();
+    expect(() => parseClientMessage({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'plan' } })).toThrow();
+  });
   it('what each harness offers', () => {
     expect([offers('claude', 'plan', 'always'), offers('codex', 'plan', 'always'), offers('codex', 'diff', 'always'), offers('cursor', 'permission', 'always'),
       offers('cursor', 'plan', 'note'), offers('claude', 'question', 'note'), offers('claude', 'question', 'always')]).toEqual([true, false, true, false, true, false, false]);

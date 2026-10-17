@@ -152,3 +152,20 @@ describe('codex adapter: always and a note (lot 6a)', () => {
     expect(() => codexAdapter.keysFor('deny', perm, fx('codex-hooks-review'), 'non')).toThrow(/answer in the terminal/);
   });
 });
+
+describe('codex adapter: the dialog on screen must be the request (lot 6a review)', () => {
+  it('a plan question up while an approval is pending, or the other way round: nothing is typed', () => {
+    for (const d of ['accept', 'always', 'deny'] as const) {
+      expect(() => codexAdapter.keysFor(d, pending('permission'), fx('codex-plan'))).toThrow('the request changed, look again');
+      expect(() => codexAdapter.keysFor(d, pending('diff'), fx('codex-plan'))).toThrow('the request changed, look again');
+      expect(() => codexAdapter.keysFor(d, pending('plan', { source: 'pane' }), fx('codex-permission-exec'))).toThrow('the request changed, look again');
+    }
+    expect(() => codexAdapter.keysFor('accept', pending('question'), fx('codex-permission-exec'))).toThrow('the request changed, look again');
+    expect(() => codexAdapter.keysFor('accept', pending('permission'), fx('codex-question'))).toThrow('the request changed, look again');
+    expect(() => codexAdapter.keysFor('accept', pending('plan', { source: 'pane' }), fx('codex-hooks-review'))).toThrow('the request changed, look again');
+  });
+  it('the matching dialog still takes its keys; no readable dialog keeps the fallbacks', () => {
+    expect(codexAdapter.keysFor('accept', pending('diff'), fx('codex-permission-patch'))).toEqual([{ text: 'y' }]);
+    expect(codexAdapter.keysFor('accept', pending('permission'))).toEqual([{ text: 'y' }]);
+  });
+});

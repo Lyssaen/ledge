@@ -352,6 +352,29 @@ describe('server', () => {
     expect(tmux.sent).toEqual([]);
     c.close();
   });
+  it('a decision for a request that changed is refused before any key; the request it saw lets it through; none keeps today', async () => {
+    const plan = fx('claude2-plan');
+    tmux = fakeTmux({ 'ledge-a': [plan, plan, 'Running…'] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0 });
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan', source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    // The user saw a Bash permission; the plan dialog is up now: « always » would type « Yes, and use auto mode ».
+    c.send({ type: 'session.decide', id: 'a', decision: 'always', expect: { kind: 'permission', text: 'npm test' } });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the request changed, look again', request: 'session.decide' });
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'plan', text: '# Plan, v2' } });
+    expect((await c.next('error', 3000)).message).toBe('the request changed, look again');
+    expect(tmux.sent).toEqual([]);
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'plan', text: '# Plan' } });
+    expect((await c.next('session.updated', 3000)).session.state).toBe('working');
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '2']]);
+    // No request left: a decision that saw one is stale, not « nothing to decide ».
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'plan', text: '# Plan' } });
+    expect((await c.next('error', 3000)).message).toBe('the request changed, look again');
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    expect((await c.next('error', 3000)).message).toBe('nothing to decide');
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '2']]);
+    c.close();
+  });
   it('a note on a question is refused for every harness, and a reply refusal names session.reply', async () => {
     store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');

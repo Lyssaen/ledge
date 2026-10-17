@@ -1,5 +1,5 @@
 import type { Pending } from '@ledge/protocol';
-import { NO_ALWAYS, NO_NOTE, flatten, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
 
 const rtrim = (l: string) => l.replace(/\s+$/, '');
 const isBlank = (l: string) => l.trim() === '';
@@ -207,6 +207,14 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   return d ? { kind: 'permission', text: dialogText(d) } : null;
 }
 
+/** The kind of request the dialog on screen answers, read in keysFor's order (the skip field is still the approval's), or null. */
+function shownKind(lines: string[]): 'permission' | 'question' | 'plan' | null {
+  if (parseTrust(lines)) return 'permission';
+  if (parseQuestion(lines)) return 'question';
+  if (parsePlan(lines)) return 'plan';
+  return lines.some(l => TELL_INSTEAD.test(l)) || parseDialog(lines) ? 'permission' : null;
+}
+
 /** Any dialog Ledge reads (approval, trust, question, plan) ends the pane. */
 const anyDialog = (lines: string[]) => !!(parseDialog(lines) || parseTrust(lines) || parseQuestion(lines) || parsePlan(lines));
 
@@ -302,8 +310,9 @@ export const cursorAdapter: Adapter = {
   previewLines,
   atRest,
   promptGone,
-  keysFor(decision, _pending, pane, note) {
+  keysFor(decision, pending, pane, note) {
     const lines = pane ? toLines(pane) : [];
+    if (pane) assertDialogIs(pending, shownKind(lines));
     // « Add … to allowlist » is permanent and « Run Everything » opens everything: no « for this session » here.
     if (decision === 'always') throw new Error(NO_ALWAYS);
     if (decision === 'deny' && note) return notePlan(lines, note);

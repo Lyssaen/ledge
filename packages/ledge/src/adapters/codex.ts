@@ -1,4 +1,4 @@
-import { NO_ALWAYS, NO_NOTE, flatten, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
 
 // Codex CLI 0.162 draws its dialogs at the bottom of the pane, without a box, the footer on the last line:
 //
@@ -216,6 +216,8 @@ export const codexAdapter: Adapter = {
   atRest,
   keysFor(decision, pending, pane, note) {
     const d = pane ? parseDialog(pane) : null;
+    // An approval or the hooks review answers a permission (or a diff).
+    if (d) assertDialogIs(pending, d.kind === 'approval' || d.kind === 'confirm' ? 'permission' : d.kind);
     if (decision === 'always') return alwaysKeys(d);
     if (decision === 'deny' && note) return noteKeys(d, note);
     if (decision === 'deny') {

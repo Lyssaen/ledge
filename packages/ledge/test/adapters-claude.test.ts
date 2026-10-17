@@ -238,7 +238,7 @@ describe('claude adapter: always and a note (lot 6a)', () => {
     expect(claudeAdapter.keysFor('always', perm, fx('claude2-permission-bash'))).toEqual([{ text: '2' }]);   // Yes, and always allow access to
     expect(claudeAdapter.keysFor('always', diff, fx('claude2-permission-write'))).toEqual([{ text: '2' }]);  // accept edits … for this session
     expect(claudeAdapter.keysFor('always', plan, fx('claude2-plan'))).toEqual([{ text: '1' }]);             // Yes, and use auto mode
-    expect(() => claudeAdapter.keysFor('always', perm, fx('claude2-question'))).toThrow('no "always" option in this dialog, answer in the terminal');
+    expect(() => claudeAdapter.keysFor('always', perm, fx('claude2-question'))).toThrow('the request changed, look again'); // a question dialog is not the permission
   });
   it('always on a permission whose only lasting option is auto mode is refused, not auto mode', () => {
     const pane = fx('claude2-permission-bash').replace('2. Yes, and always allow access to', '2. Yes, once more');
@@ -271,5 +271,32 @@ describe('claude adapter: always and a note (lot 6a)', () => {
     const noRow = fx('claude2-plan').replace('3. Tell Claude what to change', '3. Keep planning');
     expect(claudeAdapter.keysFor('deny', plan, noRow, 'Garde la v1')).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function) }, { text: 'Garde la v1' }, { keys: ['Enter'] }]);
     expect(() => claudeAdapter.keysFor('deny', perm, fx('claude2-trust'), 'non')).toThrow(/answer in the terminal/);
+  });
+});
+
+describe('claude adapter: the dialog on screen must be the request (lot 6a review)', () => {
+  const perm = { kind: 'permission' as const, text: 'npm test', tool: 'Bash', source: 'hook' as const };
+  const diff = { kind: 'diff' as const, text: 'Write a.txt', tool: 'Write', source: 'hook' as const };
+  const plan = { kind: 'plan' as const, text: '# Plan', source: 'hook' as const };
+  const q = { kind: 'question' as const, text: 'Which?', source: 'hook' as const };
+  it('a plan dialog up while a permission is pending: nothing is typed (« always » would be « use auto mode »)', () => {
+    for (const d of ['accept', 'always', 'deny'] as const) {
+      expect(() => claudeAdapter.keysFor(d, perm, fx('claude2-plan'))).toThrow('the request changed, look again');
+      expect(() => claudeAdapter.keysFor(d, diff, fx('claude2-plan'))).toThrow('the request changed, look again');
+    }
+    expect(() => claudeAdapter.keysFor('deny', perm, fx('claude2-plan'), 'Use pnpm')).toThrow('the request changed, look again');
+  });
+  it('a permission, a question or the trust dialog up while a plan is pending, and the other way round: nothing is typed', () => {
+    expect(() => claudeAdapter.keysFor('accept', plan, fx('claude2-permission-bash'))).toThrow('the request changed, look again');
+    expect(() => claudeAdapter.keysFor('accept', plan, fx('claude2-trust'))).toThrow('the request changed, look again');
+    expect(() => claudeAdapter.keysFor('accept', plan, fx('claude2-question'))).toThrow('the request changed, look again');
+    expect(() => claudeAdapter.keysFor('accept', perm, fx('claude2-question'))).toThrow('the request changed, look again');
+    expect(() => claudeAdapter.keysFor('accept', q, fx('claude2-permission-bash'))).toThrow('the request changed, look again');
+  });
+  it('the matching dialog still takes its keys; a diff is a permission dialog; no readable dialog keeps the fallbacks', () => {
+    expect(claudeAdapter.keysFor('accept', diff, fx('claude2-permission-write'))).toEqual([{ text: '1' }]);
+    expect(claudeAdapter.keysFor('accept', perm, fx('claude2-trust'))).toEqual([{ keys: ['Down', 'Enter'] }]);
+    expect(claudeAdapter.keysFor('accept', q, fx('claude2-question'))).toEqual([{ text: '1' }]);
+    expect(claudeAdapter.keysFor('accept', perm)).toEqual([{ text: '1' }]);
   });
 });

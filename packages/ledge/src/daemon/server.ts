@@ -6,6 +6,7 @@ import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
+import { STALE } from '../adapters/types.js';
 import { verifyGone } from '../adapters/verify.js';
 import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
@@ -339,6 +340,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.decide': {
         const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
         if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
+        // A decision is for the request the user saw: another one (or none) since is refused before any key.
+        if (msg.expect && (s.pending?.kind !== msg.expect.kind || s.pending.text !== msg.expect.text)) return refuse(STALE, msg.id);
         if (!s.pending) return refuse('nothing to decide', msg.id);
         const pending = s.pending; const adapter = adapterFor(s.tool);
         // What the harness cannot do is refused before any key (a question never takes `always` or a note).

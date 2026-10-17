@@ -219,3 +219,23 @@ describe('cursor adapter: a note (lot 6a)', () => {
     expect(() => cursorAdapter.keysFor('always', perm, fx('cursor-permission'))).toThrow('no "always" option in this dialog, answer in the terminal');
   });
 });
+
+describe('cursor adapter: the dialog on screen must be the request (lot 6a review)', () => {
+  const plan = { kind: 'plan' as const, text: 'Add line d to notes.txt', source: 'pane' as const };
+  const question = { kind: 'question' as const, text: 'Which letter should be added?', source: 'pane' as const };
+  it('a plan up while a permission is pending, or the other way round: nothing is typed', () => {
+    for (const d of ['accept', 'deny'] as const) {
+      expect(() => cursorAdapter.keysFor(d, perm, fx('cursor-plan'))).toThrow('the request changed, look again');
+      expect(() => cursorAdapter.keysFor(d, plan, fx('cursor-permission'))).toThrow('the request changed, look again');
+      expect(() => cursorAdapter.keysFor(d, plan, fx('cursor-skip-field'))).toThrow('the request changed, look again');
+      expect(() => cursorAdapter.keysFor(d, plan, fx('cursor-trust'))).toThrow('the request changed, look again');
+      expect(() => cursorAdapter.keysFor(d, question, fx('cursor-permission'))).toThrow('the request changed, look again');
+      expect(() => cursorAdapter.keysFor(d, perm, fx('cursor-question'))).toThrow('the request changed, look again');
+    }
+    expect(() => cursorAdapter.keysFor('deny', perm, fx('cursor-plan'), 'Use pnpm')).toThrow('the request changed, look again');
+  });
+  it('the matching dialog still takes its keys', () => {
+    expect(cursorAdapter.keysFor('accept', plan, fx('cursor-plan'))).toEqual([{ text: 'b' }]);
+    expect(cursorAdapter.keysFor('accept', perm, fx('cursor-trust'))).toEqual([{ text: 'a' }]);
+  });
+});
