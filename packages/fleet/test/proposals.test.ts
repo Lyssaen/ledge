@@ -54,16 +54,35 @@ describe('proposeProjects', () => {
     expect(p.repos).toContainEqual({ machine: 'local', path: '/home/me/Workspace/paper/paper-api', why: { kind: 'remote', remote: 'github.com/paradow/paper-api', machines: ['PC local', 'Dev SSH'] } });
   });
 
-  it("proposes the folders of the agents without a project, and files them", () => {
-    const p = all.find(x => x.file.length)!;
-    expect(p.file).toEqual(['local:kit', 'dev:zed']);
-    expect(p.repos).toEqual([
-      { machine: 'local', path: '/home/me/Téléchargements', why: { kind: 'agent', names: ['Kit'] } },
-      { machine: 'dev', path: '/var/log', why: { kind: 'agent', names: ['Zed'] } }
-    ]);
-    expect(p.summary).toEqual({ repos: 2, machines: ['PC local', 'Dev SSH'], agents: ['Kit', 'Zed'] });
-    expect(p.targetId).toBeUndefined();
+  it("proposes the folders of the agents without a project, one proposal per parent folder, and files them", () => {
+    const kit = all.find(x => x.file.includes('local:kit'))!;
+    const zed = all.find(x => x.file.includes('dev:zed'))!;
+    expect(kit).not.toBe(zed);
+    expect(kit.file).toEqual(['local:kit']);
+    expect(kit.name).toBe('Téléchargements');
+    expect(kit.repos).toEqual([{ machine: 'local', path: '/home/me/Téléchargements', why: { kind: 'agent', names: ['Kit'] } }]);
+    expect(kit.summary).toEqual({ repos: 1, machines: ['PC local'], agents: ['Kit'] });
+    expect(zed.file).toEqual(['dev:zed']);
+    expect(zed.name).toBe('Log');
+    expect(zed.repos).toEqual([{ machine: 'dev', path: '/var/log', why: { kind: 'agent', names: ['Zed'] } }]);
+    expect(kit.targetId).toBeUndefined();
+    expect(zed.targetId).toBeUndefined();
     expect(all.flatMap(x => x.file)).not.toContain('local:otto');
+  });
+
+  it("puts the agents' folders that share a parent together, named after the parent", () => {
+    const r = proposeProjects({ ...input, sessions: [...sessions, session('local:lou', 'Lou', '/home/me/Documents')] });
+    const p = r.find(x => x.file.includes('local:kit'))!;
+    expect(p.file).toEqual(['local:lou', 'local:kit']);
+    expect(p.name).toBe('Me');
+    expect(p.repos.map(x => x.path)).toEqual(['/home/me/Documents', '/home/me/Téléchargements']);
+  });
+
+  it("an agents' proposal retargets only on its own folders", () => {
+    const taken: Projects = { ...projects, projects: [...projects.projects, { id: 'logs', name: 'log', color: 'red', description: '', repos: [] }] };
+    const r = proposeProjects({ ...input, projects: taken });
+    expect(r.find(x => x.file.includes('dev:zed'))!.targetId).toBe('logs');
+    expect(r.find(x => x.file.includes('local:kit'))!.targetId).toBeUndefined();
   });
 
   it('attaches an agent to the scanned repository that holds its folder', () => {
@@ -111,13 +130,17 @@ describe('proposeProjects', () => {
     expect(p.repos).toEqual([{ machine: 'dev', path: '/srv/mirrors/ledge', why: { kind: 'remote', remote: 'github.com/paradow/ledge', machines: ['Dev SSH'] } }]);
   });
 
-  it('a repository next to a project repository is an « add to » that project', () => {
-    const scans = [{ ...local, repos: [...local.repos, { path: '/home/me/Workspace/ledge/website', branch: 'main' }] }, dev];
-    const r = proposeProjects({ ...input, scans });
-    const p = containing('/home/me/Workspace/ledge/website', 'local', r)!;
-    expect(p.targetId).toBe('ledge');
-    expect(p.repos.map(x => [x.path, x.why.kind])).toEqual([['/srv/mirrors/ledge', 'remote'], ['/home/me/Workspace/ledge/website', 'folder']]);
-    expect(r.filter(x => x.targetId === 'ledge')).toHaveLength(1);
+  it('a repository next to a project repository is a new proposal, not an « add to »', () => {
+    const scans = [{ ...local, repos: [...local.repos, { path: '/home/me/development/ledge', branch: 'main' }, { path: '/home/me/development/a', branch: 'main' }, { path: '/home/me/development/b', branch: null }] }, dev];
+    const near: Projects = { ...projects, projects: [...projects.projects, { id: 'ledge-dev', name: 'Ledge dev', color: 'pink', description: '', repos: [{ machine: 'local', path: '/home/me/development/ledge' }] }] };
+    const r = proposeProjects({ ...input, projects: near, scans });
+    const p = containing('/home/me/development/a', 'local', r)!;
+    expect(p.targetId).toBeUndefined();
+    expect(p.name).toBe('Development');
+    expect(p.repos.map(x => [x.path, x.why.kind])).toEqual([['/home/me/development/a', 'folder'], ['/home/me/development/b', 'folder']]);
+    // A lone repository next to a project repository is not proposed.
+    const lone = proposeProjects({ ...input, scans: [{ ...local, repos: [...local.repos, { path: '/home/me/Workspace/ledge/website', branch: 'main' }] }, dev] });
+    expect(containing('/home/me/Workspace/ledge/website', 'local', lone)).toBeUndefined();
   });
 
   it('a name already taken (case and accents aside) is an « add to » that project', () => {
@@ -139,7 +162,8 @@ describe('proposeProjects', () => {
       ['Paper', 'amber', undefined],
       ['Ledge', 'blue', 'ledge'],
       ['Téléchargements', 'violet', undefined],
-      ['Scratch', 'teal', undefined]
+      ['Log', 'teal', undefined],
+      ['Scratch', 'pink', undefined]
     ]);
     const full: Projects = { projects: (['blue', 'green', 'amber', 'violet', 'teal', 'pink', 'red', 'slate'] as const).map((color, i) => ({ id: `p${i}`, name: `P${i}`, color, description: '', repos: [] })), rules: [] };
     expect(proposeProjects({ ...input, projects: full }).map(p => p.color)[0]).toBe('blue');
@@ -183,8 +207,8 @@ describe('proposeFor', () => {
 
   it('with an agent to file, the proposal that holds it', () => {
     const p = proposeFor({ name: '', file: ['dev:zed'] }, all, input)!;
-    expect(p.file).toEqual(['local:kit', 'dev:zed']);
-    expect(p.name).toBe('Téléchargements');
+    expect(p.file).toEqual(['dev:zed']);
+    expect(p.name).toBe('Log');
   });
 
   it('else the first proposal, named as typed', () => {

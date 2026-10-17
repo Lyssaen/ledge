@@ -59,12 +59,10 @@ function survey(input: Input) {
   scanned.sort(byPlace);
   const ownerOf = (r: { machine: string; path: string }) => projectOf({ machineId: r.machine, cwd: r.path }, input.projects);
   const free = scanned.filter(r => ownerOf(r) === null);
-  // Overlap: a remote a project's repository has, a parent folder a project's repository sits in.
+  // Overlap: a remote a project's repository has.
   const remoteOwner = new Map<string, string>();
   for (const r of scanned) { const owner = ownerOf(r); if (owner && r.remote && !remoteOwner.has(r.remote)) remoteOwner.set(r.remote, owner); }
-  const parentOwner = new Map<string, string>();
-  for (const p of input.projects.projects) for (const r of p.repos) { const k = at(r.machine, parentOf(r.path)); if (!parentOwner.has(k)) parentOwner.set(k, p.id); }
-  return { order, labels, byPlace, scanned, free, remoteOwner, parentOwner, label: (m: string) => labels.get(m) ?? m };
+  return { order, labels, byPlace, scanned, free, remoteOwner, label: (m: string) => labels.get(m) ?? m };
 }
 type Survey = ReturnType<typeof survey>;
 
@@ -86,10 +84,11 @@ function finish(g: Group, projects: readonly Project[], color: ProjectColor, s: 
   };
 }
 
-/** Les groupes : même remote (sur plusieurs machines ou chemins, ou celui d'un dépôt d'un projet) > dossiers d'agents sans projet >
- *  nommage commun (préfixe avant « - », au moins 2 dépôts) > même dossier parent (au moins 2, ou celui d'un dépôt d'un projet).
+/** Les groupes : même remote (sur plusieurs machines ou chemins, ou celui d'un dépôt d'un projet) > dossiers d'agents sans projet
+ *  (une proposition par dossier parent) > nommage commun (préfixe avant « - », au moins 2 dépôts) > même dossier parent (au moins 2).
  *  Un dépôt déjà dans un projet (projectOf) est exclu ; chaque dépôt n'est que dans une proposition (la première raison l'emporte).
- *  Recoupement : un groupe dont un dépôt a le remote ou le dossier parent d'un dépôt d'un projet existant devient targetId (« Ajouter à »).
+ *  Recoupement : un groupe dont un dépôt a le remote d'un dépôt d'un projet existant devient targetId (« Ajouter à ») ;
+ *  le dossier parent seul ne fait jamais un recoupement.
  *  Nom : le préfixe ou le dossier parent, mis en forme (« paper-fonts » → « Paper ») ; un nom déjà pris devient un recoupement sur ce projet.
  *  Deux groupes de même cible ou de même nom n'en font qu'un. Couleur : la première libre, en tenant compte des propositions précédentes. */
 export function proposeProjects(input: Input): Proposal[] {
@@ -110,27 +109,29 @@ export function proposeProjects(input: Input): Proposal[] {
 
   // 2. The folders of the agents without a project: the scanned repository that holds the cwd, else the folder itself (never one
   //    that holds scanned repositories, which would swallow them, nor /). A repository already proposed takes the session along.
+  //    One proposal per parent folder, so that unrelated folders are not mixed; named after the folder, or the parent when several.
   const loose = input.sessions
     .map(x => ({ x, machine: x.machineId ?? 'local', cwd: normalizePath(x.cwd) }))
     .filter(a => s.order.has(a.machine) && projectOf(a.x, input.projects) === null)
     .sort((a, b) => s.byPlace({ machine: a.machine, path: a.cwd }, { machine: b.machine, path: b.cwd }) || (a.x.id < b.x.id ? -1 : 1));
-  const folders = new Map<string, { machine: string; path: string; names: string[] }>();
-  const file: string[] = [];
+  type Folders = { folders: Map<string, { machine: string; path: string; names: string[] }>; file: string[] };
+  const byFolderParent = new Map<string, Folders>();
   for (const a of loose) {
     const repo = s.free.filter(r => r.machine === a.machine && under(a.cwd, r.path)).sort((p, q) => q.path.length - p.path.length)[0];
     if (repo && claimed.has(at(repo.machine, repo.path))) { groups[claimed.get(at(repo.machine, repo.path))!]!.file.push(a.x.id); continue; }
     const path = repo?.path ?? a.cwd;
     if (!repo && (path === '/' || s.scanned.some(r => r.machine === a.machine && under(r.path, path)))) continue;
-    const k = at(a.machine, path);
-    const f = folders.get(k) ?? { machine: a.machine, path, names: [] };
+    const g: Folders = byFolderParent.get(parentOf(path)) ?? { folders: new Map(), file: [] };
+    const f = g.folders.get(at(a.machine, path)) ?? { machine: a.machine, path, names: [] };
     if (!f.names.includes(a.x.name)) f.names.push(a.x.name);
-    folders.set(k, f);
-    file.push(a.x.id);
+    g.folders.set(at(a.machine, path), f);
+    g.file.push(a.x.id);
+    byFolderParent.set(parentOf(path), g);
   }
-  if (folders.size) {
-    const paths = [...folders.values()].map(f => f.path);
-    const common = paths.reduce((c, p) => { while (!under(p, c)) c = parentOf(c); return c; });
-    claim({ name: titleCase(basename(common === '/' ? paths[0]! : common)), repos: [...folders.values()].map(f => ({ machine: f.machine, path: f.path, why: { kind: 'agent', names: f.names } })), file });
+  for (const [parent, g] of byFolderParent) {
+    const folders = [...g.folders.values()];
+    const named = unique(folders.map(f => f.path)).length > 1 && parent !== '/' ? parent : folders[0]!.path;
+    claim({ name: titleCase(basename(named)), repos: folders.map(f => ({ machine: f.machine, path: f.path, why: { kind: 'agent', names: f.names } })), file: g.file });
   }
 
   // 3. A common prefix before « - », at least two repositories.
@@ -144,23 +145,22 @@ export function proposeProjects(input: Input): Proposal[] {
   }
   for (const { stem, rs } of byStem.values()) if (rs.length >= 2) claim({ name: titleCase(stem), repos: rs.map(r => ({ machine: r.machine, path: r.path, why: { kind: 'naming', stem } })), file: [] });
 
-  // 4. The same parent folder: at least two repositories, or the folder of a project's repository.
+  // 4. The same parent folder: at least two repositories (a new proposal only: a parent folder is no overlap).
   const byParent = new Map<string, Free[]>();
   for (const r of left()) { const p = parentOf(r.path); if (p !== '/') byParent.set(p, [...(byParent.get(p) ?? []), r]); }
   for (const [parent, rs] of byParent) {
-    if (rs.length < 2 && !rs.some(r => s.parentOwner.has(at(r.machine, parent)))) continue;
+    if (rs.length < 2) continue;
     claim({ name: titleCase(basename(parent)), repos: rs.map(r => ({ machine: r.machine, path: r.path, why: { kind: 'folder', parent } })), file: [] });
   }
 
-  // Overlap, then a taken name; groups with the same target or the same name merge into the first.
+  // Overlap (a project's remote among the group's own repositories), then a taken name; groups with the same target or the same name merge into the first.
   const projects = input.projects.projects;
   const remoteOf = new Map(s.scanned.map(r => [at(r.machine, r.path), r.remote]));
   const merged: Group[] = [];
   const byKey = new Map<string, Group>();
   for (const g of groups) {
     const viaRemote = g.repos.map(r => remoteOf.get(at(r.machine, r.path))).find(rm => rm !== undefined && s.remoteOwner.has(rm));
-    const viaParent = g.repos.map(r => s.parentOwner.get(at(r.machine, parentOf(r.path)))).find(id => id !== undefined);
-    const targetId = (viaRemote !== undefined ? s.remoteOwner.get(viaRemote) : undefined) ?? viaParent ?? projects.find(p => key(p.name) === key(g.name))?.id;
+    const targetId = (viaRemote !== undefined ? s.remoteOwner.get(viaRemote) : undefined) ?? projects.find(p => key(p.name) === key(g.name))?.id;
     const k = targetId !== undefined ? `#${targetId}` : `=${key(g.name)}`;
     const into = byKey.get(k);
     if (into) { into.repos.push(...g.repos); for (const id of g.file) if (!into.file.includes(id)) into.file.push(id); continue; }
