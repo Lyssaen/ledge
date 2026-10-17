@@ -86,6 +86,17 @@ describe('Settings › Projects: the list', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('« Delete » then « Cancel » closes the dialog (it was opened to delete), sending nothing', async () => {
+    const { d, user } = await open();
+    await user.click(project('Ledge').getByRole('button', { name: 'Delete Ledge' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Delete Ledge' }));
+    await user.click(dialog.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+    expect(setsOf(d)).toEqual([]);
+    expect(saved()).toEqual([]);
+  });
+
   it('« New project » opens the editor for a new project', async () => {
     const { user } = await open();
     await user.click(region('Projects').getByRole('button', { name: 'New project' }));
