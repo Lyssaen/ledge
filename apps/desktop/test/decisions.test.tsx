@@ -95,6 +95,32 @@ describe('useDecisions', () => {
       expect(props.notify).toHaveBeenCalledWith('Ledge did not see the decision for Otto land. Open the session to check.');
     } finally { vi.useRealTimers(); }
   });
+  it('an error without its request (an older daemon) is not taken for a refusal: the send waits for its 8 s', () => {
+    vi.useFakeTimers();
+    try {
+      const { result, rerender, props } = setup();
+      act(() => { result.current.decide(otto, 'accept'); });
+      rerender({ ...props, errors: [{ id: 'local:otto', message: 'nothing to decide', seq: 1 }] });
+      expect(result.current.busy('local:otto')).toBe(true);
+      expect(props.notify).not.toHaveBeenCalled();
+      act(() => { vi.advanceTimersByTime(UNCONFIRMED_MS); });
+      expect(result.current.busy('local:otto')).toBe(false);
+      expect(props.notify).toHaveBeenCalledWith('Ledge did not see the decision for Otto land. Open the session to check.');
+    } finally { vi.useRealTimers(); }
+  });
+  it('a reply nobody confirms within 8 s comes back with its own notice', () => {
+    vi.useFakeTimers();
+    try {
+      const bix = fakeSession('local:bix', { name: 'Bix', state: 'idle' });
+      const { result, props } = setup({ sessions: [bix] });
+      act(() => { result.current.reply(bix, 'Go on'); });
+      act(() => { vi.advanceTimersByTime(UNCONFIRMED_MS - 1); });
+      expect(result.current.busy('local:bix')).toBe(true);
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(result.current.busy('local:bix')).toBe(false);
+      expect(props.notify).toHaveBeenCalledWith('Ledge did not see the reply to Bix land. Check the thread.');
+    } finally { vi.useRealTimers(); }
+  });
   it('a refusal answers its own request: a refused reply is not blamed on the decision in flight', () => {
     const { result, rerender, props } = setup();
     act(() => { result.current.decide(otto, 'accept'); });

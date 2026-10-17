@@ -59,6 +59,19 @@ describe('the agents rail, the subagent page, the terminal', () => {
     expect(rail().getByRole('button', { name: /^Otto/ })).toHaveAttribute('aria-current', 'page');
   });
 
+  it("a subagent's page: its own badge, its parent's title on the crumb, the parent's terminal", async () => {
+    const { d, user } = await openOtto();
+    d.preview('otto', ['$ npm test', 'PASS']);
+    await user.click(within(rail().getByRole('group', { name: 'Subagents of Otto' })).getByRole('button', { name: /^Explore/ }));
+    // Otto waits for an approval, its Explore works: the badge is the subagent's.
+    expect(screen.getByRole('banner').querySelectorAll('[data-badge]')).toHaveLength(1);
+    expect(screen.getByRole('banner').querySelector('[data-badge]')).toHaveAttribute('data-badge', 'working');
+    expect(banner().getByRole('button', { name: /Otto/ })).toHaveAttribute('title', 'Open Otto’s conversation');
+    await user.keyboard('o');
+    const term = within(await screen.findByRole('region', { name: 'Terminal' }));
+    expect(await term.findByText('PASS')).toBeVisible();
+  });
+
   it('« 1 subagent » shows the hidden subagents and lights their group', async () => {
     const { user } = await openOtto();
     await user.keyboard('{Escape}');
