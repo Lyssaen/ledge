@@ -2,11 +2,16 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import { setFallbackLang } from '../src/i18n/lang';
+import { loadMessages } from '../src/i18n/messages';
 import '../src/motionPreferences';
 
 // The app defaults to French; the unit suite predates the French copy and reads English unless a test asks for French
 // (`ledge.lang` = 'fr' or a <LangProvider lang="fr">).
 setFallbackLang('en');
+
+// Each language's strings come in a chunk of their own (see i18n/messages.ts); the suite has both before any test, so
+// renders and `MESSAGES.fr` / `.en` stay synchronous, as in the app once the entry point has loaded them.
+await Promise.all([loadMessages('fr'), loadMessages('en')]);
 
 afterEach(cleanup);
 
