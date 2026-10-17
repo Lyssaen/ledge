@@ -1,5 +1,5 @@
 import type { Pending } from '@ledge/protocol';
-import type { Adapter, KeyPlan, PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, flatten, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
 
 // Claude Code 2.x draws a dialog at the bottom of the pane, without a box:
 //
@@ -286,16 +286,57 @@ function optionNumber(text: string, pending: Pending | undefined): number | null
 const FREE_ROW = /^Type something\.?$/;
 const NO_FREE_ROW = 'no free-text row in this dialog, answer in the terminal';
 
+/** Option `n` (1-based) is a row that takes text: its digit selects it, the text goes in once it is, then Enter. */
+function rowPlan(n: number, text: string): KeyPlan {
+  const row = new RegExp(`^\\s*❯\\s*${n}\\.\\s`, 'm');
+  return [...digit(n), { until: p => row.test(p) }, { text }, { keys: ['Enter'] }];
+}
+
 function freeTextPlan(text: string, pane: string | undefined): KeyPlan {
   const d = pane ? parseDialog(pane) : null;
   const i = d?.kind === 'question' ? d.options.findIndex(o => FREE_ROW.test(o)) : -1;
   if (i < 0) throw new Error(NO_FREE_ROW);
-  const row = new RegExp(`^\\s*❯\\s*${i + 1}\\.\\s`, 'm');
-  return [...digit(i + 1), { until: p => row.test(p) }, { text }, { keys: ['Enter'] }];
+  return rowPlan(i + 1, text);
 }
 
 /** Accepting a plan keeps the permission mode as it was: never the option that turns on auto mode or auto edits. */
 const PLAN_ACCEPT = /\bmanually approve\b/i;
+
+// « Always », read on the dialog (a wrapped option's lines below it count, "… for this session" among them):
+//
+//   2. Yes, and always allow access to /home/user/project from this project        Bash
+//   2. Yes, and switch to accept edits (auto-approve file edits …) for this session  Write / Edit
+//   1. Yes, and use auto mode                                                       plan (2.1; "auto-accept edits" before)
+//
+// Auto mode answers every later prompt by itself: on a permission it is more than "don't ask again for this".
+const ALWAYS = /don't ask again|always allow|accept edits|for this session/i;
+const AUTO_MODE = /auto mode/i;
+const PLAN_ALWAYS = /accept edits|auto mode/i;
+// A plan's own row for feedback: its digit selects it and the text typed replaces it, Enter sends it.
+const PLAN_NOTE_ROW = /Tell Claude what to change/i;
+
+/** The 1-based option of the dialog on screen that stops asking, or NO_ALWAYS. */
+function alwaysOption(pane: string | undefined): number {
+  const d = pane ? parseDialog(pane) : null;
+  const full = d ? d.options.map((o, i) => `${o} ${d.details[i] ?? ''}`) : [];
+  const i = d?.kind === 'plan' ? full.findIndex(o => PLAN_ALWAYS.test(o))
+    : d?.kind === 'permission' ? full.findIndex(o => ALWAYS.test(o) && !AUTO_MODE.test(o)) : -1;
+  if (i < 0) throw new Error(NO_ALWAYS);
+  return i + 1;
+}
+
+/**
+ * Deny with a note: a plan takes it in its own row; elsewhere Esc refuses (the turn stops) and the note is the next
+ * prompt, typed once the input box is back.
+ */
+function notePlan(note: string, pane: string | undefined): KeyPlan {
+  if (pane && parseTrust(pane)) throw new Error(NO_NOTE);
+  const text = flatten(note);
+  const d = pane ? parseDialog(pane) : null;
+  const row = d?.kind === 'plan' ? d.options.findIndex(o => PLAN_NOTE_ROW.test(o)) : -1;
+  if (row >= 0) return rowPlan(row + 1, text);
+  return [{ keys: ['Escape'] }, { until: atRest }, { text }, { keys: ['Enter'] }];
+}
 
 export const claudeAdapter: Adapter = {
   tool: 'claude',
@@ -305,8 +346,9 @@ export const claudeAdapter: Adapter = {
   previewLines,
   atRest,
   paneTitle,
-  keysFor(decision, pending, pane) {
-    if (decision === 'deny') return [{ keys: ['Escape'] }];
+  keysFor(decision, pending, pane, note) {
+    if (decision === 'always') return digit(alwaysOption(pane));
+    if (decision === 'deny') return note ? notePlan(note, pane) : [{ keys: ['Escape'] }];
     const t = pane ? parseTrust(pane) : null;
     if (t) {
       const step = t.trust > t.selected ? 'Down' : 'Up';
@@ -321,8 +363,7 @@ export const claudeAdapter: Adapter = {
   },
   freeText: true,
   replyPlan(text, pending, pane) {
-    // Tmux.sendText rejects newlines: flatten here, Enter is a separate key step.
-    const flat = text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+    const flat = flatten(text);
     const n = optionNumber(flat, pending);
     if (n !== null) return digit(n);
     if (pending?.kind === 'question') return freeTextPlan(flat, pane);

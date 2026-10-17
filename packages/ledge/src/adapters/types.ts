@@ -1,4 +1,4 @@
-import type { Pending, Tool } from '@ledge/protocol';
+import type { Decision, Pending, Tool } from '@ledge/protocol';
 
 /**
  * Steps sent to the pane in order: literal text, tmux key names, a pause (some TUIs need one before Enter), or
@@ -12,8 +12,12 @@ export interface Adapter {
   tool: Tool;
   detectPrompt(pane: string): PanePromptMatch | null;
   promptStillVisible(pane: string): boolean;
-  /** `pane` is the bottom of the terminal right before the keys are sent, when the plan depends on the dialog. */
-  keysFor(decision: 'accept' | 'deny', pending: Pending, pane?: string): KeyPlan;
+  /**
+   * `pane` is the bottom of the terminal right before the keys are sent, when the plan depends on the dialog. `always`
+   * picks the dialog's own option that stops asking; `note` (with `deny`) is typed where the agent reads it. Either one
+   * missing from the dialog on screen throws, for the client to answer in the terminal (NO_ALWAYS, NO_NOTE).
+   */
+  keysFor(decision: Decision, pending: Pending, pane?: string, note?: string): KeyPlan;
   /** `pending` is what the reply answers, if anything: a question can take an option number. */
   /** `pane` is the bottom of the terminal right before the keys are sent, when a prompt is pending. */
   replyPlan(text: string, pending?: Pending, pane?: string): KeyPlan;
@@ -39,3 +43,10 @@ export interface Adapter {
    */
   promptGone?(pane: string, pending: Pending): boolean;
 }
+
+/** `always` asked of a dialog that has no option to stop asking (or no dialog Ledge can read). */
+export const NO_ALWAYS = 'no "always" option in this dialog, answer in the terminal';
+/** A note asked of a dialog where nothing typed would reach the agent (a trust dialog). */
+export const NO_NOTE = 'no place for a note in this dialog, answer in the terminal';
+/** Tmux.sendText rejects newlines: a reply or a note is flattened to one line, Enter is a separate key step. */
+export const flatten = (text: string) => text.replace(/\s*[\r\n]+\s*/g, ' ').trim();

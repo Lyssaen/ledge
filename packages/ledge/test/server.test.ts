@@ -20,6 +20,8 @@ import { writeMachines } from '../src/daemon/machines.js';
 import { writeProjects } from '../src/daemon/projects.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
+const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
+const tmpDir = () => mkdtempSync(join(tmpdir(), 'ledge-history-'));
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
   id, name: 'Otto', tool: 'claude', cwd: '/w/harness-assistant', project: 'harness-assistant', title: 'Otto · harness-assistant',
   tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra
@@ -282,7 +284,7 @@ describe('server', () => {
     expect(upd.session.state).toBe('error');
     expect(upd.session.pending?.text).toBe('npm test');
     expect(tmux.sent.length).toBe(1);
-    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide' });
     c.close();
   });
 
@@ -294,7 +296,7 @@ describe('server', () => {
     expect(await c.next('error', 3000)).toMatchObject({ id: 'a' });
     expect(store.get('a')?.state).toBe('error');
     c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
-    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide' });
     expect(tmux.sent.length).toBe(2);
     c.close();
   });
@@ -313,6 +315,51 @@ describe('server', () => {
     c.close();
   });
 
+  it('decide always on a Bash permission types the "always allow" option and lands as always in the thread', async () => {
+    const pane = fx('claude2-permission-bash');
+    tmux = fakeTmux({ 'ledge-a': [pane, pane, 'Running…'] }); await srv.close();
+    const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'mkdir zz-ledge-probe', tool: 'Bash', source: 'hook' } }));
+    store.apply('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'mkdir zz-ledge-probe' });
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'always' });
+    expect((await c.next('session.thread.item', 3000)).item).toMatchObject({ kind: 'permission', decision: 'always' });
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '2']]);
+    c.close();
+  });
+  it('an answer the harness does not offer is refused before any key, and the refusal names its request', async () => {
+    store.upsert(mk('a', { tool: 'cursor', state: 'waiting_permission', pending: { kind: 'permission', text: 'echo hi', source: 'pane' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'always' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'this answer is not offered for this request, answer in the terminal', request: 'session.decide' });
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept', note: 'why' });
+    expect((await c.next('error', 3000)).message).toBe('this answer is not offered for this request, answer in the terminal');
+    expect(tmux.sent).toEqual([]);
+    c.close();
+  });
+  it('a note on a question is refused for every harness, and a reply refusal names session.reply', async () => {
+    store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'deny', note: 'Neither' });
+    expect(await c.next('error', 3000)).toMatchObject({ message: 'this answer is not offered for this request, answer in the terminal', request: 'session.decide' });
+    c.send({ type: 'session.reply', id: 'a', text: '   ' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'empty reply', request: 'session.reply' });
+    expect(tmux.sent).toEqual([]);
+    c.close();
+  });
+  it('deny with a note: Escape, the note once the input is back, Enter; the thread says denied', async () => {
+    const pane = fx('claude2-permission-bash'); const rest = fx('claude2-rest-after-deny');
+    tmux = fakeTmux({ 'ledge-a': [pane, rest, rest] }); await srv.close();
+    const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'mkdir zz-ledge-probe', tool: 'Bash', source: 'hook' } }));
+    store.apply('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'mkdir zz-ledge-probe' });
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'deny', note: 'Use\npnpm' });
+    expect((await c.next('session.thread.item', 3000)).item).toMatchObject({ kind: 'permission', decision: 'deny' });
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape'], ['text', 'ledge-a', 'Use pnpm'], ['keys', 'ledge-a', 'Enter']]);
+    c.close();
+  });
+
   describe('fail closed when no prompt is on screen', () => {
     const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
     async function expectRefused(pane: string | null, msg: object, pending: Session['pending']) {
@@ -322,7 +369,7 @@ describe('server', () => {
       store.upsert(before);
       const c = await connect({ port: srv.port }); await c.next('snapshot');
       c.send(msg as never);
-      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: NO_PROMPT });
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: NO_PROMPT, request: (msg as { type: string }).type });
       expect(tmux.sent).toEqual([]);
       expect(store.get('a')).toEqual(before);
       await expect(c.next('session.updated', 200)).rejects.toThrow(/timeout/);
@@ -357,7 +404,7 @@ describe('server', () => {
     });
     it('never sends Enter when the skip field does not come: the decision fails', async () => {
       const c = await deny([fx('cursor-permission')]);
-      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it' });
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide' });
       expect(tmux.sent).toEqual([['text', 'ledge-a', 'n']]);
       expect(store.get('a')?.state).toBe('error');
       c.close();
@@ -461,7 +508,7 @@ describe('server', () => {
     store.upsert(before);
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.reply', id: 'a', text });
-    expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: 'free-text answers are not supported yet, answer in the terminal' });
+    expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: 'free-text answers are not supported yet, answer in the terminal', request: 'session.reply' });
     expect(tmux.sent).toEqual([]);
     expect(store.get('a')).toEqual(before);
     await expect(c.next('session.updated', 200)).rejects.toThrow(/timeout/);
@@ -561,10 +608,10 @@ describe('server', () => {
       store.upsert(mk('a'));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
       c.send({ type: 'session.dismiss', id: 'a' });
-      expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: 'the session is still running, kill it first' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: 'the session is still running, kill it first', request: 'session.dismiss' });
       expect(store.get('a')).toBeDefined();
       c.send({ type: 'session.dismiss', id: 'nope' });
-      expect(await c.next('error')).toEqual({ type: 'error', id: 'nope', message: 'unknown session' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'nope', message: 'unknown session', request: 'session.dismiss' });
       await expect(c.next('session.removed', 100)).rejects.toThrow(/timeout/);
       c.close();
     });
@@ -596,7 +643,7 @@ describe('server', () => {
       c.send({ type: 'session.launch', tool: 'codex', cwd: '/elsewhere', prompt: 'autre chose', qid: 'q1' });
       c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'ledge'), qid: 'q1' });
       const launched = await c.next('session.launched');
-      expect(await c.next('error')).toEqual({ type: 'error', message: 'already launched' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'already launched', request: 'session.launch' });
       expect(tmux.created).toHaveLength(1);
       expect(tmux.created[0]!.cwd).toBe(join(home(), 'ledge'));
       expect(JSON.stringify(tmux.created[0]!.command)).toContain('Corrige le build');
@@ -605,7 +652,7 @@ describe('server', () => {
       expect(marks).toEqual([['launched', 'q1', launched.id]]);
       await other.next('chat.history');
       c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'ledge'), qid: 'q1' });
-      expect(await c.next('error')).toEqual({ type: 'error', message: 'already launched' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'already launched', request: 'session.launch' });
       expect(tmux.created).toHaveLength(1);
       c.close(); other.close(); await srv2.close();
     });
@@ -614,7 +661,7 @@ describe('server', () => {
       const srv2 = await start(stubChat(undefined).chat);
       const c = await connect({ port: srv2.port }); await c.next('snapshot');
       c.send({ type: 'session.launch', tool: 'claude', cwd: '/w', qid: 'q1' });
-      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown proposal' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown proposal', request: 'session.launch' });
       expect(tmux.created).toHaveLength(0);
       c.close(); await srv2.close();
     });
@@ -624,7 +671,7 @@ describe('server', () => {
       const srv2 = await start(chat);
       const c = await connect({ port: srv2.port }); await c.next('snapshot');
       c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'gone'), qid: 'q1' });
-      expect(await c.next('error')).toEqual({ type: 'error', message: `no such folder: ${join(home(), 'gone')}` });
+      expect(await c.next('error')).toEqual({ type: 'error', message: `no such folder: ${join(home(), 'gone')}`, request: 'session.launch' });
       expect(marks).toEqual([['failed', 'q1', `no such folder: ${join(home(), 'gone')}`]]);
       mkdirSync(join(home(), 'gone'));
       c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'gone'), qid: 'q1' });
@@ -668,13 +715,13 @@ describe('server', () => {
       c.send({ type: 'session.relay', qid: 'q1' }); await c.next('chat.history');
       expect(current()!.status).toBe('queued');
       c.send({ type: 'session.relay', qid: 'q1' });
-      expect(await c.next('error')).toEqual({ type: 'error', message: 'already queued' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'already queued', request: 'session.relay' });
       c.send({ type: 'session.relay.cancel', qid: 'q1' }); await c.next('chat.history');
       expect(current()).not.toHaveProperty('status');
       c.send({ type: 'session.relay.cancel', qid: 'q1' });
-      expect(await c.next('error')).toEqual({ type: 'error', message: 'nothing queued' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'nothing queued', request: 'session.relay.cancel' });
       c.send({ type: 'session.relay', qid: 'q9' });
-      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown relay' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown relay', request: 'session.relay' });
       expect(tmux.sent).toEqual([]);
       c.close(); await srv2.close();
     });
@@ -746,7 +793,7 @@ describe('server', () => {
       c.send({ type: 'session.launch', tool: 'claude', cwd: '~/tilde' });
       expect(store.get((await c.next('session.launched')).id)!.cwd).toBe(join(home(), 'tilde'));
       c.send({ type: 'session.launch', tool: 'claude', cwd: '~/nope' });
-      expect(await c.next('error')).toEqual({ type: 'error', message: `no such folder: ${join(home(), 'nope')}` });
+      expect(await c.next('error')).toEqual({ type: 'error', message: `no such folder: ${join(home(), 'nope')}`, request: 'session.launch' });
       c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'file.txt') });
       expect((await c.next('error')).message).toMatch(/not a folder/);
       c.send({ type: 'session.launch', tool: 'claude', cwd: 'relative/path' });
@@ -861,7 +908,7 @@ describe('server', () => {
     for (const m of msgs) {
       c.send(m);
       const err = await c.next('error');
-      expect(err).toEqual({ type: 'error', id: 'h', message: 'session started without ledge, read only' });
+      expect(err).toEqual({ type: 'error', id: 'h', message: 'session started without ledge, read only', request: m.type });
     }
     expect(store.get('h')).toEqual(ro);
     expect(tmux.sent).toEqual([]);
@@ -874,6 +921,7 @@ describe('server', () => {
     c.send({ type: 'session.decide', id: 'zzz', decision: 'maybe' } as never);
     const err = await c.next('error');
     expect(err.message).toMatch(/invalid/i);
+    expect(err.request).toBe('session.decide'); // the type it carried, though the message did not parse
     c.send({ type: 'snapshot.request' });
     await c.next('snapshot');
     c.close();

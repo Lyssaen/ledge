@@ -1,4 +1,5 @@
 export * from './chat.js';
+export * from './decisions.js';
 export * from './documents.js';
 export * from './session.js';
 export * from './machines.js';

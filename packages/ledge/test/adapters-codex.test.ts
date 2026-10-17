@@ -128,3 +128,27 @@ describe('codex adapter: keys', () => {
     expect(codexAdapter.interruptKeys()).toEqual(['Escape']);
   });
 });
+
+describe('codex adapter: always and a note (lot 6a)', () => {
+  const perm = pending('permission'); const diff = pending('diff'); const plan = pending('plan', { source: 'pane' });
+  type Until = { until: (p: string) => boolean };
+  it('always takes the option letter that stops asking', () => {
+    expect(codexAdapter.keysFor('always', perm, fx('codex-permission-exec'))).toEqual([{ text: 'p' }]);
+    expect(codexAdapter.keysFor('always', diff, fx('codex-permission-patch'))).toEqual([{ text: 'a' }]);
+  });
+  it('always with no such option on screen is refused', () => {
+    expect(() => codexAdapter.keysFor('always', plan, fx('codex-plan'))).toThrow('no "always" option in this dialog, answer in the terminal');
+    expect(() => codexAdapter.keysFor('always', perm, fx('codex-hooks-review'))).toThrow('no "always" option in this dialog, answer in the terminal');
+  });
+  it('deny with a note on a plan: stay in Plan mode, then the note', () => {
+    expect(codexAdapter.keysFor('deny', plan, fx('codex-plan'), 'Garde la v1')).toEqual([{ text: '3' }, { until: expect.any(Function) }, { text: 'Garde la v1' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }]);
+  });
+  it('deny with a note on an approval: Escape, the note once the input is back, Enter after the pause', () => {
+    const keys = codexAdapter.keysFor('deny', perm, fx('codex-permission-exec'), 'Use\npnpm');
+    expect(keys).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function) }, { text: 'Use pnpm' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }]);
+    const rest = (keys[1] as Until).until;
+    expect(rest(tail(fx('codex-idle-after-turn'), 30))).toBe(true);
+    expect(rest(tail(fx('codex-permission-exec'), 30))).toBe(false);
+    expect(() => codexAdapter.keysFor('deny', perm, fx('codex-hooks-review'), 'non')).toThrow(/answer in the terminal/);
+  });
+});

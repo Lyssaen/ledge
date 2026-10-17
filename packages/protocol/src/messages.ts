@@ -7,6 +7,7 @@ import { SshAliasSchema } from './ssh.js';
 import { MachinesSchema } from './machines.js';
 import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
+import { DecisionSchema, NOTE_MAX } from './decisions.js';
 
 export const PROTOCOL_PORT = 47831;
 
@@ -40,7 +41,7 @@ export const SessionEventSchema = z.object({
   /** The session's transcript, or the helper's on SubagentStop; the daemon reads its tail for the agent's messages. */
   transcriptPath: z.string().optional(),
   /** Decided: what was chosen when the daemon knows it. */
-  decision: z.enum(['accept', 'deny']).optional()
+  decision: DecisionSchema.optional()
 });
 export type SessionEvent = z.infer<typeof SessionEventSchema>;
 
@@ -92,7 +93,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('machines'), machines: MachinesSchema }),
   /** The local daemon's projects and folder rules (spec 2026-10-16 build §5), sent to local clients only. */
   z.object({ type: z.literal('projects'), projects: ProjectsSchema }),
-  z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional() })
+  z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional() })
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 
@@ -112,7 +113,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.relay'), qid: z.string().min(1) }),
   /** Takes the card's queued instruction back out of the queue. */
   z.object({ type: z.literal('session.relay.cancel'), qid: z.string().min(1) }),
-  z.object({ type: z.literal('session.decide'), id: z.string(), decision: z.enum(['accept', 'deny']) }),
+  /** `always` and `note` only where the harness offers them (`offers`); a note goes with `deny`, for the agent to read. */
+  z.object({ type: z.literal('session.decide'), id: z.string(), decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional() }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),
   z.object({ type: z.literal('session.kill'), id: z.string() }),
   z.object({ type: z.literal('session.interrupt'), id: z.string() }),

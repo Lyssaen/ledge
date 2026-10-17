@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { PROTOCOL_PORT, SshAliasSchema, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, type ClientMessage, type DaemonInfo, type Decision, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
@@ -170,10 +170,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * With `requirePrompt`, fail closed: the prompt must be on screen before anything is typed, else a
    * stale pending (or a dialog the adapter cannot read) would get keys meant for something else and
    * the "prompt gone" check would then report success. A plan given as a function is built from that
-   * same capture, so the keys match the dialog actually on screen. True once `Decided` is applied, false when a newer
-   * prompt arrived meanwhile and was left alone.
+   * same capture, so the keys match the dialog actually on screen. True once `Decided` is applied (with `decision`, so
+   * the thread names it at once), false when a newer prompt arrived meanwhile and was left alone.
    */
-  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean): Promise<boolean> {
+  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean, decision?: Decision): Promise<boolean> {
     const s = store.get(id);
     if (!s) throw new Error(`unknown session ${id}`);
     if (inFlight.has(id)) throw new Error('a decision is already in progress');
@@ -201,7 +201,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         ? await verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
         : await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
       if (!stillTheSame()) return false; // a newer prompt arrived meanwhile: leave it alone
-      if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon' }); return true; }
+      if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) }); return true; }
       // The client gets an `error` reply for that id (via the caller's catch), so a retry from `error` reads as failed.
       store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: NOT_TAKEN });
       throw new Error(NOT_TAKEN);
@@ -212,6 +212,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
   const NOT_TAKEN = 'the terminal did not take it';
   const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
+  const NOT_OFFERED = 'this answer is not offered for this request, answer in the terminal';
 
   /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
   async function replyTo(id: string, text: string): Promise<string | null> {
@@ -243,6 +244,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     return session;
   }
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
+    /** A refusal names the request it answers, so a front can tell a refused reply from a refused decision. */
+    const refuse = (message: string, id?: string) => send(ws, { type: 'error', ...(id !== undefined ? { id } : {}), message, request: msg.type });
     switch (msg.type) {
       case 'document.read': {
         const session = msg.sessionId ? store.get(msg.sessionId) : undefined;
@@ -286,8 +289,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (msg.qid === undefined) return send(ws, { type: 'session.launched', id: (await launch(msg)).id });
         // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's.
         const qid = msg.qid; const p = chat.proposal(qid);
-        if (!p) return send(ws, { type: 'error', message: 'unknown proposal' });
-        if (p.launchedId || chatLaunches.has(qid)) return send(ws, { type: 'error', message: 'already launched' });
+        if (!p) return refuse('unknown proposal');
+        if (p.launchedId || chatLaunches.has(qid)) return refuse('already launched');
         chatLaunches.add(qid);
         try {
           const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt });
@@ -326,7 +329,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.thread':
         return send(ws, { type: 'session.thread', id: msg.id, items: history?.items(msg.id) ?? [] });
       case 'session.rename': {
-        if (!store.get(msg.id)) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
+        if (!store.get(msg.id)) return refuse('unknown session', msg.id);
         store.apply(msg.id, { name: 'Renamed', at: now(), source: 'daemon', text: msg.topic });
         return;
       }
@@ -334,36 +337,40 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.apply(msg.id, { name: 'SessionEnd', at: now(), source: 'hook', exitCode: msg.exitCode });
         return;
       case 'session.decide': {
-        const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
-        if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
-        if (!s.pending) return send(ws, { type: 'error', id: msg.id, message: 'nothing to decide' });
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
+        if (!s.pending) return refuse('nothing to decide', msg.id);
         const pending = s.pending; const adapter = adapterFor(s.tool);
+        // What the harness cannot do is refused before any key (a question never takes `always` or a note).
+        if (msg.decision === 'always' && !offers(s.tool, pending.kind, 'always')) return refuse(NOT_OFFERED, msg.id);
+        if (msg.note !== undefined && (msg.decision !== 'deny' || !offers(s.tool, pending.kind, 'note'))) return refuse(NOT_OFFERED, msg.id);
+        const { decision, note } = msg;
         // Only a decision the terminal took lands in the thread: otherwise the last open permission may be the newer one.
-        if (await injectAndVerify(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true)) history?.decide(msg.id, msg.decision);
+        if (await injectAndVerify(msg.id, pane => adapter.keysFor(decision, pending, pane, note), true, decision)) history?.decide(msg.id, decision);
         return;
       }
       case 'session.reply': {
         const refused = await replyTo(msg.id, msg.text);
-        if (refused) send(ws, { type: 'error', id: msg.id, message: refused });
+        if (refused) refuse(refused, msg.id);
         return;
       }
       case 'session.interrupt': {
         const s = store.get(msg.id);
-        if (s?.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
+        if (s?.source === 'hook_only') return refuse(READ_ONLY, msg.id);
         if (!s?.tmuxSession) return;
         await tmux.sendKeys(s.tmuxSession, adapterFor(s.tool).interruptKeys());
         return;
       }
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;
-        if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
+        if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
         if (s.tmuxSession) await tmux.killSession(s.tmuxSession);
         store.apply(msg.id, { name: 'PaneGone', at: now(), source: 'daemon' });
         return;
       }
       case 'session.dismiss': {
-        const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
-        if (s.state !== 'exited' && s.source !== 'hook_only') return send(ws, { type: 'error', id: msg.id, message: 'the session is still running, kill it first' });
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        if (s.state !== 'exited' && s.source !== 'hook_only') return refuse('the session is still running, kill it first', msg.id);
         // Removal broadcasts session.removed, drops the remembered preview and is saved to the journal.
         // A dismissed hook_only session that is in fact still alive comes back on its next hook (the
         // hook-before-register path in session.event recreates it): acceptable, it is still running.
@@ -406,12 +413,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sendSnapshot(ws);
     ws.on('message', data => {
       let msg: ClientMessage;
-      try { msg = parseClientMessage(JSON.parse(String(data))); }
-      catch (e) { log(`invalid message: ${(e as Error).message}`); return send(ws, { type: 'error', message: 'invalid message' }); }
+      let raw: unknown;
+      try { raw = JSON.parse(String(data)); msg = parseClientMessage(raw); }
+      catch (e) {
+        log(`invalid message: ${(e as Error).message}`);
+        // The type it carried, when it has one: a newer front's value this daemon does not know is refused by name.
+        const type = (raw as { type?: unknown } | null | undefined)?.type;
+        return send(ws, { type: 'error', message: 'invalid message', ...(typeof type === 'string' && type.length <= 64 ? { request: type } : {}) });
+      }
       handle(ws, msg).catch(e => {
         if (msg.type === 'document.read') return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
         log(`${msg.type} failed: ${(e as Error).message}`);
-        send(ws, { type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message });
+        send(ws, { type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message, request: msg.type });
       });
     });
   });

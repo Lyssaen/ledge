@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers } from '../src/index.js';
 
 const T0 = '2026-10-09T18:02:00.000Z';
 
@@ -233,5 +233,23 @@ describe('native session tracking (spec 2026-10-13 §3, §5)', () => {
     const item = { kind: 'message', id: 'm1', at, turn: 1, text: 'Je regarde le reducer.' };
     expect(parseServerMessage({ type: 'session.thread', id: 's', items: [item] })).toMatchObject({ type: 'session.thread', items: [item] });
     expect(parseServerMessage({ type: 'session.thread.item', id: 's', item })).toMatchObject({ type: 'session.thread.item', item });
+  });
+});
+
+describe('decisions beyond accept and deny (lot 6a)', () => {
+  it('session.decide takes always and a trimmed note; an empty or oversized note is refused', () => {
+    expect(parseClientMessage({ type: 'session.decide', id: 'a', decision: 'always' })).toEqual({ type: 'session.decide', id: 'a', decision: 'always' });
+    expect(parseClientMessage({ type: 'session.decide', id: 'a', decision: 'deny', note: '  Use pnpm ' })).toMatchObject({ note: 'Use pnpm' });
+    expect(() => parseClientMessage({ type: 'session.decide', id: 'a', decision: 'deny', note: '   ' })).toThrow();
+    expect(() => parseClientMessage({ type: 'session.decide', id: 'a', decision: 'deny', note: 'x'.repeat(4001) })).toThrow();
+    expect(parseServerMessage({ type: 'error', id: 'a', message: 'no', request: 'session.reply' })).toEqual({ type: 'error', id: 'a', message: 'no', request: 'session.reply' });
+  });
+  it('what each harness offers', () => {
+    expect([offers('claude', 'plan', 'always'), offers('codex', 'plan', 'always'), offers('codex', 'diff', 'always'), offers('cursor', 'permission', 'always'),
+      offers('cursor', 'plan', 'note'), offers('claude', 'question', 'note'), offers('claude', 'question', 'always')]).toEqual([true, false, true, false, true, false, false]);
+  });
+  it('always reaches the thread and the Decided event', () => {
+    expect(SessionEventSchema.parse({ name: 'Decided', at: T0, source: 'daemon', decision: 'always' }).decision).toBe('always');
+    expect(ThreadItemSchema.parse({ kind: 'permission', id: 'p', at: T0, turn: 0, tool: 'Bash', text: 'ls', decision: 'always' })).toMatchObject({ decision: 'always' });
   });
 });

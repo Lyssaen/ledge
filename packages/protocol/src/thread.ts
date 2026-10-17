@@ -15,8 +15,8 @@ export const ThreadItemSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('message'), ...base, text: z.string() }),
   /** `id` is the harness's tool_use_id when it gives one, so the result updates the same row. */
   z.object({ kind: z.literal('tool'), ...base, tool: z.string(), label: z.string(), input: z.string().optional(), output: z.string().optional(), error: z.string().optional(), status: ToolStatusSchema, durationMs: z.number().nonnegative().optional(), files: z.array(FileChangeSchema).default([]) }),
-  /** `unknown`: answered in the terminal, the daemon only saw the prompt go away. */
-  z.object({ kind: z.literal('permission'), ...base, tool: z.string(), text: z.string(), decision: z.enum(['accept', 'deny', 'unknown']).optional() }),
+  /** `unknown`: answered in the terminal, the daemon only saw the prompt go away; `always`: allowed and not asked again. */
+  z.object({ kind: z.literal('permission'), ...base, tool: z.string(), text: z.string(), decision: z.enum(['accept', 'deny', 'always', 'unknown']).optional() }),
   z.object({ kind: z.literal('reply'), ...base, text: z.string() }),
   z.object({ kind: z.literal('helper'), ...base, task: z.string(), agentType: z.string().optional(), state: z.enum(['working', 'exited']) })
 ]);

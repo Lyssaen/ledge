@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { SessionEvent, ThreadItem, ToolItem } from '@ledge/protocol';
+import type { Decision, SessionEvent, ThreadItem, ToolItem } from '@ledge/protocol';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
 import { filesOf } from './files.js';
@@ -84,7 +84,7 @@ export class History {
   }
 
   /** The user's own decision, sent from the overlay: it lands on the last permission still undecided or only seen to vanish. */
-  decide(id: string, decision: 'accept' | 'deny'): ThreadItem | undefined {
+  decide(id: string, decision: Decision): ThreadItem | undefined {
     const perm = [...this.items(id)].reverse().find(i => i.kind === 'permission' && (i.decision === undefined || i.decision === 'unknown'));
     return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision }) : undefined;
   }

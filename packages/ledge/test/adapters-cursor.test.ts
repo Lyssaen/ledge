@@ -191,3 +191,31 @@ describe('cursor adapter: promptGone on approvals', () => {
     expect(cursorAdapter.promptGone!(fx('cursor-permission-wrapped'), perm)).toBe(true);
   });
 });
+
+describe('cursor adapter: a note (lot 6a)', () => {
+  const plan = { kind: 'plan' as const, text: 'Add line d to notes.txt', source: 'pane' as const };
+  type Until = { until: (p: string) => boolean };
+  it('deny with a note types it in the skip field, or in the plan revision field', () => {
+    expect(cursorAdapter.keysFor('deny', perm, fx('cursor-permission'), 'Use pnpm')).toEqual([{ text: 'n' }, { until: expect.any(Function) }, { text: 'Use pnpm' }, { until: expect.any(Function) }, { keys: ['Enter'] }]);
+    expect(cursorAdapter.keysFor('deny', plan, fx('cursor-plan'), 'Garde la v1')).toEqual([{ text: 'p' }, { until: expect.any(Function) }, { text: 'Garde la v1' }, { until: expect.any(Function) }, { keys: ['Enter'] }]);
+  });
+  it('each step waits for its screen: the field, then the note in it', () => {
+    const skip = cursorAdapter.keysFor('deny', perm, fx('cursor-permission'), 'Use\npnpm');
+    expect(skip[2]).toEqual({ text: 'Use pnpm' });
+    expect((skip[1] as Until).until(tail(fx('cursor-skip-field')))).toBe(true);
+    expect((skip[1] as Until).until(tail(fx('cursor-permission')))).toBe(false);
+    const typedIn = fx('cursor-skip-field').replace(/→ Tell the agent what to do instead.*$/m, '→ Use pnpm');
+    expect((skip[3] as Until).until(tail(typedIn))).toBe(true);
+    expect((skip[3] as Until).until(tail(fx('cursor-skip-field')))).toBe(false);
+    const revise = cursorAdapter.keysFor('deny', plan, fx('cursor-plan'), 'use the letter z instead');
+    expect((revise[1] as Until).until(fx('cursor-plan-revise'))).toBe(true);
+    expect((revise[1] as Until).until(fx('cursor-plan'))).toBe(false);
+    expect((revise[3] as Until).until(fx('cursor-plan-revise-typed'))).toBe(true);
+    expect((revise[3] as Until).until(fx('cursor-plan-revise'))).toBe(false);
+  });
+  it('already in the skip field the note goes straight in; the trust box takes none; always is never offered', () => {
+    expect(cursorAdapter.keysFor('deny', perm, fx('cursor-skip-field'), 'Use pnpm')).toEqual([{ text: 'Use pnpm' }, { until: expect.any(Function) }, { keys: ['Enter'] }]);
+    expect(() => cursorAdapter.keysFor('deny', perm, fx('cursor-trust'), 'non')).toThrow(/answer in the terminal/);
+    expect(() => cursorAdapter.keysFor('always', perm, fx('cursor-permission'))).toThrow('no "always" option in this dialog, answer in the terminal');
+  });
+});

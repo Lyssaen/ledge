@@ -1,5 +1,5 @@
 import type { Pending } from '@ledge/protocol';
-import type { Adapter, KeyPlan, PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, flatten, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
 
 const rtrim = (l: string) => l.replace(/\s+$/, '');
 const isBlank = (l: string) => l.trim() === '';
@@ -282,6 +282,19 @@ function atRest(pane: string): boolean {
   return i >= 0 && !TELL_INSTEAD.test(lines[i]!) && !lines.slice(i).some(l => BUSY.test(l));
 }
 
+/**
+ * Deny with a note: n opens the skip field and p the plan's revision field; the note goes in once the field is on
+ * screen, Enter once the field holds it (sent with the text, Enter is lost in the paste).
+ */
+function notePlan(lines: string[], note: string): KeyPlan {
+  if (parseTrust(lines) || parseQuestion(lines)) throw new Error(NO_NOTE);
+  const text = flatten(note);
+  const typeIt: KeyPlan = [{ text }, { until: typed(text) }, { keys: ['Enter'] }];
+  if (lines.some(l => TELL_INSTEAD.test(l))) return typeIt; // already in the skip field
+  if (parsePlan(lines)) return [{ text: 'p' }, { until: p => REVISE.test(p) }, ...typeIt];
+  return [{ text: 'n' }, { until: inSkipField }, ...typeIt];
+}
+
 export const cursorAdapter: Adapter = {
   tool: 'cursor',
   detectPrompt,
@@ -289,8 +302,11 @@ export const cursorAdapter: Adapter = {
   previewLines,
   atRest,
   promptGone,
-  keysFor(decision, _pending, pane) {
+  keysFor(decision, _pending, pane, note) {
     const lines = pane ? toLines(pane) : [];
+    // « Add … to allowlist » is permanent and « Run Everything » opens everything: no « for this session » here.
+    if (decision === 'always') throw new Error(NO_ALWAYS);
+    if (decision === 'deny' && note) return notePlan(lines, note);
     if (parseTrust(lines)) return [{ text: decision === 'accept' ? 'a' : 'q' }];
     const q = parseQuestion(lines);
     if (q) return decision === 'accept' ? answerPlan(q, 1) : [{ keys: ['Escape'] }];
@@ -307,9 +323,9 @@ export const cursorAdapter: Adapter = {
   replyPlan(text: string, pending?: Pending, pane?: string): KeyPlan {
     const q = pending?.kind === 'question' && /^[1-9]$/.test(text.trim()) && pane ? parseQuestion(toLines(pane)) : null;
     if (q) return answerPlan(q, Number(text.trim()));
-    // Tmux.sendText rejects newlines: flatten here, Enter is a separate key step. An Enter that comes with the
-    // text in one read is taken as part of a paste and lost: it waits for the text to be in the input line.
-    const flat = text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+    // An Enter that comes with the text in one read is taken as part of a paste and lost: it waits for the text to be
+    // in the input line.
+    const flat = flatten(text);
     return [{ text: flat }, { until: typed(flat) }, { keys: ['Enter'] }];
   },
   // Ctrl-C aborts a running turn; at rest it only clears the input line, it never quits.
