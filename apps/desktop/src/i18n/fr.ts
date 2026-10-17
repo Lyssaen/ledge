@@ -6,6 +6,9 @@ import type { PlanDoc, ToolKind, Verb } from '../session/thread';
 import type { Change } from '../session/changes';
 import type { TodoStatus } from '../session/todos';
 import type { FinishedNotify, SoundCategory, SoundVolume } from '@ledge/ui/sounds/preferences';
+import type { SshProblem } from '@ledge/fleet';
+import type { DraftProblem } from '../settings/machines';
+import type { SaveOutcome } from '../settings/useMachineEditor';
 
 type PlanStatus = PlanDoc['status'];
 
@@ -107,6 +110,51 @@ export const fr = {
       behind: 'Seulement quand le terminal est derrière', behindHint: 'Si Windows Terminal est la fenêtre au premier plan, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
       behindSaved: (on: boolean): string => (on ? 'Sons seulement terminal derrière' : 'Sons toujours'),
       note: 'Un seul son à la fois, pour l’île et Ledge Desktop ensemble : une rafale de demandes ne joue qu’une fois. Ouvrir, fermer et survoler restent silencieux.'
+    },
+    machines: {
+      title: 'Vos machines',
+      noteLead: 'Ledge rejoint vos serveurs par SSH, depuis WSL. ', noteShared: 'Liste partagée', noteRest: ' : le daemon local la garde, l’île et Ledge Desktop affichent les mêmes machines.',
+      status: { online: 'Connectée', connecting: 'Connexion…', offline: 'Hors ligne' } as Record<'online' | 'connecting' | 'offline', string>,
+      local: 'Cette machine', localKind: 'Local · WSL',
+      ssh: (alias: string) => `SSH · ${alias}`,
+      version: (v: string | undefined) => (v ? `Ledge ${v}` : 'Version inconnue'),
+      sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
+      reconnect: 'Reconnecter', test: 'Tester', edit: 'Modifier', remove: 'Retirer', cancel: 'Annuler',
+      add: 'Ajouter une machine',
+      count: (n: number, max: number) => `${n} ${plural(n, 'machine', 'machines')} · ${max} au plus`,
+      addTitle: 'Ajouter une machine',
+      editTitle: (label: string) => `Modifier ${label}`,
+      label: 'Nom', labelAria: 'Nom de la machine', labelHint: 'Comme il apparaît dans l’atelier et l’île.', labelPlaceholder: 'Serveur de dev',
+      alias: 'Alias SSH', aliasHint: 'Nom d’un bloc Host de ~/.ssh/config dans WSL.', aliasPlaceholder: 'gpu-box',
+      aliasInvalid: 'Lettres, chiffres, point, tiret ou souligné, sans espace.',
+      before: 'Avant d’ajouter un serveur',
+      checklist: ['L’alias fonctionne depuis WSL, sans mot de passe.', 'La clé du serveur est déjà approuvée.', 'Node 22+ et tmux sont installés.', 'Ledge est installé et démarré sur le serveur.'],
+      probe: 'Tester la connexion', save: 'Enregistrer', saving: 'Enregistrement…',
+      optional: 'Le test est facultatif : une machine injoignable peut être enregistrée.',
+      probing: 'Connexion à ',
+      probeOk: (v: string | undefined, n: number) => `${v ? `Ledge ${v}` : 'Ledge'} répond · ${n} ${plural(n, 'session', 'sessions')}`,
+      problem: {
+        alias: 'Alias introuvable. Ajoutez un bloc Host pour cet alias dans ~/.ssh/config de WSL.',
+        key: 'La clé SSH est refusée. Vérifiez IdentityFile pour cet alias dans ~/.ssh/config de WSL.',
+        hostKey: 'La clé du serveur n’est pas encore approuvée. Connectez-vous une fois depuis WSL avec ssh et cet alias.',
+        unreachable: 'Le serveur ne répond pas. Il est peut-être éteint, ou hors du réseau.',
+        ledge: 'Ledge est absent ou trop ancien sur ce serveur. Installez-le, puis lancez « ledge setup ».',
+        stopped: 'Le service Ledge ne tourne pas sur le serveur. Lancez « ledge setup » sur le serveur.',
+        local: 'Mettez à jour Ledge sur cette machine pour rejoindre un serveur.',
+        other: 'La connexion a échoué.'
+      } as Record<SshProblem, string>,
+      errors: {
+        invalid: 'Vérifiez le nom et l’alias SSH : lettres, chiffres, point, tiret ou souligné, sans espace.',
+        duplicate: 'Cet alias est déjà ajouté.',
+        full: 'Vous avez atteint 20 machines.',
+        offline: 'Le daemon local n’est pas connecté : réessayez dans un instant.',
+        timeout: 'Le daemon local n’a pas répondu. Rien n’a changé.',
+        refused: 'Le daemon local a refusé cette liste. Rien n’a changé.'
+      } as Record<DraftProblem | Exclude<SaveOutcome, 'saved'>, string>,
+      added: (label: string) => `${label} ajoutée`,
+      edited: (label: string) => `${label} modifiée`,
+      removed: (label: string) => `${label} retirée`,
+      confirm: { before: 'Retirer ', after: ' ? Ses sessions disparaissent de la liste, dans l’île comme ici. Rien n’est arrêté ni supprimé sur le serveur.' }
     }
   },
   pending: 'Cet écran arrive bientôt.',
