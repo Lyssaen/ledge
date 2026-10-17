@@ -418,6 +418,28 @@ describe('server', () => {
       expect(store.get('a')?.pending).toBeUndefined();
       c.close();
     });
+    it('Esc taken while a newer request came: the code still says the note was not typed, the newer request is left alone', async () => {
+      const after = '● Bash(mkdir zz-ledge-probe)\n  ⎿  Interrupted by user';
+      tmux = fakeTmux({ 'ledge-a': [fx('claude2-permission-bash'), after] });
+      const realCapture = tmux.capture; let captures = 0;
+      // While the plan waits for the input box, the agent asks something else.
+      tmux.capture = async (n, l) => {
+        if (++captures === 3) store.apply('a', { name: 'PermissionRequest', at: '2026-10-09T18:00:09.000Z', source: 'hook', tool: 'Bash', text: 'rm -rf dist' });
+        return realCapture(n, l);
+      };
+      await srv.close();
+      const history = new History({ dir: tmpDir() });
+      srv = await startServer({ store, tmux, port: 0, history, untilMs: 300, verify: { attempts: 2, intervalMs: 20 } });
+      store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'mkdir zz-ledge-probe', tool: 'Bash', source: 'hook' } }));
+      store.apply('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'mkdir zz-ledge-probe' });
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.decide', id: 'a', decision: 'deny', note: 'Use pnpm' });
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'denied, but the note could not be typed', request: 'session.decide', code: 'note_not_typed' });
+      expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape']]);
+      expect(store.get('a')).toMatchObject({ state: 'waiting_permission', pending: { text: 'rm -rf dist' } });
+      expect(history.items('a').filter(i => i.kind === 'permission').map(i => i.kind === 'permission' && i.decision)).toEqual([undefined, undefined]);
+      c.close();
+    });
     it('Esc not taken (the dialog stays): nothing was denied, the usual failure', async () => {
       const { c } = await denyWithNote([fx('claude2-permission-bash')]);
       expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide' });
@@ -620,7 +642,7 @@ describe('server', () => {
     it('a client that connects later gets the last preview right after the snapshot', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim' }));
       srv.preview('a', ['old']); srv.preview('a', ['● latest']);
-      const r = await recorder(); await r.until(3);
+      const r = await recorder(); await r.until(5);
       expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'session.preview', 'chat.history']);
       expect(r.got[3]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
       r.ws.terminate();
