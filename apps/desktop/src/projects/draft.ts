@@ -37,7 +37,7 @@ export function draftProblem(d: ProjectDraft, state: Projects): DraftProblem | n
   if (state.projects.some(p => p.id !== d.id && key(p.name) === name)) return { code: 'name_taken' };
   const seen = new Set<string>();
   for (const [index, r] of d.repos.entries()) {
-    const k = `${r.machine}\n${r.path}`;
+    const k = `${r.machine}\n${normalizePath(r.path)}`;
     if (seen.has(k)) return { code: 'repo_duplicate', index };
     seen.add(k);
   }
@@ -46,14 +46,14 @@ export function draftProblem(d: ProjectDraft, state: Projects): DraftProblem | n
 
 /** Another project (not the draft's own) that also owns this repo. */
 export function alsoIn(repo: Repo, d: ProjectDraft, state: Projects): Project | undefined {
-  return state.projects.find(p => p.id !== d.id && p.repos.some(r => r.machine === repo.machine && r.path === repo.path));
+  return state.projects.find(p => p.id !== d.id && p.repos.some(r => r.machine === repo.machine && normalizePath(r.path) === normalizePath(repo.path)));
 }
 
 /** The state to send: the project (id kept, or `newProjectId` for a new one), then a rule for each checked session. */
 export function afterSave(state: Projects, d: ProjectDraft, sessions: readonly Session[]): { next: Projects; id: string } {
   const name = d.name.trim();
   const id = d.id ?? newProjectId(name, state.projects.map(p => p.id));
-  let next = withProject(state, { id, name, color: d.color, description: d.description, repos: d.repos.map(r => ({ ...r })) });
+  let next = withProject(state, { id, name, color: d.color, description: d.description, repos: d.repos.map(r => ({ machine: r.machine, path: normalizePath(r.path) })) });
   for (const s of sessions) if (d.file.includes(s.id)) next = withRule(next, ruleFor(s, id));
   return { next, id };
 }

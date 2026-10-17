@@ -47,6 +47,14 @@ describe('project draft', () => {
     expect(alsoIn(r('local', '/w/ledge'), draftOf(ledge), state)).toBeUndefined();
     expect(alsoIn(r('local', '/w/ledge'), newDraft(state), state)).toBe(ledge);
   });
+  it('repo paths are compared and sent normalized', () => {
+    expect(draftProblem({ ...newDraft(state), name: 'X', repos: [r('local', '/a/'), r('local', '/a')] }, state)).toEqual({ code: 'repo_duplicate', index: 1 });
+    expect(alsoIn(r('local', '/w/shared/'), draftOf(ledge), state)).toBe(other);
+    const x = p('x', 'teal', 'X', [r('local', '/w/x')]);
+    expect(alsoIn(r('local', '/w/x/'), newDraft(state), { projects: [x], rules: [] })).toBe(x);
+    const { next } = afterSave(state, { ...newDraft(state), name: 'Y', repos: [r('local', ' /w/x// ')] }, []);
+    expect(next.projects.find(q => q.id === 'y')!.repos).toEqual([r('local', '/w/x')]);
+  });
   it('saving keeps the id on rename, slugs a new one, and files the checked sessions', () => {
     expect(afterSave(state, { ...draftOf(ledge), name: 'Ledge Desktop' }, []).id).toBe('ledge');
     const { next, id } = afterSave(state, { ...newDraft(state, otto), name: 'Notes' }, [otto]);
