@@ -50,4 +50,11 @@ describe('inspectRepos', () => {
     expect(out[0]).toEqual({ path: d, exists: true, branch: null });
     expect(Date.now() - t0).toBeLessThan(2400);
   }, 6000);
+  it('does not spawn the second git once the path\'s deadline has passed', async () => {
+    const d = dir(); const calls: string[][] = [];
+    const git = async (_c: string, args: string[]) => { calls.push(args); await new Promise(r => setTimeout(r, 1990)); return 'HEAD'; };
+    const t0 = Date.now(); const out = await inspectRepos([d], { git });
+    expect(out[0]).toEqual({ path: d, exists: true, branch: null });
+    expect(calls).toHaveLength(1); expect(Date.now() - t0).toBeLessThan(2400);
+  }, 6000);
 });

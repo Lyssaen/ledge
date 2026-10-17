@@ -87,6 +87,13 @@ describe('folders: the launch form browser', () => {
       expect(await gitBranchOf(d)).toBe('0123456');
       expect(await gitBranchOf(join(home, 'nogit'))).toBeNull();
     });
+    it('the cap of 8 git is shared: a listing of 12 worktree entries never runs more than 8 at once', async () => {
+      for (let i = 0; i < 12; i++) { mkdirSync(join(home, `w${i}`)); writeFileSync(join(home, `w${i}`, '.git'), 'gitdir: /elsewhere\n'); }
+      let live = 0, peak = 0;
+      const git = async () => { live++; peak = Math.max(peak, live); await new Promise(r => setTimeout(r, 20)); live--; return 'main'; };
+      const l = await listFolder(home, home, undefined, git);
+      expect(l.repos).toHaveLength(12); expect(peak).toBe(8);
+    });
     it('gitBranchOf asks git when .git is a file (a worktree)', async () => {
       repo(join(home, 'main'), 'trunk'); const wt = join(home, 'wt'); git(join(home, 'main'), 'worktree', 'add', '-q', '-b', 'side', wt);
       expect(await gitBranchOf(wt)).toBe('side');

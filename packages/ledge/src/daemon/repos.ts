@@ -7,6 +7,7 @@ import type { RepoInfo } from '@ledge/protocol';
 const GIT_TIMEOUT_MS = 2000;
 /** The most git processes running at once. */
 const MAX_GIT = 8;
+const MIN_LEFT_MS = 100;
 
 /** Runs `git -C cwd <args>`: its trimmed output, or null (not a repository, git absent, too slow). */
 function runGit(cwd: string, args: string[]): Promise<string | null> {
@@ -15,18 +16,19 @@ function runGit(cwd: string, args: string[]): Promise<string | null> {
   });
 }
 
+/** At most MAX_GIT paths being inspected at once, across every call (a listing's worktrees and the launch form's inspections together). */
+let live = 0; const waiting: (() => void)[] = [];
+async function slot<T>(job: () => Promise<T>): Promise<T> {
+  if (live >= MAX_GIT) await new Promise<void>(r => waiting.push(r));
+  live++;
+  try { return await job(); } finally { live--; waiting.shift()?.(); }
+}
+
 /** For each path, echoed as asked (`~`, `..`, a trailing `/` are resolved only to look and to run git: the front finds its answer by the path it sent):
  *  whether it is a folder and its Git branch (the short commit when HEAD is detached; null when not a repository). */
 export async function inspectRepos(paths: readonly string[], opts: { home?: string; git?: (cwd: string, args: string[]) => Promise<string | null> } = {}): Promise<RepoInfo[]> {
   const home = opts.home ?? homedir();
   const git = opts.git ?? runGit;
-  // At most MAX_GIT git at once, whatever the number of paths.
-  let live = 0; const waiting: (() => void)[] = [];
-  const slot = async <T>(job: () => Promise<T>): Promise<T> => {
-    if (live >= MAX_GIT) await new Promise<void>(r => waiting.push(r));
-    live++;
-    try { return await job(); } finally { live--; waiting.shift()?.(); }
-  };
   return Promise.all(paths.map(raw => slot(async (): Promise<RepoInfo> => {
     const input = raw.trim();
     const path = resolve(input === '~' ? home : input.startsWith('~/') ? resolve(home, input.slice(2)) : input);
@@ -40,7 +42,8 @@ export async function inspectRepos(paths: readonly string[], opts: { home?: stri
       git(path, args).then(v => { clearTimeout(t); res(v); }, () => { clearTimeout(t); res(null); });
     });
     let branch = await bounded(['rev-parse', '--abbrev-ref', 'HEAD']);
-    if (branch === 'HEAD') branch = (await bounded(['rev-parse', '--short=7', 'HEAD']))?.slice(0, 7) ?? null;
+    // Under MIN_LEFT_MS of the deadline left, a second git could not answer: no branch rather than a wasted process.
+    if (branch === 'HEAD') branch = deadline - Date.now() < MIN_LEFT_MS ? null : (await bounded(['rev-parse', '--short=7', 'HEAD']))?.slice(0, 7) ?? null;
     return { path: raw, exists: true, branch };
   })));
 }

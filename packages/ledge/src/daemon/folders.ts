@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { ServerMessage } from '@ledge/protocol';
 import { inspectRepos } from './repos.js';
 
+type Git = (cwd: string, args: string[]) => Promise<string | null>;
 type Listing = Extract<ServerMessage, { type: 'folder.listing' }>;
 
 /** `raw` taken as given (a folder name may start or end with spaces): `~` expanded, absolute, an existing directory. */
@@ -37,11 +38,11 @@ async function subfolders(path: string): Promise<string[]> {
 
 /** The branch of the Git repository at `dir` (the short commit when HEAD is detached), read from `.git/HEAD` without running git;
  *  a `.git` that is a file (worktree, submodule) goes through `inspectRepos`. Null when `dir` is not a repository. */
-export async function gitBranchOf(dir: string): Promise<string | null> {
+export async function gitBranchOf(dir: string, git?: Git): Promise<string | null> {
   const dot = join(dir, '.git');
   let s;
   try { s = await stat(dot); } catch { return null; }
-  if (s.isFile()) return (await inspectRepos([dir]))[0]?.branch ?? null;
+  if (s.isFile()) return (await inspectRepos([dir], { git }))[0]?.branch ?? null;
   let head: string;
   try { head = (await readFile(join(dot, 'HEAD'), 'utf8')).trim(); } catch { return null; }
   const ref = /^ref: refs\/heads\/(.+)$/.exec(head);
@@ -54,14 +55,14 @@ export async function gitBranchOf(dir: string): Promise<string | null> {
  * The path is never trimmed: the browser asks for paths it took from a listing, and a name may end with a space;
  * a refusal echoes the asked path byte for byte. Trimming typed input is the client's job.
  */
-export async function listFolder(input: string | undefined, home = homedir(), requestId?: string): Promise<Listing> {
+export async function listFolder(input: string | undefined, home = homedir(), requestId?: string, git?: Git): Promise<Listing> {
   const tag = requestId === undefined ? {} : { requestId };
   const asked = input || '~';
   try {
     const path = await resolveExact(asked, home);
     const parent = dirname(path);
     const entries = await subfolders(path);
-    const branches = await Promise.all(entries.map(name => gitBranchOf(join(path, name))));
+    const branches = await Promise.all(entries.map(name => gitBranchOf(join(path, name), git)));
     const repos = entries.flatMap((name, i) => (branches[i] === null ? [] : [{ name, branch: branches[i]! }]));
     return { type: 'folder.listing', path, parent: parent === path ? null : parent, entries, repos, ...tag };
   } catch (e) {
