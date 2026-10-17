@@ -27,6 +27,11 @@ export interface ChatViewProps {
   launchingQid?: string | null; onLaunchProposal?: (qid: string) => void; onTerminal?: (id: string) => void;
   /** The relay card's turn being sent (its qid) and its actions. */
   relayingQid?: string | null; onRelay?: (qid: string) => void; onRelayCancel?: (qid: string) => void;
+  /** Desktop: in the flow of its parent column (no absolute positioning, no fade), no Back button; Close stays in the header. */
+  docked?: boolean;
+  /** Hover or keyboard focus of a `ledge://session/<id>` link in an answer; null when it ends. */
+  onAgentHover?: (id: string | null) => void;
+  inputRef?: Ref<HTMLInputElement>;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number; contentRef?: Ref<HTMLDivElement>;
 }
 
@@ -61,8 +66,19 @@ export function ChatView(p: ChatViewProps) {
   const running = turns.find(x => x.answeredAt === undefined && x.error === undefined) ?? null;
   const busy = !!running;
   const [text, setText] = useState('');
-  const field = useRef<HTMLInputElement>(null);
+  const field = useRef<HTMLInputElement | null>(null);
   const thread = useRef<HTMLDivElement>(null);
+  const setField = (el: HTMLInputElement | null) => {
+    field.current = el;
+    const r = p.inputRef; if (typeof r === 'function') r(el); else if (r) (r as { current: HTMLInputElement | null }).current = el;
+  };
+  const SESSION_LINK = 'a[href^="ledge://session/"]';
+  const agentOf = (target: EventTarget | null) => {
+    const a = target instanceof Element ? target.closest(SESSION_LINK) : null;
+    return a ? /^ledge:\/\/session\/(.+)$/.exec(a.getAttribute('href') ?? '')?.[1] ?? null : null;
+  };
+  const lit = useRef<string | null>(null);
+  const hover = p.onAgentHover && ((id: string | null) => { if (id === lit.current) return; lit.current = id; p.onAgentHover!(id); });
   useLayoutEffect(() => { const el = thread.current; if (visible && el) el.scrollTop = el.scrollHeight; }, [turns, live?.text]);
   useEffect(() => { if (visible && !busy) field.current?.focus({ preventScroll: true }); }, [visible, busy]);
   // The resident pulses while Ledge reads.
@@ -72,9 +88,11 @@ export function ChatView(p: ChatViewProps) {
   const repos = groupSessions(p.sessions).length;
   const mascot = (size: number, pulsing = false) => <ResidentMascot size={size} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} gestureKey={pulsing && busy ? pulse : undefined} gestureKind="pulse" />;
   return (
-    <div data-layer="chat" data-delay={enterDelay} inert={!visible} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay : 0]]) }}>
+    <div data-layer="chat" data-delay={p.docked ? undefined : enterDelay} inert={p.docked ? undefined : !visible} style={p.docked
+      ? { height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }
+      : { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay : 0]]) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: CHAT_HEADER_H, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px', borderBottom: '1px solid var(--sidebar-border)' }}>
-        <Button variant="ghost" size="icon" aria-label={t.chat.back} title={t.chat.back} data-initial-focus onClick={p.onBack}><Icon {...ICONS.chevronLeft} /></Button>
+        {!p.docked && <Button variant="ghost" size="icon" aria-label={t.chat.back} title={t.chat.back} data-initial-focus onClick={p.onBack}><Icon {...ICONS.chevronLeft} /></Button>}
         {mascot(28, true)}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1, minWidth: 0 }}>
           <span data-brand style={{ fontSize: 14, lineHeight: '18px', fontWeight: 650 }}>{t.chat.title}<span style={{ color: 'var(--sidebar-primary)' }}>.</span></span>
@@ -84,7 +102,11 @@ export function ChatView(p: ChatViewProps) {
         <Button variant="ghost" size="icon" aria-label={t.chat.reset} title={t.chat.reset} disabled={busy || !!p.offline || turns.length === 0} onClick={p.onReset}><Icon {...ICONS.plus} /></Button>
         <Button variant="ghost" size="icon" aria-label={t.chat.close} title={t.chat.close} onClick={p.onClose}><Icon {...ICONS.close} /></Button>
       </div>
-      <div ref={thread} data-scroll className="ledge-scroll" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      <div ref={thread} data-scroll className="ledge-scroll"
+        onMouseOver={hover ? e => hover(agentOf(e.target)) : undefined}
+        onMouseLeave={hover ? () => hover(null) : undefined}
+        onFocus={hover ? e => { const id = agentOf(e.target); if (id) hover(id); } : undefined}
+        onBlur={hover ? e => { if (!agentOf(e.relatedTarget)) hover(null); } : undefined} style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         <div ref={p.contentRef} data-chat-content style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 16px 10px' }}>
           {turns.length === 0 && (
             <div data-chat-empty style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6, padding: '26px 4px 6px', color: 'var(--muted-foreground)', fontSize: 12.5, lineHeight: '18px' }}>
@@ -153,7 +175,7 @@ export function ChatView(p: ChatViewProps) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', borderTop: '1px solid var(--sidebar-border)' }}>
         {p.offline && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{p.offline}</span>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input ref={field} data-chat-input type="text" className="ledge-field" aria-label={t.chat.ask} placeholder={t.chat.askPlaceholder} value={text} disabled={busy || !!p.offline}
+          <input ref={setField} data-chat-input type="text" className="ledge-field" aria-label={t.chat.ask} placeholder={t.chat.askPlaceholder} value={text} disabled={busy || !!p.offline}
             onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(text); } else if (e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur(); } }}
             style={{ flex: 1, minWidth: 0, height: 34, boxSizing: 'border-box', padding: '0 10px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', fontSize: 13 }} />
           <Button variant="primary" size="icon" aria-label={t.chat.send} title={t.chat.send} disabled={busy || !!p.offline || !text.trim()} onClick={() => submit(text)} style={{ width: 34, height: 34 }}><Icon {...ICONS.send} /></Button>
