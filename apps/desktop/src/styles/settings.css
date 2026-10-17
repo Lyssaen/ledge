@@ -1,8 +1,4 @@
 /* Réglages (docs/mockups/desktop-observatory/settings.css, without the island's rules): left, the sections; right, cards of rows. */
-.side-footer{padding:8px 12px 12px;border-top:1px solid var(--sidebar-border)}
-.side-footer .side-row>svg{color:var(--muted-foreground)}
-.side-footer .side-row.active>svg{color:var(--sidebar-primary)}
-
 .settings-page{flex:1;min-height:0;display:flex}
 .settings-nav{width:224px;flex-shrink:0;display:flex;flex-direction:column;gap:2px;padding:16px 12px;border-right:1px solid var(--border);overflow:auto}
 .settings-back{justify-content:flex-start!important;margin:0 0 12px;color:var(--muted-foreground);white-space:nowrap}
@@ -190,6 +186,5 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
  .rule-entry{grid-template-columns:minmax(0,1fr) auto;row-gap:6px}.rule-arrow{display:none}
  .set-row:not(.stack){flex-wrap:wrap}.set-control{max-width:100%}
 }
-@media(max-width:850px){.side-footer{padding:8px}.side-footer .side-row{justify-content:center;padding:0}}
 @media(max-width:600px){.event-grid thead th:not(:first-child){font-size:10px}.theme-picks{grid-template-columns:1fr 1fr}.accent-swatches{flex-wrap:wrap}}
 

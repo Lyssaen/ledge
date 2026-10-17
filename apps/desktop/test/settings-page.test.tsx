@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { boot, closeDaemons, TWO_PROJECTS } from './helpers';
 
 beforeEach(() => localStorage.clear());
@@ -105,5 +107,11 @@ describe('the Settings page', () => {
     expect(rows).toHaveLength(20);
     expect(card.getByText('Show these shortcuts')).toBeVisible();
     expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['In Ledge Desktop']);
+  });
+
+  it('the sidebar’s footer is styled once, by sidebar.css: the Settings sheet does not repeat it', () => {
+    const sheet = (name: string) => readFileSync(resolve(__dirname, '../src/styles', name), 'utf8');
+    expect(sheet('sidebar.css')).toContain('.side-footer{');
+    expect(sheet('settings.css')).not.toContain('.side-footer');
   });
 });
