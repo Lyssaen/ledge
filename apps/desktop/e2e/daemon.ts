@@ -1,5 +1,5 @@
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { ClientMessage, DaemonInfo, Machines, Projects, Recent, Session } from '@ledge/protocol';
+import type { ClientMessage, DaemonInfo, Machines, Projects, Recent, Session, ThreadItem } from '@ledge/protocol';
 
 export const T0 = new Date(Date.now() - 5 * 60_000).toISOString();
 /** A local daemon that can route the chat between machines (spec 2026-10-14 §5.3): the fleet coordinates through it. */
@@ -11,7 +11,8 @@ export function session(id: string, extra: Partial<Session> = {}): Session {
 /** Simulates the local ledge daemon inside the page: a snapshot, then the machines list, and a `push` for later updates.
  *  Like the daemon (spec §5.3) it keeps the machines list: `machines.set` replaces it and is broadcast back as `machines`,
  *  and every new connection (reload, reconnect) gets the current list. The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]> } = {}) {
+  const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
   let machines: Machines = extras.machines ?? [{ id: 'local', label: 'Local' }];
@@ -30,6 +31,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       received.push(msg);
       if (msg.type === 'projects.set') { projects = msg.projects; ws.send(JSON.stringify({ type: 'projects', projects })); }
       if (msg.type === 'session.decide') { const s = sessions.get(msg.id); if (s) { const { pending: _p, ...rest } = s; const next = { ...rest, state: 'working' as const }; sessions.set(s.id, next); ws.send(JSON.stringify({ type: 'session.updated', session: next })); } }
+      if (msg.type === 'session.thread') { const items = threads.get(msg.id); if (items) ws.send(JSON.stringify({ type: 'session.thread', id: msg.id, items })); }
       if (msg.type === 'machines.set') { machines = msg.machines; ws.send(JSON.stringify({ type: 'machines', machines })); }
     });
   });
@@ -45,6 +47,10 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     refuse(message: string) { push({ type: 'error', message }); },
     /** Answers a `folder.list` / `folder.create`. */
     listing(path: string, parent: string | null, entries: string[], error?: string) { push({ type: 'folder.listing', path, parent, entries, ...(error ? { error } : {}) }); },
+    /** Stores an item in the session's thread and broadcasts it as `session.thread.item`. */
+    item(id: string, item: ThreadItem) { const items = threads.get(id) ?? []; const at = items.findIndex(i => i.id === item.id); if (at >= 0) items[at] = item; else items.push(item); threads.set(id, items); push({ type: 'session.thread.item', id, item }); },
+    /** Pushes a session's terminal preview. */
+    preview(id: string, lines: string[]) { push({ type: 'session.preview', id, lines }); },
     /** Drops the local daemon and refuses new connections, so the fleet's own reconnect cannot quietly bring it back (see `fakeRemote`). */
     close() { up = false; socket?.close(); socket = null; }
   };
