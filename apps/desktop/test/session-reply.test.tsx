@@ -3,6 +3,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { NOTE_MAX } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, listSessions, type MockDaemon } from './helpers';
+import { MESSAGES } from '../src/i18n/messages';
 
 // A plan that takes no note exists on no harness today: Cursor's plan is made noteless here to test that case.
 vi.mock('@ledge/protocol', async importOriginal => {
@@ -92,7 +93,7 @@ describe('the pinned request and the reply', () => {
     const { d, user } = await open('Pia', [...listSessions(), pia]);
     const plan = card('Plan to approve');
     expect(plan.getByText('Pia proposes a plan · Plan: add README.md')).toBeVisible();
-    expect(plan.getByRole('button', { name: 'Approve and accept edits automatically' })).toBeVisible();
+    expect(plan.getByRole('button', { name: 'Approve in auto mode' })).toBeVisible();
     await user.keyboard('n');
     expect(field()).toHaveFocus();
     expect(screen.getByRole('status')).toHaveTextContent('Write what to revise, then Enter: the plan goes back to planning.');
@@ -100,7 +101,7 @@ describe('the pinned request and the reply', () => {
     await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny', note: 'Garde la v1', expect: { kind: 'plan', text: '# Plan: add README.md' } }]));
     cleanup(); await closeDaemons();
     await open('Pia', [...listSessions(), { ...pia, tool: 'codex' }]);
-    expect(card('Plan to approve').queryByRole('button', { name: 'Approve and accept edits automatically' })).toBeNull();
+    expect(card('Plan to approve').queryByRole('button', { name: 'Approve in auto mode' })).toBeNull();
   });
 
   it('offline: no request, no field, the machine is named; read-only says so', async () => {
@@ -157,7 +158,12 @@ describe('the reply, beyond the brief (carried items)', () => {
     expect(screen.getByRole('button', { name: /^Always allow for this session/ })).toHaveAttribute('title', expect.stringMatching(/rest of the session/));
     cleanup(); await closeDaemons();
     await open('Otto', withPending({ kind: 'plan', text: 'Plan: x', source: 'hook' }));
-    expect(screen.getByRole('button', { name: 'Approve and accept edits automatically' })).toHaveAttribute('title', expect.stringMatching(/auto mode/));
+    // Never promise less than granted: the label says auto mode (Claude 2.1), the title what older versions do instead.
+    const auto = screen.getByRole('button', { name: 'Approve in auto mode' });
+    expect(auto).toHaveAttribute('title', expect.stringMatching(/auto mode, which answers the next requests by itself, commands included/));
+    expect(auto).toHaveAttribute('title', expect.stringMatching(/versions without auto mode.*accept.*edits automatically/i));
+    expect([MESSAGES.fr.session.pending.approveAuto, MESSAGES.fr.session.pending.alwaysScope.plan]).toEqual(
+      ['Approuver en mode automatique', expect.stringMatching(/mode auto.*sans mode auto.*accepte les modifications automatiquement/)]);
   });
 
   it('Claude saves a non-edit rule for the project: the label says so; its file tools keep « for this session »', async () => {

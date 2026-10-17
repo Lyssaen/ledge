@@ -145,13 +145,13 @@ const fr = {
       command: (n: string) => `${n} veut exécuter une commande`, edit: (n: string) => `${n} veut modifier un fichier`, approval: (n: string) => `${n} veut votre accord`,
       question: (n: string) => `${n} vous pose une question`, plan: (n: string, title: string) => `${n} propose un plan · ${title}`, planBadge: 'Plan à approuver',
       allow: 'Autoriser', deny: 'Refuser', always: 'Toujours autoriser pour cette session', alwaysProject: 'Toujours autoriser dans ce projet',
-      approvePlan: 'Approuver le plan', keepPlanning: 'Continuer à planifier', approveAuto: 'Approuver et accepter les modifications automatiquement',
+      approvePlan: 'Approuver le plan', keepPlanning: 'Continuer à planifier', approveAuto: 'Approuver en mode automatique',
       // What « always » really grants, in the button's title (adapters/claude.ts, codex.ts: the option each one picks).
       alwaysScope: {
         project: 'Claude Code enregistre la règle dans les réglages du projet : elle vaut aussi pour ses prochaines sessions dans ce projet.',
         edits: 'Claude Code passe en acceptation automatique des modifications pour toute la session : chaque modification suivante sera acceptée sans vous être demandée.',
         session: 'L’agent ne redemande plus pour cette commande ou ces fichiers jusqu’à la fin de la session.',
-        plan: 'Selon la version de Claude Code : acceptation automatique des modifications, ou mode auto (2.1 et suivantes), qui répond seul aux demandes suivantes, commandes comprises.'
+        plan: 'Claude Code passe en mode auto, qui répond seul aux demandes suivantes, commandes comprises. Sur les versions sans mode auto (avant 2.1), il accepte les modifications automatiquement.'
       } as Record<'project' | 'edits' | 'session' | 'plan', string>,
       relay: (p: string) => `C’est ${p} qui transmet cette décision.`, relayAnswer: (p: string) => `${p} relaiera votre réponse.`,
       revise: 'Écrivez ce qu’il faut revoir, puis Entrée.', reviseKey: 'Écrivez ce qu’il faut revoir, puis Entrée : le plan repart en préparation.'
@@ -332,12 +332,12 @@ const en: typeof fr = {
       command: (n) => `${n} wants to run a command`, edit: (n) => `${n} wants to change a file`, approval: (n) => `${n} wants your approval`,
       question: (n) => `${n} asks you a question`, plan: (n, title) => `${n} proposes a plan · ${title}`, planBadge: 'Plan to approve',
       allow: 'Allow', deny: 'Deny', always: 'Always allow for this session', alwaysProject: 'Always allow in this project',
-      approvePlan: 'Approve the plan', keepPlanning: 'Keep planning', approveAuto: 'Approve and accept edits automatically',
+      approvePlan: 'Approve the plan', keepPlanning: 'Keep planning', approveAuto: 'Approve in auto mode',
       alwaysScope: {
         project: 'Claude Code saves the rule in the project’s settings: it also holds for its later sessions in this project.',
         edits: 'Claude Code switches to accepting edits for the whole session: every edit after this one is accepted without asking you.',
         session: 'The agent stops asking for this command or these files for the rest of the session.',
-        plan: 'Depending on the Claude Code version: accept edits automatically, or auto mode (2.1 and later), which answers the next requests by itself, commands included.'
+        plan: 'Claude Code switches to auto mode, which answers the next requests by itself, commands included. On versions without auto mode (before 2.1), it accepts edits automatically.'
       },
       relay: (p) => `${p} passes this decision on.`, relayAnswer: (p) => `${p} will relay your answer.`,
       revise: 'Write what to revise, then Enter.', reviseKey: 'Write what to revise, then Enter: the plan goes back to planning.'
