@@ -5,7 +5,7 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
-import { byFolder, type ChangedFile } from './changes';
+import { byFolder, nameOf, type ChangedFile } from './changes';
 import { Delta, FileDiffs } from './DiffView';
 
 export interface ChangesProps {
@@ -22,8 +22,6 @@ export interface ChangesProps {
   name?: string;
   notify(text: string): void;
 }
-
-const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 
 /** The Changes view (session.tsx `changes` and `fileList`): the files the shown agent changed, grouped by folder, and the
  *  diffs of the current one, an action at a time, each going back to its action in the thread. */

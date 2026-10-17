@@ -1,4 +1,4 @@
-import { useCallback, type CSSProperties, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useMemo, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { MarkdownDocument, type DocumentHeading } from '@ledge/ui/documents/markdown';
@@ -8,8 +8,9 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
-import { findFile, relativeTo, type ChangedFile } from './changes';
+import { findFile, nameOf, relativeTo, type ChangedFile } from './changes';
 import { Delta, FileDiffs } from './DiffView';
+import { clampSplit } from './prefs';
 import { useDocument } from './useDocument';
 
 export type PaneTab = { kind: 'doc'; path: string } | { kind: 'diff'; path: string } | { kind: 'plan'; key: string };   // plan: task 4
@@ -20,12 +21,12 @@ const GROWN = 0.65, DEFAULT_SPLIT = 0.5;
 /** ← / → on the handle move it this much. */
 const SPLIT_STEP = 0.03;
 
-const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 const noHeadings = (_: DocumentHeading[]) => {};
 const shownOf = (files: readonly ChangedFile[], path: string, cwd: string) => findFile(files, path, cwd)?.shown ?? relativeTo(path, cwd);
 
 /** A link inside a document, read from beside it: a relative path is joined to the document's folder (the daemon would read
- *  it from the session's folder). */
+ *  it from the session's folder). The daemon's own `basePath` resolution is not used: the tab is keyed by the path it reads,
+ *  so the same document reached from the thread or from another document is one tab. */
 export function besideDoc(from: string, path: string): string {
   if (path.startsWith('/') || path.startsWith('~')) return path;
   const parts = from.split('/').slice(0, -1);
@@ -58,13 +59,18 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
   const pathOf = (x: PaneTab) => (x.kind === 'plan' ? '' : x.kind === 'doc' ? x.path : shownOf(files, x.path, session.cwd));
   const labelOf = (x: PaneTab) => (x.kind === 'doc' ? nameOf(x.path) : x.kind === 'diff' ? tp.diffLabel(nameOf(pathOf(x))) : x.key);
 
-  // Dragged: the pane takes what is right of the pointer (the pointer captured, so leaving the handle does not let go).
+  // Dragged: the pane takes what is right of the pointer (the pointer captured, so leaving the handle does not let go); the
+  // split is written once per value it reaches (to the hundredth), not on every move.
   const drag = (e: ReactPointerEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     const box = el.parentElement?.getBoundingClientRect();
     if (!box || box.width <= 0) return;
     el.setPointerCapture?.(e.pointerId);
-    const move = (ev: PointerEvent) => onSplit((box.right - ev.clientX) / box.width);
+    let last = split;
+    const move = (ev: PointerEvent) => {
+      const x = clampSplit((box.right - ev.clientX) / box.width);
+      if (x !== null && x !== last) { last = x; onSplit(x); }
+    };
     const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); };
     el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
   };
@@ -88,7 +94,8 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
     <>
       <div className="split-handle" role="separator" aria-orientation="vertical" aria-label={tp.resize} tabIndex={0}
         onPointerDown={drag} onDoubleClick={() => onSplit(DEFAULT_SPLIT)} onKeyDown={onHandleKey} />
-      <aside className="side-pane" aria-label={tp.label} style={{ '--split': `${split * 100}%` } as CSSProperties}>
+      {/* Its width comes from the page's --split (session-split). Focusable: the focus lands here when a tab closes under it. */}
+      <aside className="side-pane" aria-label={tp.label} tabIndex={-1}>
         {tabs.length > 1 && (
           <div className="pane-tabs" role="tablist" aria-label={tp.tabs}>
             {tabs.map(x => {
@@ -123,13 +130,16 @@ function DocTab({ path, head, session, client, onDocument }: { path: string; hea
   const doc = useDocument(client, session.id, path, session.offline !== true);
   const follow = useCallback((ref: DocumentReference) => onDocument(besideDoc(path, ref.path)), [onDocument, path]);
   const errors: Record<string, string> = tp.errors;
+  // Parsed again only when its text changes: the page's clock, a drag or the reply's height leave it alone.
+  const text = doc.status === 'ready' ? doc.text : null;
+  const body = useMemo(() => (text === null ? null : <MarkdownDocument text={text} onDocument={follow} onHeadings={noHeadings} />), [text, follow]);
   return (
     <>
       {head(doc.status === 'ready' ? doc.title ?? nameOf(path) : nameOf(path), path)}
       <div className="side-body">
         {doc.status === 'loading' ? <p className="muted" style={{ padding: 20 }}>{tp.reading}</p>
           : doc.status === 'error' ? <p className="muted" style={{ padding: 20 }}>{errors[doc.code] ?? tp.errors.other}</p>
-          : <MarkdownDocument text={doc.text} onDocument={follow} onHeadings={noHeadings} />}
+          : body}
       </div>
     </>
   );

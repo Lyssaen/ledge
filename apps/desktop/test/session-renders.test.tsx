@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, screen, within } from '@testing-library/react';
 import { daemonStore } from '@ledge/fleet';
+import type { ThreadItem } from '@ledge/protocol';
 import { boot, closeDaemons, listSessions, ottoThread } from './helpers';
 
 // Each action group counts its renders by its first action; each exchange's time mark counts the thread's renders.
@@ -15,14 +16,21 @@ vi.mock('../src/session/thread', async importOriginal => {
   return { ...real, timeMark: (...a: Parameters<typeof real.timeMark>) => { marks.n++; return real.timeMark(...a); } };
 });
 
-afterEach(async () => { cleanup(); localStorage.clear(); vi.useRealTimers(); groups.clear(); marks.n = 0; await closeDaemons(); });
+// The open document counts its renders.
+const docs = vi.hoisted(() => ({ n: 0 }));
+vi.mock('@ledge/ui/documents/markdown', async importOriginal => {
+  const real = await importOriginal<typeof import('@ledge/ui/documents/markdown')>();
+  return { ...real, MarkdownDocument: (p: Parameters<typeof real.MarkdownDocument>[0]) => { docs.n++; return real.MarkdownDocument(p); } };
+});
+
+afterEach(async () => { cleanup(); localStorage.clear(); vi.useRealTimers(); groups.clear(); marks.n = 0; docs.n = 0; await closeDaemons(); });
 
 const thread = () => within(screen.getByRole('tabpanel', { name: 'Session thread' }));
 /** Otto's page with its thread (an action running in the last exchange), the page's clock held still. */
-async function openOtto() {
+async function openOtto(extra: ThreadItem[] = []) {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   const env = await boot({ sessions: listSessions(), list: true });
-  env.d.thread('otto', ottoThread());
+  env.d.thread('otto', [...ottoThread(), ...extra]);
   await env.user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
   await thread().findByRole('status', { name: 'Action running' });
   // Settled: the thread's renders have stopped (waitFor polls with setInterval, held still here).
@@ -56,5 +64,18 @@ describe('the thread renders only for what it shows', () => {
     expect(after.thread).toBeGreaterThan(before.thread);           // the thread took the new time…
     expect(after.groups.t5).toBeGreaterThan(before.groups.t5!);    // …the live exchange's actions count on…
     expect([after.groups.t1, after.groups.t4]).toEqual([before.groups.t1, before.groups.t4]); // …the finished exchange is left alone
+  });
+
+  it('the clock and a preview of another session leave the open document alone', async () => {
+    const { d, user } = await openOtto([{ kind: 'reply', id: 'reply-2', at: new Date().toISOString(), turn: 2, text: 'Le guide est dans [docs/guide.md](docs/guide.md).' }]);
+    d.documents.set('docs/guide.md', '# Guide\n\nBonjour.');
+    await user.click(screen.getByRole('link', { name: 'docs/guide.md' }));
+    await within(screen.getByRole('complementary', { name: 'Reading pane' })).findByText('Bonjour.');
+    for (let seen = -1; seen !== docs.n;) { seen = docs.n; await pause(150); }
+    const before = docs.n;
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    d.preview('nova', ['$ npm run build']);
+    await until(() => daemonStore.getState().previews.get('local:nova')?.[0] === '$ npm run build');
+    expect(docs.n).toBe(before);
   });
 });

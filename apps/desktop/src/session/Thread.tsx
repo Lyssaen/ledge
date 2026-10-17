@@ -10,6 +10,7 @@ import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import { ActionGroup } from './ActionGroup';
+import { nameOf } from './changes';
 import { docRefs, helperOf, timeMark, type Exchange, type Segment } from './thread';
 
 const CHIP_MARK = { accept: '✓', always: '✓', deny: '✕', unknown: '·' } as const;
@@ -30,8 +31,6 @@ export interface ThreadProps {
   /** A document link or card in a message: the document in the side pane. Stable (the page's callback). */
   onDocument(path: string): void;
 }
-
-const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 
 /** What the agent said, and a card for each document it names (docRefs): parsed again only when its text changes, never on
  *  the page's clock. */

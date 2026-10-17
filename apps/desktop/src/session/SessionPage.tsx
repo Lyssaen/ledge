@@ -124,8 +124,12 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   }, []);
   const openDoc = useCallback((path: string) => openTab({ kind: 'doc', path }), [openTab]);
   const openDiff = useCallback((path: string) => openTab({ kind: 'diff', path }), [openTab]);
-  // Its neighbour takes over: the next one, else the one before.
+  // Its neighbour takes over: the next one, else the one before. A focus in the pane (or already lost) follows: to the tab
+  // now active, else the pane, else (the pane closed) the thread; a focus elsewhere stays where it is.
+  const refocus = useRef(false);
   const closeTab = (id: string) => {
+    const now = document.activeElement;
+    refocus.current = now === null || now === document.body || now.closest('.side-pane') !== null;
     const at = tabs.findIndex(x => tabId(x) === id);
     const next = tabs.filter(x => tabId(x) !== id);
     setTabs(next);
@@ -145,9 +149,12 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     });
     setActiveTab(tabId(next));
   };
+  // Compared with the split as last written (a drag's moves come between renders).
+  const splitNow = useRef(p.split);
+  splitNow.current = p.split;
   const onSplit = (v: number) => {
     const x = clampSplit(v);
-    if (x !== null && x !== p.split) p.onSplit(x);
+    if (x !== null && x !== splitNow.current) { splitNow.current = x; p.onSplit(x); }
   };
   // Narrow, the pane lies over the thread and stops above the reply (session.css: --reply-h).
   const main = useRef<HTMLDivElement>(null);
@@ -159,6 +166,13 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  useLayoutEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    const pane = main.current?.parentElement?.querySelector<HTMLElement>('.side-pane');
+    const to = pane?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? pane ?? main.current?.querySelector<HTMLElement>('.session-body');
+    to?.focus({ preventScroll: true });
+  }, [tabs, activeTab]);
 
   /* Scrolling: open on the marker, else where the reader left, else at the end; then follow the end only while the reader is there. */
   const scroller = useRef<HTMLDivElement>(null);
@@ -272,7 +286,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
       <div className={cls('session-split', paneShown && 'has-pane')} style={{ '--split': `${p.split * 100}%`, '--reply-h': `${replyH}px` } as CSSProperties}>
         <div className="session-main" ref={main}>
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
-          <div className="session-body" role="tabpanel" {...(view === 'thread' ? { 'aria-label': th.label } : { 'aria-labelledby': 'session-tab-changes' })}>
+          <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : { 'aria-labelledby': 'session-tab-changes' })}>
             <div className="messages session-thread" ref={scroller} onScroll={onScroll} hidden={view !== 'thread'}>
               {offline && (
                 <div className="frozen-banner" role="status">

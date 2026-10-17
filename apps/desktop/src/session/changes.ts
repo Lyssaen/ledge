@@ -5,6 +5,9 @@ export type Change = FileChange['change'] | 'rename';
 export interface Touch { tool: ToolItem; turn: number; change: FileChange['change']; from?: string; diff: ParsedDiff | null }
 export interface ChangedFile { path: string; shown: string; from?: string; change: Change; plus: number; minus: number; cut: boolean; touches: Touch[] }
 
+/** The file name: what follows the last slash. */
+export const nameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+
 /** `path` without the `${cwd}/` prefix when below it; as is otherwise. */
 export function relativeTo(path: string, cwd: string): string {
   const base = cwd.endsWith('/') ? cwd : `${cwd}/`;

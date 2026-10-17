@@ -92,12 +92,73 @@ it('dragging the handle gives the pane what lies right of the pointer, bounded; 
   move(500);
   expect(JSON.parse(localStorage.getItem('desktop.session')!).split).toBe(0.72);
 });
+it('a drag writes the split once per value it reaches, not on every move', async () => {
+  const { user } = await openOtto();
+  await user.click(screen.getByRole('link', { name: 'docs/guide.md' }));
+  const handle = screen.getByRole('separator', { name: 'Resize the pane' });
+  vi.spyOn(handle.parentElement!, 'getBoundingClientRect').mockReturnValue({ left: 0, right: 1000, width: 1000, top: 0, bottom: 800, height: 800, x: 0, y: 0, toJSON: () => ({}) });
+  const setItem = vi.spyOn(Storage.prototype, 'setItem');
+  const writes = () => setItem.mock.calls.filter(([k]) => k === 'desktop.session').map(([, v]) => JSON.parse(v as string).split as number);
+  const move = (clientX: number) => act(() => { handle.dispatchEvent(new MouseEvent('pointermove', { clientX, bubbles: true })); });
+  fireEvent.pointerDown(handle, { pointerId: 1 });
+  for (const x of [400, 401, 402, 403, 404, 390, 391, 392]) move(x);
+  fireEvent.pointerUp(handle, { pointerId: 1 });
+  expect(writes()).toEqual([0.6, 0.61]);
+});
 it('a document that does not come says why, and Escape closes its tab', async () => {
   const { user } = await openOtto([{ kind: 'reply', id: 'reply-2', at: new Date().toISOString(), turn: 2, text: 'Voir [le plan](docs/absent.md).' }]);
   await user.click(screen.getByRole('link', { name: 'le plan' }));
   expect(await side().findByText('Document not found.')).toBeVisible();
   await user.keyboard('{Escape}');
   expect(screen.queryByRole('complementary', { name: 'Reading pane' })).toBeNull();
+  expect(document.querySelector('.session-page')).not.toBeNull();
+});
+it('the machine falling offline says the document cannot be read', async () => {
+  const { user, d } = await openOtto();
+  await user.click(screen.getByRole('link', { name: 'docs/guide.md' }));
+  expect(await side().findByText('Bonjour.')).toBeVisible();
+  d.upsert({ ...listSessions().find(x => x.id === 'otto')!, offline: true });
+  expect(await side().findByText('The machine is offline: the document cannot be read.')).toBeVisible();
+});
+it('a document the daemon never answers: said after DOCUMENT_TIMEOUT_MS', async () => {
+  const { client } = await openOtto();
+  const send = client.send.bind(client);
+  vi.spyOn(client, 'send').mockImplementation(m => { if (m.type !== 'document.read') send(m); });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  fireEvent.click(screen.getByRole('link', { name: 'docs/guide.md' }));
+  expect(side().getByText('Reading the document…')).toBeVisible();
+  act(() => { vi.advanceTimersByTime(DOCUMENT_TIMEOUT_MS); });
+  expect(side().getByText('The document did not arrive in time.')).toBeVisible();
+});
+const threeTabs: ThreadItem[] = [...withDoc, { kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 2, tool: 'Write', label: '/w/ledge/docs/guide.md', status: 'success', files: [{ path: '/w/ledge/docs/guide.md', change: 'write', diff: '+ # Guide' }] }];
+it('closing a middle tab hands over to the next one; the focus follows the active tab, then the pane, then the thread', async () => {
+  const { user } = await openOtto(threeTabs);
+  await user.click(screen.getByRole('button', { name: /guide\.md.*Read/ }));
+  await user.click(screen.getByRole('button', { name: /^3 actions/ }));
+  await user.click(within(document.querySelector<HTMLElement>('[data-tool="t3"]')!).getByRole('button', { name: 'View the change' }));
+  await user.click(screen.getAllByRole('button', { name: /^1 action/ }).at(-1)!);
+  await user.click(within(document.querySelector<HTMLElement>('[data-tool="w1"]')!).getByRole('button', { name: 'View the change' }));
+  expect(side().getAllByRole('tab').map(t => t.textContent)).toEqual(['guide.md', '± App.tsx', '± guide.md']);
+  await user.click(side().getByRole('tab', { name: '± App.tsx' }));
+  await user.click(side().getByRole('button', { name: 'Close ± App.tsx' }));
+  expect(side().getAllByRole('tab').map(t => t.textContent)).toEqual(['guide.md', '± guide.md']);
+  expect(side().getByRole('tab', { name: '± guide.md' })).toHaveAttribute('aria-selected', 'true');
+  expect(side().getByRole('tab', { name: '± guide.md' })).toHaveFocus();
+  await user.click(side().getByRole('button', { name: 'Close the pane (Esc)' }));
+  expect(side().queryAllByRole('tab')).toHaveLength(0);
+  expect(screen.getByRole('complementary', { name: 'Reading pane' })).toHaveFocus();
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('complementary', { name: 'Reading pane' })).toBeNull();
+  expect(screen.getByRole('tabpanel', { name: 'Session thread' })).toHaveFocus();
+});
+it('Escape with the focus in the thread leaves it there', async () => {
+  const { user } = await openOtto();
+  const link = screen.getByRole('link', { name: 'docs/guide.md' });
+  await user.click(link);
+  expect(link).toHaveFocus();
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('complementary', { name: 'Reading pane' })).toBeNull();
+  expect(link).toHaveFocus();
 });
 
 describe('docRefs', () => {
@@ -120,7 +181,8 @@ describe('besideDoc', () => {
 });
 
 /** A client whose sends are recorded and whose replies the test pushes. */
-function fakeClient(status: DaemonStatus = 'open') {
+function fakeClient(initial: DaemonStatus = 'open') {
+  let status = initial;
   const sent: ClientMessage[] = [];
   const msgFns = new Set<(m: ServerMessage) => void>();
   const statusFns = new Set<(s: DaemonStatus) => void>();
@@ -130,7 +192,8 @@ function fakeClient(status: DaemonStatus = 'open') {
     onStatus: f => { statusFns.add(f); return () => { statusFns.delete(f); }; }
   } as DaemonClient;
   const push = (m: ServerMessage) => act(() => { for (const f of [...msgFns]) f(m); });
-  return { client, sent, push };
+  const setStatus = (s: DaemonStatus) => act(() => { status = s; for (const f of [...statusFns]) f(s); });
+  return { client, sent, push, setStatus };
 }
 const requestOf = (sent: ClientMessage[]) => {
   const m = sent.at(-1);
@@ -156,11 +219,15 @@ describe('useDocument', () => {
     expect(result.current).toEqual({ status: 'error', code: 'offline' });
     expect(sent).toEqual([]);
   });
-  it('a daemon not connected is offline too, nothing sent', () => {
-    const { client, sent } = fakeClient('unreachable');
+  it('a daemon not connected is offline, nothing sent; once it connects, the document is read', () => {
+    const { client, sent, push, setStatus } = fakeClient('connecting');
     const { result } = renderHook(() => useDocument(client, 'local:otto', 'docs/guide.md', true));
     expect(result.current).toEqual({ status: 'error', code: 'offline' });
     expect(sent).toEqual([]);
+    setStatus('open');
+    expect(result.current).toEqual({ status: 'loading' });
+    push({ type: 'document.content', requestId: requestOf(sent).requestId, path: 'docs/guide.md', text: 'Bonjour', bytes: 7, modifiedAt: new Date().toISOString() });
+    expect(result.current).toEqual({ status: 'ready', text: 'Bonjour' });
   });
   it('no reply within DOCUMENT_TIMEOUT_MS: a timeout', () => {
     vi.useFakeTimers();

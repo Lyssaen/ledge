@@ -72,6 +72,8 @@
 .view-switch button[aria-selected=true]{background:var(--sidebar);color:var(--foreground);box-shadow:0 1px 2px rgb(0 0 0/.18)}
 .tab-count{font-size:10px;line-height:16px;min-width:18px;padding:0 5px;border-radius:4px;text-align:center;background:color-mix(in srgb,currentColor 12%,transparent)}
 .session-body{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+/* Focused by the page when a pane tab closes (SessionPage): a landing place, not a control. */
+.session-body:focus,.side-pane:focus{outline:none}
 .session-thread{position:relative;flex:1;min-height:0;overflow:auto;padding:18px 24px 28px;max-height:none}
 
 /* Turns */
