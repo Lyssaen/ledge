@@ -25,9 +25,11 @@ vi.mock('../src/i18n/messages', async importOriginal => {
   return { ...real, loadMessages: (l: 'fr' | 'en') => (strings.fail ? Promise.reject(new Error('chunk failed')) : real.loadMessages(l)) };
 });
 // saveUiScale answers `resolved` at once, unless `held`: then each call waits for its own `answer`.
-const zoom = vi.hoisted(() => ({ calls: [] as unknown[], resolved: 1.25 as number | null, held: false, answers: [] as ((f: number | null) => void)[] }));
+// `native`: the app's WebView zoom is there (Tauri), so a null answer is a refusal; without it (the browser) null is all there is.
+const zoom = vi.hoisted(() => ({ calls: [] as unknown[], resolved: 1.25 as number | null, held: false, answers: [] as ((f: number | null) => void)[], native: false }));
 vi.mock('../src/settings/scale', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/settings/scale')>()),
+  zoomsNatively: () => zoom.native,
   saveUiScale: (s: UiScale) => {
     zoom.calls.push(s);
     return zoom.held ? new Promise<number | null>(r => { zoom.answers.push(r); }) : Promise.resolve(zoom.resolved);
@@ -52,7 +54,7 @@ beforeEach(async () => {
   bridge.setAutostart = on => Promise.resolve(on);
   bridge.labels = [];
   strings.fail = false;
-  zoom.calls = []; zoom.resolved = 1.25; zoom.held = false; zoom.answers = [];
+  zoom.calls = []; zoom.resolved = 1.25; zoom.held = false; zoom.answers = []; zoom.native = false;
   await loadChat();
 });
 const daemons: MockDaemon[] = [];
@@ -274,6 +276,27 @@ describe('Settings › Appearance', () => {
     await user.click(group().getByRole('radio', { name: 'Auto' }));
     await waitFor(() => expect(zoom.calls).toEqual([1.5, 'auto']));
     expect(await group().findByRole('radio', { name: 'Auto (125%)' })).toBeChecked();
+  });
+
+  it('in the app, a zoom the WebView refuses says so beside the scale, and nothing is said saved; the next one that takes clears it', async () => {
+    zoom.native = true; zoom.resolved = null;
+    const { user } = await openSettings('Appearance');
+    const group = () => within(screen.getByRole('radiogroup', { name: 'Interface scale' }));
+    await user.click(group().getByRole('radio', { name: '150%' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The scale could not be applied.');
+    expect(saved()).toEqual([]);
+    zoom.resolved = 2;
+    await user.click(group().getByRole('radio', { name: '200%' }));
+    await waitFor(() => expect(saved()).toEqual(['Setting saved · Interface scale 200%']));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('in the browser (no WebView zoom), the scale is kept and said saved as before', async () => {
+    zoom.resolved = null;
+    const { user } = await openSettings('Appearance');
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Interface scale' })).getByRole('radio', { name: '150%' }));
+    await waitFor(() => expect(saved()).toEqual(['Setting saved · Interface scale 150%']));
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('a late answer to an earlier choice is ignored: the notice and « Auto (…) » follow the last click', async () => {

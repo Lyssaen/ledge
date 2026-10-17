@@ -71,7 +71,7 @@ export const en: Messages = {
       accentSaved: (hex) => `Ledge’s color ${hex}`, coralSaved: 'Ledge’s color: Coral',
       sample: 'Approve the plan', sampleHint: 'Ledge’s button, counter and glow.',
       scale: 'Interface scale', scaleHint: 'Size of Ledge Desktop’s text and controls. Auto follows Windows’ scaling.',
-      percent: (n) => `${Math.round(n * 100)}%`, auto: 'Auto', autoAt: (pct) => `Auto (${pct})`, scaleSaved: (label) => `Interface scale ${label}`,
+      percent: (n) => `${Math.round(n * 100)}%`, auto: 'Auto', autoAt: (pct) => `Auto (${pct})`, scaleSaved: (label) => `Interface scale ${label}`, scaleFailed: 'The scale could not be applied.',
       reduced: 'Reduced motion', reducedHint: 'The mascots stand still; states stay readable without animation. The Windows setting wins.',
       reducedOff: 'Animations'
     },

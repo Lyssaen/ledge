@@ -84,7 +84,7 @@ export const fr = {
       accentSaved: (hex: string) => `Couleur de Ledge ${hex}`, coralSaved: 'Couleur de Ledge : Corail',
       sample: 'Valider le plan', sampleHint: 'Bouton, compteur et halo de Ledge.',
       scale: 'Échelle de l’interface', scaleHint: 'Taille du texte et des contrôles de Ledge Desktop. Auto suit la mise à l’échelle de Windows.',
-      percent: (n: number) => `${Math.round(n * 100)} %`, auto: 'Auto', autoAt: (pct: string) => `Auto (${pct})`, scaleSaved: (label: string) => `Échelle de l’interface ${label}`,
+      percent: (n: number) => `${Math.round(n * 100)} %`, auto: 'Auto', autoAt: (pct: string) => `Auto (${pct})`, scaleSaved: (label: string) => `Échelle de l’interface ${label}`, scaleFailed: 'L’échelle n’a pas pu être appliquée.',
       reduced: 'Mouvements réduits', reducedHint: 'Les mascottes s’immobilisent ; les états restent lisibles sans animation. La préférence de Windows reste prioritaire.',
       reducedOff: 'Animations'
     },

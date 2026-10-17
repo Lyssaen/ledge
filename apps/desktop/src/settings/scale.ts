@@ -16,6 +16,8 @@ const tauriZoom: ZoomDeps = {
   }
 };
 const nativeZoom = (): ZoomDeps | null => (isTauri() ? tauriZoom : null);
+/** Whether the WebView can be zoomed here (the app): there, a null factor from saveUiScale is a refusal; in the browser it is all there is. */
+export const zoomsNatively = (): boolean => nativeZoom() !== null;
 
 /** One scale for the whole window (`desktop.panelScale`, spec §7): Desktop has no handle, `desktop.handleScale` stays unused. */
 export const loadUiScale = (): UiScale => loadScale('panel', 'desktop');

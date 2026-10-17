@@ -8,7 +8,7 @@ import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { setAccent, setTheme, useAccent, useTheme, type Theme } from '../shell/theme';
 import { Card, Row, Segmented, SwitchRow } from './controls';
-import { appliedUiScale, loadUiScale, saveUiScale } from './scale';
+import { appliedUiScale, loadUiScale, saveUiScale, zoomsNatively } from './scale';
 import { useEscapeLayer } from './escape';
 import type { SettingsContext } from './SettingsPage';
 
@@ -31,12 +31,16 @@ export function Appearance({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const [autoFactor, setAutoFactor] = useState<number | null>(() => (loadUiScale() === 'auto' ? appliedUiScale() : null));
   // Only the last choice's answer counts: an earlier one that resolves late neither says « saved » nor sets Auto's factor.
   const lastChoice = useRef(0);
+  // In the app a null factor is the WebView's refusal: said beside the scale, not « saved ». The browser has no zoom (null is all there is).
+  const [scaleFailed, setScaleFailed] = useState(false);
   const chooseScale = (c: ScaleChoice) => {
     const s = toScale(c);
     const turn = ++lastChoice.current;
     setScale(s);
     void saveUiScale(s).then(factor => {
       if (turn !== lastChoice.current) return;
+      if (factor === null && zoomsNatively()) { setScaleFailed(true); return; }
+      setScaleFailed(false);
       if (s === 'auto' && factor !== null) setAutoFactor(factor);
       saved(a.scaleSaved(s === 'auto' ? a.auto : a.percent(s)));
     });
@@ -59,7 +63,7 @@ export function Appearance({ ctx }: { ctx: SettingsContext }): JSX.Element {
         </div>
       </Row>
       <AccentRow ctx={ctx} />
-      <Row label={a.scale} hint={a.scaleHint} stack>
+      <Row label={a.scale} hint={a.scaleHint} error={scaleFailed ? a.scaleFailed : null} stack>
         <Segmented label={a.scale} value={toChoice(scale)} onChange={chooseScale}
           options={UI_SCALES.map(s => ({ value: toChoice(s), label: s === 'auto' ? (autoFactor === null ? a.auto : a.autoAt(a.percent(autoFactor))) : a.percent(s), wide: s === 'auto' }))} />
       </Row>
