@@ -28,10 +28,14 @@ export function Appearance({ ctx }: { ctx: SettingsContext }): JSX.Element {
   // The scale: kept and applied by saveUiScale, which answers the factor the WebView took; « Auto » shows the one it resolved to.
   const [scale, setScale] = useState<UiScale>(loadUiScale);
   const [autoFactor, setAutoFactor] = useState<number | null>(() => (loadUiScale() === 'auto' ? appliedUiScale() : null));
+  // Only the last choice's answer counts: an earlier one that resolves late neither says « saved » nor sets Auto's factor.
+  const lastChoice = useRef(0);
   const chooseScale = (c: ScaleChoice) => {
     const s = toScale(c);
+    const turn = ++lastChoice.current;
     setScale(s);
     void saveUiScale(s).then(factor => {
+      if (turn !== lastChoice.current) return;
       if (s === 'auto' && factor !== null) setAutoFactor(factor);
       saved(a.scaleSaved(s === 'auto' ? a.auto : a.percent(s)));
     });

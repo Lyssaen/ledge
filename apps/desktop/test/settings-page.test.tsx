@@ -15,7 +15,7 @@ describe('the Settings page', () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
     await user.keyboard('{Control>},{/Control}');
     expect(await screen.findByRole('heading', { level: 1, name: 'General' })).toBeVisible();
-    expect(screen.getByRole('region', { name: 'General' })).toHaveTextContent('Language, start-up, default harness and updates.');
+    expect(screen.getByRole('region', { name: 'General' })).toHaveTextContent('Language, start-up, default agent and updates.');
     expect(tab('General')).toHaveAttribute('aria-current', 'page');
     expect(nav().getAllByRole('button', { current: 'page' })).toHaveLength(1);
     expect(nav().getAllByRole('button').map(b => b.textContent)).toEqual([

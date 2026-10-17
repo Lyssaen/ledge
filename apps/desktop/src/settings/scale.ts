@@ -36,6 +36,8 @@ export async function applyUiScale(setting: UiScale, deps: ZoomDeps | null = nat
 let applied: number | null = null;
 /** The last factor applyUiScale applied (the start-up's, then each change's), null before any: Settings shows « Auto (125 %) » with it. */
 export const appliedUiScale = (): number | null => applied;
+/** Test hook: as before any scale was applied. */
+export function resetAppliedUiScaleForTests(): void { applied = null; }
 
 export function saveUiScale(setting: UiScale, deps: ZoomDeps | null = nativeZoom()): Promise<number | null> {
   saveScale('panel', setting, 'desktop');

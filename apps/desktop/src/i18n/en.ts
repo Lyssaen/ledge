@@ -22,7 +22,7 @@ export const en: Messages = {
     nav: 'Settings sections', back: 'Back to the atelier',
     saved: (what) => `Setting saved · ${what}`,
     hints: {
-      general: 'Language, start-up, default harness and updates.',
+      general: 'Language, start-up, default agent and updates.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
       notifications: 'Who lets you know, and when to leave you alone.',
       sounds: 'Your team’s sound cues.',

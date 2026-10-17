@@ -30,7 +30,7 @@ export const fr = {
     nav: 'Sections des réglages', back: 'Retour à l’atelier',
     saved: (what: string) => `Réglage enregistré · ${what}`,
     hints: {
-      general: 'Langue, démarrage, harnais par défaut et mises à jour.',
+      general: 'Langue, démarrage, agent par défaut et mises à jour.',
       appearance: 'Thème, couleur de Ledge, échelle et mouvements.',
       notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
       sounds: 'Les signaux sonores de votre équipe.',

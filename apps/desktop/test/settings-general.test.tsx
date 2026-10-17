@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import WebSocket from 'ws';
 import type { ClientMessage } from '@ledge/protocol';
@@ -24,27 +24,33 @@ vi.mock('../src/i18n/messages', async importOriginal => {
   const real = await importOriginal<typeof import('../src/i18n/messages')>();
   return { ...real, loadMessages: (l: 'fr' | 'en') => (strings.fail ? Promise.reject(new Error('chunk failed')) : real.loadMessages(l)) };
 });
-const zoom = vi.hoisted(() => ({ calls: [] as unknown[], resolved: 1.25 as number | null }));
+// saveUiScale answers `resolved` at once, unless `held`: then each call waits for its own `answer`.
+const zoom = vi.hoisted(() => ({ calls: [] as unknown[], resolved: 1.25 as number | null, held: false, answers: [] as ((f: number | null) => void)[] }));
 vi.mock('../src/settings/scale', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/settings/scale')>()),
-  saveUiScale: (s: UiScale) => { zoom.calls.push(s); return Promise.resolve(zoom.resolved); }
+  saveUiScale: (s: UiScale) => {
+    zoom.calls.push(s);
+    return zoom.held ? new Promise<number | null>(r => { zoom.answers.push(r); }) : Promise.resolve(zoom.resolved);
+  }
 }));
 
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
 import { loadSettings } from '../src/settings/lazy';
 import { loadChat } from '../src/chat/lazy';
-import { applyUiScale } from '../src/settings/scale';
+import { applyUiScale, resetAppliedUiScaleForTests } from '../src/settings/scale';
+import { saveReduced } from '../src/motionPreferences';
 import { resetAppearanceForTests } from '../src/shell/theme';
 import { boot, closeDaemons, TWO_PROJECTS, type MockDaemon } from './helpers';
 
 beforeEach(async () => {
+  saveReduced(false); resetAppliedUiScaleForTests();
   localStorage.clear(); resetAppearanceForTests();
   bridge.getAutostart = () => Promise.resolve(false);
   bridge.setAutostart = on => Promise.resolve(on);
   bridge.labels = [];
   strings.fail = false;
-  zoom.calls = []; zoom.resolved = 1.25;
+  zoom.calls = []; zoom.resolved = 1.25; zoom.held = false; zoom.answers = [];
   await loadChat();
 });
 const daemons: MockDaemon[] = [];
@@ -217,6 +223,18 @@ describe('Settings › Appearance', () => {
     expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Ledge’s color: Coral']);
   });
 
+  it('the picker keeps the color it lands on, not each one it passes over: one change, one notice', async () => {
+    await openSettings('Appearance');
+    const picker = screen.getByLabelText('Custom color');
+    for (const v of ['#110000', '#111100', '#112233']) fireEvent.input(picker, { target: { value: v } });
+    expect(screen.getByRole('textbox', { name: 'Hex code' })).toHaveValue('#112233');
+    expect(localStorage.getItem('desktop.accent')).toBeNull();
+    expect(toasts(/Setting saved/)).toHaveLength(0);
+    fireEvent.change(picker);
+    expect(localStorage.getItem('desktop.accent')).toBe('#112233');
+    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Ledge’s color #112233']);
+  });
+
   it('the scale goes through saveUiScale; « Auto » shows the factor it resolved to', async () => {
     const { user } = await openSettings('Appearance');
     const group = () => within(screen.getByRole('radiogroup', { name: 'Interface scale' }));
@@ -230,7 +248,22 @@ describe('Settings › Appearance', () => {
     expect(await group().findByRole('radio', { name: 'Auto (125%)' })).toBeChecked();
   });
 
-  it('« Auto » opens with the factor the start-up applied (after the test above: the applied factor is module state)', async () => {
+  it('a late answer to an earlier choice is ignored: the notice and « Auto (…) » follow the last click', async () => {
+    zoom.held = true;
+    const { user } = await openSettings('Appearance');
+    const group = () => within(screen.getByRole('radiogroup', { name: 'Interface scale' }));
+    await user.click(group().getByRole('radio', { name: '150%' }));
+    await user.click(group().getByRole('radio', { name: 'Auto' }));
+    expect(zoom.calls).toEqual([1.5, 'auto']);
+    await act(async () => { zoom.answers[1]!(1.25); });
+    expect(await group().findByRole('radio', { name: 'Auto (125%)' })).toBeChecked();
+    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Interface scale Auto']);
+    await act(async () => { zoom.answers[0]!(1.5); });
+    expect(group().getByRole('radio', { name: 'Auto (125%)' })).toBeChecked();
+    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Interface scale Auto']);
+  });
+
+  it('« Auto » opens with the factor the start-up applied', async () => {
     await applyUiScale('auto', { setZoom: () => Promise.resolve(), screenHeight: () => Promise.resolve(3240) });
     await openSettings('Appearance');
     expect(within(screen.getByRole('radiogroup', { name: 'Interface scale' })).getByRole('radio', { name: 'Auto (150%)' })).toBeChecked();
