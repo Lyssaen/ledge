@@ -4,6 +4,9 @@ import type { ChatRelay, ChatTurn } from '@ledge/protocol';
 import { ChatView } from '../src/surface/ChatView';
 import { AskField } from '../src/surface/AskField';
 import { fakeSession } from './mockDaemon';
+import { openUrl } from '../src/tauri/bridge';
+
+vi.mock('../src/tauri/bridge', async orig => ({ ...(await orig<typeof import('../src/tauri/bridge')>()), openUrl: vi.fn() }));
 
 const T0 = '2026-10-11T10:00:00.000Z';
 const sessions = [fakeSession('a', { name: 'Nova', repoPath: '/w/ledge' }), fakeSession('b', { name: 'Pim', repoPath: '/w/other' })];
@@ -32,6 +35,12 @@ describe('<AskField>', () => {
 describe('<ChatView>', () => {
   const proposal = { cwd: '/home/u/ledge', project: 'ledge', tool: 'claude' as const, prompt: 'Fix the overlay build' };
   const answered = (p: ChatTurn['proposal']): ChatTurn[] => [{ qid: 'q1', question: 'open a session in ledge', askedAt: T0, steps: [], answer: 'Here is the session I would start.', answeredAt: T0, proposal: p }];
+  it('a web link in an answer opens through the island bridge', () => {
+    vi.mocked(openUrl).mockClear();
+    render(<ChatView {...base} turns={[{ qid: 'q1', question: 'docs?', askedAt: T0, steps: [], answer: 'See [x](https://example.com).', answeredAt: T0 }]} live={null} />);
+    fireEvent.click(screen.getByRole('link', { name: 'x' }));
+    expect(openUrl).toHaveBeenCalledWith('https://example.com');
+  });
   it('shows a proposal card under the answer; Launch names the turn', () => {
     const onLaunchProposal = vi.fn();
     render(<ChatView {...base} turns={answered(proposal)} live={null} onLaunchProposal={onLaunchProposal} />);

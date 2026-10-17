@@ -34,9 +34,9 @@ describe('the shared chat reads its copy from the app', () => {
 
   it('useChatCopy without a provider throws a clear error', () => {
     const Probe = () => { useChatCopy(); return null; };
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(() => render(<Probe />)).toThrow('ChatCopyProvider missing');
-    vi.mocked(console.error).mockRestore();
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try { expect(() => render(<Probe />)).toThrow('ChatCopyProvider missing'); }
+    finally { quiet.mockRestore(); }
   });
 
   it('relativeTime words two minutes with French time copy', () => {

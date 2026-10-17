@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { inline } from '../src/surface/ReplyCard';
+import { openUrl } from '../src/tauri/bridge';
+
+// The bridge's opener, spied on but still real (outside Tauri it opens a tab, which the window.open cases check).
+vi.mock('../src/tauri/bridge', async orig => { const m = await orig<typeof import('../src/tauri/bridge')>(); return { ...m, openUrl: vi.fn(m.openUrl) }; });
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -14,6 +18,13 @@ describe('inline markdown', () => {
     expect(onDocument.mock.calls.map(x => x[0])).toEqual([
       { path: 'docs/my plan.md' }, { path: 'SKILL.md' }, { path: 'README.md' }
     ]);
+  });
+  it('a web link in a reply line opens through the island bridge', () => {
+    vi.spyOn(window, 'open').mockImplementation(() => null);
+    vi.mocked(openUrl).mockClear();
+    render(<p>{inline('voir [le site](https://example.com/r)')}</p>);
+    fireEvent.click(screen.getByRole('link', { name: 'le site' }));
+    expect(openUrl).toHaveBeenCalledWith('https://example.com/r');
   });
   it('renders links that open outside, italics, strikethrough and bold with italics inside', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
