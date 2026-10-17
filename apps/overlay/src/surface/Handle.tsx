@@ -19,13 +19,15 @@ export interface HandleProps {
   strip?: boolean;
   /** The update pip on the Ledge mascot (null or absent: none). */
   updatePip?: PipTone; updateVersion?: string;
+  /** The update dot. Opening the install is Ledge Desktop's job. */
+  onUpdate?: () => void;
   dnd?: boolean; unread?: boolean; sayId?: string | null; residentSignal?: { key: number; kind: ResidentGesture }; theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean;
 }
 
 /** The compact island's content (spec 2026-10-12 §3): the Ledge mascot, a separator, the companions in `islandOrder`
  *  (by machine, asks first) with a separator between two machines, a "+n" pill past six, the DND moon; or the
  *  discreet strip, one dot per session. */
-export function Handle({ bots, slots, visible, hoverId, onHover, onOpen, onOpenHome, left = 0, scale = 1, pointer = null, strip = false, updatePip = null, updateVersion = '', dnd = false, unread = false, sayId = null, residentSignal, theme = 'dark', frozen = false, reducedMotion }: HandleProps) {
+export function Handle({ bots, slots, visible, hoverId, onHover, onOpen, onOpenHome, left = 0, scale = 1, pointer = null, strip = false, updatePip = null, updateVersion = '', onUpdate, dnd = false, unread = false, sayId = null, residentSignal, theme = 'dark', frozen = false, reducedMotion }: HandleProps) {
   const { t } = useI18n();
   const opening = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [boopKey, setBoopKey] = useState(0);
@@ -45,13 +47,15 @@ export function Handle({ bots, slots, visible, hoverId, onHover, onOpen, onOpenH
   }
   return (
     <div data-layer="handle" inert={!visible} style={{ ...layer, display: 'flex', flexDirection: 'row', alignItems: 'center', height: ISLAND.h, padding: `0 ${ISLAND.padR}px 0 ${ISLAND.padL}px` }}>
+      <span style={{ position: 'relative', display: 'grid', flexShrink: 0, width: ISLAND.resident, height: ISLAND.resident }}>
       <button data-resident type="button" aria-label={unread ? `${t.resident.name} ${t.resident.unread}, ${t.open}` : `${t.resident.name}, ${t.open}`} onClick={() => { setBoopKey(k => k + 1); clearTimeout(opening.current); opening.current = setTimeout(() => onOpenHome?.(), reducedMotion ? 0 : 180); }} title={`${pipText ? `${pipText}. ` : ''}${frozen ? t.resident.offline : unread ? t.resident.unreadTip : t.resident.tip(bots.length)}`}
-        style={{ position: 'relative', display: 'grid', placeItems: 'center', flexShrink: 0, width: ISLAND.resident, height: ISLAND.resident, padding: 0, border: 0, background: 'transparent', cursor: 'pointer' }}>
+        style={{ display: 'grid', placeItems: 'center', width: ISLAND.resident, height: ISLAND.resident, padding: 0, border: 0, background: 'transparent', cursor: 'pointer' }}>
         <span data-sprite style={{ display: 'inline-flex', lineHeight: 0 }}>
           <ResidentMascot size={ISLAND.resident} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} dnd={dnd} center={{ x: left + (ISLAND.padL + ISLAND.resident / 2) * scale, y: (ISLAND.h / 2) * scale }} pointer={pointer} gestureKey={residentSignal?.key} gestureKind={residentSignal?.kind} boopKey={boopKey} />
         </span>
-          {updatePip && <span data-update-pip={updatePip} aria-hidden="true" style={{ position: 'absolute', top: 0, right: -2, width: 9, height: 9, borderRadius: 9999, border: '2px solid var(--notch)', boxSizing: 'content-box', background: { new: 'var(--sidebar-primary)', busy: 'var(--info)', bad: 'var(--danger-text)', ok: 'var(--success)' }[updatePip], animation: updatePip === 'busy' && !reducedMotion ? 'ledge-pulse 1.2s ease-in-out infinite' : undefined }} />}
       </button>
+      {updatePip && pipText && <button type="button" data-update-pip={updatePip} aria-label={pipText} onClick={() => onUpdate?.()} style={{ position: 'absolute', top: 0, right: -2, width: 9, height: 9, padding: 0, borderRadius: 9999, border: '2px solid var(--notch)', boxSizing: 'content-box', background: { new: 'var(--sidebar-primary)', busy: 'var(--info)', bad: 'var(--danger-text)', ok: 'var(--success)' }[updatePip], animation: updatePip === 'busy' && !reducedMotion ? 'ledge-pulse 1.2s ease-in-out infinite' : undefined }} />}
+      </span>
       <span data-separator aria-hidden="true" style={{ display: 'block', flexShrink: 0, width: bots.length ? SIZES.separatorH : 0, height: 16, marginLeft: bots.length ? ISLAND.sepGap : 0, background: 'var(--sidebar-border)', opacity: bots.length ? 1 : 0, transition: transition([['opacity', 'fadeIn', 0], ['margin-left', 'grow', 0], ['width', 'grow', 0]]) }} />
       {ordered.map(b => {
         const on = slots.some(s => s.id === b.id);

@@ -6,7 +6,7 @@ export const ISLAND = { h: 38, padL: 12, padR: 14, resident: 22, sepGap: 8, comp
  *  the notch is borderless so it merges with the screen edge. */
 export const SURFACE_BORDER = 0;
 export const SURFACE_CHROME_Y = 2 * SURFACE_BORDER;
-export type Mode = 'handle' | 'bubble' | 'list' | 'session' | 'helper' | 'settings' | 'help' | 'launch' | 'chat' | 'reader';
+export type Mode = 'handle' | 'bubble' | 'peek' | 'list' | 'session' | 'helper' | 'settings' | 'help' | 'launch' | 'chat' | 'reader';
 /** Where the island's axis sits on the top edge: the centre, or a quarter of the width from the left or the right. */
 export type IslandPosition = 'center' | 'left' | 'right';
 /** The resident's finished-chat notice: not a session id. */
@@ -76,6 +76,7 @@ export function layout(input: LayoutInput): Layout {
   const view = (w: number, h: number): Layout => ({ left: place(w), top: 0, w, h: Math.min(maxH, h), slots, handle });
   if (mode === 'handle') return { left: handle.left, top: 0, w: handleW, h: handle.h, slots, handle };
   if (mode === 'bubble') return view(SIZES.bubbleW, input.bubbleH ?? SIZES.bubbleH);
+  if (mode === 'peek') return view(360, input.bubbleH ?? 160);
   // The native frame adds a small shadow outside this width.
   if (mode === 'reader') return view(Math.min(input.readerExpanded ? expandedWidth(screenW, SIZES.readerExpandedW) : SIZES.readerW, Math.max(0, screenW - 24)), SIZES.readerH);
   if (mode === 'chat') return view(SIZES.sessionW, input.detailH ?? SIZES.chatH);

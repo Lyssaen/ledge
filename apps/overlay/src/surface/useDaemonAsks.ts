@@ -65,7 +65,8 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
       }
       const wasTracked = !!was && tracked(was);
       // A fresh request: whatever failed before it (a rejected reply, say) no longer applies.
-      if (isPending(s) && !wasTracked) { if (was) clearFailure(s.id); if (!dnd) dispatch({ type: 'ask', id: s.id }); }
+      // Even during Do not disturb the ask joins the queue. The machine, when quiet, does not unfold it.
+      if (isPending(s) && !wasTracked) { if (was) clearFailure(s.id); dispatch({ type: 'ask', id: s.id }); }
       else if (wasTracked && !tracked(s)) { forget(s.id); dispatch({ type: 'askCleared', id: s.id }); }
       // A new request replaced the old one in place: the old decision is moot, the new request starts unlocked.
       else if (wasTracked && !sameRequest(was!.pending, s.pending)) { forget(s.id); dispatch({ type: 'askReplaced', id: s.id }); }

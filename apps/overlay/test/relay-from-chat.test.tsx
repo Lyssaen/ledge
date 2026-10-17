@@ -16,13 +16,11 @@ const mode = () => document.querySelector('[data-surface]')!.getAttribute('data-
 const relay: ChatRelay = { id: 'a', name: 'Otto', tool: 'claude', text: 'Run the overlay tests' };
 const relays = () => sent.filter(m => m.type === 'session.relay' || m.type === 'session.relay.cancel');
 
-/** Opens the list, asks Ledge, and answers the turn with a relay: the chat shows its card. */
+/** Opens the chat, asks Ledge, and answers the turn with a relay: the chat shows its card. */
 function askAndRelay(): { qid: string; turn: (r: ChatRelay) => ChatTurn } {
   render(<Surface screenH={1080} theme="dark" client={client()} dnd={false} onToggleDnd={() => {}} />);
   act(() => { daemonStore.setStatus('open'); daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('a', { name: 'Otto', state: 'working' })] }); });
   act(() => { fireEvent.keyDown(window, { key: 'l', ctrlKey: true, altKey: true }); });
-  act(() => { vi.advanceTimersByTime(400); });
-  fireEvent.click(screen.getByRole('button', { name: 'Open the conversation with Ledge' }));
   const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
   fireEvent.change(input, { target: { value: 'tell Otto to run the overlay tests' } }); fireEvent.keyDown(input, { key: 'Enter' });
   const ask = sent.find(m => m.type === 'chat.ask') as Extract<ClientMessage, { type: 'chat.ask' }>;
@@ -67,13 +65,12 @@ describe('relaying from a chat card', () => {
     expect(within(card()).getByRole('button', { name: /Send/ })).toBeEnabled();
   });
 
-  it('never in flight together with a launch: the + form cannot start a session while a relay is in flight', () => {
+  it('Ctrl+Alt+N during a relay notes a launch for Desktop and does not start a session', () => {
     askAndRelay();
     fireEvent.click(within(card()).getByRole('button', { name: /Send/ }));
     fireEvent.keyDown(window, { key: 'n', ctrlKey: true, altKey: true });
-    expect(mode()).toBe('launch');
-    fireEvent.change(document.querySelector('[data-launch-cwd]')!, { target: { value: '/home/u/ledge' } });
-    fireEvent.click(screen.getByRole('button', { name: /^Start/ }));
+    expect(mode()).toBe('chat');
+    expect(screen.getByText(/Opening a new session in Ledge Desktop/)).toBeInTheDocument();
     expect(sent.filter(m => m.type === 'session.launch')).toEqual([]);
   });
 });
