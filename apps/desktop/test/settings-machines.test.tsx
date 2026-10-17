@@ -88,6 +88,28 @@ describe('Settings › Machines', () => {
     expect(saved()).toEqual([]);
   });
 
+  it('a disabled Save says why: a name and an alias are missing, until both are there', async () => {
+    const { client, user } = await open();
+    const configure = vi.spyOn(client.fleet!, 'configure');
+    await user.click(screen.getByRole('button', { name: 'Add a machine' }));
+    const why = 'Check the name and SSH alias: letters, digits, dot, dash or underscore, no spaces.';
+    expect(form().getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(form().getByRole('button', { name: 'Save' })).toHaveAccessibleDescription(why);
+    expect(form().getByText(why)).toBeVisible();
+    await user.type(form().getByRole('textbox', { name: 'SSH alias' }), 'nas');
+    expect(form().getByRole('button', { name: 'Save' })).toHaveAccessibleDescription(why);   // still no name
+    await user.type(form().getByRole('textbox', { name: 'Machine name' }), 'Nas');
+    expect(form().getByRole('button', { name: 'Save' })).toBeEnabled();
+    expect(form().queryByText(why)).toBeNull();
+    expect(form().getByRole('button', { name: 'Save' })).not.toHaveAccessibleDescription(why);
+    // A malformed alias says so beside its field, once: not again beside Save.
+    await user.type(form().getByRole('textbox', { name: 'SSH alias' }), ' x');
+    expect(form().getByRole('alert')).toHaveTextContent('Letters, digits, dot, dash or underscore, no spaces.');
+    expect(form().queryByText(why)).toBeNull();
+    expect(configure).not.toHaveBeenCalled();
+    expect(saved()).toEqual([]);
+  });
+
   it('edits a machine in place, keeping its id and its own alias', async () => {
     const { d, user } = await open();
     await user.click(entry('Dev SSH').getByRole('button', { name: 'Edit' }));

@@ -56,12 +56,14 @@ export function Machines({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const aliasBad = alias !== '' && !ALIAS.test(alias);
   const duplicate = form !== null && list.some(m => m.id !== form.editing && m.ssh === alias);
   const problem = form ? checkDraft(list, form.draft, form.editing) : null;
+  // A duplicate, a malformed alias or a full list says so where it is; the rest (a name or an alias missing) beside the disabled Save.
+  const missing = problem === 'invalid' && !aliasBad;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!form || editor.saving) return;
-    // A duplicate, a malformed alias or a full list already says so beside its field; the rest (an empty name) says it here.
-    if (problem) { if (problem === 'invalid' && !aliasBad) setFailure({ key: 'form', text: c.errors.invalid }); return; }
+    // Save is disabled while there is a problem; the form's own submit (Enter in a field) does nothing then either.
+    if (problem) return;
     const next = withDraft(list, form.draft, form.editing);
     if (sameMachines(list, next)) { closeForm(); return; }   // nothing changed: nothing to save, nothing to say
     setFailure(null);
@@ -147,8 +149,9 @@ export function Machines({ ctx }: { ctx: SettingsContext }): JSX.Element {
           <div className="set-actions">
             <Button size="sm" disabled={aliasBad || duplicate || alias === '' || probeBusy} onClick={testDraft}>{c.probe}</Button>
             <span className="spacer" />
+            {missing && <span className="set-hint" id={`${ids}why`}>{c.errors.invalid}</span>}
             <Button size="sm" variant="ghost" disabled={frozen} onClick={closeForm}>{c.cancel}</Button>
-            <Button size="sm" variant="primary" type="submit" disabled={frozen || problem !== null}>{frozen ? c.saving : c.save}</Button>
+            <Button size="sm" variant="primary" type="submit" disabled={frozen || problem !== null} aria-describedby={missing ? `${ids}why` : undefined}>{frozen ? c.saving : c.save}</Button>
           </div>
           <span className="set-hint">{c.optional}</span>
         </form>
