@@ -105,7 +105,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
     if (s.kind === 'tools') {
       const first = s.tools.find(x => x.id === unread);
       const lit = flash !== null && s.tools.some(x => x.id === flash) ? flash : null;
-      return <ActionGroup key={s.key} tools={s.tools} now={now} live={!offline} marker={first ? marker(first.id) : null} flash={lit} onChange={onChange} />;
+      return <ActionGroup key={s.key} tools={s.tools} todos={s.todos} now={now} live={!offline} marker={first ? marker(first.id) : null} flash={lit} onChange={onChange} />;
     }
     const { item } = s;
     let node: ReactNode;

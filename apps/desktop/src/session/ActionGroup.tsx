@@ -9,6 +9,7 @@ import { SHELL_ICONS } from '../shell/icons';
 import { parseDiff } from './diff';
 import { Delta } from './DiffView';
 import { fmtDur, kindOf, summarize, verbOf, type Summary as Sum, type ToolKind } from './thread';
+import { doneCount, todosOf } from './todos';
 
 const KINDS: readonly ToolKind[] = ['read', 'search', 'command', 'edit'];
 const KIND_ICON: Record<ToolKind, readonly string[]> = { read: SHELL_ICONS.file, search: SHELL_ICONS.search, command: SHELL_ICONS.terminal, edit: SHELL_ICONS.pencil };
@@ -28,22 +29,25 @@ export function Spinner({ live }: { live: boolean }): JSX.Element {
   return <>{turning ? SPINNER[frame] : SPINNER_STILL}</>;
 }
 
-/** The fold's head: how many actions, by kind, files changed, failures, interruptions, and the time they took. */
+/** The fold's head: how many actions, by kind, files changed, failures, interruptions, the work plan's updates, and the
+ *  time the actions took; a fold of updates alone says so (« Plan de travail mis à jour »), untimed. */
 function Summary({ s, open, onToggle }: { s: Sum; open: boolean; onToggle(): void }): JSX.Element {
   const { t, lang } = useI18n();
   const th = t.session.thread;
+  const tt = t.session.todos;
   return (
     <button type="button" className={cls('action-summary', open && 'open')} onClick={onToggle} aria-expanded={open}>
       <Icon d={SHELL_ICONS.chevronDown} size={13} />
-      <span className="summary-count">{th.actions(s.count)}</span>
+      <span className="summary-count">{s.count > 0 ? th.actions(s.count) : tt.workPlanUpdated}</span>
       <span className="kind-chips">
         {KINDS.map(k => s.kinds[k] > 0 && <span key={k} className={`kind-chip kind-${k}`} title={th.kinds[k](s.kinds[k])}><Icon d={KIND_ICON[k]} size={12} />{s.kinds[k]}</span>)}
       </span>
       {s.files > 0 && <span className="summary-meta">{th.files(s.files)}</span>}
       {s.failed > 0 && <span className="summary-failed">{th.failed(s.failed)}</span>}
       {s.cut > 0 && <span className="summary-meta">{th.cut(s.cut)}</span>}
+      {s.todos > 0 && s.count > 0 && <span className="summary-meta">· {tt.updated}{s.todos > 1 ? ` ×${s.todos}` : ''}</span>}
       <span className="spacer" />
-      <span className="summary-meta mono">{s.running ? th.running : ''}{fmtDur(s.ms, lang)}</span>
+      {s.count > 0 && <span className="summary-meta mono">{s.running ? th.running : ''}{fmtDur(s.ms, lang)}</span>}
     </button>
   );
 }
@@ -83,11 +87,32 @@ function ActionRow({ tool, now, live, expanded, onExpand, flash, onChange }: Row
   );
 }
 
-/** A run of consecutive actions, folded under its summary. Folded, the failed and interrupted ones stay in sight and the
+/** An update of the work plan, unfolded: how many are done, and the task then in progress. */
+function TodoRow({ tool }: { tool: ToolItem }): JSX.Element {
+  const { t } = useI18n();
+  const tt = t.session.todos;
+  const list = useMemo(() => todosOf(tool), [tool]);
+  const current = list?.find(x => x.status === 'in_progress');
+  return (
+    <div className="action-row todo-row">
+      <div className="action-line">
+        <span className="action-mark mark-success" aria-hidden="true">☰</span>
+        <span className="action-verb">{tt.workPlan}</span>
+        {list && <span className="action-target">{tt.doneOf(doneCount(list), list.length)}{current ? ` · ${tt.inProgress(current.text)}` : ''}</span>}
+      </div>
+    </div>
+  );
+}
+
+/** A run of consecutive actions, folded under its summary; the work plan's updates in it are no actions, summed up in the
+ *  summary and listed after the actions once unfolded. Folded, the failed and interrupted ones stay in sight and the
  *  running one has its live line; a run that is all running shows only that line. `live` false (offline): nothing runs live,
  *  and `now` is the instant the thread froze. */
-export function ActionGroup({ tools, now, live, marker, flash = null, onChange }: {
-  tools: ToolItem[]; now: number; live: boolean; marker?: ReactNode;
+export function ActionGroup({ tools, todos, now, live, marker, flash = null, onChange }: {
+  tools: ToolItem[];
+  /** The work plan's updates that fell in this run (the segment's `todos`). */
+  todos: ToolItem[];
+  now: number; live: boolean; marker?: ReactNode;
   /** One of these actions, reached from the Changes view: the fold opens and the action lights up. */
   flash?: string | null;
   onChange(path: string): void;
@@ -99,15 +124,16 @@ export function ActionGroup({ tools, now, live, marker, flash = null, onChange }
   useLayoutEffect(() => { if (flash !== null) setOpen(true); }, [flash]);
   const [shown, setShown] = useState<ReadonlySet<string>>(() => new Set());
   const toggle = (id: string) => setShown(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const s = summarize(tools, now, live);
+  const s = summarize(tools, now, live, todos);
   const run = s.running;
-  const onlyLive = run !== null && tools.every(x => x.status === 'running');
+  // Every action running and nothing else: no summary, only the live line. Updates of the plan beside them make it a fold.
+  const onlyLive = run !== null && tools.every(x => x.status === 'running') && todos.length === 0;
   const row = (x: ToolItem) => <ActionRow key={x.id} tool={x} now={now} live={live} expanded={shown.has(x.id)} onExpand={() => toggle(x.id)} flash={x.id === flash} onChange={onChange} />;
   return (
     <div className="action-group">
       {marker}
       {!onlyLive && <Summary s={s} open={open} onToggle={() => setOpen(o => !o)} />}
-      {open && !onlyLive ? <div className="action-list">{tools.map(row)}</div> : <>
+      {open && !onlyLive ? <div className="action-list">{tools.map(row)}{todos.map(x => <TodoRow key={x.id} tool={x} />)}</div> : <>
         {tools.filter(settled).map(x => <div key={x.id} className="action-list compact">{row(x)}</div>)}
         {run && (
           <div className="live-line" role="status" aria-label={th.liveAction}>

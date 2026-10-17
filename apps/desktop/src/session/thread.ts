@@ -3,6 +3,7 @@ import { helperThread, turns } from '@ledge/ui/thread/turns';
 import { elapsedMs, liveTool } from '@ledge/ui/thread/tools';
 import { findDocumentReferences } from '@ledge/ui/documents/references';
 import type { Lang } from '../i18n/lang';
+import { TODO_TOOLS } from './todos';
 
 export type ToolKind = 'read' | 'search' | 'command' | 'edit';
 const EDIT = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'apply_patch']);
@@ -22,7 +23,8 @@ export function verbOf(t: ToolItem): Verb {
 type Say = Extract<ThreadItem, { kind: 'message' | 'reply' }>;
 type Permission = Extract<ThreadItem, { kind: 'permission' }>;
 export type Segment =
-  | { kind: 'tools'; key: string; tools: ToolItem[] }
+  /** A run of actions; the work plan's updates (TODO_TOOLS) that fall in it are not actions: they fold into its summary. */
+  | { kind: 'tools'; key: string; tools: ToolItem[]; todos: ToolItem[] }
   | { kind: 'say'; item: Say }
   | { kind: 'decision'; item: Permission }
   | { kind: 'helper'; item: HelperItem }
@@ -35,6 +37,7 @@ export interface Exchange {
 }
 
 /** Les éléments à plat en segments : les actions consécutives se replient, une action ExitPlanMode en sort (son plan),
+ *  une mise à jour de la liste de tâches rejoint les `todos` du repli où elle tombe (un repli peut n'en contenir que),
  *  une permission non décidée n'en est pas un. */
 function segmentsOf(items: readonly ThreadItem[]): Segment[] {
   const out: Segment[] = [];
@@ -42,8 +45,9 @@ function segmentsOf(items: readonly ThreadItem[]): Segment[] {
     if (it.kind === 'tool') {
       const plan = planOf(it);
       if (plan) { out.push({ kind: 'plan', item: it, plan }); continue; }
-      const last = out.at(-1);
-      if (last?.kind === 'tools') last.tools.push(it); else out.push({ kind: 'tools', key: `tools-${it.id}`, tools: [it] });
+      let last = out.at(-1);
+      if (last?.kind !== 'tools') out.push(last = { kind: 'tools', key: `tools-${it.id}`, tools: [], todos: [] });
+      (TODO_TOOLS.has(it.tool) ? last.todos : last.tools).push(it);
     } else if (it.kind === 'message' || it.kind === 'reply') out.push({ kind: 'say', item: it });
     else if (it.kind === 'permission') { if (it.decision) out.push({ kind: 'decision', item: it }); }
     else if (it.kind === 'helper') out.push({ kind: 'helper', item: it });
@@ -119,7 +123,7 @@ function exchangesOf(items: readonly ThreadItem[], helperId?: string): Exchange[
   });
 }
 
-/** Les ids dans l'ordre affiché : consigne, puis chaque segment (chaque action d'un repli). */
+/** Les ids dans l'ordre affiché : consigne, puis chaque segment (chaque action d'un repli ; ses mises à jour de liste n'y sont pas). */
 export function displayIds(xs: readonly Exchange[]): string[] {
   return xs.flatMap(x => [...(x.prompt ? [x.prompt.id] : []), ...x.segments.flatMap(s => s.kind === 'tools' ? s.tools.map(t => t.id) : [s.item.id])]);
 }
@@ -128,8 +132,10 @@ export interface Summary {
   count: number; kinds: Record<ToolKind, number>;
   files: number; failed: number; cut: number; ms: number;
   running: ToolItem | null;
+  /** The work plan's updates in the fold: not actions, neither counted nor timed. */
+  todos: number;
 }
-export function summarize(tools: readonly ToolItem[], now: number, live: boolean): Summary {
+export function summarize(tools: readonly ToolItem[], now: number, live: boolean, todos: readonly ToolItem[] = []): Summary {
   const kinds: Record<ToolKind, number> = { read: 0, search: 0, command: 0, edit: 0 };
   const files = new Set<string>();
   let failed = 0, cut = 0, ms = 0;
@@ -140,7 +146,7 @@ export function summarize(tools: readonly ToolItem[], now: number, live: boolean
     else if (t.status === 'unknown') cut++;
     else if (t.status === 'success') for (const f of t.files) files.add(f.path);
   }
-  return { count: tools.length, kinds, files: files.size, failed, cut, ms, running: live ? liveTool([...tools]) ?? null : null };
+  return { count: tools.length, kinds, files: files.size, failed, cut, ms, running: live ? liveTool([...tools]) ?? null : null, todos: todos.length };
 }
 
 /** « 0,4 s », « 48 s », « 2 min 14 s », « 2 min », « 1 h 35 » ; en anglais le séparateur décimal est le point. */

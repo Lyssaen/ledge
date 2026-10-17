@@ -43,7 +43,7 @@ describe('session thread model', () => {
   });
   it('a summary counts kinds, changed files, failures and time; a live run shows its running action', () => {
     const run = items.slice(1, 4) as ToolItem[];
-    expect(summarize(run, Date.parse(at(10)), true)).toEqual({ count: 3, kinds: { read: 1, search: 1, command: 0, edit: 1 }, files: 1, failed: 0, cut: 0, ms: 900, running: null });
+    expect(summarize(run, Date.parse(at(10)), true)).toEqual({ count: 3, kinds: { read: 1, search: 1, command: 0, edit: 1 }, files: 1, failed: 0, cut: 0, ms: 900, running: null, todos: 0 });
     const t5 = items.at(-1) as ToolItem;
     expect(summarize([t5], Date.parse(at(70)), true)).toMatchObject({ ms: 8000, running: t5 });
     expect(summarize([t5], Date.parse(at(70)), false).running).toBeNull();

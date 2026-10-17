@@ -4,6 +4,7 @@ import type { Bucket, GroupBy } from '../list/model';
 import type { ToolStatus } from '@ledge/protocol';
 import type { PlanDoc, ToolKind, Verb } from '../session/thread';
 import type { Change } from '../session/changes';
+import type { TodoStatus } from '../session/todos';
 
 type PlanStatus = PlanDoc['status'];
 
@@ -234,6 +235,12 @@ const fr = {
       // « Répondez sous le fil : [Y] approuver · [N] continuer à planifier », the keys drawn as keys.
       answerHint: { lead: 'Répondez sous le fil :', approve: 'approuver', keep: 'continuer à planifier' },
       summary: (n: number, s: string) => plural(n, `${n} étape : ${s}`, `${n} étapes : ${s}`)
+    },
+    todos: {
+      workPlan: 'Plan de travail', workPlanUpdated: 'Plan de travail mis à jour', updated: 'plan de travail mis à jour',
+      allDone: 'Tout est fait', paused: 'En pause',
+      doneOf: (d: number, n: number) => `${d}/${n} faites`, inProgress: (t: string) => `en cours : ${t}`,
+      boxes: { completed: 'Fait', in_progress: 'En cours', pending: 'À faire' } as Record<TodoStatus, string>
     }
   },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
@@ -460,6 +467,12 @@ const en: typeof fr = {
       by: (n) => `Plan proposed by ${n}`, tab: (t) => `Plan · ${t}`,
       answerHint: { lead: 'Answer below the thread:', approve: 'approve', keep: 'keep planning' },
       summary: (n, s) => pluralEn(n, `1 step: ${s}`, `${n} steps: ${s}`)
+    },
+    todos: {
+      workPlan: 'Work plan', workPlanUpdated: 'Work plan updated', updated: 'work plan updated',
+      allDone: 'All done', paused: 'Paused',
+      doneOf: (d, n) => `${d}/${n} done`, inProgress: (t) => `in progress: ${t}`,
+      boxes: { completed: 'Done', in_progress: 'In progress', pending: 'To do' }
     }
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },

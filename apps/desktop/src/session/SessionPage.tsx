@@ -18,6 +18,8 @@ import { clampSplit } from './prefs';
 import { Reply } from './Reply';
 import { SidePane, tabId, type PanePlan, type PaneTab } from './SidePane';
 import { Thread } from './Thread';
+import { TodoBar } from './TodoBar';
+import { latestTodos } from './todos';
 import { atEnd, displayIds, exchanges, helperOf, pendingPlan, unreadFrom, type PlanDoc } from './thread';
 
 export interface SessionPageProps {
@@ -51,8 +53,8 @@ const VIEWS: ReadonlyArray<{ view: View; icon: readonly string[] }> = [{ view: '
 
 /** A session's page, or one of its subagents' (session.tsx SessionPage): the heading and its Thread / Changes switch, the flat
  *  thread or the changed files, the pinned request and the reply, and beside the thread the side pane's documents and
- *  changes. Mounted again for each agent (Workspace's key), so what belongs to a page (unfolded actions, the view, the file
- *  shown, the pane's tabs) starts over. */
+ *  changes, and on top of the thread the agent's work plan. Mounted again for each agent (Workspace's key), so what belongs
+ *  to a page (unfolded actions, the view, the file shown, the pane's tabs, the work plan unfolded) starts over. */
 export function SessionPage(p: SessionPageProps): JSX.Element {
   const { session, helper, items, memory } = p;
   const { t, lang } = useI18n();
@@ -109,6 +111,12 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     if (!current) return;
     setFile(files[(files.indexOf(current) + d + files.length) % files.length]!.path);
   };
+
+  /* The work plan: the shown thread's latest list (a subagent's own), folded until the reader unfolds it. */
+  const todos = useMemo(() => (items ? latestTodos(items, helper?.id) : null), [items, helper?.id]);
+  const [todoOpen, setTodoOpen] = useState(false);
+  const toggleTodos = useCallback(() => setTodoOpen(o => !o), []);
+  const todoShown = todoOpen && todos !== null && view === 'thread';
 
   /* The side pane: a tab per document or change opened from the thread (or from Changes, which gives way to the thread). */
   const [tabs, setTabs] = useState<readonly PaneTab[]>([]);
@@ -269,12 +277,13 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     if (shown) memory.set(key, { scroll: pos.current, ...(last !== null && { seen: last }) });
   }, [memory, key]);
 
-  // The page's keys: Escape closes the narrow file list first, then the pane's active tab (else navigation goes back); the
-  // reply area takes R, Y / N and 1…9; O shows or hides the terminal; J / K walk the changed files, or the pane's change on
-  // the thread (never while typing: useKeys; a held key moves one file).
+  // The page's keys: Escape closes the narrow file list first, then folds the work plan, then closes the pane's active tab
+  // (else navigation goes back); the reply area takes R, Y / N and 1…9; O shows or hides the terminal; J / K walk the
+  // changed files, or the pane's change on the thread (never while typing: useKeys; a held key moves one file).
   const replyKeys = useRef<ScreenKeyHandler | null>(null);
   useScreenKeys(e => {
     if (e.key === 'Escape' && view === 'changes' && listOpen) { setListOpen(false); return true; }
+    if (e.key === 'Escape' && todoShown) { setTodoOpen(false); return true; }
     if (e.key === 'Escape' && paneShown) { closeTab(activeTab!); return true; }
     if (replyKeys.current?.(e)) return true;
     if (e.key === 'o' || e.key === 'O') { p.onTerminal(); return true; }
@@ -319,6 +328,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
           <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : { 'aria-labelledby': 'session-tab-changes' })}>
             <div className="messages session-thread" ref={scroller} onScroll={onScroll} hidden={view !== 'thread'}>
+              {todos && <TodoBar todos={todos} open={todoOpen} onToggle={toggleTodos} live={!offline} />}
               {offline && (
                 <div className="frozen-banner" role="status">
                   <Icon d={SHELL_ICONS.offline} size={15} />
