@@ -9,23 +9,29 @@ export const UNCONFIRMED_MS = 8000;
 const IDLE: SaveState = { status: 'idle' };
 const SAVING: SaveState = { status: 'saving' };
 
-interface Waiting { confirm: (p: Projects) => boolean; onDone: () => void; timer: ReturnType<typeof setTimeout> }
+/** `timer` null once timed out: the broadcast is still listened for until `reset`. */
+interface Waiting { confirm: (p: Projects) => boolean; onDone: () => void; timer: ReturnType<typeof setTimeout> | null }
 
-/** Nothing optimistic: `send` calls `setProjects(next)`, then waits for a `projects` broadcast that `confirm` accepts (UNCONFIRMED_MS),
- *  and only then calls `onDone`. A refusal is named from the error (`DaemonOffline` → offline, `DaemonOutdated` → outdated, any other,
- *  zod's included → invalid), a silence is `timeout`. One send at a time; after `reset` (or unmounting), nothing that arrives counts. */
+/** Nothing optimistic: `send` calls `setProjects(next)`, then waits for a `projects` state that `confirm` accepts (the current one,
+ *  checked at once, then each broadcast), and only then calls `onDone`. A refusal is named from the error (`DaemonOffline` → offline,
+ *  `DaemonOutdated` → outdated, any other, zod's included → invalid), UNCONFIRMED_MS of silence is `timeout`. A confirmation that
+ *  comes after the timeout still ends the save (the editor is still open). One send at a time while saving; a timed out one may be
+ *  sent again, and the new send replaces it. After `reset` (or unmounting), nothing that arrives counts. */
 export function useProjectSave(fleet: Pick<Fleet, 'setProjects'>, projects: Projects | null): { state: SaveState; send(next: Projects, confirm: (p: Projects) => boolean, onDone: () => void): void; reset(): void } {
   const [state, setState] = useState<SaveState>(IDLE);
   // A synchronous mirror of the send in flight: two Ctrl ↵ in the same frame see the first one before React renders again.
   const waiting = useRef<Waiting | null>(null);
   const drop = () => {
-    if (waiting.current) clearTimeout(waiting.current.timer);
+    if (waiting.current?.timer) clearTimeout(waiting.current.timer);
     waiting.current = null;
   };
+  // The state at the time of a send: the broadcast that holds the change may already be there.
+  const current = useRef(projects);
+  current.current = projects;
   useEffect(() => drop, []);
 
   const send = useCallback((next: Projects, confirm: (p: Projects) => boolean, onDone: () => void) => {
-    if (waiting.current) return;
+    if (waiting.current?.timer) return;
     try {
       fleet.setProjects(next);
     } catch (e) {
@@ -37,10 +43,12 @@ export function useProjectSave(fleet: Pick<Fleet, 'setProjects'>, projects: Proj
       confirm, onDone,
       timer: setTimeout(() => {
         if (waiting.current !== w) return;
-        waiting.current = null;
+        w.timer = null;
         setState({ status: 'refused', reason: 'timeout' });
       }, UNCONFIRMED_MS)
     };
+    drop();
+    if (current.current !== null && confirm(current.current)) { clearTimeout(w.timer!); setState(IDLE); onDone(); return; }
     waiting.current = w;
     setState(SAVING);
   }, [fleet]);

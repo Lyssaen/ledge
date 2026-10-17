@@ -2,12 +2,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import type { UserEvent } from '@testing-library/user-event';
 import type { ClientMessage, Projects, RepoInfo } from '@ledge/protocol';
+import type { DaemonClient } from '@ledge/fleet';
 import { boot, closeDaemons, PROJECTS, type MockDaemon } from './helpers';
+import { LangProvider } from '../src/i18n/lang';
+import { MESSAGES } from '../src/i18n/messages';
+import { ProjectDialog } from '../src/projects/ProjectDialog';
 import { ProjectSwatch } from '../src/projects/ProjectSwatch';
 import { useProjectSave } from '../src/projects/useProjectSave';
 
 afterEach(async () => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
   await closeDaemons();
   localStorage.clear();
 });
@@ -108,8 +113,25 @@ describe('the project editor: a new project from the sidebar', () => {
     expect(side.queryByRole('button', { name: /^Paper Rendering/ })).toBeNull();
   });
 
-  it('the local daemon offline: the editor says nothing was saved, and nothing is sent', async () => {
-    const { d, side, user } = await boot();
+  it('a confirming broadcast that comes after the 8 s, the editor still open, closes it and says so', async () => {
+    const { d, side, dialog, name } = await openNew();
+    fireEvent.change(name, { target: { value: 'Paper Rendering' } });
+    d.holdProjects();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    fireEvent.click(dialog.getByRole('button', { name: /^Create the project/ }));
+    act(() => { vi.advanceTimersByTime(8000); });
+    expect(dialog.getByRole('alert')).toHaveTextContent('The daemon did not confirm the save.');
+    vi.useRealTimers();
+    await waitFor(() => expect(setsOf(d)).toHaveLength(1));
+    d.releaseProjects();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('status')).toHaveTextContent('Project Paper Rendering created. It appears in the sidebar; its table opens with the first session.');
+    expect(side.getByRole('button', { name: /^Paper Rendering/ })).toBeVisible();
+  });
+
+  it('the local daemon offline: the editor says nothing was saved; the fleet refused before sending', async () => {
+    const { d, side, user, client } = await boot();
+    const setProjects = vi.spyOn(client.fleet!, 'setProjects');
     await d.close();
     await waitFor(() => expect(side.getByRole('button', { name: /Local/ })).toHaveTextContent('offline'));
     await user.click(side.getByRole('button', { name: 'New project' }));
@@ -118,7 +140,9 @@ describe('the project editor: a new project from the sidebar', () => {
     await user.click(dialog.getByRole('button', { name: /^Create the project/ }));
     expect(dialog.getByRole('alert')).toHaveTextContent('The local daemon is offline: nothing was saved.');
     expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('Paper Rendering');
-    expect(setsOf(d)).toEqual([]);
+    // The closed mock records nothing: the proof is that the fleet threw DaemonOffline, which it does before any send.
+    expect(setProjects).toHaveBeenCalledOnce();
+    expect(setProjects.mock.results[0]).toMatchObject({ type: 'throw', value: expect.objectContaining({ name: 'DaemonOffline' }) });
   });
 });
 
@@ -139,15 +163,16 @@ describe('the project editor: editing a project', () => {
   ]);
   async function editLedge(projects: Projects = EDITED) {
     const env = await boot({ projects, repoInfo: INFOS });
+    const sent = vi.spyOn(env.client, 'send');
     await env.user.click(screen.getByRole('button', { name: 'Actions of project Ledge' }));
     await env.user.click(screen.getByRole('menuitem', { name: 'Edit project' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Edit Ledge' }));
-    return { ...env, dialog };
+    return { ...env, dialog, sent };
   }
   const rowOf = (dialog: ReturnType<typeof within>, name: string, machine: string) => dialog.getByRole('button', { name: `Remove ${name} (${machine})` }).closest('li')!;
 
   it('« Edit project » from a table: its repositories with their branch, « not found », « offline »; a rename keeps the id', async () => {
-    const { d, side, user, dialog } = await editLedge();
+    const { d, side, user, dialog, sent } = await editLedge();
     const name = dialog.getByRole('textbox', { name: 'Name' });
     expect(name).toHaveValue('Ledge');
     expect(name).toHaveFocus();
@@ -157,9 +182,9 @@ describe('the project editor: editing a project', () => {
     // The browser stays closed for a project that has repositories.
     expect(dialog.queryByRole('radiogroup', { name: 'Machine to browse' })).toBeNull();
     expect(dialog.getByRole('button', { name: 'Add a repository' })).toBeVisible();
-    // The saved repositories' branches come from repos.inspect on their machine (Local only: Dev SSH is offline).
+    // The saved repositories' branches come from repos.inspect on their machine: the client asks Local only (Dev SSH is offline).
     expect(await within(rowOf(dialog, 'ledge', 'Local')).findByText('⎇ main')).toHaveAttribute('title', 'Default branch detected');
-    expect(d.received.filter(m => m.type === 'repos.inspect')).toEqual([expect.objectContaining({ paths: ['/w/ledge', '/w/notes', '/w/gone'] })]);   // (the fleet routes it to Local, machineId dropped)
+    expect(sent.mock.calls.map(c => c[0]).filter(m => m.type === 'repos.inspect')).toEqual([expect.objectContaining({ machineId: 'local', paths: ['/w/ledge', '/w/notes', '/w/gone'] })]);
     expect(within(rowOf(dialog, 'notes', 'Local')).getByText('Folder without Git')).toBeVisible();
     expect(within(rowOf(dialog, 'gone', 'Local')).getByText('not found')).toHaveClass('set-warn');
     const remote = rowOf(dialog, 'ledge', 'Dev SSH');
@@ -270,7 +295,7 @@ describe('the project editor: « Move to › New project… »', () => {
     const sent = setsOf(d)[0]!.projects;
     expect(sent.projects.at(-1)).toEqual({ id: 'scratch', name: 'Scratch', color: 'violet', description: '', repos: [{ machine: 'local', path: '/tmp' }] });
     expect(sent.rules).toEqual([{ machine: 'local', path: '/tmp', project: 'scratch' }]);
-    expect(screen.getByRole('status')).toHaveTextContent('Project Scratch created. Kit join its table.');
+    expect(screen.getByRole('status')).toHaveTextContent('Project Scratch created. Kit joins its table.');
     expect(within(screen.getByRole('region', { name: 'Scratch table' })).getByRole('button', { name: /^Kit,/ })).toBeVisible();
   });
 
@@ -305,6 +330,25 @@ describe('ProjectSwatch', () => {
   });
 });
 
+describe('the project dialog', () => {
+  it('an unknown project to edit closes the dialog at once', () => {
+    const onClose = vi.fn();
+    render(<LangProvider lang="en"><ProjectDialog edit="nope" projects={PROJECTS} sessions={[]} machines={[]} client={{} as DaemonClient} fleet={{ setProjects: vi.fn() }}
+      projectIdOf={() => null} onClose={onClose} onSaved={vi.fn()} /></LangProvider>);
+    expect(onClose).toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+describe('the notice of a new project with its agents', () => {
+  it('agrees with one agent or several (fr and en)', () => {
+    expect(MESSAGES.fr.projects.createdWith('Scratch', ['Kit'])).toBe('Projet Scratch créé. Kit rejoint sa table.');
+    expect(MESSAGES.fr.projects.createdWith('Scratch', ['Kit', 'Otto', 'Nova'])).toBe('Projet Scratch créé. Kit, Otto et Nova rejoignent sa table.');
+    expect(MESSAGES.en.projects.createdWith('Scratch', ['Kit'])).toBe('Project Scratch created. Kit joins its table.');
+    expect(MESSAGES.en.projects.createdWith('Scratch', ['Kit', 'Otto'])).toBe('Project Scratch created. Kit and Otto join its table.');
+  });
+});
+
 describe('useProjectSave', () => {
   const state: Projects = { projects: [], rules: [] };
   const next: Projects = { projects: [{ id: 'a', name: 'A', color: 'blue', description: '', repos: [] }], rules: [] };
@@ -334,6 +378,39 @@ describe('useProjectSave', () => {
     rerender({ ...next });
     expect(onDone).toHaveBeenCalledOnce();
     expect(result.current.state).toEqual({ status: 'idle' });
+  });
+
+  it('a state that already holds the change confirms at once (still sent)', () => {
+    const fleet = { setProjects: vi.fn() };
+    const onDone = vi.fn();
+    const { result } = renderHook(() => useProjectSave(fleet, next));
+    act(() => result.current.send(next, holds, onDone));
+    expect(fleet.setProjects).toHaveBeenCalledOnce();
+    expect(onDone).toHaveBeenCalledOnce();
+    expect(result.current.state).toEqual({ status: 'idle' });
+  });
+
+  it('after the timeout it keeps listening: a late confirming broadcast still ends the save; a new send is allowed; reset stops it', () => {
+    vi.useFakeTimers();
+    const fleet = { setProjects: vi.fn() };
+    const onDone = vi.fn();
+    const { result, rerender } = renderHook((p: Projects) => useProjectSave(fleet, p), { initialProps: state });
+    act(() => result.current.send(next, holds, onDone));
+    act(() => { vi.advanceTimersByTime(8000); });
+    expect(result.current.state).toEqual({ status: 'refused', reason: 'timeout' });
+    rerender(next);
+    expect(onDone).toHaveBeenCalledOnce();
+    expect(result.current.state).toEqual({ status: 'idle' });
+    // Timed out, then sent again: the retry is sent.
+    rerender(state);
+    act(() => result.current.send(next, holds, onDone));
+    act(() => { vi.advanceTimersByTime(8000); });
+    act(() => result.current.send(next, holds, onDone));
+    expect(fleet.setProjects).toHaveBeenCalledTimes(3);
+    act(() => { vi.advanceTimersByTime(8000); });
+    act(() => result.current.reset());
+    rerender({ ...next });
+    expect(onDone).toHaveBeenCalledOnce();
   });
 
   it('unmounted while waiting: no timer outlives it', () => {

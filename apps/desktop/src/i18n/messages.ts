@@ -283,7 +283,7 @@ const fr = {
     create: 'Créer le projet', save: 'Enregistrer', saving: 'Enregistrement…', cancel: 'Annuler', deleteProject: 'Supprimer le projet',
     saved: (n: string) => `${n} enregistré.`,
     created: (n: string) => `Projet ${n} créé. Il apparaît dans la barre latérale ; sa table s’ouvrira avec la première session.`,
-    createdWith: (n: string, names: string) => `Projet ${n} créé. ${names} rejoignent sa table.`,
+    createdWith: (n: string, names: readonly string[]) => `Projet ${n} créé. ${new Intl.ListFormat('fr', { type: 'conjunction' }).format(names)} ${plural(names.length, 'rejoint', 'rejoignent')} sa table.`,
     picker: {
       machines: 'Machine à parcourir', offline: 'hors ligne',
       offlineBody: (m: string) => `${m} est hors ligne. Reconnectez-la dans Réglages › Machines pour parcourir ses dossiers.`,
@@ -566,7 +566,7 @@ const en: typeof fr = {
     create: 'Create the project', save: 'Save', saving: 'Saving…', cancel: 'Cancel', deleteProject: 'Delete the project',
     saved: (n) => `${n} saved.`,
     created: (n) => `Project ${n} created. It appears in the sidebar; its table opens with the first session.`,
-    createdWith: (n, names) => `Project ${n} created. ${names} join its table.`,
+    createdWith: (n, names) => `Project ${n} created. ${new Intl.ListFormat('en', { type: 'conjunction' }).format(names)} ${pluralEn(names.length, 'joins', 'join')} its table.`,
     picker: {
       machines: 'Machine to browse', offline: 'offline',
       offlineBody: (m) => `${m} is offline. Reconnect it in Settings › Machines to browse its folders.`,
