@@ -17,14 +17,19 @@ function crumbsOf(path: string): string[] {
   return out;
 }
 let next = 0;
+/** A path with a `.` or `..` segment: normalizePath does not resolve them, so it would match no saved repository. */
+const dotted = (path: string) => path.split('/').some(x => x === '.' || x === '..');
+/** The daemon's words for a folder that is not there (resolveExact, or the raw fs error of a race): said as « not found ». */
+const MISSING = /^(no such folder|not a folder): |^(ENOENT|ENOTDIR)\b/;
 
 type Check = { id: string; machine: string; label: string; path: string };
 
 /** The project editor's folder browser (the mockup's FolderPicker): a machine, then its folders from the home it resolves, the Git
- *  repositories with their branch; or a path typed and checked on its machine. Nothing is added before the machine has answered. */
+ *  repositories with their branch; or a path typed and checked on its machine. Nothing is added before the machine has answered.
+ *  `taken`: already in the draft (« Ajouté »); `owner`: the name of another project that has it (« Déjà dans {p} »), else null. */
 export function FolderPicker(p: {
   client: DaemonClient; machines: readonly MachineState[];
-  taken(machine: string, path: string): boolean; onAdd(repo: Repo & { branch: string | null }): void;
+  taken(machine: string, path: string): boolean; owner?(machine: string, path: string): string | null; onAdd(repo: Repo & { branch: string | null }): void;
 }): JSX.Element {
   const { t } = useI18n();
   const c = t.projects.picker;
@@ -49,6 +54,9 @@ export function FolderPicker(p: {
   onAdd.current = p.onAdd;
   const taken = useRef(p.taken);
   taken.current = p.taken;
+  const ownerOf = (machine: string, path: string) => p.owner?.(machine, path) ?? null;
+  const owner = useRef(ownerOf);
+  owner.current = ownerOf;
   const machinesNow = useRef(machines);
   machinesNow.current = machines;
   useEffect(() => {
@@ -64,6 +72,8 @@ export function FolderPicker(p: {
         return;
       }
       if (taken.current(check.machine, check.path)) { setError(c.alreadyListed); return; }   // added from the list meanwhile
+      const other = owner.current(check.machine, check.path);
+      if (other !== null) { setError(c.ownedBy(other)); return; }                             // another project took it meanwhile
       onAdd.current({ machine: check.machine, path: check.path, branch: info.branch });
       setTyped(''); setError('');
     });
@@ -77,8 +87,10 @@ export function FolderPicker(p: {
     if (!typed.trim() || machineId === null || check) return;
     if (!online) { setError(c.offlinePath(label)); return; }
     const path = normalizePath(typed);
-    if (!path.startsWith('/')) { setError(c.absolute); return; }
+    if (!path.startsWith('/') || dotted(path)) { setError(c.absolute); return; }
     if (p.taken(machineId, path)) { setError(c.alreadyListed); return; }
+    const other = ownerOf(machineId, path);
+    if (other !== null) { setError(c.ownedBy(other)); return; }
     setError('');
     setCheck({ id: `typed-${++next}`, machine: machineId, label, path });
   };
@@ -110,7 +122,7 @@ export function FolderPicker(p: {
           )}
           {listing.status === 'error' ? (
             <p className="picker-offline" role="status">
-              {listing.message === 'offline' ? c.offlineBody(label) : listing.message}
+              {listing.message === 'offline' ? c.offlineBody(label) : MISSING.test(listing.message) ? c.notFound(label) : listing.message}
               <button type="button" className="picker-retry" onClick={retry}>{c.retry}</button>
             </p>
           ) : (
@@ -125,15 +137,16 @@ export function FolderPicker(p: {
                     const branch = listing.repos.get(name);
                     const git = branch !== undefined;
                     const added = p.taken(machineId!, path);
+                    const other = added ? null : ownerOf(machineId!, path);
                     return (
                       <li key={name} className={git ? 'is-git' : ''}>
                         <button type="button" className="picker-name" onClick={() => setDir(path)} title={c.open(name)}>
                           <Icon d={git ? ICONS.branch.d : ICONS.folder.d} size={14} /><span>{name}</span><Icon d={ICONS.chevronRight.d} size={12} />
                         </button>
                         {git ? <span className="picker-branch mono">⎇ {branch}</span> : <span className="picker-branch">{c.noGit}</span>}
-                        <Button size="sm" variant={git ? 'outline' : 'ghost'} disabled={added} onClick={() => p.onAdd({ machine: machineId!, path, branch: branch ?? null })}
-                          aria-label={added ? c.addedLabel(name) : c.addLabel(name, label)}>
-                          {added ? <><Icon d={ICONS.check.d} size={13} />{c.added}</> : c.add}
+                        <Button size="sm" variant={git ? 'outline' : 'ghost'} disabled={added || other !== null} onClick={() => p.onAdd({ machine: machineId!, path, branch: branch ?? null })}
+                          aria-label={added ? c.addedLabel(name) : other !== null ? c.ownedLabel(name, other) : c.addLabel(name, label)}>
+                          {added ? <><Icon d={ICONS.check.d} size={13} />{c.added}</> : other !== null ? c.ownedBy(other) : c.add}
                         </Button>
                       </li>
                     );

@@ -276,33 +276,47 @@ describe('the project editor: editing a project', () => {
     expect(dialog.getByRole('button', { name: 'Add a repository' })).toHaveFocus();
   });
 
-  it('a repository another project has: its row says so as an error, Save names the problem, nothing is sent, the values stay', async () => {
+  it('a repository another project has: typed, it is refused; taken by it meanwhile, its row says so as an error, Save names the problem, nothing is sent, the values stay', async () => {
     const { d, user, dialog } = await editLedge();
+    d.repoInfo.set('/w/extra', { path: '/w/extra', exists: true, branch: null });
     await user.click(dialog.getByRole('button', { name: 'Add a repository' }));
-    await user.type(dialog.getByRole('textbox', { name: 'Path on Local' }), '/w/docs{Enter}');
-    const docs = (await dialog.findByRole('button', { name: 'Remove docs (Local)' })).closest('li')!;
-    expect(within(docs).getByText('This repository is already in Docs')).toHaveClass('set-error');
-    expect(within(docs).getByText('Folder without Git')).toBeVisible();
+    const typed = dialog.getByRole('textbox', { name: 'Path on Local' });
+    // The browser knows /w/docs is Docs's: refused before it is checked.
+    await user.type(typed, '/w/docs{Enter}');
+    expect(dialog.getByRole('alert')).toHaveTextContent('Already in Docs');
+    await user.clear(typed);
+    await user.type(typed, '/w/extra{Enter}');
+    const extra = (await dialog.findByRole('button', { name: 'Remove extra (Local)' })).closest('li')!;
+    // Docs takes /w/extra too (elsewhere) while it is in the draft.
+    const [ledge, docs] = EDITED.projects;
+    d.projects({ ...EDITED, projects: [ledge!, { ...docs!, repos: [...docs!.repos, { machine: 'local', path: '/w/extra' }] }] });
+    await waitFor(() => expect(within(extra).getByText('This repository is already in Docs')).toHaveClass('set-error'));
+    expect(within(extra).getByText('Folder without Git')).toBeVisible();
     expect(dialog.getByText('Working repositories · 5')).toBeVisible();
     await user.click(dialog.getByRole('button', { name: /^Save/ }));
     const alert = dialog.getByRole('alert');
     expect(alert).toHaveTextContent('This repository is already in Docs');
     expect(alert).toHaveClass('composer-missing');
-    expect(dialog.getByRole('button', { name: 'Remove docs (Local)' })).toBeVisible();
+    expect(dialog.getByRole('button', { name: 'Remove extra (Local)' })).toBeVisible();
     await tick();
     expect(setsOf(d)).toEqual([]);
     // Removing it lifts the problem: Save goes through.
-    await user.click(dialog.getByRole('button', { name: 'Remove docs (Local)' }));
+    await user.click(dialog.getByRole('button', { name: 'Remove extra (Local)' }));
     await user.click(dialog.getByRole('button', { name: /^Save/ }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(setsOf(d)).toHaveLength(1);
   });
 
-  it('a new project from the browser: a folder Docs has shows the problem; Create sends nothing', async () => {
-    const { d, user, dialog, name } = await openNew({ projects: { ...PROJECTS, projects: PROJECTS.projects.map(p => (p.id === 'docs' ? { ...p, repos: [{ machine: 'local', path: '/home/me/paper' }] } : p)) } });
+  it('a new project from the browser: a folder Docs has is « Already in Docs »; one Docs takes once added shows the problem; Create sends nothing', async () => {
+    const withDocs = (...paths: string[]): Projects => ({ ...PROJECTS, projects: PROJECTS.projects.map(p => (p.id === 'docs' ? { ...p, repos: paths.map(path => ({ machine: 'local', path })) } : p)) });
+    const { d, user, dialog, name } = await openNew({ projects: withDocs('/home/me/paper') });
     await user.type(name, 'Paper Rendering');
-    await user.click(await dialog.findByRole('button', { name: 'Add paper (Local)' }));
-    expect(within(dialog.getByRole('button', { name: 'Remove paper (Local)' }).closest('li')!).getByText('This repository is already in Docs')).toHaveClass('set-error');
+    const owned = await dialog.findByRole('button', { name: 'paper is already in Docs' });
+    expect(owned).toBeDisabled();
+    expect(owned).toHaveTextContent('Already in Docs');
+    await user.click(dialog.getByRole('button', { name: 'Add notes (Local)' }));
+    d.projects(withDocs('/home/me/paper', '/home/me/notes'));
+    await waitFor(() => expect(within(dialog.getByRole('button', { name: 'Remove notes (Local)' }).closest('li')!).getByText('This repository is already in Docs')).toHaveClass('set-error'));
     await user.click(dialog.getByRole('button', { name: /^Create the project/ }));
     expect(dialog.getByRole('alert')).toHaveTextContent('This repository is already in Docs');
     await tick();

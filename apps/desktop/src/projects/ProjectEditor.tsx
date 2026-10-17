@@ -109,6 +109,8 @@ export function ProjectEditor(p: {
     (rows[i] ?? rows[i - 1] ?? addRef.current ?? reposRef.current?.querySelector<HTMLElement>('.picker-typed input'))?.focus();
   }, [d.repos]);
   const taken = (machine: string, path: string) => d.repos.some(r => r.machine === machine && normalizePath(r.path) === path);
+  // A repository belongs to one project: the browser flags a folder another project has (« Déjà dans {p} »).
+  const ownerOf = (machine: string, path: string) => alsoIn({ machine, path }, d, projects)?.name ?? null;
   const onAdd = ({ branch, ...repo }: Repo & { branch: string | null }) => {
     setD(x => ({ ...x, repos: [...x.repos, repo] }));
     setKnown(prev => new Map(prev).set(repoKey(repo.machine, repo.path), { exists: true, branch }));
@@ -291,7 +293,7 @@ export function ProjectEditor(p: {
               })}
             </div>
           )}
-          {adding ? <FolderPicker client={p.client} machines={machines} taken={taken} onAdd={onAdd} />
+          {adding ? <FolderPicker client={p.client} machines={machines} taken={taken} owner={ownerOf} onAdd={onAdd} />
             : <Button ref={addRef} size="sm" variant="outline" onClick={() => setAdding(true)}><Icon d={ICONS.plus.d} size={14} />{c.addRepo}</Button>}
         </section>
       </div>

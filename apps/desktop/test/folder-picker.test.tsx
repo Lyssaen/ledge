@@ -21,7 +21,7 @@ afterEach(async () => {
 });
 
 /** The fleet on a mock daemon: Local (home /home/me: the Git repository ledge on main, the plain folder notes) and NAS, which never connects. */
-async function setup(opts: { taken?: (m: string, p: string) => boolean } = {}) {
+async function setup(opts: { taken?: (m: string, p: string) => boolean; owner?: (m: string, p: string) => string | null } = {}) {
   const d = await createMockDaemon();
   d.options.home = '/home/me';
   d.machines([{ id: 'local', label: 'Local' }, { id: 'nas', label: 'NAS', ssh: 'nas' }]);
@@ -39,9 +39,10 @@ async function setup(opts: { taken?: (m: string, p: string) => boolean } = {}) {
   });
   const onAdd = vi.fn();
   const taken = vi.fn(opts.taken ?? (() => false));
-  render(<FolderPicker client={client} machines={client.fleet!.machines()} taken={taken} onAdd={onAdd} />);
+  const owner = vi.fn(opts.owner ?? (() => null));
+  render(<FolderPicker client={client} machines={client.fleet!.machines()} taken={taken} owner={owner} onAdd={onAdd} />);
   const list = await screen.findByRole('list', { name: 'Contents of /home/me on Local' });
-  return { d, client, onAdd, taken, user: userEvent.setup(), list: within(list) };
+  return { d, client, onAdd, taken, owner, user: userEvent.setup(), list: within(list) };
 }
 const rowOf = (el: HTMLElement) => el.closest('li')!;
 const typedField = (m: string) => screen.getByRole('textbox', { name: `Path on ${m}` });
@@ -99,6 +100,38 @@ describe('FolderPicker', () => {
     await user.click(added);
     expect(onAdd).not.toHaveBeenCalled();
     expect(list.getByRole('button', { name: 'Add notes (Local)' })).toBeEnabled();
+  });
+
+  it('a folder another project has shows « Already in {p} », disabled; typed, it is refused with the same words before any check', async () => {
+    const { d, onAdd, owner, user, list } = await setup({ owner: (m, p) => (m === 'local' && (p === '/home/me/ledge' || p === '/srv/app') ? 'Docs' : null) });
+    const owned = list.getByRole('button', { name: 'ledge is already in Docs' });
+    expect(owned).toBeDisabled();
+    expect(owned).toHaveTextContent('Already in Docs');
+    expect(owner).toHaveBeenCalledWith('local', '/home/me/ledge');
+    await user.click(owned);
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(list.getByRole('button', { name: 'Add notes (Local)' })).toBeEnabled();
+    await user.type(typedField('Local'), '/srv//app/{Enter}');
+    expect(screen.getByRole('alert')).toHaveTextContent('Already in Docs');
+    expect(typedField('Local')).toHaveValue('/srv//app/');
+    expect(inspections(d)).toEqual([]);
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('a typed path with . or .. segments asks for a full path, before any check', async () => {
+    const { d, onAdd, user } = await setup();
+    for (const typed of ['/home/me/../me/ledge', '/home/./me', '/srv/app/..', '/.']) {
+      await user.clear(typedField('Local'));
+      await user.type(typedField('Local'), `${typed}{Enter}`);
+      expect(screen.getByRole('alert')).toHaveTextContent('Type a full path, starting with /.');
+      expect(typedField('Local')).toHaveValue(typed);
+    }
+    expect(inspections(d)).toEqual([]);
+    expect(onAdd).not.toHaveBeenCalled();
+    // A name that only starts with dots is a name.
+    await user.clear(typedField('Local'));
+    await user.type(typedField('Local'), '/srv/..app{Enter}');
+    await waitFor(() => expect(inspections(d)).toEqual([expect.objectContaining({ paths: ['/srv/..app'] })]));
   });
 
   it('an offline machine says so; a path typed on it is not checked, nothing is added and the text stays', async () => {
@@ -257,6 +290,19 @@ describe('useFolderListing through FolderPicker', () => {
     expect(lists(sent)[3]).toMatchObject({ path: '/home/me/a' });
     emit({ type: 'folder.listing', requestId: lists(sent)[3]!.requestId!, path: '/home/me/a', parent: '/home/me', entries: ['b'] });
     expect(screen.getByRole('button', { name: 'b' })).toBeVisible();
+  });
+
+  it('a folder the machine cannot find (missing, not a folder) is said as not found; another error stays as the daemon wrote it', () => {
+    const { client, sent, emit } = fakeClient();
+    render(<FolderPicker client={client} machines={[local]} taken={() => false} onAdd={vi.fn()} />);
+    const errors = ['no such folder: /home/me/a', 'not a folder: /home/me/a', "ENOENT: no such file or directory, scandir '/home/me/a'", "ENOTDIR: not a directory, scandir '/home/me/a'"];
+    for (const error of errors) {
+      emit({ type: 'folder.listing', requestId: lists(sent).at(-1)!.requestId!, path: '/home/me/a', parent: null, entries: [], error });
+      expect(document.querySelector('p.picker-offline')!.firstChild!.textContent).toBe('Folder not found on Local.');
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    }
+    emit({ type: 'folder.listing', requestId: lists(sent).at(-1)!.requestId!, path: '/home/me/a', parent: null, entries: [], error: 'EACCES: permission denied' });
+    expect(document.querySelector('p.picker-offline')!.firstChild!.textContent).toBe('EACCES: permission denied');
   });
 
   it('a machine dropping during a typed check says it is offline, not that the path is missing; nothing is added', () => {

@@ -312,6 +312,7 @@ const fr = {
       typed: (m: string) => `Chemin sur ${m}`, typedPlaceholder: (m: string) => `Ou saisissez un chemin sur ${m}`,
       offlinePath: (m: string) => `${m} est hors ligne : impossible de vérifier ce chemin.`, notFound: (m: string) => `Dossier introuvable sur ${m}.`,
       alreadyListed: 'Ce dépôt est déjà dans la liste.', absolute: 'Saisissez un chemin complet, qui commence par /.',
+      ownedBy: (p: string) => `Déjà dans ${p}`, ownedLabel: (n: string, p: string) => `${n} est déjà dans ${p}`,
       timeout: 'Le dossier n’a pas répondu.', retry: 'Réessayer'
     }
   },
@@ -613,6 +614,7 @@ const en: typeof fr = {
       typed: (m) => `Path on ${m}`, typedPlaceholder: (m) => `Or type a path on ${m}`,
       offlinePath: (m) => `${m} is offline: this path cannot be checked.`, notFound: (m) => `Folder not found on ${m}.`,
       alreadyListed: 'This repository is already in the list.', absolute: 'Type a full path, starting with /.',
+      ownedBy: (p) => `Already in ${p}`, ownedLabel: (n, p) => `${n} is already in ${p}`,
       timeout: 'The folder did not answer.', retry: 'Try again'
     }
   },
