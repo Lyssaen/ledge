@@ -31,7 +31,50 @@ export const en: Messages = {
       shortcuts: 'The app’s keyboard shortcuts.',
       about: 'Versions and updates.'
     },
-    machineOffline: 'A machine is offline', updateWaiting: 'An update is available'
+    machineOffline: 'A machine is offline', updateWaiting: 'An update is available',
+    general: {
+      lang: 'Language', langHint: 'Applies at once, the notification area menu included.',
+      langs: { fr: 'Français', en: 'English' },
+      langFailed: 'English stays: French could not be loaded.',
+      autostart: 'Start with Windows', autostartHint: 'Ledge Desktop opens with your Windows session.',
+      autostartMissing: 'Not offered here: only the installed app can start with Windows.',
+      autostartFailed: 'Windows did not take this setting.', autostartOff: 'No start with Windows',
+      tool: 'Default agent', toolHint: 'For Ledge’s chat and its cards.', toolSaved: (name) => `Default agent: ${name}`
+    },
+    updates: {
+      title: 'Updates',
+      version: (v) => (v ? `Ledge ${v}` : 'Ledge Desktop'),
+      phase: {
+        idle: 'No check yet.',
+        checking: 'Looking for a new version…',
+        current: 'Ledge Desktop is up to date.',
+        available: (v) => `Ledge ${v} is available. Nothing is installed without your click.`,
+        installing: (v) => `Installing Ledge ${v}. Ledge Desktop will restart on its own.`,
+        failedCheck: 'The check failed. Check your connection.',
+        failedInstall: 'The install failed. The app did not change.'
+      },
+      upToDate: 'Up to date',
+      installingTag: (percent) => (percent === null ? 'Installing…' : `Installing… ${percent}%`),
+      install: 'Install', retry: 'Try again',
+      auto: 'Check for updates', autoHint: 'At start-up, then every 6 hours. Ledge never updates without your click.',
+      autoOn: 'Automatic update checks', autoOff: 'Manual update checks',
+      checking: 'Checking…', never: 'Never checked', checkedNow: 'Checked just now', checkedAgo: (d) => `Checked ${d} ago`,
+      source: 'From the GitHub releases of Lyssaen/ledge.', check: 'Check'
+    },
+    appearance: {
+      theme: 'Theme', themeHint: 'Also changes the mascots’ material.',
+      themes: { light: ['Light', 'Pebble'], dark: ['Dark', 'Signal'] },
+      themeSaved: { light: 'Light theme · Pebble', dark: 'Dark theme · Signal' },
+      accent: 'Ledge’s color', accentHint: 'Ledge’s dot, buttons and glow. State colors stay the same.',
+      picker: 'Custom color', hex: 'Hex code', coral: 'Coral',
+      accentInvalid: 'Invalid color: use # and six hexadecimal characters.',
+      accentSaved: (hex) => `Ledge’s color ${hex}`, coralSaved: 'Ledge’s color: Coral',
+      sample: 'Approve the plan', sampleHint: 'Ledge’s button, counter and glow.',
+      scale: 'Interface scale', scaleHint: 'Size of Ledge Desktop’s text and controls. Auto follows Windows’ scaling.',
+      percent: (n) => `${Math.round(n * 100)}%`, auto: 'Auto', autoAt: (pct) => `Auto (${pct})`, scaleSaved: (label) => `Interface scale ${label}`,
+      reduced: 'Reduced motion', reducedHint: 'The mascots stand still; states stay readable without animation. The Windows setting wins.',
+      reducedOff: 'Animations'
+    }
   },
   pending: 'This screen is coming soon.',
   chunkFailed: 'This part of Ledge could not load. Restart the app.',

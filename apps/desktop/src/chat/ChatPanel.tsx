@@ -6,6 +6,7 @@ import type { FleetView } from '../fleet/useFleet';
 import { chatCopy, useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
+import { useDefaultTool } from '../settings/tool';
 import { useAgentHighlight } from './useAgentHighlight';
 import { useChatCards } from './useChatCards';
 
@@ -19,7 +20,7 @@ export interface ChatPanelProps {
 }
 
 /** Desktop's Ledge chat, docked on the right (observatory.tsx, `ledge-chat-panel`): the island's ChatView in its docked mode, on
- *  the real fleet. Questions go to the daemon with Claude; nothing is sent while the local daemon is offline. A name hovered or
+ *  the real fleet. Questions go to the daemon with the default agent (Settings › General); nothing is sent while the local daemon is offline. A name hovered or
  *  focused lights its agent; a session card launches in one click and seats the agent (`onLaunched`); a relay card sends as in the island. */
 export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession, onLaunched }: ChatPanelProps): JSX.Element {
   const { t } = useI18n();
@@ -27,6 +28,8 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
   const { chat, chatLive } = useDaemon();
+  // The default agent of Settings › General: a change there applies to the next question, the chat open or not.
+  const [tool] = useDefaultTool();
   const send = useCallback((m: Parameters<DaemonClient['send']>[0]) => client.send(m), [client]);
   // « En ligne » is the local machine's `ready` (lot 7): until then the field says why it waits.
   const offline = view.machines.find(m => m.id === 'local')?.ready ? null : copy.offline;
@@ -44,7 +47,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
     if (offline) return;
     const qid = `q-${crypto.randomUUID()}`;
     daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
-    send({ type: 'chat.ask', qid, text, tool: 'claude' });
+    send({ type: 'chat.ask', qid, text, tool });
   };
   // Opening a name opens the agent's page, which closes the chat (the mockup's `open`); the light goes out first.
   const open = (id: string) => { setHovered(null); onOpenSession(id); };

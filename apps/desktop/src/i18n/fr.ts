@@ -39,7 +39,51 @@ export const fr = {
       shortcuts: 'Les raccourcis de l’application.',
       about: 'Versions et mises à jour.'
     } as Record<SectionId, string>,
-    machineOffline: 'Une machine est hors ligne', updateWaiting: 'Une mise à jour est disponible'
+    machineOffline: 'Une machine est hors ligne', updateWaiting: 'Une mise à jour est disponible',
+    general: {
+      lang: 'Langue', langHint: 'S’applique tout de suite, menu de la zone de notification compris.',
+      langs: { fr: 'Français', en: 'English' } as Record<'fr' | 'en', string>,
+      // The language that stays speaks: the other one is the language asked for, which did not load.
+      langFailed: 'Le français reste affiché : l’anglais n’a pas pu être chargé.',
+      autostart: 'Lancer au démarrage de Windows', autostartHint: 'Ledge Desktop s’ouvre avec votre session Windows.',
+      autostartMissing: 'Pas proposé ici : seule l’application installée peut se lancer avec Windows.',
+      autostartFailed: 'Windows n’a pas pris ce réglage.', autostartOff: 'Pas de lancement au démarrage',
+      tool: 'Agent par défaut', toolHint: 'Pour le chat de Ledge et ses cartes.', toolSaved: (name: string) => `Agent par défaut : ${name}`
+    },
+    updates: {
+      title: 'Mises à jour',
+      version: (v: string | null) => (v ? `Ledge ${v}` : 'Ledge Desktop'),
+      phase: {
+        idle: 'Aucune vérification pour l’instant.',
+        checking: 'Recherche d’une nouvelle version…',
+        current: 'Ledge Desktop est à jour.',
+        available: (v: string) => `Ledge ${v} est disponible. Rien n’est installé sans votre clic.`,
+        installing: (v: string) => `Installation de Ledge ${v}. Ledge Desktop redémarrera seul.`,
+        failedCheck: 'La vérification a échoué. Vérifiez votre connexion.',
+        failedInstall: 'L’installation a échoué. L’application n’a pas changé.'
+      },
+      upToDate: 'À jour',
+      installingTag: (percent: number | null) => (percent === null ? 'Installation…' : `Installation… ${percent} %`),
+      install: 'Installer', retry: 'Réessayer',
+      auto: 'Rechercher les mises à jour', autoHint: 'Au démarrage, puis toutes les 6 heures. Ledge ne met jamais à jour sans votre clic.',
+      autoOn: 'Recherche automatique des mises à jour', autoOff: 'Recherche manuelle des mises à jour',
+      checking: 'Vérification…', never: 'Jamais vérifié', checkedNow: 'Vérifié à l’instant', checkedAgo: (d: string) => `Vérifié il y a ${d}`,
+      source: 'Sur les releases GitHub de Lyssaen/ledge.', check: 'Vérifier'
+    },
+    appearance: {
+      theme: 'Thème', themeHint: 'Change aussi la matière des mascottes.',
+      themes: { light: ['Clair', 'Galet'], dark: ['Sombre', 'Signal'] } as Record<'light' | 'dark', readonly [string, string]>,
+      themeSaved: { light: 'Thème clair · Galet', dark: 'Thème sombre · Signal' } as Record<'light' | 'dark', string>,
+      accent: 'Couleur de Ledge', accentHint: 'Le point, les boutons et le halo de Ledge. Les couleurs des états restent inchangées.',
+      picker: 'Couleur personnalisée', hex: 'Code hexadécimal', coral: 'Corail',
+      accentInvalid: 'Couleur invalide : utilisez # et six caractères hexadécimaux.',
+      accentSaved: (hex: string) => `Couleur de Ledge ${hex}`, coralSaved: 'Couleur de Ledge : Corail',
+      sample: 'Valider le plan', sampleHint: 'Bouton, compteur et halo de Ledge.',
+      scale: 'Échelle de l’interface', scaleHint: 'Taille du texte et des contrôles de Ledge Desktop. Auto suit la mise à l’échelle de Windows.',
+      percent: (n: number) => `${Math.round(n * 100)} %`, auto: 'Auto', autoAt: (pct: string) => `Auto (${pct})`, scaleSaved: (label: string) => `Échelle de l’interface ${label}`,
+      reduced: 'Mouvements réduits', reducedHint: 'Les mascottes s’immobilisent ; les états restent lisibles sans animation. La préférence de Windows reste prioritaire.',
+      reducedOff: 'Animations'
+    }
   },
   pending: 'Cet écran arrive bientôt.',
   chunkFailed: 'Cette partie de Ledge n’a pas pu se charger. Relancez l’application.',

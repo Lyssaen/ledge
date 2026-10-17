@@ -3,28 +3,29 @@ import { useId, type JSX, type ReactNode } from 'react';
 /* The Settings page's building blocks (docs/mockups/desktop-observatory/settings.tsx, Controls): a card of rows, a row
    (its label and hint left, its control right, or stacked), a switch row and a segmented choice. */
 
-function RowFrame({ label, hint, hintId, labelId, stack, children }: { label: string; hint?: ReactNode; hintId?: string; labelId?: string; stack?: boolean; children?: ReactNode }): JSX.Element {
+function RowFrame({ label, hint, hintId, labelId, error, stack, children }: { label: string; hint?: ReactNode; hintId?: string; labelId?: string; error?: string | null; stack?: boolean; children?: ReactNode }): JSX.Element {
   return (
     <div className={stack ? 'set-row stack' : 'set-row'}>
       <div className="set-copy">
         <span id={labelId} className="set-label">{label}</span>
         {hint && <span className="set-hint" id={hintId}>{hint}</span>}
+        {error && <span className="set-error" role="alert">{error}</span>}
       </div>
       {children && <div className="set-control">{children}</div>}
     </div>
   );
 }
 
-/** A row: the setting's name and its hint, then its control (beside, or under them with `stack`). */
-export function Row({ label, hint, stack, children }: { label: string; hint?: ReactNode; stack?: boolean; children: ReactNode }): JSX.Element {
-  return <RowFrame label={label} hint={hint} stack={stack}>{children}</RowFrame>;
+/** A row: the setting's name and its hint, then its control (beside, or under them with `stack`); `error` says why a change did not take. */
+export function Row({ label, hint, error, stack, children }: { label: string; hint?: ReactNode; error?: string | null; stack?: boolean; children: ReactNode }): JSX.Element {
+  return <RowFrame label={label} hint={hint} error={error} stack={stack}>{children}</RowFrame>;
 }
 
-/** A switch row: the row's label names the switch (role="switch", aria-checked), its hint describes it. */
-export function SwitchRow({ label, hint, checked, disabled, onChange }: { label: string; hint?: ReactNode; checked: boolean; disabled?: boolean; onChange(on: boolean): void }): JSX.Element {
+/** A switch row: the row's label names the switch (role="switch", aria-checked), its hint describes it; `error` as in Row. */
+export function SwitchRow({ label, hint, error, checked, disabled, onChange }: { label: string; hint?: ReactNode; error?: string | null; checked: boolean; disabled?: boolean; onChange(on: boolean): void }): JSX.Element {
   const id = useId();
   return (
-    <RowFrame label={label} hint={hint} labelId={`${id}l`} hintId={`${id}h`}>
+    <RowFrame label={label} hint={hint} error={error} labelId={`${id}l`} hintId={`${id}h`}>
       <button type="button" role="switch" aria-checked={checked} aria-labelledby={`${id}l`} aria-describedby={hint ? `${id}h` : undefined} disabled={disabled}
         className="set-switch" onClick={() => onChange(!checked)}><i /></button>
     </RowFrame>

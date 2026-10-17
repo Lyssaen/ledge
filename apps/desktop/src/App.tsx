@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { projectOf, useDaemon, useProjects, type DaemonClient } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
-import { LangProvider, loadLang, useI18n, type Lang } from './i18n/lang';
+import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
+import { loadMessages } from './i18n/messages';
 import { useFleet } from './fleet/useFleet';
 import { useDecisions } from './fleet/decisions';
 import { useWaits } from './fleet/waits';
@@ -51,7 +52,7 @@ const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'rec
 
 /** The Atelier's shell: sidebar, top bar, the current place (the atelier, the List, a session, Settings), footer, chat and dialogs;
  *  the real fleet, toasts and sounds, and the tray. */
-function Shell({ client }: { client?: DaemonClient }) {
+function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): Promise<'ok' | 'failed'> }) {
   const fleetView = useFleet(client);
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
   const projects = useProjects(fleetClient);
@@ -172,9 +173,11 @@ function Shell({ client }: { client?: DaemonClient }) {
     notify(d.done(name) + (agents === 0 ? '' : to === null ? d.doneNone(agents) : d.doneMoved(agents, to)));
   };
 
-  // What the Settings page's sections receive; « Setting saved · … » goes through the app's toast, once per accepted change.
+  // What the Settings page's sections receive; « Setting saved · … » goes through the app's toast, once per accepted change
+  // (in the language just chosen, for the language itself: the render that speaks it has not happened yet).
   const settings: SettingsContext = {
-    notify, saved: what => notify(t.settings.saved(what)), fleet, machines, projects, projectIdOf, sessions, dispatch, alerts, daemonUpdate, lang
+    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, machines, projects, projectIdOf, sessions, dispatch, alerts, daemonUpdate,
+    lang, setLang, paused: nav.paused
   };
 
   return (
@@ -216,8 +219,16 @@ function Shell({ client }: { client?: DaemonClient }) {
 
 /** `lang` is the language the entry point's boot settled on (French when the stored one's strings did not load); else the stored one. */
 export function App({ client, lang: booted }: { client?: DaemonClient; lang?: Lang } = {}) {
-  const [lang] = useState<Lang>(() => booted ?? loadLang());
+  const [lang, setLangState] = useState<Lang>(() => booted ?? loadLang());
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
   useAppearance();
-  return <LangProvider lang={lang}><MarkdownLinks.Provider value={openUrl}><Shell client={client} /></MarkdownLinks.Provider></LangProvider>;
+  // Settings › General: the language's strings load first (messages.ts serves French under a language not loaded yet); if they
+  // do not, the language stays as it is. Then it is kept and the whole app, <html lang> and the tray follow.
+  const setLang = useCallback(async (l: Lang): Promise<'ok' | 'failed'> => {
+    try { await loadMessages(l); } catch { return 'failed'; }
+    saveLang(l);
+    setLangState(l);
+    return 'ok';
+  }, []);
+  return <LangProvider lang={lang}><MarkdownLinks.Provider value={openUrl}><Shell client={client} setLang={setLang} /></MarkdownLinks.Provider></LangProvider>;
 }

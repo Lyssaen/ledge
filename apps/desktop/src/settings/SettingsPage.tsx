@@ -9,13 +9,16 @@ import { SECTIONS, type NavAction, type SectionId } from '../nav/state';
 import type { Alerts } from '../notify/useAlerts';
 import type { DaemonUpdate } from '../update/daemon';
 import { updateReady, useUpdate } from '../update/store';
+import { General } from './General';
+import { Appearance } from './Appearance';
 
-/** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted),
- *  the fleet and its machines, the projects, the sessions, navigation, the alerts (the Sounds' Test), the local daemon's
- *  update and the language. */
+/** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,
+ *  in `lang` when given), the fleet and its machines, the projects, the sessions, navigation, the alerts (the Sounds' Test), the
+ *  local daemon's update, the language and how to change it (its strings load first: 'failed' leaves the language as it is),
+ *  and whether the animations are frozen. */
 export interface SettingsContext {
   notify(text: string): void;
-  saved(what: string): void;
+  saved(what: string, lang?: Lang): void;
   fleet: Fleet;
   machines: readonly MachineState[];
   projects: Projects | null;
@@ -25,6 +28,8 @@ export interface SettingsContext {
   alerts: Alerts;
   daemonUpdate: DaemonUpdate;
   lang: Lang;
+  setLang(l: Lang): Promise<'ok' | 'failed'>;
+  paused: boolean;
 }
 
 /** The sections' line icons, as the mockup draws them (settings.tsx, SECTIONS). */
@@ -39,9 +44,11 @@ const SECTION_ICONS: Record<SectionId, readonly string[]> = {
   about: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 16v-4', 'M12 8h.01']
 };
 
-/** A section's cards. Each one waits for its task of lot 10 (2 to 5), which replaces its placeholder. */
-function SectionBody({ section: _section, ctx: _ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
+/** A section's cards. Each one not built yet waits for its task of lot 10 (3 to 5), which replaces its placeholder. */
+function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
+  if (section === 'general') return <General ctx={ctx} />;
+  if (section === 'appearance') return <Appearance ctx={ctx} />;
   return <p className="muted">{t.pending}</p>;
 }
 
