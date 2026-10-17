@@ -50,13 +50,13 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
           <span className="crumb-session">
             <HelperBot helper={helper} parent={session} size={22} paused={nav.paused} />
             <strong>{helper.kind}</strong>
-            <span className="crumb-task" title={helper.task}>{helper.task}</span>
+            {helper.task && <span className="crumb-task" title={helper.task}>{helper.task}</span>}
           </span>
         </> : (
           <span className="crumb-session">
             <SessionBot session={session} size={22} paused={nav.paused} />
             <strong>{session.name}</strong>
-            <span className="crumb-task" title={taskOf(session)}>{taskOf(session)}</span>
+            {taskOf(session) && <span className="crumb-task" title={taskOf(session)}>{taskOf(session)}</span>}
           </span>
         )}
       </>;

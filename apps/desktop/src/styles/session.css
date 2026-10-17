@@ -42,6 +42,8 @@
 .rail-dot.approval{background:var(--sidebar-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--sidebar-primary) 25%,transparent)}
 .rail-dot.question{background:var(--warning);box-shadow:0 0 0 3px color-mix(in srgb,var(--warning) 25%,transparent)}
 .rail-dot.done{background:var(--muted-foreground);opacity:.5}.rail-dot.off{background:none;border:1px solid var(--muted-foreground)}
+/* Not in the mockup (no agent in error there): red, as the sidebar's dot-error. */
+.rail-dot.error{background:var(--danger-text)}
 .rail-new{display:flex;align-items:center;gap:6px;margin:6px;padding:8px;border:1px dashed var(--input);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground)}
 .rail-new:hover{color:var(--foreground);border-color:var(--ring)}
 /* Sub-agents live only in the rail, grouped under their parent behind a « Sous-agents » caption and a tree line. */

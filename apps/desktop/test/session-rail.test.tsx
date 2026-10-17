@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
-import { boot, closeDaemons, listSessions } from './helpers';
+import { boot, closeDaemons, declarations, listSessions } from './helpers';
 import { App } from '../src/App';
 import { loadSessionPrefs, SESSION_KEY } from '../src/session/prefs';
 import { OBSOLETE_KEYS } from '../src/state/obsolete';
@@ -29,6 +29,21 @@ describe('the agents rail, the subagent page, the terminal', () => {
     expect(rail().getByRole('button', { name: /^Rio/ }).querySelector('.rail-dot')).toHaveClass('off');
     await user.click(rail().getByRole('button', { name: /^Bix/ }));
     expect(banner().getByText('Bix')).toBeVisible();
+  });
+
+  it('an agent in error has the red dot; the dot is not read apart from its row; an empty task leaves no lone « · » in the crumb', async () => {
+    const sessions = listSessions().map(s => (s.name === 'Bix' ? { ...s, state: 'error' as const } : s.name === 'Otto' ? { ...s, topic: '', title: '' } : s));
+    const { user } = await boot({ sessions, list: true });
+    await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+    await screen.findByRole('navigation', { name: 'Agents of the project Ledge' });
+    const bix = rail().getByRole('button', { name: /^Bix/ });
+    expect(bix.querySelector('.rail-dot')).toHaveClass('error');
+    expect(declarations('session.css', '.rail-dot.error')).toContain('background:var(--danger-text)');
+    expect(bix.querySelector('.rail-dot')).not.toHaveAttribute('aria-label');
+    expect(bix.querySelector('.rail-dot')).toHaveAttribute('aria-hidden', 'true');
+    expect(bix).toHaveAccessibleName(/, Error$/);
+    expect(screen.getByRole('banner').querySelector('.crumb-task')).toBeNull();
+    expect(banner().getByText('Otto')).toBeVisible();
   });
 
   it('switching agent from the rail with Enter keeps the rail and the focus on its newly current row', async () => {

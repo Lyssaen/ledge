@@ -10,10 +10,11 @@ import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot } from '../shell/SessionBot';
 
-/** The rail's dot (office.css .rail-dot): a ring offline, the two requests lit, done or available muted, anything else at work. */
-type RailDot = 'off' | 'approval' | 'question' | 'done' | 'working';
-const dotOf = (state: BotState, offline: boolean): RailDot =>
-  offline ? 'off' : state === 'approval' || state === 'question' ? state : state === 'done' || state === 'idle' || state === 'error' ? 'done' : 'working';
+/** The rail's dot (office.css .rail-dot): a ring offline, the two requests lit, an error red (as in the sidebar), done or
+ *  available muted, anything else at work. */
+type RailDot = 'off' | 'approval' | 'question' | 'error' | 'done' | 'working';
+const railDotOf = (state: BotState, offline: boolean): RailDot =>
+  offline ? 'off' : state === 'approval' || state === 'question' || state === 'error' ? state : state === 'done' || state === 'idle' ? 'done' : 'working';
 
 /** The project's agents beside the session (observatory.tsx project-rail): the main agents of the open one's project — or of
  *  « Sans projet » — in mainOrder, each subagent grouped under its parent when subagents show, and « Nouvelle session ici ».
@@ -55,7 +56,8 @@ export function AgentsRail({ session, helper, order, projects, projectIdOf, nav,
         aria-current={current ? 'page' : undefined} data-agent={s.id} aria-label={[label.name, label.task, stateText].filter(Boolean).join(', ')} onClick={() => dispatch(open)}>
         {bot}
         <span><strong>{label.name}</strong><small>{label.task}</small></span>
-        <i className={`rail-dot ${dotOf(state, offline)}`} aria-label={stateText} />
+        {/* The row's name says the state already. */}
+        <i className={`rail-dot ${railDotOf(state, offline)}`} aria-hidden="true" />
       </button>
     );
   };
