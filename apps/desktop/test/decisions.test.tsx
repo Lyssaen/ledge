@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import type React from 'react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { useDecisions } from '../src/fleet/decisions';
+import { UNCONFIRMED_MS, useDecisions } from '../src/fleet/decisions';
 import { LangProvider } from '../src/i18n/lang';
 
 afterEach(() => cleanup());
@@ -137,5 +137,35 @@ describe('useDecisions', () => {
     rerender({ ...props, sessions: [{ ...bix, state: 'working', lastActivityAt: '2026-10-09T18:01:00.000Z' }], errors: [] });
     expect(result.current.busy('local:bix')).toBe(false);
     expect(props.notify).toHaveBeenCalledTimes(1);
+  });
+  it('a reply that lands is still answered by a refusal that comes late (a working session moves at once)', () => {
+    vi.useFakeTimers();
+    try {
+      const nova = fakeSession('local:nova', { name: 'Nova', state: 'working' });
+      const onRefused = vi.fn();
+      const { result, rerender, props } = setup({ sessions: [nova] });
+      act(() => { expect(result.current.reply(nova, 'Go on', onRefused)).toBe(true); });
+      // InjectFailed reaches the store before the refusal: the session moves, the reply looks landed.
+      rerender({ ...props, sessions: [{ ...nova, state: 'error', lastActivityAt: '2026-10-09T18:01:00.000Z' }] });
+      expect(result.current.busy('local:nova')).toBe(false);
+      rerender({ ...props, sessions: [{ ...nova, state: 'error' }], errors: [{ id: 'local:nova', message: 'the terminal did not take it', seq: 1, request: 'session.reply' }] });
+      expect(props.notify).toHaveBeenCalledWith('Could not send the reply to Nova: the terminal did not take it');
+      expect(onRefused).toHaveBeenCalledWith('Go on');
+      // Once the window has passed, a refusal is no longer this reply's.
+      act(() => { result.current.reply(nova, 'Again', onRefused); });
+      rerender({ ...props, sessions: [{ ...nova, lastActivityAt: '2026-10-09T18:02:00.000Z' }], errors: [{ id: 'local:nova', message: 'the terminal did not take it', seq: 1, request: 'session.reply' }] });
+      act(() => { vi.advanceTimersByTime(UNCONFIRMED_MS); });
+      rerender({ ...props, sessions: [{ ...nova, lastActivityAt: '2026-10-09T18:02:00.000Z' }], errors: [{ id: 'local:nova', message: 'late', seq: 2, request: 'session.reply' }] });
+      expect(onRefused).toHaveBeenCalledTimes(1);
+      expect(props.notify).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+  it('a refused note comes back like a refused reply', () => {
+    const onRefused = vi.fn();
+    const { result, rerender, props } = setup();
+    act(() => { expect(result.current.decide(otto, 'deny', 'Use pnpm', onRefused)).toBe(true); });
+    rerender({ ...props, errors: [{ id: 'local:otto', message: 'no prompt', seq: 1, request: 'session.decide' }] });
+    expect(props.notify).toHaveBeenCalledWith('Could not send the decision to Otto: no prompt');
+    expect(onRefused).toHaveBeenCalledWith('Use pnpm');
   });
 });

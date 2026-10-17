@@ -7,10 +7,12 @@ import { whenOf, type Wait } from '../list/time';
 import { repoOf } from '../list/model';
 import { machineOf } from '../nav/agents';
 import type { NavAction, NavState } from '../nav/state';
+import { useScreenKeys, type ScreenKeyHandler } from '../nav/screenKeys';
 import { SHELL_ICONS } from '../shell/icons';
 import { memoKey, type SessionMemory } from './memory';
+import { Reply } from './Reply';
 import { Thread } from './Thread';
-import { atEnd, displayIds, exchanges, unreadFrom } from './thread';
+import { atEnd, displayIds, exchanges, helperOf, unreadFrom } from './thread';
 
 export interface SessionPageProps {
   /** The parent on a subagent's page. */
@@ -28,7 +30,7 @@ const SETTLE_MS = 250;
 /** The « Nouveau » marker opens this far below the top of the thread. */
 const MARKER_OFFSET = 120;
 
-/** A session's page, or one of its subagents' (session.tsx SessionPage): the heading, the flat thread and, task 7, the reply.
+/** A session's page, or one of its subagents' (session.tsx SessionPage): the heading, the flat thread, the pinned request and the reply.
  *  Mounted again for each agent (Workspace's key), so what belongs to a page (unfolded actions) starts over. */
 export function SessionPage(p: SessionPageProps): JSX.Element {
   const { session, helper, items, memory } = p;
@@ -105,8 +107,16 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     if (shown) memory.set(key, { scroll: pos.current, ...(last !== null && { seen: last }) });
   }, [memory, key]);
 
+  // The page's keys: the reply area takes R, Y / N and 1…9 (later lots add theirs here).
+  const replyKeys = useRef<ScreenKeyHandler | null>(null);
+  useScreenKeys(e => replyKeys.current?.(e) ?? false);
+
   const machine = machineOf(session);
   const since = whenOf(session, undefined, now, t.list.when).text;
+  const waitedFor = whenOf(session, p.waits.get(session.id)?.since, now, t.list.when).text;
+  const askerId = session.pending?.helperId;
+  const asker = askerId === undefined ? session.name : helperOf(session, items, askerId)?.kind ?? session.name;
+  const place = p.nav.place;
   return (
     <section className="conversation session-page" data-session={session.id} data-helper={helper?.id}>
       <div className="pane-heading">
@@ -128,6 +138,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
             </div>
             {!atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
           </div>
+          <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
+            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} />
         </div>
       </div>
     </section>

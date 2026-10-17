@@ -131,6 +131,34 @@ const fr = {
   },
   session: {
     meta: 'Machine et dépôts',
+    pending: {
+      regions: { approval: 'Autorisation demandée', plan: 'Plan à approuver', question: 'Question de l’agent' } as Record<'approval' | 'plan' | 'question', string>,
+      command: (n: string) => `${n} veut exécuter une commande`, edit: (n: string) => `${n} veut modifier un fichier`, approval: (n: string) => `${n} veut votre accord`,
+      question: (n: string) => `${n} vous pose une question`, plan: (n: string, title: string) => `${n} propose un plan · ${title}`, planBadge: 'Plan à approuver',
+      allow: 'Autoriser', deny: 'Refuser', always: 'Toujours autoriser pour cette session',
+      approvePlan: 'Approuver le plan', keepPlanning: 'Continuer à planifier', approveAuto: 'Approuver et accepter les modifications automatiquement',
+      // What « always » really grants, in the button's title (adapters/claude.ts, codex.ts: the option each one picks).
+      alwaysScope: {
+        project: 'Claude Code enregistre la règle dans les réglages du projet : elle vaut aussi pour ses prochaines sessions dans ce projet.',
+        edits: 'Claude Code passe en acceptation automatique des modifications pour toute la session : chaque modification suivante sera acceptée sans vous être demandée.',
+        session: 'L’agent ne redemande plus pour cette commande ou ces fichiers jusqu’à la fin de la session.',
+        plan: 'Selon la version de Claude Code : acceptation automatique des modifications, ou mode auto (2.1 et suivantes), qui répond seul aux demandes suivantes, commandes comprises.'
+      } as Record<'project' | 'edits' | 'session' | 'plan', string>,
+      relay: (p: string) => `C’est ${p} qui transmet cette décision.`, relayAnswer: (p: string) => `${p} relaiera votre réponse.`,
+      revise: 'Écrivez ce qu’il faut revoir, puis Entrée.', reviseKey: 'Écrivez ce qu’il faut revoir, puis Entrée : le plan repart en préparation.'
+    },
+    reply: {
+      label: 'Répondre à l’agent', send: 'Envoyer', denyWith: 'Refuser avec ce message',
+      placeholder: {
+        plan: 'Ce qu’il faut revoir dans le plan… (Entrée : continuer à planifier)', approval: 'Ou refusez en expliquant quoi faire autrement…',
+        question: (n: string) => `Ou répondez librement à ${n}…`, done: (n: string) => `Relancer ${n} avec une nouvelle consigne…`, idle: (n: string) => `Répondre à ${n}…`
+      },
+      denyHint: 'Entrée refuse avec ce message', planHint: 'Entrée renvoie le plan en préparation', write: 'écrire',
+      offline: (m: string) => `${m} est hors ligne.`, offlineBody: ' Le fil est figé à la dernière activité connue ; vous pourrez répondre à la reconnexion.', seeMachine: 'Voir la machine',
+      viaParent: (n: string, p: string) => `Les réponses à ${n} passent par ${p}, qui l’a lancé.`, openParent: (p: string) => `Ouvrir ${p}`,
+      readOnly: 'Session démarrée sans Ledge : lecture seule.', optionsOnly: 'Choisissez une des réponses proposées (1–9).',
+      noNote: 'Cet agent ne prend pas de message avec un refus : refusez avec N.', tooLong: (max: number) => `Une note tient en ${max} caractères au plus.`
+    },
     thread: {
       label: 'Fil de la session',
       you: 'Vous', fromParent: (n: string) => `Consigne de ${n}`,
@@ -281,6 +309,33 @@ const en: typeof fr = {
   },
   session: {
     meta: 'Machine and repositories',
+    pending: {
+      regions: { approval: 'Approval requested', plan: 'Plan to approve', question: 'Question from the agent' },
+      command: (n) => `${n} wants to run a command`, edit: (n) => `${n} wants to change a file`, approval: (n) => `${n} wants your approval`,
+      question: (n) => `${n} asks you a question`, plan: (n, title) => `${n} proposes a plan · ${title}`, planBadge: 'Plan to approve',
+      allow: 'Allow', deny: 'Deny', always: 'Always allow for this session',
+      approvePlan: 'Approve the plan', keepPlanning: 'Keep planning', approveAuto: 'Approve and accept edits automatically',
+      alwaysScope: {
+        project: 'Claude Code saves the rule in the project’s settings: it also holds for its later sessions in this project.',
+        edits: 'Claude Code switches to accepting edits for the whole session: every edit after this one is accepted without asking you.',
+        session: 'The agent stops asking for this command or these files for the rest of the session.',
+        plan: 'Depending on the Claude Code version: accept edits automatically, or auto mode (2.1 and later), which answers the next requests by itself, commands included.'
+      },
+      relay: (p) => `${p} passes this decision on.`, relayAnswer: (p) => `${p} will relay your answer.`,
+      revise: 'Write what to revise, then Enter.', reviseKey: 'Write what to revise, then Enter: the plan goes back to planning.'
+    },
+    reply: {
+      label: 'Reply to the agent', send: 'Send', denyWith: 'Deny with this message',
+      placeholder: {
+        plan: 'What to revise in the plan… (Enter: keep planning)', approval: 'Or deny and say what to do instead…',
+        question: (n) => `Or answer ${n} freely…`, done: (n) => `Start ${n} again with a new instruction…`, idle: (n) => `Reply to ${n}…`
+      },
+      denyHint: 'Enter denies with this message', planHint: 'Enter sends the plan back to planning', write: 'write',
+      offline: (m) => `${m} is offline.`, offlineBody: ' The thread is frozen at the last known activity; you can reply once it reconnects.', seeMachine: 'See the machine',
+      viaParent: (n, p) => `Replies to ${n} go through ${p}, who started it.`, openParent: (p) => `Open ${p}`,
+      readOnly: 'Session started without Ledge: read only.', optionsOnly: 'Choose one of the proposed answers (1–9).',
+      noNote: 'This agent takes no message with a refusal: deny with N.', tooLong: (max) => `A note holds ${max} characters at most.`
+    },
     thread: {
       label: 'Session thread',
       you: 'You', fromParent: (n) => `Instruction from ${n}`,
