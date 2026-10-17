@@ -282,6 +282,31 @@ describe('the Ledge chat docked on the right', () => {
     expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
   });
 
+  it('the filter stays when the launched agent is not listed, or sits at the filtered table', async () => {
+    const env = await openChat();
+    const { d, user } = env;
+    const turn = await ask(env, 'Lance une session', 'Voici la session.', { proposal: PROPOSAL });
+    await user.click(within(screen.getByRole('complementary', { name: /sidebar/i })).getByRole('button', { name: /^Payment Service/ }));
+    expect(filterButton()).toBeVisible();
+    d.holdLaunch();
+    await user.click(panel().getByRole('button', { name: 'Start the session' }));
+    await waitFor(() => expect(launches(d)).toHaveLength(1));
+    // The daemon marks the turn launched with an agent it never lists: nothing to show, the filter stays.
+    d.push({ type: 'chat.history', turns: [{ ...turn, proposal: { ...PROPOSAL, launchedId: 'ghost' } }] });
+    await panel().findByText('Session started');
+    expect(filterButton()).toBeVisible();
+    expect(document.querySelector('.toast')).toBeNull();
+    // An agent listed at the filtered table: the filter stays too.
+    await user.click(within(screen.getByRole('complementary', { name: /sidebar/i })).getByRole('button', { name: /^Ledge/ }));
+    d.releaseLaunch();                                                   // the held launch is answered late: no card waits for it
+    await waitFor(() => expect(seat('local:launch-1')).not.toBeNull());
+    await ask(env, 'Une autre', 'Voici.', { proposal: PROPOSAL });
+    d.options.autoLaunch = true;
+    await user.click(await panel().findByRole('button', { name: 'Start the session' }));
+    await screen.findByText(/is starting at the Ledge table\./);
+    expect(filterButton()).toBeVisible();
+  });
+
   it('with the local daemon offline, the field is disabled with the reason and the history stays', async () => {
     const env = await openChat();
     await ask(env, 'Who reviews?', '**Otto** relit la PR.');

@@ -131,13 +131,14 @@ function Shell({ client }: { client?: DaemonClient }) {
   });
   // A chat card's session started (the daemon listed it before answering): the chat stays open; if the current filter hides its
   // table, the filter goes back to All without leaving the page; the seat lights and the notice names who starts where (lot 7's words),
-  // or says it starts with no project (not mapped yet, or « Sans projet »: the proposal's folder name is no table). Not listed: no notice.
+  // or says it starts with no project (not mapped yet, or « Sans projet »: the proposal's folder name is no table). Not listed: nothing
+  // to show, so the filter stays and there is no notice.
   const chatLaunched = (id: string) => {
     const s = sessions.find(x => x.id === id);
-    const table = s ? projectIdOf(s) ?? 'none' : null;
-    if (base.project !== 'all' && base.project !== table) dispatch({ type: 'filter', project: 'all' });
     filing.markSeated(id);
     if (!s) return;
+    const table = projectIdOf(s) ?? 'none';
+    if (base.project !== 'all' && base.project !== table) dispatch({ type: 'filter', project: 'all' });
     const own = projects?.projects.find(p => p.id === table)?.name;
     notify(own ? t.launch.started(s.name, own) : t.launch.startedNoTable(s.name));
   };
