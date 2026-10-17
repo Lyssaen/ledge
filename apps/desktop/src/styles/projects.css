@@ -17,6 +17,8 @@
 .picker-branch{font-size:11px;color:var(--muted-foreground);white-space:nowrap}
 .picker-list .ledge-btn{height:28px!important;padding:0 10px!important;font-size:12px!important;gap:5px!important}
 .picker-offline{margin:0;padding:14px;font-size:12px;color:var(--warning);border:1px dashed var(--input);border-radius:var(--radius-md)}
+/* Not in the mockup: a listing that failed can be asked again. */
+.picker-retry{margin-left:8px;padding:0;font-size:12px;color:var(--foreground);text-decoration:underline;text-underline-offset:2px}
 .picker-typed{display:flex;gap:8px}
 .picker-typed input{flex:1;min-width:0;height:32px;padding:0 10px;font-size:12px;background:var(--card)}
 /* The mockup's base gives inputs and .mono these; Desktop's base does not. */

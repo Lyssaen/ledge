@@ -274,7 +274,7 @@ const fr = {
       typed: (m: string) => `Chemin sur ${m}`, typedPlaceholder: (m: string) => `Ou saisissez un chemin sur ${m}`,
       offlinePath: (m: string) => `${m} est hors ligne : impossible de vérifier ce chemin.`, notFound: (m: string) => `Dossier introuvable sur ${m}.`,
       alreadyListed: 'Ce dépôt est déjà dans la liste.', absolute: 'Saisissez un chemin complet, qui commence par /.',
-      timeout: 'Le dossier n’a pas répondu.'
+      timeout: 'Le dossier n’a pas répondu.', retry: 'Réessayer'
     }
   },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
@@ -538,7 +538,7 @@ const en: typeof fr = {
       typed: (m) => `Path on ${m}`, typedPlaceholder: (m) => `Or type a path on ${m}`,
       offlinePath: (m) => `${m} is offline: this path cannot be checked.`, notFound: (m) => `Folder not found on ${m}.`,
       alreadyListed: 'This repository is already in the list.', absolute: 'Type a full path, starting with /.',
-      timeout: 'The folder did not answer.'
+      timeout: 'The folder did not answer.', retry: 'Try again'
     }
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },

@@ -13,12 +13,12 @@ const LOADING: Listing = { status: 'loading' };
 let next = 0;
 
 /** A folder's subfolders on one machine (its home when `path` is undefined), with the Git repositories among them and their branch:
- *  one `folder.list` per (machine, path), with its own requestId; an answer to another request, or a late one, is ignored.
- *  Loading while it is asked, and when there is no machine; an error after LISTING_TIMEOUT_MS of silence. */
-export function useFolderListing(client: DaemonClient, machine: string | null, path: string | undefined): Listing {
+ *  one `folder.list` per (machine, path, attempt), with its own requestId; an answer to another request, or a late one, is ignored.
+ *  Loading while it is asked, and when there is no machine; an error after LISTING_TIMEOUT_MS of silence. A new `attempt` asks again. */
+export function useFolderListing(client: DaemonClient, machine: string | null, path: string | undefined, attempt = 0): Listing {
   const { t } = useI18n();
   const timeout = t.projects.picker.timeout;
-  const key = machine === null ? null : JSON.stringify([machine, path ?? null]);
+  const key = machine === null ? null : JSON.stringify([machine, path ?? null, attempt]);
   const [answer, setAnswer] = useState<{ key: string; listing: Listing } | null>(null);
   useEffect(() => {
     if (key === null || machine === null) return;

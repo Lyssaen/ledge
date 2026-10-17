@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -8,6 +9,9 @@ import { createMockDaemon } from '@ledge/fleet/test/mockDaemon';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { FolderPicker } from '../src/projects/FolderPicker';
 import { machine } from './fleet-helpers';
+import { declarations } from './helpers';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 type MockDaemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const opened: { d: MockDaemon; client: DaemonClient }[] = [];
@@ -155,6 +159,25 @@ describe('FolderPicker', () => {
     expect(typedField('Local')).toHaveValue('');
     expect(screen.queryByRole('alert')).toBeNull();
   });
+
+  it('switching machine starts again from that machine\'s home', async () => {
+    const { d, user, list } = await setup();
+    await user.click(list.getByRole('button', { name: 'notes' }));
+    await screen.findByRole('button', { name: 'drafts' });
+    await user.click(screen.getByRole('radio', { name: /^NAS/ }));
+    const asked = d.received.length;
+    await user.click(screen.getByRole('radio', { name: 'Local' }));
+    const back = within(await screen.findByRole('list', { name: 'Contents of /home/me on Local' }));
+    expect(await back.findByRole('button', { name: 'ledge' })).toBeVisible();
+    const again = d.received.slice(asked).filter((m): m is Extract<ClientMessage, { type: 'folder.list' }> => m.type === 'folder.list');
+    expect(again).toHaveLength(1);
+    expect(again[0]!.path).toBeUndefined();
+  });
+
+  it('the machine chips show keyboard focus (the chip rule of launch.css, loaded with the app)', () => {
+    expect(declarations('launch.css', '.chip:has(input:focus-visible)')).toContain('outline:2pxsolidvar(--ring)');
+    expect(readFileSync(resolve(__dirname, '../src/styles/app.css'), 'utf8')).toContain('@import "./launch.css";');
+  });
 });
 
 describe('useFolderListing through FolderPicker', () => {
@@ -213,5 +236,61 @@ describe('useFolderListing through FolderPicker', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('The folder did not answer.');
     expect(typedField('Local')).toHaveValue('/srv/slow');
     expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('a listing that failed is asked again by « Try again », and by its current crumb', () => {
+    const { client, sent, emit } = fakeClient();
+    render(<FolderPicker client={client} machines={[local]} taken={() => false} onAdd={vi.fn()} />);
+    emit({ type: 'folder.listing', requestId: lists(sent)[0]!.requestId!, path: '~', parent: null, entries: [], error: 'busy' });
+    expect(screen.getByText(/^busy/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(lists(sent)).toHaveLength(2);
+    expect(lists(sent)[1]!.path).toBeUndefined();
+    expect(lists(sent)[1]!.requestId).not.toBe(lists(sent)[0]!.requestId);
+    emit({ type: 'folder.listing', requestId: lists(sent)[1]!.requestId!, path: '/home/me', parent: '/home', entries: ['a'] });
+    expect(screen.getByRole('list', { name: 'Contents of /home/me on Local' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'a' }));
+    emit({ type: 'folder.listing', requestId: lists(sent)[2]!.requestId!, path: '/home/me/a', parent: null, entries: [], error: 'permission denied' });
+    expect(screen.getByText(/^permission denied/)).toBeVisible();
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Current folder' })).getByRole('button', { name: 'a' }));
+    expect(lists(sent)).toHaveLength(4);
+    expect(lists(sent)[3]).toMatchObject({ path: '/home/me/a' });
+    emit({ type: 'folder.listing', requestId: lists(sent)[3]!.requestId!, path: '/home/me/a', parent: '/home/me', entries: ['b'] });
+    expect(screen.getByRole('button', { name: 'b' })).toBeVisible();
+  });
+
+  it('a machine dropping during a typed check says it is offline, not that the path is missing; nothing is added', () => {
+    const { client, sent, emit } = fakeClient();
+    const onAdd = vi.fn();
+    const view = render(<FolderPicker client={client} machines={[local]} taken={() => false} onAdd={onAdd} />);
+    fireEvent.change(typedField('Local'), { target: { value: '/srv/x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    const ask = sent.find((m): m is Extract<ClientMessage, { type: 'repos.inspect' }> => m.type === 'repos.inspect')!;
+    view.rerender(<FolderPicker client={client} machines={[{ ...local, status: 'unreachable', ready: false }]} taken={() => false} onAdd={onAdd} />);
+    // The fleet answers a dropped machine's inspection « not found » for every path.
+    emit({ type: 'repos.info', requestId: ask.requestId, repos: [{ path: '/srv/x', exists: false, branch: null }] });
+    expect(screen.getByRole('alert')).toHaveTextContent('Local is offline: this path cannot be checked.');
+    expect(typedField('Local')).toHaveValue('/srv/x');
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('a typed check answered after the same repository was added from the list says « already listed »: added once', () => {
+    const { client, sent, emit } = fakeClient();
+    const onAdd = vi.fn();
+    function Host() {
+      const [repos, setRepos] = useState<string[]>([]);
+      return <FolderPicker client={client} machines={[local]} taken={(m, p) => m === 'local' && repos.includes(p)} onAdd={r => { onAdd(r); setRepos(x => [...x, r.path]); }} />;
+    }
+    render(<Host />);
+    emit({ type: 'folder.listing', requestId: lists(sent)[0]!.requestId!, path: '/home/me', parent: '/home', entries: ['ledge'], repos: [{ name: 'ledge', branch: 'main' }] });
+    fireEvent.change(typedField('Local'), { target: { value: '/home/me/ledge' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    const ask = sent.find((m): m is Extract<ClientMessage, { type: 'repos.inspect' }> => m.type === 'repos.inspect')!;
+    fireEvent.click(screen.getByRole('button', { name: 'Add ledge (Local)' }));
+    emit({ type: 'repos.info', requestId: ask.requestId, repos: [{ path: '/home/me/ledge', exists: true, branch: 'main' }] });
+    expect(screen.getByRole('alert')).toHaveTextContent('This repository is already in the list.');
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(onAdd).toHaveBeenCalledWith({ machine: 'local', path: '/home/me/ledge', branch: 'main' });
+    expect(screen.getByRole('button', { name: 'ledge already added' })).toBeDisabled();
   });
 });

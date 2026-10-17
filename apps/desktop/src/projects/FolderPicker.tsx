@@ -34,11 +34,13 @@ export function FolderPicker(p: {
   const [typed, setTyped] = useState('');
   const [error, setError] = useState('');
   const [check, setCheck] = useState<Check | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const fieldId = useId();
   const current = machines.find(m => m.id === machineId);
   const online = !!current && isUp(current);
   const label = current?.label ?? machineId ?? '';
-  const listing = useFolderListing(client, online ? machineId : null, dir);
+  const listing = useFolderListing(client, online ? machineId : null, dir, attempt);
+  const retry = () => setAttempt(n => n + 1);
   // The folder shown: the one the machine resolved once it answered (the home's `~` expanded), the one asked meanwhile.
   const shown = listing.status === 'ready' ? listing.path : dir;
 
@@ -47,13 +49,20 @@ export function FolderPicker(p: {
   onAdd.current = p.onAdd;
   const taken = useRef(p.taken);
   taken.current = p.taken;
+  const machinesNow = useRef(machines);
+  machinesNow.current = machines;
   useEffect(() => {
     if (!check) return;
     const off = client.onMessage(m => {
       if (m.type !== 'repos.info' || m.requestId !== check.id) return;
       const info = m.repos.find(r => r.path === check.path);
       setCheck(null);
-      if (!info?.exists) { setError(c.notFound(check.label)); return; }
+      if (!info?.exists) {
+        // The fleet answers « not found » for every path of a machine that dropped: that is said as offline.
+        const m = machinesNow.current.find(x => x.id === check.machine);
+        setError(m && isUp(m) ? c.notFound(check.label) : c.offlinePath(check.label));
+        return;
+      }
       if (taken.current(check.machine, check.path)) { setError(c.alreadyListed); return; }   // added from the list meanwhile
       onAdd.current({ machine: check.machine, path: check.path, branch: info.branch });
       setTyped(''); setError('');
@@ -94,13 +103,16 @@ export function FolderPicker(p: {
               {crumbsOf(shown).map((x, i) => (
                 <Fragment key={x}>
                   {i > 0 && <span aria-hidden="true">/</span>}
-                  <button type="button" onClick={() => setDir(x)} aria-current={x === shown ? 'location' : undefined}>{x === '/' ? c.root : baseName(x)}</button>
+                  <button type="button" onClick={() => (x === shown ? retry() : setDir(x))} aria-current={x === shown ? 'location' : undefined}>{x === '/' ? c.root : baseName(x)}</button>
                 </Fragment>
               ))}
             </nav>
           )}
           {listing.status === 'error' ? (
-            <p className="picker-offline" role="status">{listing.message === 'offline' ? c.offlineBody(label) : listing.message}</p>
+            <p className="picker-offline" role="status">
+              {listing.message === 'offline' ? c.offlineBody(label) : listing.message}
+              <button type="button" className="picker-retry" onClick={retry}>{c.retry}</button>
+            </p>
           ) : (
             <ul className="picker-list" aria-label={shown === undefined ? undefined : c.contents(shown, label)} aria-busy={listing.status === 'loading'}>
               {listing.status === 'ready' && (
