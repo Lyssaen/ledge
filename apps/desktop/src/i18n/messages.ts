@@ -14,10 +14,11 @@ const fr = {
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
     machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', settings: 'Réglages'
   },
-  crumb: { atelier: 'Atelier', list: 'Liste', settings: 'Réglages', clearFilter: 'Retirer le filtre : voir tous les projets', clearFilterTitle: 'Tous les projets (Échap)', escape: 'Échap' },
+  crumb: { atelier: 'Atelier', list: 'Liste', settings: 'Réglages', clearFilter: 'Retirer le filtre : voir tous les projets', clearFilterTitle: 'Tous les projets (Échap)', escape: 'Échap', openParent: (n: string) => `Ouvrir la conversation de ${n}` },
   top: {
     viewTabs: 'Vue des agents', helpersHide: 'Masquer les sous-agents', helpersShow: 'Afficher les sous-agents', pause: 'Figer les animations', play: 'Animer',
-    search: 'Rechercher une session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran'
+    search: 'Rechercher une session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
+    terminalShow: 'Afficher le terminal', terminalHide: 'Masquer le terminal', terminalShowTitle: 'Afficher le terminal (O)', terminalHideTitle: 'Masquer le terminal (O)'
   },
   foot: { sessions: 'Sessions locales et SSH', search: 'Une session', chat: 'Chat Ledge', shortcuts: 'Raccourcis' },
   sections: { general: 'Général', appearance: 'Apparence', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', projects: 'Projets', shortcuts: 'Raccourcis', about: 'À propos' } as Record<SectionId, string>,
@@ -131,6 +132,14 @@ const fr = {
   },
   session: {
     meta: 'Machine et dépôts',
+    rail: {
+      label: (p: string) => `Agents du projet ${p}`, kids: (n: number) => `Sous-agents · ${n}`, kidsOf: (n: string) => `Sous-agents de ${n}`, newHere: 'Nouvelle session ici'
+    },
+    kidsPill: (n: number) => plural(n, `${n} sous-agent`, `${n} sous-agents`), kidsPillTitle: 'Voir les sous-agents dans la colonne',
+    terminal: {
+      title: 'Terminal', empty: 'Aucune sortie reçue pour l’instant.', readOnly: 'Aperçu en lecture seule', offline: 'Hors ligne',
+      open: 'Ouvrir dans un terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`
+    },
     pending: {
       regions: { approval: 'Autorisation demandée', plan: 'Plan à approuver', question: 'Question de l’agent' } as Record<'approval' | 'plan' | 'question', string>,
       command: (n: string) => `${n} veut exécuter une commande`, edit: (n: string) => `${n} veut modifier un fichier`, approval: (n: string) => `${n} veut votre accord`,
@@ -196,10 +205,11 @@ const en: typeof fr = {
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', settings: 'Settings'
   },
-  crumb: { atelier: 'Atelier', list: 'List', settings: 'Settings', clearFilter: 'Remove the filter: show every project', clearFilterTitle: 'Every project (Esc)', escape: 'Esc' },
+  crumb: { atelier: 'Atelier', list: 'List', settings: 'Settings', clearFilter: 'Remove the filter: show every project', clearFilterTitle: 'Every project (Esc)', escape: 'Esc', openParent: (n) => `Open ${n}’s conversation` },
   top: {
     viewTabs: 'Agents view', helpersHide: 'Hide subagents', helpersShow: 'Show subagents', pause: 'Freeze animations', play: 'Animate',
-    search: 'Search a session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen'
+    search: 'Search a session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
+    terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)'
   },
   foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts' },
   sections: { general: 'General', appearance: 'Appearance', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Shortcuts', about: 'About' },
@@ -309,6 +319,14 @@ const en: typeof fr = {
   },
   session: {
     meta: 'Machine and repositories',
+    rail: {
+      label: (p) => `Agents of the project ${p}`, kids: (n) => `Subagents · ${n}`, kidsOf: (n) => `Subagents of ${n}`, newHere: 'New session here'
+    },
+    kidsPill: (n) => pluralEn(n, '1 subagent', `${n} subagents`), kidsPillTitle: 'Show the subagents in the rail',
+    terminal: {
+      title: 'Terminal', empty: 'No output received yet.', readOnly: 'Read-only preview', offline: 'Offline',
+      open: 'Open in a terminal', openFailed: (n) => `${n}’s terminal could not open.`
+    },
     pending: {
       regions: { approval: 'Approval requested', plan: 'Plan to approve', question: 'Question from the agent' },
       command: (n) => `${n} wants to run a command`, edit: (n) => `${n} wants to change a file`, approval: (n) => `${n} wants your approval`,

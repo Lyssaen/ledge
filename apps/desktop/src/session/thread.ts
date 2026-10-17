@@ -135,3 +135,8 @@ export function helperOf(session: Session, items: readonly ThreadItem[] | undefi
   const row = items?.find((i): i is HelperItem => i.kind === 'helper' && i.id === id);
   return row ? { id, kind: row.agentType ?? 'subagent', task: row.task, state: 'exited' } : null;
 }
+
+/** The subagent of a place: helperOf, else — known by neither (its thread not there yet, or gone) — named by its id alone, finished. */
+export function subagentOf(session: Session, items: readonly ThreadItem[] | undefined, id: string): Helper {
+  return helperOf(session, items, id) ?? { id, kind: 'subagent', task: '', state: 'exited' };
+}

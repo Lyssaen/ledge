@@ -127,7 +127,7 @@ describe('the Atelier shell', () => {
   it('a long project name truncates in the session crumb, full name in its title', () => {
     const nova = fakeSession('nova', { name: 'Nova', cwd: '/w/pay', state: 'working', topic: 'Migrate the ledger' });
     const nav = { ...initialNav({ view: 'atelier', helpers: true, paused: false }), place: { kind: 'session' as const, id: 'nova', view: 'atelier' as const, project: 'all' } };
-    render(<LangProvider lang="en"><TopBar nav={nav} dispatch={() => {}} session={nova} projects={TWO_PROJECTS} projectIdOf={() => 'pay'} /></LangProvider>);
+    render(<LangProvider lang="en"><TopBar nav={nav} dispatch={() => {}} session={nova} projects={TWO_PROJECTS} projectIdOf={() => 'pay'} helper={null} terminal={false} onTerminal={() => {}} /></LangProvider>);
     const link = within(screen.getByRole('banner')).getByRole('button', { name: 'Payment Service Platform Migration Europe' });
     expect(link).toHaveClass('crumb-link');
     expect(link).toHaveAttribute('title', 'Payment Service Platform Migration Europe');

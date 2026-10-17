@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, within } from '@testing-library/react';
-import { boot, closeDaemons, TWO_PROJECTS } from './helpers';
+import { boot, closeDaemons, listSessions, TWO_PROJECTS } from './helpers';
 
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
@@ -43,6 +43,15 @@ describe('the session search', () => {
     expect(screen.getAllByRole('option')[1]).toHaveAttribute('aria-selected', 'true');
     await user.click(screen.getAllByRole('option')[1]!);
     expect(within(screen.getByRole('banner')).getByText('Nova')).toBeVisible();
+  });
+
+  it('an offline session: its bot frozen in the search, « Offline » in the top bar once opened', async () => {
+    const { user } = await boot({ sessions: listSessions(), list: true });
+    await user.keyboard('{Control>}k{/Control}');
+    const rio = screen.getByRole('option', { name: /Rio/ });
+    expect(rio.querySelector('[data-frozen]')).toHaveAttribute('data-frozen', 'true');
+    await user.click(rio);
+    expect(within(screen.getByRole('banner')).getByText('Offline')).toHaveAttribute('data-badge', 'readonly');
   });
 
   it('the shortcuts help lists the rows without Ctrl Alt N', async () => {

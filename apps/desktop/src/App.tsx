@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { projectOf, useProjects, type DaemonClient } from '@ledge/fleet';
+import { projectOf, useDaemon, useProjects, type DaemonClient } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -31,6 +31,9 @@ import { Toast, useToast } from './shell/Toast';
 import { useFiling } from './atelier/filing';
 import { Workspace } from './session/Workspace';
 import { createSessionMemory, memoKey } from './session/memory';
+import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
+import { subagentOf } from './session/thread';
+import { useStored } from './state/useStored';
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
@@ -90,6 +93,12 @@ function Shell({ client }: { client?: DaemonClient }) {
     void setWindowFullscreen(nav.fullscreen);
   }, [nav.fullscreen]);
   const session = place.kind === 'session' ? sessions.find(s => s.id === place.id) ?? null : null;
+  // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
+  const { threads } = useDaemon();
+  const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper) : null;
+  // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
+  const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
+  const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
 
@@ -98,9 +107,10 @@ function Shell({ client }: { client?: DaemonClient }) {
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={nav.modal !== null}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
         <section className="workspace">
-          <TopBar nav={nav} dispatch={dispatch} session={session} projects={projects} projectIdOf={projectIdOf} />
+          <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal} />
           {place.kind === 'settings' ? <Pending title={t.sections[place.section]} />
-            : session && place.kind === 'session' ? <Workspace key={memoKey(place.id, place.helper)} client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} />
+            : session && place.kind === 'session' ? <Workspace key={memoKey(place.id, place.helper)} client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify}
+                prefs={sessionPrefs} setPrefs={setSessionPrefs} order={order} projects={projects} projectIdOf={projectIdOf} />
             : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
             : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} decisions={decisions} filing={filing} waits={waits} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} />}

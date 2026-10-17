@@ -1,20 +1,24 @@
 import { useRef } from 'react';
-import { PROJECT_COLORS, type Projects, type Session } from '@ledge/protocol';
+import { PROJECT_COLORS, type Helper, type Projects, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
+import { helperState } from '../atelier/layout';
 import { useI18n } from '../i18n/lang';
 import { taskOf } from '../nav/agents';
 import type { NavAction, NavState, ProjectFilter, View } from '../nav/state';
 import { SHELL_ICONS } from './icons';
-import { SessionBot, StateBadge } from './SessionBot';
+import { HelperBot, SessionBot, StateBadge } from './SessionBot';
 
 const VIEWS: readonly View[] = ['atelier', 'list'];
 
-/** The mockup's top bar: the breadcrumb on the left (no page title); on the right, icons only, in groups: view and display
- *  (overview only), or the session's state; then search, chat, shortcuts, and full screen. */
-export function TopBar({ nav, dispatch, session, projects, projectIdOf }: {
+/** The mockup's top bar: the breadcrumb on the left (no page title; on a subagent's page, its parent before it); on the right,
+ *  icons only, in groups: view and display (overview only), or the open agent's state and the terminal toggle; then search,
+ *  chat, shortcuts, and full screen. */
+export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal }: {
   nav: NavState; dispatch: (a: NavAction) => void; session: Session | null; projects: Projects | null; projectIdOf: (s: Session) => string | null;
+  /** The subagent whose page is open (session is then its parent). */
+  helper: Helper | null; terminal: boolean; onTerminal(): void;
 }) {
   const { t } = useI18n();
   const tabs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
@@ -38,11 +42,23 @@ export function TopBar({ nav, dispatch, session, projects, projectIdOf }: {
         <span className="muted">/</span>
         <button className="crumb-link" onClick={() => dispatch({ type: 'home', project: pid })} title={filterName(pid)}>{filterName(pid)}</button>
         <span className="muted">/</span>
-        <span className="crumb-session">
-          <SessionBot session={session} size={22} paused={nav.paused} />
-          <strong>{session.name}</strong>
-          <span className="crumb-task" title={taskOf(session)}>{taskOf(session)}</span>
-        </span>
+        {helper ? <>
+          <button className="crumb-link crumb-parent" onClick={() => dispatch({ type: 'open', id: session.id })} title={t.crumb.openParent(session.name)}>
+            <SessionBot session={session} size={18} paused={nav.paused} />{session.name}
+          </button>
+          <span className="muted">/</span>
+          <span className="crumb-session">
+            <HelperBot helper={helper} parent={session} size={22} paused={nav.paused} />
+            <strong>{helper.kind}</strong>
+            <span className="crumb-task" title={helper.task}>{helper.task}</span>
+          </span>
+        </> : (
+          <span className="crumb-session">
+            <SessionBot session={session} size={22} paused={nav.paused} />
+            <strong>{session.name}</strong>
+            <span className="crumb-task" title={taskOf(session)}>{taskOf(session)}</span>
+          </span>
+        )}
       </>;
     }
     const view = place.view;
@@ -78,7 +94,15 @@ export function TopBar({ nav, dispatch, session, projects, projectIdOf }: {
   return (
     <header className="app-header" role="banner">
       <div className="breadcrumb"><Icon d={crumbIcon} />{crumbs()}</div>
-      {place.kind === 'session' && session && <div className="header-view header-session"><StateBadge state={botState(session)} offline={!!session.offline} /></div>}
+      {place.kind === 'session' && session && (
+        <div className="header-view header-session">
+          <StateBadge state={helper ? helperState(helper) : botState(session)} offline={!!session.offline} />
+          <span className="view-actions-sep" />
+          <Button variant="ghost" size="icon" aria-pressed={terminal} aria-label={terminal ? t.top.terminalHide : t.top.terminalShow} title={terminal ? t.top.terminalHideTitle : t.top.terminalShowTitle} onClick={onTerminal}>
+            <Icon d={SHELL_ICONS.terminal} size={16} />
+          </Button>
+        </div>
+      )}
       {overview && (
         <div className="header-view">
           <div className="icon-tabs" role="tablist" aria-label={t.top.viewTabs}>{tab('atelier', SHELL_ICONS.grid)}{tab('list', SHELL_ICONS.list)}</div>

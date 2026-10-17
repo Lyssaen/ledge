@@ -89,6 +89,7 @@
 .crumb-task { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 13px; }
 .crumb-task:before { content: '·'; margin-right: 7px; color: var(--muted-foreground); }
 .header-session { gap: 6px; }
+.header-session .ledge-btn[aria-pressed=true] { background: var(--accent); color: var(--foreground); }
 .app-header .breadcrumb { flex: 1 1 auto; }
 
 /* settings.css: the crumb link's size and corners. */
@@ -97,6 +98,8 @@
 /* Not in the mockup (spec: long names end with « … », the top bar never wraps): a crumb link keeps one line up to 180 px,
    with its full name in `title`, and does not shrink, so the session's task gives way first. */
 .breadcrumb .crumb-link { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 180px; flex-shrink: 0; }
+/* office.css: on a subagent's page, its parent (bot and name) before it. */
+.breadcrumb .crumb-parent { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
 /* launch.css: the dialog widths and the chat panel. */
 .modal.composer-modal { width: 640px; }

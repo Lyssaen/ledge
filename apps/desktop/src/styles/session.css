@@ -4,16 +4,60 @@
      the mockup cancels them itself;
    - « Voir » under 600 px comes from the link's data-short attribute (translated), not from a French string in the CSS. */
 
-/* The conversation pane's frame (observatory.css: .conversation-workspace, .conversation, .pane-heading, .messages; office.css:
-   .pane-meta), without which the page neither lays out nor scrolls. First, so the session's own rules below win as in the mockup;
-   one column until the agents' rail and the terminal join it (task 8 replaces these lines with its port). */
-.conversation-workspace{display:grid;grid-template-columns:minmax(0,1fr);flex:1;min-height:0}
-.conversation{min-width:0;min-height:0;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--sidebar)}
+/* The session place (observatory.css: .conversation-workspace, .conversation, .pane-heading, .messages, the terminal; office.css:
+   the project's agents in a rail on the left, the subagents under their parent, the « N sous-agents » pill, .pane-meta).
+   First, so the session's own rules below win as in the mockup. The mockup's !important (office.css over observatory.css)
+   is not needed: the grid is declared once, here. Departure: the terminal shows the daemon's read-only preview, no prompt. */
+.conversation-workspace{display:grid;grid-template-columns:240px minmax(0,1fr);flex:1;min-height:0}
+.conversation-workspace.with-terminal{grid-template-columns:240px minmax(0,1.15fr) minmax(0,1fr)}
+.conversation,.terminal-pane{min-width:0;min-height:0;display:flex;flex-direction:column}
+.conversation{border-right:1px solid var(--border);background:var(--sidebar)}
 .pane-heading{height:43px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 20px;font-size:12px}
 .pane-heading>.muted{font-size:10px}
 .messages{overflow:auto;padding:24px;flex:1}
 .pane-meta{margin-left:10px;font-size:10px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-@media(max-width:850px){.conversation-workspace{grid-template-columns:1fr;overflow:auto;display:flex;flex-direction:column}.conversation{min-height:520px;flex-shrink:0}.messages{max-height:480px}}
+.terminal-pane{background:var(--well)}
+.terminal-content{padding:18px 20px;flex:1;overflow:auto;font-size:11px;line-height:21px}
+.terminal-content>.muted:first-child{font-size:10px}
+.terminal-prompt{color:var(--success)}
+.terminal-output{white-space:pre-wrap;overflow-wrap:anywhere;margin:25px 0}
+.terminal-content>.terminal-output:first-child{margin-top:0}
+.terminal-footer{border-top:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted-foreground)}
+.terminal-footer .ledge-btn{height:26px!important;font-size:11px!important;padding:0 8px!important}
+.project-rail{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--border);background:var(--sidebar)}
+.rail-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);font-size:12px;font-weight:500}
+.rail-head>span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail-head small{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.rail-head .side-swatch{margin:0}.rail-head .filter-none{width:9px;height:9px;border-radius:3px;border:1.5px dashed var(--muted-foreground)}
+.rail-list{flex:1;overflow:auto;padding:6px;display:flex;flex-direction:column;gap:2px}
+.rail-agent{position:relative;display:flex;align-items:center;gap:9px;width:100%;padding:6px 8px;border-radius:var(--radius-md);text-align:left;color:var(--muted-foreground)}
+.rail-agent:hover{background:var(--sidebar-accent);color:var(--foreground)}
+.rail-agent.current{background:var(--sidebar-accent);color:var(--foreground);box-shadow:inset 2px 0 0 var(--sidebar-primary)}
+.rail-agent>span{flex:1;min-width:0;display:flex;flex-direction:column}
+.rail-agent strong{font-size:12px;font-weight:500;color:var(--foreground)}
+.rail-agent small{font-size:11px;line-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail-agent.child{padding-left:24px}
+.rail-agent.child:before{content:'';position:absolute;left:14px;top:0;bottom:50%;width:7px;border-left:1px solid var(--input);border-bottom:1px solid var(--input);border-bottom-left-radius:4px}
+.rail-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--info)}
+.rail-dot.approval{background:var(--sidebar-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--sidebar-primary) 25%,transparent)}
+.rail-dot.question{background:var(--warning);box-shadow:0 0 0 3px color-mix(in srgb,var(--warning) 25%,transparent)}
+.rail-dot.done{background:var(--muted-foreground);opacity:.5}.rail-dot.off{background:none;border:1px solid var(--muted-foreground)}
+.rail-new{display:flex;align-items:center;gap:6px;margin:6px;padding:8px;border:1px dashed var(--input);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground)}
+.rail-new:hover{color:var(--foreground);border-color:var(--ring)}
+/* Sub-agents live only in the rail, grouped under their parent behind a « Sous-agents » caption and a tree line. */
+.rail-kids{position:relative;margin:0 0 4px 20px;padding:2px 0 2px 10px;border-left:1px dashed var(--input);border-radius:0 0 0 6px;transition:background .3s}
+.rail-kids-label{display:flex;align-items:center;gap:5px;padding:3px 6px 2px;font:500 10px/14px 'Geist Mono',monospace;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-foreground)}
+.rail-kids .rail-agent.child{padding-left:8px}
+.rail-kids .rail-agent.child:before{display:none}
+.rail-kids .rail-agent.child strong{font-weight:400}
+.rail-flash{animation:rail-flash 1.4s ease-out}
+@keyframes rail-flash{0%,40%{background:color-mix(in srgb,var(--sidebar-primary) 16%,transparent);border-left-color:var(--sidebar-primary)}100%{background:transparent}}
+@media(prefers-reduced-motion:reduce){.rail-flash{animation:none;background:color-mix(in srgb,var(--sidebar-primary) 10%,transparent)}}
+.kids-pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--muted-foreground)}
+.kids-pill:hover{color:var(--foreground);border-color:var(--input)}
+.kids-pill:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+@media(max-width:1000px){.project-rail{display:none}.conversation-workspace,.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:850px){.conversation-workspace{grid-template-columns:1fr;overflow:auto;display:flex;flex-direction:column}.conversation{min-height:520px;flex-shrink:0}.terminal-pane{min-height:310px;flex-shrink:0;border-top:1px solid var(--border)}.messages{max-height:480px}}
 @media(max-width:540px){.messages{padding:18px}}
 
 /* Session page content */

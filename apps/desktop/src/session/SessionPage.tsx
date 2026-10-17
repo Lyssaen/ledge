@@ -23,6 +23,10 @@ export interface SessionPageProps {
   nav: NavState; dispatch(a: NavAction): void;
   decisions: Decisions; waits: ReadonlyMap<string, Wait>;
   memory: SessionMemory; notify(text: string): void;
+  /** « N sous-agents »: show this agent's subagents in the rail. */
+  onShowKids(): void;
+  /** O: show or hide the terminal. */
+  onTerminal(): void;
 }
 
 /** After the last scroll, the reading position is written down this late (and when the page closes). */
@@ -107,9 +111,13 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     if (shown) memory.set(key, { scroll: pos.current, ...(last !== null && { seen: last }) });
   }, [memory, key]);
 
-  // The page's keys: the reply area takes R, Y / N and 1…9 (later lots add theirs here).
+  // The page's keys: the reply area takes R, Y / N and 1…9; O shows or hides the terminal (later lots add theirs here).
   const replyKeys = useRef<ScreenKeyHandler | null>(null);
-  useScreenKeys(e => replyKeys.current?.(e) ?? false);
+  useScreenKeys(e => {
+    if (replyKeys.current?.(e)) return true;
+    if (e.key === 'o' || e.key === 'O') { p.onTerminal(); return true; }
+    return false;
+  });
 
   const machine = machineOf(session);
   const since = whenOf(session, undefined, now, t.list.when).text;
@@ -117,10 +125,12 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const askerId = session.pending?.helperId;
   const asker = askerId === undefined ? session.name : helperOf(session, items, askerId)?.kind ?? session.name;
   const place = p.nav.place;
+  const kids = helper === null ? session.helpers ?? [] : [];
   return (
     <section className="conversation session-page" data-session={session.id} data-helper={helper?.id}>
       <div className="pane-heading">
         <span className="pane-meta mono" title={t.session.meta}>{machine} · {repoOf(session)}</span>
+        {kids.length > 0 && <><span className="spacer" /><button type="button" className="kids-pill" title={t.session.kidsPillTitle} onClick={p.onShowKids}><Icon d={SHELL_ICONS.subagents} size={13} />{t.session.kidsPill(kids.length)}</button></>}
       </div>
       <div className="session-split">
         <div className="session-main">
