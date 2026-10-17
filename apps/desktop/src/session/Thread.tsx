@@ -29,10 +29,19 @@ const Say = memo(function Say({ kind, text }: { kind: 'message' | 'reply'; text:
   return <div className={`agent-message ${kind}`}><div className="msg-body"><ThreadMarkdown text={text} /></div></div>;
 });
 
-/** The flat thread (session.tsx renderTurn / renderItem): one section per exchange, its time, the prompt as a bubble, the
- *  agent named once, then what it said, decided and did; the frozen or ended note after the last one. */
-export function Thread({ session, helper, items, xs, now, unread, since, dispatch }: ThreadProps): JSX.Element {
-  const { t, lang } = useI18n();
+interface TurnProps {
+  session: Session; helper: Helper | null; items: readonly ThreadItem[]; x: Exchange;
+  /** Its time mark, its live badge, and whether it is the last exchange (the frozen or ended note goes under it). */
+  at: string; running: boolean; last: boolean;
+  /** The clock, for the exchanges whose times count on (an action without a duration); the others get 0 and stay still. */
+  now: number;
+  unread: string | null; since: string; dispatch(a: NavAction): void;
+}
+
+/** One exchange: its time, the prompt as a bubble, the agent named once, then what it said, decided and did. Rendered again
+ *  only when what it shows changes: the clock's tick reaches the exchange whose action runs, not the ones before it. */
+const Turn = memo(function Turn({ session, helper, items, x, at, running, last, now, unread, since, dispatch }: TurnProps): JSX.Element {
+  const { t } = useI18n();
   const th = t.session.thread;
   const offline = session.offline === true;
   const marker = (id: string): ReactNode => id === unread
@@ -70,25 +79,36 @@ export function Thread({ session, helper, items, xs, now, unread, since, dispatc
     return <Fragment key={item.id}>{marker(item.id)}{node}</Fragment>;
   };
 
-  return <>{xs.map((x, i) => {
-    const last = i === xs.length - 1;
-    const at = timeMark(x.at, now, lang);
-    const running = !offline && x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running'));
-    return (
-      <section key={x.key} className={cls('turn open', last && 'current')} aria-label={th.exchange(at)}>
-        {x.prompt && marker(x.prompt.id)}
-        <div className="turn-time" aria-hidden="true"><span className="mono">{at}</span>{running && <span className="turn-live"><i />{th.live}</span>}</div>
-        {x.prompt && (
-          <div className={cls('prompt-block', x.prompt.from === 'parent' && 'from-agent')}>
-            <div className="prompt-author">{x.prompt.from === 'parent' ? <><SessionBot session={session} size={16} />{th.fromParent(session.name)}</> : th.you}</div>
-            <p>{x.prompt.text}</p>
-          </div>
-        )}
-        {x.segments.length > 0 && <div className="turn-author">{author}</div>}
-        {x.segments.map(segment)}
-        {last && offline && <div className="frozen-end"><Icon d={SHELL_ICONS.offline} size={13} />{th.frozenEnd(since)}</div>}
-        {last && !offline && session.state === 'exited' && <div className="turn-end">{th.ended(since)}</div>}
-      </section>
-    );
-  })}</>;
-}
+  return (
+    <section className={cls('turn open', last && 'current')} aria-label={th.exchange(at)}>
+      {x.prompt && marker(x.prompt.id)}
+      <div className="turn-time" aria-hidden="true"><span className="mono">{at}</span>{running && <span className="turn-live"><i />{th.live}</span>}</div>
+      {x.prompt && (
+        <div className={cls('prompt-block', x.prompt.from === 'parent' && 'from-agent')}>
+          <div className="prompt-author">{x.prompt.from === 'parent' ? <><SessionBot session={session} size={16} />{th.fromParent(session.name)}</> : th.you}</div>
+          <p>{x.prompt.text}</p>
+        </div>
+      )}
+      {x.segments.length > 0 && <div className="turn-author">{author}</div>}
+      {x.segments.map(segment)}
+      {last && offline && <div className="frozen-end"><Icon d={SHELL_ICONS.offline} size={13} />{th.frozenEnd(since)}</div>}
+      {last && !offline && session.state === 'exited' && <div className="turn-end">{th.ended(since)}</div>}
+    </section>
+  );
+});
+
+/** An action whose time counts on with the clock (running, or cut without a duration): its exchange takes every tick. */
+const ticks = (x: Exchange) => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.durationMs === undefined));
+
+/** The flat thread (session.tsx renderTurn / renderItem): one section per exchange, the frozen or ended note after the last
+ *  one. Memoised: the store's changes elsewhere (another session's preview, the chat, an error) leave it alone, its props
+ *  being the session, its items and their exchanges, the clock and the page's stable callbacks. */
+export const Thread = memo(function Thread({ session, helper, items, xs, now, unread, since, dispatch }: ThreadProps): JSX.Element {
+  const { lang } = useI18n();
+  const offline = session.offline === true;
+  return <>{xs.map((x, i) => (
+    <Turn key={x.key} session={session} helper={helper} items={items} x={x} at={timeMark(x.at, now, lang)} last={i === xs.length - 1}
+      running={!offline && x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running'))}
+      now={ticks(x) ? now : 0} unread={unread} since={since} dispatch={dispatch} />
+  ))}</>;
+});

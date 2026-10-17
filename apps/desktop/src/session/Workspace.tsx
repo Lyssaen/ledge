@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
 import { AgentsRail } from './AgentsRail';
@@ -20,7 +20,8 @@ export interface WorkspaceProps extends Omit<SessionPageProps, 'items' | 'helper
 export function Workspace({ client, prefs, setPrefs, order, projects, projectIdOf, ...p }: WorkspaceProps): JSX.Element {
   const items = useThread(client, p.session);
   const id = p.nav.place.kind === 'session' ? p.nav.place.helper : undefined;
-  const helper = id === undefined ? null : subagentOf(p.session, items, id);
+  // The same object while nothing it is read from changes: the thread is memoised on it.
+  const helper = useMemo(() => (id === undefined ? null : subagentOf(p.session, items, id)), [p.session, items, id]);
   // « N sous-agents »: the subagents show (if hidden), then their group in the rail scrolls into view and lights up.
   const [flash, setFlash] = useState(0);
   const showKids = () => {
