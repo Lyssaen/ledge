@@ -1,0 +1,29 @@
+/* Projects (ported from the mockup's projects.css): the folder picker. The editor's rules come with it. */
+.picker-machines input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
+.picker{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--well)}
+.picker-machines{display:flex;flex-wrap:wrap;gap:6px}
+.picker-crumbs{display:flex;align-items:center;flex-wrap:wrap;gap:4px;font-size:11px;color:var(--muted-foreground)}
+.picker-crumbs button{padding:2px 5px;border-radius:4px;font:inherit;color:var(--muted-foreground)}
+.picker-crumbs button:hover{background:var(--accent);color:var(--foreground)}
+.picker-crumbs button[aria-current]{color:var(--foreground);font-weight:500}
+.picker-list{list-style:none;margin:0;padding:4px;max-height:236px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--card)}
+.picker-list li{display:flex;align-items:center;gap:8px;min-height:36px;padding:0 4px 0 0;border-radius:var(--radius-sm)}
+.picker-list li:hover{background:var(--accent)}
+.picker-name{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;font-size:13px;border-radius:var(--radius-sm)}
+.picker-name>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.picker-name:disabled{cursor:default;opacity:1}
+.picker-name>svg{color:var(--muted-foreground)}
+.picker-list li.is-git .picker-name>svg:first-child{color:var(--success)}
+.picker-branch{font-size:11px;color:var(--muted-foreground);white-space:nowrap}
+.picker-list .ledge-btn{height:28px!important;padding:0 10px!important;font-size:12px!important;gap:5px!important}
+.picker-offline{margin:0;padding:14px;font-size:12px;color:var(--warning);border:1px dashed var(--input);border-radius:var(--radius-md)}
+.picker-typed{display:flex;gap:8px}
+.picker-typed input{flex:1;min-width:0;height:32px;padding:0 10px;font-size:12px;background:var(--card)}
+/* The mockup's base gives inputs and .mono these; Desktop's base does not. */
+.picker-typed input{color:var(--foreground);border:1px solid var(--input);border-radius:var(--radius-md)}
+.picker-typed input::placeholder{color:var(--muted-foreground)}
+.picker .mono{font-family:'Geist Mono',ui-monospace,monospace}
+.picker-typed input[aria-invalid=true]{border-color:var(--destructive)}
+/* From the mockup's settings.css, which Desktop does not port: the typed path's hidden label and its error. */
+.visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.set-error{font-size:12px;color:var(--danger-text)}

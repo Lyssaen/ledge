@@ -264,6 +264,19 @@ const fr = {
     started: (n: string, t: string) => `${n} démarre à la table ${t}.`, refused: (m: string) => `Démarrage refusé : ${m}`,
     timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.'
   },
+  projects: {
+    picker: {
+      machines: 'Machine à parcourir', offline: 'hors ligne',
+      offlineBody: (m: string) => `${m} est hors ligne. Reconnectez-la dans Réglages › Machines pour parcourir ses dossiers.`,
+      crumbs: 'Dossier courant', root: 'racine', parent: 'Dossier parent', contents: (d: string, m: string) => `Contenu de ${d} sur ${m}`,
+      open: (n: string) => `Ouvrir ${n}`,
+      noGit: 'sans Git', add: 'Ajouter', added: 'Ajouté', addLabel: (n: string, m: string) => `Ajouter ${n} (${m})`, addedLabel: (n: string) => `${n} déjà ajouté`,
+      typed: (m: string) => `Chemin sur ${m}`, typedPlaceholder: (m: string) => `Ou saisissez un chemin sur ${m}`,
+      offlinePath: (m: string) => `${m} est hors ligne : impossible de vérifier ce chemin.`, notFound: (m: string) => `Dossier introuvable sur ${m}.`,
+      alreadyListed: 'Ce dépôt est déjà dans la liste.', absolute: 'Saisissez un chemin complet, qui commence par /.',
+      timeout: 'Le dossier n’a pas répondu.'
+    }
+  },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
   botReadOnly: 'Lecture seule',
@@ -514,6 +527,19 @@ const en: typeof fr = {
     cancel: 'Cancel', launch: 'Launch', launching: 'Launching…',
     started: (n, t) => `${n} is starting at the ${t} table.`, refused: (m) => `Launch refused: ${m}`,
     timeout: 'The launch did not answer. Check the machine, then try again.'
+  },
+  projects: {
+    picker: {
+      machines: 'Machine to browse', offline: 'offline',
+      offlineBody: (m) => `${m} is offline. Reconnect it in Settings › Machines to browse its folders.`,
+      crumbs: 'Current folder', root: 'root', parent: 'Parent folder', contents: (d, m) => `Contents of ${d} on ${m}`,
+      open: (n) => `Open ${n}`,
+      noGit: 'no Git', add: 'Add', added: 'Added', addLabel: (n, m) => `Add ${n} (${m})`, addedLabel: (n) => `${n} already added`,
+      typed: (m) => `Path on ${m}`, typedPlaceholder: (m) => `Or type a path on ${m}`,
+      offlinePath: (m) => `${m} is offline: this path cannot be checked.`, notFound: (m) => `Folder not found on ${m}.`,
+      alreadyListed: 'This repository is already in the list.', absolute: 'Type a full path, starting with /.',
+      timeout: 'The folder did not answer.'
+    }
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },

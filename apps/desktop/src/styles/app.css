@@ -6,6 +6,7 @@
 @import "./list.css";
 @import "./session.css";
 @import "./launch.css";
+@import "./projects.css";
 
 /* All UI colors come from Ledge's unchanged tokens.css snapshot. */
 :root { font-family: 'Geist', 'Segoe UI', system-ui, sans-serif; font-synthesis: none; color: var(--foreground); background: var(--background); --grow: cubic-bezier(.2,.8,.2,1); }
