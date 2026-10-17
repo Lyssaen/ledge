@@ -22,7 +22,8 @@ describe('useDecisions', () => {
     act(() => { expect(result.current.decide(otto, 'accept')).toBe(true); });
     act(() => { expect(result.current.decide(otto, 'deny')).toBe(false); });
     expect(props.client.send).toHaveBeenCalledTimes(1);
-    expect(props.client.send).toHaveBeenCalledWith({ type: 'session.decide', id: 'local:otto', decision: 'accept' });
+    // The request the user saw goes with it: the daemon refuses it if another one is pending by then.
+    expect(props.client.send).toHaveBeenCalledWith({ type: 'session.decide', id: 'local:otto', decision: 'accept', expect: { kind: 'permission', text: 'npm test' } });
     expect(result.current.busy('local:otto')).toBe(true);
     rerender({ ...props, sessions: [{ ...otto, state: 'working', pending: undefined }] });
     expect(result.current.busy('local:otto')).toBe(false);
@@ -118,7 +119,7 @@ describe('useDecisions', () => {
     act(() => { expect(result.current.decide(otto, 'accept', 'why')).toBe(false); });
     act(() => { expect(result.current.decide({ ...otto, tool: 'cursor' }, 'always')).toBe(false); });
     act(() => { expect(result.current.decide(otto, 'deny', 'Use pnpm')).toBe(true); });
-    expect(props.client.send).toHaveBeenCalledWith({ type: 'session.decide', id: 'local:otto', decision: 'deny', note: 'Use pnpm' });
+    expect(props.client.send).toHaveBeenCalledWith({ type: 'session.decide', id: 'local:otto', decision: 'deny', note: 'Use pnpm', expect: { kind: 'permission', text: 'npm test' } });
     expect(props.client.send).toHaveBeenCalledTimes(1);
   });
   it('a reply lands when the session moves; refused, its text comes back', () => {

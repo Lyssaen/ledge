@@ -142,7 +142,9 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
       if (note) {
         if (decision !== 'deny' || note.length > NOTE_MAX || !offers(s.tool, p.kind, 'note')) return false;
       }
-      return send(s, 'session.decide', { type: 'session.decide', id: s.id, decision, ...(note ? { note } : {}) }, note ? { text: note, onRefused } : {});
+      // The request the user saw goes with it: the daemon refuses the decision if another one is pending by then.
+      const payload = { type: 'session.decide' as const, id: s.id, decision, ...(note ? { note } : {}), expect: { kind: p.kind, text: p.text } };
+      return send(s, 'session.decide', payload, note ? { text: note, onRefused } : {});
     },
     reply(s, text, onRefused) {
       if (s.offline || s.source === 'hook_only' || !text.trim() || live.current.has(s.id) || (s.pending && s.pending.kind !== 'question')) return false;

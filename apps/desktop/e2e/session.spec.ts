@@ -47,7 +47,7 @@ test('the session reads as a flat thread; actions unfold; Y allows the pinned re
   await thread(page).getByRole('button', { name: /^3 actions/ }).click();
   await expect(thread(page).locator('.action-list:not(.compact) .action-row')).toHaveCount(3);
   await page.keyboard.press('y');
-  await expect.poll(() => daemon.received.filter(m => m.type === 'session.decide')).toEqual([{ type: 'session.decide', id: 'otto', decision: 'accept' }]);
+  await expect.poll(() => daemon.received.filter(m => m.type === 'session.decide')).toEqual([{ type: 'session.decide', id: 'otto', decision: 'accept', expect: { kind: 'permission', text: 'npm test' } }]);
   await expect(page.getByRole('region', { name: 'Approval requested' })).toHaveCount(0);
 });
 test('reading older messages while new ones arrive: no jump, then « Go to the latest message »', async ({ page }) => {

@@ -18,7 +18,7 @@ describe('the List quick actions', () => {
     const { d, user } = await boot({ sessions: listSessions(), list: true });
     const allow = within(row('Otto')).getByRole('button', { name: 'Allow' });
     await user.dblClick(allow);
-    await waitFor(() => expect(decides(d)).toEqual([{ type: 'session.decide', id: 'otto', decision: 'accept' }]));
+    await waitFor(() => expect(decides(d)).toEqual([{ type: 'session.decide', id: 'otto', decision: 'accept', expect: { kind: 'permission', text: 'npm test' } }]));
     expect(allow).toBeDisabled();
     expect(within(row('Otto')).getByRole('button', { name: 'Deny' })).toBeDisabled();
     d.upsert({ ...listSessions()[0]!, state: 'working', pending: undefined });
