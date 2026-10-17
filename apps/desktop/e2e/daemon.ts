@@ -1,5 +1,5 @@
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { ClientMessage, DaemonInfo, Machines, Projects, Recent, Session, ThreadItem } from '@ledge/protocol';
+import type { ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Machines, Projects, Recent, Session, ThreadItem } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -13,6 +13,9 @@ export function session(id: string, extra: Partial<Session> = {}): Session {
 /** A folder of the fake daemon's disk: its parent (null at `/`), its subfolders by name, the Git repositories among them with their branch. */
 export interface Folder { parent: string | null; entries: string[]; repos?: { name: string; branch: string }[] }
 
+/** Ledge's scripted answer to every `chat.ask`: what it read, its text, the session it proposes to start. */
+export interface ChatReply { steps?: ChatStep[]; text: string; proposal?: ChatProposal }
+
 /** Simulates the local ledge daemon inside the page: a snapshot, then the machines list, and a `push` for later updates.
  *  Like the daemon (spec §5.3) it keeps the machines list: `machines.set` replaces it and is broadcast back as `machines`,
  *  and every new connection (reload, reconnect) gets the current list. A `document.read` is answered from `extras.documents` by its path
@@ -20,8 +23,11 @@ export interface Folder { parent: string | null; entries: string[]; repos?: { na
  *  `main`). A `folder.list` is answered from `extras.folders` by its path (`extras.home`, default `/home/me`, when it has none) with its
  *  `requestId` and the Git `repos` among the entries, or with the asked path and `error` `not found`. A `session.launch` is answered as the daemon does: a `starting` session (`launched-<n>`, the message's name, harness and folder) is listed,
  *  then `session.launched`, and LAUNCH_SETTLE_MS later it is `working`; `launches: 'manual'` leaves the answer to the test (`launched`, `refuse`).
+ *  A `chat.ask` is answered from `extras.chat` as the daemon streams it: each `chat.step`, the text as one `chat.delta`, then `chat.done` with the
+ *  proposal. A card's `session.launch { qid }` seats its agent as above, then broadcasts the `chat.history` where that turn's proposal has its
+ *  `launchedId`; that agent stays `starting` (the test may `upsert` it), so what the launch lit is never raced by the settle.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual' } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -30,6 +36,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   let socket: WebSocketRoute | null = null;
   let up = true;
   let launches = 0;
+  const turns = new Map<string, ChatTurn>();
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
     if (!up) { ws.close(); return; }
     socket = ws;
@@ -61,6 +68,15 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
           ? { type: 'folder.listing', ...id, path, parent: f.parent, entries: f.entries, repos: f.repos ?? [] }
           : { type: 'folder.listing', ...id, path, parent: null, entries: [], error: 'not found' }));
       }
+      if (msg.type === 'chat.ask') {
+        const reply = extras.chat ?? { text: 'Nothing to report.' };
+        const steps = reply.steps ?? [];
+        const at = new Date().toISOString();
+        turns.set(msg.qid, { qid: msg.qid, question: msg.text, askedAt: at, steps, answer: reply.text, answeredAt: at, ...(reply.proposal ? { proposal: reply.proposal } : {}) });
+        for (const step of steps) ws.send(JSON.stringify({ type: 'chat.step', qid: msg.qid, step }));
+        ws.send(JSON.stringify({ type: 'chat.delta', qid: msg.qid, text: reply.text }));
+        ws.send(JSON.stringify({ type: 'chat.done', qid: msg.qid, text: reply.text, at, ...(reply.proposal ? { proposal: reply.proposal } : {}) }));
+      }
       if (msg.type === 'session.launch' && extras.launches !== 'manual') {
         const id = `launched-${++launches}`;
         const project = msg.cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || msg.cwd;
@@ -69,6 +85,12 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
         sessions.set(id, s);
         ws.send(JSON.stringify({ type: 'session.updated', session: s }));
         ws.send(JSON.stringify({ type: 'session.launched', id }));
+        const turn = msg.qid === undefined ? undefined : turns.get(msg.qid);
+        if (turn?.proposal) {
+          turns.set(turn.qid, { ...turn, proposal: { ...turn.proposal, launchedId: id } });
+          ws.send(JSON.stringify({ type: 'chat.history', turns: [...turns.values()] }));
+        }
+        if (msg.qid !== undefined) return;
         setTimeout(() => {
           if (sessions.get(id)?.state !== 'starting') return;
           const next = { ...s, state: 'working' as const, lastActivityAt: new Date().toISOString() };
