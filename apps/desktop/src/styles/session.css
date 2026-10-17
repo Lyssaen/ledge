@@ -248,7 +248,7 @@
 .diff-fold:hover{color:var(--foreground)}
 .diff-gap{padding:6px 14px 6px 70px;font-size:11px;color:var(--muted-foreground)}
 /* Not in the mockup (its diffs were never cut): the daemon's 80-line cut, said under the diff like a gap. */
-.diff-cut{margin:0;padding:6px 14px 6px 70px;font-size:11px}
+.diff-cut,.diff-none{margin:0;padding:6px 14px 6px 70px;font-size:11px}
 .changes-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted-foreground);text-align:center;padding:24px}
 .changes-empty strong{color:var(--foreground);font-weight:500}
 .changes-empty p{margin:0;font-size:12px}

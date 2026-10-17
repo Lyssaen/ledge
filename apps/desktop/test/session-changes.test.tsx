@@ -144,3 +144,51 @@ it('« turn 2 » aims at the action: the thread growing as its fold opens does n
     expect(g.top).toBe(900);
   } finally { vi.unstubAllGlobals(); }
 });
+
+const touchHeads = () => [...pane().querySelectorAll('.diff-scroll > .touch-head')];
+it('a touch without a diff among several says so under its header', async () => {
+  const { user } = await openOtto([
+    { kind: 'tool', id: 'n1', at: new Date().toISOString(), turn: 2, tool: 'NotebookEdit', label: '/w/ledge/src/App.tsx', status: 'success', files: [{ path: '/w/ledge/src/App.tsx', change: 'edit' }] }
+  ]);
+  await user.click(tab(/^Changes/));
+  expect(touchHeads().map(h => h.textContent)).toEqual(['Edit · turn 1', 'NotebookEdit · turn 2']);
+  expect(touchHeads()[1]!.nextElementSibling).toHaveTextContent('No recorded difference for this action.');
+  expect(touchHeads()[0]!.nextElementSibling).toHaveRole('table');
+});
+it('the diff is a table of rows, each with cells; a line says whether it was added or removed', async () => {
+  const { user } = await openOtto([
+    { kind: 'tool', id: 'k1', at: new Date().toISOString(), turn: 2, tool: 'apply_patch', label: 'src/c.ts', status: 'success',
+      files: [{ path: 'src/c.ts', change: 'edit', diff: `@@ -1,12 +1,12 @@ fn x\n-a\n+b\n${Array.from({ length: 10 }, (_, i) => ` c${i}`).join('\n')}\n-y\n+z\n@@ -40,1 +40,1 @@\n-p\n+q` }] }
+  ]);
+  await user.click(tab(/^Changes/));
+  await user.click(within(screen.getByRole('navigation', { name: 'Changed files' })).getByRole('button', { name: /c\.ts/ }));
+  const table = within(pane()).getByRole('table', { name: 'Differences' });
+  const rows = within(table).getAllByRole('row');
+  expect(rows.length).toBeGreaterThan(10);
+  for (const r of rows) expect(within(r).queryAllByRole('cell').length).toBeGreaterThan(0);
+  // Every row of the table's own children is a row: hunks, gaps and folds too.
+  for (const child of table.children) expect(child).toHaveRole('row');
+  expect(within(table).getAllByRole('cell', { name: 'added' })).toHaveLength(3);
+  expect(within(table).getAllByRole('cell', { name: 'removed' })).toHaveLength(3);
+  expect(within(table).getByRole('cell', { name: /unchanged lines \(lines 13–39\)/ })).toBeVisible();
+  await user.click(within(table).getByRole('button', { name: 'Show 4 unchanged lines' }));
+  expect(within(table).queryByRole('button', { name: /unchanged line/ })).toBeNull();
+});
+it('a file touched by five actions: added, edited, renamed, edited, deleted by a Codex patch without a diff', async () => {
+  const at = new Date().toISOString();
+  const { user } = await openOtto([
+    { kind: 'tool', id: 'f1', at, turn: 2, tool: 'apply_patch', label: 'src/a.ts', status: 'success', files: [{ path: 'src/a.ts', change: 'add', diff: '+one\n+two' }] },
+    { kind: 'tool', id: 'f2', at, turn: 2, tool: 'Edit', label: '/w/ledge/src/a.ts', status: 'success', files: [{ path: '/w/ledge/src/a.ts', change: 'edit', diff: '- one\n+ uno' }] },
+    { kind: 'tool', id: 'f3', at, turn: 2, tool: 'apply_patch', label: 'src/b.ts', status: 'success', files: [{ path: 'src/b.ts', from: 'src/a.ts', change: 'edit', diff: '@@\n-uno\n+un' }] },
+    { kind: 'tool', id: 'f4', at, turn: 2, tool: 'Edit', label: '/w/ledge/src/b.ts', status: 'success', files: [{ path: '/w/ledge/src/b.ts', change: 'edit', diff: '- two\n+ deux' }] },
+    { kind: 'tool', id: 'f5', at, turn: 2, tool: 'apply_patch', label: 'src/b.ts', status: 'success', files: [{ path: 'src/b.ts', change: 'delete' }] }
+  ]);
+  await user.click(tab(/^Changes/));
+  const file = within(screen.getByRole('navigation', { name: 'Changed files' })).getByRole('button', { name: /b\.ts/ });
+  expect(file.querySelector('.change-letter')).toHaveTextContent('D');
+  await user.click(file);
+  expect(pane().querySelector('.file-title code')).toHaveTextContent('src/a.ts → src/b.ts');
+  expect(touchHeads().map(h => h.textContent)).toEqual(['apply_patch · turn 2', 'Edit · turn 2', 'apply_patch · turn 2', 'Edit · turn 2', 'apply_patch · turn 2']);
+  expect(touchHeads()[4]!.nextElementSibling).toHaveTextContent('No recorded difference for this action.');
+  expect(pane().querySelectorAll('.diff-scroll > [role="table"]')).toHaveLength(4);
+});

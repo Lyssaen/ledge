@@ -10,13 +10,15 @@ export function Delta({ plus, minus }: { plus: number; minus: number }): JSX.Ele
   return <span className="delta mono"><span className="plus">+{plus}</span><span className="minus">−{minus}</span></span>;
 }
 
-/** One line of a diff (session.tsx Line): its old and new numbers when the hunk is numbered, its sign, its text. */
-function Line({ l }: { l: DiffLine }): JSX.Element {
+/** One line of a diff (session.tsx Line), a row of the table: its old and new numbers when the hunk is numbered (left out
+ *  for a screen reader), its sign (said « ajouté » / « supprimé »), its text. */
+function Line({ l, signs }: { l: DiffLine; signs: { add: string; del: string } }): JSX.Element {
+  const said = l.t === 'add' ? signs.add : l.t === 'del' ? signs.del : undefined;
   return (
     <div className={`diff-line ${l.t}`} role="row">
-      <span className="ln">{l.o ?? ''}</span><span className="ln">{l.n ?? ''}</span>
-      <span className="sign">{l.t === 'add' ? '+' : l.t === 'del' ? '−' : ''}</span>
-      <span className="code">{l.text || ' '}</span>
+      <span className="ln" aria-hidden="true">{l.o ?? ''}</span><span className="ln" aria-hidden="true">{l.n ?? ''}</span>
+      <span className="sign" role="cell" {...(said !== undefined ? { 'aria-label': said } : {})}>{l.t === 'add' ? '+' : l.t === 'del' ? '−' : ''}</span>
+      <span className="code" role="cell">{l.text || ' '}</span>
     </div>
   );
 }
@@ -31,14 +33,24 @@ export function DiffView({ diff }: { diff: ParsedDiff }): JSX.Element {
   return (
     <div className="diff-view mono" role="table" aria-label={tc.diff}>
       {rows.map((r, i) => {
-        if (r.kind === 'line') return <Line key={i} l={r.line} />;
-        // An unnumbered Codex hunk has only its context: no empty label before it.
-        if (r.kind === 'hunk') return <div key={i} className="diff-hunk mono">{r.label && <span>{r.label}</span>}{r.ctx && <span className="hunk-ctx">{r.ctx}</span>}</div>;
-        if (r.kind === 'gap') return <div key={i} className="diff-gap">{tc.gap(r.to - r.from + 1, r.from, r.to)}</div>;
+        if (r.kind === 'line') return <Line key={i} l={r.line} signs={tc.signs} />;
+        // An unnumbered Codex hunk has only its context: no empty label before it (a row holds a cell all the same).
+        if (r.kind === 'hunk') {
+          return (
+            <div key={i} className="diff-hunk mono" role="row">
+              {r.label || !r.ctx ? <span role="cell">{r.label}</span> : null}{r.ctx && <span className="hunk-ctx" role="cell">{r.ctx}</span>}
+            </div>
+          );
+        }
+        if (r.kind === 'gap') return <div key={i} className="diff-gap" role="row"><span role="cell">{tc.gap(r.to - r.from + 1, r.from, r.to)}</span></div>;
         return (
-          <button key={i} type="button" className="diff-fold" onClick={() => setShown(s => new Set(s).add(r.key))}>
-            <Icon d={SHELL_ICONS.unfold} size={12} />{tc.unfold(r.hidden)}
-          </button>
+          <div key={i} role="row">
+            <div role="cell">
+              <button type="button" className="diff-fold" onClick={() => setShown(s => new Set(s).add(r.key))}>
+                <Icon d={SHELL_ICONS.unfold} size={12} />{tc.unfold(r.hidden)}
+              </button>
+            </div>
+          </div>
         );
       })}
     </div>
@@ -55,8 +67,8 @@ export function FileDiffs({ file }: { file: ChangedFile }): JSX.Element {
     <div className="diff-scroll">
       {file.touches.every(x => x.diff === null) ? <p className="muted" style={{ padding: 20 }}>{tc.noDiff}</p> : file.touches.map((x, i) => (
         <Fragment key={`${x.tool.id}:${i}`}>
-          {many && <div className="diff-hunk mono">{x.tool.tool} · {tc.turn(x.turn)}</div>}
-          {x.diff && <DiffView diff={x.diff} />}
+          {many && <div className="diff-hunk touch-head mono">{x.tool.tool} · {tc.turn(x.turn)}</div>}
+          {x.diff ? <DiffView diff={x.diff} /> : <p className="muted diff-none">{tc.noTouchDiff}</p>}
           {x.diff?.cut && <p className="muted diff-cut">{tc.cut}</p>}
         </Fragment>
       ))}

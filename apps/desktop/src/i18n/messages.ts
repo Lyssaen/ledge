@@ -155,7 +155,10 @@ const fr = {
       diff: 'Différences',
       gap: (n: number, a: number, b: number) => plural(n, `⋯ ${n} ligne non modifiée (ligne ${a})`, `⋯ ${n} lignes non modifiées (lignes ${a}–${b})`),
       unfold: (n: number) => plural(n, `Afficher ${n} ligne inchangée`, `Afficher ${n} lignes inchangées`),
-      cut: 'Diff limité aux 80 premières lignes.', noDiff: 'Ce fichier n’a pas de différence enregistrée.'
+      cut: 'Diff limité aux 80 premières lignes.', noDiff: 'Ce fichier n’a pas de différence enregistrée.',
+      noTouchDiff: 'Pas de différence enregistrée pour cette action.',
+      // Said to a screen reader in place of a line's + or −.
+      signs: { add: 'ajouté', del: 'supprimé' }
     },
     pane: {
       label: 'Volet de lecture', tabs: 'Documents ouverts', closeTab: (l: string) => `Fermer ${l}`,
@@ -392,7 +395,9 @@ const en: typeof fr = {
       diff: 'Differences',
       gap: (n, a, b) => pluralEn(n, `⋯ 1 unchanged line (line ${a})`, `⋯ ${n} unchanged lines (lines ${a}–${b})`),
       unfold: (n) => pluralEn(n, 'Show 1 unchanged line', `Show ${n} unchanged lines`),
-      cut: 'Diff limited to the first 80 lines.', noDiff: 'This file has no recorded difference.'
+      cut: 'Diff limited to the first 80 lines.', noDiff: 'This file has no recorded difference.',
+      noTouchDiff: 'No recorded difference for this action.',
+      signs: { add: 'added', del: 'removed' }
     },
     pane: {
       label: 'Reading pane', tabs: 'Open documents', closeTab: (l) => `Close ${l}`,
