@@ -71,14 +71,18 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
     const sent = isNote ? decisions.decide(session, 'deny', text, restore) : decisions.reply(session, text, restore);
     if (sent) setDraft('');
   };
-  const askRevision = (message: string) => { input.current?.focus(); notify(message); };
+  // A plan goes back with what to revise; where the harness takes no note, a plain deny (the field is shut).
+  const askRevision = (message: string) => {
+    if (noteless) decisions.decide(session, 'deny');
+    else { input.current?.focus(); notify(message); }
+  };
 
   const actions: PendingActions | null = pending && canAct ? {
     busy,
     always: sort !== 'question' && offers(session.tool, pending.kind, 'always'),
-    alwaysTitle: tp.alwaysScope[alwaysScope(session.tool, pending)],
+    alwaysScope: alwaysScope(session.tool, pending),
     decide: d => { decisions.decide(session, d); },
-    keepPlanning: () => { if (text) submit(); else askRevision(tp.revise); },
+    keepPlanning: () => { if (text && !noteless) submit(); else askRevision(tp.revise); },
     choose: i => { decisions.reply(session, String(i + 1)); }
   } : null;
 

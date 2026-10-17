@@ -135,7 +135,7 @@ const fr = {
       regions: { approval: 'Autorisation demandée', plan: 'Plan à approuver', question: 'Question de l’agent' } as Record<'approval' | 'plan' | 'question', string>,
       command: (n: string) => `${n} veut exécuter une commande`, edit: (n: string) => `${n} veut modifier un fichier`, approval: (n: string) => `${n} veut votre accord`,
       question: (n: string) => `${n} vous pose une question`, plan: (n: string, title: string) => `${n} propose un plan · ${title}`, planBadge: 'Plan à approuver',
-      allow: 'Autoriser', deny: 'Refuser', always: 'Toujours autoriser pour cette session',
+      allow: 'Autoriser', deny: 'Refuser', always: 'Toujours autoriser pour cette session', alwaysProject: 'Toujours autoriser dans ce projet',
       approvePlan: 'Approuver le plan', keepPlanning: 'Continuer à planifier', approveAuto: 'Approuver et accepter les modifications automatiquement',
       // What « always » really grants, in the button's title (adapters/claude.ts, codex.ts: the option each one picks).
       alwaysScope: {
@@ -313,7 +313,7 @@ const en: typeof fr = {
       regions: { approval: 'Approval requested', plan: 'Plan to approve', question: 'Question from the agent' },
       command: (n) => `${n} wants to run a command`, edit: (n) => `${n} wants to change a file`, approval: (n) => `${n} wants your approval`,
       question: (n) => `${n} asks you a question`, plan: (n, title) => `${n} proposes a plan · ${title}`, planBadge: 'Plan to approve',
-      allow: 'Allow', deny: 'Deny', always: 'Always allow for this session',
+      allow: 'Allow', deny: 'Deny', always: 'Always allow for this session', alwaysProject: 'Always allow in this project',
       approvePlan: 'Approve the plan', keepPlanning: 'Keep planning', approveAuto: 'Approve and accept edits automatically',
       alwaysScope: {
         project: 'Claude Code saves the rule in the project’s settings: it also holds for its later sessions in this project.',

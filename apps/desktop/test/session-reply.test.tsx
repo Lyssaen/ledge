@@ -1,8 +1,14 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { NOTE_MAX } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, listSessions, type MockDaemon } from './helpers';
+
+// A plan that takes no note exists on no harness today: Cursor's plan is made noteless here to test that case.
+vi.mock('@ledge/protocol', async importOriginal => {
+  const real = await importOriginal<typeof import('@ledge/protocol')>();
+  return { ...real, offers: (tool: Parameters<typeof real.offers>[0], kind: Parameters<typeof real.offers>[1], what: 'always' | 'note') => (tool === 'cursor' && kind === 'plan' && what === 'note' ? false : real.offers(tool, kind, what)) };
+});
 
 afterEach(async () => { cleanup(); localStorage.clear(); await closeDaemons(); });
 
@@ -24,7 +30,7 @@ describe('the pinned request and the reply', () => {
     expect(req.getByText('Otto wants to run a command')).toBeVisible();
     expect(req.getByText('Bash')).toHaveClass('tool-tag');
     expect(req.getByText('for 12 min')).toHaveClass('pending-since');
-    expect(req.getByRole('button', { name: /^Always allow for this session/ })).toBeVisible();
+    expect(req.getByRole('button', { name: /^Always allow in this project/ })).toBeVisible();
     await user.keyboard('y'); await user.keyboard('y');
     await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'otto', decision: 'accept' }]));
     expect(req.getByRole('button', { name: /^Allow/ })).toBeDisabled();
@@ -142,7 +148,7 @@ describe('the reply, beyond the brief (carried items)', () => {
     const withPending = (pending: NonNullable<ReturnType<typeof listSessions>[0]['pending']>, tool: 'claude' | 'codex' = 'claude') =>
       [{ ...listSessions()[0]!, tool, pending }, ...listSessions().slice(1)];
     await open('Otto', withPending({ kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' }));
-    expect(screen.getByRole('button', { name: /^Always allow for this session/ })).toHaveAttribute('title', expect.stringMatching(/project/));
+    expect(screen.getByRole('button', { name: /^Always allow in this project/ })).toHaveAttribute('title', expect.stringMatching(/project/));
     cleanup(); await closeDaemons();
     await open('Otto', withPending({ kind: 'permission', text: 'src/a.ts', tool: 'Write', source: 'hook' }));
     expect(screen.getByRole('button', { name: /^Always allow for this session/ })).toHaveAttribute('title', expect.stringMatching(/every edit/));
@@ -152,6 +158,32 @@ describe('the reply, beyond the brief (carried items)', () => {
     cleanup(); await closeDaemons();
     await open('Otto', withPending({ kind: 'plan', text: 'Plan: x', source: 'hook' }));
     expect(screen.getByRole('button', { name: 'Approve and accept edits automatically' })).toHaveAttribute('title', expect.stringMatching(/auto mode/));
+  });
+
+  it('Claude saves a non-edit rule for the project: the label says so; its file tools keep « for this session »', async () => {
+    const withPending = (pending: NonNullable<ReturnType<typeof listSessions>[0]['pending']>) => [{ ...listSessions()[0]!, pending }, ...listSessions().slice(1)];
+    await open('Otto', withPending({ kind: 'permission', text: 'https://example.com', tool: 'WebFetch', source: 'hook' }));
+    expect(card('Approval requested').getByRole('button', { name: 'Always allow in this project' })).toBeVisible();
+    expect(card('Approval requested').queryByRole('button', { name: /for this session/ })).toBeNull();
+    cleanup(); await closeDaemons();
+    await open('Otto', withPending({ kind: 'permission', text: 'src/a.ts', tool: 'Write', source: 'hook' }));
+    expect(card('Approval requested').getByRole('button', { name: 'Always allow for this session' })).toBeVisible();
+    cleanup(); await closeDaemons();
+    await open('Otto', withPending({ kind: 'diff', text: 'src/a.ts', source: 'hook' }));
+    expect(card('Approval requested').getByRole('button', { name: 'Always allow for this session' })).toBeVisible();
+  });
+
+  it('a plan whose harness takes no note: N and « Keep planning » deny it plainly', async () => {
+    const pia = fakeSession('pia', { name: 'Pia', tool: 'cursor', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan: x', source: 'hook' } });
+    const { d, user } = await open('Pia', [...listSessions(), pia]);
+    expect(field()).toBeDisabled();
+    await user.keyboard('n');
+    await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny' }]));
+    expect(screen.getByRole('status')).not.toHaveTextContent('Write what to revise');
+    cleanup(); await closeDaemons();
+    const env = await open('Pia', [...listSessions(), pia]);
+    await env.user.click(card('Plan to approve').getByRole('button', { name: /^Keep planning/ }));
+    await waitFor(() => expect(sent(env.d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny' }]));
   });
 
   it('a reply that seems to land at once (a working session moves) still gives its text back when refused', async () => {

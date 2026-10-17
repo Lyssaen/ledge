@@ -26,12 +26,14 @@ export function alwaysScope(tool: Tool, p: Pending): 'project' | 'edits' | 'sess
 /** A plan's title: its first line without the heading marks. */
 const titleOf = (text: string): string => (text.split('\n').find(l => l.trim() !== '') ?? '').replace(/^\s*#+\s*/, '').trim();
 
+export type Scope = ReturnType<typeof alwaysScope>;
+
 export interface PendingActions {
   busy: boolean;
-  /** offers(tool, kind, 'always'), and what it grants (the button's title). */
-  always: boolean; alwaysTitle: string;
+  /** offers(tool, kind, 'always'), and what it grants: `project` names the project on the button, the title says it all. */
+  always: boolean; alwaysScope: Scope;
   decide(decision: 'accept' | 'deny' | 'always'): void;
-  /** « Continuer à planifier » : sends the draft back as the note, else asks for one. */
+  /** « Continuer à planifier » : sends the draft back as the note, else asks for one (a plain deny where no note is taken). */
   keepPlanning(): void;
   choose(i: number): void;
 }
@@ -74,13 +76,13 @@ export function PendingCard({ pending, asker, since, actions, relay }: { pending
           <div className="pending-actions">
             <Button variant="primary" size="sm" disabled={busy} onClick={() => actions.decide('accept')}>{tp.allow}<Kbd accent>Y</Kbd></Button>
             <Button variant="outline" size="sm" disabled={busy} onClick={() => actions.decide('deny')}>{tp.deny}<Kbd>N</Kbd></Button>
-            {actions.always && <Button variant="ghost" size="sm" disabled={busy} title={actions.alwaysTitle} onClick={() => actions.decide('always')}>{tp.always}</Button>}
+            {actions.always && <Button variant="ghost" size="sm" disabled={busy} title={tp.alwaysScope[actions.alwaysScope]} onClick={() => actions.decide('always')}>{actions.alwaysScope === 'project' ? tp.alwaysProject : tp.always}</Button>}
           </div>
         ) : actions && sort === 'plan' ? (
           <div className="pending-actions">
             <Button variant="primary" size="sm" disabled={busy} onClick={() => actions.decide('accept')}>{tp.approvePlan}<Kbd accent>Y</Kbd></Button>
             <Button variant="outline" size="sm" disabled={busy} onClick={actions.keepPlanning}>{tp.keepPlanning}<Kbd>N</Kbd></Button>
-            {actions.always && <Button variant="ghost" size="sm" disabled={busy} title={actions.alwaysTitle} onClick={() => actions.decide('always')}>{tp.approveAuto}</Button>}
+            {actions.always && <Button variant="ghost" size="sm" disabled={busy} title={tp.alwaysScope[actions.alwaysScope]} onClick={() => actions.decide('always')}>{tp.approveAuto}</Button>}
           </div>
         ) : null}
     </div>
