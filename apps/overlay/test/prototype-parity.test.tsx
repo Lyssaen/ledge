@@ -74,59 +74,44 @@ describe('prototype parity', () => {
     const handleBot = () => layer('handle').querySelector('svg.bot') as SVGSVGElement;
     const firstHandle = handleBot();
     fireEvent.click(screen.getByRole('button', { name: /Otto working, open/ }));
-    const reply = screen.getByPlaceholderText('Reply to Otto…');
-    fireEvent.change(reply, { target: { value: 'not yet' } });
-    const svg = layer('session').querySelector('svg.bot') as SVGSVGElement;
+    const svg = layer('peek').querySelector('svg.bot') as SVGSVGElement;
     const phase = svg.style.getPropertyValue('--bot-phase'); const state = svg.getAttribute('data-state');
     expect(svg).toHaveAttribute('data-material', 'signal');
     rerender(<Surface screenH={1080} theme="light" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    const after = layer('session').querySelector('svg.bot') as SVGSVGElement;
+    const after = layer('peek').querySelector('svg.bot') as SVGSVGElement;
     expect(after).toBe(svg);
     expect(after).toHaveAttribute('data-material', 'pebble');
     expect(after.style.getPropertyValue('--bot-phase')).toBe(phase);
     expect(after.getAttribute('data-state')).toBe(state);
     expect(handleBot()).toBe(firstHandle);
     expect(handleBot()).toHaveAttribute('data-material', 'pebble');
-    expect(mode()).toBe('session');
-    expect((screen.getByPlaceholderText('Reply to Otto…') as HTMLInputElement).value).toBe('not yet');
+    expect(mode()).toBe('peek');
+    expect(within(layer('peek')).getByText('Otto')).toBeInTheDocument();
   });
 
-  it('bubble retains its remaining time', () => {
+  it('an ask has no clock; a notice keeps the time it had left while held', () => {
     snapshot([otto(), pim(asks('git push'))]);
     render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    const bubbleBtn = (name: string) => within(layer('bubble')).getByRole('button', { name });
-    const holders: Array<{ hold: () => void; release: () => void }> = [
-      { hold: () => fireEvent.mouseEnter(surface()), release: () => fireEvent.mouseLeave(surface()) },
-      { hold: () => act(() => bubbleBtn('Approve').focus()), release: () => act(() => (document.activeElement as HTMLElement).blur()) },
-      (() => {
-        let spy: { mockRestore(): void } | null = null;
-        return {
-          hold: () => { spy = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true); act(() => { document.dispatchEvent(new Event('visibilitychange')); }); },
-          release: () => { spy!.mockRestore(); act(() => { document.dispatchEvent(new Event('visibilitychange')); }); }
-        };
-      })()
-    ];
-    let n = 0;
-    for (const h of holders) {
-      // A fresh ask re-unfolds the bubble; the oldest pending request (Pim's, never answered) comes back first.
-      if (n++ > 0) update(fakeSession(`late${n}`, { name: `Late${n}`, startedAt: `2026-10-09T18:0${n + 2}:00.000Z`, ...asks(`ls ${n}`) }));
-      tick(540);
-      expect(mode()).toBe('bubble');
-      expect(screen.getByText('Pim needs your approval')).toBeInTheDocument();
-      tick(1000);
-      h.hold();
-      tick(5000);
-      expect(mode()).toBe('bubble');
-      h.release();
-      expect(document.querySelector('[data-timer]')).toHaveAttribute('data-remaining', '3000');
-      tick(2999);
-      expect(mode()).toBe('bubble');
-      tick(1);
-      expect(mode()).toBe('handle');
-      // Closing preserves the pending request: nothing was decided and Pim still asks from the handle.
-      expect(rec.sent.filter(m => m.type === 'session.decide')).toHaveLength(0);
-      expect(screen.getByRole('button', { name: /Pim needs your approval, open/ })).toBeInTheDocument();
-    }
+    tick(540);
+    expect(mode()).toBe('bubble');
+    expect(document.querySelector('[data-timer]')).toBeNull();
+    fireEvent.click(within(layer('bubble')).getByRole('button', { name: 'Approve' }));
+    update(pim({ state: 'working' }));
+    tick(900);
+    expect(mode()).toBe('handle');
+    update(otto({ state: 'idle' }));
+    tick(540);
+    expect(screen.getByText('Otto finished')).toBeInTheDocument();
+    tick(1000);
+    fireEvent.mouseEnter(surface());
+    tick(5000);
+    expect(mode()).toBe('bubble');
+    fireEvent.mouseLeave(surface());
+    expect(document.querySelector('[data-timer]')).toHaveAttribute('data-remaining', '5000');
+    tick(4999);
+    expect(mode()).toBe('bubble');
+    tick(1);
+    expect(mode()).toBe('handle');
   });
 
   it('a late confirmation cannot steal focus', () => {
@@ -136,26 +121,18 @@ describe('prototype parity', () => {
     expect(screen.getByText('Otto needs your approval')).toBeInTheDocument();
     fireEvent.click(within(layer('bubble')).getByRole('button', { name: 'Approve' }));
     expect(rec.sent).toContainEqual({ type: 'session.decide', id: 'a', decision: 'accept' });
-    // Manually open B from the keyboard: Ctrl+Alt+L over the bubble opens the list.
+    // Ctrl+Alt+L while Otto's ask is showing opens the chat. The late confirmation must not steal it.
     shortcut();
-    expect(mode()).toBe('list');
-    toRow(2); press('Enter');
-    expect(mode()).toBe('session');
-    expect(document.activeElement).toHaveAccessibleName('Back to sessions');
-    const reply = screen.getByPlaceholderText('Reply to Pim…') as HTMLInputElement;
-    act(() => reply.focus());
-    fireEvent.change(reply, { target: { value: 'wait for CI' } });
-    // A's confirmation lands late.
+    expect(mode()).toBe('chat');
+    const field = screen.getByRole('textbox', { name: 'Ask Ledge' }) as HTMLInputElement;
+    act(() => field.focus());
+    fireEvent.change(field, { target: { value: 'wait for CI' } });
     update(otto({ state: 'working' }));
     tick(900);
-    expect(mode()).toBe('session');
-    expect(screen.getByText('Pim · speos-api')).toBeInTheDocument();
-    expect(reply.value).toBe('wait for CI');
-    expect(document.activeElement).toBe(reply);
-    // Double-clicking sends one command.
-    const approve = within(layer('session')).getByRole('button', { name: 'Approve' });
-    fireEvent.click(approve); fireEvent.click(approve);
-    expect(rec.sent.filter(m => m.type === 'session.decide' && m.id === 'b')).toHaveLength(1);
+    expect(mode()).toBe('chat');
+    expect(field.value).toBe('wait for CI');
+    expect(document.activeElement).toBe(field);
+    expect(rec.sent.filter(m => m.type === 'session.decide' && m.id === 'b')).toHaveLength(0);
   });
 
   it('decision timing does not fabricate success', () => {
@@ -197,8 +174,8 @@ describe('prototype parity', () => {
     tick(900);
     expect(mode()).toBe('handle');
     fireEvent.click(screen.getByRole('button', { name: /Otto available, open/ }));
-    const view = layer('session');
-    expect(within(view).getByRole('img', { name: /Available/ })).toBeInTheDocument();
+    const view = layer('peek');
+    expect(within(view).getByText('Available')).toBeInTheDocument();
     expect(within(view).queryByText(/passed|tests? ran|all green|✓/i)).toBeNull();
   });
 
@@ -240,127 +217,80 @@ describe('prototype parity', () => {
     expect(within(layer('bubble')).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
   });
 
-  it('native Tab and scoped shortcuts coexist', () => {
+  it('native Tab and the card keys coexist', () => {
     snapshot([otto(asks('rm -rf dist')), pim(question('Which?', ['Rebase', 'Merge'])), lu()]);
-    render(<Surface screenH={1080} theme="dark" client={rec.client} dnd onToggleDnd={() => {}} />);
+    render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
     shortcut();
-    expect(mode()).toBe('list');
+    expect(mode()).toBe('bubble');
     expect(fireEvent.keyDown(document.activeElement!, { key: 'Tab' })).toBe(true);
     expect(fireEvent.keyDown(document.activeElement!, { key: 'Tab', shiftKey: true })).toBe(true);
-    press('ArrowRight', { altKey: true });
-    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Pim/));
-    // Every inactive layer is inert, so nothing in it can take focus.
-    for (const name of ['handle', 'bubble', 'settings', 'help']) expect(layer(name)).toHaveAttribute('inert');
-    expect(layer('list')).not.toHaveAttribute('inert');
-    toRow(1); press('Enter');
-    expect(mode()).toBe('session');
-    const reply = screen.getByPlaceholderText('Reply to Otto…');
-    act(() => reply.focus());
-    for (const k of ['j', 'k', 'y', 'n']) fireEvent.keyDown(reply, { key: k });
-    expect(mode()).toBe('session');
+    for (const name of ['handle', 'settings', 'help', 'list']) expect(layer(name)).toHaveAttribute('inert');
+    expect(layer('bubble')).not.toHaveAttribute('inert');
+    const field = within(layer('bubble')).getByRole('button', { name: 'Approve' });
+    act(() => field.focus());
+    for (const k of ['j', 'k']) fireEvent.keyDown(field, { key: k });
+    expect(mode()).toBe('bubble');
     expect(rec.sent.some(m => m.type === 'session.decide')).toBe(false);
-    press('Escape'); // leaves the field's ownership to Escape: back to the list
-    expect(mode()).toBe('list');
-    toRow(2); press('Enter');
-    const radio = screen.getByRole('radio', { name: 'Rebase' });
+    press('Escape');
+    expect(mode()).toBe('bubble');
+    expect(screen.getByText('Pim has a question')).toBeInTheDocument();
+    const radio = screen.getByRole('radio', { name: /Rebase/ });
     act(() => radio.focus());
     for (const k of ['j', 'k', 'y', 'n']) fireEvent.keyDown(radio, { key: k });
-    expect(mode()).toBe('session');
-    expect(screen.getByText('Pim · speos-api')).toBeInTheDocument();
+    expect(mode()).toBe('bubble');
     expect(rec.sent).toHaveLength(0);
   });
 
-  it('drafts survive view and connection changes', () => {
+  it('a chat draft survives a disconnect, and an offline ask cannot be decided', () => {
     snapshot([otto(), pim(asks('git push')), lu({ ...asks('rm -rf /tmp/x'), source: 'hook_only' })]);
     render(<Harness client={rec.client} dnd />);
-    const value = () => (screen.getByPlaceholderText('Reply to Otto…') as HTMLInputElement).value;
-    fireEvent.click(screen.getByRole('button', { name: /Otto working, open/ }));
-    fireEvent.change(screen.getByPlaceholderText('Reply to Otto…'), { target: { value: 'keep going, then rebase' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Back to sessions' }));
-    expect(mode()).toBe('list');
-    fireEvent.click(within(layer('list')).getByRole('button', { name: 'Settings' }));
-    fireEvent.click(within(layer('settings')).getByRole('button', { name: /theme/i }));
-    expect(layer('handle').querySelector('svg.bot')).toHaveAttribute('data-material', 'pebble');
-    fireEvent.click(within(layer('settings')).getByRole('button', { name: 'Back to sessions' }));
-    fireEvent.click(within(layer('list')).getByRole('button', { name: /harness-assistant, Otto, open/ }));
-    expect(value()).toBe('keep going, then rebase');
-    fireEvent.click(screen.getByRole('button', { name: 'Reading mode' }));
-    expect(value()).toBe('keep going, then rebase');
-    fireEvent.click(screen.getByRole('button', { name: 'Reading mode' }));
+    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
+    tick(180);
+    const field = screen.getByRole('textbox', { name: 'Ask Ledge' }) as HTMLInputElement;
+    fireEvent.change(field, { target: { value: 'keep going, then rebase' } });
     act(() => daemonStore.setStatus('unreachable'));
-    expect(value()).toBe('keep going, then rebase');
-    // Offline: the bots freeze and every send path is disabled, the draft stays editable.
+    expect(field.value).toBe('keep going, then rebase');
+    expect(field).toBeDisabled();
     for (const svg of document.querySelectorAll('svg.bot')) expect(svg).toHaveAttribute('data-frozen', 'true');
-    expect(within(layer('session')).getByRole('button', { name: 'Send' })).toBeDisabled();
-    fireEvent.keyDown(screen.getByPlaceholderText('Reply to Otto…'), { key: 'Enter' });
-    expect(rec.sent.filter(m => m.type === 'session.reply')).toHaveLength(0);
-    snapshot([otto(), pim(asks('git push')), lu({ ...asks('rm -rf /tmp/x'), source: 'hook_only' })]);
-    expect(value()).toBe('keep going, then rebase');
-    expect(within(layer('session')).getByRole('button', { name: 'Send' })).toBeEnabled();
-    fireEvent.click(within(layer('session')).getByRole('button', { name: 'Close' }));
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(rec.sent.filter(m => m.type === 'chat.ask')).toHaveLength(0);
+    act(() => daemonStore.setStatus('open'));
+    expect(field).toBeEnabled();
+    expect(field.value).toBe('keep going, then rebase');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(mode()).toBe('handle');
-    fireEvent.click(screen.getByRole('button', { name: /Otto working, open/ }));
-    expect(value()).toBe('keep going, then rebase');
-    fireEvent.click(within(layer('session')).getByRole('button', { name: 'Close' }));
-
-    // Offline from the keyboard: y, n, digits and r-send do nothing; the buttons are disabled. The terminal tab stays
-    // reachable (it is the fallback), but `o` sends nothing to the unreachable daemon.
     act(() => daemonStore.setStatus('unreachable'));
     shortcut();
-    toRow(2);
-    press('y'); press('n'); press('o');
-    press('Enter');
-    expect(mode()).toBe('session');
-    const view = layer('session');
-    expect(within(view).getByRole('button', { name: 'Approve' })).toBeDisabled();
-    expect(within(view).getByRole('button', { name: 'Deny' })).toBeDisabled();
-    expect(within(view).getByRole('button', { name: 'Kill session' })).toBeDisabled();
-    expect(within(view).getByRole('button', { name: 'Focus terminal tab' })).toBeEnabled();
-    press('y'); press('n'); press('o');
-    press('r');
-    fireEvent.change(document.activeElement!, { target: { value: 'please' } });
-    fireEvent.keyDown(document.activeElement!, { key: 'Enter' });
-    expect(rec.sent).toHaveLength(0);
-
-    // Read-only (started without Ledge): the same, while the daemon is reachable.
-    snapshot([otto(), pim(asks('git push')), lu({ ...asks('rm -rf /tmp/x'), source: 'hook_only' })]);
-    press('Escape');
-    toRow(3); press('y'); press('n');
-    press('Enter');
-    expect(screen.getByText('Lu · docs')).toBeInTheDocument();
-    expect(within(layer('session')).getByRole('button', { name: 'Approve' })).toBeDisabled();
-    press('y');
+    expect(mode()).toBe('bubble');
+    expect(within(layer('bubble')).getByRole('button', { name: 'Approve' })).toBeDisabled();
+    expect(within(layer('bubble')).getByRole('button', { name: 'Deny' })).toBeDisabled();
+    press('y'); press('n');
     expect(rec.sent).toHaveLength(0);
   });
 
-  it('reduced motion keeps interactions functional', () => {
+  it('reduced motion keeps the card usable, and an ask does not expire', () => {
     vi.stubEnv('VITE_LEDGE_MOTION', '1');
-    snapshot([otto(), lu(question('Which strategy?', ['Backfill', 'Shadow']))]);
-    render(<Harness client={rec.client} dnd />);
+    snapshot([otto(), lu()]);
+    const onToggleDnd = vi.fn();
+    render(<Surface screenH={1080} theme="dark" client={rec.client} dnd onToggleDnd={onToggleDnd} />);
     for (const svg of document.querySelectorAll('svg.bot')) expect(svg).toHaveAttribute('data-reduced', 'false');
     shortcut();
-    fireEvent.click(within(layer('list')).getByRole('button', { name: 'Settings' }));
-    expect(mode()).toBe('settings');
-    fireEvent.click(within(layer('settings')).getByRole('switch', { name: /Reduced motion/ }));
-    for (const svg of document.querySelectorAll('svg.bot')) expect(svg).toHaveAttribute('data-reduced', 'true');
-    press('Escape');
-    expect(mode()).toBe('list');
-    // Do not disturb off, then a new ask: the bubble still expires after 4,000 ms of active time.
-    fireEvent.click(within(layer('list')).getAllByRole('button', { name: 'Do not disturb' })[0]!);
+    expect(mode()).toBe('chat');
+    fireEvent.click(screen.getByRole('button', { name: 'Ledge menu' }));
+    fireEvent.click(screen.getByRole('switch', { name: /Do not disturb/ }));
+    expect(onToggleDnd).toHaveBeenCalledTimes(1);
     press('Escape');
     expect(mode()).toBe('handle');
-    update(pim(asks('git push')));
+    update(lu(question('Which strategy?', ['Backfill', 'Shadow'])));
     tick(540);
-    expect(mode()).toBe('bubble');
-    tick(3999);
-    expect(mode()).toBe('bubble');
-    tick(1);
     expect(mode()).toBe('handle');
-    // Replies still work.
     fireEvent.click(screen.getByRole('button', { name: /Lu has a question, open/ }));
-    fireEvent.click(screen.getByLabelText('Shadow'));
-    fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
-    expect(rec.sent).toContainEqual({ type: 'session.reply', id: 'c', text: '2' });
+    expect(mode()).toBe('bubble');
+    tick(6000);
+    expect(mode()).toBe('bubble');
+    fireEvent.click(screen.getByRole('radio', { name: /Shadow/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    expect(rec.sent).toContainEqual({ type: 'session.reply', id: 'c', text: 'Shadow' });
   });
 
   it('reduced motion: the OS preference wins and hidden or unmounted bots release their timers', () => {
@@ -443,71 +373,51 @@ describe('carried items', () => {
     expect(mode()).toBe('bubble');
     expect(within(layer('bubble')).queryByText(/nothing to decide/)).toBeNull();
     expect(layer('bubble')).toHaveAttribute('data-ack', 'none');
-    fireEvent.click(screen.getByRole('link', { name: /Otto needs your approval/ }));
-    expect(within(layer('session')).queryByText(/nothing to decide/)).toBeNull();
-    // A request replaced in place (no resolution in between) also drops the old failure.
-    fireEvent.click(within(layer('session')).getByRole('button', { name: 'Approve' }));
+    fireEvent.click(within(layer('bubble')).getByRole('button', { name: 'Approve' }));
     act(() => { daemonStore.apply({ type: 'error', id: 'a', message: 'nothing to decide' }); });
-    expect(within(layer('session')).getByText(/nothing to decide/)).toBeInTheDocument();
+    expect(within(layer('bubble')).getByText(/nothing to decide/)).toBeInTheDocument();
     update(otto(asks('npm publish')));
-    expect(within(layer('session')).queryByText(/nothing to decide/)).toBeNull();
+    expect(within(layer('bubble')).queryByText(/nothing to decide/)).toBeNull();
   });
 
   it('every rendered bot freezes while the daemon is unreachable', () => {
     snapshot([otto(), pim(asks('git push'))]);
     render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
     tick(540);
-    fireEvent.click(screen.getByRole('link', { name: /Pim needs your approval/ }));
     act(() => daemonStore.setStatus('unreachable'));
     const bots = document.querySelectorAll('svg.bot');
-    expect(bots.length).toBeGreaterThanOrEqual(5); // handle x2, bubble, list x2, session
+    expect(bots.length).toBeGreaterThanOrEqual(2);
     for (const svg of bots) expect(svg).toHaveAttribute('data-frozen', 'true');
     act(() => daemonStore.setStatus('open'));
     for (const svg of document.querySelectorAll('svg.bot')) expect(svg).toHaveAttribute('data-frozen', 'false');
   });
 
-  it('a mouse open moves focus into the session; Escape steps back to the list then closes, never leaving focus in an inert layer', () => {
+  it('a mouse open of a bot shows the peek; Escape folds it and never leaves focus in an inert layer', () => {
     snapshot([otto(), pim()]);
     render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
-    tick(180);
-    const row = within(layer('list')).getByRole('button', { name: /speos-api, Pim, open/ });
-    act(() => row.focus());
-    fireEvent.click(row);
-    expect(mode()).toBe('session');
-    expect(document.activeElement).toHaveAccessibleName('Back to sessions');
-    press('Escape');
-    expect(mode()).toBe('list');
-    expect(document.activeElement).toBe(row);
+    fireEvent.click(screen.getByRole('button', { name: /Pim working, open/ }));
+    expect(mode()).toBe('peek');
     press('Escape');
     expect(mode()).toBe('handle');
     expect(inInert()).toBe(false);
   });
 
-  it('settings share do not disturb, theme and motion with the app; the footer opens the help', () => {
+  it('the chat menu sends settings to Ledge Desktop and toggles do not disturb here', () => {
     snapshot([otto()]);
-    render(<Harness client={rec.client} />);
+    const onToggleDnd = vi.fn();
+    render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={onToggleDnd} />);
     shortcut();
-    const list = layer('list');
-    fireEvent.click(within(list).getByRole('button', { name: 'Settings' }));
-    expect(mode()).toBe('settings');
-    expect(surface()).toHaveStyle({ width: '380px' });
-    expect(document.activeElement).toHaveAccessibleName('Back to sessions');
-    const view = layer('settings');
-    fireEvent.click(within(view).getByRole('tab', { name: 'Notifications' }));
-    fireEvent.click(within(view).getByRole('switch', { name: /Do not disturb/ }));
-    for (const b of within(list).getAllByRole('button', { name: 'Do not disturb', hidden: true })) expect(b).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(within(view).getByRole('tab', { name: 'Display' }));
-    expect(within(view).getByRole('button', { name: /Dark theme · Signal/ })).toBeInTheDocument();
-    fireEvent.click(within(view).getByRole('button', { name: /theme/ }));
-    expect(within(view).getByRole('button', { name: /Light theme · Pebble/ })).toBeInTheDocument();
-    expect(mode()).toBe('settings');
-    fireEvent.click(within(view).getByRole('button', { name: 'Back to sessions' }));
-    expect(mode()).toBe('list');
-    fireEvent.click(within(list).getByRole('button', { name: 'Keyboard shortcuts' }));
-    expect(mode()).toBe('help');
-    expect(within(layer('help')).getByText('Previous or next session')).toBeInTheDocument();
-    fireEvent.click(within(layer('help')).getByRole('button', { name: 'Close' }));
+    expect(mode()).toBe('chat');
+    expect(surface()).toHaveStyle({ width: '480px' });
+    expect(screen.queryByRole('button', { name: 'Back to sessions' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ledge menu' }));
+    fireEvent.click(screen.getByRole('button', { name: /Settings in Ledge Desktop/ }));
+    expect(screen.getByText(/Opening settings in Ledge Desktop/)).toBeInTheDocument();
+    expect(mode()).toBe('chat');
+    fireEvent.click(screen.getByRole('button', { name: 'Ledge menu' }));
+    fireEvent.click(screen.getByRole('switch', { name: /Do not disturb/ }));
+    expect(onToggleDnd).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(mode()).toBe('handle');
     expect(inInert()).toBe(false);
   });

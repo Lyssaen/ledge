@@ -8,7 +8,7 @@ import { Surface } from '../src/surface/Surface';
 import { createDaemonClient } from '../src/daemon/client';
 import { attachClient, daemonStore } from '../src/daemon/store';
 import { createMockDaemon, fakeSession } from './mockDaemon';
-import { setFrame } from '../src/tauri/bridge';
+import { subscribeOpenInLedge } from '../src/desktop/openInLedge';
 
 vi.mock('../src/tauri/bridge', async orig => ({ ...(await orig<typeof import('../src/tauri/bridge')>()), setFrame: vi.fn() }));
 
@@ -176,7 +176,6 @@ describe('<Surface> keyboard first', () => {
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
   const surface = () => document.querySelector('[data-surface]') as HTMLElement;
   const shortcut = () => press('l', { ctrlKey: true, altKey: true });
-  const coach = () => screen.queryByRole('dialog', { name: 'Keyboard' });
   beforeEach(async () => {
     try { localStorage.removeItem('ledge.coachmarks'); } catch { /* ignore */ }
     daemonStore.reset(); mock = await createMockDaemon();
@@ -186,101 +185,53 @@ describe('<Surface> keyboard first', () => {
   });
   afterEach(async () => { detach(); client.close(); await mock.close(); });
 
-  it('the shortcut opens the list focused on the oldest ask, without row numbers; y approves it and Escape closes', async () => {
+  it('the shortcut opens the oldest ask; Escape sets it aside and y approves the one left', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     act(() => shortcut());
-    expect(surface()).toHaveAttribute('data-mode', 'list');
-    expect(within(document.querySelector('[data-row-id="a"]') as HTMLElement).queryByText('1')).toBeNull();
-    expect(document.querySelector('[data-row-id="a"]')).toHaveStyle({ height: '100px' });
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    expect(screen.getByText('Otto needs your approval')).toBeInTheDocument();
+    act(() => press('Escape'));
+    expect(screen.getByText('Pim has a question')).toBeInTheDocument();
+    act(() => press('Escape'));
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    act(() => shortcut());
+    expect(screen.getByText('Otto needs your approval')).toBeInTheDocument();
     act(() => press('y'));
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.decide', id: 'a', decision: 'accept' }));
-    act(() => press('Escape'));
+  });
+
+  it('a second shortcut from the ask opens the chat, and from the chat it folds', () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
+    act(() => shortcut());
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    act(() => shortcut());
+    expect(surface()).toHaveAttribute('data-mode', 'chat');
+    expect(screen.queryByRole('button', { name: 'Back to sessions' })).toBeNull();
+    act(() => shortcut());
     expect(surface()).toHaveAttribute('data-mode', 'handle');
   });
 
-  it('j moves the focus, Enter opens, Escape goes back to the list then closes', () => {
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-    act(() => shortcut());
-    act(() => press('j'));
-    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Pim/));
-    act(() => press('Enter'));
-    expect(surface()).toHaveAttribute('data-mode', 'session');
-    act(() => press('Escape'));
-    expect(surface()).toHaveAttribute('data-mode', 'list');
-    act(() => press('Escape'));
-    expect(surface()).toHaveAttribute('data-mode', 'handle');
-  });
-
-  it('Alt+ArrowRight and Alt+ArrowLeft move to the next and previous row, an ask or not', () => {
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-    act(() => shortcut());
-    act(() => press('ArrowRight', { altKey: true }));
-    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Pim/));
-    act(() => press('ArrowRight', { altKey: true }));
-    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Lu/));
-    act(() => press('ArrowLeft', { altKey: true }));
-    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Pim/));
-  });
-
-  it('in an open session, Alt+ArrowLeft opens the previous session and Alt+ArrowRight the next one', () => {
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-    const session = () => document.querySelector('[data-layer="session"]') as HTMLElement;
-    act(() => shortcut());
-    act(() => press('Enter'));
-    expect(surface()).toHaveAttribute('data-mode', 'session');
-    expect(within(session()).getByText(/^Otto · /)).toBeInTheDocument();
-    act(() => press('ArrowLeft', { altKey: true }));
-    expect(surface()).toHaveAttribute('data-mode', 'session');
-    expect(within(session()).getByText(/^Lu · /)).toBeInTheDocument();
-    act(() => press('ArrowRight', { altKey: true }));
-    expect(within(session()).getByText(/^Otto · /)).toBeInTheDocument();
-  });
-
-  it('Ctrl+Alt+N opens the launch form from the handle and folds it again', () => {
+  it('Ctrl+Alt+N notes a launch for Ledge Desktop and does not open a form', () => {
+    const heard: unknown[] = [];
+    const stop = subscribeOpenInLedge(t => heard.push(t));
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     act(() => press('n', { ctrlKey: true, altKey: true }));
-    expect(surface()).toHaveAttribute('data-mode', 'launch');
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
     act(() => press('n', { ctrlKey: true, altKey: true }));
     expect(surface()).toHaveAttribute('data-mode', 'handle');
+    expect(heard).toEqual([{ kind: 'launch' }, { kind: 'launch' }]);
+    stop();
   });
 
-  it('r opens the focused row and puts the cursor in the reply field; letters then type', () => {
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-    act(() => shortcut());
-    act(() => press('r'));
-    expect(surface()).toHaveAttribute('data-mode', 'session');
-    expect(document.activeElement).toHaveAttribute('aria-label', 'Reply to Otto');
-    fireEvent.keyDown(document.activeElement!, { key: 'n' });
-    expect(mock.received.some(m => m.type === 'session.decide')).toBe(false);
-  });
-
-  it('o asks the daemon and the shell to focus the terminal tab of the focused row', async () => {
+  it('o on an ask notes the session for Ledge Desktop and does not focus a terminal', () => {
+    const heard: unknown[] = [];
+    const stop = subscribeOpenInLedge(t => heard.push(t));
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     act(() => shortcut());
     act(() => press('o'));
-    await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.focus', id: 'a' }));
-  });
-
-  it('/ focuses the ask field in the list and does nothing in a session', () => {
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-    act(() => shortcut());
-    act(() => press('/'));
-    expect(document.activeElement).toHaveAttribute('data-ask-input');
-    (document.activeElement as HTMLElement).blur();
-    act(() => press('Enter'));
-    expect(surface()).toHaveAttribute('data-mode', 'session');
-    act(() => press('/'));
-    expect(document.activeElement).not.toHaveAttribute('data-ask-input');
-  });
-
-  it('Enter on the empty ask field opens the chat without asking', () => {
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-    act(() => shortcut());
-    act(() => press('/'));
-    act(() => { fireEvent.keyDown(document.activeElement!, { key: 'Enter' }); });
-    expect(surface()).toHaveAttribute('data-mode', 'chat');
-    expect(screen.getByRole('button', { name: 'How are the others doing?' })).toBeInTheDocument();
-    expect(mock.received.some(m => m.type === 'chat.ask')).toBe(false);
+    expect(heard).toEqual([{ kind: 'session', id: 'a' }]);
+    expect(mock.received.some(m => m.type === 'session.focus')).toBe(false);
+    stop();
   });
 
   it('the ask field stays off until the daemon connection is open', () => {
@@ -295,108 +246,44 @@ describe('<Surface> keyboard first', () => {
     expect(fields().every(f => !f.disabled)).toBe(true);
   });
 
-  it('digits choose the question options in an open session; a focused radio keeps native arrows; Other takes typed digits as text', async () => {
+  it('digits choose a question on the card; a short answer in the field is what gets sent', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     await act(async () => { mock.upsert({ ...sessions[1]!, pending: { kind: 'question', text: 'Which?', source: 'hook', options: ['Rebase', 'Merge'] } }); await sleep(50); });
     act(() => shortcut());
-    act(() => press('j')); act(() => press('Enter'));
-    expect(surface()).toHaveAttribute('data-mode', 'session');
+    act(() => press('Escape'));
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    expect(screen.getByText('Pim has a question')).toBeInTheDocument();
     act(() => press('2'));
-    const merge = screen.getByRole('radio', { name: 'Merge' });
-    expect(merge).toBeChecked(); expect(document.activeElement).toBe(merge);
-    act(() => { fireEvent.keyDown(merge, { key: '1' }); });
-    expect(screen.getByRole('radio', { name: 'Rebase' })).toBeChecked();
-    // Claude Code takes free text: in the Other field a digit is text, not an option.
-    const other = screen.getByPlaceholderText('Other…');
-    act(() => { other.focus(); fireEvent.keyDown(other, { key: '2' }); fireEvent.change(other, { target: { value: '2 tabs' } }); });
-    expect(document.activeElement).toBe(other); expect(merge).not.toBeChecked();
-    fireEvent.keyDown(other, { key: 'Enter' });
+    expect(screen.getByRole('radio', { name: /Merge/ })).toHaveAttribute('aria-checked', 'true');
+    const field = screen.getByRole('textbox', { name: 'Short answer' });
+    act(() => { field.focus(); fireEvent.change(field, { target: { value: '2 tabs' } }); fireEvent.keyDown(field, { key: 'Enter' }); });
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.reply', id: 'b', text: '2 tabs' }));
   });
 
-  it('the coachmark hangs 8 px under the panel, centred on it, and the native frame extends to hold it', async () => {
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-    act(() => shortcut());
-    act(() => press('3'));
-    const card = screen.getByRole('dialog', { name: 'Keyboard' });
-    const top = parseFloat(card.style.top), h = parseFloat(card.style.height), left = parseFloat(card.style.left);
-    const sLeft = parseFloat(surface().style.left), sW = parseFloat(surface().style.width), sH = parseFloat(surface().style.height);
-    expect(top).toBe(sH + 8);
-    expect(left).toBe(sLeft + sW / 2 - 150);
-    await waitFor(() => { const frame = vi.mocked(setFrame).mock.lastCall![0]; expect(frame.top + frame.h).toBeGreaterThanOrEqual(top + h); });
-  });
-
-  it('when the list is too short for the coachmark either way, the native frame extends to hold it', async () => {
-    await act(async () => { mock.remove('b'); mock.remove('c'); await sleep(50); });
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-    act(() => shortcut());
-    const card = screen.getByRole('dialog', { name: 'Keyboard' });
-    const bottom = parseFloat(card.style.top) + parseFloat(card.style.height);
-    // The frame goes out once the frame that opened the list is painted.
-    await waitFor(() => { const frame = vi.mocked(setFrame).mock.lastCall![0]; expect(frame.top + frame.h).toBeGreaterThanOrEqual(bottom); });
-    expect(parseFloat(surface().style.height)).toBeLessThan(vi.mocked(setFrame).mock.lastCall![0].h);
-  });
-
-  it('d toggles dnd from the keyboard', () => {
+  it('d from the chat toggles do not disturb; the menu does too', () => {
     const onToggleDnd = vi.fn();
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={onToggleDnd} />);
     act(() => shortcut());
+    act(() => shortcut());
+    expect(surface()).toHaveAttribute('data-mode', 'chat');
+    act(() => { (document.activeElement as HTMLElement | null)?.blur(); });
     act(() => press('d'));
     expect(onToggleDnd).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Ledge menu' }));
+    fireEvent.click(screen.getByRole('switch', { name: /Do not disturb/ }));
+    expect(onToggleDnd).toHaveBeenCalledTimes(2);
   });
 
-  it('the coachmark shows on the first three keyboard opens only; ? opens the keyboard help in the surface', () => {
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-    for (let i = 1; i <= 3; i++) {
-      act(() => shortcut());
-      expect(coach()).toBeInTheDocument();
-      expect(localStorage.getItem('ledge.coachmarks')).toBe(String(i));
-      act(() => shortcut());
-    }
-    act(() => shortcut());
-    expect(coach()).toBeNull();
-    act(() => press('?'));
-    expect(surface()).toHaveAttribute('data-mode', 'help');
-    expect(document.activeElement).toHaveAccessibleName('Back to sessions');
-    act(() => press('Escape'));
-    expect(surface()).toHaveAttribute('data-mode', 'list');
-    act(() => press('Escape'));
-    expect(surface()).toHaveAttribute('data-mode', 'handle');
-  });
-  it('Got it dismisses the coachmark', () => {
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-    act(() => shortcut());
-    expect(coach()).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
-    expect(coach()).toBeNull();
-  });
-
-  it('a mouse-opened list ignores the keyboard commands', async () => {
+  it('hovering the handle does not open a panel, so y decides nothing', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-      const zone = document.querySelector('[data-surface]') as HTMLElement;
-      fireEvent.mouseEnter(zone);
+      fireEvent.mouseEnter(document.querySelector('[data-surface]') as HTMLElement);
       await act(async () => { vi.advanceTimersByTime(180); });
-      expect(surface()).toHaveAttribute('data-mode', 'list');
+      expect(surface()).toHaveAttribute('data-mode', 'handle');
       act(() => press('y'));
       await sleep(30);
       expect(mock.received.some(m => m.type === 'session.decide')).toBe(false);
     } finally { vi.useRealTimers(); }
-  });
-});
-
-describe('<Surface> keyboard with interleaved repositories', () => {
-  it('Alt+ArrowRight follows the displayed order', async () => {
-    daemonStore.reset(); const mock = await createMockDaemon();
-    const at = (id: string, name: string, repo: string) => fakeSession(id, { name, repo, repoPath: `/w/${repo}`, cwd: `/w/${repo}` });
-    for (const s of [at('a', 'Aa', 'x'), at('c', 'Cc', 'y'), at('b', 'Bb', 'x')]) mock.sessions.set(s.id, s);
-    const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never }); const detach = attachClient(client); client.connect();
-    await new Promise(r => setTimeout(r, 100));
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
-    act(() => press('l', { ctrlKey: true, altKey: true }));
-    act(() => press('ArrowRight', { altKey: true }));
-    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Bb/));
-    detach(); client.close(); await mock.close();
   });
 });

@@ -17,6 +17,8 @@ import { Handle, type HandleBot } from './Handle';
 import { UnreadSay, UNREAD_SAY_BOX, SAY_TAIL_X } from './UnreadSay';
 import { pickSay, pickSpeaker, sayKindOf, SAY_LINGER_MS, type SayCandidate } from './say';
 import { Bubble, type BubbleAck } from './Bubble';
+import { PeekCard } from './PeekCard';
+import { openInLedge, subscribeOpenInLedge } from '../desktop/openInLedge';
 import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
 import { HelperView } from './HelperView';
@@ -35,7 +37,8 @@ import { SessionList, EXPANDED_ROW_H, ASK_H, NOTICE_GAP, type ListNotice } from 
 import { SessionView, measureSessionH, SESSION_HEADER_H, READING_TERMINAL_H } from './SessionView';
 import { useI18n, type Lang } from '../i18n/lang';
 import { transition, MOTION, ms, enterDelay } from '../motion';
-import { focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, onTrayAction, focusOverlay, releaseFocus, isTauri, onForegroundCovered, setHotZone, openUrl } from '../tauri/bridge';
+import { focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, onTrayAction, focusOverlay, releaseFocus, isTauri, onForegroundCovered, setHotZone, openUrl, quitApp } from '../tauri/bridge';
+import { Icon, ICONS } from '../ui/icons';
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { useDelayed } from './useDelayed';
 import { UpdateCard } from '../update/UpdateCard';
@@ -151,20 +154,58 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const [coach, setCoach] = useState(false);
   const replyAfterOpen = useRef(false);
 
-  // Ctrl+Alt+L (the global shortcut in Tauri, a window key binding in the browser) toggles a keyboard-opened list, from
-  // the handle or over a bubble. Opening takes OS focus so single-letter keys reach the overlay; asks and bubbles never do.
+  // Ctrl+Alt+L opens the first ask, else the chat, and folds the chat. Focus follows so the card's keys arrive.
   useEffect(() => onShortcut(() => {
-    const was = ctl.state().mode;
     dispatch({ type: 'shortcut' });
-    if ((was === 'handle' || was === 'bubble') && ctl.state().mode === 'list') void focusOverlay();
+    void focusOverlay();
   }), [ctl, dispatch]);
 
-  // Ctrl+Alt+N opens the new-session form from anywhere, with focus so its field takes keys at once; again folds it.
-  useEffect(() => onNewSessionShortcut(() => {
-    const was = ctl.state().mode;
-    dispatch({ type: 'newSession' });
-    if (ctl.state().mode === 'launch' && (was === 'handle' || was === 'bubble')) void focusOverlay();
-  }), [ctl, dispatch]);
+  // Ctrl+Alt+N no longer opens a form. It asks Ledge Desktop for a new session.
+  useEffect(() => onNewSessionShortcut(() => { openInLedge({ kind: 'launch' }); }), [ctl, dispatch]);
+
+  // The keys of the open card. Enter on a focused button keeps its click. Letters never fire inside a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const st = ctl.state();
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (e.key === 'Escape' && st.mode !== 'handle') {
+        if (menuOpen) { setMenuOpen(false); return; }
+        e.preventDefault();
+        dispatch({ type: st.mode === 'bubble' && st.bubbleKind === 'ask' ? 'defer' : 'close' });
+        return;
+      }
+      if (st.mode !== 'bubble' || st.bubbleKind !== 'ask' || !st.bubbleId || st.ack || e.ctrlKey || e.metaKey || e.altKey) return;
+      const session = byId.get(st.bubbleId);
+      const pending = session?.pending;
+      if (e.key === 'Enter' && !(el?.tagName === 'BUTTON') && (!typing || el?.dataset.reply !== undefined)) {
+        e.preventDefault();
+        if (pending?.kind === 'question') {
+          const field = surfaceRef.current?.querySelector<HTMLInputElement>('[data-reply]');
+          const chosen = surfaceRef.current?.querySelector<HTMLButtonElement>('[role="radio"][aria-checked="true"] span');
+          const answer = field?.value.trim() || chosen?.textContent || '';
+          if (!answer) return;
+          if (blockedFor(session) !== null || !asks.begin(st.bubbleId)) return;
+          send({ type: 'session.reply', id: st.bubbleId, text: answer });
+          sounds.user('accept');
+          dispatch({ type: 'decidedInBubble' });
+        } else if (pending?.kind === 'permission') {
+          if (decide(st.bubbleId, 'accept')) dispatch({ type: 'decidedInBubble' });
+        } else openInLedge({ kind: 'session', id: st.bubbleId });
+        return;
+      }
+      if (typing) return;
+      const k = e.key.toLowerCase();
+      if (k === 'o') { e.preventDefault(); openInLedge(st.bubbleId.startsWith('machine:') ? { kind: 'machines' } : { kind: 'session', id: st.bubbleId }); }
+      else if (pending?.kind === 'permission' && k === 'y') { if (decide(st.bubbleId, 'accept')) dispatch({ type: 'decidedInBubble' }); }
+      else if (pending?.kind === 'permission' && k === 'n') { if (decide(st.bubbleId, 'deny')) dispatch({ type: 'decidedInBubble' }); }
+      else if (pending?.kind === 'question' && /^[1-9]$/.test(k)) {
+        surfaceRef.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[Number(k) - 1]?.click();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   // A press outside an open panel folds it back to the handle. The overlay window never takes focus on a mouse open,
   // so under Tauri the shell watches the mouse buttons; in the browser the document's own presses tell.
@@ -197,8 +238,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   useEffect(() => onTrayAction(action => {
     if (action === 'dnd') { onToggleDnd(); return; }
     dispatch({ type: 'close' });
-    dispatch({ type: 'shortcut' });
-    if (action === 'new') dispatch({ type: 'launch' });
+    if (action === 'new') openInLedge({ kind: 'launch' });
+    else dispatch({ type: 'shortcut' });
     void focusOverlay();
   }), [dispatch, onToggleDnd]);
 
@@ -213,11 +254,35 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       const looking = ctl.state().mode === 'session' && ctl.state().selectedId === c.id;
       if (!looking) setFinishedUnread(x => ({ ...x, [c.id]: `${c.id}:finished:${info.elapsedMs ?? 0}` }));
     }
+    if (c.kind === 'failed' && !dnd) {
+      const crashed = sessions.find(s => s.id === c.id);
+      if (crashed && !crashed.pending) dispatch({ type: 'notice', id: c.id, kind: 'error' });
+    }
     if (c.kind === 'asked' || c.kind === 'left' || c.kind === 'failed') setFinishedUnread(x => { if (!(c.id in x)) return x; const { [c.id]: _gone, ...rest } = x; return rest; });
   }, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
 
-  // DND switched on takes any bubble down and drops queued asks. Turning it off does not re-bubble asks already pending.
-  useEffect(() => { if (dnd) dispatch({ type: 'dnd', on: true }); }, [dnd, dispatch]);
+  // DND folds the bubble and keeps the queue. Nothing unfolds on its own. Turning it off does not re-bubble.
+  useEffect(() => { dispatch({ type: 'dnd', on: dnd }); }, [dnd, dispatch]);
+  // A machine that drops gets a notice. Coming back removes it. Nothing unfolds during Do not disturb.
+  const machineReady = useRef<Map<string, boolean>>(new Map());
+  useEffect(() => {
+    for (const m of machines) {
+      const was = machineReady.current.get(m.id);
+      if (was === true && !m.ready && !dnd) dispatch({ type: 'notice', id: `machine:${m.id}`, kind: 'offline' });
+      if (was === false && m.ready) dispatch({ type: 'removed', id: `machine:${m.id}`, remaining: sessions.map(s => s.id) });
+      machineReady.current.set(m.id, m.ready);
+    }
+  }, [machines, dnd, sessions, dispatch]);
+  const [handoff, setHandoff] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => subscribeOpenInLedge(target => {
+    const name = (id: string) => sessions.find(s => s.id === id)?.name ?? id;
+    const line = target.kind === 'session' ? t.handoff.session(name(target.id))
+      : target.kind === 'terminal' ? t.handoff.terminal(name(target.id))
+      : target.kind === 'document' ? t.handoff.document(target.path)
+      : t.handoff[target.kind];
+    setHandoff(`${line}. ${t.handoff.noted}`);
+  }), [sessions, t]);
 
   // A hidden document holds the bubble clock.
   useEffect(() => {
@@ -317,7 +382,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   }, [chat]); // eslint-disable-line react-hooks/exhaustive-deps -- finishedBubble/dnd/sounds read the live values of this render
   useEffect(() => { if (st.mode === 'chat') setLedgeUnread(false); }, [st.mode]);
   useEffect(() => {
-    if (st.mode !== 'session' || !st.selectedId) return;
+    if ((st.mode !== 'session' && st.mode !== 'peek') || !st.selectedId) return;
     setFinishedUnread(x => { if (!(st.selectedId! in x)) return x; const { [st.selectedId!]: _gone, ...rest } = x; return rest; });
   }, [st.mode, st.selectedId]);
   useEffect(() => {
@@ -344,6 +409,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const shown = live ?? (lastShown?.session.id === shownId ? lastShown.session : null);
   const shownPreview = live ? livePreview : lastShown?.preview ?? NO_LINES;
   const bubbleSession = st.bubbleId ? byId.get(st.bubbleId) ?? null : null;
+  const peekSession = st.mode === 'peek' && st.selectedId ? byId.get(st.selectedId) ?? null : null;
+  const offlineMachine = st.bubbleKind === 'offline' && st.bubbleId?.startsWith('machine:') ? machines.find(m => m.id === st.bubbleId!.slice('machine:'.length)) : undefined;
   const bubbleRef = useRef<HTMLDivElement>(null);
   const bubbleH = useMeasuredHeight(bubbleRef, st.mode === 'bubble', ps);
   // The open session sizes itself to its content (header + scroll content + reply area), up to the screen.
@@ -666,19 +733,21 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
         style={{ position: 'absolute', left: geo.left, top: 0, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--notch)', color: 'var(--sidebar-foreground)', borderRadius: `0px 0px ${radius}px ${radius}px`, opacity: unreachable ? 0.6 : 1, willChange: 'left, width, height',
           transition: surfaceTransition }}>
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-          <Handle updatePip={updatePip} updateVersion={updateVersion} bots={bots} slots={geo.slots} visible={st.mode === 'handle'} strip={strip} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} sayId={sayShown && speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+          <Handle updatePip={updatePip} updateVersion={updateVersion} onUpdate={() => openInLedge({ kind: 'update' })} bots={bots} slots={geo.slots} visible={st.mode === 'handle'} strip={strip} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} sayId={sayShown && speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
-        <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
+        <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : offlineMachine ? offlineMachine.label : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
           ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} failure={st.bubbleId ? asks.failures[st.bubbleId] : undefined} blocked={bubbleSession ? blockedFor(bubbleSession) : null} frozen={unreachable} reducedMotion={reducedMotion}
-          onOpen={() => dispatch({ type: 'bubbleClick' })} onDismiss={() => dispatch({ type: 'close' })}
+          onOpen={() => { if (st.bubbleId === LEDGE_ID) dispatch({ type: 'bubbleClick' }); else if (st.bubbleId?.startsWith('machine:')) openInLedge({ kind: 'machines' }); else if (st.bubbleId) openInLedge({ kind: 'session', id: st.bubbleId }); }}
+          onDismiss={() => dispatch({ type: st.bubbleKind === 'ask' ? 'defer' : 'close' })}
           onDecide={d => { if (st.bubbleId && !ctl.state().ack && decide(st.bubbleId, d)) dispatch({ type: 'decidedInBubble' }); }}
-          onReply={t => {
+          onReply={text => {
             const id = st.bubbleId; if (!id || ctl.state().ack || blockedFor(byId.get(id)) !== null || !asks.begin(id)) return;
-            send({ type: 'session.reply', id, text: t }); sounds.user('accept'); dispatch({ type: 'decidedInBubble' });
+            send({ type: 'session.reply', id, text }); sounds.user('accept'); dispatch({ type: 'decidedInBubble' });
           }} theme={theme} />
+        {st.mode === 'peek' && peekSession && <PeekCard session={peekSession} visible theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onClose={() => dispatch({ type: 'close' })} onOpen={() => openInLedge({ kind: 'session', id: peekSession.id })} />}
         </div>
-        <div data-panel style={{ position: 'absolute', inset: 0, zoom: ps, opacity: panel ? 1 : 0, pointerEvents: panel ? 'auto' : 'none', transition: transition([['opacity', panel ? 'fadeIn' : 'fadeOut', panel ? 120 : 0]]) }}>
+        <div data-panel style={{ position: 'absolute', inset: 0, zoom: ps, opacity: panel && st.mode !== 'peek' ? 1 : 0, pointerEvents: panel && st.mode !== 'peek' ? 'auto' : 'none', transition: transition([['opacity', panel && st.mode !== 'peek' ? 'fadeIn' : 'fadeOut', panel && st.mode !== 'peek' ? 120 : 0]]) }}>
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               disconnected={disconnected}
@@ -689,11 +758,13 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <ChatView contentRef={chatRef} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
+              showBack={false}
+              headerExtra={<IslandMenu open={menuOpen && st.mode === 'chat'} dnd={dnd} onToggle={() => setMenuOpen(o => !o)} onClose={() => setMenuOpen(false)} onSettings={() => { setMenuOpen(false); openInLedge({ kind: 'settings' }); }} onDnd={onToggleDnd} onQuit={() => { setMenuOpen(false); void quitApp(); }} />}
               turnAvailable={qid => !client.fleet || !!client.fleet.turnMachine(qid)?.ready}
-              onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onOpenSession={openRow}
-              launchingQid={chatLaunching} onLaunchProposal={launchProposal} onTerminal={focusTab}
+              onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onClose={() => { setMenuOpen(false); dispatch({ type: 'close' }); }} onOpenSession={id => openInLedge({ kind: 'session', id })}
+              launchingQid={chatLaunching} onLaunchProposal={launchProposal} onTerminal={id => openInLedge({ kind: 'terminal', id })}
               relayingQid={relaying} onRelay={qid => relayCard('session.relay', qid)} onRelayCancel={qid => relayCard('session.relay.cancel', qid)}
-              theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={(ref, qid) => openDocument(ref, { kind: 'chat', machineId: qid ? client.fleet?.turnMachine(qid)?.id : undefined })} />
+              theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openInLedge({ kind: 'document', path: ref.path })} />
           </div>
           <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <LaunchView key={`${launchOpen}-${launchMachine ?? ''}`} contentRef={launchRef} visible={st.mode === 'launch'} enterDelay={enter} recents={recents} sessions={sessions.filter(s => !launchMachine || s.machineId === launchMachine)} offline={unreachable || (chosenMachine && !chosenMachine.ready) ? t.offline : null} busy={!!launching} failure={launchFailure}
@@ -745,8 +816,36 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       <div data-zoom="status" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
         {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: statusLeft / hs, top: statusTop / hs, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{t.unreachable}</div>}
       </div>
+      <div aria-live="polite" role="status" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{handoff}</div>
     </>
   );
   // Under Tauri the window covers the work area, so the page draws in work-area coordinates, like the browser preview.
   return content;
+}
+
+/** The gear in the chat header: settings go to Desktop, Do not disturb stays here, Quit closes the island. */
+function IslandMenu({ open, dnd, onToggle, onClose, onSettings, onDnd, onQuit }: {
+  open: boolean; dnd: boolean; onToggle: () => void; onClose: () => void; onSettings: () => void; onDnd: () => void; onQuit: () => void;
+}) {
+  const { t } = useI18n();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (open) ref.current?.querySelector('button')?.focus(); }, [open]);
+  return (
+    <span style={{ position: 'relative' }}>
+      <button type="button" aria-label={t.menu.gear} aria-haspopup="true" aria-expanded={open} onClick={onToggle}
+        style={{ display: 'grid', placeItems: 'center', width: 32, height: 32, padding: 0, border: 0, borderRadius: 8, background: 'transparent', color: 'inherit', cursor: 'pointer' }}>
+        <Icon size={16} {...ICONS.gear} />
+      </button>
+      {open && <div ref={ref} role="group" aria-label={t.menu.label} style={{ position: 'absolute', top: 36, right: 0, zIndex: 3, width: 280, padding: 6, borderRadius: 10, background: 'var(--popover, var(--card))', border: '1px solid var(--sidebar-border)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <button type="button" onClick={onSettings} style={{ display: 'flex', gap: 8, textAlign: 'left', padding: 8, border: 0, borderRadius: 8, background: 'transparent', color: 'inherit', cursor: 'pointer' }}>
+          <span><strong>{t.menu.settings}</strong><small style={{ display: 'block', color: 'var(--muted-foreground)' }}>{t.menu.settingsHint}</small></span>
+        </button>
+        <button type="button" role="switch" aria-checked={dnd} onClick={onDnd} style={{ display: 'flex', gap: 8, textAlign: 'left', padding: 8, border: 0, borderRadius: 8, background: 'transparent', color: 'inherit', cursor: 'pointer' }}>
+          <span><strong>{t.menu.dnd}</strong><small style={{ display: 'block', color: 'var(--muted-foreground)' }}>{t.menu.dndHint}</small></span>
+        </button>
+        <button type="button" onClick={onQuit} style={{ display: 'flex', gap: 8, textAlign: 'left', padding: 8, border: 0, borderRadius: 8, background: 'transparent', color: 'inherit', cursor: 'pointer' }}>{t.menu.quit}</button>
+        <button type="button" onClick={onClose} style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }}> </button>
+      </div>}
+    </span>
+  );
 }

@@ -3,7 +3,7 @@ import { fakeDaemon, session } from './daemon';
 import { hoverHandle } from './scenarios';
 import { islandWidth } from '../src/surface/geometry';
 
-const team = () => [session('a'), session('b', { name: 'Pim', project: 'speos-api' }), session('c', { name: 'Ada', state: 'waiting_permission', pending: { kind: 'permission', text: 'Run pnpm test', source: 'hook' } })];
+const team = () => [session('a'), session('b', { name: 'Pim', project: 'speos-api' }), session('c', { name: 'Ada' })];
 const box = async (l: import('@playwright/test').Locator) => (await l.boundingBox())!;
 const storeScales = (page: import('@playwright/test').Page, s: { handle?: string; panel?: string }) =>
   page.addInitScript(v => { try { if (v.handle) localStorage.setItem('ledge.handleScale', v.handle); if (v.panel) localStorage.setItem('ledge.panelScale', v.panel); } catch { /* ignore */ } }, s);
@@ -20,31 +20,23 @@ test.describe('4K work area', () => {
     const bots = layer(page, 'handle').locator('button:not([data-resident])');
     await expect.poll(async () => (await box(bots.nth(0))).width).toBeCloseTo(44, 0); // a companion: 22 x 2
     await expect.poll(async () => (await box(bots.nth(2))).width).toBeCloseTo(44, 0);
-    // Still on the top edge, centred on the real screen.
+    // Still on the top edge, centred on the real screen. Hovering it does not open a panel.
     const s = await box(surface(page));
     expect(s.y).toBe(0); expect(Math.abs(s.x + s.width / 2 - 1920)).toBeLessThan(4);
-    // The list opens at its base 380 px.
-    await page.keyboard.press('Control+Alt+L');
-    await expectMode(page, 'list');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(380, 0);
-    await expect.poll(async () => (await box(layer(page, 'list').locator('[data-row]').first())).height).toBeCloseTo(58, 0);
+    await hoverHandle(page);
+    await page.waitForTimeout(400);
+    await expectMode(page, 'handle');
   });
 
-  test('hover works on the 2x handle; the list stays open under a resting pointer when it changes shape', async ({ page }) => {
+  test('hovering the 2x handle leaves it folded while a new companion arrives', async ({ page }) => {
     const d = await fakeDaemon(page, team());
     await ready(page, 3);
     await hoverHandle(page);
-    await expectMode(page, 'list');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(380, 0);
     await page.mouse.move(1920, 200, { steps: 4 });
-    // A new session grows the list without any pointer event; the sticky hover check must still see the pointer inside,
-    // or the mouse-opened list would fold after the 500 ms leave delay.
     d.upsert(session('d', { name: 'Zed' }));
-    await expect(layer(page, 'list').getByRole('button', { name: /Zed, open/ })).toBeVisible();
+    await expect(layer(page, 'handle').getByRole('button', { name: /Zed/ })).toBeVisible();
     await page.waitForTimeout(900);
-    await expectMode(page, 'list');
-    await layer(page, 'list').getByRole('button', { name: 'speos-api, Pim, open' }).click();
-    await expectMode(page, 'session');
+    await expectMode(page, 'handle');
   });
 
   test('windows at 150 %: the bubble is measured in its own CSS px and the surface fits its content exactly', async ({ page }) => {
@@ -60,46 +52,6 @@ test.describe('4K work area', () => {
     // The bubble's actions take real clicks under the zoom.
     await layer(page, 'bubble').getByRole('button', { name: 'Approve' }).click();
     await expect(layer(page, 'bubble')).toHaveAttribute('data-ack', 'pending');
-  });
-
-  test('Settings: island Auto (200%) and windows Auto (100%); each size changes on its own, live, and is remembered', async ({ page }) => {
-    await fakeDaemon(page, team());
-    await ready(page, 3);
-    await page.keyboard.press('Control+Alt+L');
-    await page.locator('[data-coachmark]').getByRole('button', { name: 'Got it' }).click();
-    await layer(page, 'list').getByRole('button', { name: 'Settings' }).click();
-    await expectMode(page, 'settings');
-    const settings = layer(page, 'settings');
-    const handle = settings.getByRole('group', { name: 'Island size' }); const windows = settings.getByRole('group', { name: 'Window size' });
-    await expect(handle.getByRole('radio', { name: 'Auto (200%)' })).toBeChecked();
-    await expect(windows.getByRole('radio', { name: 'Auto (100%)' })).toBeChecked();
-    // Handle to 150 %: the opened settings keep their size.
-    await handle.getByText('150%', { exact: true }).click();
-    await expect(handle.getByRole('radio', { name: '150%', exact: true })).toBeChecked();
-    await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '1.5');
-    await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(380, 0);
-    // Windows to 100 % explicitly (already the Auto value here): still 380 px, the handle stays at 150 %.
-    await windows.getByText('100%', { exact: true }).click();
-    await expect(windows.getByRole('radio', { name: '100%', exact: true })).toBeChecked();
-    await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '1.5');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(380, 0);
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
-    await expectMode(page, 'handle');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(3) * 1.5, 0);
-    // Windows to 125 % from the list: the list grows, the handle does not.
-    await page.keyboard.press('Control+Alt+L');
-    await layer(page, 'list').getByRole('button', { name: 'Settings' }).click();
-    await windows.getByText('125%', { exact: true }).click();
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(380 * 1.25, 0);
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(islandWidth(3) * 1.5, 0);
-    expect(await page.evaluate(() => [localStorage.getItem('ledge.handleScale'), localStorage.getItem('ledge.panelScale')])).toEqual(['1.5', '1.25']);
-    await page.reload();
-    await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '1.5');
-    await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1.25');
   });
 
   test('a stored single Size from an older version applies to both', async ({ page }) => {

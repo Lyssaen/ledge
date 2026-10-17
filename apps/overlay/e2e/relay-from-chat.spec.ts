@@ -1,6 +1,6 @@
 import { test, expect, layer, expectMode, ready, received } from './fixtures';
 import { fakeDaemon, session } from './daemon';
-import { openList } from './scenarios';
+import { openChat } from './scenarios';
 
 /* The chat proposes an instruction for Otto, the user sends it from the card (spec 2026-10-12 relay). */
 const relay = { id: 'otto', name: 'Otto', tool: 'claude', text: 'Run the overlay tests' };
@@ -8,8 +8,8 @@ const relay = { id: 'otto', name: 'Otto', tool: 'claude', text: 'Run the overlay
 async function askForRelay(page: Parameters<typeof fakeDaemon>[0], ottoState: 'working' | 'idle') {
   const d = await fakeDaemon(page, [session('otto', { name: 'Otto', state: ottoState }), session('pim', { name: 'Pim' })]);
   await ready(page, 2);
-  await openList(page);
-  await layer(page, 'list').getByRole('textbox', { name: 'Ask Ledge' }).fill('tell Otto to run the overlay tests');
+  await openChat(page);
+  await layer(page, 'chat').getByRole('textbox', { name: 'Ask Ledge' }).fill('tell Otto to run the overlay tests');
   await page.keyboard.press('Enter');
   await expectMode(page, 'chat');
   const ask = await received(d.received, 'chat.ask');

@@ -1,6 +1,6 @@
 import { test, expect, layer, expectMode, ready, received } from './fixtures';
 import { fakeDaemon, session } from './daemon';
-import { openList } from './scenarios';
+import { openChat } from './scenarios';
 
 /* The chat proposes a session, the user starts it from the card (spec 2026-10-12). */
 const proposal = { cwd: '/home/u/ledge', project: 'ledge', tool: 'claude', prompt: 'Fix the overlay build' };
@@ -8,8 +8,8 @@ const proposal = { cwd: '/home/u/ledge', project: 'ledge', tool: 'claude', promp
 async function askForSession(page: Parameters<typeof fakeDaemon>[0]) {
   const d = await fakeDaemon(page, [session('otto'), session('pim', { name: 'Pim' })]);
   await ready(page, 2);
-  await openList(page);
-  await layer(page, 'list').getByRole('textbox', { name: 'Ask Ledge' }).fill('open a session in ledge to fix the overlay build');
+  await openChat(page);
+  await layer(page, 'chat').getByRole('textbox', { name: 'Ask Ledge' }).fill('open a session in ledge to fix the overlay build');
   await page.keyboard.press('Enter');
   await expectMode(page, 'chat');
   const ask = await received(d.received, 'chat.ask');

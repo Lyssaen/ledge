@@ -21,12 +21,9 @@ function stubClient() {
 const snapshot = (sessions: Session[]) => act(() => { daemonStore.setStatus('open'); daemonStore.apply({ type: 'snapshot', sessions }); });
 const update = (s: Session) => act(() => { daemonStore.apply({ type: 'session.updated', session: s }); });
 const remove = (id: string) => act(() => { daemonStore.apply({ type: 'session.removed', id }); });
-const daemonError = (id: string, message: string) => act(() => { daemonStore.apply({ type: 'error', id, message }); });
 const tick = (n: number) => act(() => { vi.advanceTimersByTime(n); });
 const press = (key: string, extra: KeyboardEventInit = {}) => act(() => { fireEvent.keyDown(document.activeElement ?? window, { key, ...extra }); });
 const shortcut = () => press('l', { ctrlKey: true, altKey: true });
-/** Keyboard focus on the n-th listed row (1-based), with K to the top then J down. */
-const toRow = (n: number) => { for (let i = 0; i < 9; i++) press('k'); for (let i = 1; i < n; i++) press('j'); };
 const surface = () => document.querySelector('[data-surface]') as HTMLElement;
 const layer = (name: string) => document.querySelector(`[data-layer="${name}"]`) as HTMLElement;
 const mode = () => surface().getAttribute('data-mode');
@@ -64,7 +61,7 @@ describe('final review fixes', () => {
     expect(within(bubble).getByText(/git push --force/)).toBeInTheDocument();
     expect(bubble).toHaveAttribute('data-ack', 'none');
     expect(within(bubble).queryByText('Sent, waiting for the terminal')).toBeNull();
-    expect(document.querySelector('[data-timer]')).toHaveAttribute('data-paused', 'false');
+    expect(document.querySelector('[data-timer]')).toBeNull();
     expect(approve()).toBeEnabled();
     fireEvent.click(approve());
     expect(rec.sent.filter(m => m.type === 'session.decide')).toHaveLength(2);
@@ -73,42 +70,36 @@ describe('final review fixes', () => {
     expect(mode()).toBe('handle');
   });
 
-  it('2. Ctrl+Alt+L over a bubble opens the list from the keyboard and takes OS focus', () => {
+  it('2. Ctrl+Alt+L over the ask that is already showing opens the chat and takes OS focus', () => {
     snapshot([otto(asks('rm -rf dist'))]);
     mount();
     tick(540);
     expect(mode()).toBe('bubble');
     shortcut();
-    expect(mode()).toBe('list');
-    expect(document.activeElement).toHaveAttribute('aria-label', expect.stringMatching(/Otto/));
+    expect(mode()).toBe('chat');
     expect(bridge.focusOverlay).toHaveBeenCalledTimes(1);
   });
 
-  it('3. a keyboard-opened surface hands OS focus back when it folds; a mouse-opened one does not', () => {
+  it('3. a keyboard-opened chat hands OS focus back when it folds; a mouse-opened one does not', () => {
     snapshot([otto(), pim()]);
     mount();
-    // Mouse: edge dwell, then collapse.
-    fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
+    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
     tick(180);
-    expect(mode()).toBe('list');
-    fireEvent.click(within(layer('list')).getByRole('button', { name: 'Collapse' }));
+    expect(mode()).toBe('chat');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(mode()).toBe('handle');
     expect(bridge.releaseFocus).not.toHaveBeenCalled();
-    // Keyboard: Ctrl+Alt+L then Escape.
     shortcut();
-    expect(mode()).toBe('list');
+    expect(mode()).toBe('chat');
     expect(bridge.releaseFocus).not.toHaveBeenCalled();
+    // The composer swallows the first Escape (it only blurs). The next one folds the chat.
+    press('Escape');
     press('Escape');
     expect(mode()).toBe('handle');
     expect(bridge.releaseFocus).toHaveBeenCalledTimes(1);
-    // Keyboard into a session, then closed from there; and Ctrl+Alt+L again to close.
-    shortcut(); toRow(1); press('Enter');
-    expect(mode()).toBe('session');
-    fireEvent.click(within(layer('session')).getByRole('button', { name: 'Close' }));
-    expect(bridge.releaseFocus).toHaveBeenCalledTimes(2);
     shortcut(); shortcut();
     expect(mode()).toBe('handle');
-    expect(bridge.releaseFocus).toHaveBeenCalledTimes(3);
+    expect(bridge.releaseFocus).toHaveBeenCalledTimes(2);
   });
 
   it('4. buttons carry their variant for the stylesheet, which dims disabled ones and has hover states from tokens', () => {
@@ -125,85 +116,42 @@ describe('final review fixes', () => {
     expect(btnRules).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|oklch\(/i);
   });
 
-  it('5a. a reply the daemon rejects on an idle session shows why and gives the text back', () => {
-    snapshot([otto({ state: 'idle' })]);
-    mount();
-    fireEvent.click(screen.getByRole('button', { name: /Otto .*open/ }));
-    const field = () => screen.getByPlaceholderText('Reply to Otto…') as HTMLInputElement;
-    fireEvent.change(field(), { target: { value: 'run the tests' } });
-    fireEvent.keyDown(field(), { key: 'Enter' });
-    expect(rec.sent).toContainEqual({ type: 'session.reply', id: 'a', text: 'run the tests' });
-    expect(field().value).toBe('');
-    daemonError('a', 'tmux send failed');
-    expect(within(layer('session')).getByRole('status')).toHaveTextContent('tmux send failed');
-    expect(field().value).toBe('run the tests');
-    // Sending again clears the old failure.
-    fireEvent.keyDown(field(), { key: 'Enter' });
-    expect(within(layer('session')).queryByText('tmux send failed')).toBeNull();
-  });
-
-  it('5b. a free-text reply to a question is rejected: the request unlocks, the failure shows, the draft comes back', () => {
+  it('5. a question on the card sends the chosen words; an empty choice sends nothing and says so', () => {
     snapshot([otto(question('Which strategy?', ['Backfill', 'Shadow']))]);
     mount();
-    fireEvent.click(screen.getByRole('button', { name: /Otto .*open/ }));
-    const view = layer('session');
-    expect(within(view).getByText(/A question takes an option number/)).toBeInTheDocument();
-    const field = screen.getByPlaceholderText('Reply to Otto…') as HTMLInputElement;
-    fireEvent.change(field, { target: { value: 'dual write' } });
-    fireEvent.keyDown(field, { key: 'Enter' });
-    expect(within(view).getByRole('button', { name: 'Answer' })).toBeDisabled(); // locked like a decision
-    daemonError('a', 'free-text answers are not supported yet, answer in the terminal');
-    expect(within(view).getByText(/free-text answers are not supported yet/)).toBeInTheDocument();
-    expect(field.value).toBe('dual write');
-    expect(within(view).getByRole('button', { name: 'Answer' })).toBeEnabled();
-  });
-
-  it('5c. while a permission prompt is pending the reply field explains it and sends nothing', () => {
-    snapshot([otto(asks('npm test'))]);
-    mount();
-    fireEvent.click(screen.getByRole('button', { name: /Otto .*open/ }));
-    const view = layer('session');
-    expect(within(view).getByText('Approve or deny the permission first, then reply')).toBeInTheDocument();
-    const field = screen.getByPlaceholderText('Reply to Otto…') as HTMLInputElement;
-    fireEvent.change(field, { target: { value: 'wait' } });
-    expect(within(view).getByRole('button', { name: 'Send' })).toBeDisabled();
-    fireEvent.keyDown(field, { key: 'Enter' });
+    tick(540);
+    const bubble = layer('bubble');
+    fireEvent.click(within(bubble).getByRole('button', { name: 'Reply' }));
+    expect(within(bubble).getByRole('alert')).toHaveTextContent('Choose an answer or write one.');
     expect(rec.sent).toHaveLength(0);
-    expect(field.value).toBe('wait');
+    fireEvent.click(within(bubble).getByRole('radio', { name: /Shadow/ }));
+    fireEvent.click(within(bubble).getByRole('button', { name: 'Reply' }));
+    expect(rec.sent).toContainEqual({ type: 'session.reply', id: 'a', text: 'Shadow' });
   });
 
-  it('7. a diff or plan opens its review before any decision: bubble, list row and Y/N', () => {
+  it('7. a diff or plan is reread in Ledge, never approved from the island', () => {
     snapshot([otto(review('diff', 'src/app.ts +12 -3')), pim()]);
     mount();
     tick(540);
     const bubble = layer('bubble');
     expect(within(bubble).getByText('Otto has a diff to review')).toBeInTheDocument();
     expect(within(bubble).queryByRole('button', { name: 'Approve' })).toBeNull();
-    // Later folds the bubble, the request stays pending.
-    fireEvent.click(within(bubble).getByRole('button', { name: 'Later' }));
+    fireEvent.click(within(bubble).getByRole('button', { name: /Later/ }));
     expect(mode()).toBe('handle');
     expect(rec.sent).toHaveLength(0);
-    // From the keyboard list: no inline Approve/Deny on the row, Y opens the session instead of deciding.
     shortcut();
-    expect(within(layer('list')).queryByRole('button', { name: /Approve/ })).toBeNull();
+    expect(mode()).toBe('bubble');
     press('y');
-    expect(mode()).toBe('session');
     expect(rec.sent).toHaveLength(0);
-    // Inside the session (the terminal preview is the review) Approve and Y decide.
-    const view = layer('session');
-    expect(within(view).getByText(/proposes changes/)).toBeInTheDocument();
-    press('y');
-    expect(rec.sent).toEqual([{ type: 'session.decide', id: 'a', decision: 'accept' }]);
-    // A plan in the bubble: Review opens the session.
+    fireEvent.click(within(bubble).getByRole('button', { name: 'Review in Ledge' }));
+    expect(mode()).toBe('bubble');
+    expect(screen.getByText(/Opening Otto in Ledge Desktop/)).toBeInTheDocument();
     update(otto({ state: 'working' }));
-    press('Escape'); press('Escape');
+    press('Escape');
     expect(mode()).toBe('handle');
     update(pim(review('plan', 'Refactor the poller')));
     tick(540);
     expect(within(bubble).getByText('Pim has a plan to review')).toBeInTheDocument();
-    fireEvent.click(within(bubble).getByRole('button', { name: 'Review' }));
-    expect(mode()).toBe('session');
-    expect(screen.getByText('Pim · speos-api')).toBeInTheDocument();
   });
 
   it('8. removing the bubble session bubbles the next queued ask', () => {
@@ -231,29 +179,23 @@ describe('final review fixes', () => {
     expect(mode()).toBe('bubble');
   });
 
-  it('10. the terminal tab is reachable for read-only and offline sessions; only the daemon message needs the daemon', () => {
+  it('10. Open in Ledge on a read-only ask notes the session and does not focus a terminal', () => {
     snapshot([otto({ source: 'hook_only', tmuxSession: null, ...asks('npm test') })]);
     mount();
-    fireEvent.click(screen.getByRole('button', { name: /Otto .*open/ }));
-    const tab = within(layer('session')).getByRole('button', { name: 'Focus terminal tab' });
-    expect(tab).toBeEnabled();
-    fireEvent.click(tab);
-    expect(bridge.focusTerminal).toHaveBeenLastCalledWith('Otto · harness-assistant');
-    expect(rec.sent).toEqual([{ type: 'session.focus', id: 'a' }]);
-    act(() => daemonStore.setStatus('unreachable'));
-    fireEvent.click(tab);
-    expect(bridge.focusTerminal).toHaveBeenCalledTimes(2);
-    expect(rec.sent).toHaveLength(1);
+    tick(540);
+    fireEvent.click(within(layer('bubble')).getByRole('button', { name: /Open in Ledge/ }));
+    expect(screen.getByText(/Opening Otto in Ledge Desktop/)).toBeInTheDocument();
+    expect(bridge.focusTerminal).not.toHaveBeenCalled();
+    expect(rec.sent.filter(m => m.type === 'session.focus')).toHaveLength(0);
+    expect(mode()).toBe('bubble');
   });
 
-  it('an exited session offers no rename (the daemon would ignore it); a live one does', () => {
-    snapshot([otto({ topic: 'Done work', state: 'exited' }), pim({ topic: 'Live work' })]);
+  it('an exited bot opens a peek, not a rename field', () => {
+    snapshot([otto({ topic: 'Done work', state: 'exited' })]);
     mount();
-    shortcut(); toRow(1); press('Enter');
-    expect(mode()).toBe('session');
-    expect(within(layer('session')).getByRole('button', { name: 'Done work' })).toBeDisabled();
-    press('Escape');
-    toRow(2); press('Enter');
-    expect(within(layer('session')).getByRole('button', { name: 'Live work' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: /Otto .*open/ }));
+    expect(mode()).toBe('peek');
+    expect(within(layer('peek')).getByText('Done work')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Done work' })).toBeNull();
   });
 });

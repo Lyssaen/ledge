@@ -1,78 +1,30 @@
-import { test, expect, layer, expectMode, ready, surface } from './fixtures';
-import { fakeDaemon } from './daemon';
-import { overview, openList, restInside } from './scenarios';
+import { test, expect, layer, expectMode, ready } from './fixtures';
+import { fakeDaemon, session } from './daemon';
+
+const otto = () => [session('otto', { name: 'Otto', state: 'waiting_permission', pending: { kind: 'permission', text: 'pnpm test', source: 'hook' } })];
 
 test.describe('French by default', () => {
   test.use({ lang: null });
 
-  test('the list, the badges and a permission read the mockup\'s French labels', async ({ page }) => {
-    await fakeDaemon(page, overview());
-    await ready(page, 4);
+  test('the ask card and the chat menu read French, and settings leave for Ledge Desktop', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('ledge.dnd', '1'));
+    await fakeDaemon(page, otto());
+    await ready(page, 1);
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
-    await openList(page);
-    const list = layer(page, 'list');
-    await expect(list.getByText('4 sessions · 2 demandes pour vous')).toBeVisible();
-    for (const name of ['Ne pas déranger', 'Réglages', 'Replier']) await expect(list.getByRole('button', { name, exact: true }).first()).toBeVisible();
-    for (const word of ['Votre accord', 'Une question', 'Au travail', 'Disponible']) await expect(list.getByText(word, { exact: true })).toBeVisible();
-    await expect(list.locator('[data-row]', { hasText: /Otto\s*·\s*Cette machine\s*·\s*18 min/ }).first()).toBeVisible();
-    await expect(list.locator('kbd', { hasText: 'Ctrl Alt L' })).toBeVisible();
-    await list.getByRole('button', { name: 'harness-assistant, Otto, ouvrir' }).click();
-    await expectMode(page, 'session');
-    await restInside(page);
-    const view = layer(page, 'session');
-    await expect(view.getByText('À vous de jouer')).toBeVisible();
-    await expect(view.getByRole('heading', { name: 'Otto souhaite lancer une commande.' })).toBeVisible();
-    await expect(view.getByText('Exécution dans harness-assistant')).toBeVisible();
-    await expect(view.getByRole('checkbox', { name: 'Toujours pour cette session' })).toBeDisabled();
-    await expect(view.getByRole('button', { name: 'Refuser' })).toBeVisible();
-    await expect(view.getByRole('button', { name: 'Autoriser' })).toBeVisible();
-    await expect(view.getByPlaceholder('Une instruction pour votre compagnon…')).toBeVisible();
-  });
-
-  test('a question reads "Envoyer la réponse →" and "Ou proposez autre chose…"', async ({ page }) => {
-    await fakeDaemon(page, overview());
-    await ready(page, 4);
-    await openList(page);
-    await layer(page, 'list').getByRole('button', { name: 'design-system, Nova, ouvrir' }).click();
-    await expectMode(page, 'session');
-    const view = layer(page, 'session');
-    await expect(view.getByText('Une question', { exact: true })).toBeVisible();
-    await expect(view.getByRole('heading', { name: 'Quel thème utiliser par défaut ?' })).toBeVisible();
-    await expect(view.getByRole('radio', { name: 'Sombre · Signal' })).toBeChecked();
-    await expect(view.getByPlaceholder('Ou proposez autre chose…')).toBeDisabled();
-    await expect(view.getByRole('button', { name: 'Envoyer la réponse →' })).toBeEnabled();
-  });
-});
-
-test.describe('Language setting', () => {
-  test.use({ lang: null });
-
-  test('switching to English in Settings applies live, is remembered, and switching back restores French', async ({ page }) => {
-    await fakeDaemon(page, overview());
-    await ready(page, 4);
-    await openList(page);
-    await layer(page, 'list').getByRole('button', { name: 'Réglages' }).click();
-    await expectMode(page, 'settings');
-    const settings = layer(page, 'settings');
-    await expect(settings.getByText('Votre Ledge')).toBeVisible();
-    await expect(settings.getByRole('radio', { name: 'Français' })).toBeChecked();
-    await settings.getByText('English', { exact: true }).click();
-    await expect(settings.getByText('Your Ledge')).toBeVisible();
-    await expect(settings.getByRole('radio', { name: 'English' })).toBeChecked();
-    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    expect(await page.evaluate(() => localStorage.getItem('ledge.lang'))).toBe('en');
-    await settings.getByRole('button', { name: 'Back to sessions' }).click();
-    await expectMode(page, 'list');
-    await expect(layer(page, 'list').getByText('4 sessions · 2 waiting for you')).toBeVisible();
-    await expect(layer(page, 'list').getByText('Running', { exact: true })).toBeVisible();
-    await expect(layer(page, 'list').locator('[data-row]', { hasText: /Otto\s*·\s*This machine\s*·\s*18m/ }).first()).toBeVisible();
-    // Remembered across a reload.
-    await page.reload();
-    await expect(layer(page, 'handle').getByRole('button', { name: /^Otto needs your approval, open/ })).toBeAttached();
-    await openList(page);
-    await layer(page, 'list').getByRole('button', { name: 'Settings' }).click();
-    await layer(page, 'settings').getByText('Français', { exact: true }).click();
-    await expect(layer(page, 'settings').getByText('Votre Ledge')).toBeVisible();
-    await expect(surface(page)).toHaveAttribute('data-mode', 'settings');
+    await page.keyboard.press('Control+Alt+L');
+    await expectMode(page, 'bubble');
+    const bubble = layer(page, 'bubble');
+    await expect(bubble.getByText('Otto attend votre accord')).toBeVisible();
+    await expect(bubble.getByRole('button', { name: 'Refuser' })).toBeVisible();
+    await expect(bubble.getByRole('button', { name: 'Autoriser' })).toBeVisible();
+    await expect(bubble.getByRole('button', { name: /^Plus tard/ })).toBeVisible();
+    await expect(bubble.getByRole('button', { name: /Ouvrir dans Ledge/ })).toBeVisible();
+    await page.keyboard.press('Control+Alt+L');
+    await expectMode(page, 'chat');
+    await expect(layer(page, 'chat').getByRole('button', { name: 'Retour aux sessions' })).toHaveCount(0);
+    await layer(page, 'chat').getByRole('button', { name: 'Menu de Ledge' }).click();
+    await layer(page, 'chat').getByRole('button', { name: /Réglages dans Ledge Desktop/ }).click();
+    await expect(page.getByRole('status')).toContainText('Ouverture des réglages dans Ledge Desktop');
+    await expect(layer(page, 'chat').getByRole('button', { name: 'Menu de Ledge' })).toHaveAttribute('aria-expanded', 'false');
   });
 });
