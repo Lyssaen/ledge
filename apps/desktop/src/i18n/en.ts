@@ -299,6 +299,34 @@ export const en: Messages = {
       timeout: 'The folder did not answer.', retry: 'Try again'
     }
   },
+  chat: {
+    title: 'Ledge', subtitle: (n: number, repos: number) => `Sees ${n} ${pluralEn(n, 'session', 'sessions')} · ${repos} ${pluralEn(repos, 'repository', 'repositories')} · read only`,
+    ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…', open: 'Open the conversation with Ledge', send: 'Send', stop: 'Stop', reset: 'New conversation', back: 'Back to sessions', close: 'Close',
+    emptyTitle: 'Ask me how things are going.',
+    emptyHint: (n: number) => `${n === 0 ? 'I see no session yet.' : n === 1 ? 'I see 1 session, its terminal and its repository.' : `I see ${n} sessions, the terminals and the repositories.`} I read, I touch nothing.`,
+    starters: 'To start with',
+    chips: ['How are the others doing?', 'What is waiting for my decision?', 'Which branches can be merged?'],
+    thinking: 'Ledge is looking…',
+    step: { sessions: 'Reads the sessions', pane: (name: string) => `Reads ${name}'s terminal`, reply: (name: string) => `Reads ${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => `Reads ${path}` },
+    source: { sessions: 'the sessions', pane: (name: string) => `${name}'s terminal`, reply: (name: string) => `${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => path },
+    sources: 'Sources', sourcesNone: 'nothing read', ago: (when: string) => `${when} ago`,
+    error: (why: string) => `Ledge could not answer: ${why}`,
+    stopped: 'Stopped.',
+    card: {
+      label: 'Proposed session', folder: 'Folder', tool: 'Harness', byDefault: (tool: string) => `${tool} · default`, prompt: 'Instruction', noPrompt: 'None, empty session',
+      launch: 'Start the session', launching: 'Starting…', retry: 'Retry', orRephrase: 'or rephrase your request', orFolder: 'or give me another folder',
+      failed: (why: string) => `Could not start: ${why}`, started: 'has started', startedUnknown: 'Session started', terminal: 'Terminal'
+    },
+    relay: {
+      label: 'Instruction to send', session: 'Session', instruction: 'Instruction',
+      send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',
+      queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: (why: string) => `Could not send: ${why}`,
+      pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
+    },
+  },
+  machines: { clarification: 'You can also answer in the chat.', destination: 'Destination', choose: (name: string) => `On ${name}.`, local: 'This machine', offline: 'Offline' },
+  time: { seconds: (n: number) => `${n}s`, minutes: (n: number) => `${n}m`, hours: (n: number) => `${n}h`, locale: 'en-US' },
+  offline: 'The local daemon is offline.',
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },
   botReadOnly: 'Read-only',

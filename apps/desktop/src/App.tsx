@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { projectOf, useDaemon, useProjects, type DaemonClient } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
-import { Button } from '@ledge/ui/ui/Button';
-import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { LangProvider, loadLang, useI18n, type Lang } from './i18n/lang';
 import { useFleet } from './fleet/useFleet';
 import { useDecisions } from './fleet/decisions';
@@ -24,6 +22,7 @@ import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { Pending } from './shell/Pending';
 import { LaunchPlace, loadComposer } from './launch/lazy';
+import { ChatPlace, loadChat } from './chat/lazy';
 import { useLaunch } from './launch/useLaunch';
 import { Atelier } from './atelier/Atelier';
 import { List } from './list/List';
@@ -107,8 +106,8 @@ function Shell({ client }: { client?: DaemonClient }) {
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
   // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
   const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
-  // The session page's, the New session form's and the project editor's chunks are fetched once the shell is up, so a first opening rarely waits for them.
-  useEffect(() => { void loadWorkspace(); void loadComposer(); void loadEditor(); }, []);
+  // The session page's, the New session form's, the project editor's and the chat's chunks are fetched once the shell is up, so a first opening rarely waits for them.
+  useEffect(() => { void loadWorkspace(); void loadComposer(); void loadEditor(); void loadChat(); }, []);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
@@ -130,6 +129,16 @@ function Shell({ client }: { client?: DaemonClient }) {
     filing.markSeated(id);
     if (table) notify(t.launch.started(s?.name ?? preview?.name ?? '', table.name));
   });
+  // A chat card's session started (the daemon listed it before answering): the chat stays open; if the current filter hides its
+  // table, the filter goes back to All without leaving the page; the seat lights and the notice names who starts where (lot 7's words).
+  const chatLaunched = (id: string) => {
+    const s = sessions.find(x => x.id === id);
+    const table = s ? projectIdOf(s) ?? 'none' : null;
+    if (base.project !== 'all' && base.project !== table) dispatch({ type: 'filter', project: 'all' });
+    filing.markSeated(id);
+    const own = table !== null ? projects?.projects.find(p => p.id === table) : undefined;
+    if (s && own) notify(t.launch.started(s.name, own.name));
+  };
   // The form closed (Escape, Cancel, another dialog): nothing is waited for any more; a late answer is not announced.
   const { reset: resetLaunch } = launcher;
   useEffect(() => { if (nav.modal?.kind !== 'launch') resetLaunch(); }, [nav.modal?.kind, resetLaunch]);
@@ -166,10 +175,8 @@ function Shell({ client }: { client?: DaemonClient }) {
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} />}
         </section>
         {nav.chat && (
-          <aside className="ledge-chat-panel" aria-label={t.side.chat}>
-            <div className="chat-drawer-content"><Pending title={t.side.chat} /></div>
-            <Button variant="ghost" size="icon" className="chat-close" aria-label={t.close} onClick={() => dispatch({ type: 'chat', open: false })}><Icon d={ICONS.close.d} /></Button>
-          </aside>
+          <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} onClose={() => dispatch({ type: 'chat', open: false })}
+            onOpenSession={id => dispatch({ type: 'open', id })} onLaunched={chatLaunched} />
         )}
       </div>
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
