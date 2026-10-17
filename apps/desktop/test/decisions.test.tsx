@@ -161,6 +161,20 @@ describe('useDecisions', () => {
       expect(props.notify).toHaveBeenCalledTimes(1);
     } finally { vi.useRealTimers(); }
   });
+  it('a decision sent meanwhile does not take the landed reply\'s late refusal away', () => {
+    const nova = fakeSession('local:nova', { name: 'Nova', state: 'working' });
+    const onRefused = vi.fn();
+    const { result, rerender, props } = setup({ sessions: [nova] });
+    act(() => { expect(result.current.reply(nova, 'Go on', onRefused)).toBe(true); });
+    const asking = { ...nova, state: 'waiting_permission' as const, lastActivityAt: '2026-10-09T18:01:00.000Z', pending: { kind: 'permission' as const, text: 'npm test', source: 'hook' as const } };
+    rerender({ ...props, sessions: [asking] });                                     // the reply looks landed
+    expect(result.current.busy('local:nova')).toBe(false);
+    act(() => { expect(result.current.decide(asking, 'accept')).toBe(true); });
+    rerender({ ...props, sessions: [asking], errors: [{ id: 'local:nova', message: 'the terminal did not take it', seq: 1, request: 'session.reply' }] });
+    expect(props.notify).toHaveBeenCalledWith('Could not send the reply to Nova: the terminal did not take it');
+    expect(onRefused).toHaveBeenCalledWith('Go on');
+    expect(result.current.busy('local:nova')).toBe(true);                         // the decision still waits for its own answer
+  });
   it('a refused note comes back like a refused reply', () => {
     const onRefused = vi.fn();
     const { result, rerender, props } = setup();

@@ -118,7 +118,8 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
   /** Records the send and the 8 s watch, then sends. */
   const send = (s: Session, message: Sent['message'], payload: Parameters<Pick<DaemonClient, 'send'>['send']>[0], extra: Pick<Sent, 'text' | 'onRefused'> = {}) => {
     const { name, id } = s;
-    unsettle(id);
+    // A new reply takes over the landed one's window; a decision does not (the reply's late refusal still reaches it).
+    if (message === 'session.reply') unsettle(id);
     const timer = setTimeout(() => {
       const x = forget(id);
       if (!x) return;
