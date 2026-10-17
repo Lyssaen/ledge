@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -46,5 +48,14 @@ describe('the shell on the real fleet', () => {
     render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
     expect(screen.getByText('Sessions locales et SSH')).toBeVisible();
     expect(screen.getByRole('complementary', { name: 'Barre latérale' })).toBeVisible();
+  });
+});
+
+describe('the bundle', () => {
+  it('the session page comes in a chunk of its own: the shell imports neither it nor the Markdown reader', () => {
+    const app = readFileSync(resolve(__dirname, '../src/App.tsx'), 'utf8');
+    expect(app).not.toMatch(/from '\.\/session\/Workspace'/);
+    expect(app).not.toMatch(/from '@ledge\/ui\/documents\/markdown'/);
+    expect(readFileSync(resolve(__dirname, '../src/session/lazy.tsx'), 'utf8')).toMatch(/import\('\.\/Workspace'\)/);
   });
 });

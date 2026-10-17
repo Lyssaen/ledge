@@ -1,11 +1,11 @@
-import { createContext, useContext, useEffect, useMemo } from 'react';
+import { useContext, useEffect, useMemo } from 'react';
 import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { MarkdownLinks } from './links';
 import { parseDocumentReference, type DocumentReference } from './references';
 import './markdown.css';
 
-/** Opens a web address (the overlay and Desktop put their openUrl here); by default, nothing. */
-export const MarkdownLinks = createContext<(url: string) => void>(() => {});
+export { MarkdownLinks };
 
 export interface DocumentHeading { id: string; depth: number; text: string }
 export function splitMarkdownFrontmatter(text: string): { title?: string; body: string } {

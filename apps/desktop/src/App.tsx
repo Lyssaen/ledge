@@ -9,7 +9,9 @@ import { useDecisions } from './fleet/decisions';
 import { useWaits } from './fleet/waits';
 import { useAlerts } from './notify/useAlerts';
 import { getDnd, setDnd, useDnd } from './notify/prefs';
-import { MarkdownLinks } from '@ledge/ui/documents/markdown';
+import { MarkdownLinks } from '@ledge/ui/documents/links';
+// The reader's styles stay in the first bundle, before app.css (as when the reader itself was there): session.css overrides them.
+import '@ledge/ui/documents/markdown.css';
 import { onTrayAction, openUrl, setTrayLabels } from './tauri/bridge';
 import { useAppearance } from './shell/theme';
 import { initialNav, navReducer, reconcile, type NavAction, type NavState } from './nav/state';
@@ -29,7 +31,7 @@ import { ShortcutsHelp } from './shell/ShortcutsHelp';
 import { onFullscreenLeft, setWindowFullscreen } from './shell/fullscreen';
 import { Toast, useToast } from './shell/Toast';
 import { useFiling } from './atelier/filing';
-import { Workspace } from './session/Workspace';
+import { loadWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
 import { subagentOf } from './session/thread';
@@ -98,6 +100,8 @@ function Shell({ client }: { client?: DaemonClient }) {
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
   // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
   const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
+  // The session page's chunk is fetched once the shell is up, so a first session rarely waits for it.
+  useEffect(() => { void loadWorkspace(); }, []);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
@@ -109,7 +113,7 @@ function Shell({ client }: { client?: DaemonClient }) {
         <section className="workspace">
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal} />
           {place.kind === 'settings' ? <Pending title={t.sections[place.section]} />
-            : session && place.kind === 'session' ? <Workspace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify}
+            : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} order={order} projects={projects} projectIdOf={projectIdOf} />
             : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
             : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} decisions={decisions} filing={filing} waits={waits} />}

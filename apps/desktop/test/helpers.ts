@@ -11,6 +11,7 @@ import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
 import { activeCount } from '../src/nav/agents';
+import { loadWorkspace } from '../src/session/lazy';
 
 /** jsdom loads no stylesheet: the declarations of the top-level rules naming `selector` in one of the app's sheets (@media and @container blocks removed). */
 export function declarations(sheet: string, selector: string): string {
@@ -92,6 +93,8 @@ export async function closeDaemons(): Promise<void> {
  *  Ready once the Atelier counter shows the active sessions, the last project's row is in the sidebar and, with sessions,
  *  the first one is shown (its seat in the atelier, its row in the List). */
 export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false }: { sessions?: Session[]; projects?: Projects; list?: boolean } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
+  // The session page's own chunk is there before a test opens one: the page comes in the same render, as once preloaded in the app.
+  await loadWorkspace();
   const d = await createMockDaemon(); daemons.push(d);
   d.machines([{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }]);
   d.projects(projects);
