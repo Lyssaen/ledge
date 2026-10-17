@@ -83,7 +83,10 @@ export class History {
     this.writes = this.writes.then(() => rm(join(this.dir, `${id}.jsonl`), { force: true })).catch(e => log(`history not removed for ${id}: ${(e as Error).message}`));
   }
 
-  /** The user's own decision, sent from the overlay: it lands on the last permission still undecided or only seen to vanish. */
+  /**
+   * The user's own decision: it lands on the last permission still undecided or only seen to vanish. The server no longer
+   * calls it (its `Decided` carries the decision, which settles exactly the permission answered).
+   */
   decide(id: string, decision: Decision): ThreadItem | undefined {
     const perm = [...this.items(id)].reverse().find(i => i.kind === 'permission' && (i.decision === undefined || i.decision === 'unknown'));
     return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision }) : undefined;

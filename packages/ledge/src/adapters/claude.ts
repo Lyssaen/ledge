@@ -308,10 +308,13 @@ const PLAN_ACCEPT = /\bmanually approve\b/i;
 //   2. Yes, and switch to accept edits (auto-approve file edits …) for this session  Write / Edit
 //   1. Yes, and use auto mode                                                       plan (2.1; "auto-accept edits" before)
 //
-// Auto mode answers every later prompt by itself: on a permission it is more than "don't ask again for this".
+// Auto mode answers every later prompt by itself: on a permission it is more than "don't ask again for this". On a plan,
+// 2.0.x lists « Yes, clear context and auto-accept edits » before « Yes, auto-accept edits »: clearing the context
+// would wipe the conversation, never part of « always ».
 const ALWAYS = /don't ask again|always allow|accept edits|for this session/i;
 const AUTO_MODE = /auto mode/i;
 const PLAN_ALWAYS = /accept edits|auto mode/i;
+const CLEAR_CONTEXT = /clear context/i;
 // A plan's own row for feedback: its digit selects it and the text typed replaces it, Enter sends it.
 const PLAN_NOTE_ROW = /Tell Claude what to change/i;
 
@@ -319,7 +322,7 @@ const PLAN_NOTE_ROW = /Tell Claude what to change/i;
 function alwaysOption(pane: string | undefined): number {
   const d = pane ? parseDialog(pane) : null;
   const full = d ? d.options.map((o, i) => `${o} ${d.details[i] ?? ''}`) : [];
-  const i = d?.kind === 'plan' ? full.findIndex(o => PLAN_ALWAYS.test(o))
+  const i = d?.kind === 'plan' ? full.findIndex(o => PLAN_ALWAYS.test(o) && !CLEAR_CONTEXT.test(o))
     : d?.kind === 'permission' ? full.findIndex(o => ALWAYS.test(o) && !AUTO_MODE.test(o)) : -1;
   if (i < 0) throw new Error(NO_ALWAYS);
   return i + 1;

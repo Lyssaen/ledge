@@ -245,6 +245,15 @@ describe('claude adapter: always and a note (lot 6a)', () => {
     expect(() => claudeAdapter.keysFor('always', perm, pane)).toThrow('no "always" option in this dialog, answer in the terminal');
     expect(() => claudeAdapter.keysFor('always', perm)).toThrow('no "always" option in this dialog, answer in the terminal');
   });
+  it('always on a plan never clears the context (Claude Code 2.0.x lists that variant first; edited capture)', () => {
+    const v20 = fx('claude2-plan')
+      .replace('❯ 1. Yes, and use auto mode', '❯ 1. Yes, clear context and auto-accept edits (shift+tab)')
+      .replace('  2. Yes, manually approve edits', '  2. Yes, auto-accept edits')
+      .replace('  3. Tell Claude what to change', '  3. Yes, manually approve edits\n     4. Tell Claude what to change');
+    expect(claudeAdapter.keysFor('always', plan, v20)).toEqual([{ text: '2' }]);
+    const onlyClear = fx('claude2-plan').replace('❯ 1. Yes, and use auto mode', '❯ 1. Yes, clear context and auto-accept edits (shift+tab)');
+    expect(() => claudeAdapter.keysFor('always', plan, onlyClear)).toThrow('no "always" option in this dialog, answer in the terminal');
+  });
   it('deny with a note: Escape, then the note once the input is back; a plan takes it in its own row', () => {
     expect(claudeAdapter.keysFor('deny', perm, fx('claude2-permission-bash'), 'Use\npnpm')).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function) }, { text: 'Use pnpm' }, { keys: ['Enter'] }]);
     expect(claudeAdapter.keysFor('deny', plan, fx('claude2-plan'), 'Garde la v1')).toEqual([{ text: '3' }, { until: expect.any(Function) }, { text: 'Garde la v1' }, { keys: ['Enter'] }]);

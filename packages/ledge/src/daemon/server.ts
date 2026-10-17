@@ -345,8 +345,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (msg.decision === 'always' && !offers(s.tool, pending.kind, 'always')) return refuse(NOT_OFFERED, msg.id);
         if (msg.note !== undefined && (msg.decision !== 'deny' || !offers(s.tool, pending.kind, 'note'))) return refuse(NOT_OFFERED, msg.id);
         const { decision, note } = msg;
-        // Only a decision the terminal took lands in the thread: otherwise the last open permission may be the newer one.
-        if (await injectAndVerify(msg.id, pane => adapter.keysFor(decision, pending, pane, note), true, decision)) history?.decide(msg.id, decision);
+        // Only a decision the terminal took lands in the thread, through the `Decided` it carries: that settles the
+        // permission it answered and no other (an older one answered in the terminal keeps its own state).
+        await injectAndVerify(msg.id, pane => adapter.keysFor(decision, pending, pane, note), true, decision);
         return;
       }
       case 'session.reply': {
