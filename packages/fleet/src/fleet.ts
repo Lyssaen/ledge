@@ -37,9 +37,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** The paths of a pending inspection, to answer « not found » for each if its machine drops. */
   const unfound = new Map<string, { path: string; exists: false; branch: null }[]>();
   /** Each pending inspection of `machine` is answered « not found » for every path (the machine dropped, or does not know repos.inspect). */
-  const answerUnfound = (machine: string, why = 'not found') => {
-    for (const [requestId, l] of listings) if (l.machine === machine) { listings.delete(requestId); emit({ type: 'folder.listing', requestId, path: l.path, parent: null, entries: [], error: why }); }
+  const answerUnfoundInspections = (machine: string) => {
     for (const [requestId, owner] of inspections) if (owner === machine) { inspections.delete(requestId); const repos = unfound.get(requestId) ?? []; unfound.delete(requestId); emit({ type: 'repos.info', requestId, repos }); }
+  };
+  /** Each pending listing of `machine` is answered with `error` (offline when it dropped, the daemon's text or « not found » when it refused). */
+  const answerUnfoundListings = (machine: string, error: string) => {
+    for (const [requestId, l] of listings) if (l.machine === machine) { listings.delete(requestId); emit({ type: 'folder.listing', requestId, path: l.path, parent: null, entries: [], error }); }
   };
   let source: 'daemon' | 'local' = 'local';
   /** The local daemon's projects (build spec §5); the last ones stay while it is down. */
@@ -194,8 +197,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (p.restarting) return;
       if (!p.fresh) { p.error = m.message; publish(); return; }
       // An older daemon does not know repos.inspect (« invalid message »): its pending inspections find nothing, as when it drops.
-      if (m.request === 'repos.inspect') { answerUnfound(machine); return; }
-      if (m.request === 'folder.list' && [...listings.values()].some(l => l.machine === machine)) { answerUnfound(machine); return; }
+      if (m.request === 'repos.inspect') { answerUnfoundInspections(machine); return; }
+      if (m.request === 'folder.list' && [...listings.values()].some(l => l.machine === machine)) { answerUnfoundListings(machine, m.message || 'not found'); return; }
       // Only the in-flight operation's own refusal ends it: another refused command leaves it waiting for its answer or the machine's drop.
       if (m.request !== undefined && OPERATIONS.has(m.request)) operations.delete(machine);
       emit({ ...m, ...(m.id ? { id: qualify(machine, m.id) } : {}), message: configs.length > 1 ? `${p.config.label}: ${m.message}` : m.message });
@@ -213,7 +216,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         // A launch in flight names its request, as the daemon's refusal does, so the form that sent it hears it.
         const op = operations.get(c.id);
         if (operations.delete(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : {}) });
-        answerUnfound(c.id, 'offline');
+        answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline');
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
         for (const [qid, b] of bindings) { const t = turns.get(qid); if (b.machine === c.id && t && !t.answeredAt && !t.error) fail(qid, `${c.label} is offline`); }

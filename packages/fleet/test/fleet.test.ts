@@ -145,11 +145,23 @@ describe('multi-machine connections', () => {
     expect(got.filter(m => m.type === 'folder.listing').at(-1)).toEqual({ type: 'folder.listing', requestId: 'f2', path: '/x', parent: null, entries: [], error: 'offline' });
     expect(server.sent).toEqual([{ type: 'folder.list', path: '/w', requestId: 'f1' }]);
   });
-  it('a machine refusing folder.list answers « not found » for the pending request', () => {
+  it('a machine refusing folder.list answers the pending request with the daemon error text', () => {
     const { client, server, got } = setup();
     client.send({ type: 'folder.list', path: '/w', machineId: 'server', requestId: 'f1' });
     server.emit({ type: 'error', message: 'invalid message', request: 'folder.list' });
-    expect(got.filter(m => m.type === 'folder.listing')).toEqual([{ type: 'folder.listing', requestId: 'f1', path: '/w', parent: null, entries: [], error: 'not found' }]);
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([{ type: 'folder.listing', requestId: 'f1', path: '/w', parent: null, entries: [], error: 'invalid message' }]);
+  });
+  it('a repos.inspect refusal leaves pending listings alone, and a folder.list refusal leaves inspections alone', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'folder.list', path: '/w', machineId: 'server', requestId: 'f1' });
+    client.send({ type: 'repos.inspect', requestId: 'r1', paths: ['/a'], machineId: 'server' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'repos.inspect' });
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([]);
+    expect(got.filter(m => m.type === 'repos.info')).toHaveLength(1);
+    client.send({ type: 'repos.inspect', requestId: 'r2', paths: ['/b'], machineId: 'server' });
+    server.emit({ type: 'error', message: 'boom', request: 'folder.list' });
+    expect(got.filter(m => m.type === 'repos.info')).toHaveLength(1);
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([{ type: 'folder.listing', requestId: 'f1', path: '/w', parent: null, entries: [], error: 'boom' }]);
   });
   it('a folder.list without requestId keeps the old behaviour: the selected machine, relayed only from it', () => {
     const { client, local, server, got } = setup();
