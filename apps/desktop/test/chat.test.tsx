@@ -166,13 +166,14 @@ describe('the Ledge chat docked on the right', () => {
     } finally { opened.mockRestore(); }
   });
 
-  it('a card whose agent has no table yet names the proposal’s project in the notice', async () => {
+  it('a card whose agent has no table says it starts with no project (the proposal’s folder name is no table)', async () => {
     const env = await openChat();
     const proposal: ChatProposal = { tool: 'claude', cwd: '/w/scratch/tool', project: 'scratch' };
     const turn = await ask(env, 'Lance une session', 'Voici la session.', { proposal });
     env.d.options.autoLaunch = true;
     await env.user.click(panel().getByRole('button', { name: 'Start the session' }));
-    await screen.findByText('Agent1 is starting at the scratch table.');
+    await screen.findByText('Agent1 is starting, with no project.');
+    expect(screen.queryByText(/scratch table/)).toBeNull();
     env.d.push({ type: 'chat.history', turns: [{ ...turn, proposal: { ...proposal, launchedId: 'launch-1' } }] });
     await panel().findByText('has started');
   });

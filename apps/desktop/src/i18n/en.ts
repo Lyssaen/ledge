@@ -245,7 +245,7 @@ export const en: Messages = {
     newAgent: 'A new agent', joins: (n, t) => `${n} will join the ${t} table`, seat: (n, m, r) => `Seat ${n} · ${m} · ${r}`, noRepo: 'no repository',
     missing: { tool: 'Choose an agent', prompt: 'Write the instruction', machine: 'No machine online', repos: 'Choose at least one repository' },
     cancel: 'Cancel', launch: 'Launch', launching: 'Launching…',
-    started: (n, t) => `${n} is starting at the ${t} table.`, refused: (m) => `Launch refused: ${m}`,
+    started: (n, t) => `${n} is starting at the ${t} table.`, startedNoTable: (n) => `${n} is starting, with no project.`, refused: (m) => `Launch refused: ${m}`,
     timeout: 'The launch did not answer. Check the machine, then try again.'
   },
   projects: {
