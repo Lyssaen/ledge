@@ -79,7 +79,7 @@ export const en: Messages = {
       dnd: 'Do not disturb', dndHint: 'Holds the bubbles, the Windows notifications and the sounds. Requests stay visible in the island and in the sessions.',
       dndSaved: (on) => (on ? 'Do not disturb on' : 'Do not disturb off'),
       finished: 'When an agent is done', finishedHint: 'How Ledge Desktop tells you when a task comes to an end.',
-      modes: { both: 'Alert and sound', bubble: 'Bubble', sound: 'Sound', none: 'Session state only' },
+      modes: { both: 'Bubble and sound', bubble: 'Bubble', sound: 'Sound', none: 'Session state only' },
       finishedSaved: (mode) => `When an agent is done: ${mode}`,
       note: 'The session state always stays visible, even without a bubble or a sound.'
     },

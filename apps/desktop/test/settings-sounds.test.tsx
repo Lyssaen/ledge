@@ -46,7 +46,7 @@ describe('Settings › Notifications', () => {
     const { user } = await open('Notifications');
     const group = screen.getByRole('radiogroup', { name: 'When an agent is done' });
     expect(within(group).getAllByRole('radio').map(r => (r as HTMLInputElement).value)).toEqual(['both', 'bubble', 'sound', 'none']);
-    expect(within(group).getByRole('radio', { name: 'Alert and sound' })).toBeChecked();
+    expect(within(group).getByRole('radio', { name: 'Bubble and sound' })).toBeChecked();
     await user.click(within(group).getByRole('radio', { name: 'Session state only' }));
     expect(localStorage.getItem('desktop.notify')).toBe('none');
     expect(saved()).toEqual(['Setting saved · When an agent is done: Session state only']);
