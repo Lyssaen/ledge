@@ -3,9 +3,10 @@ import type { Decision, Pending, Tool } from '@ledge/protocol';
 /**
  * Steps sent to the pane in order: literal text, tmux key names, a pause (some TUIs need one before Enter), or
  * `until`, which holds the plan until the bottom of the pane passes the check (a TUI that takes a burst of keys in
- * one read can apply them all to the screen it had): if it never does, the rest is not sent.
+ * one read can apply them all to the screen it had): if it never does, the rest is not sent. `denied`: the keys before
+ * it already refused (a deny with a note waiting for the input box), so a wait that fails leaves a refusal without its note.
  */
-export type KeyPlan = Array<{ text: string } | { keys: string[] } | { waitMs: number } | { until: (lastLines: string) => boolean }>;
+export type KeyPlan = Array<{ text: string } | { keys: string[] } | { waitMs: number } | { until: (lastLines: string) => boolean; denied?: true }>;
 export type PanePromptMatch = { kind: 'permission' | 'question' | 'plan'; text: string; options?: string[]; optionDetails?: string[]; body?: string };
 
 export interface Adapter {

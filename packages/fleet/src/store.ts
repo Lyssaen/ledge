@@ -3,7 +3,7 @@ import type { ChatTurn, DaemonInfo, Recent, ServerMessage, Session, ThreadItem }
 import type { DaemonClient, DaemonStatus } from './client';
 
 /** A daemon `error` reply; `seq` tells two identical messages apart. */
-export interface DaemonError { id?: string; message: string; seq: number; /** Le type du message refusé, quand le daemon le dit. */ request?: string }
+export interface DaemonError { id?: string; message: string; seq: number; /** Le type du message refusé, quand le daemon le dit. */ request?: string; /** NOTE_NOT_TYPED… */ code?: string }
 /** How many errors the store remembers. */
 export const ERRORS_KEPT = 20;
 /** The daemon's last `session.launched` answer (to this client's `session.launch`); `seq` tells two apart. */
@@ -55,7 +55,7 @@ export const daemonStore = {
       state = { ...state, chat, chatLive }; emit(); return;
     }
     if (m.type === 'error') {
-      const e: DaemonError = { id: m.id, message: m.message, seq: (state.lastError?.seq ?? 0) + 1, ...(m.request ? { request: m.request } : {}) };
+      const e: DaemonError = { id: m.id, message: m.message, seq: (state.lastError?.seq ?? 0) + 1, ...(m.request ? { request: m.request } : {}), ...(m.code ? { code: m.code } : {}) };
       state = { ...state, lastError: e, errors: [...state.errors, e].slice(-ERRORS_KEPT) }; emit(); return;
     }
     if (m.type === 'session.launched') { state = { ...state, lastLaunched: { id: m.id, seq: (state.lastLaunched?.seq ?? 0) + 1 } }; emit(); return; }

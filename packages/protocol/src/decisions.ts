@@ -8,6 +8,9 @@ export type Decision = z.infer<typeof DecisionSchema>;
 /** The longest note a refusal carries to the agent. */
 export const NOTE_MAX = 4000;
 
+/** The `code` of a refusal whose deny happened but whose note could not be typed (the input box did not come back). */
+export const NOTE_NOT_TYPED = 'note_not_typed';
+
 /** Ce qu'un harnais laisse répondre au-delà d'accept / deny, par sorte de demande : `always` (permission : ne plus demander ;
  *  plan : approuver et accepter les modifications automatiquement) et une note (refuser avec un texte que l'agent lit). */
 export const DECISION_OFFERS: Record<Tool, { always: readonly Pending['kind'][]; note: readonly Pending['kind'][] }> = {

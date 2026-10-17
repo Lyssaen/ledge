@@ -175,6 +175,24 @@ describe('useDecisions', () => {
     expect(onRefused).toHaveBeenCalledWith('Go on');
     expect(result.current.busy('local:nova')).toBe(true);                         // the decision still waits for its own answer
   });
+  it('a deny whose note could not be typed says so and gives the note back, even once the request is gone', () => {
+    const onRefused = vi.fn();
+    const { result, rerender, props } = setup();
+    act(() => { expect(result.current.decide(otto, 'deny', 'Use pnpm', onRefused)).toBe(true); });
+    // The daemon applies the deny (the request goes) before it sends the refusal.
+    rerender({ ...props, sessions: [{ ...otto, state: 'working', pending: undefined }] });
+    expect(result.current.landed).toBe('local:otto');
+    rerender({ ...props, sessions: [{ ...otto, state: 'working', pending: undefined }], errors: [{ id: 'local:otto', message: 'denied, but the note could not be typed', seq: 1, request: 'session.decide', code: 'note_not_typed' }] });
+    expect(props.notify).toHaveBeenCalledWith('Refused, but the note could not be typed.');
+    expect(onRefused).toHaveBeenCalledWith('Use pnpm');
+  });
+  it('a plain decision that landed hears no late refusal', () => {
+    const { result, rerender, props } = setup();
+    act(() => { result.current.decide(otto, 'deny'); });
+    rerender({ ...props, sessions: [{ ...otto, state: 'working', pending: undefined }] });
+    rerender({ ...props, sessions: [{ ...otto, state: 'working', pending: undefined }], errors: [{ id: 'local:otto', message: 'late', seq: 1, request: 'session.decide' }] });
+    expect(props.notify).not.toHaveBeenCalled();
+  });
   it('a refused note comes back like a refused reply', () => {
     const onRefused = vi.fn();
     const { result, rerender, props } = setup();

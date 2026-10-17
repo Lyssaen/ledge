@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, type ClientMessage, type DaemonInfo, type Decision, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, type ClientMessage, type DaemonInfo, type Decision, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
@@ -35,6 +35,9 @@ export function launchArgs(msg: { tool: Tool; prompt?: string; continue?: boolea
 }
 
 export { resolveFolder };
+
+/** A deny with a note whose deny keys went but whose input box never came back: refused, the note not typed (NOTE_NOT_TYPED). */
+class NoteNotTyped extends Error { constructor() { super('denied, but the note could not be typed'); } }
 
 /**
  * Origins allowed to open a WebSocket: the Tauri overlay (packaged and dev server). A browser always
@@ -158,7 +161,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         for (;;) {
           const pane = await tmux.capture(s.tmuxSession, UNTIL_LINES);
           if (pane !== null && step.until(pane)) break;
-          if (Date.now() >= end) throw new Error(NOT_TAKEN);
+          if (Date.now() >= end) throw step.denied ? new NoteNotTyped() : new Error(NOT_TAKEN);
           await new Promise(r => setTimeout(r, UNTIL_POLL_MS));
         }
       }
@@ -192,15 +195,22 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const cur = store.get(id)?.pending;
         return cur === decided || (!!cur && !!decided && cur.kind === decided.kind && cur.text === decided.text);
       };
+      // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.
+      const promptGone = () => decided && adapter.promptGone
+        ? verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
+        : verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
       try { await runPlan(s, plan); }
       catch (e) {
+        // The deny keys went and the input box never came back for the note: if the request is gone, the refusal
+        // happened (the thread says so) and only the note is missing; if it stays, nothing was refused.
+        if (e instanceof NoteNotTyped) {
+          if (await promptGone() && stillTheSame()) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) }); throw e; }
+          e = new Error(NOT_TAKEN);
+        }
         store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: (e as Error).message });
         throw e;
       }
-      // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.
-      const gone = decided && adapter.promptGone
-        ? await verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
-        : await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
+      const gone = await promptGone();
       if (!stillTheSame()) return false; // a newer prompt arrived meanwhile: leave it alone
       if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) }); return true; }
       // The client gets an `error` reply for that id (via the caller's catch), so a retry from `error` reads as failed.
@@ -429,7 +439,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       handle(ws, msg).catch(e => {
         if (msg.type === 'document.read') return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
         log(`${msg.type} failed: ${(e as Error).message}`);
-        send(ws, { type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message, request: msg.type });
+        send(ws, { type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message, request: msg.type, ...(e instanceof NoteNotTyped ? { code: NOTE_NOT_TYPED } : {}) });
       });
     });
   });

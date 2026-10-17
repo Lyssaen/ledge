@@ -93,7 +93,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('machines'), machines: MachinesSchema }),
   /** The local daemon's projects and folder rules (spec 2026-10-16 build §5), sent to local clients only. */
   z.object({ type: z.literal('projects'), projects: ProjectsSchema }),
-  z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional() })
+  z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
+    /** Ce que le front doit reconnaître au-delà du texte (NOTE_NOT_TYPED) ; une chaîne libre, qu'un front plus ancien ignore. */ code: z.string().optional() })
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 

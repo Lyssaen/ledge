@@ -191,4 +191,9 @@ describe('daemon client + store', () => {
     expect(errors[0]).toEqual({ id: 'a', message: 'e6', seq: 6 });
     expect(lastError).toEqual({ id: 'a', message: 'e25', seq: 25, request: 'session.reply' });
   });
+  it('keeps an error\'s code', () => {
+    daemonStore.reset();
+    daemonStore.apply({ type: 'error', id: 'a', message: 'denied, but the note could not be typed', request: 'session.decide', code: 'note_not_typed' });
+    expect(daemonStore.getState().lastError).toEqual({ id: 'a', message: 'denied, but the note could not be typed', seq: 1, request: 'session.decide', code: 'note_not_typed' });
+  });
 });

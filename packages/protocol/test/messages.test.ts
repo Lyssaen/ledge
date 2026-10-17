@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED } from '../src/index.js';
 
 const T0 = '2026-10-09T18:02:00.000Z';
 
@@ -243,6 +243,11 @@ describe('decisions beyond accept and deny (lot 6a)', () => {
     expect(() => parseClientMessage({ type: 'session.decide', id: 'a', decision: 'deny', note: '   ' })).toThrow();
     expect(() => parseClientMessage({ type: 'session.decide', id: 'a', decision: 'deny', note: 'x'.repeat(4001) })).toThrow();
     expect(parseServerMessage({ type: 'error', id: 'a', message: 'no', request: 'session.reply' })).toEqual({ type: 'error', id: 'a', message: 'no', request: 'session.reply' });
+  });
+  it('an error may carry a code: a deny whose note could not be typed', () => {
+    const m = { type: 'error', id: 'a', message: 'denied, but the note could not be typed', request: 'session.decide', code: NOTE_NOT_TYPED };
+    expect(parseServerMessage(m)).toEqual(m);
+    expect(NOTE_NOT_TYPED).toBe('note_not_typed');
   });
   it('session.decide carries the request the user saw, optional (the island sends none)', () => {
     const expected = { kind: 'permission', text: 'npm test' } as const;

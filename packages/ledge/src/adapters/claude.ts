@@ -338,7 +338,7 @@ function notePlan(note: string, pane: string | undefined): KeyPlan {
   const d = pane ? parseDialog(pane) : null;
   const row = d?.kind === 'plan' ? d.options.findIndex(o => PLAN_NOTE_ROW.test(o)) : -1;
   if (row >= 0) return rowPlan(row + 1, text);
-  return [{ keys: ['Escape'] }, { until: atRest }, { text }, { keys: ['Enter'] }];
+  return [{ keys: ['Escape'] }, { until: atRest, denied: true }, { text }, { keys: ['Enter'] }];
 }
 
 export const claudeAdapter: Adapter = {

@@ -205,7 +205,7 @@ function alwaysKeys(d: Dialog | null): KeyPlan {
 function noteKeys(d: Dialog | null, note: string): KeyPlan {
   if (d?.kind === 'confirm') throw new Error(NO_NOTE);
   const no = d?.kind === 'plan' ? optionNumber(d.options, /^No\b/) : null;
-  return [...(no ? digit(no) : [{ keys: ['Escape'] }]), { until: atRest }, { text: flatten(note) }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
+  return [...(no ? digit(no) : [{ keys: ['Escape'] }]), { until: atRest, denied: true }, { text: flatten(note) }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
 }
 
 export const codexAdapter: Adapter = {

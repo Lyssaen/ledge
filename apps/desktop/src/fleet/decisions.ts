@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DaemonClient, DaemonError } from '@ledge/fleet';
-import { NOTE_MAX, offers, type Decision, type Session } from '@ledge/protocol';
+import { NOTE_MAX, NOTE_NOT_TYPED, offers, type Decision, type Session } from '@ledge/protocol';
 import { useI18n } from '../i18n/lang';
 
 /** What a pending request is, whatever refreshes around it: its kind, its text and the helper it comes from; null without a request. */
@@ -41,7 +41,7 @@ interface Sent {
 /** Allow / Deny / Always / a note, and free replies, shared by the List and the session: one send per session, settled
  *  when it lands (the request changes for a decision, the session moves for a reply), the session goes (forgotten), the
  *  daemon refuses that very message type for it (said in the toast), or nothing happens for 8 s (given up, with a notice).
- *  A landed reply still hears its refusal for 8 s (see `settled`). */
+ *  A landed reply, or a landed deny with a note, still hears its refusal for 8 s (see `settled`). */
 export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: readonly Session[]; errors: readonly DaemonError[]; notify(text: string): void }): Decisions {
   const { t } = useI18n();
   const { sessions, errors } = o;
@@ -81,7 +81,8 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
       if (!s) forget(id);
       else if (!s.offline && (x.message === 'session.decide' ? requestKey(s) !== x.pending : markOf(s) !== x.mark)) {
         forget(id); setLanded({ id });
-        if (x.message === 'session.reply') settled.current.set(id, { ...x, timer: setTimeout(() => settled.current.delete(id), UNCONFIRMED_MS) });
+        // A deny with a note lands before the daemon can say its note was not typed (NOTE_NOT_TYPED): it waits for that too.
+        if (x.message === 'session.reply' || x.text !== undefined) { unsettle(id); settled.current.set(id, { ...x, timer: setTimeout(() => settled.current.delete(id), UNCONFIRMED_MS) }); }
       }
     }
     for (const id of [...settled.current.keys()]) if (!byId.has(id)) unsettle(id);
@@ -96,10 +97,13 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
       if (e.id === undefined || !e.request) continue;
       const matches = (x: Sent | undefined): x is Sent => !!x && e.request === x.message && e.seq > x.errorSeq;
       const inFlightNow = live.current.get(e.id);
-      const x = matches(inFlightNow) ? forget(e.id) : matches(settled.current.get(e.id)) ? unsettle(e.id) : null;
+      const done = settled.current.get(e.id);
+      const x = matches(inFlightNow) ? forget(e.id)
+        : matches(done) && (done.message === 'session.reply' || e.code === NOTE_NOT_TYPED) ? unsettle(e.id) : null;
       if (!x) continue;
       const { o: cur, t: tr } = latest.current;
-      cur.notify(x.message === 'session.decide' ? tr.decisions.failed(x.name, e.message) : tr.decisions.replyFailed(x.name, e.message));
+      cur.notify(e.code === NOTE_NOT_TYPED ? tr.decisions.noteNotTyped
+        : x.message === 'session.decide' ? tr.decisions.failed(x.name, e.message) : tr.decisions.replyFailed(x.name, e.message));
       if (x.text !== undefined) x.onRefused?.(x.text);
     }
   }, [errors]);

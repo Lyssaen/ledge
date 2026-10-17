@@ -132,7 +132,8 @@ const fr = {
     failed: (name: string, message: string) => `Décision non transmise à ${name} : ${message}`,
     unconfirmed: (name: string) => `Ledge n’a pas vu la décision pour ${name} aboutir. Ouvrez la session pour vérifier.`,
     replyFailed: (name: string, message: string) => `Réponse non transmise à ${name} : ${message}`,
-    replyUnconfirmed: (name: string) => `Ledge n’a pas vu la réponse à ${name} aboutir. Vérifiez le fil.`
+    replyUnconfirmed: (name: string) => `Ledge n’a pas vu la réponse à ${name} aboutir. Vérifiez le fil.`,
+    noteNotTyped: 'Refusé, mais la note n’a pas pu être tapée.'
   },
   session: {
     meta: 'Machine et dépôts',
@@ -366,7 +367,8 @@ const en: typeof fr = {
     failed: (name, message) => `Could not send the decision to ${name}: ${message}`,
     unconfirmed: (name) => `Ledge did not see the decision for ${name} land. Open the session to check.`,
     replyFailed: (name, message) => `Could not send the reply to ${name}: ${message}`,
-    replyUnconfirmed: (name) => `Ledge did not see the reply to ${name} land. Check the thread.`
+    replyUnconfirmed: (name) => `Ledge did not see the reply to ${name} land. Check the thread.`,
+    noteNotTyped: 'Refused, but the note could not be typed.'
   },
   session: {
     meta: 'Machine and repositories',

@@ -398,6 +398,35 @@ describe('server', () => {
     c.close();
   });
 
+  describe('deny with a note whose input box does not come back', () => {
+    async function denyWithNote(panes: string[]) {
+      tmux = fakeTmux({ 'ledge-a': panes }); await srv.close();
+      const history = new History({ dir: tmpDir() });
+      srv = await startServer({ store, tmux, port: 0, history, untilMs: 300, verify: { attempts: 2, intervalMs: 20 } });
+      store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'mkdir zz-ledge-probe', tool: 'Bash', source: 'hook' } }));
+      store.apply('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'mkdir zz-ledge-probe' });
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.decide', id: 'a', decision: 'deny', note: 'Use pnpm' });
+      return { c, history };
+    }
+    it('Esc taken, the note not typed: the thread says denied and the refusal has its own code', async () => {
+      const { c, history } = await denyWithNote([fx('claude2-permission-bash'), '● Bash(mkdir zz-ledge-probe)\n  ⎿  Interrupted by user']);
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'denied, but the note could not be typed', request: 'session.decide', code: 'note_not_typed' });
+      expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape']]);
+      expect(history.items('a').at(-1)).toMatchObject({ kind: 'permission', decision: 'deny' });
+      expect(store.get('a')).toMatchObject({ state: 'working' });
+      expect(store.get('a')?.pending).toBeUndefined();
+      c.close();
+    });
+    it('Esc not taken (the dialog stays): nothing was denied, the usual failure', async () => {
+      const { c } = await denyWithNote([fx('claude2-permission-bash')]);
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide' });
+      expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape']]);
+      expect(store.get('a')).toMatchObject({ state: 'error', pending: { text: 'mkdir zz-ledge-probe' } });
+      c.close();
+    });
+  });
+
   describe('fail closed when no prompt is on screen', () => {
     const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
     async function expectRefused(pane: string | null, msg: object, pending: Session['pending']) {

@@ -255,7 +255,8 @@ describe('claude adapter: always and a note (lot 6a)', () => {
     expect(() => claudeAdapter.keysFor('always', plan, onlyClear)).toThrow('no "always" option in this dialog, answer in the terminal');
   });
   it('deny with a note: Escape, then the note once the input is back; a plan takes it in its own row', () => {
-    expect(claudeAdapter.keysFor('deny', perm, fx('claude2-permission-bash'), 'Use\npnpm')).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function) }, { text: 'Use pnpm' }, { keys: ['Enter'] }]);
+    // After Esc the refusal is done: a wait that fails there says so (`denied`); the plan's row only selects, nothing refused yet.
+    expect(claudeAdapter.keysFor('deny', perm, fx('claude2-permission-bash'), 'Use\npnpm')).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function), denied: true }, { text: 'Use pnpm' }, { keys: ['Enter'] }]);
     expect(claudeAdapter.keysFor('deny', plan, fx('claude2-plan'), 'Garde la v1')).toEqual([{ text: '3' }, { until: expect.any(Function) }, { text: 'Garde la v1' }, { keys: ['Enter'] }]);
   });
   it('the note waits for the screen it is meant for: the input at rest, or the plan row selected', () => {
@@ -269,7 +270,7 @@ describe('claude adapter: always and a note (lot 6a)', () => {
   });
   it('a plan dialog without its own row takes the note like a permission; the trust dialog takes none', () => {
     const noRow = fx('claude2-plan').replace('3. Tell Claude what to change', '3. Keep planning');
-    expect(claudeAdapter.keysFor('deny', plan, noRow, 'Garde la v1')).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function) }, { text: 'Garde la v1' }, { keys: ['Enter'] }]);
+    expect(claudeAdapter.keysFor('deny', plan, noRow, 'Garde la v1')).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function), denied: true }, { text: 'Garde la v1' }, { keys: ['Enter'] }]);
     expect(() => claudeAdapter.keysFor('deny', perm, fx('claude2-trust'), 'non')).toThrow(/answer in the terminal/);
   });
 });
