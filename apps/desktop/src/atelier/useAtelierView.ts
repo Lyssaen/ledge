@@ -65,9 +65,19 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
         const widest = widestRow(widths, k);
         const w = Math.ceil(widest + 2 * FLOOR_MARGIN);
         s.maxWidth = `${w}px`; s.marginInline = 'auto';
-        let zk = fitCeiling(scroll.clientWidth, widest);
-        for (; zk > FIT_MIN; zk -= FIT_STEP) { s.zoom = String(zk); if (fits()) break; }
-        zk = Math.max(FIT_MIN, zk);
+        // The highest notch (the ceiling, then FIT_STEP lower each time, above FIT_MIN) that fits, else FIT_MIN. Each try forces a
+        // layout: stepping down one notch at a time (up to 70 layouts per arrangement) froze the window for seconds whenever a seat
+        // came or went, so the notches are bisected (a smaller zoom never fits worse).
+        const ceiling = fitCeiling(scroll.clientWidth, widest);
+        const notches = Math.max(0, Math.ceil((ceiling - FIT_MIN) / FIT_STEP));
+        const notch = (i: number) => ceiling - i * FIT_STEP;
+        let lo = 0, hi = notches;
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1;
+          s.zoom = String(notch(mid));
+          if (fits()) hi = mid; else lo = mid + 1;
+        }
+        const zk = lo < notches ? notch(lo) : FIT_MIN;
         if (best === null || zk > best.z) best = { z: zk, w };
       }
       z = best!.z;

@@ -98,6 +98,26 @@ describe('the atelier zoom', () => {
     expect((scroller.scrollLeft + 400) / 1.2).toBeCloseTo(centre.x);
     expect((scroller.scrollTop + 300) / 1.2).toBeCloseTo(centre.y);
   });
+  it('a new seat refits with a handful of layouts: the zoom notches are bisected, not stepped through one by one', async () => {
+    const { d } = await boot();
+    const scroller = document.querySelector<HTMLElement>('.overview-scroll.atelier')!;
+    const shell = scroller.querySelector<HTMLElement>('.office-shell')!;
+    // An 800 × 600 view where the floor fits at 70 % or less; every read of its height is a forced layout in a browser.
+    let zoom = 1, layouts = 0;
+    const props: Record<string, PropertyDescriptor> = {
+      clientWidth: { get: () => 800 }, clientHeight: { get: () => 600 }, offsetWidth: { get: () => 800 }, offsetHeight: { get: () => 600 },
+      scrollWidth: { get: () => 800 }, scrollHeight: { get: () => { layouts++; return zoom <= 0.7 ? 600 : 900; } }
+    };
+    for (const [k, p] of Object.entries(props)) Object.defineProperty(scroller, k, { configurable: true, ...p });
+    Object.defineProperty(shell.style, 'zoom', { configurable: true, get: () => String(zoom), set: (v: string) => { zoom = Number(v) || 1; } });
+    d.upsert(fakeSession('mia', { name: 'Mia', cwd: '/w/elsewhere', project: 'elsewhere', state: 'working' }));
+    await screen.findByRole('button', { name: /^Mia,/ });
+    const level = Number.parseInt(bar().getByRole('button', { name: 'Back to 100 %' }).textContent!, 10);
+    expect(level).toBeGreaterThanOrEqual(68);
+    expect(level).toBeLessThanOrEqual(70);
+    // Stepping down one notch at a time took 71 here (and froze a real window for about two seconds); bisecting takes 21.
+    expect(layouts).toBeLessThanOrEqual(30);
+  });
   it('a double-click on the floor refits; the zoom bar titles its buttons and shows its hint', async () => {
     const { user } = await boot();
     await user.keyboard('++');
