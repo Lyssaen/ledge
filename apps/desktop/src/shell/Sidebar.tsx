@@ -1,5 +1,5 @@
 import { type MachineState } from '@ledge/fleet';
-import { PROJECT_COLORS, type Projects, type Session } from '@ledge/protocol';
+import type { Projects, Session } from '@ledge/protocol';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -11,6 +11,7 @@ import type { NavAction, NavState } from '../nav/state';
 import type { Filing } from '../atelier/filing';
 import { SHELL_ICONS } from './icons';
 import { useTheme } from './theme';
+import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 const needsYou = (s: Session) => { const d = dotOf(s); return d === 'approval' || d === 'question'; };
 
@@ -60,7 +61,7 @@ export function Sidebar({ nav, dispatch, sessions, machines, projects, order, pr
               const team = order.filter(s => projectIdOf(s) === p.id);
               return (
                 <button key={p.id} {...filing.dropProps(p.id)} className={`side-row side-project ${filter === p.id ? 'active' : ''} ${filing.over === p.id ? 'drop-over' : ''}`} onClick={() => dispatch({ type: 'home', project: p.id })}>
-                  <i className="side-swatch" style={{ background: PROJECT_COLORS[p.color] }} />
+                  <ProjectSwatch project={p} />
                   <span title={p.name}>{p.name}</span>
                   <span className="side-dots" aria-label={t.side.agents(team.length)}>{team.slice(0, 6).map(s => <i key={s.id} className={`dot-${dotOf(s)}`} />)}</span>
                 </button>

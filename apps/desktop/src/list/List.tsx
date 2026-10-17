@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { MachineState } from '@ledge/fleet';
-import { PROJECT_COLORS, type Projects, type Session } from '@ledge/protocol';
+import type { Projects, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -17,6 +17,7 @@ import { ListToolbar } from './ListToolbar';
 import { listModel, walkRows, type Chip, type ListCtx } from './model';
 import { loadListPrefs, saveListPrefs } from './prefs';
 import type { Wait } from './time';
+import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 export interface ListProps {
   nav: NavState;
@@ -139,7 +140,7 @@ export function List({ nav, dispatch, order, projects, projectIdOf, machines, de
       const where = p.repos.map(r => folderOf(r.path)).join(' · ') || t.atelier.empty.noRepo;
       return (
         <div className="list-empty">
-          <i className="side-swatch" style={{ background: PROJECT_COLORS[p.color] }} />
+          <ProjectSwatch project={p} />
           <h2>{t.list.empty.projectTitle(p.name)}</h2>
           <p className="muted">{t.list.empty.projectBody(where)}</p>
           <Button variant="primary" onClick={() => launch(p.id)}><Icon d={ICONS.plus.d} size={14} />{t.atelier.newSession}</Button>

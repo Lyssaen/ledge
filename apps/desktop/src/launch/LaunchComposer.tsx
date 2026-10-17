@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type ReactNode } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
-import { PROJECT_COLORS, type Project, type Session } from '@ledge/protocol';
+import type { Project, Session } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -11,6 +11,7 @@ import { useTheme } from '../shell/theme';
 import { isUp, launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, previewOf, reposOn, toggleRepo, withMachine, withProject, withTool, type LaunchForm, type LaunchMessage, type Tool } from './model';
 import { useRepoInfo } from './useRepoInfo';
 import type { LaunchState } from './useLaunch';
+import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor'];
 const folderName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
@@ -139,7 +140,7 @@ export function LaunchComposer(p: {
               {projects.map(x => (
                 <label key={x.id} className={`chip ${form.project === x.id ? 'selected' : ''}`}>
                   <input type="radio" name="project" checked={form.project === x.id} onChange={() => setForm(f => withProject(f, projects, x.id, infos))} />
-                  <i className="side-swatch" style={{ background: PROJECT_COLORS[x.color] }} />{x.name}
+                  <ProjectSwatch project={x} />{x.name}
                 </label>
               ))}
             </fieldset>

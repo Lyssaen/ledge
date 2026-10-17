@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { PROJECT_COLORS, type Helper, type Projects, type Session } from '@ledge/protocol';
+import type { Helper, Projects, Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -9,6 +9,7 @@ import { taskOf } from '../nav/agents';
 import type { NavAction, NavState, ProjectFilter, View } from '../nav/state';
 import { SHELL_ICONS } from './icons';
 import { HelperBot, SessionBot, StateBadge } from './SessionBot';
+import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 const VIEWS: readonly View[] = ['atelier', 'list'];
 
@@ -69,7 +70,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
       <button className="crumb-link" onClick={() => dispatch({ type: 'home' })}>{viewName(view)}</button>
       <span className="muted">/</span>
       <span className="project-filter">
-        <i className={filter === 'none' || !color ? 'filter-none' : 'side-swatch'} style={filter !== 'none' && color ? { background: PROJECT_COLORS[color] } : undefined} />
+        <ProjectSwatch project={filter !== 'none' && color ? { color } : null} />
         <span title={filterName(filter)}>{filterName(filter)}</span>
         <button aria-label={t.crumb.clearFilter} title={t.crumb.clearFilterTitle} onClick={() => dispatch({ type: 'home' })}><Icon d={ICONS.close.d} size={12} /></button>
       </span>

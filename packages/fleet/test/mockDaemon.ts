@@ -22,6 +22,9 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
   let holding = false;
   const held: { ws: WebSocket; m: Extract<ClientMessage, { type: 'session.launch' }> }[] = [];
   let refusal: string | null = null;
+  /** `holdProjects`: the `projects.set` received wait here (in `received` too) until `releaseProjects` applies and broadcasts them. */
+  let holdingProjects = false;
+  const heldProjects: Projects[] = [];
   /** What `autoLaunch` does: a `starting` session, broadcast, then `session.launched` to the sender. */
   const answerLaunch = (ws: WebSocket, m: Extract<ClientMessage, { type: 'session.launch' }>) => {
     const id = `launch-${++launchCount}`;
@@ -41,7 +44,7 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     ws.send(JSON.stringify(snapshot()));
     if (machinesList) ws.send(JSON.stringify({ type: 'machines', machines: machinesList })); // like the daemon, right after the snapshot
     if (projectsState) ws.send(JSON.stringify({ type: 'projects', projects: projectsState })); // then the projects
-    ws.on('message', d => { last = ws; try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify(snapshot())); if (m.type === 'session.thread') { const items = threads.get(m.id); if (items) ws.send(JSON.stringify({ type: 'session.thread', id: m.id, items })); } if (m.type === 'document.read') { const text = documents.get(m.path); ws.send(JSON.stringify(text === undefined ? { type: 'document.error', requestId: m.requestId, path: m.path, code: 'not_found' } : { type: 'document.content', requestId: m.requestId, path: m.path, text, bytes: Buffer.byteLength(text), modifiedAt: T0 })); } if (m.type === 'repos.inspect') ws.send(JSON.stringify({ type: 'repos.info', requestId: m.requestId, repos: m.paths.map(path => repoInfo.get(path) ?? { path, exists: true, branch: 'main' }) })); if (m.type === 'folder.list') { const path = m.path ? m.path.replace(/^~(?=\/|$)/, options.home) : options.home; const f = folders.get(path); const tag = m.requestId === undefined ? {} : { requestId: m.requestId }; ws.send(JSON.stringify(f ? { type: 'folder.listing', ...tag, path, parent: path === '/' ? null : path.replace(/\/[^/]*$/, '') || '/', entries: f.entries, ...(f.repos ? { repos: f.repos } : {}) } : { type: 'folder.listing', ...tag, path, parent: null, entries: [], error: 'not found' })); } if (m.type === 'session.launch') { if (refusal !== null) { ws.send(JSON.stringify({ type: 'error', message: refusal, request: 'session.launch' })); refusal = null; } else if (holding) held.push({ ws, m }); else if (options.autoLaunch) answerLaunch(ws, m); } if (m.type === 'projects.set') { projectsState = m.projects; bc({ type: 'projects', projects: m.projects }); } } catch { /* ignore */ } });
+    ws.on('message', d => { last = ws; try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify(snapshot())); if (m.type === 'session.thread') { const items = threads.get(m.id); if (items) ws.send(JSON.stringify({ type: 'session.thread', id: m.id, items })); } if (m.type === 'document.read') { const text = documents.get(m.path); ws.send(JSON.stringify(text === undefined ? { type: 'document.error', requestId: m.requestId, path: m.path, code: 'not_found' } : { type: 'document.content', requestId: m.requestId, path: m.path, text, bytes: Buffer.byteLength(text), modifiedAt: T0 })); } if (m.type === 'repos.inspect') ws.send(JSON.stringify({ type: 'repos.info', requestId: m.requestId, repos: m.paths.map(path => repoInfo.get(path) ?? { path, exists: true, branch: 'main' }) })); if (m.type === 'folder.list') { const path = m.path ? m.path.replace(/^~(?=\/|$)/, options.home) : options.home; const f = folders.get(path); const tag = m.requestId === undefined ? {} : { requestId: m.requestId }; ws.send(JSON.stringify(f ? { type: 'folder.listing', ...tag, path, parent: path === '/' ? null : path.replace(/\/[^/]*$/, '') || '/', entries: f.entries, ...(f.repos ? { repos: f.repos } : {}) } : { type: 'folder.listing', ...tag, path, parent: null, entries: [], error: 'not found' })); } if (m.type === 'session.launch') { if (refusal !== null) { ws.send(JSON.stringify({ type: 'error', message: refusal, request: 'session.launch' })); refusal = null; } else if (holding) held.push({ ws, m }); else if (options.autoLaunch) answerLaunch(ws, m); } if (m.type === 'projects.set') { if (holdingProjects) heldProjects.push(m.projects); else { projectsState = m.projects; bc({ type: 'projects', projects: m.projects }); } } } catch { /* ignore */ } });
   });
   return {
     get clientCount() { return [...wss.clients].filter(c => c.readyState === WebSocket.OPEN).length; },
@@ -76,6 +79,10 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     releaseLaunch(count?: number) { if (count === undefined) holding = false; for (const { ws, m } of held.splice(0, count ?? held.length)) answerLaunch(ws, m); },
     /** The next launch is refused as the daemon does: an `error` without id, `request: 'session.launch'`, to its sender. */
     refuseLaunch(message: string) { refusal = message; },
+    /** The next `projects.set` are received but neither applied nor broadcast (a daemon that never confirms) until `releaseProjects`. */
+    holdProjects() { holdingProjects = true; },
+    /** Applies and broadcasts the held `projects.set`, in the order received; later ones are broadcast at once again. */
+    releaseProjects() { holdingProjects = false; for (const p of heldProjects.splice(0)) { projectsState = p; bc({ type: 'projects', projects: p }); } },
     /** Any daemon message, to every client (the chat's steps, answers and history in Desktop's tests). */
     push(m: ServerMessage) { bc(m); },
     /** Cuts every open socket, as a daemon restart does; the client reconnects and gets a fresh snapshot. */

@@ -137,7 +137,7 @@ describe('New session', () => {
     expect(preview()).toBe('A new agent will join the Docs table');
     expect(document.querySelector('.composer-preview small')!.textContent).toBe('Seat 1 · Local · no repository');
     await user.click(form.getByRole('button', { name: 'Edit the project' }));
-    expect(screen.getByRole('dialog', { name: 'Edit project' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Edit Docs' })).toBeVisible();
     expect(screen.queryByRole('dialog', { name: 'New session' })).toBeNull();
   });
 

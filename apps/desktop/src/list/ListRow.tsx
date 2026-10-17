@@ -1,5 +1,5 @@
 import type { JSX, MouseEvent } from 'react';
-import { PROJECT_COLORS, type Projects, type Session } from '@ledge/protocol';
+import type { Projects, Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -17,6 +17,7 @@ import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import { bucketOf, helperBucket, quickActions, repoOf, type GroupBy, type ListRow as Row } from './model';
 import type { Density } from './prefs';
 import { whenOf } from './time';
+import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 /** Marks the filter's match inside a label (list.tsx's `Hl`), when the accents fold character for character. */
 export function Hl({ text, q }: { text: string; q: string }): JSX.Element {
@@ -68,7 +69,7 @@ export function ListRow({ row, selected, onChoose, group, density, text, now, wa
   const id = projectIdOf(session);
   const project = id === null ? undefined : projects?.projects.find(p => p.id === id);
   const projectName = project?.name ?? t.side.unassigned;
-  const swatch = project ? <i className="side-swatch" style={{ background: PROJECT_COLORS[project.color] }} /> : <i className="filter-none" />;
+  const swatch = <ProjectSwatch project={project ?? null} />;
   const machine = machineOf(session);
   const ctx = group === 'machine' ? projectName : machine;
   const when = helper ? null : whenOf(session, waits.get(session.id), now, t.list.when);

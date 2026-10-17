@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type JSX } from 'react';
-import { PROJECT_COLORS, type Project, type Projects, type Session } from '@ledge/protocol';
+import type { Project, Projects, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -14,6 +14,7 @@ import { Unassigned } from './Unassigned';
 import { useAtelierView } from './useAtelierView';
 import { folderOf, type Filing } from './filing';
 import { LEDGE_TILE, ZONE_TILE } from './zoom';
+import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 export interface AtelierProps {
   nav: NavState; dispatch: (a: NavAction) => void;
@@ -29,7 +30,7 @@ function EmptyProject({ project, dispatch }: { project: Project; dispatch: (a: N
   const where = project.repos.map(r => folderOf(r.path)).join(' · ') || t.atelier.empty.noRepo;
   return (
     <div className="empty-project">
-      <i className="side-swatch" style={{ background: PROJECT_COLORS[project.color] }} />
+      <ProjectSwatch project={project} />
       <h2>{t.atelier.empty.title(project.name)}</h2>
       <p>{t.atelier.empty.body(where)}</p>
       <Button variant="primary" onClick={() => dispatch({ type: 'modal', modal: { kind: 'launch', project: project.id } })}>

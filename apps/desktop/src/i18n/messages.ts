@@ -1,7 +1,8 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
-import type { ToolStatus } from '@ledge/protocol';
+import type { ProjectColor, ToolStatus } from '@ledge/protocol';
+import type { DraftProblem } from '../projects/draft';
 import type { PlanDoc, ToolKind, Verb } from '../session/thread';
 import type { Change } from '../session/changes';
 import type { TodoStatus } from '../session/todos';
@@ -28,7 +29,7 @@ const fr = {
   sections: { general: 'Général', appearance: 'Apparence', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', projects: 'Projets', shortcuts: 'Raccourcis', about: 'À propos' } as Record<SectionId, string>,
   pending: 'Cet écran arrive bientôt.',
   close: 'Fermer',
-  modalTitles: { launch: 'Nouvelle session', project: 'Nouveau projet', editProject: 'Modifier le projet' },
+  modalTitles: { launch: 'Nouvelle session' },
   search: {
     title: 'Aller à une session', placeholder: 'Agent, tâche, projet ou machine…', empty: 'Aucune session ne correspond à cette recherche.', results: 'Sessions',
     browse: 'Parcourir', open: 'Ouvrir', closeKey: 'Fermer', enter: 'Entrée', escape: 'Échap'
@@ -265,6 +266,24 @@ const fr = {
     timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.'
   },
   projects: {
+    titles: { new: 'Nouveau projet', edit: (n: string) => `Modifier ${n}`, delete: (n: string) => `Supprimer ${n}` },
+    name: 'Nom', namePlaceholder: 'Ex. Paper Rendering', color: 'Couleur',
+    colors: { blue: 'Bleu', green: 'Vert', amber: 'Ambre', violet: 'Violet', teal: 'Sarcelle', pink: 'Rose', red: 'Rouge', slate: 'Ardoise' } as Record<ProjectColor, string>,
+    description: 'Description', optional: 'facultatif', descriptionPlaceholder: 'Une phrase qui dit à quoi sert le projet',
+    repos: (n: number) => `Dépôts de travail · ${n}`, branchTitle: 'Branche par défaut détectée', noGit: 'Dossier sans Git', alsoIn: (p: string) => `Aussi dans ${p}`,
+    notFound: 'introuvable', offline: 'hors ligne', remove: (n: string, m: string) => `Retirer ${n} (${m})`, addRepo: 'Ajouter un dépôt',
+    empty: 'Aucun dépôt pour l’instant. Le projet peut exister sans, mais Ledge ne saura pas y ranger les sessions.',
+    fileToo: 'Ranger aussi',
+    problems: { name_empty: 'Donnez un nom au projet', name_taken: 'Ce nom est déjà utilisé par un autre projet', repo_duplicate: 'Ce dépôt est en double', gone: 'Ce projet a été supprimé entre-temps' } as Record<DraftProblem['code'], string>,
+    refused: {
+      offline: 'Le daemon local est hors ligne : rien n’a été enregistré.', outdated: 'Le daemon local est trop ancien pour les projets : mettez-le à jour.',
+      invalid: 'Le daemon a refusé ce projet.', timeout: 'Le daemon n’a pas confirmé l’enregistrement.'
+    } as Record<'offline' | 'outdated' | 'invalid' | 'timeout', string>,
+    preview: (n: number, ms: string) => `${n} dépôt${plural(n, '', 's')}${ms ? ` sur ${ms}` : ''}`, firstSession: ' · la table apparaîtra avec la première session', newName: 'Nouveau projet',
+    create: 'Créer le projet', save: 'Enregistrer', saving: 'Enregistrement…', cancel: 'Annuler', deleteProject: 'Supprimer le projet',
+    saved: (n: string) => `${n} enregistré.`,
+    created: (n: string) => `Projet ${n} créé. Il apparaît dans la barre latérale ; sa table s’ouvrira avec la première session.`,
+    createdWith: (n: string, names: string) => `Projet ${n} créé. ${names} rejoignent sa table.`,
     picker: {
       machines: 'Machine à parcourir', offline: 'hors ligne',
       offlineBody: (m: string) => `${m} est hors ligne. Reconnectez-la dans Réglages › Machines pour parcourir ses dossiers.`,
@@ -300,7 +319,7 @@ const en: typeof fr = {
   sections: { general: 'General', appearance: 'Appearance', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Shortcuts', about: 'About' },
   pending: 'This screen is coming soon.',
   close: 'Close',
-  modalTitles: { launch: 'New session', project: 'New project', editProject: 'Edit project' },
+  modalTitles: { launch: 'New session' },
   search: {
     title: 'Go to a session', placeholder: 'Agent, task, project or machine…', empty: 'No session matches this search.', results: 'Sessions',
     browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc'
@@ -529,6 +548,24 @@ const en: typeof fr = {
     timeout: 'The launch did not answer. Check the machine, then try again.'
   },
   projects: {
+    titles: { new: 'New project', edit: (n) => `Edit ${n}`, delete: (n) => `Delete ${n}` },
+    name: 'Name', namePlaceholder: 'E.g. Paper Rendering', color: 'Colour',
+    colors: { blue: 'Blue', green: 'Green', amber: 'Amber', violet: 'Violet', teal: 'Teal', pink: 'Pink', red: 'Red', slate: 'Slate' },
+    description: 'Description', optional: 'optional', descriptionPlaceholder: 'One sentence on what the project is for',
+    repos: (n) => `Working repositories · ${n}`, branchTitle: 'Default branch detected', noGit: 'Folder without Git', alsoIn: (p) => `Also in ${p}`,
+    notFound: 'not found', offline: 'offline', remove: (n, m) => `Remove ${n} (${m})`, addRepo: 'Add a repository',
+    empty: 'No repository yet. The project can exist without one, but Ledge will not be able to file sessions in it.',
+    fileToo: 'Also file',
+    problems: { name_empty: 'Give the project a name', name_taken: 'This name is already used by another project', repo_duplicate: 'This repository is listed twice', gone: 'This project was deleted meanwhile' },
+    refused: {
+      offline: 'The local daemon is offline: nothing was saved.', outdated: 'The local daemon is too old for projects: update it.',
+      invalid: 'The daemon refused this project.', timeout: 'The daemon did not confirm the save.'
+    },
+    preview: (n, ms) => `${n} ${pluralEn(n, 'repository', 'repositories')}${ms ? ` on ${ms}` : ''}`, firstSession: ' · the table appears with the first session', newName: 'New project',
+    create: 'Create the project', save: 'Save', saving: 'Saving…', cancel: 'Cancel', deleteProject: 'Delete the project',
+    saved: (n) => `${n} saved.`,
+    created: (n) => `Project ${n} created. It appears in the sidebar; its table opens with the first session.`,
+    createdWith: (n, names) => `Project ${n} created. ${names} join its table.`,
     picker: {
       machines: 'Machine to browse', offline: 'offline',
       offlineBody: (m) => `${m} is offline. Reconnect it in Settings › Machines to browse its folders.`,

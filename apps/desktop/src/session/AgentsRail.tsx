@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, type JSX } from 'react';
-import { PROJECT_COLORS, type Helper, type Projects, type Session } from '@ledge/protocol';
+import type { Helper, Projects, Session } from '@ledge/protocol';
 import { botState, type BotState } from '@ledge/ui/bots/poseFor';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { helperState } from '../atelier/layout';
@@ -9,6 +9,7 @@ import type { NavAction, NavState } from '../nav/state';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot } from '../shell/SessionBot';
+import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 /** The rail's dot (office.css .rail-dot): a ring offline, the two requests lit, an error red (as in the sidebar), done or
  *  available muted, anything else at work. */
@@ -65,7 +66,7 @@ export function AgentsRail({ session, helper, order, projects, projectIdOf, nav,
   return (
     <nav className="project-rail" aria-label={r.label(name)}>
       <div className="rail-head">
-        <i className={project ? 'side-swatch' : 'filter-none'} style={project ? { background: PROJECT_COLORS[project.color] } : undefined} />
+        <ProjectSwatch project={project ?? null} />
         <span title={name}>{name}</span>
         <small>{team.length}</small>
       </div>

@@ -11,6 +11,7 @@ import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import type { Filing } from './filing';
 import { Plants } from './Plants';
 import { RUG_SIDE, helperState, layoutTable, noteX, sheetState, tableBranch, type Side } from './layout';
+import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 export interface ProjectTableProps {
   project: Project;
@@ -84,7 +85,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
 
   const heading = (
     <div className="room-heading">
-      <i className="side-swatch" style={{ background: color }} />
+      <ProjectSwatch project={project} />
       <span className="heading-names">
         <button className="project-conversations" title={name} aria-label={t.atelier.conversations(name)} onClick={toList}>{name}</button>
         {branch !== null && <span className="heading-branch" title={branch}>⎇ {branch}</span>}

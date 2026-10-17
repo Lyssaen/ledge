@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { projectOf, useDaemon, useProjects, type DaemonClient } from '@ledge/fleet';
+import { projectOf, useDaemon, useProjects, type DaemonClient, type Fleet, type MachineState } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -38,8 +38,11 @@ import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
 import { subagentOf } from './session/thread';
 import { useStored } from './state/useStored';
+import { draftOf, newDraft } from './projects/draft';
+import { EditorPlace, loadEditor } from './projects/lazy';
 
 const NO_PROJECTS: readonly Project[] = [];
+const NO_STATE: Projects = { projects: [], rules: [] };
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
@@ -51,7 +54,7 @@ function Shell({ client }: { client?: DaemonClient }) {
   const fleetView = useFleet(client);
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
   const projects = useProjects(fleetClient);
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
   // Toasts and sounds from session changes (spec 2026-10-14 §10); no daemon update can start before the settings (lot 10).
   useAlerts({ sessions, machines, status });
@@ -105,8 +108,8 @@ function Shell({ client }: { client?: DaemonClient }) {
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
   // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
   const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
-  // The session page's and the New session form's chunks are fetched once the shell is up, so a first opening rarely waits for them.
-  useEffect(() => { void loadWorkspace(); void loadComposer(); }, []);
+  // The session page's, the New session form's and the project editor's chunks are fetched once the shell is up, so a first opening rarely waits for them.
+  useEffect(() => { void loadWorkspace(); void loadComposer(); void loadEditor(); }, []);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
@@ -131,6 +134,14 @@ function Shell({ client }: { client?: DaemonClient }) {
   // The form closed (Escape, Cancel, another dialog): nothing is waited for any more; a late answer is not announced.
   const { reset: resetLaunch } = launcher;
   useEffect(() => { if (nav.modal?.kind !== 'launch') resetLaunch(); }, [nav.modal?.kind, resetLaunch]);
+  // A project the daemon confirmed: the editor closes and the notice says what happened (with the agents filed, for a new one).
+  const projectSaved = (id: string, created: boolean, filed: Session[]) => {
+    dispatch({ type: 'modal', modal: null });
+    const name = projects?.projects.find(p => p.id === id)?.name ?? id;
+    notify(!created ? t.projects.saved(name)
+      : filed.length > 0 ? t.projects.createdWith(name, new Intl.ListFormat(lang, { type: 'conjunction' }).format(filed.map(s => s.name)))
+      : t.projects.created(name));
+  };
 
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
@@ -162,12 +173,38 @@ function Shell({ client }: { client?: DaemonClient }) {
             launch={launcher.state} onLaunch={(msg, preview) => { launched.current = preview; launcher.launch(msg); }} onCancel={close} paused={nav.paused} />
         </Modal>
       )}
-      {nav.modal?.kind === 'project' && (() => {
-        const title = nav.modal.edit !== undefined ? t.modalTitles.editProject : t.modalTitles.project;
-        return <Modal title={title} wide onClose={close}><Pending title={title} /></Modal>;
-      })()}
+      {nav.modal?.kind === 'project' && (
+        <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}`} edit={nav.modal.edit} file={nav.modal.file} projects={projects} sessions={sessions} machines={machines}
+          client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} onClose={close} onSaved={projectSaved} />
+      )}
       <Toast notice={notice} />
     </ScreenKeysContext.Provider>
+  );
+}
+
+/** The project editor's dialog (sidebar « + », a table's « Modifier le projet », « Ranger dans… › Nouveau projet… », the New session form).
+ *  The draft is taken once, at opening: an unknown project closes the dialog, but one deleted elsewhere while it is edited stays,
+ *  and the editor says so on « Enregistrer ». */
+function ProjectDialog({ edit, file, projects, sessions, machines, client, fleet, projectIdOf, onClose, onSaved }: {
+  edit?: string; file?: string; projects: Projects | null; sessions: readonly Session[]; machines: readonly MachineState[];
+  client: DaemonClient; fleet: Pick<Fleet, 'setProjects'>; projectIdOf(s: Session): string | null; onClose(): void; onSaved(id: string, created: boolean, filed: Session[]): void;
+}) {
+  const { t } = useI18n();
+  const [initial] = useState(() => {
+    const state = projects ?? NO_STATE;
+    if (edit === undefined) return newDraft(state, file === undefined ? undefined : sessions.find(s => s.id === file));
+    const p = state.projects.find(x => x.id === edit);
+    return p ? draftOf(p) : null;
+  });
+  useEffect(() => { if (initial === null) onClose(); }, [initial, onClose]);
+  if (initial === null) return null;
+  const current = projects?.projects.find(p => p.id === initial.id);
+  const title = edit !== undefined ? t.projects.titles.edit(current?.name ?? initial.name) : t.projects.titles.new;
+  return (
+    <Modal title={title} wide className="project-modal" onClose={onClose}>
+      <EditorPlace mode={edit !== undefined ? 'edit' : 'new'} initial={initial} projects={projects ?? NO_STATE} sessions={sessions} machines={machines}
+        client={client} fleet={fleet} projectIdOf={projectIdOf} onClose={onClose} onSaved={onSaved} onDeleted={onClose} />
+    </Modal>
   );
 }
 

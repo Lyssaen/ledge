@@ -1,5 +1,4 @@
 import type { JSX, ReactNode } from 'react';
-import { PROJECT_COLORS } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import type { Filing } from '../atelier/filing';
 import { useI18n } from '../i18n/lang';
@@ -7,6 +6,7 @@ import type { NavAction } from '../nav/state';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import type { Bucket, ListGroup as Group } from './model';
+import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 const QUIET: readonly Bucket[] = ['running', 'done', 'offline'];
 
@@ -37,7 +37,7 @@ export function ListGroup({ group: g, collapsed, filtering, onToggle, dispatch, 
         <button type="button" className="g-toggle" aria-expanded={!collapsed} aria-label={collapsed ? t.list.expand(g.label) : t.list.collapse(g.label)} onClick={onToggle}>
           <Icon d={ICONS.chevronRight.d} size={13} />
         </button>
-        {project ? <i className="side-swatch" style={{ background: PROJECT_COLORS[project.color] }} />
+        {project ? <ProjectSwatch project={project} />
           : g.unassigned ? <Icon d={SHELL_ICONS.unassigned} size={14} />
           : g.machine ? <i className={cls('machine-dot', g.machine.offline && 'off')} />
           : <i className={`g-dot dot-${g.bucket}`} />}
