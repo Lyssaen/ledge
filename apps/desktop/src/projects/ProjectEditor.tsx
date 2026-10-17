@@ -68,7 +68,8 @@ export function ProjectEditor(p: {
   const [proposal, setProposal] = useState<Proposal | null>(p.proposal ?? null);
   const [scanning, setScanning] = useState(false);
   const [scanned, setScanned] = useState<string[]>([]);
-  const [nothing, setNothing] = useState(false);
+  // « Nothing »: every repository found is taken, or no machine could be scanned at all.
+  const [nothing, setNothing] = useState<'taken' | 'unscanned' | null>(null);
   const scan = useLedgeScan(p.client, machines);
   const cancelRef = useRef<HTMLButtonElement>(null);
   // The draft now, for a confirmation that comes in an effect: closing on it would drop what was edited since the send.
@@ -101,7 +102,7 @@ export function ProjectEditor(p: {
   const ids = useId();
 
   const runLedge = () => {
-    setNothing(false);
+    setNothing(null);
     setScanned(machines.filter(isUp).map(m => m.label));
     scan.start();
     setScanning(true);
@@ -118,7 +119,7 @@ export function ProjectEditor(p: {
       const found = proposeFor({ ...(now.id !== undefined ? { id: now.id } : {}), name: now.name, file: now.file }, proposeProjects(input), input);
       resetScan();
       setScanning(false);
-      if (!found) { setNothing(true); return; }
+      if (!found) { setNothing(scans.some(sc => sc.status === 'ok') ? 'taken' : 'unscanned'); return; }
       setD(applyProposal(now, found, state));
       setProposal(found);
       setAdding(false);
@@ -224,7 +225,8 @@ export function ProjectEditor(p: {
       st => saved(st, sent) && rules.every(r => st.rules.some(x => x.machine === r.machine && x.path === r.path && x.project === r.project)),
       () => {
         // Edited since the send (after a timeout, say): the project exists as sent; the editor stays open on it, the newer values kept.
-        if (!sameDraft(draftNow.current, sentDraft)) { setD(x => ({ ...x, id })); setMode('edit'); return; }
+        // A proposal is over then: its project exists, so no « Ajouter à » it.
+        if (!sameDraft(draftNow.current, sentDraft)) { setD(x => ({ ...x, id })); setMode('edit'); setProposal(null); return; }
         latest.current.onSaved(id, created, filed);
       });
   };
@@ -331,9 +333,9 @@ export function ProjectEditor(p: {
   }
 
   // The offer: a new project with neither name nor proposal. « Demander à Ledge »: once there is a name or a repository, the offer
-  // gone (or answered « nothing free »), no proposal under way.
+  // gone, no proposal under way, and not next to the « nothing » note (which has its own « Relancer »).
   const fresh = mode === 'new' && !proposal && d.name === '';
-  const canAsk = !proposal && (!fresh || nothing) && (d.name.trim() !== '' || d.repos.length > 0);
+  const canAsk = !proposal && !fresh && !nothing && (d.name.trim() !== '' || d.repos.length > 0);
   return (
     <form className="pe" onSubmit={e => { e.preventDefault(); save(); }} onKeyDown={onKeyDown}>
       {groups.map(([machine, paths]) => <Inspect key={machine} client={p.client} machine={machine} paths={paths} onInfos={onInfos} />)}
@@ -348,7 +350,8 @@ export function ProjectEditor(p: {
         {nothing && (
           <div className="pe-proposal" role="status">
             <ResidentMascot size={28} theme={theme} paused={p.paused} reducedMotion={reduced} />
-            <div><span>{c.ledge.nothing}</span></div>
+            <div><span>{nothing === 'taken' ? c.ledge.nothing : c.ledge.unscanned}</span></div>
+            <Button variant="ghost" size="sm" onClick={runLedge}>{c.ledge.again}</Button>
           </div>
         )}
         {proposal && (

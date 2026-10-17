@@ -35,18 +35,18 @@ export function newDraft(state: Projects, from?: Session): ProjectDraft {
 }
 
 /** A proposal laid on the draft (« Laisser Ledge faire », or one opened by the navigation): with a target that still exists, the
- *  draft becomes that project (the draft itself when it already is, its edits kept), else the proposal's name, colour and
- *  description (the description typed kept). The proposed repositories follow the draft's, checked, with their reason (one
- *  already listed is not added again); its sessions join the ones to file, checked. */
+ *  draft becomes that project (the draft itself when it already is, its edits kept; else the target's repositories, then the
+ *  draft's own, a seeded folder included), else the proposal's name, colour and description (the description typed kept).
+ *  The proposed repositories follow, checked, with their reason (one already listed is not added again); the proposal's sessions
+ *  join the draft's ones to file, checked. A listed repository another project has stays `repo_taken` (draftProblem). */
 export function applyProposal(d: ProjectDraft, p: Proposal, state: Projects): ProjectDraft {
   const target = p.targetId === undefined ? undefined : state.projects.find(x => x.id === p.targetId);
   const { id: _own, ...fresh } = d;
-  const base: ProjectDraft = target
-    ? (d.id === target.id ? d : draftOf(target))
+  const base: ProjectDraft = target ? (d.id === target.id ? d : onto(draftOf(target), d))
     : { ...fresh, name: p.name, color: p.color, description: d.description || p.description };
   const listed = new Set(base.repos.map(r => repoKey(r.machine, r.path)));
-  const proposed = { ...base.proposed };
   const repos = [...base.repos];
+  const proposed = { ...base.proposed };
   for (const r of p.repos) {
     const k = repoKey(r.machine, r.path);
     if (listed.has(k)) continue;
@@ -55,6 +55,12 @@ export function applyProposal(d: ProjectDraft, p: Proposal, state: Projects): Pr
     proposed[k] = { why: r.why, checked: true };
   }
   return { ...base, repos, file: [...new Set([...base.file, ...p.file])], proposed };
+}
+
+/** The target's draft with `d`'s own repositories after (those it does not have already), its sessions to file and its boxes. */
+function onto(target: ProjectDraft, d: ProjectDraft): ProjectDraft {
+  const has = new Set(target.repos.map(r => repoKey(r.machine, r.path)));
+  return { ...target, repos: [...target.repos, ...d.repos.filter(r => !has.has(repoKey(r.machine, r.path)))], file: [...d.file], ...(d.proposed ? { proposed: d.proposed } : {}) };
 }
 
 /** The draft of a proposal opened by the navigation: a new project, or its target's draft with the proposed repositories after. */

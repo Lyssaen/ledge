@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import type { ClientMessage, FoundRepo, Machines, ServerMessage } from '@ledge/protocol';
 import type { DaemonClient, Proposal } from '@ledge/fleet';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -7,9 +7,14 @@ import { boot, closeDaemons, PROJECTS, type MockDaemon } from './helpers';
 import { machine } from './fleet-helpers';
 import { LangProvider } from '../src/i18n/lang';
 import { MESSAGES } from '../src/i18n/messages';
+import { afterSave, applyProposal, newDraft } from '../src/projects/draft';
 import { ProjectDialog } from '../src/projects/ProjectDialog';
 import { rememberProposal, proposalOf } from '../src/projects/proposals';
+import { loadEditor } from '../src/projects/lazy';
 import { useLedgeScan } from '../src/projects/useLedgeScan';
+
+// The editor's chunk is there before the dialog renders alone (boot does it for the app).
+beforeAll(async () => { await loadEditor(); });
 
 afterEach(async () => {
   vi.useRealTimers();
@@ -171,7 +176,7 @@ describe('« Let Ledge do it » in the project editor', () => {
     await user.click(back.getByRole('button', { name: 'Ask Ledge' }));
     const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
     expect(prop.getByRole('textbox', { name: 'Name' })).toHaveValue('Fonts lab');
-    expect(prop.getByRole('checkbox', { name: 'Keep paper-fonts (Local)' }).closest('li')!.querySelector('.pe-why')).toHaveTextContent('Ledge · Named fonts-*');
+    expect(prop.getByRole('checkbox', { name: 'Keep paper-fonts (Local)' }).closest('li')!.querySelector('.pe-why')).toHaveTextContent('Ledge · Name close to “fonts”');
     expect(prop.queryByRole('checkbox', { name: 'Keep paper-templates (Local)' })).toBeNull();
   });
 
@@ -181,6 +186,52 @@ describe('« Let Ledge do it » in the project editor', () => {
     const back = within(await screen.findByRole('dialog', { name: 'New project' }, { timeout: 3000 }));
     expect(await back.findByText('Every repository found already belongs to a project. Add one by hand.')).toBeVisible();
     expect(back.getByRole('textbox', { name: 'Name' })).toHaveValue('');
+  });
+
+  it('after « nothing free », « Run again » scans again and can propose', async () => {
+    const { d, user, dialog } = await openNew([{ path: '/w/ledge', branch: 'main' }]);
+    await user.click(dialog.getByRole('button', { name: 'Let Ledge do it' }));
+    const back = within(await screen.findByRole('dialog', { name: 'New project' }, { timeout: 3000 }));
+    await back.findByText('Every repository found already belongs to a project. Add one by hand.');
+    d.found.push(...PAPER);
+    await user.click(back.getByRole('button', { name: 'Run again' }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }, { timeout: 3000 }));
+    expect(prop.getByRole('checkbox', { name: 'Keep paper-fonts (Local)' })).toBeChecked();
+    expect(scansOf(d)).toHaveLength(2);
+  });
+});
+
+/** A client that answers nothing: for the dialog alone. */
+const silentClient = () => ({ send: vi.fn(), onMessage: () => () => {} }) as unknown as DaemonClient;
+
+describe('the scan with no machine answering', () => {
+  it('says that no machine could be scanned, not that everything is taken', async () => {
+    render(<LangProvider lang="en"><ProjectDialog projects={PROJECTS} sessions={[]} machines={[machine('local', { ready: false })]} client={silentClient()}
+      fleet={{ setProjects: vi.fn() }} projectIdOf={() => null} onClose={vi.fn()} onSaved={vi.fn()} onDeleted={vi.fn()} /></LangProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Let Ledge do it' }));
+    const back = within(await screen.findByRole('dialog', { name: 'New project' }, { timeout: 3000 }));
+    expect(await back.findByText('No machine could be scanned.')).toBeVisible();
+    expect(back.queryByText('Every repository found already belongs to a project. Add one by hand.')).toBeNull();
+    expect(back.getByRole('button', { name: 'Run again' })).toBeVisible();
+  });
+});
+
+describe('« add to » from a seeded draft', () => {
+  it('keeps the seeded folder after the target\'s repositories, and its session to file', () => {
+    const kit = fakeSession('kit', { name: 'Kit', cwd: '/tmp/foo', state: 'waiting_input' });
+    const seeded = newDraft(PROJECTS, kit);
+    const toLedge: Proposal = {
+      pid: 'prop-ledge', name: 'Ledge', color: 'blue', description: '', targetId: 'ledge', file: [],
+      repos: [{ machine: 'local', path: '/home/me/site', why: { kind: 'remote', remote: 'github.com/me/ledge', machines: ['Local'] } }],
+      summary: { repos: 1, machines: ['Local'], target: 'Ledge', agents: [] }
+    };
+    const d = applyProposal(seeded, toLedge, PROJECTS);
+    expect(d.id).toBe('ledge');
+    expect(d.repos).toEqual([{ machine: 'local', path: '/w/ledge' }, { machine: 'local', path: '/tmp/foo' }, { machine: 'local', path: '/home/me/site' }]);
+    expect(d.file).toEqual(['kit']);
+    const { next } = afterSave(PROJECTS, d, [kit]);
+    expect(next.projects[0]!.repos).toEqual([{ machine: 'local', path: '/w/ledge' }, { machine: 'local', path: '/tmp/foo' }, { machine: 'local', path: '/home/me/site' }]);
+    expect(next.rules).toEqual([{ machine: 'local', path: '/tmp/foo', project: 'ledge' }]);
   });
 });
 
@@ -213,6 +264,26 @@ describe('a proposal opened by the navigation', () => {
     expect(next.rules).toEqual([{ machine: 'local', path: '/tmp', project: 'tmp' }]);
   });
 
+  it('a save that timed out, then confirmed after an edit, leaves proposal mode: the editor is on the project it created', async () => {
+    rememberProposal(TMP);
+    const setProjects = vi.fn();
+    const kit = fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input' });
+    const props = { proposal: 'prop-tmp', sessions: [kit], machines: [machine('local')], client: silentClient(), fleet: { setProjects }, projectIdOf: () => null, onClose: vi.fn(), onSaved: vi.fn(), onDeleted: vi.fn() };
+    const view = render(<LangProvider lang="en"><ProjectDialog {...props} projects={PROJECTS} /></LangProvider>);
+    const dialog = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    fireEvent.click(dialog.getByRole('button', { name: /^Create the project/ }));
+    act(() => { vi.advanceTimersByTime(8000); });
+    expect(dialog.getByRole('alert')).toHaveTextContent('The daemon did not confirm the save.');
+    vi.useRealTimers();
+    fireEvent.change(dialog.getByRole('textbox', { name: 'Name' }), { target: { value: 'Tmp files' } });
+    view.rerender(<LangProvider lang="en"><ProjectDialog {...props} projects={setProjects.mock.calls[0]![0]} /></LangProvider>);
+    await waitFor(() => expect(dialog.getByRole('button', { name: /^Save/ })).toBeVisible());
+    expect(dialog.queryByRole('button', { name: /^Add to/ })).toBeNull();
+    expect(document.querySelector('.pe-proposal')).toBeNull();
+    expect(props.onSaved).not.toHaveBeenCalled();
+  });
+
   it('an unknown pid closes the window and says the proposal no longer exists', () => {
     const onClose = vi.fn();
     const notify = vi.fn();
@@ -237,6 +308,7 @@ describe('the reasons and the summary, in both languages', () => {
       expect(why({ kind: 'naming', stem: 'paper' })).toBe(naming);
       expect(why({ kind: 'folder', parent: '/w' })).toBe(folder);
       expect(why({ kind: 'chat', text: 'Vu dans la conversation' })).toBe('Vu dans la conversation');
+      expect(why({ kind: 'name', word: 'fonts' })).toBe(l === 'fr' ? 'Nom proche de « fonts »' : 'Name close to “fonts”');
     }
     expect(MESSAGES.fr.projects.why({ kind: 'remote', remote: 'r', machines: ['Local'] })).toBe('Même remote r');
     expect(MESSAGES.fr.projects.ledge.summary({ repos: 3, machines: ['Local', 'Dev'], target: 'Ledge', agents: ['Kit'] })).toBe('3 dépôts de plus pour Ledge, sur Local et Dev. À ranger aussi : Kit.');

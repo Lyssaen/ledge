@@ -223,7 +223,13 @@ describe('proposeFor', () => {
     expect(p.repos.map(r => `${r.machine}:${r.path}`)).toEqual([
       'local:/home/me/Workspace/paper/paper-api', 'local:/home/me/Workspace/paper/paper-fonts', 'dev:/home/dev/paper/paper-api', 'dev:/home/dev/paper/paper-templates'
     ]);
-    expect(p.repos[0]!.why).toEqual({ kind: 'naming', stem: 'paper' });
+    // A typed word found in a name is no prefix group: its own reason, the word typed.
+    expect(p.repos[0]!.why).toEqual({ kind: 'name', word: 'paper' });
+  });
+
+  it('a typed word in the middle of a name gives the « name close to » reason, never « named word-* »', () => {
+    const p = proposeFor({ name: 'Fonts lab', file: [] }, all, input)!;
+    expect(p.repos).toEqual([{ machine: 'local', path: '/home/me/Workspace/paper/paper-fonts', why: { kind: 'name', word: 'fonts' } }]);
   });
 
   it("from a project's editor, the proposal that already targets it, the project keeping its name", () => {

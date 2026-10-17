@@ -490,6 +490,7 @@ export const fr = {
     why: (w: Why): string => w.kind === 'remote' ? `Même remote ${w.remote}${w.machines.length > 1 ? `, sur ${andList(w.machines)}` : ''}`
       : w.kind === 'agent' ? `Dossier ouvert par ${andList(w.names)}`
       : w.kind === 'naming' ? `Nommé ${w.stem}-*`
+      : w.kind === 'name' ? `Nom proche de « ${w.word} »`
       : w.kind === 'folder' ? `Rangé dans ${w.parent}`
       : w.text,
     /** « Laisser Ledge faire » (lot 11): the offer, the scan's steps, the proposal. */
@@ -513,6 +514,7 @@ export const fr = {
         return head + (s.agents.length ? ` À ranger aussi : ${andList(s.agents)}.` : '');
       },
       nothing: 'Tous les dépôts trouvés appartiennent déjà à un projet. Ajoutez-en un à la main.',
+      unscanned: 'Aucune machine n’a pu être parcourue.', again: 'Relancer',
       why: 'Ledge · ', keep: (n: string, m: string) => `Garder ${n} (${m})`, addTo: (n: string) => `Ajouter à ${n}`,
       gone: 'Cette proposition n’existe plus.'
     },

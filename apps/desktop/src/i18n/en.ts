@@ -466,6 +466,7 @@ export const en: Messages = {
     why: (w) => w.kind === 'remote' ? `Same remote ${w.remote}${w.machines.length > 1 ? `, on ${andList(w.machines)}` : ''}`
       : w.kind === 'agent' ? `Folder opened by ${andList(w.names)}`
       : w.kind === 'naming' ? `Named ${w.stem}-*`
+      : w.kind === 'name' ? `Name close to “${w.word}”`
       : w.kind === 'folder' ? `Kept in ${w.parent}`
       : w.text,
     ledge: {
@@ -488,6 +489,7 @@ export const en: Messages = {
         return head + (s.agents.length ? ` Also to file: ${andList(s.agents)}.` : '');
       },
       nothing: 'Every repository found already belongs to a project. Add one by hand.',
+      unscanned: 'No machine could be scanned.', again: 'Run again',
       why: 'Ledge · ', keep: (n, m) => `Keep ${n} (${m})`, addTo: (n) => `Add to ${n}`,
       gone: 'This proposal no longer exists.'
     },

@@ -2,11 +2,13 @@ import { normalizePath, PROJECT_COLORS, projectOf, type FoundRepo, type Project,
 
 /** One machine's answer to `repos.scan`, as the app gathers them; only `ok` machines are proposed. `label`: the machine's name, for the texts. */
 export interface ScanOf { machine: string; label: string; status: 'ok' | 'offline' | 'outdated'; repos: FoundRepo[]; truncated: boolean }
-/** Why a folder is proposed. `machines` are labels. `chat`: the LLM's own reason (lot 11, task 5); `proposeProjects` never gives it. */
+/** Why a folder is proposed. `machines` are labels. `naming`: a group sharing the prefix `stem` before « - »; `name`: a word typed in
+ *  the editor found in the folder's name (proposeFor). `chat`: the LLM's own reason (lot 11, task 5); `proposeProjects` never gives it. */
 export type Why =
   | { kind: 'remote'; remote: string; machines: string[] }
   | { kind: 'agent'; names: string[] }
   | { kind: 'naming'; stem: string }
+  | { kind: 'name'; word: string }
   | { kind: 'folder'; parent: string }
   | { kind: 'chat'; text: string };
 export interface ProposedRepo { machine: string; path: string; why: Why }
@@ -209,8 +211,8 @@ export function proposeFor(draft: { id?: string; name: string; file: readonly st
   const words = key(name).split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2);
   if (words.length) {
     const repos = s.free.flatMap(r => {
-      const stem = words.find(w => key(basename(r.path)).includes(w));
-      return stem === undefined ? [] : [{ machine: r.machine, path: r.path, why: { kind: 'naming', stem } as Why }];
+      const word = words.find(w => key(basename(r.path)).includes(w));
+      return word === undefined ? [] : [{ machine: r.machine, path: r.path, why: { kind: 'name', word } as Why }];
     });
     if (repos.length) return finish({ name, ...(target ? { targetId: target.id } : {}), repos, file: [...draft.file] }, projects, firstFree, s, input.sessions);
   }
