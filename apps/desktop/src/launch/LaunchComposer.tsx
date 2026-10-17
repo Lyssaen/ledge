@@ -30,6 +30,8 @@ export function LaunchComposer(p: {
   client: DaemonClient; projects: readonly Project[]; machines: readonly MachineState[]; sessions: readonly Session[];
   projectIdOf(s: Session): string | null; wanted: { project?: string; filter?: string }; onEditProject(id: string): void; onNewProject(): void;
   launch: LaunchState; onLaunch(msg: LaunchMessage, preview: { name: string; project: string }): void; onCancel(): void;
+  /** The app's « Freeze animations »: the form's bots hold still. */
+  paused?: boolean;
 }): JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
@@ -72,14 +74,19 @@ export function LaunchComposer(p: {
 
   const missing = missingOf(form, machines);
   const { name, seat } = previewOf(form, p.sessions, p.projectIdOf);
+  // Without any project, the repositories are missing because the project is: the alert names the « No project yet » block.
+  const alert = !missing ? null : missing === 'repos' && projects.length === 0 ? t.launch.noProjects : t.launch.missing[missing];
   const launching = p.launch.status === 'launching';
   const submit = () => {
     setTried(true);
     if (missing || launching || !project) return;
     p.onLaunch(launchMessage(form, name), { name, project: project.name });
   };
+  // Only Ctrl / ⌘ ↵ and « Launch » send: a plain Enter on a tile or a chip would submit the form implicitly (the textarea keeps its newline).
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
+    if (e.key !== 'Enter') return;
+    if (e.ctrlKey || e.metaKey) { e.preventDefault(); submit(); }
+    else if (e.target instanceof HTMLInputElement) e.preventDefault();
   };
 
   const multi = form.tool === null || MULTI_REPO_TOOLS.has(form.tool);
@@ -110,7 +117,7 @@ export function LaunchComposer(p: {
             return (
               <label key={id} className={`tool-tile ${form.tool === id ? 'selected' : ''}`}>
                 <input type="radio" name="tool" value={id} checked={form.tool === id} onChange={() => setForm(f => withTool(f, id))} />
-                <Bot tool={id} state={form.tool === id ? 'working' : 'idle'} pose={1} size={46} theme={theme} seed={'pick-' + id} reducedMotion={reduced} />
+                <span className="composer-bot" aria-hidden="true"><Bot tool={id} state={form.tool === id ? 'working' : 'idle'} pose={1} size={46} theme={theme} seed={'pick-' + id} paused={p.paused} reducedMotion={reduced} /></span>
                 <span><strong>{label}</strong><small>{hint}</small></span>
               </label>
             );
@@ -179,7 +186,7 @@ export function LaunchComposer(p: {
 
       <footer className="composer-footer">
         <div className="composer-preview" aria-live="polite">
-          {form.tool ? <Bot tool={form.tool} state="starting" pose={1} size={30} theme={theme} seed={'preview-' + form.tool} reducedMotion={reduced} /> : <span className="preview-empty" aria-hidden="true" />}
+          {form.tool ? <span className="composer-bot" aria-hidden="true"><Bot tool={form.tool} state="starting" pose={1} size={30} theme={theme} seed={'preview-' + form.tool} paused={p.paused} reducedMotion={reduced} /></span> : <span className="preview-empty" aria-hidden="true" />}
           {project && (
             <span>
               <span className="preview-line">{emphasized(t.launch.joins, form.tool ? name : t.launch.newAgent, project.name)}</span>
@@ -187,7 +194,7 @@ export function LaunchComposer(p: {
             </span>
           )}
         </div>
-        {tried && missing && <span className="composer-missing" role="alert">{t.launch.missing[missing]}</span>}
+        {tried && alert && <span className="composer-missing" role="alert">{alert}</span>}
         <Button variant="ghost" type="button" onClick={p.onCancel}>{t.launch.cancel}</Button>
         <Button variant="primary" type="submit" aria-disabled={!!missing || launching}>
           <Icon d={ICONS.plus.d} size={14} />{launching ? t.launch.launching : t.launch.launch}<Kbd>Ctrl ↵</Kbd>

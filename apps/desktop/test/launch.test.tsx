@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
@@ -40,7 +40,7 @@ describe('New session', () => {
     expect(document.querySelector('.composer-preview small')!.textContent).toBe('Seat 4 · Local · app');
   });
 
-  it('Launch with a field missing names it; Ctrl Enter launches when complete', async () => {
+  it('Launch and Ctrl / ⌘ Enter name the first missing field and mark the incomplete ones', async () => {
     const { user, form } = await openLaunch();
     expect(form.queryByRole('alert')).toBeNull();
     await user.click(form.getByRole('button', { name: /Launch/ }));
@@ -151,6 +151,7 @@ describe('New session', () => {
     expect(declarations('launch.css', '.tool-tile.selected')).toContain('border-color:var(--sidebar-primary)');
     expect(declarations('launch.css', '.chip.disabled')).toContain('cursor:not-allowed');
     expect(declarations('launch.css', '.ledge-chat-panel')).toBe('');
+    expect(declarations('launch.css', '.composer .composer-bot')).toBe('display:contents');   // the bot's aria-hidden wrapper changes no layout
   });
 });
 
@@ -193,12 +194,62 @@ describe('LaunchComposer and its machines', () => {
     render(<LaunchComposer {...props(client, [local, nas])} />);
     const ask = sent.find(m => m.type === 'repos.inspect') as Extract<ClientMessage, { type: 'repos.inspect' }>;
     expect(ask).toMatchObject({ paths: ['/w/ledge/app', '/w/ledge/docs'], machineId: 'local' });
-    emit({ type: 'repos.info', requestId: 'someone-else', repos: [{ path: '/w/ledge/app', exists: false, branch: null }] });
-    await Promise.resolve();
-    expect(screen.getByRole('checkbox', { name: /^app/ })).toBeEnabled();
-    emit({ type: 'repos.info', requestId: ask.requestId, repos: [{ path: '/w/ledge/app', exists: false, branch: null }, { path: '/w/ledge/docs', exists: true, branch: 'main' }] });
-    await waitFor(() => expect(screen.getByRole('checkbox', { name: /^app/ })).toBeDisabled());
+    // Another request's answer (it says docs is missing) is ignored, before and after this one's.
+    const stale: ServerMessage = { type: 'repos.info', requestId: 'someone-else', repos: [{ path: '/w/ledge/app', exists: true, branch: 'x' }, { path: '/w/ledge/docs', exists: false, branch: null }] };
+    await act(async () => { emit(stale); });
+    expect(screen.getByRole('checkbox', { name: /^docs/ })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: /^app/ }).closest('label')).not.toHaveAttribute('title');
+    await act(async () => { emit({ type: 'repos.info', requestId: ask.requestId, repos: [{ path: '/w/ledge/app', exists: false, branch: null }, { path: '/w/ledge/docs', exists: true, branch: 'main' }] }); });
+    expect(screen.getByRole('checkbox', { name: /^app/ })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: /^docs/ })).toBeEnabled();
     await waitFor(() => expect(screen.getByRole('checkbox', { name: /^docs/ })).toBeChecked());
+    await act(async () => { emit(stale); });
+    expect(screen.getByRole('checkbox', { name: /^docs/ })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: /^docs/ })).toBeChecked();
+  });
+
+  it('plain Enter on a tile or a chip sends nothing; only Ctrl / ⌘ Enter and Launch do', async () => {
+    const { client } = fakeClient();
+    const user = userEvent.setup();
+    const p = props(client, [local, nas]);
+    render(<LaunchComposer {...p} />);
+    await user.type(screen.getByRole('textbox', { name: 'Instruction' }), 'Review{Enter}it');
+    expect(screen.getByRole('textbox', { name: 'Instruction' })).toHaveValue('Review\nit');
+    await user.click(screen.getByRole('radio', { name: /Codex/ }));
+    expect(screen.getByRole('radio', { name: /Codex/ })).toHaveFocus();
+    await user.keyboard('{Enter}');
+    screen.getByRole('radio', { name: 'Ledge' }).focus();
+    await user.keyboard('{Enter}');
+    screen.getByRole('radio', { name: /^app/ }).focus();
+    await user.keyboard('{Enter}');
+    expect(p.onLaunch).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /Launch/ }));
+    expect(p.onLaunch).toHaveBeenCalledTimes(1);
+  });
+
+  it('the bots stay out of the names; they follow Freeze animations', async () => {
+    const { client } = fakeClient();
+    const user = userEvent.setup();
+    const view = render(<LaunchComposer {...props(client, [local, nas])} paused />);
+    expect(screen.getByRole('radio', { name: 'Claude Code Design, review' })).toBeInTheDocument();
+    expect(screen.queryByRole('img')).toBeNull();
+    await user.click(screen.getByRole('radio', { name: 'Codex Code and tests' }));
+    expect(document.querySelector('.composer-preview')!.textContent).toMatch(/^\w+ will join the Ledge table/);
+    const bots = view.container.querySelectorAll('[data-paused]');
+    expect(bots).toHaveLength(4);                                          // three tiles and the preview
+    bots.forEach(b => expect(b).toHaveAttribute('data-paused', 'true'));
+    view.rerender(<LaunchComposer {...props(client, [local, nas])} />);
+    view.container.querySelectorAll('[data-paused]').forEach(b => expect(b).toHaveAttribute('data-paused', 'false'));
+  });
+
+  it('with no project, the missing field is the project', async () => {
+    const { client } = fakeClient();
+    const user = userEvent.setup();
+    render(<LaunchComposer {...props(client, [local, nas])} projects={[]} />);
+    await user.click(screen.getByRole('radio', { name: /Claude Code/ }));
+    await user.type(screen.getByRole('textbox', { name: 'Instruction' }), 'Go');
+    await user.click(screen.getByRole('button', { name: /Launch/ }));
+    expect(screen.getByRole('alert')).toHaveTextContent('No project yet.');
   });
 
   it('sends the launch message with the previewed name and table when complete', async () => {

@@ -141,7 +141,7 @@ function Shell({ client }: { client?: DaemonClient }) {
           <LaunchComposer client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
             wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }) }}
             onEditProject={id => dispatch({ type: 'modal', modal: { kind: 'project', edit: id } })} onNewProject={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}
-            launch={IDLE} onLaunch={() => {}} onCancel={close} />
+            launch={IDLE} onLaunch={() => {}} onCancel={close} paused={nav.paused} />
         </Modal>
       )}
       {nav.modal?.kind === 'project' && (() => {

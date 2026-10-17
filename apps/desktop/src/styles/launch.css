@@ -46,7 +46,8 @@
 .composer-footer [aria-disabled=true]{opacity:.55}
 @media(max-width:700px){.composer-tools{grid-template-columns:1fr}.composer-footer{flex-wrap:wrap}.composer-preview{flex-basis:100%}}
 
-/* Not in the mockup: the one-repository note beside the chips, the project without repository on the machine, the form without project. */
+/* Not in the mockup: the bots kept out of the names (aria-hidden), laid out as if unwrapped; the one-repository note beside the chips, the project without repository on the machine, the form without project. */
+.composer .composer-bot{display:contents}
 .chip-hint{font-size:11px;color:var(--muted-foreground)}
 .composer-norepo{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 .composer-norepo p{margin:0;font-size:12px}
