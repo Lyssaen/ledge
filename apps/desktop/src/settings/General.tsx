@@ -54,7 +54,7 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
     <>
       <Card>
         <Row label={g.lang} hint={g.langHint} error={langFailed ? g.langFailed : null}>
-          <Segmented label={g.lang} value={ctx.lang} disabled={switching} onChange={chooseLang} options={LANGS.map(l => ({ value: l, label: g.langs[l] }))} />
+          {describedBy => <Segmented label={g.lang} value={ctx.lang} disabled={switching} describedBy={describedBy} onChange={chooseLang} options={LANGS.map(l => ({ value: l, label: g.langs[l], lang: l }))} />}
         </Row>
         <SwitchRow label={g.autostart} hint={autostart === null ? g.autostartMissing : g.autostartHint} error={autostartFailed ? g.autostartFailed : null}
           checked={autostart === true} disabled={autostart == null || writing} onChange={chooseAutostart} />

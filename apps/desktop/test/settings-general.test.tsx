@@ -127,6 +127,33 @@ describe('Settings › General: the language', () => {
   });
 });
 
+describe('Settings › General: what assistive technologies hear', () => {
+  it('each language names itself in its own language (lang="fr" / lang="en")', async () => {
+    await bootFrench();
+    const group = within(screen.getByRole('radiogroup', { name: 'Langue' }));
+    expect(group.getByRole('radio', { name: 'Français' }).closest('label')).toHaveAttribute('lang', 'fr');
+    expect(group.getByRole('radio', { name: 'English' }).closest('label')).toHaveAttribute('lang', 'en');
+  });
+
+  it('a row’s error describes its control: the language choice', async () => {
+    const { user } = await bootFrench();
+    strings.fail = true;
+    await user.click(screen.getByRole('radio', { name: 'English' }));
+    await screen.findByRole('alert');
+    expect(screen.getByRole('radiogroup', { name: 'Langue' })).toHaveAccessibleDescription(expect.stringContaining('Le français reste affiché : l’anglais n’a pas pu être chargé.'));
+  });
+
+  it('the Windows switch: its hint, then its error, describe it', async () => {
+    const { user } = await openSettings();
+    await waitFor(() => expect(sw('Start with Windows')).toBeEnabled());
+    expect(sw('Start with Windows')).not.toHaveAccessibleDescription(expect.stringContaining('Windows did not take this setting.'));
+    bridge.setAutostart = () => Promise.resolve(null);
+    await user.click(sw('Start with Windows'));
+    await screen.findByRole('alert');
+    expect(sw('Start with Windows')).toHaveAccessibleDescription(expect.stringContaining('Windows did not take this setting.'));
+  });
+});
+
 describe('Settings › General: start with Windows', () => {
   it('disabled while Windows is asked; not offered here (null): disabled, with why', async () => {
     let answer!: (v: boolean | null) => void;
@@ -226,6 +253,15 @@ describe('Settings › Appearance', () => {
     expect(hex).toHaveValue('#e85d4a');
     expect(screen.getByRole('button', { name: 'Coral' })).toBeDisabled();
     expect(saved()).toEqual(['Setting saved · Ledge’s color #12ab34', 'Setting saved · Ledge’s color: Coral']);
+  });
+
+  it('an invalid hex: its error describes the field', async () => {
+    const { user } = await openSettings('Appearance');
+    const hex = screen.getByRole('textbox', { name: 'Hex code' });
+    await user.clear(hex);
+    await user.type(hex, '#12');
+    await user.tab();
+    expect(hex).toHaveAccessibleDescription(expect.stringContaining('Invalid color: use # and six hexadecimal characters.'));
   });
 
   it('Escape in the hex field puts the stored color back and stays in Settings; the next Escape leaves', async () => {

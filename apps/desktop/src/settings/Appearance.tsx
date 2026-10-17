@@ -64,8 +64,8 @@ export function Appearance({ ctx }: { ctx: SettingsContext }): JSX.Element {
       </Row>
       <AccentRow ctx={ctx} />
       <Row label={a.scale} hint={a.scaleHint} error={scaleFailed ? a.scaleFailed : null} stack>
-        <Segmented label={a.scale} value={toChoice(scale)} onChange={chooseScale}
-          options={UI_SCALES.map(s => ({ value: toChoice(s), label: s === 'auto' ? (autoFactor === null ? a.auto : a.autoAt(a.percent(autoFactor))) : a.percent(s), wide: s === 'auto' }))} />
+        {describedBy => <Segmented label={a.scale} value={toChoice(scale)} describedBy={describedBy} onChange={chooseScale}
+          options={UI_SCALES.map(s => ({ value: toChoice(s), label: s === 'auto' ? (autoFactor === null ? a.auto : a.autoAt(a.percent(autoFactor))) : a.percent(s), wide: s === 'auto' }))} />}
       </Row>
       <SwitchRow label={a.reduced} hint={a.reducedHint} checked={motion.app} onChange={on => { motion.setReduced(on); saved(on ? a.reduced : a.reducedOff); }} />
     </Card>
@@ -121,17 +121,19 @@ function AccentRow({ ctx }: { ctx: SettingsContext }): JSX.Element {
 
   return (
     <Row label={a.accent} hint={a.accentHint} error={invalid ? a.accentInvalid : null} stack>
-      <div className="accent-row">
-        <input ref={picker} type="color" aria-label={a.picker} value={parseAccent(draft) ?? accent ?? DEFAULT_ACCENT} onChange={e => { setDraft(e.target.value); setInvalid(false); }} />
-        <input className="mono set-input hex" aria-label={a.hex} value={draft} maxLength={7} spellCheck={false} aria-invalid={invalid || undefined}
-          onChange={e => { setDraft(e.target.value); setInvalid(false); }} onBlur={() => commit(draft)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commit(draft); } }} />
-        <Button size="sm" variant="ghost" disabled={accent === null && draft === DEFAULT_ACCENT} onClick={coral}>{a.coral}</Button>
-      </div>
-      <div className="accent-sample" aria-hidden="true">
-        <Button size="sm" variant="primary" tabIndex={-1}>{a.sample}</Button><span className="side-count">3</span>
-        <ResidentMascot size={28} theme={theme} paused={ctx.paused || reduced} /><span className="set-hint">{a.sampleHint}</span>
-      </div>
+      {describedBy => <>
+        <div className="accent-row">
+          <input ref={picker} type="color" aria-label={a.picker} value={parseAccent(draft) ?? accent ?? DEFAULT_ACCENT} onChange={e => { setDraft(e.target.value); setInvalid(false); }} />
+          <input className="mono set-input hex" aria-label={a.hex} aria-describedby={describedBy} value={draft} maxLength={7} spellCheck={false} aria-invalid={invalid || undefined}
+            onChange={e => { setDraft(e.target.value); setInvalid(false); }} onBlur={() => commit(draft)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commit(draft); } }} />
+          <Button size="sm" variant="ghost" disabled={accent === null && draft === DEFAULT_ACCENT} onClick={coral}>{a.coral}</Button>
+        </div>
+        <div className="accent-sample" aria-hidden="true">
+          <Button size="sm" variant="primary" tabIndex={-1}>{a.sample}</Button><span className="side-count">3</span>
+          <ResidentMascot size={28} theme={theme} paused={ctx.paused || reduced} /><span className="set-hint">{a.sampleHint}</span>
+        </div>
+      </>}
     </Row>
   );
 }

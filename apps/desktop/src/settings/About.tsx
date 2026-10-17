@@ -79,20 +79,23 @@ export function About({ ctx }: { ctx: SettingsContext }): JSX.Element {
             {local.manual && <code>{local.manual}</code>}
           </div>
         )}
-        {journal.length > 0 && (
-          <ol className="set-well steps update-log" aria-label={c.log}>
-            {journal.map((step, i) => {
-              const command = step.kind === 'failed' ? step.command ?? (step.reason === 'timeout' ? c.timeoutCommand : null) : null;
-              return (
-                <li key={i} className={step.kind === 'failed' ? 'set-error' : undefined}>
-                  {stepText(step)}
-                  {command && <code>{command}</code>}
-                  {step.kind === 'failed' && step.detail && <small>{step.detail}</small>}
-                </li>
-              );
-            })}
-          </ol>
-        )}
+        {/* A polite live region, there before the first step: each step that comes is read out. */}
+        <div className="update-live" aria-live="polite">
+          {journal.length > 0 && (
+            <ol className="set-well steps update-log" aria-label={c.log}>
+              {journal.map((step, i) => {
+                const command = step.kind === 'failed' ? step.command ?? (step.reason === 'timeout' ? c.timeoutCommand : null) : null;
+                return (
+                  <li key={i} className={step.kind === 'failed' ? 'set-error' : undefined}>
+                    {stepText(step)}
+                    {command && <code>{command}</code>}
+                    {step.kind === 'failed' && step.detail && <small>{step.detail}</small>}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
       </Card>
       <UpdatesCard saved={ctx.saved} />
     </>

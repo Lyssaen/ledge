@@ -73,6 +73,17 @@ describe('Settings › About', () => {
     expect(screen.getByRole('button', { name: 'Update' })).toBeDisabled();
   });
 
+  it('the log sits in a polite live region, there before its first step, so each step is heard', async () => {
+    const { user } = await open(NPM_BEHIND);
+    const update = await screen.findByRole('button', { name: 'Update' });
+    const live = document.querySelector('[aria-live="polite"].update-live');
+    expect(live).not.toBeNull();
+    expect(live).toBeEmptyDOMElement();
+    await user.click(update);
+    await waitFor(() => expect(steps()).toEqual(['Request sent to the local daemon: 0.6.0']));
+    expect(live).toContainElement(log_());
+  });
+
   it('the log follows the daemon’s steps; a refusal shows with its command, and « Update » can be used again', async () => {
     const { d, user } = await open(NPM_BEHIND);
     await user.click(await screen.findByRole('button', { name: 'Update' }));

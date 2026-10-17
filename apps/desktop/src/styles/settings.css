@@ -172,7 +172,7 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 .version-list>div+div{border-top:1px solid var(--border)}
 .version-list dt{color:var(--muted-foreground)}
 .version-list dd{margin:0;display:flex;align-items:center;gap:6px}.version-list dd .set-hint,.version-list dd .set-tag{font-family:'Geist',system-ui,sans-serif}.version-list dd .set-tag.warn{margin-left:4px}
-.set-rows>.set-well{margin:0 0 14px}
+.set-rows>.set-well,.update-live>.set-well{margin:0 0 14px}
 .update-log code,.update-log small{display:block;width:max-content;max-width:100%;margin-top:4px}
 .update-log small{font-size:11px;color:var(--muted-foreground)}
 
