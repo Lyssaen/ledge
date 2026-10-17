@@ -1,7 +1,7 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
-import type { ProjectColor, ToolStatus } from '@ledge/protocol';
+import type { DaemonInfo, ProjectColor, ToolStatus, UpdateFailure } from '@ledge/protocol';
 import type { PlanDoc, ToolKind, Verb } from '../session/thread';
 import type { Change } from '../session/changes';
 import type { TodoStatus } from '../session/todos';
@@ -155,9 +155,55 @@ export const fr = {
       edited: (label: string) => `${label} modifiée`,
       removed: (label: string) => `${label} retirée`,
       confirm: { before: 'Retirer ', after: ' ? Ses sessions disparaissent de la liste, dans l’île comme ici. Rien n’est arrêté ni supprimé sur le serveur.' }
+    },
+    projects: {
+      title: 'Projets',
+      note: 'Un projet regroupe des dépôts de travail, sur une ou plusieurs machines, et leurs conversations. Sa table apparaît dans l’atelier dès qu’un agent y travaille.',
+      noRepo: 'Aucun dépôt', edit: 'Modifier', editLabel: (n: string) => `Modifier ${n}`, delete: 'Supprimer', deleteLabel: (n: string) => `Supprimer ${n}`,
+      add: 'Nouveau projet',
+      rules: 'Dossiers mémorisés',
+      rulesNote: 'Quand vous rangez un agent sans projet à une table, Ledge retient son dossier : les prochaines sessions qui y démarrent rejoignent le même projet.',
+      rule: (path: string, machine: string) => `${path} sur ${machine}`,
+      target: (path: string) => `Projet pour ${path}`,
+      forget: 'Oublier', forgetLabel: (path: string) => `Oublier ${path}`,
+      empty: 'Aucun dossier mémorisé. Ranger un agent en ajoute un.',
+      repointed: (path: string, project: string) => `${path} → ${project}`, forgotten: (path: string) => `${path} oublié`,
+      refused: {
+        offline: 'Le daemon local est hors ligne : rien n’a changé.', outdated: 'Le daemon local est trop ancien pour les projets : mettez-le à jour.',
+        invalid: 'Le daemon a refusé ce changement. Rien n’a changé.', timeout: 'Le daemon n’a pas confirmé ce changement.'
+      } as Record<'offline' | 'outdated' | 'invalid' | 'timeout', string>
+    },
+    shortcuts: {
+      title: 'Dans Ledge Desktop',
+      note: 'Y et N n’agissent que sur la demande épinglée de la session ouverte, jamais pendant la saisie.'
+    },
+    about: {
+      tagline: 'Une nouvelle façon de travailler avec vos agents. L’île et Ledge Desktop, une seule application.',
+      versions: 'Versions', app: 'Ledge Desktop', daemon: (label: string) => `Daemon · ${label}`,
+      install: { npm: 'npm', git: 'clone git', unknown: 'installation inconnue' } as Record<DaemonInfo['install'], string>,
+      unknown: 'Version inconnue', behindTag: 'À mettre à jour', latest: 'Dernière version', latestUnknown: 'Pas encore vérifiée',
+      behind: (names: readonly string[]) => `${new Intl.ListFormat('fr', { type: 'conjunction' }).format(names)} ${plural(names.length, 'n’a', 'n’ont')} pas la dernière version.`,
+      updateDaemon: 'Mettre à jour le daemon', updateDaemonHint: (v: string) => `Le daemon local passe à Ledge ${v}, puis redémarre.`, update: 'Mettre à jour',
+      log: 'Journal du daemon',
+      step: {
+        sent: (v: string) => `Demande envoyée au daemon local : ${v}`,
+        installing: 'Installation de la nouvelle version…',
+        restarting: 'Redémarrage du daemon…',
+        done: (v: string) => `Daemon à jour : ${v}`
+      },
+      failed: {
+        'git-install': 'Votre daemon tourne depuis un clone git : mettez-le à jour vous-même.',
+        'no-systemd': 'Le daemon ne tourne pas comme service : il ne peut pas se relancer seul.',
+        'sessions-at-risk': 'Vos sessions tournent dans le service du daemon : un redémarrage les fermerait. Fermez-les, ou redémarrez WSL, puis réessayez.',
+        'npm-failed': 'Le daemon n’a pas pu se mettre à jour. Rien n’a changé.',
+        busy: 'Une mise à jour est déjà en cours.',
+        offline: 'Le daemon local n’est pas connecté : rien n’a été envoyé.',
+        timeout: 'Le daemon ne répond plus.'
+      } as Record<UpdateFailure | 'offline' | 'timeout', string>,
+      timeoutCommand: 'systemctl --user status ledge-daemon',
+      manualUnknown: 'Ledge ne sait pas comment votre daemon a été installé : mettez-le à jour vous-même.'
     }
   },
-  pending: 'Cet écran arrive bientôt.',
   chunkFailed: 'Cette partie de Ledge n’a pas pu se charger. Relancez l’application.',
   close: 'Fermer',
   modalTitles: { launch: 'Nouvelle session' },

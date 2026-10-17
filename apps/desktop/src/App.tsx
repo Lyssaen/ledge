@@ -176,7 +176,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // What the Settings page's sections receive; « Setting saved · … » goes through the app's toast, once per accepted change
   // (in the language just chosen, for the language itself: the render that speaks it has not happened yet).
   const settings: SettingsContext = {
-    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, machines, projects, projectIdOf, sessions, dispatch, alerts, daemonUpdate,
+    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, projectIdOf, sessions, dispatch, alerts, daemonUpdate,
     lang, setLang, paused: nav.paused
   };
 
@@ -209,7 +209,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         </Modal>
       )}
       {nav.modal?.kind === 'project' && (
-        <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}`} edit={nav.modal.edit} file={nav.modal.file} projects={projects} sessions={sessions} machines={machines}
+        <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}|${nav.modal.delete ? 'delete' : ''}`} edit={nav.modal.edit} file={nav.modal.file} startDeleting={nav.modal.delete} projects={projects} sessions={sessions} machines={machines}
           client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}
       <Toast notice={notice} />

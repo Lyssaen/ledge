@@ -6,7 +6,7 @@ import userEvent, { type UserEvent } from '@testing-library/user-event';
 import WebSocket from 'ws';
 import { createElement, type ComponentType } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
-import type { Machines, Projects, RepoInfo, Session, ThreadItem } from '@ledge/protocol';
+import type { DaemonInfo, Machines, Projects, RepoInfo, Session, ThreadItem } from '@ledge/protocol';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
@@ -109,11 +109,12 @@ export async function closeDaemons(): Promise<void> {
   for (const d of daemons.splice(0)) await d.close();
 }
 
-/** Mounts the app on a mock daemon (machines Local and Dev SSH unless `machines` says otherwise; `repoInfo`: what `repos.inspect` answers).
+/** Mounts the app on a mock daemon (machines Local and Dev SSH unless `machines` says otherwise; `repoInfo`: what `repos.inspect` answers;
+ *  `daemon`: what the local daemon's snapshot says of itself, its version and install).
  *  `list` writes `desktop.overview` on the List before rendering.
  *  Ready once the Atelier counter shows the active sessions, the last project's row is in the sidebar and, with sessions,
  *  the first one is shown (its seat in the atelier, its row in the List). */
-export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false, machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }], repoInfo }: { sessions?: Session[]; projects?: Projects; list?: boolean; machines?: Machines; repoInfo?: ReadonlyMap<string, RepoInfo> } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
+export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false, machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }], repoInfo, daemon }: { sessions?: Session[]; projects?: Projects; list?: boolean; machines?: Machines; repoInfo?: ReadonlyMap<string, RepoInfo>; daemon?: DaemonInfo } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
   // The session page's, the New session form's, the project editor's and the Settings page's own chunks are there before a test opens them: they come in the same render, as once preloaded in the app.
   await loadWorkspace();
   await loadComposer();
@@ -123,6 +124,7 @@ export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, l
   d.machines(machines);
   d.projects(projects);
   for (const [path, info] of repoInfo ?? []) d.repoInfo.set(path, info);
+  if (daemon) d.extras.daemon = daemon;
   for (const s of sessions) d.upsert(s);
   if (list) localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false }));
   const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });

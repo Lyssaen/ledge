@@ -142,9 +142,55 @@ export const en: Messages = {
       edited: (label) => `${label} edited`,
       removed: (label) => `${label} removed`,
       confirm: { before: 'Remove ', after: '? Its sessions leave the list, in the island as here. Nothing is stopped or deleted on the server.' }
+    },
+    projects: {
+      title: 'Projects',
+      note: 'A project groups working repositories, on one or more machines, and their conversations. Its table shows in the atelier as soon as an agent works there.',
+      noRepo: 'No repository', edit: 'Edit', editLabel: (n) => `Edit ${n}`, delete: 'Delete', deleteLabel: (n) => `Delete ${n}`,
+      add: 'New project',
+      rules: 'Remembered folders',
+      rulesNote: 'When you file an agent without a project at a table, Ledge remembers its folder: the next sessions that start there join the same project.',
+      rule: (path, machine) => `${path} on ${machine}`,
+      target: (path) => `Project for ${path}`,
+      forget: 'Forget', forgetLabel: (path) => `Forget ${path}`,
+      empty: 'No remembered folder. Filing an agent adds one.',
+      repointed: (path, project) => `${path} → ${project}`, forgotten: (path) => `${path} forgotten`,
+      refused: {
+        offline: 'The local daemon is offline: nothing changed.', outdated: 'The local daemon is too old for projects: update it.',
+        invalid: 'The daemon refused this change. Nothing changed.', timeout: 'The daemon did not confirm this change.'
+      }
+    },
+    shortcuts: {
+      title: 'In Ledge Desktop',
+      note: 'Y and N act only on the pinned request of the open session, never while typing.'
+    },
+    about: {
+      tagline: 'A new way of working with your agents. The island and Ledge Desktop, one application.',
+      versions: 'Versions', app: 'Ledge Desktop', daemon: (label) => `Daemon · ${label}`,
+      install: { npm: 'npm', git: 'git clone', unknown: 'unknown install' },
+      unknown: 'Unknown version', behindTag: 'Update needed', latest: 'Latest version', latestUnknown: 'Not checked yet',
+      behind: (names) => `${new Intl.ListFormat('en', { type: 'conjunction' }).format(names)} ${pluralEn(names.length, 'does', 'do')} not have the latest version.`,
+      updateDaemon: 'Update the daemon', updateDaemonHint: (v) => `The local daemon moves to Ledge ${v}, then restarts.`, update: 'Update',
+      log: 'Daemon log',
+      step: {
+        sent: (v) => `Request sent to the local daemon: ${v}`,
+        installing: 'Installing the new version…',
+        restarting: 'Restarting the daemon…',
+        done: (v) => `Daemon up to date: ${v}`
+      },
+      failed: {
+        'git-install': 'Your daemon runs from a git clone: update it yourself.',
+        'no-systemd': 'The daemon does not run as a service: it cannot restart itself.',
+        'sessions-at-risk': 'Your sessions run inside the daemon service: a restart would close them. Close them, or restart WSL, then retry.',
+        'npm-failed': 'The daemon could not update. Nothing changed.',
+        busy: 'An update is already running.',
+        offline: 'The local daemon is not connected: nothing was sent.',
+        timeout: 'The daemon is not answering.'
+      },
+      timeoutCommand: 'systemctl --user status ledge-daemon',
+      manualUnknown: 'Ledge cannot tell how your daemon was installed: update it yourself.'
     }
   },
-  pending: 'This screen is coming soon.',
   chunkFailed: 'This part of Ledge could not load. Restart the app.',
   close: 'Close',
   modalTitles: { launch: 'New session' },

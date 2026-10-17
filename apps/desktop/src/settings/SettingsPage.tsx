@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, type JSX } from 'react';
-import type { Fleet, MachineState } from '@ledge/fleet';
-import type { Projects, Session } from '@ledge/protocol';
+import type { DaemonClient, Fleet, MachineState } from '@ledge/fleet';
+import type { Projects as ProjectsState, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -14,17 +14,21 @@ import { Appearance } from './Appearance';
 import { Notifications } from './Notifications';
 import { Sounds } from './Sounds';
 import { Machines } from './Machines';
+import { Projects } from './Projects';
+import { Shortcuts } from './Shortcuts';
+import { About } from './About';
 
 /** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,
- *  in `lang` when given), the fleet and its machines, the projects, the sessions, navigation, the alerts (the Sounds' Test), the
+ *  in `lang` when given), the fleet, its client (what a machine says of its folders) and its machines, the projects, the sessions, navigation, the alerts (the Sounds' Test), the
  *  local daemon's update, the language and how to change it (its strings load first: 'failed' leaves the language as it is),
  *  and whether the animations are frozen. */
 export interface SettingsContext {
   notify(text: string): void;
   saved(what: string, lang?: Lang): void;
   fleet: Fleet;
+  client: DaemonClient;
   machines: readonly MachineState[];
-  projects: Projects | null;
+  projects: ProjectsState | null;
   projectIdOf(s: Session): string | null;
   sessions: readonly Session[];
   dispatch(a: NavAction): void;
@@ -47,15 +51,16 @@ const SECTION_ICONS: Record<SectionId, readonly string[]> = {
   about: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 16v-4', 'M12 8h.01']
 };
 
-/** A section's cards. Each one not built yet waits for its task of lot 10 (5), which replaces its placeholder. */
+/** A section's cards. */
 function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
-  const { t } = useI18n();
   if (section === 'general') return <General ctx={ctx} />;
   if (section === 'appearance') return <Appearance ctx={ctx} />;
   if (section === 'notifications') return <Notifications ctx={ctx} />;
   if (section === 'sounds') return <Sounds ctx={ctx} />;
   if (section === 'machines') return <Machines ctx={ctx} />;
-  return <p className="muted">{t.pending}</p>;
+  if (section === 'projects') return <Projects ctx={ctx} />;
+  if (section === 'shortcuts') return <Shortcuts />;
+  return <About ctx={ctx} />;
 }
 
 /** The mockup's Settings page: the sections on the left (« Back to the atelier » first, as Escape; a dot on Machines while a

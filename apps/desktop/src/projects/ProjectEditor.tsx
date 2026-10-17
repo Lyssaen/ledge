@@ -61,12 +61,13 @@ export function ProjectEditor(p: {
   const [known, setKnown] = useState<ReadonlyMap<string, Known>>(() => new Map());
   const { state, confirming, send, reset } = useProjectSave(p.fleet, projects);
   const nameRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { nameRef.current?.focus(); }, []);
   // Deleting: where its agents go (null: « Sans projet »). Entering the view focuses that choice; leaving it, « Supprimer le projet ».
   const [moveTo, setMoveTo] = useState<string | null>(null);
   const moveRef = useRef<HTMLInputElement>(null);
   const deleteRef = useRef<HTMLButtonElement>(null);
   const entered = useRef(p.deleting);
+  // Opening: the name, or where its agents go when the dialog opens on the deletion view.
+  useEffect(() => { (entered.current ? moveRef : nameRef).current?.focus(); }, []);
   useEffect(() => {
     if (entered.current === p.deleting) return;
     entered.current = p.deleting;

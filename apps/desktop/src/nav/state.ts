@@ -14,7 +14,8 @@ export type Place =
 export type Modal =
   | { kind: 'search' } | { kind: 'shortcuts' }
   | { kind: 'launch'; project?: string }               // project : la table ou le projet d'où on l'a demandée (lot 7)
-  | { kind: 'project'; edit?: string; file?: string }  // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8)
+  // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8) ; delete : ouvert sur sa vue de suppression (Réglages › Projets, lot 10)
+  | { kind: 'project'; edit?: string; file?: string; delete?: true }
   | null;
 /** chatFocus: bumped each time the chat is asked for (/, an open button), even already open: its field takes the focus again. */
 export interface NavState { place: Place; modal: Modal; chat: boolean; chatFocus: number; fullscreen: boolean; helpers: boolean; paused: boolean }

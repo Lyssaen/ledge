@@ -78,4 +78,17 @@ describe('the Settings page', () => {
     await waitFor(() => expect(within(tab('Machines')).getByRole('img', { name: 'A machine is offline' })).toHaveClass('side-alert'));
     expect(tab('About').querySelector('.side-alert')).toBeNull();
   });
+
+  it('Keyboard shortcuts: the app’s table under « In Ledge Desktop », Ctrl , first; no Windows-wide card', async () => {
+    const { user } = await boot({ projects: TWO_PROJECTS });
+    await user.keyboard('{Control>},{/Control}');
+    await user.click(tab('Keyboard shortcuts'));
+    const card = within(screen.getByRole('region', { name: 'In Ledge Desktop' }));
+    const rows = [...document.querySelectorAll('.set-card .set-row')].map(r => [r.querySelector('.set-label')!.textContent, r.querySelector('kbd')!.textContent]);
+    expect(rows[0]).toEqual(['Open the settings', 'Ctrl ,']);
+    expect(rows[1]).toEqual(['Search and open a session', 'Ctrl / ⌘ K']);
+    expect(rows).toHaveLength(20);
+    expect(card.getByText('Show these shortcuts')).toBeVisible();
+    expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['In Ledge Desktop']);
+  });
 });
