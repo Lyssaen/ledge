@@ -24,12 +24,14 @@ export function newDraft(state: Projects, from?: Session): ProjectDraft {
   };
 }
 
-export type DraftProblem = { code: 'name_empty' } | { code: 'name_taken' } | { code: 'repo_duplicate'; index: number } | { code: 'gone' };
+/** `repo_taken`: a repository that another project (`project`, its id) already has: a repository belongs to one project only
+ *  (`projectOf` needs a single answer, and the daemon refuses `duplicate_repo` across projects). */
+export type DraftProblem = { code: 'name_empty' } | { code: 'name_taken' } | { code: 'repo_duplicate'; index: number } | { code: 'repo_taken'; index: number; project: string } | { code: 'gone' };
 
 // projectsProblems ignores case only; the editor ignores accents too.
 const key = (name: string) => name.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLocaleLowerCase();
 
-/** The first problem that prevents saving: gone, name_empty, name_taken, repo_duplicate. */
+/** The first problem that prevents saving: gone, name_empty, name_taken, repo_duplicate, repo_taken. */
 export function draftProblem(d: ProjectDraft, state: Projects): DraftProblem | null {
   if (d.id !== undefined && !state.projects.some(p => p.id === d.id)) return { code: 'gone' };
   const name = key(d.name);
@@ -40,6 +42,10 @@ export function draftProblem(d: ProjectDraft, state: Projects): DraftProblem | n
     const k = `${r.machine}\n${normalizePath(r.path)}`;
     if (seen.has(k)) return { code: 'repo_duplicate', index };
     seen.add(k);
+  }
+  for (const [index, r] of d.repos.entries()) {
+    const owner = alsoIn(r, d, state);
+    if (owner) return { code: 'repo_taken', index, project: owner.id };
   }
   return null;
 }

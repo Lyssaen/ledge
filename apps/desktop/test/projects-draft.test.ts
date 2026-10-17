@@ -42,6 +42,13 @@ describe('project draft', () => {
     expect(draftProblem({ ...newDraft(state), name: 'X', repos: [r('local', '/a'), r('local', '/a')] }, state)).toEqual({ code: 'repo_duplicate', index: 1 });
     expect(draftProblem({ ...newDraft(state), name: 'X', repos: [r('local', '/a'), r('lab', '/a')] }, state)).toBeNull();
   });
+  it('a repo another project owns is taken (paths normalized, per machine), after a duplicate; the draft\'s own repos are not', () => {
+    expect(draftProblem({ ...newDraft(state), name: 'X', repos: [r('local', '/a'), r('local', '/w/shared/')] }, state)).toEqual({ code: 'repo_taken', index: 1, project: 'other' });
+    expect(draftProblem({ ...draftOf(ledge), repos: [r('local', '/w/ledge'), r('local', '/w/shared')] }, state)).toEqual({ code: 'repo_taken', index: 1, project: 'other' });
+    expect(draftProblem({ ...newDraft(state), name: 'X', repos: [r('lab', '/w/shared')] }, state)).toBeNull();
+    expect(draftProblem({ ...draftOf(ledge), repos: [r('local', '/w/ledge')] }, state)).toBeNull();
+    expect(draftProblem({ ...newDraft(state), name: 'X', repos: [r('local', '/w/shared'), r('local', '/a'), r('local', '/a')] }, state)).toEqual({ code: 'repo_duplicate', index: 2 });
+  });
   it('alsoIn names another project owning the repo, never the draft’s own', () => {
     expect(alsoIn(r('local', '/w/shared'), draftOf(ledge), state)).toBe(other);
     expect(alsoIn(r('local', '/w/ledge'), draftOf(ledge), state)).toBeUndefined();

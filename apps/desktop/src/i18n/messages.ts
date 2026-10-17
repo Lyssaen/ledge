@@ -2,7 +2,6 @@ import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
 import type { ProjectColor, ToolStatus } from '@ledge/protocol';
-import type { DraftProblem } from '../projects/draft';
 import type { PlanDoc, ToolKind, Verb } from '../session/thread';
 import type { Change } from '../session/changes';
 import type { TodoStatus } from '../session/todos';
@@ -270,11 +269,12 @@ const fr = {
     name: 'Nom', namePlaceholder: 'Ex. Paper Rendering', color: 'Couleur',
     colors: { blue: 'Bleu', green: 'Vert', amber: 'Ambre', violet: 'Violet', teal: 'Sarcelle', pink: 'Rose', red: 'Rouge', slate: 'Ardoise' } as Record<ProjectColor, string>,
     description: 'Description', optional: 'facultatif', descriptionPlaceholder: 'Une phrase qui dit à quoi sert le projet',
-    repos: (n: number) => `Dépôts de travail · ${n}`, branchTitle: 'Branche par défaut détectée', noGit: 'Dossier sans Git', alsoIn: (p: string) => `Aussi dans ${p}`,
+    repos: (n: number) => `Dépôts de travail · ${n}`, branchTitle: 'Branche par défaut détectée', noGit: 'Dossier sans Git',
     notFound: 'introuvable', offline: 'hors ligne', remove: (n: string, m: string) => `Retirer ${n} (${m})`, addRepo: 'Ajouter un dépôt',
     empty: 'Aucun dépôt pour l’instant. Le projet peut exister sans, mais Ledge ne saura pas y ranger les sessions.',
     fileToo: 'Ranger aussi',
-    problems: { name_empty: 'Donnez un nom au projet', name_taken: 'Ce nom est déjà utilisé par un autre projet', repo_duplicate: 'Ce dépôt est en double', gone: 'Ce projet a été supprimé entre-temps' } as Record<DraftProblem['code'], string>,
+    problems: { name_empty: 'Donnez un nom au projet', name_taken: 'Ce nom est déjà utilisé par un autre projet', repo_duplicate: 'Ce dépôt est en double', gone: 'Ce projet a été supprimé entre-temps',
+      repo_taken: (p: string) => `Ce dépôt est déjà dans ${p}` },
     refused: {
       offline: 'Le daemon local est hors ligne : rien n’a été enregistré.', outdated: 'Le daemon local est trop ancien pour les projets : mettez-le à jour.',
       invalid: 'Le daemon a refusé ce projet.', timeout: 'Le daemon n’a pas confirmé l’enregistrement.'
@@ -552,11 +552,12 @@ const en: typeof fr = {
     name: 'Name', namePlaceholder: 'E.g. Paper Rendering', color: 'Colour',
     colors: { blue: 'Blue', green: 'Green', amber: 'Amber', violet: 'Violet', teal: 'Teal', pink: 'Pink', red: 'Red', slate: 'Slate' },
     description: 'Description', optional: 'optional', descriptionPlaceholder: 'One sentence on what the project is for',
-    repos: (n) => `Working repositories · ${n}`, branchTitle: 'Default branch detected', noGit: 'Folder without Git', alsoIn: (p) => `Also in ${p}`,
+    repos: (n) => `Working repositories · ${n}`, branchTitle: 'Default branch detected', noGit: 'Folder without Git',
     notFound: 'not found', offline: 'offline', remove: (n, m) => `Remove ${n} (${m})`, addRepo: 'Add a repository',
     empty: 'No repository yet. The project can exist without one, but Ledge will not be able to file sessions in it.',
     fileToo: 'Also file',
-    problems: { name_empty: 'Give the project a name', name_taken: 'This name is already used by another project', repo_duplicate: 'This repository is listed twice', gone: 'This project was deleted meanwhile' },
+    problems: { name_empty: 'Give the project a name', name_taken: 'This name is already used by another project', repo_duplicate: 'This repository is listed twice', gone: 'This project was deleted meanwhile',
+      repo_taken: (p) => `This repository is already in ${p}` },
     refused: {
       offline: 'The local daemon is offline: nothing was saved.', outdated: 'The local daemon is too old for projects: update it.',
       invalid: 'The daemon refused this project.', timeout: 'The daemon did not confirm the save.'

@@ -82,6 +82,9 @@ export function ProjectEditor(p: {
 
   const problem = draftProblem(d, projects);
   const nameProblem = problem && (problem.code === 'name_empty' || problem.code === 'name_taken') ? c.problems[problem.code] : null;
+  const problemText = !problem ? null
+    : problem.code === 'repo_taken' ? c.problems.repo_taken(projects.projects.find(x => x.id === problem.project)?.name ?? problem.project)
+    : c.problems[problem.code];
   const saving = state.status === 'saving';
   const save = () => {
     setTried(true);
@@ -153,7 +156,8 @@ export function ProjectEditor(p: {
                           : <span className="pe-branch">{c.noGit}</span>}
                       </span>
                       <code className="mono">{r.path}</code>
-                      {owner && <small className="set-warn">{c.alsoIn(owner.name)}</small>}
+                      {/* A repository belongs to one project only: said before saving, and nothing is sent while it stands. */}
+                      {owner && <small className="set-error">{c.problems.repo_taken(owner.name)}</small>}
                     </span>
                     <Button size="icon" variant="ghost" aria-label={c.remove(baseName(r.path), label)} onClick={() => setD(x => ({ ...x, repos: x.repos.filter((_, j) => j !== i) }))}>
                       <Icon d={ICONS.close.d} size={14} />
@@ -190,7 +194,7 @@ export function ProjectEditor(p: {
             <small>{c.preview(d.repos.length, machinesShown)}{p.mode === 'new' ? c.firstSession : ''}</small>
           </span>
         </span>
-        {tried && problem ? <span className="composer-missing" role={nameProblem ? undefined : 'alert'}>{c.problems[problem.code]}</span>
+        {tried && problemText ? <span className="composer-missing" role={nameProblem ? undefined : 'alert'}>{problemText}</span>
           : state.status === 'refused' ? <p className="composer-missing" role="alert">{c.refused[state.reason]}</p> : null}
         <Button variant="ghost" onClick={p.onClose}>{c.cancel}</Button>
         <Button variant="primary" type="submit" aria-disabled={!!problem || saving}>

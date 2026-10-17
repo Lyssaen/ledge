@@ -192,19 +192,35 @@ describe('the project editor: editing a project', () => {
     expect(setsOf(d)[0]!.projects.projects[0]!.repos).toEqual([{ machine: 'local', path: '/w/ledge' }, { machine: 'local', path: '/w/notes' }, { machine: 'dev', path: '/srv/ledge' }]);
   });
 
-  it('a repository another project has shows « Also in »; the protocol refuses it on save: the editor says so, nothing is sent, the values stay', async () => {
+  it('a repository another project has: its row says so as an error, Save names the problem, nothing is sent, the values stay', async () => {
     const { d, user, dialog } = await editLedge();
     await user.click(dialog.getByRole('button', { name: 'Add a repository' }));
     await user.type(dialog.getByRole('textbox', { name: 'Path on Local' }), '/w/docs{Enter}');
     const docs = (await dialog.findByRole('button', { name: 'Remove docs (Local)' })).closest('li')!;
-    expect(within(docs).getByText('Also in Docs')).toHaveClass('set-warn');
+    expect(within(docs).getByText('This repository is already in Docs')).toHaveClass('set-error');
     expect(within(docs).getByText('Folder without Git')).toBeVisible();
     expect(dialog.getByText('Working repositories · 5')).toBeVisible();
     await user.click(dialog.getByRole('button', { name: /^Save/ }));
     const alert = dialog.getByRole('alert');
-    expect(alert).toHaveTextContent('The daemon refused this project.');
+    expect(alert).toHaveTextContent('This repository is already in Docs');
     expect(alert).toHaveClass('composer-missing');
     expect(dialog.getByRole('button', { name: 'Remove docs (Local)' })).toBeVisible();
+    await tick();
+    expect(setsOf(d)).toEqual([]);
+    // Removing it lifts the problem: Save goes through.
+    await user.click(dialog.getByRole('button', { name: 'Remove docs (Local)' }));
+    await user.click(dialog.getByRole('button', { name: /^Save/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(setsOf(d)).toHaveLength(1);
+  });
+
+  it('a new project from the browser: a folder Docs has shows the problem; Create sends nothing', async () => {
+    const { d, user, dialog, name } = await openNew({ projects: { ...PROJECTS, projects: PROJECTS.projects.map(p => (p.id === 'docs' ? { ...p, repos: [{ machine: 'local', path: '/home/me/paper' }] } : p)) } });
+    await user.type(name, 'Paper Rendering');
+    await user.click(await dialog.findByRole('button', { name: 'Add paper (Local)' }));
+    expect(within(dialog.getByRole('button', { name: 'Remove paper (Local)' }).closest('li')!).getByText('This repository is already in Docs')).toHaveClass('set-error');
+    await user.click(dialog.getByRole('button', { name: /^Create the project/ }));
+    expect(dialog.getByRole('alert')).toHaveTextContent('This repository is already in Docs');
     await tick();
     expect(setsOf(d)).toEqual([]);
   });
