@@ -13,7 +13,8 @@ function runGit(cwd: string, args: string[]): Promise<string | null> {
   });
 }
 
-/** For each path (`~` resolved): whether it is a folder and its Git branch (the short commit when HEAD is detached; null when not a repository). */
+/** For each path, echoed as asked (`~`, `..`, a trailing `/` are resolved only to look and to run git: the front finds its answer by the path it sent):
+ *  whether it is a folder and its Git branch (the short commit when HEAD is detached; null when not a repository). */
 export async function inspectRepos(paths: readonly string[], opts: { home?: string; git?: (cwd: string, args: string[]) => Promise<string | null> } = {}): Promise<RepoInfo[]> {
   const home = opts.home ?? homedir();
   const git = opts.git ?? runGit;
@@ -27,9 +28,9 @@ export async function inspectRepos(paths: readonly string[], opts: { home?: stri
     const path = resolve(input === '~' ? home : input.startsWith('~/') ? resolve(home, input.slice(2)) : input);
     let isDir = false;
     try { isDir = (await stat(path)).isDirectory(); } catch { /* missing */ }
-    if (!isDir) return { path, exists: false, branch: null };
+    if (!isDir) return { path: raw, exists: false, branch: null };
     let branch = await bounded(path, ['rev-parse', '--abbrev-ref', 'HEAD']);
     if (branch === 'HEAD') branch = (await bounded(path, ['rev-parse', '--short=7', 'HEAD']))?.slice(0, 7) ?? null;
-    return { path, exists: true, branch };
+    return { path: raw, exists: true, branch };
   }));
 }

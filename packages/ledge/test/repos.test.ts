@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspectRepos } from '../src/daemon/repos.js';
@@ -7,11 +7,19 @@ import { inspectRepos } from '../src/daemon/repos.js';
 const dir = () => mkdtempSync(join(tmpdir(), 'ledge-repos-'));
 
 describe('inspectRepos', () => {
-  it('reports a missing path, and resolves ~ against the given home', async () => {
+  it('reports a missing path, and resolves ~ against the given home (the path answered is the one asked)', async () => {
     const home = dir(); const seen: string[] = [];
     const out = await inspectRepos(['~', join(home, 'nope')], { home, git: async cwd => { seen.push(cwd); return 'main'; } });
-    expect(out).toEqual([{ path: home, exists: true, branch: 'main' }, { path: join(home, 'nope'), exists: false, branch: null }]);
+    expect(out).toEqual([{ path: '~', exists: true, branch: 'main' }, { path: join(home, 'nope'), exists: false, branch: null }]);
     expect(seen).toEqual([home]);
+  });
+  it('echoes each path as asked (~/x, a trailing slash, ..): the front looks its answer up by the path it sent', async () => {
+    const home = dir(); mkdirSync(join(home, 'x')); const seen: string[] = [];
+    const asked = ['~/x', join(home, 'x') + '/', `${home}/x/../x`, '~/gone/'];
+    const out = await inspectRepos(asked, { home, git: async cwd => { seen.push(cwd); return 'main'; } });
+    expect(out.map(r => r.path)).toEqual(asked);
+    expect(out.map(r => r.exists)).toEqual([true, true, true, false]);
+    expect(seen).toEqual([join(home, 'x'), join(home, 'x'), join(home, 'x')]);
   });
   it('a detached HEAD gives the short commit', async () => {
     const d = dir();
