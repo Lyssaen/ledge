@@ -52,7 +52,7 @@ describe('the List keys', () => {
     await user.click(within(row('Otto')).getByRole('button', { name: 'Show 1 subagent' }));
     screen.getByRole('listitem', { name: /subagent of Otto/ }).focus();
     await user.keyboard('{Enter}');
-    expect(screen.getByRole('heading', { name: 'Lire le code' })).toBeVisible();
+    expect(document.querySelector('.session-page')).toHaveAttribute('data-helper', 'h1');
   });
   it('a wait keeps its start across a session round trip, though the pane refreshed the activity', async () => {
     const { d, user } = await boot({ sessions: listSessions(), list: true });

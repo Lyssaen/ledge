@@ -30,8 +30,13 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     preview(id: string, lines: string[]) { bc({ type: 'session.preview', id, lines }); },
     /** The thread `session.thread` returns for `id` (raw); an id without one gets no reply, so the page stays loading. */
     thread(id: string, items: ThreadItem[]) { threads.set(id, items); },
-    /** A live item: stored and broadcast as `session.thread.item`. */
-    threadItem(id: string, item: ThreadItem) { threads.set(id, [...(threads.get(id) ?? []).filter(i => i.id !== item.id), item]); bc({ type: 'session.thread.item', id, item }); },
+    /** A live item: stored and broadcast as `session.thread.item`; a re-sent id (a tool's result) replaces its row in place, as the daemon's store does. */
+    threadItem(id: string, item: ThreadItem) {
+      const cur = threads.get(id) ?? [];
+      const at = cur.findIndex(i => i.id === item.id);
+      threads.set(id, at >= 0 ? cur.map((i, k) => (k === at ? item : i)) : [...cur, item]);
+      bc({ type: 'session.thread.item', id, item });
+    },
     /** The daemon's machines list (spec 2026-10-14 §5.2), pushed to every client. */
     machines(list: Machines) { machinesList = list; bc({ type: 'machines', machines: list }); },
     /** The local daemon's projects (build spec §5), pushed to every client; a client's projects.set is stored and broadcast back. */

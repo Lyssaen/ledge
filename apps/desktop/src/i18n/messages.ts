@@ -1,6 +1,8 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
+import type { ToolStatus } from '@ledge/protocol';
+import type { ToolKind, Verb } from '../session/thread';
 
 /** French counts 0 and 1 as singular, English only 1. */
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -127,6 +129,32 @@ const fr = {
     replyFailed: (name: string, message: string) => `Réponse non transmise à ${name} : ${message}`,
     replyUnconfirmed: (name: string) => `Ledge n’a pas vu la réponse à ${name} aboutir. Vérifiez le fil.`
   },
+  session: {
+    meta: 'Machine et dépôts',
+    thread: {
+      label: 'Fil de la session',
+      you: 'Vous', fromParent: (n: string) => `Consigne de ${n}`,
+      exchange: (at: string) => `Échange de ${at}`, live: 'en cours',
+      actions: (n: number) => plural(n, `${n} action`, `${n} actions`),
+      kinds: {
+        read: (n: number) => plural(n, `${n} lecture`, `${n} lectures`), search: (n: number) => plural(n, `${n} recherche`, `${n} recherches`),
+        command: (n: number) => plural(n, `${n} commande`, `${n} commandes`), edit: (n: number) => plural(n, `${n} modification`, `${n} modifications`)
+      } as Record<ToolKind, (n: number) => string>,
+      files: (n: number) => plural(n, `· ${n} fichier modifié`, `· ${n} fichiers modifiés`),
+      failed: (n: number) => plural(n, `· ${n} échec`, `· ${n} échecs`),
+      cut: (n: number) => plural(n, `· ${n} interrompue`, `· ${n} interrompues`),
+      running: 'en cours · ', interrupted: 'interrompu', liveAction: 'Action en cours',
+      marks: { running: 'En cours', success: 'Réussi', failed: 'Échec', unknown: 'Interrompu' } as Record<ToolStatus, string>,
+      verbs: { create: 'Création', delete: 'Suppression', read: 'Lecture', search: 'Recherche', command: 'Commande', edit: 'Modification' } as Record<Verb, string>,
+      decided: { accept: 'Accordé', always: 'Toujours autorisé', deny: 'Refusé', unknown: 'Répondu dans le terminal' } as Record<'accept' | 'always' | 'deny' | 'unknown', string>,
+      helperLaunched: 'Sous-agent lancé', openHelper: (n: string, task: string) => `Ouvrir ${n} : ${task}`,
+      unread: 'Nouveau depuis votre dernière visite', latest: 'Aller au dernier message',
+      lost: (m: string) => `Connexion perdue avec ${m}`,
+      lostBody: 'Le fil est figé : ce qui suit est le dernier état connu, l’activité actuelle n’est pas connue.',
+      frozenEnd: (s: string) => `Plus aucune nouvelle depuis la perte de connexion · ${s}`, ended: (s: string) => `Session terminée · ${s}`,
+      loading: 'Chargement du fil…', empty: 'Rien dans le fil pour l’instant.', notLoaded: 'Le fil n’a pas été chargé avant la perte de connexion.'
+    }
+  },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
   botReadOnly: 'Lecture seule',
@@ -250,6 +278,32 @@ const en: typeof fr = {
     unconfirmed: (name) => `Ledge did not see the decision for ${name} land. Open the session to check.`,
     replyFailed: (name, message) => `Could not send the reply to ${name}: ${message}`,
     replyUnconfirmed: (name) => `Ledge did not see the reply to ${name} land. Check the thread.`
+  },
+  session: {
+    meta: 'Machine and repositories',
+    thread: {
+      label: 'Session thread',
+      you: 'You', fromParent: (n) => `Instruction from ${n}`,
+      exchange: (at) => `Exchange at ${at}`, live: 'running',
+      actions: (n) => pluralEn(n, '1 action', `${n} actions`),
+      kinds: {
+        read: (n) => pluralEn(n, `${n} read`, `${n} reads`), search: (n) => pluralEn(n, `${n} search`, `${n} searches`),
+        command: (n) => pluralEn(n, `${n} command`, `${n} commands`), edit: (n) => pluralEn(n, `${n} edit`, `${n} edits`)
+      },
+      files: (n) => pluralEn(n, '· 1 file changed', `· ${n} files changed`),
+      failed: (n) => `· ${n} failed`,
+      cut: (n) => `· ${n} interrupted`,
+      running: 'running · ', interrupted: 'interrupted', liveAction: 'Action running',
+      marks: { running: 'Running', success: 'Succeeded', failed: 'Failed', unknown: 'Interrupted' },
+      verbs: { create: 'Create', delete: 'Delete', read: 'Read', search: 'Search', command: 'Command', edit: 'Edit' },
+      decided: { accept: 'Allowed', always: 'Always allowed', deny: 'Denied', unknown: 'Answered in the terminal' },
+      helperLaunched: 'Subagent started', openHelper: (n, task) => `Open ${n}: ${task}`,
+      unread: 'New since your last visit', latest: 'Go to the latest message',
+      lost: (m) => `Connection lost with ${m}`,
+      lostBody: 'The thread is frozen: what follows is the last known state; what the agent is doing now is not known.',
+      frozenEnd: (s) => `No news since the connection was lost · ${s}`, ended: (s) => `Session ended · ${s}`,
+      loading: 'Loading the thread…', empty: 'Nothing in the thread yet.', notLoaded: 'The thread was not loaded before the connection was lost.'
+    }
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },

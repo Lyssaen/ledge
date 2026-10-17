@@ -15,7 +15,7 @@ import { useAppearance } from './shell/theme';
 import { initialNav, navReducer, reconcile, type NavAction, type NavState } from './nav/state';
 import { loadOverview, saveOverview } from './nav/overview';
 import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
-import { mainOrder, taskOf } from './nav/agents';
+import { mainOrder } from './nav/agents';
 import { useKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
@@ -29,12 +29,14 @@ import { ShortcutsHelp } from './shell/ShortcutsHelp';
 import { onFullscreenLeft, setWindowFullscreen } from './shell/fullscreen';
 import { Toast, useToast } from './shell/Toast';
 import { useFiling } from './atelier/filing';
+import { Workspace } from './session/Workspace';
+import { createSessionMemory, memoKey } from './session/memory';
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
 const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'reconcile' ? reconcile(s, a.sessions, a.projects) : navReducer(s, a));
 
-/** The Atelier's shell: sidebar, top bar, the current place (the atelier, the List; the other screens wait for their lot), footer, chat and dialogs;
+/** The Atelier's shell: sidebar, top bar, the current place (the atelier, the List, a session; the other screens wait for their lot), footer, chat and dialogs;
  *  the real fleet, toasts and sounds, and the tray. */
 function Shell({ client }: { client?: DaemonClient }) {
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = useFleet(client);
@@ -75,6 +77,8 @@ function Shell({ client }: { client?: DaemonClient }) {
   // Allow / Deny from the List (and, lot 6, the session): one send per request; a refusal or a silence is said in the toast.
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
+  // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
+  const memory = useRef(createSessionMemory()).current;
   useKeys(dispatch, { state: nav, order, screen: screenKeys });
   // The window may leave full screen by itself (Escape in a browser, the OS): the layout follows.
   useEffect(() => onFullscreenLeft(() => dispatch({ type: 'fullscreen', on: false })), []);
@@ -96,7 +100,7 @@ function Shell({ client }: { client?: DaemonClient }) {
         <section className="workspace">
           <TopBar nav={nav} dispatch={dispatch} session={session} projects={projects} projectIdOf={projectIdOf} />
           {place.kind === 'settings' ? <Pending title={t.sections[place.section]} />
-            : session ? <Pending title={place.kind === 'session' && place.helper !== undefined ? session.helpers.find(h => h.id === place.helper)?.task ?? taskOf(session) : taskOf(session)} />
+            : session && place.kind === 'session' ? <Workspace key={memoKey(place.id, place.helper)} client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} />
             : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
             : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} decisions={decisions} filing={filing} waits={waits} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} />}
