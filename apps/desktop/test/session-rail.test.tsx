@@ -31,6 +31,24 @@ describe('the agents rail, the subagent page, the terminal', () => {
     expect(banner().getByText('Bix')).toBeVisible();
   });
 
+  it('switching agent from the rail with Enter keeps the rail and the focus on its newly current row', async () => {
+    const { user } = await openOtto();
+    const nav = screen.getByRole('navigation', { name: 'Agents of the project Ledge' });
+    const list = nav.querySelector<HTMLElement>('.rail-list')!;
+    list.scrollTop = 40;
+    rail().getByRole('button', { name: /^Bix/ }).focus();
+    await user.keyboard('{Enter}');
+    expect(banner().getByText('Bix')).toBeVisible();
+    expect(screen.getByRole('navigation', { name: 'Agents of the project Ledge' })).toBe(nav);   // the same rail, not a new one
+    expect(nav.querySelector('.rail-list')!.scrollTop).toBe(40);
+    const bix = rail().getByRole('button', { name: /^Bix/ });
+    expect(bix).toHaveAttribute('aria-current', 'page');
+    expect(bix).toHaveFocus();
+    // Within the same agent: its subagent's page, then back, the rail stays too.
+    await user.click(within(rail().getByRole('group', { name: 'Subagents of Otto' })).getByRole('button', { name: /^Explore/ }));
+    expect(screen.getByRole('navigation', { name: 'Agents of the project Ledge' })).toBe(nav);
+  });
+
   it("a subagent's page: the parent in the breadcrumb, which opens it back", async () => {
     const { user } = await openOtto();
     await user.click(within(rail().getByRole('group', { name: 'Subagents of Otto' })).getByRole('button', { name: /^Explore/ }));

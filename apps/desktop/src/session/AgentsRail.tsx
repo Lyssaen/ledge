@@ -44,7 +44,8 @@ export function AgentsRail({ session, helper, order, projects, projectIdOf, nav,
     group.classList.remove('rail-flash');
     void group.offsetWidth;
     group.classList.add('rail-flash');
-  }, [flash, session.id]);
+    // Only a new flash plays it: the rail outlives the agent shown, and switching agent must not light the new one's group.
+  }, [flash]);
 
   const row = (key: string, s: Session, state: BotState, label: { name: string; task: string }, current: boolean, open: NavAction, bot: JSX.Element, child = false) => {
     const offline = !!s.offline;

@@ -31,6 +31,18 @@ describe('useThread', () => {
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent(String(ottoThread().length + 1)));
     expect(d.received.filter(m => m.type === 'session.thread')).toEqual([{ type: 'session.thread', id: 'otto' }]);
   });
+  it('the same hook given another session (the Workspace outlives the agent shown): asks for its thread, never shows the last one\'s', async () => {
+    const d = await createMockDaemon(); daemons.push(d);
+    d.upsert(fakeSession('otto')); d.upsert(fakeSession('nova')); d.thread('otto', ottoThread());
+    const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
+    const view = render(<Probe client={client} id="local:otto" />);
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent(String(ottoThread().length)));
+    view.rerender(<Probe client={client} id="local:nova" />);
+    expect(screen.getByTestId('count')).toHaveTextContent('loading');
+    await waitFor(() => expect(d.received.filter(m => m.type === 'session.thread')).toEqual([{ type: 'session.thread', id: 'otto' }, { type: 'session.thread', id: 'nova' }]));
+    view.rerender(<Probe client={client} id="local:otto" />);
+    expect(screen.getByTestId('count')).toHaveTextContent(String(ottoThread().length));
+  });
   it('an offline session asks nothing', async () => {
     const d = await createMockDaemon(); daemons.push(d);
     d.upsert(fakeSession('rio', { offline: true }));

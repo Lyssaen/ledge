@@ -3,6 +3,7 @@ import type { DaemonClient } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
 import { AgentsRail } from './AgentsRail';
 import type { SessionPrefs } from './prefs';
+import { memoKey } from './memory';
 import { SessionPage, type SessionPageProps } from './SessionPage';
 import { TerminalPane } from './TerminalPane';
 import { subagentOf } from './thread';
@@ -16,7 +17,8 @@ export interface WorkspaceProps extends Omit<SessionPageProps, 'items' | 'helper
 
 /** The session place (the mockup's conversation-workspace): the project's agents, the page, and the terminal when asked for (O).
  *  It asks for the thread and finds the subagent of the place: live in session.helpers, else its thread row; a subagent
- *  known by neither (its thread not there yet, or gone) still gets its page, named by what is known. */
+ *  known by neither (its thread not there yet, or gone) still gets its page, named by what is known. It lives as long as the
+ *  session place: switching agent changes its props (useThread follows the id) and mounts a new SessionPage only. */
 export function Workspace({ client, prefs, setPrefs, order, projects, projectIdOf, ...p }: WorkspaceProps): JSX.Element {
   const items = useThread(client, p.session);
   const id = p.nav.place.kind === 'session' ? p.nav.place.helper : undefined;
@@ -31,7 +33,8 @@ export function Workspace({ client, prefs, setPrefs, order, projects, projectIdO
   return (
     <div className={`conversation-workspace${prefs.terminal ? ' with-terminal' : ''}`}>
       <AgentsRail session={p.session} helper={helper} order={order} projects={projects} projectIdOf={projectIdOf} nav={p.nav} dispatch={p.dispatch} flash={flash} />
-      <SessionPage {...p} items={items} helper={helper} onShowKids={showKids} onTerminal={() => setPrefs(x => ({ ...x, terminal: !x.terminal }))} />
+      {/* Only the page starts over for each agent (its key): the rail and the terminal stay, with the focus and the scroll. */}
+      <SessionPage key={memoKey(p.session.id, helper?.id)} {...p} items={items} helper={helper} onShowKids={showKids} onTerminal={() => setPrefs(x => ({ ...x, terminal: !x.terminal }))} />
       {prefs.terminal && <TerminalPane client={client} session={p.session} notify={p.notify} />}
     </div>
   );

@@ -30,7 +30,7 @@ import { onFullscreenLeft, setWindowFullscreen } from './shell/fullscreen';
 import { Toast, useToast } from './shell/Toast';
 import { useFiling } from './atelier/filing';
 import { Workspace } from './session/Workspace';
-import { createSessionMemory, memoKey } from './session/memory';
+import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
 import { subagentOf } from './session/thread';
 import { useStored } from './state/useStored';
@@ -109,7 +109,7 @@ function Shell({ client }: { client?: DaemonClient }) {
         <section className="workspace">
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal} />
           {place.kind === 'settings' ? <Pending title={t.sections[place.section]} />
-            : session && place.kind === 'session' ? <Workspace key={memoKey(place.id, place.helper)} client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify}
+            : session && place.kind === 'session' ? <Workspace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} order={order} projects={projects} projectIdOf={projectIdOf} />
             : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
             : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} decisions={decisions} filing={filing} waits={waits} />}
