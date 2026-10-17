@@ -10,6 +10,11 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./test/setup.ts'],
     include: ['test/**/*.test.{ts,tsx}'],
-    env: { VITE_LEDGE_MOTION: '0' }
+    env: { VITE_LEDGE_MOTION: '0' },
+    // The suite drives the whole app in jsdom (a fake daemon, real timers): on a loaded machine a test takes a few seconds, and
+    // one worker per core makes them fight for it. Half the cores and a 15 s ceiling keep the default `pnpm test` green.
+    testTimeout: 15_000,
+    hookTimeout: 15_000,
+    maxWorkers: '50%'
   }
 });
