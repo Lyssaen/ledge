@@ -191,8 +191,9 @@ function Shell({ client }: { client?: DaemonClient }) {
   );
 }
 
-export function App({ client }: { client?: DaemonClient } = {}) {
-  const [lang] = useState<Lang>(loadLang);
+/** `lang` is the language the entry point's boot settled on (French when the stored one's strings did not load); else the stored one. */
+export function App({ client, lang: booted }: { client?: DaemonClient; lang?: Lang } = {}) {
+  const [lang] = useState<Lang>(() => booted ?? loadLang());
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
   useAppearance();
   return <LangProvider lang={lang}><MarkdownLinks.Provider value={openUrl}><Shell client={client} /></MarkdownLinks.Provider></LangProvider>;

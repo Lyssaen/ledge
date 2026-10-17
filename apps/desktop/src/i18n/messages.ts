@@ -27,7 +27,8 @@ export function messagesLoaded(lang: Lang): Messages | undefined {
 }
 
 /** What createI18n reads, always after the entry point's loads: a language not fetched yet stands in as French, the fallback
- *  loaded at start-up (so a missing load never blanks the window). */
+ *  loaded at start-up (so a missing load never blanks the window). Switching language (lot 10's Settings) must therefore
+ *  `await loadMessages(lang)` before it takes effect, otherwise French is served under the new language's name. */
 const table = (lang: Lang): Messages => {
   const m = loaded[lang] ?? loaded.fr;
   if (!m) throw new Error(`desktop: no strings loaded for « ${lang} » nor French; await loadMessages before rendering`);

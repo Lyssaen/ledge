@@ -49,6 +49,14 @@ describe('the shell on the real fleet', () => {
     expect(screen.getByText('Sessions locales et SSH')).toBeVisible();
     expect(screen.getByRole('complementary', { name: 'Barre latérale' })).toBeVisible();
   });
+
+  it('speaks the language the boot settled on, when its strings stood in for the stored one', async () => {
+    localStorage.setItem('desktop.lang', 'en');
+    const d = await daemon();
+    render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} lang="fr" />);
+    expect(screen.getByText('Sessions locales et SSH')).toBeVisible();
+    expect(document.documentElement.lang).toBe('fr');
+  });
 });
 
 describe('the bundle', () => {
