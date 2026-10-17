@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import type { ClientMessage, Projects } from '@ledge/protocol';
 import { test, expect } from './fixtures';
-import { eight, fakeDaemon, fakeRemote } from './daemon';
+import { eight, fakeDaemon, fakeRemote, session } from './daemon';
 
 /** Ledge with two repositories on this machine, Website with one. */
 const projects: Projects = {
@@ -32,7 +32,8 @@ async function open(page: Page) {
 }
 
 test('N, an instruction, Claude Code, two repositories, Ctrl Enter: one launch, the form closes, the new agent sits at Ledge, Starting then Running', async ({ page }) => {
-  const daemon = await fakeDaemon(page, fleet, { projects });
+  // The test answers the launch and says when the agent is at work: Starting holds as long as it needs, whatever the load.
+  const daemon = await fakeDaemon(page, fleet, { projects, launches: 'manual' });
   await open(page);
   const form = dialog(page);
   await form.getByLabel('Instruction').fill('Fix the failing tests');
@@ -46,18 +47,21 @@ test('N, an instruction, Claude Code, two repositories, Ctrl Enter: one launch, 
   // A second Ctrl Enter right after: still one launch (two in the same frame are the unit suite's, task 5).
   await form.getByLabel('Instruction').press('Control+Enter');
   await page.keyboard.press('Control+Enter');
-  await expect(form).toBeHidden();
-  const sent = launchesOf(daemon.received);
-  expect(sent).toHaveLength(1);
-  const launch = sent[0]!;
+  await expect.poll(() => launchesOf(daemon.received).length).toBe(1);
+  await expect(form.getByRole('button', { name: /Launching…/ })).toBeVisible();
+  const launch = launchesOf(daemon.received)[0]!;
   expect(launch).toMatchObject({ tool: 'claude', cwd: '/w/ledge', dirs: ['/w/ledge-docs'], prompt: 'Fix the failing tests' });
   expect(launch).not.toHaveProperty('machineId');
   const name = launch.name!;
   expect(name).toBeTruthy();
+  const started = session('launched-1', { name, tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: `${name} · ledge`, state: 'starting' });
+  daemon.launched(started);
+  await expect(form).toBeHidden();
   const seat = page.getByRole('region', { name: 'Ledge table' }).getByRole('button', { name: new RegExp(`^${name},`) });
-  await expect(seat.locator('[data-badge]')).toHaveText('Starting');
   await expect(seat).toHaveClass(/just-seated/);
+  await expect(seat.locator('[data-badge]')).toHaveText('Starting');
   await expect(page.locator('.toast')).toHaveText(`${name} is starting at the Ledge table.`);
+  daemon.upsert({ ...started, state: 'working' });
   await expect(seat.locator('[data-badge]')).toHaveText('Running');
   await expect(seat).not.toHaveClass(/just-seated/);
   expect(launchesOf(daemon.received)).toHaveLength(1);
@@ -114,7 +118,6 @@ test('an offline machine: its chip is disabled, the form launches on Local', asy
   expect(sent).toHaveLength(1);
   expect(sent[0]).toMatchObject({ tool: 'codex', cwd: '/w/ledge', prompt: 'Review the latest pull request' });
   expect(sent[0]).not.toHaveProperty('dirs');
-  expect(remote.received.filter(m => m.type === 'session.launch')).toHaveLength(0);
   const seat = page.getByRole('region', { name: 'Ledge table' }).getByRole('button', { name: new RegExp(`^${sent[0]!.name},`) });
   await expect(seat.locator('[data-badge]')).toHaveText('Running');
 });

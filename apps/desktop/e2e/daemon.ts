@@ -74,8 +74,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     remove(id: string) { sessions.delete(id); push({ type: 'session.removed', id }); },
     /** Answers a `session.launch` as the daemon does: the session is broadcast first, then `session.launched` with its raw id. */
     launched(s: Session) { sessions.set(s.id, s); push({ type: 'session.updated', session: s }); push({ type: 'session.launched', id: s.id }); },
-    /** Refuses a launch: an `error` with no id (spec §9.2). */
-    refuse(message: string) { push({ type: 'error', message }); },
+    /** Refuses a launch as the daemon does: an `error` with no id, naming its request (spec §9.2). */
+    refuse(message: string) { push({ type: 'error', message, request: 'session.launch' }); },
     /** Answers a `folder.list` / `folder.create`. */
     listing(path: string, parent: string | null, entries: string[], error?: string) { push({ type: 'folder.listing', path, parent, entries, ...(error ? { error } : {}) }); },
     /** Stores an item in the session's thread and broadcasts it as `session.thread.item`. */
