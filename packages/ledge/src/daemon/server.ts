@@ -202,9 +202,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       try { await runPlan(s, plan); }
       catch (e) {
         // The deny keys went and the input box never came back for the note: if the request is gone, the refusal
-        // happened (the thread says so) and only the note is missing; if it stays, nothing was refused.
+        // happened (the thread says so, unless a newer prompt came meanwhile: left alone) and only the note is missing;
+        // if it stays, nothing was refused.
         if (e instanceof NoteNotTyped) {
-          if (await promptGone() && stillTheSame()) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) }); throw e; }
+          if (await promptGone()) {
+            if (stillTheSame()) store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) });
+            throw e;
+          }
           e = new Error(NOT_TAKEN);
         }
         store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: (e as Error).message });
