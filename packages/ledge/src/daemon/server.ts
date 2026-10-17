@@ -11,6 +11,7 @@ import { verifyGone } from '../adapters/verify.js';
 import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
 import { spawnSession } from '../spawn.js';
+import { inspectRepos } from './repos.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
 import { loginShellEnv } from '../shell-path.js';
 import { log } from '../log.js';
@@ -28,10 +29,15 @@ import { MAX_FRAME } from '../transport/frames.js';
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
 
+/** The harnesses that take extra folders, and how. Claude only (verified: `claude --add-dir a b -- "prompt"`). */
+export const MULTI_DIR_ARGS: Partial<Record<Tool, (dirs: string[]) => string[]>> = { claude: dirs => ['--add-dir', ...dirs] };
+
 /** The agent's arguments for a `session.launch`: the resume flag, then the first instruction as the positional prompt. */
-export function launchArgs(msg: { tool: Tool; prompt?: string; continue?: boolean }): string[] {
+export function launchArgs(msg: { tool: Tool; prompt?: string; continue?: boolean; dirs?: string[] }): string[] {
   const prompt = msg.prompt?.trim();
-  return [...(msg.continue ? CONTINUE_ARGS[msg.tool] : []), ...(prompt ? [prompt] : [])];
+  const more = msg.dirs?.length ? MULTI_DIR_ARGS[msg.tool]?.(msg.dirs) : undefined;
+  // The `--` only follows --add-dir: the option is variadic and would swallow the prompt.
+  return [...(msg.continue ? CONTINUE_ARGS[msg.tool] : []), ...(more ?? []), ...(prompt ? [...(more ? ['--'] : []), prompt] : [])];
 }
 
 export { resolveFolder };
@@ -248,11 +254,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
   const chatLaunches = new Set<string>();
   /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
-  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean }): Promise<Session> {
+  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[] }): Promise<Session> {
+    if (req.dirs?.length && !MULTI_DIR_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes one folder`);
     const cwd = await resolveFolder(req.cwd, opts.home);
+    const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
     const live = store.all();
     const env = await agentEnv();
-    const session = await spawnSession({ tool: req.tool, args: launchArgs(req), name: req.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+    const session = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs }), name: req.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
     store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);
     log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
@@ -267,6 +275,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (msg.sessionId && !session) return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'session_missing' });
         return send(ws, await readDocument(msg, { cwd: session?.cwd, home: opts.home ?? process.env.HOME ?? '' }));
       }
+      case 'repos.inspect': return send(ws, { type: 'repos.info', requestId: msg.requestId, repos: await inspectRepos(msg.paths, { home: opts.home }) });
       case 'snapshot.request': return sendSnapshot(ws);
       case 'machines.set': {
         writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender

@@ -10,6 +10,7 @@ import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
 import { startServer, ALLOWED_ORIGINS, launchArgs, resolveFolder } from '../src/daemon/server.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { createDaemonUpdater } from '../src/update/run-update.js';
@@ -80,12 +81,49 @@ describe('launchArgs and resolveFolder', () => {
     expect(launchArgs({ tool: 'claude', prompt: 'fix the build', continue: true })).toEqual(['--continue', 'fix the build']);
     expect(launchArgs({ tool: 'codex', continue: true })).toEqual(['resume', '--last']);
   });
+  it('extra folders go to Claude with --add-dir, the prompt after --', () => {
+    expect(launchArgs({ tool: 'claude', prompt: 'Relis', dirs: ['/w/a', '/w/b'] })).toEqual(['--add-dir', '/w/a', '/w/b', '--', 'Relis']);
+    expect(launchArgs({ tool: 'claude', prompt: 'Relis' })).toEqual(['Relis']);
+    expect(launchArgs({ tool: 'claude', continue: true, dirs: ['/w/a'] })).toEqual(['--continue', '--add-dir', '/w/a']);
+    expect(launchArgs({ tool: 'claude', prompt: 'Relis', dirs: [] })).toEqual(['Relis']);
+  });
   it('resolves a folder: ~ against the given home, absolute paths normalised', async () => {
     const home = mkdtempSync(join(tmpdir(), 'ledge-home-')); mkdirSync(join(home, 'w'));
     expect(await resolveFolder('~', home)).toBe(home);
     expect(await resolveFolder(' ~/w ', home)).toBe(join(home, 'w'));
     expect(await resolveFolder(`${home}/w/../w/`, home)).toBe(join(home, 'w'));
     await expect(resolveFolder('w', home)).rejects.toThrow(/not an absolute path/);
+  });
+});
+
+describe('server: extra folders and repos.inspect', () => {
+  const home = () => process.env.LEDGE_HOME!;
+  it('a harness that takes one folder refuses extra ones, spawning nothing', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.launch', tool: 'codex', cwd: home(), dirs: [tmpdir()] });
+    expect(await c.next('error')).toEqual({ type: 'error', message: 'launch: codex takes one folder', request: 'session.launch' });
+    expect(tmux.created).toEqual([]);
+    c.close();
+  });
+  it('an extra folder is resolved like the cwd: a missing one is refused', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.launch', tool: 'claude', cwd: home(), dirs: ['~/nope'] });
+    const err = await c.next('error');
+    expect(err.message).toMatch(/no such folder/); expect(err.request).toBe('session.launch');
+    expect(tmux.created).toEqual([]);
+    c.close();
+  });
+  it('repos.inspect answers each path: Git branch, plain folder, missing, in order', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'ledge-repo-')); const plain = mkdtempSync(join(tmpdir(), 'ledge-plain-'));
+    execFileSync('git', ['init', '-b', 'trunk', repo]);
+    execFileSync('git', ['-C', repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '--allow-empty', '-m', 'one']);
+    const missing = join(plain, 'missing');
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'repos.inspect', requestId: 'r1', paths: [repo, plain, missing] });
+    expect(await c.next('repos.info')).toEqual({ type: 'repos.info', requestId: 'r1', repos: [
+      { path: repo, exists: true, branch: 'trunk' }, { path: plain, exists: true, branch: null }, { path: missing, exists: false, branch: null }
+    ] });
+    c.close();
   });
 });
 

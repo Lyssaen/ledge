@@ -171,6 +171,25 @@ describe('protocol: browsing folders from the launch form', () => {
   });
 });
 
+describe('protocol: launching with several folders and inspecting repos', () => {
+  it('session.launch takes dirs and a machineId', () => {
+    const m = { type: 'session.launch', tool: 'claude', cwd: '/w/a', dirs: ['/w/b'], machineId: 'm1' };
+    expect(parseClientMessage(m)).toEqual(m);
+    expect(parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w/a' })).not.toHaveProperty('dirs');
+    expect(() => parseClientMessage({ ...m, dirs: [''] })).toThrow();
+    expect(() => parseClientMessage({ ...m, dirs: Array.from({ length: 21 }, () => '/x') })).toThrow();
+  });
+  it('parses repos.inspect and repos.info', () => {
+    const q = { type: 'repos.inspect', requestId: 'r1', paths: ['/w/a', '~/b'], machineId: 'm1' };
+    expect(parseClientMessage(q)).toEqual(q);
+    expect(() => parseClientMessage({ ...q, paths: [] })).toThrow();
+    expect(() => parseClientMessage({ ...q, requestId: '' })).toThrow();
+    const info = { type: 'repos.info', requestId: 'r1', repos: [{ path: '/w/a', exists: true, branch: 'main' }, { path: '/w/b', exists: true, branch: null }] };
+    expect(parseServerMessage(info)).toEqual(info);
+    expect(() => parseServerMessage({ ...info, repos: [{ path: '/w', exists: true }] })).toThrow();
+  });
+});
+
 describe('relay from the chat (spec 2026-10-12 relay §5)', () => {
   const relay = { id: 's1', name: 'Otto', tool: 'claude', text: 'Lance les tests' };
   it('a turn and chat.done carry a relay; old messages still parse', () => {
