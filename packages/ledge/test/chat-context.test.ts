@@ -36,17 +36,17 @@ describe('writeContext', () => {
     const ctx = await writeContext(dir, { sessions: [], projects: PROJECTS, now: T0, capture: async () => null, git: async () => null });
     const md = readFileSync(join(dir, 'projects.md'), 'utf8');
     expect(md).toContain('## Ledge'); expect(md).toContain('The agent cockpit.');
-    expect(md).toContain('- local : /w/ledge'); expect(md).toContain('- devbox : /srv/ledge'); expect(md).toContain('## API'); expect(md).toContain('- local : /w/api');
-    expect(md).toContain('Dossiers rangés'); expect(md).toContain('- local : /tmp/scratch → API');
-    expect(md.indexOf('## API')).toBeLessThan(md.indexOf('Dossiers rangés'));
+    expect(md).toContain('- local: /w/ledge'); expect(md).toContain('- devbox: /srv/ledge'); expect(md).toContain('## API'); expect(md).toContain('- local: /w/api');
+    expect(md).toContain('Filed folders'); expect(md).toContain('- local: /tmp/scratch → API');
+    expect(md.indexOf('## API')).toBeLessThan(md.indexOf('Filed folders'));
     expect(stepFor(join(dir, 'projects.md'), ctx)).toBeNull();
   });
 
   it('says there is no project when there are none', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
     await writeContext(dir, { sessions: [mk('a')], now: T0, capture: async () => null, git: async () => null });
-    expect(readFileSync(join(dir, 'projects.md'), 'utf8')).toContain('Aucun projet.');
-    expect(readFileSync(join(dir, 'sessions.md'), 'utf8')).toContain('- Projet : Sans projet');
+    expect(readFileSync(join(dir, 'projects.md'), 'utf8')).toContain('No projects.');
+    expect(readFileSync(join(dir, 'sessions.md'), 'utf8')).toContain('- Project: no project');
   });
 
   it('gives each session its project in sessions.md', async () => {
@@ -55,7 +55,7 @@ describe('writeContext', () => {
     await writeContext(dir, { sessions, projects: PROJECTS, now: T0, capture: async () => null, git: async () => null });
     const md = readFileSync(join(dir, 'sessions.md'), 'utf8');
     const section = (name: string) => md.slice(md.indexOf(`## ${name} `)).split('\n## ')[0];
-    expect(section('Otto')).toContain('- Projet : Ledge'); expect(section('Nova')).toContain('- Projet : Sans projet'); expect(section('Zed')).toContain('- Projet : Ledge');
+    expect(section('Otto')).toContain('- Project: Ledge'); expect(section('Nova')).toContain('- Project: no project'); expect(section('Zed')).toContain('- Project: Ledge');
   });
 
   it('writes sessions.md and one file per source, and maps them to steps', async () => {

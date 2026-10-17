@@ -24,7 +24,7 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
   for (const s of input.sessions) {
     lines.push(`## ${s.name} (${s.tool}) — ${STATE[s.state]}`, `- id: ${s.id}`, `- topic: ${s.topic ?? '(none yet)'}`, `- folder: ${s.cwd}`,
       `- repository: ${s.repo ?? s.project}${s.branch ? `, branch ${s.branch}${s.worktree ? ' (linked worktree)' : ''}` : ''}`, `- started: ${s.startedAt}, last activity: ${s.lastActivityAt}`);
-    lines.push(`- Projet : ${nameOf.get(projectOf(s, projects) ?? '') ?? 'Sans projet'}`);
+    lines.push(`- Project: ${nameOf.get(projectOf(s, projects) ?? '') ?? 'no project'}`);
     if (s.source === 'hook_only') lines.push('- read-only: Ledge cannot send to it');
     if (s.pending) lines.push(`- pending ${s.pending.kind}: ${s.pending.text}`);
     const live = s.helpers.filter(h => h.state !== 'exited');
@@ -42,8 +42,8 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
   await writeFile(join(dir, 'folders.md'), ['# Recent folders', '', 'The folders the user started sessions in, most recent first.', '',
     ...(recents.length ? recents.map(r => `- ${r.project}: ${r.cwd} (last used ${r.lastAt})`) : ['- (none yet)']), ''].join('\n'));
   // The projects (build spec §5): a remote daemon knows none, so its `projects.md` says so.
-  await writeFile(join(dir, 'projects.md'), ['# Projets', '', ...(projects.projects.length ? projects.projects.flatMap(p => [`## ${p.name}`, ...(p.description ? [p.description] : []), '', ...p.repos.map(r => `- ${r.machine} : ${r.path}`), '']) : ['Aucun projet.', '']),
-    ...(projects.rules.length ? ['## Dossiers rangés', '', ...projects.rules.map(r => `- ${r.machine} : ${r.path} → ${nameOf.get(r.project) ?? r.project}`), ''] : [])].join('\n'));
+  await writeFile(join(dir, 'projects.md'), ['# Projects', '', ...(projects.projects.length ? projects.projects.flatMap(p => [`## ${p.name}`, ...(p.description ? [p.description] : []), '', ...p.repos.map(r => `- ${r.machine}: ${r.path}`), '']) : ['No projects.', '']),
+    ...(projects.rules.length ? ['## Filed folders', '', ...projects.rules.map(r => `- ${r.machine}: ${r.path} → ${nameOf.get(r.project) ?? r.project}`), ''] : [])].join('\n'));
   const repoPaths = [...new Set(input.sessions.map(s => s.repoPath ?? s.cwd).filter(p => p && !coversHome(p)).map(p => resolve(p)))];
   return { dir, steps, repoPaths };
 }
