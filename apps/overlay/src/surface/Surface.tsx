@@ -729,7 +729,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       </div>
 
       {/* Drawn after the surface: each overlaps its edge by a pixel, so no seam shows where they meet. */}
-      <Shoulders left={geo.left} w={geo.w} strip={strip} opacity={unreachable ? 0.6 : 1} transition={surfaceTransition} />
+      <Shoulders left={geo.left} w={geo.w} strip={st.mode === 'handle'} opacity={unreachable ? 0.6 : 1} transition={surfaceTransition} />
 
       {/* Zoomed extras: a zoomed element's own offsets are zoomed too, so their real-px positions are divided back. */}
       <div data-zoom="coachmark" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
