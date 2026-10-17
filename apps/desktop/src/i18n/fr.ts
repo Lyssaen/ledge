@@ -5,6 +5,7 @@ import type { ProjectColor, ToolStatus } from '@ledge/protocol';
 import type { PlanDoc, ToolKind, Verb } from '../session/thread';
 import type { Change } from '../session/changes';
 import type { TodoStatus } from '../session/todos';
+import type { FinishedNotify, SoundCategory, SoundVolume } from '@ledge/ui/sounds/preferences';
 
 type PlanStatus = PlanDoc['status'];
 
@@ -83,6 +84,28 @@ export const fr = {
       percent: (n: number) => `${Math.round(n * 100)} %`, auto: 'Auto', autoAt: (pct: string) => `Auto (${pct})`, scaleSaved: (label: string) => `Échelle de l’interface ${label}`,
       reduced: 'Mouvements réduits', reducedHint: 'Les mascottes s’immobilisent ; les états restent lisibles sans animation. La préférence de Windows reste prioritaire.',
       reducedOff: 'Animations'
+    },
+    notifications: {
+      dnd: 'Ne pas déranger', dndHint: 'Suspend les bulles, les notifications Windows et les sons. Les demandes restent visibles dans l’île et dans les sessions.',
+      dndSaved: (on: boolean): string => (on ? 'Ne pas déranger activé' : 'Ne pas déranger désactivé'),
+      finished: 'Quand un agent a terminé', finishedHint: 'Comment Ledge Desktop vous prévient quand une tâche arrive au bout.',
+      modes: { both: 'Bulle et son', bubble: 'Bulle', sound: 'Son', none: 'État de session seul' } as Record<FinishedNotify, string>,
+      finishedSaved: (mode: string) => `À la fin d’un agent : ${mode}`,
+      note: 'L’état de la session reste toujours visible, même sans bulle ni son.'
+    },
+    sounds: {
+      enabled: 'Sons', enabledHint: 'Des tons courts et doux pour ce qui vous attend. Jamais en Ne pas déranger.',
+      enabledSaved: (on: boolean): string => (on ? 'Sons activés' : 'Sons coupés'),
+      custom: 'Personnaliser les sons',
+      volume: 'Volume', volumeHint: 'Tester joue le signal de question.',
+      volumes: { quiet: 'Bas', normal: 'Normal', loud: 'Fort' } as Record<SoundVolume, string>,
+      volumeSaved: (label: string) => `Volume ${label.toLowerCase()}`,
+      test: 'Tester', dndOn: 'Ne pas déranger est actif : aucun son.',
+      when: 'Jouer un son quand',
+      categories: { requests: 'Un bot a besoin de vous · accord, question', finished: 'Un bot ou Ledge a terminé sa tâche', errors: 'Quelque chose échoue', decisions: 'Vous acceptez ou refusez', team: 'Un bot arrive ou part' } as Record<SoundCategory, string>,
+      behind: 'Seulement quand le terminal est derrière', behindHint: 'Si Windows Terminal est la fenêtre au premier plan, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
+      behindSaved: (on: boolean): string => (on ? 'Sons seulement terminal derrière' : 'Sons toujours'),
+      note: 'Un seul son à la fois, pour l’île et Ledge Desktop ensemble : une rafale de demandes ne joue qu’une fois. Ouvrir, fermer et survoler restent silencieux.'
     }
   },
   pending: 'Cet écran arrive bientôt.',

@@ -11,6 +11,8 @@ import type { DaemonUpdate } from '../update/daemon';
 import { updateReady, useUpdate } from '../update/store';
 import { General } from './General';
 import { Appearance } from './Appearance';
+import { Notifications } from './Notifications';
+import { Sounds } from './Sounds';
 
 /** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,
  *  in `lang` when given), the fleet and its machines, the projects, the sessions, navigation, the alerts (the Sounds' Test), the
@@ -44,11 +46,13 @@ const SECTION_ICONS: Record<SectionId, readonly string[]> = {
   about: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 16v-4', 'M12 8h.01']
 };
 
-/** A section's cards. Each one not built yet waits for its task of lot 10 (3 to 5), which replaces its placeholder. */
+/** A section's cards. Each one not built yet waits for its task of lot 10 (4 and 5), which replaces its placeholder. */
 function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
   if (section === 'general') return <General ctx={ctx} />;
   if (section === 'appearance') return <Appearance ctx={ctx} />;
+  if (section === 'notifications') return <Notifications ctx={ctx} />;
+  if (section === 'sounds') return <Sounds ctx={ctx} />;
   return <p className="muted">{t.pending}</p>;
 }
 

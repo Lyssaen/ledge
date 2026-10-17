@@ -74,6 +74,28 @@ export const en: Messages = {
       percent: (n) => `${Math.round(n * 100)}%`, auto: 'Auto', autoAt: (pct) => `Auto (${pct})`, scaleSaved: (label) => `Interface scale ${label}`,
       reduced: 'Reduced motion', reducedHint: 'The mascots stand still; states stay readable without animation. The Windows setting wins.',
       reducedOff: 'Animations'
+    },
+    notifications: {
+      dnd: 'Do not disturb', dndHint: 'Holds the bubbles, the Windows notifications and the sounds. Requests stay visible in the island and in the sessions.',
+      dndSaved: (on) => (on ? 'Do not disturb on' : 'Do not disturb off'),
+      finished: 'When an agent is done', finishedHint: 'How Ledge Desktop tells you when a task comes to an end.',
+      modes: { both: 'Alert and sound', bubble: 'Bubble', sound: 'Sound', none: 'Session state only' },
+      finishedSaved: (mode) => `When an agent is done: ${mode}`,
+      note: 'The session state always stays visible, even without a bubble or a sound.'
+    },
+    sounds: {
+      enabled: 'Sounds', enabledHint: 'Short, soft tones for what is waiting for you. Never in Do not disturb.',
+      enabledSaved: (on) => (on ? 'Sounds on' : 'Sounds off'),
+      custom: 'Customise sounds',
+      volume: 'Volume', volumeHint: 'Test plays the question signal.',
+      volumes: { quiet: 'Low', normal: 'Normal', loud: 'Loud' },
+      volumeSaved: (label) => `Volume ${label.toLowerCase()}`,
+      test: 'Test', dndOn: 'Do not disturb is on: no sound.',
+      when: 'Play a sound when',
+      categories: { requests: 'A bot needs you · approval, question', finished: 'A bot or Ledge has finished its task', errors: 'Something fails', decisions: 'You allow or deny', team: 'A bot arrives or leaves' },
+      behind: 'Only when the terminal is behind', behindHint: 'If Windows Terminal is the front window, you are already looking: no sound, the bubble still shows.',
+      behindSaved: (on) => (on ? 'Sounds only when the terminal is behind' : 'Sounds even when the terminal is in front'),
+      note: 'One sound at a time, for the island and Ledge Desktop together: a burst of requests plays once. Opening, closing and hovering stay silent.'
     }
   },
   pending: 'This screen is coming soon.',
