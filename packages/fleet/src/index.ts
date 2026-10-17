@@ -5,3 +5,4 @@ export * from './changes';
 export * from './fleet';
 export * from './groups';
 export * from './projects';
+export * from './proposals';
