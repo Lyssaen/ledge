@@ -153,7 +153,7 @@ const fr = {
       prev: 'Fichier précédent', next: 'Fichier suivant',
       createdBy: 'Créé par', changedBy: 'Modifié par', turn: (n: number) => `tour ${n}`, seeInThread: '· voir dans le fil',
       diff: 'Différences',
-      gap: (n: number, a: number, b: number) => plural(n, `⋯ ${n} ligne non modifiée (lignes ${a}–${b})`, `⋯ ${n} lignes non modifiées (lignes ${a}–${b})`),
+      gap: (n: number, a: number, b: number) => plural(n, `⋯ ${n} ligne non modifiée (ligne ${a})`, `⋯ ${n} lignes non modifiées (lignes ${a}–${b})`),
       unfold: (n: number) => plural(n, `Afficher ${n} ligne inchangée`, `Afficher ${n} lignes inchangées`),
       cut: 'Diff limité aux 80 premières lignes.', noDiff: 'Ce fichier n’a pas de différence enregistrée.'
     },

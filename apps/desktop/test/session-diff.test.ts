@@ -3,6 +3,7 @@ import type { FileChange, ThreadItem, ToolItem } from '@ledge/protocol';
 import { T0 } from '@ledge/fleet/test/mockDaemon';
 import { diffRows, parseDiff, type ParsedDiff } from '../src/session/diff';
 import { byFolder, changedFiles, relativeTo } from '../src/session/changes';
+import { MESSAGES } from '../src/i18n/messages';
 
 const lines = (d: ParsedDiff) => d.hunks.flatMap(h => h.lines.map(l => `${l.t}:${l.o ?? ''}:${l.n ?? ''}:${l.text}`));
 
@@ -40,6 +41,12 @@ describe('session diffs', () => {
     expect(kinds(new Set())).toEqual(['hunk', 'del', 'add', 'ctx', 'ctx', 'ctx', 'fold4', 'ctx', 'ctx', 'ctx', 'del', 'add', 'gap13-39', 'hunk', 'del', 'add']);
     const fold = diffRows(d, new Set()).find(r => r.kind === 'fold')!;
     expect(kinds(new Set([(fold as { key: string }).key])).filter(k => k === 'ctx')).toHaveLength(10);
+  });
+  it('a gap of one line names that line alone', () => {
+    expect(MESSAGES.fr.session.changes.gap(1, 13, 13)).toBe('⋯ 1 ligne non modifiée (ligne 13)');
+    expect(MESSAGES.fr.session.changes.gap(27, 13, 39)).toBe('⋯ 27 lignes non modifiées (lignes 13–39)');
+    expect(MESSAGES.en.session.changes.gap(1, 13, 13)).toBe('⋯ 1 unchanged line (line 13)');
+    expect(MESSAGES.en.session.changes.gap(27, 13, 39)).toBe('⋯ 27 unchanged lines (lines 13–39)');
   });
 });
 
