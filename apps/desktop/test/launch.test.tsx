@@ -251,6 +251,13 @@ describe('LaunchComposer and its machines', () => {
     expect(sent.filter(m => m.type === 'repos.inspect')).toEqual([]);
   });
 
+  it('the inspection sends the repositories\' paths as they are, a newline in one included', () => {
+    const { client, sent } = fakeClient();
+    const odd = { ...LAUNCH_PROJECTS.projects[0]!, repos: [{ machine: 'local', path: '/w/odd\nname' }, { machine: 'local', path: '/w/ledge/app' }] };
+    render(<LaunchComposer {...props(client, [local, down(nas)])} projects={[odd]} />);
+    expect(sent.filter(m => m.type === 'repos.inspect')).toEqual([expect.objectContaining({ paths: ['/w/odd\nname', '/w/ledge/app'], machineId: 'local' })]);
+  });
+
   it('an inspection answers only its own request', async () => {
     const { client, sent, emit } = fakeClient();
     render(<LaunchComposer {...props(client, [local, nas])} />);
