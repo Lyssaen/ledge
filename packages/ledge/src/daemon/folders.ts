@@ -1,8 +1,8 @@
-import { mkdir, readdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { ServerMessage } from '@ledge/protocol';
-import { inspectRepos } from './repos.js';
+import { headBranch, inspectRepos } from './repos.js';
 
 type Git = (cwd: string, args: string[]) => Promise<string | null>;
 type Listing = Extract<ServerMessage, { type: 'folder.listing' }>;
@@ -43,11 +43,7 @@ export async function gitBranchOf(dir: string, git?: Git): Promise<string | null
   let s;
   try { s = await stat(dot); } catch { return null; }
   if (s.isFile()) return (await inspectRepos([dir], { git }))[0]?.branch ?? null;
-  let head: string;
-  try { head = (await readFile(join(dot, 'HEAD'), 'utf8')).trim(); } catch { return null; }
-  const ref = /^ref: refs\/heads\/(.+)$/.exec(head);
-  if (ref) return ref[1]!;
-  return /^[0-9a-f]{7,}$/i.test(head) ? head.slice(0, 7) : null;
+  return s.isDirectory() ? headBranch(dot) : null;
 }
 
 /**

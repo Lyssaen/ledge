@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { listFolder, createFolder, gitBranchOf } from '../src/daemon/folders.js';
+import { inspectRepos } from '../src/daemon/repos.js';
 
 describe('folders: the launch form browser', () => {
   let home: string;
@@ -86,6 +87,20 @@ describe('folders: the launch form browser', () => {
       writeFileSync(join(d, '.git', 'HEAD'), '0123456789abcdef0123456789abcdef01234567\n');
       expect(await gitBranchOf(d)).toBe('0123456');
       expect(await gitBranchOf(join(home, 'nogit'))).toBeNull();
+    });
+    it('gitBranchOf edges: a CRLF HEAD, a ref outside refs/heads, a .git folder without HEAD', async () => {
+      const d = join(home, 'x'); mkdirSync(join(d, '.git'), { recursive: true });
+      expect(await gitBranchOf(d)).toBeNull();
+      writeFileSync(join(d, '.git', 'HEAD'), 'ref: refs/heads/main\r\n');
+      expect(await gitBranchOf(d)).toBe('main');
+      writeFileSync(join(d, '.git', 'HEAD'), 'ref: refs/remotes/origin/main\n');
+      expect(await gitBranchOf(d)).toBeNull();
+    });
+    it('an empty repository (no commit yet): the listing and inspectRepos both name its branch', async () => {
+      const d = join(home, 'empty'); mkdirSync(d); git(d, 'init', '-q', '-b', 'trunk');
+      expect(await gitBranchOf(d)).toBe('trunk');
+      expect((await listFolder(home, home)).repos).toEqual([{ name: 'empty', branch: 'trunk' }]);
+      expect(await inspectRepos([d])).toEqual([{ path: d, exists: true, branch: 'trunk' }]);
     });
     it('the cap of 8 git is shared: a listing of 12 worktree entries never runs more than 8 at once', async () => {
       for (let i = 0; i < 12; i++) { mkdirSync(join(home, `w${i}`)); writeFileSync(join(home, `w${i}`, '.git'), 'gitdir: /elsewhere\n'); }

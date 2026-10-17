@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { RepoInfo } from '@ledge/protocol';
 
 const GIT_TIMEOUT_MS = 2000;
@@ -25,8 +25,20 @@ async function slot<T>(job: () => Promise<T>): Promise<T> {
   try { return await job(); } finally { const next = waiting.shift(); if (next) next(); else live--; }
 }
 
+/** The branch named by a `.git` folder's HEAD (the short commit when detached), read without running git: an empty repository has
+ *  its branch there before any commit. Null when HEAD is missing or names no local branch. */
+export async function headBranch(dotGit: string): Promise<string | null> {
+  let head: string;
+  try { head = (await readFile(join(dotGit, 'HEAD'), 'utf8')).trim(); } catch { return null; }
+  const ref = /^ref: refs\/heads\/(.+)$/.exec(head);
+  if (ref) return ref[1]!;
+  return /^[0-9a-f]{7,}$/i.test(head) ? head.slice(0, 7) : null;
+}
+
 /** For each path, echoed as asked (`~`, `..`, a trailing `/` are resolved only to look and to run git: the front finds its answer by the path it sent):
- *  whether it is a folder and its Git branch (the short commit when HEAD is detached; null when not a repository). */
+ *  whether it is a folder and its Git branch (the short commit when HEAD is detached; null when not a repository). A `.git` folder is
+ *  read as the browser reads it (`headBranch`); git runs only for a `.git` file (worktree, submodule) or a folder without `.git`
+ *  (a folder inside a repository). */
 export async function inspectRepos(paths: readonly string[], opts: { home?: string; git?: (cwd: string, args: string[]) => Promise<string | null> } = {}): Promise<RepoInfo[]> {
   const home = opts.home ?? homedir();
   const git = opts.git ?? runGit;
@@ -36,6 +48,9 @@ export async function inspectRepos(paths: readonly string[], opts: { home?: stri
     let isDir = false;
     try { isDir = (await stat(path)).isDirectory(); } catch { /* missing */ }
     if (!isDir) return { path: raw, exists: false, branch: null };
+    let dotDir = false;
+    try { dotDir = (await stat(join(path, '.git'))).isDirectory(); } catch { /* no .git here */ }
+    if (dotDir) return { path: raw, exists: true, branch: await headBranch(join(path, '.git')) };
     // One deadline for the path, shared by its git calls, and a hard stop whatever the injected git does.
     const deadline = Date.now() + GIT_TIMEOUT_MS;
     const bounded = (args: string[]) => new Promise<string | null>(res => {
