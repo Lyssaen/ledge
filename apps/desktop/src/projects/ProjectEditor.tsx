@@ -1,21 +1,29 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type ReactNode } from 'react';
-import { withoutProject, type DaemonClient, type Fleet, type MachineState } from '@ledge/fleet';
+import { proposeFor, proposeProjects, withoutProject, type DaemonClient, type Fleet, type MachineState, type Proposal } from '@ledge/fleet';
 import { normalizePath, PROJECT_COLORS, type Projects, type Repo, type RepoInfo, type Session } from '@ledge/protocol';
+import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
+import { useMotionPreferences } from '../motionPreferences';
+import { useTheme } from '../shell/theme';
 import { ruleFor } from '../atelier/filing';
 import { isUp } from '../launch/model';
 import { useRepoInfo } from '../launch/useRepoInfo';
 import { SessionBot } from '../shell/SessionBot';
-import { afterSave, alsoIn, COLOR_ORDER, deletion, draftProblem, removed, saved, sameDraft, type ProjectDraft } from './draft';
+import { afterSave, alsoIn, applyProposal, COLOR_ORDER, deletion, draftProblem, keptRepos, removed, repoKey, saved, sameDraft, type ProjectDraft } from './draft';
 import { FolderPicker } from './FolderPicker';
+import type { EditorPhase } from './ProjectDialog';
 import { ProjectSwatch } from './ProjectSwatch';
+import { useLedgeScan } from './useLedgeScan';
 import { useProjectSave } from './useProjectSave';
 
 const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1) || path;
-const repoKey = (machine: string, path: string) => `${machine}\n${normalizePath(path)}`;
+/** How long the scan's finished steps stay in view before the proposal replaces them. */
+const SETTLE_MS = 400;
+/** « Demander à Ledge »'s sparkles (the mockup's). */
+const SPARKLES = ['M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z', 'M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z'];
 type Known = { exists: boolean; branch: string | null };
 const SLOT = '\u0000';
 /** A translated sentence with `name` in bold where its slot stands: the sentence is written around a mark, never searched for the name
@@ -33,11 +41,16 @@ function Inspect({ client, machine, paths, onInfos }: { client: DaemonClient; ma
   return null;
 }
 
-/** The mockup's ProjectEditor (without Ledge's scan nor its proposals): the name, the colour, the description, the working repositories
- *  with their machine and branch (added from the folder browser or a typed path), the agents to file too. Saving sends the whole state
- *  and waits for the daemon's broadcast that holds it: nothing changes before, and a refusal or a silence is said here, the values kept. */
+/** The mockup's ProjectEditor: the name, the colour, the description, the working repositories with their machine and branch (added
+ *  from the folder browser or a typed path), the agents to file too. Saving sends the whole state and waits for the daemon's broadcast
+ *  that holds it: nothing changes before, and a refusal or a silence is said here, the values kept.
+ *  « Laisser Ledge faire » / « Demander à Ledge » (lot 11): Ledge scans the machines step by step (useLedgeScan), then `proposeFor`
+ *  fills the draft: its repositories checked, each with its reason, its sessions to file checked; a proposal on an existing project is
+ *  « Ajouter à » it. « Annuler » during the scan goes back to the form as it was. Nothing is written before the main button. */
 export function ProjectEditor(p: {
   mode: 'new' | 'edit'; initial: ProjectDraft; projects: Projects; sessions: readonly Session[]; machines: readonly MachineState[];
+  /** A proposal opened by the navigation (its draft is `initial`). */
+  proposal?: Proposal | undefined; paused?: boolean; onPhase?(phase: EditorPhase): void;
   client: DaemonClient; fleet: Pick<Fleet, 'setProjects'>; projectIdOf(s: Session): string | null; onClose(): void;
   onSaved(id: string, created: boolean, filed: Session[]): void;
   /** The deletion view (« Supprimer le projet », edit mode only): the dialog titles it, hence held there. */
@@ -48,7 +61,16 @@ export function ProjectEditor(p: {
   const { t } = useI18n();
   const c = t.projects;
   const { machines, projects } = p;
+  const theme = useTheme();
+  const { reduced } = useMotionPreferences();
   const [d, setD] = useState<ProjectDraft>(p.initial);
+  // Ledge: the proposal under way (its repositories carry their box in `d.proposed`), the scan's view, « nothing free ».
+  const [proposal, setProposal] = useState<Proposal | null>(p.proposal ?? null);
+  const [scanning, setScanning] = useState(false);
+  const [scanned, setScanned] = useState<string[]>([]);
+  const [nothing, setNothing] = useState(false);
+  const scan = useLedgeScan(p.client, machines);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   // The draft now, for a confirmation that comes in an effect: closing on it would drop what was edited since the send.
   const draftNow = useRef(d);
   draftNow.current = d;
@@ -78,6 +100,53 @@ export function ProjectEditor(p: {
   latest.current = p;
   const ids = useId();
 
+  const runLedge = () => {
+    setNothing(false);
+    setScanned(machines.filter(isUp).map(m => m.label));
+    scan.start();
+    setScanning(true);
+  };
+  const cancelScan = () => { scan.cancel(); setScanning(false); };
+  // Every machine settled: the finished steps stay a moment, then the proposal fills the draft (or « nothing free » is said).
+  const { status: scanStatus, scans, cancel: resetScan } = scan;
+  useEffect(() => {
+    if (!scanning || scanStatus !== 'done') return;
+    const timer = setTimeout(() => {
+      const { projects: state, sessions } = latest.current;
+      const now = draftNow.current;
+      const input = { projects: state, scans, sessions };
+      const found = proposeFor({ ...(now.id !== undefined ? { id: now.id } : {}), name: now.name, file: now.file }, proposeProjects(input), input);
+      resetScan();
+      setScanning(false);
+      if (!found) { setNothing(true); return; }
+      setD(applyProposal(now, found, state));
+      setProposal(found);
+      setAdding(false);
+      // The branches the scan found, for the proposed repositories.
+      setKnown(prev => {
+        const next = new Map(prev);
+        for (const sc of scans) for (const r of sc.repos) next.set(repoKey(sc.machine, r.path), { exists: true, branch: r.branch });
+        return next;
+      });
+    }, SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [scanning, scanStatus, scans, resetScan]);
+  // Entering the scan, « Annuler » takes the focus; leaving it, the name.
+  const wasScanning = useRef(false);
+  useEffect(() => {
+    if (wasScanning.current === scanning) return;
+    wasScanning.current = scanning;
+    (scanning ? cancelRef : nameRef).current?.focus();
+  }, [scanning]);
+  // The dialog's title follows: the scan, a proposal (on an existing project: « pour X »), the form.
+  const targetName = proposal && d.id !== undefined ? (projects.projects.find(x => x.id === d.id)?.name ?? d.name) : null;
+  const phaseKey = scanning ? 'scan' : proposal ? `proposal\n${targetName ?? ''}` : 'form';
+  const report = useRef(p.onPhase);
+  report.current = p.onPhase;
+  useEffect(() => {
+    report.current?.(phaseKey === 'scan' ? { kind: 'scan' } : phaseKey === 'form' ? { kind: 'form' } : { kind: 'proposal', target: targetName });
+  }, [phaseKey, targetName]);
+
   const machineOf = (id: string) => machines.find(m => m.id === id);
   const labelOf = (id: string) => machineOf(id)?.label ?? id;
   // The saved repositories, by machine online: one inspection each (a machine offline would answer « not found » for every path).
@@ -101,7 +170,20 @@ export function ProjectEditor(p: {
   const reposRef = useRef<HTMLElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);
   const refocus = useRef<number | null>(null);
-  const removeRepo = (i: number) => { refocus.current = i; setD(x => ({ ...x, repos: x.repos.filter((_, j) => j !== i) })); };
+  const removeRepo = (i: number) => {
+    refocus.current = i;
+    setD(x => {
+      const gone = x.repos[i];
+      if (!gone || !x.proposed) return { ...x, repos: x.repos.filter((_, j) => j !== i) };
+      const { [repoKey(gone.machine, gone.path)]: _dropped, ...proposed } = x.proposed;
+      return { ...x, repos: x.repos.filter((_, j) => j !== i), proposed };
+    });
+  };
+  const keep = (machine: string, path: string, checked: boolean) => setD(x => {
+    const k = repoKey(machine, path);
+    const was = x.proposed?.[k];
+    return was ? { ...x, proposed: { ...x.proposed, [k]: { ...was, checked } } } : x;
+  });
   useEffect(() => {
     const i = refocus.current;
     if (i === null) return;
@@ -116,8 +198,8 @@ export function ProjectEditor(p: {
     setD(x => ({ ...x, repos: [...x.repos, repo] }));
     setKnown(prev => new Map(prev).set(repoKey(repo.machine, repo.path), { exists: true, branch }));
   };
-  // « Ranger aussi »: the sessions the editor was opened to file (« Ranger dans… › Nouveau projet… »), still listed.
-  const candidates = p.initial.file.map(id => p.sessions.find(s => s.id === id)).filter((s): s is Session => s !== undefined);
+  // « Ranger aussi »: the sessions the editor was opened to file (« Ranger dans… › Nouveau projet… ») or Ledge proposes, still listed.
+  const candidates = [...new Set([...p.initial.file, ...(proposal?.file ?? [])])].map(id => p.sessions.find(s => s.id === id)).filter((s): s is Session => s !== undefined);
 
   const saving = state.status === 'saving';
   // While saving, and on the render of the broadcast that confirms (which already holds the project, its name and its repositories),
@@ -135,7 +217,8 @@ export function ProjectEditor(p: {
     const sent = next.projects.find(x => x.id === id)!;
     const filed = p.sessions.filter(s => d.file.includes(s.id));
     const rules = filed.map(s => ruleFor(s, id));
-    const created = mode === 'new';
+    // « Ajouter à » an existing project from a new draft is no creation.
+    const created = mode === 'new' && d.id === undefined;
     const sentDraft = d;
     send(next,
       st => saved(st, sent) && rules.every(r => st.rules.some(x => x.machine === r.machine && x.path === r.path && x.project === r.project)),
@@ -172,7 +255,8 @@ export function ProjectEditor(p: {
   };
 
   const showName = tried && nameProblem;
-  const machinesShown = [...new Set(d.repos.map(r => labelOf(r.machine)))].join(', ');
+  const kept = keptRepos(d);
+  const machinesShown = [...new Set(kept.map(r => labelOf(r.machine)))].join(', ');
 
   if (p.deleting) {
     const dl = c.delete;
@@ -222,10 +306,57 @@ export function ProjectEditor(p: {
     );
   }
 
+  if (scanning) {
+    const l = c.ledge;
+    return (
+      <div className="pe">
+        <div className={`pe-scan ${p.paused || reduced ? 'still' : ''}`} role="status" aria-live="polite">
+          <span className="pe-scan-mascot">
+            <ResidentMascot size={84} theme={theme} paused={p.paused} reducedMotion={reduced} />
+            <span className="pe-dots" aria-hidden="true"><i /><i /><i /></span>
+          </span>
+          <strong>{l.scanning(scanned)}</strong>
+          <ul>
+            {scan.steps.map(s => (
+              <li key={s.machine} className={s.state === 'waiting' ? 'now' : 'done'}>
+                {s.state === 'waiting' ? <i className="pe-wait" /> : <Icon d={ICONS.check.d} size={13} />}{l.step(s)}
+              </li>
+            ))}
+            <li className={scanStatus === 'done' ? 'done' : ''}>{scanStatus === 'done' ? <Icon d={ICONS.check.d} size={13} /> : <i className="pe-wait" />}{l.compared}</li>
+          </ul>
+          <Button ref={cancelRef} variant="ghost" size="sm" onClick={cancelScan}>{c.cancel}</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // The offer: a new project with neither name nor proposal. « Demander à Ledge »: once there is a name or a repository, the offer
+  // gone (or answered « nothing free »), no proposal under way.
+  const fresh = mode === 'new' && !proposal && d.name === '';
+  const canAsk = !proposal && (!fresh || nothing) && (d.name.trim() !== '' || d.repos.length > 0);
   return (
     <form className="pe" onSubmit={e => { e.preventDefault(); save(); }} onKeyDown={onKeyDown}>
       {groups.map(([machine, paths]) => <Inspect key={machine} client={p.client} machine={machine} paths={paths} onInfos={onInfos} />)}
       <div className="pe-body">
+        {fresh && !nothing && (
+          <div className="pe-ledge">
+            <ResidentMascot size={44} theme={theme} paused={p.paused} reducedMotion={reduced} />
+            <div><strong>{c.ledge.offerTitle}</strong><span>{c.ledge.offerBody}</span></div>
+            <Button variant="primary" size="sm" onClick={runLedge}>{c.ledge.offer}</Button>
+          </div>
+        )}
+        {nothing && (
+          <div className="pe-proposal" role="status">
+            <ResidentMascot size={28} theme={theme} paused={p.paused} reducedMotion={reduced} />
+            <div><span>{c.ledge.nothing}</span></div>
+          </div>
+        )}
+        {proposal && (
+          <div className="pe-proposal">
+            <ResidentMascot size={28} theme={theme} paused={p.paused} reducedMotion={reduced} />
+            <div><strong>{c.ledge.proposes}</strong><span>{c.ledge.summary(proposal.summary)} {c.ledge.check}</span></div>
+          </div>
+        )}
         <div className="pe-identity">
           <div className="pe-field">
             <label className="composer-label" htmlFor={`${ids}-name`}>{c.name}</label>
@@ -247,7 +378,10 @@ export function ProjectEditor(p: {
           <input id={`${ids}-description`} value={d.description} maxLength={120} placeholder={c.descriptionPlaceholder} onChange={e => set({ description: e.target.value })} />
         </div>
         <section ref={reposRef} className="pe-repos" aria-labelledby={`${ids}-repos`}>
-          <div className="pe-repos-head"><span className="composer-label" id={`${ids}-repos`}>{c.repos(d.repos.length)}</span></div>
+          <div className="pe-repos-head">
+            <span className="composer-label" id={`${ids}-repos`}>{c.repos(kept.length)}</span>
+            {canAsk && <Button size="sm" variant="ghost" onClick={runLedge}><Icon d={SPARKLES} size={14} />{c.ledge.ask}</Button>}
+          </div>
           {d.repos.length > 0 ? (
             <ul className="pe-repo-list">
               {d.repos.map((r, i) => {
@@ -256,8 +390,12 @@ export function ProjectEditor(p: {
                 const label = labelOf(r.machine);
                 const info = known.get(repoKey(r.machine, r.path));
                 const owner = saving || confirming ? undefined : alsoIn(r, d, projects);
+                const offered = d.proposed?.[repoKey(r.machine, r.path)];
                 return (
-                  <li key={`${r.machine}:${r.path}:${i}`}>
+                  <li key={`${r.machine}:${r.path}:${i}`} className={offered && !offered.checked ? 'off' : undefined}>
+                    {offered && (
+                      <input type="checkbox" checked={offered.checked} aria-label={c.ledge.keep(baseName(r.path), label)} onChange={e => keep(r.machine, r.path, e.target.checked)} />
+                    )}
                     <span className="pe-repo-main">
                       <span className="pe-repo-line">
                         <strong>{baseName(r.path)}</strong>
@@ -269,6 +407,7 @@ export function ProjectEditor(p: {
                           : <span className="pe-branch">{c.noGit}</span>}
                       </span>
                       <code className="mono">{r.path}</code>
+                      {offered && <small className="pe-why"><span className="pe-why-mark">{c.ledge.why}</span>{c.why(offered.why)}</small>}
                       {/* A repository belongs to one project only: said before saving, and nothing is sent while it stands. */}
                       {owner && <small className="set-error">{c.problems.repo_taken(owner.name)}</small>}
                     </span>
@@ -299,21 +438,21 @@ export function ProjectEditor(p: {
         </section>
       </div>
       <footer className="composer-footer">
-        {p.mode === 'edit' && (
+        {p.mode === 'edit' && !proposal && (
           <Button ref={deleteRef} variant="ghost" className="pe-delete-btn" aria-disabled={saving} onClick={() => toggle(true)}>{c.deleteProject}</Button>
         )}
         <span className="composer-preview">
           <ProjectSwatch project={{ color: d.color }} />
           <span>
             <span className="preview-line"><strong>{d.name.trim() || c.newName}</strong></span>
-            <small>{c.preview(d.repos.length, machinesShown)}{p.mode === 'new' ? c.firstSession : ''}</small>
+            <small>{c.preview(kept.length, machinesShown)}{p.mode === 'new' && d.id === undefined ? c.firstSession : ''}</small>
           </span>
         </span>
         {tried && problemText ? <span className="composer-missing" role={nameProblem ? undefined : 'alert'}>{problemText}</span>
           : state.status === 'refused' ? <p className="composer-missing" role="alert">{c.refused[state.reason]}</p> : null}
         <Button variant="ghost" onClick={p.onClose}>{c.cancel}</Button>
         <Button variant="primary" type="submit" aria-disabled={!!problem || saving}>
-          {saving ? c.saving : mode === 'new' ? c.create : c.save}<Kbd>Ctrl ↵</Kbd>
+          {saving ? c.saving : targetName !== null ? c.ledge.addTo(targetName) : mode === 'new' ? c.create : c.save}<Kbd>Ctrl ↵</Kbd>
         </Button>
       </footer>
     </form>

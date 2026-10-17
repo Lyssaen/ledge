@@ -209,8 +209,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         </Modal>
       )}
       {nav.modal?.kind === 'project' && (
-        <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}|${nav.modal.delete ? 'delete' : ''}`} edit={nav.modal.edit} file={nav.modal.file} startDeleting={nav.modal.delete} projects={projects} sessions={sessions} machines={machines}
-          client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
+        <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}|${nav.modal.delete ? 'delete' : ''}|${nav.modal.proposal ?? ''}`} edit={nav.modal.edit} file={nav.modal.file} startDeleting={nav.modal.delete}
+          proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}
+          notify={notify} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}
       <Toast notice={notice} />
     </ScreenKeysContext.Provider>

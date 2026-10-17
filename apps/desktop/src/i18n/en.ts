@@ -2,6 +2,7 @@ import type { Messages } from './messages';
 
 /** English counts only 1 as singular. */
 const pluralEn = (n: number, one: string, many: string) => (n === 1 ? one : many);
+const andList = (xs: readonly string[]) => new Intl.ListFormat('en', { type: 'conjunction' }).format(xs);
 
 /** Desktop's copy in English, shaped by the French (see messages.ts, which loads it on demand). */
 export const en: Messages = {
@@ -422,7 +423,10 @@ export const en: Messages = {
     timeout: 'The launch did not answer. Check the machine, then try again.'
   },
   projects: {
-    titles: { new: 'New project', edit: (n) => `Edit ${n}`, delete: (n) => `Delete ${n}` },
+    titles: {
+      new: 'New project', edit: (n) => `Edit ${n}`, delete: (n) => `Delete ${n}`,
+      scan: 'Ledge is preparing a project', proposal: 'Ledge proposal', proposalFor: (n) => `Ledge proposal for ${n}`
+    },
     name: 'Name', namePlaceholder: 'E.g. Paper Rendering', color: 'Colour',
     colors: { blue: 'Blue', green: 'Green', amber: 'Amber', violet: 'Violet', teal: 'Teal', pink: 'Pink', red: 'Red', slate: 'Slate' },
     description: 'Description', optional: 'optional', descriptionPlaceholder: 'One sentence on what the project is for',
@@ -458,6 +462,34 @@ export const en: Messages = {
       done: (n) => `${n} deleted.`,
       doneMoved: (k, p) => ` ${k} ${pluralEn(k, 'agent', 'agents')} ${pluralEn(k, 'joins', 'join')} ${p}.`,
       doneNone: (k) => ` ${k} ${pluralEn(k, 'agent', 'agents')} ${pluralEn(k, 'moves', 'move')} to « No project ».`
+    },
+    why: (w) => w.kind === 'remote' ? `Same remote ${w.remote}${w.machines.length > 1 ? `, on ${andList(w.machines)}` : ''}`
+      : w.kind === 'agent' ? `Folder opened by ${andList(w.names)}`
+      : w.kind === 'naming' ? `Named ${w.stem}-*`
+      : w.kind === 'folder' ? `Kept in ${w.parent}`
+      : w.text,
+    ledge: {
+      offerTitle: 'Rather not look for the repositories yourself?',
+      offerBody: 'Ledge scans your machines, groups the repositories that go together and proposes a project for you to check.',
+      offer: 'Let Ledge do it', ask: 'Ask Ledge',
+      scanning: (ms) => `Ledge is scanning ${ms.length ? andList(ms) : 'your machines'}…`,
+      step: (s) => s.state === 'waiting' ? `Scanning ${s.label}…`
+        : s.state === 'done' ? `${s.label} · ${s.repos} ${pluralEn(s.repos, 'repository', 'repositories')} found${s.truncated ? ' · scan limited' : ''}`
+        : s.state === 'outdated' ? `${s.label}: daemon too old, skipped`
+        : s.state === 'timeout' ? `${s.label} did not answer, skipped`
+        : s.state === 'failed' ? `${s.label}: the scan failed, skipped`
+        : `${s.label} offline, skipped`,
+      compared: 'Remotes and sessions compared',
+      proposes: 'Ledge proposes', check: 'Uncheck what does not fit, then confirm: nothing is created before.',
+      summary: (s) => {
+        const n = `${s.repos} ${s.target ? 'more ' : ''}${pluralEn(s.repos, 'repository', 'repositories')}`;
+        const on = s.machines.length ? `on ${andList(s.machines)}` : '';
+        const head = s.target ? `${n} for ${s.target}${on ? `, ${on}` : ''}.` : `${n}${on ? ` ${on}` : ''}.`;
+        return head + (s.agents.length ? ` Also to file: ${andList(s.agents)}.` : '');
+      },
+      nothing: 'Every repository found already belongs to a project. Add one by hand.',
+      why: 'Ledge · ', keep: (n, m) => `Keep ${n} (${m})`, addTo: (n) => `Add to ${n}`,
+      gone: 'This proposal no longer exists.'
     },
     picker: {
       machines: 'Machine to browse', offline: 'offline',

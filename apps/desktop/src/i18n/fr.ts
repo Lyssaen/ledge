@@ -6,7 +6,8 @@ import type { PlanDoc, ToolKind, Verb } from '../session/thread';
 import type { Change } from '../session/changes';
 import type { TodoStatus } from '../session/todos';
 import type { FinishedNotify, SoundCategory, SoundVolume } from '@ledge/ui/sounds/preferences';
-import type { SshProblem } from '@ledge/fleet';
+import type { SshProblem, Summary, Why } from '@ledge/fleet';
+import type { ScanStep } from '../projects/useLedgeScan';
 import type { DraftProblem } from '../settings/machines';
 import type { SaveOutcome } from '../settings/useMachineEditor';
 
@@ -14,6 +15,7 @@ type PlanStatus = PlanDoc['status'];
 
 /** French counts 0 and 1 as singular. */
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
+const andList = (xs: readonly string[]) => new Intl.ListFormat('fr', { type: 'conjunction' }).format(xs);
 
 /** Desktop's copy in French: the source of truth, whose shape is `Messages` (see messages.ts, which loads it on demand). */
 export const fr = {
@@ -443,7 +445,10 @@ export const fr = {
     timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.'
   },
   projects: {
-    titles: { new: 'Nouveau projet', edit: (n: string) => `Modifier ${n}`, delete: (n: string) => `Supprimer ${n}` },
+    titles: {
+      new: 'Nouveau projet', edit: (n: string) => `Modifier ${n}`, delete: (n: string) => `Supprimer ${n}`,
+      scan: 'Ledge prépare un projet', proposal: 'Proposition de Ledge', proposalFor: (n: string) => `Proposition de Ledge pour ${n}`
+    },
     name: 'Nom', namePlaceholder: 'Ex. Paper Rendering', color: 'Couleur',
     colors: { blue: 'Bleu', green: 'Vert', amber: 'Ambre', violet: 'Violet', teal: 'Sarcelle', pink: 'Rose', red: 'Rouge', slate: 'Ardoise' } as Record<ProjectColor, string>,
     description: 'Description', optional: 'facultatif', descriptionPlaceholder: 'Une phrase qui dit à quoi sert le projet',
@@ -480,6 +485,36 @@ export const fr = {
       done: (n: string) => `${n} supprimé.`,
       doneMoved: (k: number, p: string) => ` ${k} agent${plural(k, '', 's')} ${plural(k, 'rejoint', 'rejoignent')} ${p}.`,
       doneNone: (k: number) => ` ${k} agent${plural(k, '', 's')} ${plural(k, 'passe', 'passent')} dans « Sans projet ».`
+    },
+    /** Why Ledge proposes a repository (`small.pe-why`, after « Ledge · »); `chat` is the LLM's own reason. */
+    why: (w: Why): string => w.kind === 'remote' ? `Même remote ${w.remote}${w.machines.length > 1 ? `, sur ${andList(w.machines)}` : ''}`
+      : w.kind === 'agent' ? `Dossier ouvert par ${andList(w.names)}`
+      : w.kind === 'naming' ? `Nommé ${w.stem}-*`
+      : w.kind === 'folder' ? `Rangé dans ${w.parent}`
+      : w.text,
+    /** « Laisser Ledge faire » (lot 11): the offer, the scan's steps, the proposal. */
+    ledge: {
+      offerTitle: 'Pas envie de chercher les dépôts vous-même ?',
+      offerBody: 'Ledge parcourt vos machines, regroupe les dépôts qui vont ensemble et vous propose un projet à vérifier.',
+      offer: 'Laisser Ledge faire', ask: 'Demander à Ledge',
+      scanning: (ms: readonly string[]) => `Ledge parcourt ${ms.length ? andList(ms) : 'vos machines'}…`,
+      step: (s: ScanStep): string => s.state === 'waiting' ? `Parcourt ${s.label}…`
+        : s.state === 'done' ? `${s.label} · ${s.repos} dépôt${plural(s.repos, '', 's')} trouvé${plural(s.repos, '', 's')}${s.truncated ? ' · parcours limité' : ''}`
+        : s.state === 'outdated' ? `${s.label} : daemon trop ancien, ignorée`
+        : s.state === 'timeout' ? `${s.label} n’a pas répondu, ignorée`
+        : s.state === 'failed' ? `${s.label} : le parcours a échoué, ignorée`
+        : `${s.label} hors ligne, ignorée`,
+      compared: 'Remotes et sessions comparés',
+      proposes: 'Ledge propose', check: 'Décochez ce qui ne va pas, puis validez : rien n’est créé avant.',
+      summary: (s: Summary): string => {
+        const n = `${s.repos} dépôt${plural(s.repos, '', 's')}`;
+        const on = s.machines.length ? `sur ${andList(s.machines)}` : '';
+        const head = s.target ? `${n} de plus pour ${s.target}${on ? `, ${on}` : ''}.` : `${n}${on ? ` ${on}` : ''}.`;
+        return head + (s.agents.length ? ` À ranger aussi : ${andList(s.agents)}.` : '');
+      },
+      nothing: 'Tous les dépôts trouvés appartiennent déjà à un projet. Ajoutez-en un à la main.',
+      why: 'Ledge · ', keep: (n: string, m: string) => `Garder ${n} (${m})`, addTo: (n: string) => `Ajouter à ${n}`,
+      gone: 'Cette proposition n’existe plus.'
     },
     picker: {
       machines: 'Machine à parcourir', offline: 'hors ligne',
