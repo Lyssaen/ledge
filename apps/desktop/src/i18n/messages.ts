@@ -123,7 +123,9 @@ const fr = {
   },
   decisions: {
     failed: (name: string, message: string) => `Décision non transmise à ${name} : ${message}`,
-    unconfirmed: (name: string) => `Ledge n’a pas vu la décision pour ${name} aboutir. Ouvrez la session pour vérifier.`
+    unconfirmed: (name: string) => `Ledge n’a pas vu la décision pour ${name} aboutir. Ouvrez la session pour vérifier.`,
+    replyFailed: (name: string, message: string) => `Réponse non transmise à ${name} : ${message}`,
+    replyUnconfirmed: (name: string) => `Ledge n’a pas vu la réponse à ${name} aboutir. Vérifiez le fil.`
   },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
@@ -245,7 +247,9 @@ const en: typeof fr = {
   },
   decisions: {
     failed: (name, message) => `Could not send the decision to ${name}: ${message}`,
-    unconfirmed: (name) => `Ledge did not see the decision for ${name} land. Open the session to check.`
+    unconfirmed: (name) => `Ledge did not see the decision for ${name} land. Open the session to check.`,
+    replyFailed: (name, message) => `Could not send the reply to ${name}: ${message}`,
+    replyUnconfirmed: (name) => `Ledge did not see the reply to ${name} land. Check the thread.`
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },

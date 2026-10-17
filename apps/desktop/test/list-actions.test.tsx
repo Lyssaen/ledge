@@ -30,7 +30,7 @@ describe('the List quick actions', () => {
     const { d, user } = await boot({ sessions: listSessions(), list: true });
     await user.click(within(row('Otto')).getByRole('button', { name: 'Deny' }));
     await waitFor(() => expect(decides(d)).toHaveLength(1));
-    d.push({ type: 'error', id: 'otto', message: 'no pending request' });
+    d.push({ type: 'error', id: 'otto', message: 'no pending request', request: 'session.decide' });
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not send the decision to Otto: Local: no pending request'));
     expect(within(row('Otto')).getByRole('button', { name: 'Allow' })).toBeEnabled();
     expect(within(row('Otto')).getByText('Approval')).toBeVisible();

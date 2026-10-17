@@ -183,4 +183,12 @@ describe('daemon client + store', () => {
     daemonStore.apply({ type: 'snapshot', sessions: [] });   // the machine was removed from the list
     expect(daemonStore.getState().threads.size).toBe(0);
   });
+  it('keeps the last 20 errors with their request, in order', () => {
+    daemonStore.reset();
+    for (let i = 1; i <= 25; i++) daemonStore.apply({ type: 'error', id: 'a', message: `e${i}`, ...(i % 2 ? { request: 'session.reply' } : {}) });
+    const { errors, lastError } = daemonStore.getState();
+    expect(errors.map(e => e.message)).toEqual(Array.from({ length: 20 }, (_, i) => `e${i + 6}`));
+    expect(errors[0]).toEqual({ id: 'a', message: 'e6', seq: 6 });
+    expect(lastError).toEqual({ id: 'a', message: 'e25', seq: 25, request: 'session.reply' });
+  });
 });

@@ -2,12 +2,16 @@ import { useSyncExternalStore } from 'react';
 import type { ChatTurn, DaemonInfo, Recent, ServerMessage, Session, ThreadItem } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 
-/** The daemon's last `error` reply; `seq` tells two identical messages apart. */
-export interface DaemonError { id?: string; message: string; seq: number }
+/** A daemon `error` reply; `seq` tells two identical messages apart. */
+export interface DaemonError { id?: string; message: string; seq: number; /** Le type du message refusé, quand le daemon le dit. */ request?: string }
+/** How many errors the store remembers. */
+export const ERRORS_KEPT = 20;
 /** The daemon's last `session.launched` answer (to this client's `session.launch`); `seq` tells two apart. */
 export interface Launched { id: string; seq: number }
 export interface DaemonState {
   sessions: Session[]; byId: Map<string, Session>; status: DaemonStatus; previews: Map<string, string[]>; lastError: DaemonError | null;
+  /** Les ERRORS_KEPT derniers `error`, du plus ancien au plus récent; `lastError` est le dernier. */
+  errors: readonly DaemonError[];
   /** Native tracking: the threads received so far, by session (asked for when a session opens). */
   threads: Map<string, ThreadItem[]>;
   /** The folders of past sessions, most recent first (the launch form's suggestions). */
@@ -27,7 +31,7 @@ export interface DaemonState {
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
 export type FolderListing = Omit<Extract<ServerMessage, { type: 'folder.listing' }>, 'type'> & { seq: number };
-const empty = (): DaemonState => ({ sessions: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, lastUpdate: null });
+const empty = (): DaemonState => ({ sessions: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, lastUpdate: null });
 let state: DaemonState = empty();
 const subs = new Set<() => void>();
 const emit = () => subs.forEach(f => f());
@@ -50,7 +54,10 @@ export const daemonStore = {
       const chatLive = m.type === 'chat.delta' ? { qid: m.qid, text: (state.chatLive?.qid === m.qid ? state.chatLive.text : '') + m.text } : m.type === 'chat.step' ? state.chatLive : null;
       state = { ...state, chat, chatLive }; emit(); return;
     }
-    if (m.type === 'error') { state = { ...state, lastError: { id: m.id, message: m.message, seq: (state.lastError?.seq ?? 0) + 1 } }; emit(); return; }
+    if (m.type === 'error') {
+      const e: DaemonError = { id: m.id, message: m.message, seq: (state.lastError?.seq ?? 0) + 1, ...(m.request ? { request: m.request } : {}) };
+      state = { ...state, lastError: e, errors: [...state.errors, e].slice(-ERRORS_KEPT) }; emit(); return;
+    }
     if (m.type === 'session.launched') { state = { ...state, lastLaunched: { id: m.id, seq: (state.lastLaunched?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'folder.listing') { const { type: _, ...l } = m; state = { ...state, lastListing: { ...l, seq: (state.lastListing?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'update.progress' || m.type === 'update.failed') { state = { ...state, lastUpdate: { msg: m, seq: (state.lastUpdate?.seq ?? 0) + 1 } }; emit(); return; }

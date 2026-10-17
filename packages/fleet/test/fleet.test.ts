@@ -126,6 +126,12 @@ describe('common chat routing', () => {
     server.set('unreachable');
     expect(got.at(-2)).toMatchObject({ type: 'error' });
   });
+  it('a reply to an offline machine says which request it refuses', () => {
+    const { client, server, got } = setup();
+    server.set('unreachable');
+    client.send({ type: 'session.reply', id: 'server:same', text: 'Go' });
+    expect(got.at(-1)).toEqual({ type: 'error', id: 'server:same', message: 'dev-server is offline', request: 'session.reply' });
+  });
   it('refuses an offline routed destination even while the coordinator stays online', () => {
     const { client, local, server, got } = setup();
     server.set('unreachable');

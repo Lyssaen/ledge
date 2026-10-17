@@ -11,7 +11,7 @@ const otto = fakeSession('local:otto', { name: 'Otto', state: 'waiting_permissio
 type P = Parameters<typeof useDecisions>[0];
 const wrapper = ({ children }: { children: React.ReactNode }) => <LangProvider lang="en">{children}</LangProvider>;
 const setup = (over: Partial<P> = {}) => {
-  const props: P = { client: { send: vi.fn() }, sessions: [otto], lastError: null, notify: vi.fn(), ...over };
+  const props: P = { client: { send: vi.fn() }, sessions: [otto], errors: [], notify: vi.fn(), ...over };
   const hook = renderHook((p: P) => useDecisions(p), { initialProps: props, wrapper });
   return { ...hook, props };
 };
@@ -65,11 +65,11 @@ describe('useDecisions', () => {
     expect(props.notify).not.toHaveBeenCalled();
   });
   it('an error for that session after the send frees it and says why; an older or another one does not', () => {
-    const { result, rerender, props } = setup({ lastError: { id: 'local:otto', message: 'old', seq: 1 } });
+    const { result, rerender, props } = setup({ errors: [{ id: 'local:otto', message: 'old', seq: 1, request: 'session.decide' }] });
     act(() => { result.current.decide(otto, 'deny'); });
-    rerender({ ...props, lastError: { id: 'local:nova', message: 'other', seq: 2 } });
+    rerender({ ...props, errors: [{ id: 'local:nova', message: 'other', seq: 2, request: 'session.decide' }] });
     expect(result.current.busy('local:otto')).toBe(true);
-    rerender({ ...props, lastError: { id: 'local:otto', message: 'Dev SSH is offline', seq: 3 } });
+    rerender({ ...props, errors: [{ id: 'local:otto', message: 'Dev SSH is offline', seq: 3, request: 'session.decide' }] });
     expect(result.current.busy('local:otto')).toBe(false);
     expect(props.notify).toHaveBeenCalledWith('Could not send the decision to Otto: Dev SSH is offline');
     // Free again: a new decision goes.
@@ -93,5 +93,49 @@ describe('useDecisions', () => {
       expect(result.current.busy('local:otto')).toBe(false);
       expect(props.notify).toHaveBeenCalledWith('Ledge did not see the decision for Otto land. Open the session to check.');
     } finally { vi.useRealTimers(); }
+  });
+  it('a refusal answers its own request: a refused reply is not blamed on the decision in flight', () => {
+    const { result, rerender, props } = setup();
+    act(() => { result.current.decide(otto, 'accept'); });
+    const replyRefused = { id: 'local:otto', message: 'empty reply', seq: 1, request: 'session.reply' };
+    rerender({ ...props, errors: [replyRefused] });
+    expect(result.current.busy('local:otto')).toBe(true);
+    expect(props.notify).not.toHaveBeenCalled();
+    rerender({ ...props, errors: [replyRefused, { id: 'local:otto', message: 'nothing to decide', seq: 2, request: 'session.decide' }] });
+    expect(result.current.busy('local:otto')).toBe(false);
+    expect(props.notify).toHaveBeenCalledWith('Could not send the decision to Otto: nothing to decide');
+  });
+  it('two refusals in one batch are both said', () => {
+    const nova = fakeSession('local:nova', { name: 'Nova', state: 'waiting_permission', pending: { kind: 'permission', text: 'rm -rf dist', source: 'hook' } });
+    const { result, rerender, props } = setup({ sessions: [otto, nova] });
+    act(() => { result.current.decide(otto, 'accept'); result.current.decide(nova, 'deny'); });
+    rerender({ ...props, errors: [{ id: 'local:otto', message: 'a', seq: 1, request: 'session.decide' }, { id: 'local:nova', message: 'b', seq: 2, request: 'session.decide' }] });
+    expect((props.notify as ReturnType<typeof vi.fn>).mock.calls).toEqual([['Could not send the decision to Otto: a'], ['Could not send the decision to Nova: b']]);
+    expect([result.current.busy('local:otto'), result.current.busy('local:nova')]).toEqual([false, false]);
+  });
+  it('always and a note travel with the decision; what the harness does not offer is never sent', () => {
+    const { result, props } = setup({ sessions: [otto] });
+    act(() => { expect(result.current.decide(otto, 'accept', 'why')).toBe(false); });
+    act(() => { expect(result.current.decide({ ...otto, tool: 'cursor' }, 'always')).toBe(false); });
+    act(() => { expect(result.current.decide(otto, 'deny', 'Use pnpm')).toBe(true); });
+    expect(props.client.send).toHaveBeenCalledWith({ type: 'session.decide', id: 'local:otto', decision: 'deny', note: 'Use pnpm' });
+    expect(props.client.send).toHaveBeenCalledTimes(1);
+  });
+  it('a reply lands when the session moves; refused, its text comes back', () => {
+    const bix = fakeSession('local:bix', { name: 'Bix', state: 'idle' });
+    const onRefused = vi.fn();
+    const { result, rerender, props } = setup({ sessions: [bix] });
+    act(() => { expect(result.current.reply(otto, 'x')).toBe(false); });           // a permission waits for its buttons
+    act(() => { expect(result.current.reply(bix, '   ')).toBe(false); });
+    act(() => { expect(result.current.reply(bix, 'Go on', onRefused)).toBe(true); });
+    act(() => { expect(result.current.reply(bix, 'again')).toBe(false); });
+    expect(props.client.send).toHaveBeenCalledWith({ type: 'session.reply', id: 'local:bix', text: 'Go on' });
+    rerender({ ...props, sessions: [bix], errors: [{ id: 'local:bix', message: 'the terminal did not take it', seq: 1, request: 'session.reply' }] });
+    expect(props.notify).toHaveBeenCalledWith('Could not send the reply to Bix: the terminal did not take it');
+    expect(onRefused).toHaveBeenCalledWith('Go on');
+    act(() => { result.current.reply(bix, 'Go on'); });
+    rerender({ ...props, sessions: [{ ...bix, state: 'working', lastActivityAt: '2026-10-09T18:01:00.000Z' }], errors: [] });
+    expect(result.current.busy('local:bix')).toBe(false);
+    expect(props.notify).toHaveBeenCalledTimes(1);
   });
 });

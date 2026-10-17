@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DaemonClient, DaemonError } from '@ledge/fleet';
-import type { Session } from '@ledge/protocol';
+import { NOTE_MAX, offers, type Decision, type Session } from '@ledge/protocol';
 import { useI18n } from '../i18n/lang';
 
 /** What a pending request is, whatever refreshes around it: its kind, its text and the helper it comes from; null without a request. */
@@ -14,24 +14,35 @@ export const UNCONFIRMED_MS = 8000;
 /** How long a row flashes once its decision landed (list.css `.lrow.flash`). */
 export const FLASH_MS = 1800;
 
-export interface Decisions {
-  /** Une décision est partie pour la demande en cours de cette session. */
-  busy(id: string): boolean;
-  /** La session dont la décision vient d'aboutir, pendant 1,8 s (classe `flash` de la ligne). */
-  landed: string | null;
-  /** false sans envoi : hors ligne, lecture seule (`hook_only`), sans demande, demande de type question, ou déjà partie. */
-  decide(s: Session, decision: 'accept' | 'deny'): boolean;
+/** Ce que le daemon change après avoir pris un message (sends.ts de feat/desktop) : état, activité, dernière réponse, demande. */
+export function markOf(s: Session): string {
+  return JSON.stringify([s.state, s.lastActivityAt, s.lastReply ?? null, requestKey(s)]);
 }
 
-/** The request the decision answers, the daemon's last error when it left (only a later one can refuse it), the name a notice gives. */
-interface Sent { request: string | null; errorSeq: number; name: string; timer: ReturnType<typeof setTimeout> }
+export interface Decisions {
+  /** Un envoi (décision ou réponse) est en vol pour cette session. */
+  busy(id: string): boolean;
+  /** La session dont l'envoi vient d'aboutir, pendant 1,8 s (classe `flash` de la ligne). */
+  landed: string | null;
+  /** false sans envoi : hors ligne, lecture seule, sans demande, question, déjà en vol, `always` ou note que offers() refuse, note sans deny. */
+  decide(s: Session, decision: Decision, note?: string): boolean;
+  /** false sans envoi : hors ligne, lecture seule, texte vide, déjà en vol, demande autre qu'une question. `onRefused` rend le texte. */
+  reply(s: Session, text: string, onRefused?: (text: string) => void): boolean;
+}
 
-/** Allow / Deny, shared by the List and (lot 6) the session (the lot-3 `sends.ts`, reduced to decisions): one send per
- *  request, settled when the request changes (landed), the session goes (forgotten), the daemon answers an error for it
- *  (refused, said in the toast), or nothing happens for 8 s (given up, with a notice). */
-export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: readonly Session[]; lastError: DaemonError | null; notify(text: string): void }): Decisions {
+/** What is in flight: the message, the request and the mark it started from, the last error seen then (only a later one
+ *  can refuse it), the name a notice gives, and what a refused reply gives back. */
+interface Sent {
+  message: 'session.decide' | 'session.reply'; pending: string | null; mark: string; errorSeq: number; name: string;
+  text?: string; onRefused?: (text: string) => void; timer: ReturnType<typeof setTimeout>;
+}
+
+/** Allow / Deny / Always / a note, and free replies, shared by the List and the session: one send per session, settled
+ *  when it lands (the request changes for a decision, the session moves for a reply), the session goes (forgotten), the
+ *  daemon refuses that very message type for it (said in the toast), or nothing happens for 8 s (given up, with a notice). */
+export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: readonly Session[]; errors: readonly DaemonError[]; notify(text: string): void }): Decisions {
   const { t } = useI18n();
-  const { sessions, lastError } = o;
+  const { sessions, errors } = o;
   // A synchronous mirror of what is in flight: two clicks in the same frame see the first send before React renders again.
   const live = useRef(new Map<string, Sent>());
   const [inFlight, setInFlight] = useState<ReadonlySet<string>>(() => new Set());
@@ -40,6 +51,8 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
   // The timers and the effects speak with the current props and language.
   const latest = useRef({ o, t });
   latest.current = { o, t };
+  // The newest error already looked at: each error is judged once, in order.
+  const seen = useRef(errors.at(-1)?.seq ?? 0);
 
   const forget = (id: string) => {
     const x = live.current.get(id);
@@ -55,17 +68,24 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
     for (const [id, x] of [...live.current]) {
       const s = byId.get(id);
       if (!s) forget(id);
-      else if (!s.offline && requestKey(s) !== x.request) { forget(id); setLanded({ id }); }
+      else if (!s.offline && (x.message === 'session.decide' ? requestKey(s) !== x.pending : markOf(s) !== x.mark)) { forget(id); setLanded({ id }); }
     }
   }, [sessions]);
 
   useEffect(() => {
-    const id = lastError?.id;
-    const x = id === undefined ? undefined : live.current.get(id);
-    if (!lastError || !id || !x || lastError.seq <= x.errorSeq) return;
-    forget(id);
-    latest.current.o.notify(latest.current.t.decisions.failed(x.name, lastError.message));
-  }, [lastError]);
+    const last = errors.at(-1)?.seq ?? 0;
+    if (last < seen.current) seen.current = 0; // the store started over
+    for (const e of errors) {
+      if (e.seq <= seen.current) continue;
+      seen.current = e.seq;
+      const x = e.id === undefined ? undefined : live.current.get(e.id);
+      if (!x || !e.request || e.request !== x.message || e.seq <= x.errorSeq) continue;
+      forget(e.id!);
+      const { o: cur, t: tr } = latest.current;
+      if (x.message === 'session.decide') cur.notify(tr.decisions.failed(x.name, e.message));
+      else { cur.notify(tr.decisions.replyFailed(x.name, e.message)); x.onRefused?.(x.text ?? ''); }
+    }
+  }, [errors]);
 
   useEffect(() => {
     if (!landed) return;
@@ -75,21 +95,37 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
 
   useEffect(() => () => { for (const x of live.current.values()) clearTimeout(x.timer); live.current.clear(); }, []);
 
+  /** Records the send and the 8 s watch, then sends. */
+  const send = (s: Session, message: Sent['message'], payload: Parameters<Pick<DaemonClient, 'send'>['send']>[0], extra: Pick<Sent, 'text' | 'onRefused'> = {}) => {
+    const { name, id } = s;
+    const timer = setTimeout(() => {
+      const x = forget(id);
+      if (!x) return;
+      const { o: cur, t: tr } = latest.current;
+      cur.notify(message === 'session.decide' ? tr.decisions.unconfirmed(name) : tr.decisions.replyUnconfirmed(name));
+    }, UNCONFIRMED_MS);
+    // `errorSeq` comes from the last render's errors, so whether this is recorded before or after `client.send` does not matter for it.
+    live.current.set(id, { message, pending: requestKey(s), mark: markOf(s), errorSeq: latest.current.o.errors.at(-1)?.seq ?? 0, name, timer, ...extra });
+    setInFlight(new Set(live.current.keys()));
+    latest.current.o.client.send(payload);
+    return true;
+  };
+
   return {
     busy: id => inFlight.has(id),
     landed: landed?.id ?? null,
-    decide(s, decision) {
-      if (s.offline || s.source === 'hook_only' || !s.pending || s.pending.kind === 'question' || live.current.has(s.id)) return false;
-      const { name, id } = s;
-      const timer = setTimeout(() => {
-        if (!forget(id)) return;
-        latest.current.o.notify(latest.current.t.decisions.unconfirmed(name));
-      }, UNCONFIRMED_MS);
-      // `errorSeq` comes from the last render's `lastError`, so whether this is recorded before or after `client.send` does not matter for it.
-      live.current.set(id, { request: requestKey(s), errorSeq: latest.current.o.lastError?.seq ?? 0, name, timer });
-      setInFlight(new Set(live.current.keys()));
-      latest.current.o.client.send({ type: 'session.decide', id, decision });
-      return true;
+    decide(s, decision, note) {
+      const p = s.pending;
+      if (s.offline || s.source === 'hook_only' || !p || p.kind === 'question' || live.current.has(s.id)) return false;
+      if (decision === 'always' && !offers(s.tool, p.kind, 'always')) return false;
+      if (note) {
+        if (decision !== 'deny' || note.length > NOTE_MAX || !offers(s.tool, p.kind, 'note')) return false;
+      }
+      return send(s, 'session.decide', { type: 'session.decide', id: s.id, decision, ...(note ? { note } : {}) });
+    },
+    reply(s, text, onRefused) {
+      if (s.offline || s.source === 'hook_only' || !text.trim() || live.current.has(s.id) || (s.pending && s.pending.kind !== 'question')) return false;
+      return send(s, 'session.reply', { type: 'session.reply', id: s.id, text }, { text, onRefused });
     }
   };
 }

@@ -22,7 +22,7 @@ afterEach(async () => { cleanup(); await closeDaemons(); });
 const rowsOf = (name: string) => within(screen.getByRole('region', { name })).getAllByRole('listitem').map(r => r.getAttribute('aria-label')!.split(',')[0]);
 const row = (name: string) => screen.getByRole('listitem', { name: new RegExp(`^${name},`) });
 const head = (name: string) => within(document.querySelector<HTMLElement>(`.lgroup[aria-label="${name}"] .lgroup-head`)!);
-const decisions: Decisions = { busy: () => false, landed: null, decide: () => false };
+const decisions: Decisions = { busy: () => false, landed: null, decide: () => false, reply: () => false };
 const chip = (name: RegExp) => within(screen.getByRole('group', { name: 'Filter by state' })).getByRole('button', { name });
 
 /** A filing that never drags. */

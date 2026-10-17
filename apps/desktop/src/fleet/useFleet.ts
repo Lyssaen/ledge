@@ -23,6 +23,8 @@ export interface FleetView {
   sessions: Session[]; machines: MachineState[]; status: DaemonStatus; fleet: Fleet; client: DaemonClient; localDown: boolean;
   /** The daemon's last `error` reply (a refused decision, a machine offline at send), its session id qualified. */
   lastError: DaemonError | null;
+  /** The last errors (a refused send, a machine offline at send), oldest first, the session ids qualified. */
+  errors: readonly DaemonError[];
 }
 
 /** One attach/connect per client however many components use it: the first consumer starts it, the last one stops it. */
@@ -40,5 +42,5 @@ export function useFleet(client: DaemonClient = defaultClient()): FleetView {
   const machines = useMachines(client);
   // Only a settled failure counts: the first machine starts as 'connecting', which must not flash the notice at boot.
   const localDown = machines[0]?.status === 'unreachable';
-  return { sessions: daemon.sessions, machines, status: daemon.status, fleet: client.fleet!, client, localDown, lastError: daemon.lastError };
+  return { sessions: daemon.sessions, machines, status: daemon.status, fleet: client.fleet!, client, localDown, lastError: daemon.lastError, errors: daemon.errors };
 }

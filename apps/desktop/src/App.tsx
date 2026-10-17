@@ -36,7 +36,7 @@ const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'rec
 /** The Atelier's shell: sidebar, top bar, the current place (the atelier, the List; the other screens wait for their lot), footer, chat and dialogs;
  *  the real fleet, toasts and sounds, and the tray. */
 function Shell({ client }: { client?: DaemonClient }) {
-  const { sessions, machines, status, localDown, fleet, client: fleetClient, lastError } = useFleet(client);
+  const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = useFleet(client);
   const projects = useProjects(fleetClient);
   const { t } = useI18n();
   const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
@@ -72,7 +72,7 @@ function Shell({ client }: { client?: DaemonClient }) {
   const { notice, notify } = useToast();
   const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
   // Allow / Deny from the List (and, lot 6, the session): one send per request; a refusal or a silence is said in the toast.
-  const decisions = useDecisions({ client: fleetClient, sessions, lastError, notify });
+  const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   useKeys(dispatch, { state: nav, order, screen: screenKeys });
   // The window may leave full screen by itself (Escape in a browser, the OS): the layout follows.
