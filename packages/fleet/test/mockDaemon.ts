@@ -68,8 +68,9 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     refuse(message: string) { last?.send(JSON.stringify({ type: 'error', message })); },
     /** The next launches get no answer until `releaseLaunch` (whatever `autoLaunch` says). */
     holdLaunch() { holding = true; },
-    /** Answers the held launches as `autoLaunch` does (a `starting` session, then `session.launched` to each sender); later ones are answered by `autoLaunch` again. */
-    releaseLaunch() { holding = false; for (const { ws, m } of held.splice(0)) answerLaunch(ws, m); },
+    /** Answers the held launches as `autoLaunch` does (a `starting` session, then `session.launched` to each sender); later ones are answered by `autoLaunch` again.
+     *  With `count`, only the first `count` held launches are answered, in the order sent, and the next ones are still held. */
+    releaseLaunch(count?: number) { if (count === undefined) holding = false; for (const { ws, m } of held.splice(0, count ?? held.length)) answerLaunch(ws, m); },
     /** The next launch is refused as the daemon does: an `error` without id, `request: 'session.launch'`, to its sender. */
     refuseLaunch(message: string) { refusal = message; },
     /** Any daemon message, to every client (the chat's steps, answers and history in Desktop's tests). */

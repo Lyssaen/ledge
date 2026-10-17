@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { DaemonError } from '@ledge/fleet';
+import { daemonStore, type DaemonError } from '@ledge/fleet';
 import { closeDaemons, openLaunch, type MockDaemon } from './helpers';
 import { LAUNCH_TIMEOUT_MS, type LaunchMessage } from '../src/launch/model';
 import { useLaunch } from '../src/launch/useLaunch';
@@ -111,6 +111,55 @@ describe('launching', () => {
     expect(again.queryByRole('alert')).toBeNull();
   });
 
+  it('a late answer for an earlier launch is not taken for the current one; the notice names the launched session and its own table', async () => {
+    const { d, user, form } = await openLaunch();
+    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'A');
+    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    d.holdLaunch();
+    await user.click(launchButton(form));
+    await waitFor(() => expect(launches(d)).toHaveLength(1));
+    await user.click(form.getByRole('button', { name: 'Cancel' }));
+    await user.keyboard('n');
+    const b = within(await screen.findByRole('dialog', { name: 'New session' }));
+    await user.type(b.getByRole('textbox', { name: 'Instruction' }), 'B');
+    await user.click(b.getByRole('radio', { name: /Claude Code/ }));
+    await user.click(b.getByRole('radio', { name: /^Payment Service/ }));
+    await user.click(launchButton(b));
+    await waitFor(() => expect(launches(d)).toHaveLength(2));
+    expect(launches(d)[1]).toMatchObject({ tool: 'claude', cwd: '/w/pay' });
+    // A answers: listed, then launched; B's form keeps waiting.
+    const seq = daemonStore.getState().lastLaunched?.seq ?? 0;
+    d.releaseLaunch(1);
+    await waitFor(() => expect(daemonStore.getState().lastLaunched?.seq).toBe(seq + 1));
+    expect(dialog()).not.toBeNull();
+    expect(b.getByRole('button', { name: /Launching…/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(document.querySelector('.toast')).toBeNull();
+    // B answers: the form closes, the notice names B at the table its session sits at.
+    d.releaseLaunch();
+    await waitFor(() => expect(dialog()).toBeNull());
+    expect(screen.getByText(`${launches(d)[1]!.name} is starting at the Payment Service Platform Migration Europe table.`)).toBeVisible();
+  });
+
+  it('a launch from a session page stays on the page, whatever the filter', async () => {
+    const { d, user, side } = await openLaunch();
+    await user.keyboard('{Escape}');
+    await user.click(side.getByRole('button', { name: /^Payment Service/ }));
+    await user.click(screen.getByRole('listitem', { name: /^Nova,/ }));
+    const rail = within(await screen.findByRole('navigation', { name: 'Agents of the project Payment Service Platform Migration Europe' }));
+    await user.click(rail.getByRole('button', { name: 'New session here' }));
+    const form = within(await screen.findByRole('dialog', { name: 'New session' }));
+    await user.click(form.getByRole('radio', { name: 'Ledge' }));
+    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
+    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    d.options.autoLaunch = true;
+    await user.click(launchButton(form));
+    await waitFor(() => expect(dialog()).toBeNull());
+    expect(screen.getByText(/ is starting at the Ledge table\.$/)).toBeVisible();
+    expect(screen.getByRole('navigation', { name: 'Agents of the project Payment Service Platform Migration Europe' })).toBeVisible();
+    expect(within(screen.getByRole('banner')).getByText('Nova')).toBeVisible();
+    expect(screen.queryByRole('listitem', { name: /^Otto,/ })).toBeNull();      // not back on the List
+  });
+
   it('a launch from another project filter switches the filter to All, keeping the view', async () => {
     const { d, user, side } = await openLaunch();
     await user.keyboard('{Escape}');
@@ -150,10 +199,10 @@ describe('launching', () => {
 
 describe('useLaunch', () => {
   const msg: LaunchMessage = { type: 'session.launch', tool: 'codex', cwd: '/w/a', name: 'Ada', prompt: 'Go', machineId: 'nas' };
-  type View = { client: { send: (m: unknown) => void }; lastLaunched: { id: string; seq: number } | null; errors: readonly DaemonError[] };
+  type View = { client: { send: (m: unknown) => void }; lastLaunched: { id: string; seq: number } | null; errors: readonly DaemonError[]; sessions: readonly object[] };
   const setup = (initial: Partial<View> = {}) => {
     const onLaunched = vi.fn();
-    const view: View = { client: { send: vi.fn() }, lastLaunched: { id: 'local:old', seq: 3 }, errors: [{ message: 'old', seq: 5, request: 'session.launch' }], ...initial };
+    const view: View = { client: { send: vi.fn() }, lastLaunched: { id: 'local:old', seq: 3 }, errors: [{ message: 'old', seq: 5, request: 'session.launch' }], sessions: [], ...initial };
     const hook = renderHook((v: View) => useLaunch(v as never, onLaunched), { initialProps: view });
     return { ...hook, view, onLaunched };
   };
@@ -169,6 +218,23 @@ describe('useLaunch', () => {
     rerender({ ...view, lastLaunched: { id: 'nas:ada', seq: 4 } });
     expect(onLaunched).toHaveBeenCalledExactlyOnceWith('nas:ada');
     expect(result.current.state).toEqual({ status: 'idle' });
+  });
+
+  it('a launched answer from another machine, or for another tool or folder, is not this launch: the wait goes on', () => {
+    const ada = (extra: object) => ({ id: 'nas:ada', name: 'Ada', tool: 'codex', cwd: '/w/a', ...extra });
+    const { result, rerender, view, onLaunched } = setup({ sessions: [] });
+    act(() => result.current.launch(msg));
+    rerender({ ...view, lastLaunched: { id: 'local:ada', seq: 4 } });
+    rerender({ ...view, lastLaunched: { id: 'nas:bob', seq: 5 }, sessions: [ada({ id: 'nas:bob', tool: 'claude' })] });
+    rerender({ ...view, lastLaunched: { id: 'nas:cid', seq: 6 }, sessions: [ada({ id: 'nas:cid', cwd: '/w/b' })] });
+    expect(onLaunched).not.toHaveBeenCalled();
+    expect(result.current.state).toEqual({ status: 'launching' });
+    // Listed with the same tool and folder (normalized), or not listed yet: this launch.
+    rerender({ ...view, lastLaunched: { id: 'nas:ada', seq: 7 }, sessions: [ada({ cwd: '/w//a/' })] });
+    expect(onLaunched).toHaveBeenCalledExactlyOnceWith('nas:ada');
+    act(() => result.current.launch({ ...msg, machineId: undefined }));
+    rerender({ ...view, lastLaunched: { id: 'local:dee', seq: 8 }, sessions: [] });
+    expect(onLaunched).toHaveBeenLastCalledWith('local:dee');
   });
 
   it('a machine that drops mid-launch: the fleet\'s « is offline » is the refusal', () => {

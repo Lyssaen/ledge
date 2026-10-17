@@ -118,10 +118,15 @@ function Shell({ client }: { client?: DaemonClient }) {
   const launched = useRef<{ name: string; project: string; projectId: string } | null>(null);
   const launcher = useLaunch(fleetView, id => {
     const preview = launched.current;
+    // The table is the launched session's own, once listed (the daemon lists it before answering); the preview's until then.
+    const s = sessions.find(x => x.id === id);
+    const own = s ? projects?.projects.find(p => p.id === projectIdOf(s)) : undefined;
+    const table = own ? { id: own.id, name: own.name } : preview ? { id: preview.projectId, name: preview.project } : null;
     dispatch({ type: 'modal', modal: null });
-    if (base.project !== 'all' && base.project !== preview?.projectId) dispatch({ type: 'home', project: 'all' });
+    // Only the overview's filter follows; a session page (its rail's « New session here ») stays where it is.
+    if (place.kind === 'overview' && place.project !== 'all' && place.project !== table?.id) dispatch({ type: 'home', project: 'all' });
     filing.markSeated(id);
-    if (preview) notify(t.launch.started(sessions.find(s => s.id === id)?.name ?? preview.name, preview.project));
+    if (table) notify(t.launch.started(s?.name ?? preview?.name ?? '', table.name));
   });
   // The form closed (Escape, Cancel, another dialog): nothing is waited for any more; a late answer is not announced.
   const { reset: resetLaunch } = launcher;
