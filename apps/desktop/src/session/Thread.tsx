@@ -12,7 +12,7 @@ import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import { ActionGroup } from './ActionGroup';
 import { nameOf } from './changes';
 import { PlanCard } from './PlanCard';
-import { docRefs, helperOf, timeMark, type Exchange, type Segment } from './thread';
+import { docRefs, helperOf, planTitle, timeMark, type Exchange, type Segment } from './thread';
 
 const CHIP_MARK = { accept: '✓', always: '✓', deny: '✕', unknown: '·' } as const;
 /** A decided plan (ExitPlanMode): approved, or sent back to planning. */
@@ -113,7 +113,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
     else if (s.kind === 'decision') {
       const d = s.item.decision!;
       node = s.item.tool === 'ExitPlanMode'
-        ? <div className={`decision-chip plan ${d}`}><span className="chip-mark">{PLAN_MARK[d]}</span><span>{planDecided[d]}</span><strong>{s.item.text}</strong></div>
+        ? <div className={`decision-chip plan ${d}`}><span className="chip-mark">{PLAN_MARK[d]}</span><span>{planDecided[d]}</span><strong>{planTitle(s.item.text)}</strong></div>
         : <div className={`decision-chip ${d}`}><span className="chip-mark">{CHIP_MARK[d]}</span><span>{th.decided[d]}</span><code>{s.item.text}</code></div>;
     } else if (s.kind === 'plan') node = <PlanCard plan={s.plan} open={planOpen === s.plan.key} onOpen={onPlan} />;
     else node = helperCard(s.item);

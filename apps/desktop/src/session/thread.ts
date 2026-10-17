@@ -84,8 +84,21 @@ export function pendingPlan(p: Pending): PlanDoc | null {
 
 /** Le fil principal par tour (turns : sous-agents écartés, écho de la réponse retiré), ou celui d'un sous-agent (helperThread) :
  *  un échange, sa consigne = la tâche de l'élément helper (from 'parent'), puis ses éléments et son rapport.
- *  Les actions consécutives se replient en un segment ; une permission non décidée est la demande épinglée, pas un segment. */
+ *  Les actions consécutives se replient en un segment ; une permission non décidée est la demande épinglée, pas un segment.
+ *  Un plan encore en attente qu'un plan plus récent du même fil suit est révisé. */
 export function exchanges(items: readonly ThreadItem[], helperId?: string): Exchange[] {
+  return superseded(exchangesOf(items, helperId));
+}
+
+/** A plan still waiting when the same thread proposes a later one was sent back: the daemon settles its action only at
+ *  the turn's end (or on a failure it is told of), so until then it would read « En attente de votre accord » twice. */
+function superseded(xs: Exchange[]): Exchange[] {
+  const plans = xs.flatMap(x => x.segments.filter((s): s is Extract<Segment, { kind: 'plan' }> => s.kind === 'plan'));
+  for (const s of plans.slice(0, -1)) if (s.plan.status === 'proposed') s.plan = { ...s.plan, status: 'revised' };
+  return xs;
+}
+
+function exchangesOf(items: readonly ThreadItem[], helperId?: string): Exchange[] {
   if (helperId !== undefined) {
     const { helper, items: own, report } = helperThread([...items], helperId);
     const rest = [...own, ...(report ? [report] : [])];

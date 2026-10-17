@@ -148,9 +148,10 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const shown = offline ? undefined : session.pending;
   const request = shown?.kind === 'plan' && (helper ? shown.helperId === helper.id : true) ? shown : undefined;
   const canAnswer = request !== undefined && session.source !== 'hook_only' && !helper;
+  // The waiting card: only the thread's last plan can still be proposed (exchanges revises those it supersedes).
   const requestKey = useMemo(() => {
     let key = 'pending';
-    for (const x of xs) for (const s of x.segments) if (s.kind === 'plan' && s.item.status === 'running') key = s.plan.key;
+    for (const x of xs) for (const s of x.segments) if (s.kind === 'plan' && s.plan.status === 'proposed') key = s.plan.key;
     return key;
   }, [xs]);
   const requestPlan = useMemo(() => (request ? pendingPlan(request) : null), [request]);
@@ -163,7 +164,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     for (const x of xs) for (const s of x.segments) {
       if (s.kind === 'plan') m.set(s.plan.key, { plan: s.plan, by: author, known: true, answer: canAnswer && s.plan.key === requestKey });
     }
-    if (requestPlan) m.set('pending', { plan: requestPlan, by: asker, known: true, answer: canAnswer && requestKey === 'pending' });
+    // The request's own tab is the request, whether or not its card has come since.
+    if (requestPlan) m.set('pending', { plan: requestPlan, by: asker, known: true, answer: canAnswer });
     else if (lastRequest) m.set('pending', { ...lastRequest, known: false, answer: false });
     return m;
   }, [xs, author, asker, canAnswer, requestKey, requestPlan, lastRequest]);

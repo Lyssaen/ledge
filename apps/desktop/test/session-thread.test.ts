@@ -94,4 +94,15 @@ describe('plans', () => {
     const xs = exchanges([{ kind: 'prompt', id: 'prompt-3', at: T0, turn: 3, text: 'Prépare la 0.6' }, { ...exit('r', 'success'), id: 'r', tool: 'Read', label: 'a' }, exit('p1', 'running')]);
     expect(xs[0]!.segments.map(s => s.kind)).toEqual(['tools', 'plan']);
   });
+  it('a plan still running when a later one comes is revised (main thread or the same subagent); an approved one stays approved', () => {
+    const statuses = (xs: Exchange[]) => xs.flatMap(x => x.segments.flatMap(s => (s.kind === 'plan' ? [s.plan.status] : [])));
+    const p3: ThreadItem = { kind: 'prompt', id: 'prompt-3', at: T0, turn: 3, text: 'Prépare la 0.6' };
+    expect(statuses(exchanges([p3, exit('p1', 'running'), exit('p2', 'running')]))).toEqual(['revised', 'proposed']);
+    expect(statuses(exchanges([p3, exit('p1', 'running'), { ...p3, id: 'prompt-4', turn: 4 }, { ...exit('p2', 'running'), turn: 4 }]))).toEqual(['revised', 'proposed']);
+    expect(statuses(exchanges([p3, exit('p1', 'success'), exit('p2', 'running')]))).toEqual(['approved', 'proposed']);
+    // A subagent's plan supersedes neither the main thread's nor another's.
+    const sub: ThreadItem[] = [p3, exit('p1', 'running'), { kind: 'helper', id: 'h1', at: T0, turn: 3, task: 'Planifier', agentType: 'Plan', state: 'working' }, { ...exit('hp', 'running'), helperId: 'h1' }];
+    expect(statuses(exchanges(sub))).toEqual(['proposed']);
+    expect(statuses(exchanges([...sub, { ...exit('hp2', 'running'), helperId: 'h1' }], 'h1'))).toEqual(['revised', 'proposed']);
+  });
 });

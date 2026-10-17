@@ -16,14 +16,20 @@ vi.mock('../src/session/thread', async importOriginal => {
   return { ...real, timeMark: (...a: Parameters<typeof real.timeMark>) => { marks.n++; return real.timeMark(...a); } };
 });
 
-// The open document counts its renders.
+// The open document counts its renders; so does the plan card, by its intro (rendered with it, never memoised apart).
 const docs = vi.hoisted(() => ({ n: 0 }));
+const intros = vi.hoisted(() => ({ n: 0 }));
+const INTRO = 'Préparer la release.';
 vi.mock('@ledge/ui/documents/markdown', async importOriginal => {
   const real = await importOriginal<typeof import('@ledge/ui/documents/markdown')>();
-  return { ...real, MarkdownDocument: (p: Parameters<typeof real.MarkdownDocument>[0]) => { docs.n++; return real.MarkdownDocument(p); } };
+  return {
+    ...real,
+    MarkdownDocument: (p: Parameters<typeof real.MarkdownDocument>[0]) => { docs.n++; return real.MarkdownDocument(p); },
+    ThreadMarkdown: (p: Parameters<typeof real.ThreadMarkdown>[0]) => { if (p.text === 'Préparer la release.') intros.n++; return real.ThreadMarkdown(p); }
+  };
 });
 
-afterEach(async () => { cleanup(); localStorage.clear(); vi.useRealTimers(); groups.clear(); marks.n = 0; docs.n = 0; await closeDaemons(); });
+afterEach(async () => { cleanup(); localStorage.clear(); vi.useRealTimers(); groups.clear(); marks.n = 0; docs.n = 0; intros.n = 0; await closeDaemons(); });
 
 const thread = () => within(screen.getByRole('tabpanel', { name: 'Session thread' }));
 /** Otto's page with its thread (an action running in the last exchange), the page's clock held still. */
@@ -77,5 +83,20 @@ describe('the thread renders only for what it shows', () => {
     d.preview('nova', ['$ npm run build']);
     await until(() => daemonStore.getState().previews.get('local:nova')?.[0] === '$ npm run build');
     expect(docs.n).toBe(before);
+  });
+
+  it('the clock and a preview of another session leave the plan card and its open plan alone', async () => {
+    const plan = `# Plan : version 0.6.0\n\n${INTRO}\n\n1. Construire\n2. Publier`;
+    // In the exchange whose action runs: the clock's ticks reach it.
+    const { d, user } = await openOtto([{ kind: 'tool', id: 'p1', at: new Date().toISOString(), turn: 2, tool: 'ExitPlanMode', label: '# Plan : version 0.6.0', input: JSON.stringify({ plan }), status: 'running', files: [] }]);
+    await user.click(thread().getByRole('button', { name: /Read the plan/ }));
+    await within(screen.getByRole('complementary', { name: 'Reading pane' })).findByText('Construire');
+    for (let seen = -1; seen !== docs.n + intros.n;) { seen = docs.n + intros.n; await pause(150); }
+    const before = { docs: docs.n, intros: intros.n, thread: marks.n };
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    d.preview('nova', ['$ npm run build']);
+    await until(() => daemonStore.getState().previews.get('local:nova')?.[0] === '$ npm run build');
+    expect(marks.n).toBeGreaterThan(before.thread);                // the thread took the tick…
+    expect({ docs: docs.n, intros: intros.n }).toEqual({ docs: before.docs, intros: before.intros }); // …the plan, card and tab, did not
   });
 });
