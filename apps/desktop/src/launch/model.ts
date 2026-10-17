@@ -11,7 +11,8 @@ export interface LaunchForm { tool: Tool | null; prompt: string; project: string
 export type Missing = 'tool' | 'prompt' | 'machine' | 'repos';
 type Infos = ReadonlyMap<string, RepoInfo>;
 
-const isUp = (m: MachineState) => m.status === 'open';
+/** Online: what the fleet takes (connected, fresh, its snapshot there), not merely a socket open. */
+export const isUp = (m: MachineState) => m.ready;
 const find = (projects: readonly Project[], id: string | null) => projects.find(p => p.id === id);
 const usable = (infos: Infos | undefined, path: string) => infos?.get(path)?.exists !== false;
 

@@ -10,7 +10,9 @@ const projects: Project[] = [
 ];
 const local = machine('local'), nas = machine('nas');
 const machines = [local, nas];
-const down = (m: typeof local) => ({ ...m, status: 'unreachable' as const });
+// As the fleet publishes them: a machine down is not ready; one reconnecting is open but not ready until its snapshot.
+const down = (m: typeof local) => ({ ...m, status: 'unreachable' as const, ready: false });
+const reconnecting = (m: typeof local) => ({ ...m, ready: false });
 
 describe('launch model', () => {
   it('defaults: the asked project, local when online, its first repo there, no harness', () => {
@@ -21,12 +23,14 @@ describe('launch model', () => {
     expect(launchDefaults(projects, machines, {}).project).toBe('ledge');
     expect(launchDefaults([], machines, {}).project).toBeNull();
     expect(launchDefaults(projects, machines.map(down), {}).machine).toBeNull();
+    expect(launchDefaults(projects, [reconnecting(local), nas], {}).machine).toBe('nas');
   });
   it('the first missing field is named in order', () => {
     const f = launchDefaults(projects, machines, {});
     expect(missingOf(f, machines)).toBe('tool');
     expect(missingOf({ ...f, tool: 'codex' }, machines)).toBe('prompt');
     expect(missingOf({ ...f, tool: 'codex', prompt: 'x' }, machines.map(down))).toBe('machine');
+    expect(missingOf({ ...f, tool: 'codex', prompt: 'x' }, machines.map(reconnecting))).toBe('machine');
     expect(missingOf({ ...f, tool: 'codex', prompt: 'x', repos: [] }, machines)).toBe('repos');
     expect(missingOf({ ...f, tool: 'codex', prompt: ' x ' }, machines)).toBeNull();
     expect(missingOf({ ...f, tool: 'codex', prompt: '  ' }, machines)).toBe('prompt');

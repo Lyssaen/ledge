@@ -8,12 +8,11 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
-import { launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, previewOf, reposOn, toggleRepo, withMachine, withProject, withTool, type LaunchForm, type LaunchMessage, type Tool } from './model';
+import { isUp, launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, previewOf, reposOn, toggleRepo, withMachine, withProject, withTool, type LaunchForm, type LaunchMessage, type Tool } from './model';
 import { useRepoInfo } from './useRepoInfo';
 import type { LaunchState } from './useLaunch';
 
 const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor'];
-const isUp = (m: MachineState) => m.status === 'open';
 const folderName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
 
 /** A message with two strong parts (« {name} will join the {table} table »), whatever their order in the language. */
@@ -45,11 +44,15 @@ export function LaunchComposer(p: {
   const chosen = machines.find(m => m.id === form.machine);
   const online = !!chosen && isUp(chosen);
   const here = reposOn(project, form.machine);
-  // Asked only of a machine online: an offline one would answer « not found » for every folder.
+  // Asked only of a machine the fleet takes: another one would answer « not found » for every folder. One reconnecting (no snapshot yet)
+  // is not online, so the inspection is asked again once it is.
   const infos = useRepoInfo(p.client, online ? form.machine : null, here.map(r => r.path));
+  const infosNow = useRef(infos);
+  infosNow.current = infos;
 
   // A project removed, or the projects arriving after the form: the first one. The chosen machine going offline: the first one online, if any.
   useEffect(() => {
+    const infos = infosNow.current;
     setForm(f => {
       let next = f;
       if (projects.length > 0 && !projects.some(x => x.id === next.project)) next = withProject(next, projects, projects[0]!.id, infos);

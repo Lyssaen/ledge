@@ -113,6 +113,23 @@ describe('New session', () => {
     expect(form.getByRole('alert')).toHaveTextContent('No machine online');
   });
 
+  it('the machine reconnecting: asked again once its snapshot is there, its branches and chosen repository come back', async () => {
+    const { d, form } = await openLaunch();
+    const inspections = () => d.received.filter(m => m.type === 'repos.inspect');
+    const repos = () => within(form.getByRole('group', { name: 'Repositories on Local' }));
+    await waitFor(() => expect(chipOf(repos().getByRole('checkbox', { name: /^app/ }))).toHaveAttribute('title', 'desktop'));
+    expect(inspections()).toHaveLength(1);
+    await d.dropClients();
+    await waitFor(() => expect(form.getByRole('radio', { name: /^Local/ })).toBeDisabled());
+    await waitFor(() => expect(form.getByRole('radio', { name: 'Local' })).toBeEnabled(), { timeout: 5000 });
+    await waitFor(() => expect(inspections()).toHaveLength(2));
+    await waitFor(() => expect(chipOf(repos().getByRole('checkbox', { name: /^app/ }))).toHaveAttribute('title', 'desktop'));
+    expect(repos().getByRole('checkbox', { name: /^app/ })).toBeChecked();
+    expect(repos().getByRole('checkbox', { name: /^docs/ })).toBeEnabled();
+    expect(repos().queryByText('not found')).toBeNull();
+    expect(inspections()).toHaveLength(2);
+  }, 10_000);
+
   it('a project with no repository on the machine says so and offers to edit it', async () => {
     const { user, form } = await openLaunch();
     await user.click(form.getByRole('radio', { name: 'Docs' }));
@@ -187,6 +204,51 @@ describe('LaunchComposer and its machines', () => {
     await user.click(screen.getByRole('button', { name: /Launch/ }));
     expect(screen.getByRole('alert')).toHaveTextContent('No machine online');
     expect(view.container.querySelector('fieldset[aria-invalid="true"]')!.querySelector('legend')).toHaveTextContent('Machine');
+  });
+
+  it('a machine coming back is asked again once the fleet takes it: its branches show and its repositories are chosen again', async () => {
+    // Like the fleet: an inspection of a machine it does not take yet (not ready) is answered « not found » at once, without asking it.
+    const sent: ClientMessage[] = [];
+    const fns = new Set<(m: ServerMessage) => void>();
+    let machines: MachineState[] = [local, down(nas)];
+    const emit = (m: ServerMessage) => fns.forEach(fn => fn(m));
+    const client = {
+      send: (m: ClientMessage) => {
+        sent.push(m);
+        if (m.type === 'repos.inspect' && !machines.find(x => x.id === (m.machineId ?? 'local'))?.ready) emit({ type: 'repos.info', requestId: m.requestId, repos: m.paths.map(path => ({ path, exists: false, branch: null })) });
+      },
+      onMessage: (fn: (m: ServerMessage) => void) => { fns.add(fn); return () => { fns.delete(fn); }; }
+    } as unknown as DaemonClient;
+    const asks = () => sent.filter((m): m is Extract<ClientMessage, { type: 'repos.inspect' }> => m.type === 'repos.inspect');
+    const answer = async (requestId: string) => act(async () => { emit({ type: 'repos.info', requestId, repos: [{ path: '/w/ledge/app', exists: true, branch: 'desktop' }, { path: '/w/ledge/docs', exists: true, branch: 'main' }] }); });
+    const show = (next: MachineState[]) => { machines = next; view.rerender(<LaunchComposer {...props(client, next)} />); };
+    const view = render(<LaunchComposer {...props(client, machines)} />);
+    expect(asks()).toHaveLength(1);
+    await answer(asks()[0]!.requestId);
+    expect(screen.getByRole('checkbox', { name: /^app/ })).toBeChecked();
+    expect(screen.getByText('⎇ desktop')).toBeVisible();
+
+    show([down(local), down(nas)]);                                         // the chosen machine drops, none other online
+    show([{ ...local, ready: false }, down(nas)]);                          // reconnected, its snapshot not there yet
+    expect(screen.getByRole('radio', { name: /^Local/ })).toBeDisabled();
+    expect(asks()).toHaveLength(1);
+    show([local, down(nas)]);                                               // the fleet takes it again
+    expect(asks()).toHaveLength(2);
+    expect(asks()[1]).toMatchObject({ paths: ['/w/ledge/app', '/w/ledge/docs'], machineId: 'local' });
+    await answer(asks()[1]!.requestId);
+    expect(screen.getByRole('checkbox', { name: /^app/ })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: /^app/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /^docs/ })).toBeEnabled();
+    expect(screen.queryByText('not found')).toBeNull();
+    expect(screen.getByText('⎇ desktop')).toBeVisible();
+  });
+
+  it('a machine connected but not taken by the fleet yet (no snapshot) is offline: not selectable, not inspected', () => {
+    const { client, sent } = fakeClient();
+    render(<LaunchComposer {...props(client, [{ ...local, ready: false }, down(nas)])} />);
+    expect(screen.getByRole('radio', { name: /^Local/ })).toBeDisabled();
+    expect(chipOf(screen.getByRole('radio', { name: /^Local/ }))).toHaveTextContent('offline');
+    expect(sent.filter(m => m.type === 'repos.inspect')).toEqual([]);
   });
 
   it('an inspection answers only its own request', async () => {
