@@ -27,7 +27,8 @@ export function createDaemonClient(opts: { url: string; WebSocketImpl?: WsCtor; 
     sock.onclose = () => { if (ws !== sock) return; ws = null; setStatus('unreachable'); schedule(); };
   }
   return {
-    connect: () => { closed = false; if (timer) { clearTimeout(timer); timer = null; } const old = ws; ws = null; old?.close(); open(); },
+    // An explicit connect (a « Reconnect ») says « connecting » at once, even after a drop: the automatic retries stay « unreachable ».
+    connect: () => { closed = false; if (timer) { clearTimeout(timer); timer = null; } const old = ws; ws = null; old?.close(); setStatus('connecting'); open(); },
     close: () => { closed = true; if (timer) clearTimeout(timer); const old = ws; ws = null; old?.close(); setStatus('connecting'); },
     send: m => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); },
     status: () => status,

@@ -43,6 +43,21 @@ describe('daemon client + store', () => {
     client.close();
   });
 
+  it('connect() after a drop says « connecting » at once, until the socket opens (or drops again)', async () => {
+    const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never, minBackoffMs: 5000, maxBackoffMs: 5000 });
+    client.connect(); await sleep(80);
+    const port = mock.port; await mock.close(); await sleep(80);
+    expect(client.status()).toBe('unreachable');
+    mock = await createMockDaemon({ port });
+    const statuses: string[] = []; client.onStatus(s => statuses.push(s));
+    client.connect();
+    expect(client.status()).toBe('connecting');
+    await sleep(100);
+    expect(client.status()).toBe('open');
+    expect(statuses).toEqual(['connecting', 'open']);
+    client.close();
+  });
+
   it('sends client messages as JSON the daemon can parse', async () => {
     const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never });
     client.connect(); await sleep(80);

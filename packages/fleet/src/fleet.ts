@@ -310,7 +310,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       },
       machinesSource: () => source,
       probe: ssh => probeMachine(configs[0]!.url!, ssh),
-      retry(id) { const p = peers.get(id); if (p && connected) p.client.connect(); },
+      // The last try's error is forgotten: the machine is « connecting » until its next answer (a snapshot, or an error again).
+      retry(id) { const p = peers.get(id); if (!p || !connected) return; p.error = undefined; p.client.connect(); publish(); },
       terminal(id) { const origin = splitId(id); const m = state.find(x => x.id === origin?.machine); return origin && m ? terminalCommand(m, origin.id) : null; },
       turnMachine(qid) { return state.find(m => m.id === bindings.get(qid)?.machine); },
       documentMachine(id) { return splitId(id)?.machine; },

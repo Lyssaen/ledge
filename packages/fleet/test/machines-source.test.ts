@@ -163,6 +163,23 @@ describe('configure and old daemons', () => {
   });
 });
 
+describe('retry', () => {
+  it('a remote whose last try ended in an error: retry forgets that error and reconnects; the next answer decides', () => {
+    const { api, local, server } = setup();
+    local.emit(machinesMsg([{ id: 'local', label: 'Local' }, { id: 'server', label: 'dev-server', ssh: 'dev-server' }]));
+    server.set('open'); server.emit({ type: 'error', message: 'ssh: Could not resolve hostname dev-server' });
+    expect(api.fleet!.machines().find(m => m.id === 'server')?.error).toBe('ssh: Could not resolve hostname dev-server');
+    const before = server.connects();
+    api.fleet!.retry('server');
+    expect(server.connects()).toBe(before + 1);
+    const m = api.fleet!.machines().find(x => x.id === 'server')!;
+    expect(m.error).toBeUndefined();
+    expect(m.ready).toBe(false);
+    server.emit(snap(['r1'], remote.ssh));
+    expect(api.fleet!.machines().find(x => x.id === 'server')?.ready).toBe(true);
+  });
+});
+
 describe('loadMachines with a tunnel-era list', () => {
   it('drops every stored url and pins the local one', () => {
     localStorage.setItem('ledge.machines', JSON.stringify([{ id: 'local', label: 'Local', url: 'ws://127.0.0.1:1' }, { id: 'server', label: 's', url: 'ws://127.0.0.1:47833', ssh: 'dev-server' }]));

@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ProbeResult } from '@ledge/fleet';
 import type { ClientMessage, Machines } from '@ledge/protocol';
 import { boot, closeDaemons, recordToasts, savedNotices, TWO_PROJECTS, type MockDaemon } from './helpers';
+import { SAVE_TIMEOUT_MS } from '../src/settings/useMachineEditor';
 
 let log: string[] = [];
 beforeEach(() => { log = recordToasts(); localStorage.clear(); });
-afterEach(async () => { cleanup(); await closeDaemons(); });
+afterEach(async () => { vi.useRealTimers(); cleanup(); await closeDaemons(); });
 
 const THREE: Machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }, { id: 'nas', label: 'NAS', ssh: 'nas' }];
 const saved = () => savedNotices(log);
@@ -152,6 +153,38 @@ describe('Settings › Machines', () => {
     act(() => d.machines(sets(d)[0]!.machines));
     await waitFor(() => expect(names()).toEqual(['Local', 'Dev SSH']));
     expect(saved()).toEqual(['Setting saved · NAS removed']);
+  });
+
+  it('a save the daemon never confirms times out: the values stay in the form, the list is unchanged, nothing is said saved', async () => {
+    const { d, user } = await open();
+    await fill(user, 'Nas', 'nas');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    fireEvent.click(form().getByRole('button', { name: 'Save' }));
+    expect(form().getByRole('button', { name: 'Saving…' })).toBeDisabled();
+    await act(async () => { vi.advanceTimersByTime(SAVE_TIMEOUT_MS); });
+    vi.useRealTimers();
+    expect(form().getByRole('alert')).toHaveTextContent('The local daemon did not answer. Nothing changed.');
+    expect(form().getByRole('textbox', { name: 'Machine name' })).toHaveValue('Nas');
+    expect(form().getByRole('textbox', { name: 'SSH alias' })).toHaveValue('nas');
+    expect(form().getByRole('button', { name: 'Save' })).toBeEnabled();
+    expect(names()).toEqual(['Local', 'Dev SSH']);
+    await waitFor(() => expect(sets(d)).toHaveLength(1));
+    expect(saved()).toEqual([]);
+  });
+
+  it('an errored machine: « Reconnect » asks the fleet again, and the entry says « Connecting… » until its answer, not « Offline »', async () => {
+    const { client } = await open(THREE);
+    await waitFor(() => expect(client.fleet!.machines().find(m => m.id === 'nas')?.error).toBeTruthy());
+    expect(entry('NAS').getByText('Offline')).toBeVisible();
+    const retry = vi.spyOn(client.fleet!, 'retry');
+    fireEvent.click(entry('NAS').getByRole('button', { name: 'Reconnect' }));
+    expect(retry).toHaveBeenCalledWith('nas');
+    expect(entry('NAS').getByText('Connecting…')).toBeVisible();
+    expect(entry('NAS').queryByText('Offline')).toBeNull();
+    expect(entry('NAS').queryByRole('button', { name: 'Reconnect' })).toBeNull();
+    // The mock's answer (a snapshot naming no SSH alias) is an error again: offline once it comes.
+    await waitFor(() => expect(entry('NAS').getByText('Offline')).toBeVisible());
+    expect(saved()).toEqual([]);
   });
 
   it('« Cancel » in the confirmation keeps the machine and sends nothing', async () => {
