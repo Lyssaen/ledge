@@ -70,6 +70,13 @@ describe('session changed files', () => {
     expect(changedFiles(items, '/w/ledge', 'h1').map(f => [f.shown, f.change])).toEqual([['src/helper.ts', 'add']]);
     expect([relativeTo('/w/ledge/src/a.ts', '/w/ledge'), relativeTo('/w/ledger/a.ts', '/w/ledge'), relativeTo('src/a.ts', '/w/ledge')]).toEqual(['src/a.ts', '/w/ledger/a.ts', 'src/a.ts']);
   });
+  it('a file added then deleted is deleted; deleted then added again, added; renamed then deleted, deleted', () => {
+    const change = (...steps: FileChange[]) => changedFiles(steps.map((f, i) => edit(`x${i}`, i, 1, [f])), '/w/ledge')[0]!.change;
+    expect(change({ path: 'src/t.ts', change: 'add', diff: '+x' }, { path: 'src/t.ts', change: 'delete' })).toBe('delete');
+    expect(change({ path: 'src/t.ts', change: 'delete' }, { path: 'src/t.ts', change: 'add', diff: '+x' })).toBe('add');
+    expect(change({ path: 'src/u.ts', from: 'src/t.ts', change: 'edit', diff: '@@\n-x\n+y' }, { path: 'src/u.ts', change: 'delete' })).toBe('delete');
+    expect(change({ path: 'src/t.ts', change: 'add', diff: '+x' }, { path: 'src/t.ts', change: 'edit', diff: '- x\n+ y' })).toBe('add');
+  });
   it('grouped by folder in order of appearance, the root as « . »', () => {
     expect(byFolder(changedFiles(items, '/w/ledge')).map(g => [g.dir, g.files.map(f => f.shown)])).toEqual([
       ['src', ['src/App.tsx', 'src/b.ts']], ['docs', ['docs/guide.md']], ['.', ['notes.ipynb']]

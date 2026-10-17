@@ -14,12 +14,16 @@ export function relativeTo(path: string, cwd: string): string {
   return path.startsWith(base) ? path.slice(base.length) : path;
 }
 
-const changeOf = (touches: Touch[], renamed: boolean): Change =>
-  renamed ? 'rename'
-    : touches[0]!.change === 'add' ? 'add'
-    : touches[touches.length - 1]!.change === 'delete' ? 'delete'
+/** Gone at the end (deleted last, whatever came before: added, renamed) → delete; renamed → rename; created by its first
+ *  action, or again by its last (deleted then added back) → add; only rewritten → write; else edit. */
+const changeOf = (touches: Touch[], renamed: boolean): Change => {
+  const last = touches[touches.length - 1]!.change;
+  return last === 'delete' ? 'delete'
+    : renamed ? 'rename'
+    : touches[0]!.change === 'add' || last === 'add' ? 'add'
     : touches.every(t => t.change === 'write') ? 'write'
     : 'edit';
+};
 
 /** The files of the shown thread's successful actions, in order of their first action. A rename moves the entry from the old path to the new. */
 export function changedFiles(items: readonly ThreadItem[], cwd: string, helperId?: string): ChangedFile[] {
