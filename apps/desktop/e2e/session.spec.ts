@@ -58,9 +58,10 @@ test('reading older messages while new ones arrive: no jump, then « Go to the l
   await expect(scroller.locator('.turn')).toHaveCount(120);
   await expect.poll(() => gap(page)).toBeLessThan(60);
   await scroller.evaluate(el => { el.scrollTop = 400; });
+  await expect(page.getByRole('button', { name: 'Go to the latest message' })).toBeVisible();
   daemon.item('nova', { kind: 'message', id: 'msg-live', at: new Date().toISOString(), turn: 120, text: 'Encore une chose.' });
   await expect(scroller.getByText('Encore une chose.')).toBeAttached();
-  expect(Math.abs(await scroller.evaluate(el => el.scrollTop) - 400)).toBeLessThan(2);
+  for (let i = 0; i < 8; i++) { expect(Math.abs(await scroller.evaluate(el => el.scrollTop) - 400)).toBeLessThan(2); await page.waitForTimeout(40); }
   await page.getByRole('button', { name: 'Go to the latest message' }).click();
   await expect.poll(() => gap(page)).toBeLessThan(60);
   await expect(page.getByRole('button', { name: 'Go to the latest message' })).toHaveCount(0);
@@ -92,7 +93,16 @@ test('the terminal on O follows from agent to agent and survives a reload', asyn
   await page.keyboard.press('o');
   await expect(page.getByRole('region', { name: 'Terminal' }).getByText('$ npm test')).toBeVisible();
   await page.getByRole('navigation', { name: /^Agents of the project/ }).getByRole('button', { name: /^Nova/ }).click();
-  await expect(page.getByRole('region', { name: 'Terminal' }).getByText('$ git status')).toBeVisible();
+  // Agents run in project order, oldest first then by id: bix, echo, nova, otto, pim.
+  const terminal = page.getByRole('region', { name: 'Terminal' });
+  await expect(terminal.getByText('$ git status')).toBeVisible();
+  await expect(terminal.getByText('$ npm test')).toHaveCount(0);
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect(terminal.getByText('$ npm test')).toBeVisible();
+  await expect(terminal.getByText('$ git status')).toHaveCount(0);
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(terminal.getByText('$ git status')).toBeVisible();
+  await expect(terminal.getByText('$ npm test')).toHaveCount(0);
   await page.reload();
   await open(page, 'Otto');
   await expect(page.getByRole('region', { name: 'Terminal' })).toBeVisible();
