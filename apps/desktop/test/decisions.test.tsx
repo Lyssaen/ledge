@@ -212,6 +212,16 @@ describe('useDecisions', () => {
     expect(props.notify).toHaveBeenCalledWith('Refused, but the note could not be typed.');
     expect(onRefused).toHaveBeenCalledWith('Use pnpm');
   });
+  it('a landed deny with a note hears only that code: another late refusal neither says it nor gives the note back', () => {
+    const onRefused = vi.fn();
+    const { result, rerender, props } = setup();
+    act(() => { result.current.decide(otto, 'deny', 'Use pnpm', onRefused); });
+    const gone = [{ ...otto, state: 'working' as const, pending: undefined }];
+    rerender({ ...props, sessions: gone });
+    rerender({ ...props, sessions: gone, errors: [{ id: 'local:otto', message: 'late', seq: 1, request: 'session.decide' }] });
+    expect(props.notify).not.toHaveBeenCalled();
+    expect(onRefused).not.toHaveBeenCalled();
+  });
   it('a plain decision that landed hears no late refusal', () => {
     const { result, rerender, props } = setup();
     act(() => { result.current.decide(otto, 'deny'); });
