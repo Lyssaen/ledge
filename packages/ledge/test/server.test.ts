@@ -143,6 +143,26 @@ describe('server: extra folders and repos.inspect', () => {
     ].sort((a, b) => a.path.localeCompare(b.path)) });
     c.close(); await srv2.close();
   });
+  it('concurrent repos.scan share one walk: each request gets the same result under its own requestId', async () => {
+    let calls = 0; let finish!: (v: { repos: { path: string; branch: string | null }[]; truncated: boolean }) => void;
+    const scan = async () => { calls++; return new Promise<{ repos: { path: string; branch: string | null }[]; truncated: boolean }>(r => { finish = r; }); };
+    const srv2 = await startServer({ store, tmux, port: 0, home: mkdtempSync(join(tmpdir(), 'ledge-scan-home-')), scan });
+    const a = await connect({ port: srv2.port }); await a.next('snapshot');
+    const b = await connect({ port: srv2.port }); await b.next('snapshot');
+    a.send({ type: 'repos.scan', requestId: 's1' }); b.send({ type: 'repos.scan', requestId: 's2' }); a.send({ type: 'repos.scan', requestId: 's3' });
+    await until(() => calls === 1); await new Promise(r => setTimeout(r, 50));
+    expect(calls).toBe(1);
+    const repos = [{ path: '/w/x', branch: 'main' }];
+    finish({ repos, truncated: true });
+    expect(await a.next('repos.found')).toEqual({ type: 'repos.found', requestId: 's1', repos, truncated: true });
+    expect(await b.next('repos.found')).toEqual({ type: 'repos.found', requestId: 's2', repos, truncated: true });
+    expect(await a.next('repos.found')).toEqual({ type: 'repos.found', requestId: 's3', repos, truncated: true });
+    a.send({ type: 'repos.scan', requestId: 's4' }); // the walk is over: a new one starts
+    await until(() => calls === 2);
+    finish({ repos: [], truncated: false });
+    expect(await a.next('repos.found')).toEqual({ type: 'repos.found', requestId: 's4', repos: [], truncated: false });
+    a.close(); b.close(); await srv2.close();
+  });
 });
 
 describe('server: origin check', () => {

@@ -75,6 +75,31 @@ describe('scanRepos', () => {
     expect((await scanRepos({ home })).repos).toEqual([{ path: home, branch: 'dots' }, { path: join(home, 'w/app'), branch: 'main' }]);
   });
 
+  it('an extra root that is itself a repository is listed but not entered: only home is walked past its own .git', async () => {
+    const home = tmp(); const other = tmp();
+    repo(other, { branch: 'top' });
+    repo(join(other, 'inner'));
+    const s = spy();
+    expect((await scanRepos({ home, extra: [other], readdir: s.readdir })).repos).toEqual([{ path: other, branch: 'top' }]);
+    expect(s.read).not.toContain(join(other, 'inner'));
+  });
+
+  it('home comes first in the budget: a big extra root cannot starve home\'s deeper levels', async () => {
+    const home = tmp(); const big = tmp();
+    repo(join(home, 'a/b/r'));
+    for (let i = 0; i < 20; i++) mkdirSync(join(big, `f${i}`));
+    const out = await scanRepos({ home, extra: [big], limits: { dirs: 4 } });
+    expect(out).toEqual({ repos: [{ path: join(home, 'a/b/r'), branch: 'main' }], truncated: true });
+  });
+
+  it('a folder that never answers cannot hold the walk past its time (the real-time stop)', async () => {
+    const home = tmp(); mkdirSync(join(home, 'dead')); repo(join(home, 'ok'));
+    const started = Date.now();
+    const out = await scanRepos({ home, limits: { ms: 50 }, readdir: p => p.endsWith('dead') ? new Promise(() => {}) : readdir(p, { withFileTypes: true }) });
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(out.truncated).toBe(true);
+  }, 2000);
+
   it('never follows a symbolic link', async () => {
     const home = tmp(); const away = tmp();
     repo(join(away, 'r'));

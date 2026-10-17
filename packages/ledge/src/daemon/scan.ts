@@ -6,8 +6,9 @@ import { repositoryId } from './git.js';
 
 /** How deep under each root, how many folders read, how long, how many repositories: past any of them the list is partial (`truncated`). */
 export const SCAN_DEPTH = 4, SCAN_DIRS = 5000, SCAN_MS = 4000, SCAN_REPOS = 500;
-/** Folders read at once: a slow disk (a Windows drive under WSL) is not read one folder at a time. */
-const BATCH = 16;
+/** Folders read at once: a slow disk (a Windows drive under WSL) is not read one folder at a time, yet the scan never holds more
+ *  than libuv's default pool (4 threads), so the daemon's other file operations are not queued behind a slow mount. */
+const BATCH = 4;
 
 /** Folders never entered: dependencies, build output, caches, system folders of a home. Every hidden folder is skipped too. */
 export const SKIP: ReadonlySet<string> = new Set(['node_modules', '.git', '.cache', 'dist', 'build', 'target', 'vendor', '__pycache__', 'venv', '.venv', 'Library', 'AppData']);
@@ -87,8 +88,9 @@ async function describe(dir: string, dotIsFile: boolean, home: string, readFile:
 }
 
 /**
- * The Git repositories under home and the `extra` roots, breadth first, SCAN_DEPTH levels under each root: a folder holding `.git`
- * (a folder, or a file for a worktree or a submodule) is one, and is not entered (a root still is: a home kept in Git hides nothing).
+ * The Git repositories under home, then under each `extra` root, breadth first, SCAN_DEPTH levels under each root. Home is walked
+ * first, whole, so a big extra root (a Windows drive) cannot spend home's budget. A folder holding `.git` (a folder, or a file for a
+ * worktree or a submodule) is one, and is not entered; home is the exception (a home kept in Git, dotfiles, hides nothing).
  * Links are not followed; skip-listed and hidden folders are not entered; a folder that cannot be read is passed over.
  * Stops at SCAN_DIRS folders read, SCAN_MS or SCAN_REPOS repositories, and then says `truncated`. Writes nothing, runs git only
  * for a `.git` file's branch.
@@ -102,28 +104,33 @@ export async function scanRepos(opts: ScanOptions): Promise<{ repos: FoundRepo[]
   // The hard stop, in real time: a folder or a git that never answers cannot hold the walk past its time.
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<'expired'>(res => { timer = setTimeout(() => res('expired'), ms); });
-  const seen = new Set<string>(); const queue: { path: string; depth: number }[] = [];
-  for (const root of [opts.home, ...(opts.extra ?? [])].map(p => resolve(p))) if (!seen.has(root)) { seen.add(root); queue.push({ path: root, depth: 0 }); }
+  const home = resolve(opts.home);
+  const seen = new Set<string>();
   const repos: FoundRepo[] = []; let read = 0; let truncated = false;
   try {
-    while (queue.length) {
-      if (read >= maxDirs || repos.length >= maxRepos || now() >= deadline) { truncated = true; break; }
-      const batch = queue.splice(0, Math.min(BATCH, maxDirs - read));
-      read += batch.length;
-      const listed = await Promise.race([Promise.all(batch.map(d => readdir(d.path).catch(() => null))), expired]);
-      if (listed === 'expired') { truncated = true; break; }
-      const found: Promise<FoundRepo>[] = [];
-      batch.forEach((d, i) => {
-        const entries = listed[i]; if (!entries) return;
-        const dot = entries.find(e => e.name === '.git' && (e.isDirectory() || e.isFile()));
-        if (dot) found.push(describe(d.path, dot.isFile(), opts.home, readFile));
-        if ((dot && d.depth > 0) || d.depth >= depth) return;
-        const names = entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && !SKIP.has(e.name)).map(e => e.name).sort();
-        for (const name of names) { const path = join(d.path, name); if (!seen.has(path)) { seen.add(path); queue.push({ path, depth: d.depth + 1 }); } }
-      });
-      const described = await Promise.race([Promise.all(found), expired]);
-      if (described === 'expired') { truncated = true; break; }
-      for (const r of described) { if (repos.length >= maxRepos) { truncated = true; break; } repos.push(r); }
+    walk: for (const root of [home, ...(opts.extra ?? []).map(p => resolve(p))]) {
+      if (seen.has(root)) continue; // listed twice, or already walked under an earlier root
+      seen.add(root);
+      const queue = [{ path: root, depth: 0 }];
+      while (queue.length) {
+        if (read >= maxDirs || repos.length >= maxRepos || now() >= deadline) { truncated = true; break walk; }
+        const batch = queue.splice(0, Math.min(BATCH, maxDirs - read));
+        read += batch.length;
+        const listed = await Promise.race([Promise.all(batch.map(d => readdir(d.path).catch(() => null))), expired]);
+        if (listed === 'expired') { truncated = true; break walk; }
+        const found: Promise<FoundRepo>[] = [];
+        batch.forEach((d, i) => {
+          const entries = listed[i]; if (!entries) return;
+          const dot = entries.find(e => e.name === '.git' && (e.isDirectory() || e.isFile()));
+          if (dot) found.push(describe(d.path, dot.isFile(), opts.home, readFile));
+          if ((dot && d.path !== home) || d.depth >= depth) return;
+          const names = entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && !SKIP.has(e.name)).map(e => e.name).sort();
+          for (const name of names) { const path = join(d.path, name); if (!seen.has(path)) { seen.add(path); queue.push({ path, depth: d.depth + 1 }); } }
+        });
+        const described = await Promise.race([Promise.all(found), expired]);
+        if (described === 'expired') { truncated = true; break walk; }
+        for (const r of described) { if (repos.length >= maxRepos) { truncated = true; break walk; } repos.push(r); }
+      }
     }
   } finally { clearTimeout(timer); }
   return { repos, truncated };

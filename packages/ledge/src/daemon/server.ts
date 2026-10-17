@@ -85,7 +85,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; scan?: typeof scanRepos }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -268,6 +268,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
     return session;
   }
+  /** The scan in flight (lot 11): a `repos.scan` arriving while one walks gets that walk's result, under its own requestId. */
+  let scanning: ReturnType<typeof scanRepos> | null = null;
+  function sharedScan(): ReturnType<typeof scanRepos> {
+    if (scanning) return scanning;
+    const home = opts.home ?? homedir();
+    const extra = extraRoots(home, [...store.recents().map(r => r.cwd), ...store.all().filter(s => s.state !== 'exited').map(s => s.cwd)]);
+    const walk = (opts.scan ?? scanRepos)({ home, extra }).finally(() => { if (scanning === walk) scanning = null; });
+    return (scanning = walk);
+  }
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     /** A refusal names the request it answers, so a front can tell a refused reply from a refused decision. */
     const refuse = (message: string, id?: string) => send(ws, { type: 'error', ...(id !== undefined ? { id } : {}), message, request: msg.type });
@@ -281,9 +290,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // Lot 11: home, then the parents of the recent and live folders outside it. Answered even when it fails: an `error` for
       // repos.scan reads, to the fleet, as a daemon too old to know it. The remotes it carries are never logged.
       case 'repos.scan': {
-        const home = opts.home ?? homedir();
-        const extra = extraRoots(home, [...store.recents().map(r => r.cwd), ...store.all().filter(s => s.state !== 'exited').map(s => s.cwd)]);
-        try { return send(ws, { type: 'repos.found', requestId: msg.requestId, ...await scanRepos({ home, extra }) }); }
+        try { return send(ws, { type: 'repos.found', requestId: msg.requestId, ...await sharedScan() }); }
         catch (e) { log(`repos.scan failed: ${(e as Error).message}`); return send(ws, { type: 'repos.found', requestId: msg.requestId, repos: [], truncated: false, error: 'scan failed' }); }
       }
       case 'snapshot.request': return sendSnapshot(ws);
