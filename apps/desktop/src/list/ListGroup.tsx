@@ -4,9 +4,9 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import type { Filing } from '../atelier/filing';
 import { useI18n } from '../i18n/lang';
 import type { NavAction } from '../nav/state';
+import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import type { Bucket, ListGroup as Group } from './model';
-import { cls } from '../shell/cls';
 
 const QUIET: readonly Bucket[] = ['running', 'done', 'offline'];
 

@@ -5,12 +5,12 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { machineOf, taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
+import { cls } from '../shell/cls';
 import { Menu, MenuItem } from '../shell/Menu';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import type { Filing } from './filing';
 import { Plants } from './Plants';
 import { RUG_SIDE, helperState, layoutTable, noteX, sheetState, tableBranch, type Side } from './layout';
-import { cls } from '../shell/cls';
 
 export interface ProjectTableProps {
   project: Project;
@@ -30,7 +30,6 @@ export interface ProjectTableProps {
   /** The table is a drop target for the agents of « Sans projet ». */
   filing: Filing;
 }
-
 
 /** The mockup's « … » glyph (observatory.tsx, room-heading). */
 const DOTS = ['M5 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M12 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M19 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z'];

@@ -11,13 +11,12 @@ import type { Decisions } from '../fleet/decisions';
 import { useI18n } from '../i18n/lang';
 import { fold, machineOf, taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
+import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import { bucketOf, helperBucket, quickActions, repoOf, type GroupBy, type ListRow as Row } from './model';
 import type { Density } from './prefs';
 import { whenOf } from './time';
-import { cls } from '../shell/cls';
-
 
 /** Marks the filter's match inside a label (list.tsx's `Hl`), when the accents fold character for character. */
 export function Hl({ text, q }: { text: string; q: string }): JSX.Element {
