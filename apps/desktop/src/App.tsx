@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { projectOf, useDaemon, useProjects, type DaemonClient } from '@ledge/fleet';
-import type { Project, Projects, Session } from '@ledge/protocol';
+import type { ChatProposal, Project, Projects, Session } from '@ledge/protocol';
 import { LangProvider, loadLang, useI18n, type Lang } from './i18n/lang';
 import { useFleet } from './fleet/useFleet';
 import { useDecisions } from './fleet/decisions';
@@ -130,14 +130,16 @@ function Shell({ client }: { client?: DaemonClient }) {
     if (table) notify(t.launch.started(s?.name ?? preview?.name ?? '', table.name));
   });
   // A chat card's session started (the daemon listed it before answering): the chat stays open; if the current filter hides its
-  // table, the filter goes back to All without leaving the page; the seat lights and the notice names who starts where (lot 7's words).
-  const chatLaunched = (id: string) => {
+  // table, the filter goes back to All without leaving the page; the seat lights and the notice names who starts where (lot 7's words):
+  // its own table, else the proposal's project while the session is not mapped yet; no name, no notice.
+  const chatLaunched = (id: string, proposal: ChatProposal) => {
     const s = sessions.find(x => x.id === id);
     const table = s ? projectIdOf(s) ?? 'none' : null;
     if (base.project !== 'all' && base.project !== table) dispatch({ type: 'filter', project: 'all' });
     filing.markSeated(id);
-    const own = table !== null ? projects?.projects.find(p => p.id === table) : undefined;
-    if (s && own) notify(t.launch.started(s.name, own.name));
+    const own = table !== null ? projects?.projects.find(p => p.id === table)?.name : undefined;
+    const where = own ?? proposal.project;
+    if (s && where) notify(t.launch.started(s.name, where));
   };
   // The form closed (Escape, Cancel, another dialog): nothing is waited for any more; a late answer is not announced.
   const { reset: resetLaunch } = launcher;

@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DaemonError } from '@ledge/fleet';
-import type { ChatProposal, ChatTurn, ClientMessage } from '@ledge/protocol';
+import type { ChatProposal, ChatTurn, ClientMessage, Session } from '@ledge/protocol';
+import { answers } from '../launch/useLaunch';
 
 export interface ChatCardsOptions {
   send(m: ClientMessage): void;
   chat: ChatTurn[];
   lastLaunched: { id: string; seq: number } | null;
   errors: readonly DaemonError[];
+  /** The listed sessions: a `session.launched` answers the card only if its session (once listed) has the card's harness and folder. */
+  sessions: readonly Session[];
   /** Whether the machine that answered this turn is online (`MachineState.ready`). */
   turnReady(qid: string): boolean;
-  /** The card's session started (its qualified id): called once per launch. */
-  onLaunched(id: string): void;
+  /** The machine that answered this turn: a card's session starts there. */
+  turnMachine(qid: string): string | undefined;
+  /** The card's session started (its qualified id) from this proposal: called once per launch. */
+  onLaunched(id: string, proposal: ChatProposal): void;
 }
 export interface ChatCards {
   launchingQid: string | null; relayingQid: string | null;
@@ -18,7 +23,7 @@ export interface ChatCards {
 }
 
 /** A launch in flight: the proposal as sent (its error tells a new failure from the old one), what was seen at the send, whether announced. */
-interface Launching { qid: string; from: ChatProposal; launchedSeq: number; errorSeq: number; announced: boolean }
+interface Launching { qid: string; from: ChatProposal; machineId: string | undefined; launchedSeq: number; errorSeq: number; announced: boolean }
 interface Relaying { qid: string; from: string; errorSeq: number }
 
 const relayState = (chat: readonly ChatTurn[], qid: string): string => {
@@ -43,11 +48,11 @@ export function useChatCards(o: ChatCardsOptions): ChatCards {
   const freeRelay = () => { relaying.current = null; setRelayingQid(null); };
 
   const launch = useCallback((qid: string) => {
-    const { chat, send, turnReady, lastLaunched, errors } = latest.current;
+    const { chat, send, turnReady, turnMachine, lastLaunched, errors } = latest.current;
     if (launching.current || relaying.current || !turnReady(qid)) return;
     const p = chat.find(x => x.qid === qid)?.proposal;
     if (!p || p.launchedId) return;
-    launching.current = { qid, from: p, launchedSeq: lastLaunched?.seq ?? 0, errorSeq: errors.at(-1)?.seq ?? 0, announced: false };
+    launching.current = { qid, from: p, machineId: turnMachine(qid), launchedSeq: lastLaunched?.seq ?? 0, errorSeq: errors.at(-1)?.seq ?? 0, announced: false };
     setLaunchingQid(qid);
     send({ type: 'session.launch', tool: p.tool, cwd: p.cwd, ...(p.prompt ? { prompt: p.prompt } : {}), qid });
   }, []);
@@ -62,21 +67,25 @@ export function useChatCards(o: ChatCardsOptions): ChatCards {
   const relay = useCallback((qid: string) => relayCard('session.relay', qid), [relayCard]);
   const cancelRelay = useCallback((qid: string) => relayCard('session.relay.cancel', qid), [relayCard]);
 
-  const { chat, lastLaunched, errors } = o;
+  const { chat, lastLaunched, errors, sessions } = o;
   const ready = launchingQid ? o.turnReady(launchingQid) : relayingQid ? o.turnReady(relayingQid) : true;
   useEffect(() => {
     const l = launching.current;
     if (l) {
-      // The daemon answers the launch, then marks the turn: the answer is announced at once, the card waits for its turn.
-      if (!l.announced && lastLaunched && lastLaunched.seq > l.launchedSeq) { l.announced = true; latest.current.onLaunched(lastLaunched.id); }
+      // The daemon answers the launch, then marks the turn: the answer is announced at once, the card waits for its turn. Another
+      // launch's answer (the New session form's: another machine, harness or folder, as useLaunch tells them apart) is passed over.
+      if (!l.announced && lastLaunched && lastLaunched.seq > l.launchedSeq) {
+        if (answers({ type: 'session.launch', tool: l.from.tool, cwd: l.from.cwd, ...(l.machineId ? { machineId: l.machineId } : {}) }, lastLaunched.id, sessions)) { l.announced = true; latest.current.onLaunched(lastLaunched.id, l.from); }
+        else l.launchedSeq = lastLaunched.seq;
+      }
       const p = chat.find(x => x.qid === l.qid)?.proposal;
-      if (p?.launchedId && !l.announced) { l.announced = true; latest.current.onLaunched(p.launchedId); }
+      if (p?.launchedId && !l.announced) { l.announced = true; latest.current.onLaunched(p.launchedId, l.from); }
       const refused = errors.some(e => e.seq > l.errorSeq && e.id === undefined && (e.request === 'session.launch' || e.message === p?.error));
       if (!p || p.launchedId || p.error !== l.from.error || refused || !ready) freeLaunch();
     }
     const r = relaying.current;
     if (r && (relayState(chat, r.qid) !== r.from || errors.some(e => e.seq > r.errorSeq && e.id === undefined) || !ready)) freeRelay();
-  }, [chat, lastLaunched, errors, ready]);
+  }, [chat, lastLaunched, errors, sessions, ready]);
 
   return { launchingQid, relayingQid, launch, relay, cancelRelay };
 }

@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, screen, waitFor, within } from '@testing-library/react';
 import type { DaemonError } from '@ledge/fleet';
-import type { ChatProposal, ChatTurn, ClientMessage } from '@ledge/protocol';
-import { boot, closeDaemons, declarations, LAUNCH_PROJECTS, type MockDaemon } from './helpers';
+import type { ChatProposal, ChatTurn, ClientMessage, Session } from '@ledge/protocol';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import { boot, closeDaemons, declarations, DEFAULT_SESSIONS, LAUNCH_PROJECTS, type MockDaemon } from './helpers';
 import { loadChat } from '../src/chat/lazy';
 import { useChatCards } from '../src/chat/useChatCards';
 
@@ -21,7 +22,7 @@ const launches = (d: MockDaemon) => d.received.filter(m => m.type === 'session.l
 const filterButton = () => within(screen.getByRole('banner')).queryByRole('button', { name: 'Remove the filter: show every project' });
 
 /** The app on one local machine and LAUNCH_PROJECTS (Otto at the Ledge table, Nova at Payment's, Kit without a project), the chat opened with `/`. */
-async function openChat(opts: { list?: boolean } = {}) {
+async function openChat(opts: { list?: boolean; sessions?: Session[] } = {}) {
   const env = await boot({ machines: LOCAL, projects: LAUNCH_PROJECTS, ...opts });
   await env.user.keyboard('/');
   await screen.findByRole('complementary', { name: 'Chat Ledge' });
@@ -121,6 +122,61 @@ describe('the Ledge chat docked on the right', () => {
     expect(document.querySelectorAll('.chat-hover')).toHaveLength(0);
   });
 
+  it('Escape from a name in an answer closes the chat only: the filter and the page stay', async () => {
+    const env = await openChat();
+    await env.user.click(within(screen.getByRole('complementary', { name: /sidebar/i })).getByRole('button', { name: /^Ledge/ }));
+    expect(filterButton()).toBeVisible();
+    await ask(env, 'Who reviews?', '**Otto** relit la PR.');
+    act(() => panel().getByRole('link', { name: 'Otto' }).focus());
+    await env.user.keyboard('{Escape}');
+    expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
+    expect(filterButton()).toBeVisible();
+    // On a session page too: Escape from the chat's Close button closes the chat, the page stays.
+    await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
+    await waitFor(() => expect(document.querySelector('[aria-current=page][data-agent]')).toHaveAttribute('data-agent', 'local:otto'));
+    await env.user.keyboard('/');
+    act(() => panel().getByRole('button', { name: 'Close' }).focus());
+    await env.user.keyboard('{Escape}');
+    expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
+    expect(document.querySelector('[aria-current=page][data-agent]')).toHaveAttribute('data-agent', 'local:otto');
+  });
+
+  it('an exited agent: lit while its seat is shown; once it is gone, its name lights nothing and nothing breaks', async () => {
+    const env = await openChat({ sessions: [...DEFAULT_SESSIONS, fakeSession('bix', { name: 'Bix', cwd: '/w/ledge', state: 'exited' })] });
+    await ask(env, 'Who finished?', '**Bix** a fini, **Otto** relit la PR.');
+    await env.user.hover(panel().getByRole('link', { name: 'Bix' }));
+    expect(seat('local:bix')).toHaveClass('chat-hover');               // still at its table: shown, so lit
+    env.d.remove('bix');                                               // the finished agent leaves while its name is hovered
+    await waitFor(() => expect(seat('local:bix')).toBeNull());
+    expect(panel().queryByRole('link', { name: 'Bix' })).toBeNull();   // its name is plain text now
+    expect(panel().getByText(/a fini/)).toBeVisible();
+    expect(document.querySelectorAll('.chat-hover')).toHaveLength(0);
+    await env.user.hover(panel().getByRole('link', { name: 'Otto' }));
+    expect(seat('local:otto')).toHaveClass('chat-hover');
+    expect(document.querySelectorAll('.chat-hover')).toHaveLength(1);
+  });
+
+  it('a web link in an answer opens through the app, never by navigating', async () => {
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+    try {
+      const env = await openChat();
+      await ask(env, 'Where are the docs?', 'Voir [la doc](https://example.com/docs).');
+      await env.user.click(panel().getByRole('link', { name: 'la doc' }));
+      expect(opened).toHaveBeenCalledWith('https://example.com/docs', '_blank', 'noopener');
+    } finally { opened.mockRestore(); }
+  });
+
+  it('a card whose agent has no table yet names the proposal’s project in the notice', async () => {
+    const env = await openChat();
+    const proposal: ChatProposal = { tool: 'claude', cwd: '/w/scratch/tool', project: 'scratch' };
+    const turn = await ask(env, 'Lance une session', 'Voici la session.', { proposal });
+    env.d.options.autoLaunch = true;
+    await env.user.click(panel().getByRole('button', { name: 'Start the session' }));
+    await screen.findByText('Agent1 is starting at the scratch table.');
+    env.d.push({ type: 'chat.history', turns: [{ ...turn, proposal: { ...proposal, launchedId: 'launch-1' } }] });
+    await panel().findByText('has started');
+  });
+
   it('on the List, a hovered name lights its row', async () => {
     const env = await openChat({ list: true });
     await ask(env, 'Who works?', '**Otto** relit la PR.');
@@ -215,11 +271,11 @@ describe('the Ledge chat docked on the right', () => {
 
 describe('useChatCards', () => {
   const turnWith = (extra: Partial<ChatTurn>): ChatTurn => ({ qid: 'q-1', question: 'Lance', askedAt: '2026-10-17T10:00:00.000Z', steps: [], answer: 'ok', answeredAt: '2026-10-17T10:00:01.000Z', ...extra });
-  type Props = { chat: ChatTurn[]; lastLaunched: { id: string; seq: number } | null; errors: DaemonError[]; ready: boolean };
+  type Props = { chat: ChatTurn[]; lastLaunched: { id: string; seq: number } | null; errors: DaemonError[]; ready: boolean; sessions?: Session[] };
   const setup = (initial: Props) => {
     const send = vi.fn();
     const onLaunched = vi.fn();
-    const hook = renderHook((p: Props) => useChatCards({ send, chat: p.chat, lastLaunched: p.lastLaunched, errors: p.errors, turnReady: () => p.ready, onLaunched }), { initialProps: initial });
+    const hook = renderHook((p: Props) => useChatCards({ send, chat: p.chat, lastLaunched: p.lastLaunched, errors: p.errors, sessions: p.sessions ?? [], turnReady: () => p.ready, turnMachine: () => 'local', onLaunched }), { initialProps: initial });
     return { send, onLaunched, ...hook };
   };
 
@@ -231,7 +287,7 @@ describe('useChatCards', () => {
     expect(send).toHaveBeenCalledWith({ type: 'session.launch', tool: 'codex', cwd: '/w/ledge/app', prompt: 'Relis la PR', qid: 'q-1' });
     expect(result.current.launchingQid).toBe('q-1');
     rerender({ chat, lastLaunched: { id: 'local:launch-1', seq: 1 }, errors: [], ready: true });
-    expect(onLaunched).toHaveBeenCalledWith('local:launch-1');
+    expect(onLaunched).toHaveBeenCalledWith('local:launch-1', PROPOSAL);
     expect(result.current.launchingQid).toBe('q-1');                   // still waiting for the history
     const marked = [turnWith({ proposal: { ...PROPOSAL, launchedId: 'local:launch-1' } })];
     rerender({ chat: marked, lastLaunched: { id: 'local:launch-1', seq: 1 }, errors: [], ready: true });
@@ -239,6 +295,21 @@ describe('useChatCards', () => {
     expect(onLaunched).toHaveBeenCalledTimes(1);
     act(() => result.current.launch('q-1'));                           // launched: never again
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('a session.launched that is not the card’s (another machine, folder or harness: the form’s launch) is not announced', () => {
+    const chat = [turnWith({ proposal: PROPOSAL })];
+    const { onLaunched, result, rerender } = setup({ chat, lastLaunched: null, errors: [], ready: true });
+    act(() => result.current.launch('q-1'));
+    const form = fakeSession('local:launch-1', { name: 'Ada', tool: 'claude', cwd: '/w/docs' });
+    rerender({ chat, lastLaunched: { id: 'local:launch-1', seq: 1 }, errors: [], ready: true, sessions: [form] });
+    rerender({ chat, lastLaunched: { id: 'nas:launch-9', seq: 2 }, errors: [], ready: true, sessions: [form] });
+    expect(onLaunched).not.toHaveBeenCalled();
+    expect(result.current.launchingQid).toBe('q-1');
+    const card = fakeSession('local:launch-2', { name: 'Neo', tool: 'codex', cwd: '/w/ledge/app/' });
+    rerender({ chat, lastLaunched: { id: 'local:launch-2', seq: 3 }, errors: [], ready: true, sessions: [form, card] });
+    expect(onLaunched).toHaveBeenCalledTimes(1);
+    expect(onLaunched).toHaveBeenCalledWith('local:launch-2', PROPOSAL);
   });
 
   it('a card of a machine that is not ready does not launch; one whose machine falls is freed', () => {

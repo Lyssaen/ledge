@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'rea
 import { daemonStore, useDaemon, type DaemonClient } from '@ledge/fleet';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
+import type { ChatProposal } from '@ledge/protocol';
 import type { FleetView } from '../fleet/useFleet';
 import { chatCopy, useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
@@ -13,7 +14,7 @@ export interface ChatPanelProps {
   client: DaemonClient; view: FleetView;
   /** « Figer les animations »: the mascots stand still, as with reduced motion. */
   paused: boolean;
-  onClose(): void; onOpenSession(id: string): void; onLaunched(id: string): void;
+  onClose(): void; onOpenSession(id: string): void; onLaunched(id: string, proposal: ChatProposal): void;
 }
 
 /** Desktop's Ledge chat, docked on the right (observatory.tsx, `ledge-chat-panel`): the island's ChatView in its docked mode, on
@@ -29,7 +30,8 @@ export function ChatPanel({ client, view, paused, onClose, onOpenSession, onLaun
   // « En ligne » is the local machine's `ready` (lot 7): until then the field says why it waits.
   const offline = view.machines.find(m => m.id === 'local')?.ready ? null : copy.offline;
   const turnReady = useCallback((qid: string) => !!view.fleet.turnMachine(qid)?.ready, [view.fleet]);
-  const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, turnReady, onLaunched });
+  const turnMachine = useCallback((qid: string) => view.fleet.turnMachine(qid)?.id, [view.fleet]);
+  const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, sessions: view.sessions, turnReady, turnMachine, onLaunched });
   const [hovered, setHovered] = useState<string | null>(null);
   useAgentHighlight(hovered);
   // Every way in (/, the sidebar, the top bar, the footer, Ledge's desk) mounts the panel: the field takes the focus.
@@ -46,8 +48,12 @@ export function ChatPanel({ client, view, paused, onClose, onOpenSession, onLaun
   const open = (id: string) => { setHovered(null); onOpenSession(id); };
 
   return (
-    // Escape closes the chat even from its field (which keeps Escape from the window's shortcuts, as in the island).
-    <aside className="ledge-chat-panel" aria-label={t.side.chat} onKeyDownCapture={e => { if (e.key === 'Escape' && !e.nativeEvent.isComposing) onClose(); }}>
+    // Escape anywhere in the panel, its field included (which keeps Escape from the window's shortcuts, as in the island), closes
+    // the chat and nothing else: the window's Escape (leave the page, clear the filter, leave full screen) does not hear it.
+    <aside className="ledge-chat-panel" aria-label={t.side.chat} onKeyDownCapture={e => {
+      if (e.key !== 'Escape' || e.nativeEvent.isComposing) return;
+      e.preventDefault(); e.stopPropagation(); onClose();
+    }}>
       <div className="chat-drawer-content">
         <ChatCopyProvider value={copy}>
           <ChatView docked visible turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
