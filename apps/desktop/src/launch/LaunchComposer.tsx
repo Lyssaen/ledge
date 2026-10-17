@@ -10,9 +10,7 @@ import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
 import { launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, previewOf, reposOn, toggleRepo, withMachine, withProject, withTool, type LaunchForm, type LaunchMessage, type Tool } from './model';
 import { useRepoInfo } from './useRepoInfo';
-
-/** Until the launch itself (task 5) says more. */
-export type LaunchState = { status: 'idle' } | { status: 'launching' };
+import type { LaunchState } from './useLaunch';
 
 const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor'];
 const isUp = (m: MachineState) => m.status === 'open';
@@ -29,7 +27,8 @@ function emphasized(text: (a: string, b: string) => string, a: string, b: string
 export function LaunchComposer(p: {
   client: DaemonClient; projects: readonly Project[]; machines: readonly MachineState[]; sessions: readonly Session[];
   projectIdOf(s: Session): string | null; wanted: { project?: string; filter?: string }; onEditProject(id: string): void; onNewProject(): void;
-  launch: LaunchState; onLaunch(msg: LaunchMessage, preview: { name: string; project: string }): void; onCancel(): void;
+  /** The launch in flight or its outcome (useLaunch): « Launching… » sends nothing more; a refusal or a silence is said here. */
+  launch: LaunchState; onLaunch(msg: LaunchMessage, preview: { name: string; project: string; projectId: string }): void; onCancel(): void;
   /** The app's « Freeze animations »: the form's bots hold still. */
   paused?: boolean;
 }): JSX.Element {
@@ -80,7 +79,7 @@ export function LaunchComposer(p: {
   const submit = () => {
     setTried(true);
     if (missing || launching || !project) return;
-    p.onLaunch(launchMessage(form, name), { name, project: project.name });
+    p.onLaunch(launchMessage(form, name), { name, project: project.name, projectId: project.id });
   };
   // Only Ctrl / ⌘ ↵ and « Launch » send: a plain Enter on a tile or a chip would submit the form implicitly (the textarea keeps its newline).
   const onKeyDown = (e: KeyboardEvent) => {
@@ -194,7 +193,9 @@ export function LaunchComposer(p: {
             </span>
           )}
         </div>
-        {tried && alert && <span className="composer-missing" role="alert">{alert}</span>}
+        {tried && alert ? <span className="composer-missing" role="alert">{alert}</span>
+          : p.launch.status === 'refused' ? <p className="composer-missing" role="alert">{t.launch.refused(p.launch.message)}</p>
+          : p.launch.status === 'timeout' ? <p className="composer-missing" role="alert">{t.launch.timeout}</p> : null}
         <Button variant="ghost" type="button" onClick={p.onCancel}>{t.launch.cancel}</Button>
         <Button variant="primary" type="submit" aria-disabled={!!missing || launching}>
           <Icon d={ICONS.plus.d} size={14} />{launching ? t.launch.launching : t.launch.launch}<Kbd>Ctrl ↵</Kbd>

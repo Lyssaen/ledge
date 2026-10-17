@@ -129,9 +129,9 @@ export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, l
   return { d, side, view, client, user: userEvent.setup() };
 }
 
-/** The app on the List with listSessions, LAUNCH_PROJECTS, Local and NAS (offline), then N: the New session dialog. */
-export async function openLaunch(opts: { repoInfo?: Map<string, RepoInfo> } = {}) {
-  const env = await boot({ sessions: listSessions(), list: true, projects: LAUNCH_PROJECTS, machines: LOCAL_AND_NAS, repoInfo: opts.repoInfo ?? LAUNCH_REPOS() });
+/** The app on the List (the Atelier with `list: false`) with listSessions, LAUNCH_PROJECTS, Local and NAS (offline), then N: the New session dialog. */
+export async function openLaunch(opts: { repoInfo?: Map<string, RepoInfo>; list?: boolean } = {}) {
+  const env = await boot({ sessions: listSessions(), list: opts.list ?? true, projects: LAUNCH_PROJECTS, machines: LOCAL_AND_NAS, repoInfo: opts.repoInfo ?? LAUNCH_REPOS() });
   await env.user.keyboard('n');
   return { ...env, form: within(await screen.findByRole('dialog', { name: 'New session' })) };
 }

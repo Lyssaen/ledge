@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { withRule, type Fleet } from '@ledge/fleet';
 import { normalizePath, type Projects, type Rule, type Session } from '@ledge/protocol';
 import { useI18n } from '../i18n/lang';
+import { useMotionPreferences } from '../motionPreferences';
 
 /** Putting an agent away (spec § 2.3, § 3): a « dossier → projet » rule written to the local daemon, which applies it on its
  *  `projects` broadcast. Nothing moves before that broadcast. */
@@ -38,9 +39,15 @@ export interface Filing {
   dragProps(s: Session): { draggable: true; onDragStart(e: DragEvent): void; onDragEnd(): void };
   dropProps(projectId: string): DropTarget;
   file(s: Session, projectId: string): void;
+  /** A launched agent: its seat lights (just-seated) once the session is listed, and it is brought into view. */
+  markSeated(id: string): void;
 }
 
 const SEATED_MS = 1600;
+/** How long a launched agent's seat waits for its session to be listed. */
+const LISTED_MS = 8000;
+/** The mockup's `startAgent`: the seat is brought into view once it is drawn. */
+const SCROLL_DELAY_MS = 80;
 /** How long a sent rule waits for the broadcast that applies it. */
 const UNCONFIRMED_MS = 8000;
 
@@ -53,6 +60,14 @@ export function useFiling(o: { fleet: Pick<Fleet, 'setProjects'>; projects: Proj
   const [dragging, setDragging] = useState<Session | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [seated, setSeated] = useState<string | null>(null);
+  // A launched agent whose session is not listed yet, and the seat to bring into view once lit.
+  const [listed, setListed] = useState<string | null>(null);
+  const shown = useRef<string | null>(null);
+  // Read when the scroll starts: a preference changing in between does not cancel it.
+  const reduced = useRef(false);
+  reduced.current = useMotionPreferences().reduced;
+  const current = useRef(sessions);
+  current.current = sessions;
   // The drag being carried, read by the targets' handlers whatever render they come from.
   const carried = useRef<Session | null>(null);
   // Sent rules waiting for their broadcast: session id → the project and the clock that gives up on it.
@@ -87,6 +102,30 @@ export function useFiling(o: { fleet: Pick<Fleet, 'setProjects'>; projects: Proj
   useEffect(() => {
     if (seated === null) return;
     const timer = setTimeout(() => setSeated(null), SEATED_MS);
+    return () => clearTimeout(timer);
+  }, [seated]);
+
+  const markSeated = useCallback((id: string) => {
+    shown.current = id;
+    if (current.current.some(s => s.id === id)) { setListed(null); setSeated(id); } else setListed(id);
+  }, []);
+  // The launched session reached the snapshot: its seat lights. It never does within LISTED_MS: nothing to light.
+  useEffect(() => {
+    if (listed !== null && sessions.some(s => s.id === listed)) { setListed(null); setSeated(listed); }
+  }, [listed, sessions]);
+  useEffect(() => {
+    if (listed === null) return;
+    const timer = setTimeout(() => setListed(l => (l === listed ? null : l)), LISTED_MS);
+    return () => clearTimeout(timer);
+  }, [listed]);
+  // A launched agent's seat (or its row in the List) is brought to the centre once drawn.
+  useEffect(() => {
+    if (seated === null || shown.current !== seated) return;
+    shown.current = null;
+    const timer = setTimeout(() => {
+      const el = [...document.querySelectorAll<HTMLElement>('[data-agent]')].find(x => x.dataset.agent === seated);
+      el?.scrollIntoView?.({ block: 'center', behavior: reduced.current ? 'auto' : 'smooth' });
+    }, SCROLL_DELAY_MS);
     return () => clearTimeout(timer);
   }, [seated]);
 
@@ -136,5 +175,5 @@ export function useFiling(o: { fleet: Pick<Fleet, 'setProjects'>; projects: Proj
     }
   });
 
-  return { dragging, over, seated, dragProps, dropProps, file };
+  return { dragging, over, seated, dragProps, dropProps, file, markSeated };
 }

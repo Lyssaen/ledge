@@ -15,6 +15,17 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
   /** `autoLaunch`: answer every `session.launch` with a `starting` session and `session.launched`. Off by default: the overlay's tests answer a launch themselves (`launched`, `refuse`). */
   const options = { autoLaunch: false };
   let launchCount = 0;
+  /** `holdLaunch`: the launches wait here until `releaseLaunch` answers them. `refuseLaunch`: the next launch's refusal. */
+  let holding = false;
+  const held: { ws: WebSocket; m: Extract<ClientMessage, { type: 'session.launch' }> }[] = [];
+  let refusal: string | null = null;
+  /** What `autoLaunch` does: a `starting` session, broadcast, then `session.launched` to the sender. */
+  const answerLaunch = (ws: WebSocket, m: Extract<ClientMessage, { type: 'session.launch' }>) => {
+    const id = `launch-${++launchCount}`;
+    const s: Session = { id, name: m.name ?? `Agent${launchCount}`, tool: m.tool, cwd: m.cwd, project: m.cwd.split('/').filter(Boolean).at(-1) ?? m.cwd, title: m.name ?? `Agent${launchCount}`, tmuxSession: `ledge-${id}`, state: 'starting', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher' };
+    sessions.set(id, s); bc({ type: 'session.updated', session: s });
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'session.launched', id }));
+  };
   /** What the snapshot carries beside the sessions (the launch form's inputs); set before a client connects. */
   const extras: { recents?: Recent[]; launcher?: string[]; daemon?: DaemonInfo } = {};
   const bc = (m: ServerMessage) => { for (const c of wss.clients) if (c.readyState === WebSocket.OPEN) c.send(JSON.stringify(m)); };
@@ -27,7 +38,7 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     ws.send(JSON.stringify(snapshot()));
     if (machinesList) ws.send(JSON.stringify({ type: 'machines', machines: machinesList })); // like the daemon, right after the snapshot
     if (projectsState) ws.send(JSON.stringify({ type: 'projects', projects: projectsState })); // then the projects
-    ws.on('message', d => { last = ws; try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify(snapshot())); if (m.type === 'session.thread') { const items = threads.get(m.id); if (items) ws.send(JSON.stringify({ type: 'session.thread', id: m.id, items })); } if (m.type === 'document.read') { const text = documents.get(m.path); ws.send(JSON.stringify(text === undefined ? { type: 'document.error', requestId: m.requestId, path: m.path, code: 'not_found' } : { type: 'document.content', requestId: m.requestId, path: m.path, text, bytes: Buffer.byteLength(text), modifiedAt: T0 })); } if (m.type === 'repos.inspect') ws.send(JSON.stringify({ type: 'repos.info', requestId: m.requestId, repos: m.paths.map(path => repoInfo.get(path) ?? { path, exists: true, branch: 'main' }) })); if (m.type === 'session.launch' && options.autoLaunch) { const id = `launch-${++launchCount}`; const s: Session = { id, name: m.name ?? `Agent${launchCount}`, tool: m.tool, cwd: m.cwd, project: m.cwd.split('/').filter(Boolean).at(-1) ?? m.cwd, title: m.name ?? `Agent${launchCount}`, tmuxSession: `ledge-${id}`, state: 'starting', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher' }; sessions.set(id, s); bc({ type: 'session.updated', session: s }); ws.send(JSON.stringify({ type: 'session.launched', id })); } if (m.type === 'projects.set') { projectsState = m.projects; bc({ type: 'projects', projects: m.projects }); } } catch { /* ignore */ } });
+    ws.on('message', d => { last = ws; try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify(snapshot())); if (m.type === 'session.thread') { const items = threads.get(m.id); if (items) ws.send(JSON.stringify({ type: 'session.thread', id: m.id, items })); } if (m.type === 'document.read') { const text = documents.get(m.path); ws.send(JSON.stringify(text === undefined ? { type: 'document.error', requestId: m.requestId, path: m.path, code: 'not_found' } : { type: 'document.content', requestId: m.requestId, path: m.path, text, bytes: Buffer.byteLength(text), modifiedAt: T0 })); } if (m.type === 'repos.inspect') ws.send(JSON.stringify({ type: 'repos.info', requestId: m.requestId, repos: m.paths.map(path => repoInfo.get(path) ?? { path, exists: true, branch: 'main' }) })); if (m.type === 'session.launch') { if (refusal !== null) { ws.send(JSON.stringify({ type: 'error', message: refusal, request: 'session.launch' })); refusal = null; } else if (holding) held.push({ ws, m }); else if (options.autoLaunch) answerLaunch(ws, m); } if (m.type === 'projects.set') { projectsState = m.projects; bc({ type: 'projects', projects: m.projects }); } } catch { /* ignore */ } });
   });
   return {
     get clientCount() { return [...wss.clients].filter(c => c.readyState === WebSocket.OPEN).length; },
@@ -55,6 +66,12 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     reply(m: ServerMessage) { last?.send(JSON.stringify(m)); },
     /** A launch refused: an `error` with no id, to the last requester. */
     refuse(message: string) { last?.send(JSON.stringify({ type: 'error', message })); },
+    /** The next launches get no answer until `releaseLaunch` (whatever `autoLaunch` says). */
+    holdLaunch() { holding = true; },
+    /** Answers the held launches as `autoLaunch` does (a `starting` session, then `session.launched` to each sender); later ones are answered by `autoLaunch` again. */
+    releaseLaunch() { holding = false; for (const { ws, m } of held.splice(0)) answerLaunch(ws, m); },
+    /** The next launch is refused as the daemon does: an `error` without id, `request: 'session.launch'`, to its sender. */
+    refuseLaunch(message: string) { refusal = message; },
     /** Any daemon message, to every client (the chat's steps, answers and history in Desktop's tests). */
     push(m: ServerMessage) { bc(m); },
     /** Cuts every open socket, as a daemon restart does; the client reconnects and gets a fresh snapshot. */

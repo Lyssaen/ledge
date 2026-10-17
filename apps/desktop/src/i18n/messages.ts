@@ -260,7 +260,9 @@ const fr = {
     noProjects: 'Aucun projet pour l’instant.', noProjectsBody: 'Créez un projet pour y lancer des agents.', newProject: 'Nouveau projet',
     newAgent: 'Un nouvel agent', joins: (n: string, t: string) => `${n} rejoindra la table ${t}`, seat: (n: number, m: string, r: string) => `Place ${n} · ${m} · ${r}`, noRepo: 'aucun dépôt',
     missing: { tool: 'Choisissez un agent', prompt: 'Écrivez la consigne', machine: 'Aucune machine en ligne', repos: 'Choisissez au moins un dépôt' } as Record<'tool' | 'prompt' | 'machine' | 'repos', string>,
-    cancel: 'Annuler', launch: 'Lancer', launching: 'Lancement…'
+    cancel: 'Annuler', launch: 'Lancer', launching: 'Lancement…',
+    started: (n: string, t: string) => `${n} démarre à la table ${t}.`, refused: (m: string) => `Démarrage refusé : ${m}`,
+    timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.'
   },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
@@ -509,7 +511,9 @@ const en: typeof fr = {
     noProjects: 'No project yet.', noProjectsBody: 'Create a project to launch agents in it.', newProject: 'New project',
     newAgent: 'A new agent', joins: (n, t) => `${n} will join the ${t} table`, seat: (n, m, r) => `Seat ${n} · ${m} · ${r}`, noRepo: 'no repository',
     missing: { tool: 'Choose an agent', prompt: 'Write the instruction', machine: 'No machine online', repos: 'Choose at least one repository' },
-    cancel: 'Cancel', launch: 'Launch', launching: 'Launching…'
+    cancel: 'Cancel', launch: 'Launch', launching: 'Launching…',
+    started: (n, t) => `${n} is starting at the ${t} table.`, refused: (m) => `Launch refused: ${m}`,
+    timeout: 'The launch did not answer. Check the machine, then try again.'
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },

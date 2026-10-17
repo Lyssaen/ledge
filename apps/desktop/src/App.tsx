@@ -23,7 +23,8 @@ import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { Pending } from './shell/Pending';
-import { LaunchComposer, type LaunchState } from './launch/LaunchComposer';
+import { LaunchComposer } from './launch/LaunchComposer';
+import { useLaunch } from './launch/useLaunch';
 import { Atelier } from './atelier/Atelier';
 import { List } from './list/List';
 import { Modal } from './shell/Modal';
@@ -39,8 +40,6 @@ import { subagentOf } from './session/thread';
 import { useStored } from './state/useStored';
 
 const NO_PROJECTS: readonly Project[] = [];
-// Task 5 wires the real launch (useLaunch): until then the form never sends.
-const IDLE: LaunchState = { status: 'idle' };
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
@@ -49,7 +48,8 @@ const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'rec
 /** The Atelier's shell: sidebar, top bar, the current place (the atelier, the List, a session; the other screens wait for their lot), footer, chat and dialogs;
  *  the real fleet, toasts and sounds, and the tray. */
 function Shell({ client }: { client?: DaemonClient }) {
-  const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = useFleet(client);
+  const fleetView = useFleet(client);
+  const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
   const projects = useProjects(fleetClient);
   const { t } = useI18n();
   const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
@@ -113,6 +113,19 @@ function Shell({ client }: { client?: DaemonClient }) {
   // The New session form starts on the overview's project filter (a project id, not « all » nor « none »).
   const base = place.kind === 'settings' ? place.back : place;
   const filter = base.project !== 'all' && base.project !== 'none' ? base.project : undefined;
+  // Launching from the form: one at a time, nothing optimistic. Once the daemon says launched, the form closes, the filter
+  // shows the launch's table, the seat lights and the notice names who starts where.
+  const launched = useRef<{ name: string; project: string; projectId: string } | null>(null);
+  const launcher = useLaunch(fleetView, id => {
+    const preview = launched.current;
+    dispatch({ type: 'modal', modal: null });
+    if (base.project !== 'all' && base.project !== preview?.projectId) dispatch({ type: 'home', project: 'all' });
+    filing.markSeated(id);
+    if (preview) notify(t.launch.started(sessions.find(s => s.id === id)?.name ?? preview.name, preview.project));
+  });
+  // The form closed (Escape, Cancel, another dialog): nothing is waited for any more; a late answer is not announced.
+  const { reset: resetLaunch } = launcher;
+  useEffect(() => { if (nav.modal?.kind !== 'launch') resetLaunch(); }, [nav.modal?.kind, resetLaunch]);
 
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
@@ -141,7 +154,7 @@ function Shell({ client }: { client?: DaemonClient }) {
           <LaunchComposer client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
             wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }) }}
             onEditProject={id => dispatch({ type: 'modal', modal: { kind: 'project', edit: id } })} onNewProject={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}
-            launch={IDLE} onLaunch={() => {}} onCancel={close} paused={nav.paused} />
+            launch={launcher.state} onLaunch={(msg, preview) => { launched.current = preview; launcher.launch(msg); }} onCancel={close} paused={nav.paused} />
         </Modal>
       )}
       {nav.modal?.kind === 'project' && (() => {

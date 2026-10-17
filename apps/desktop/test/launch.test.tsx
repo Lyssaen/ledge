@@ -262,7 +262,7 @@ describe('LaunchComposer and its machines', () => {
     await user.type(screen.getByRole('textbox', { name: 'Instruction' }), ' Review ');
     await user.keyboard('{Control>}{Enter}{/Control}');
     expect(p.onLaunch).toHaveBeenCalledTimes(1);
-    expect(p.onLaunch).toHaveBeenCalledWith({ type: 'session.launch', tool: 'claude', cwd: '/w/ledge/app', dirs: ['/w/ledge/docs'], name: 'Otto', prompt: 'Review', machineId: 'local' }, { name: 'Otto', project: 'Ledge' });
+    expect(p.onLaunch).toHaveBeenCalledWith({ type: 'session.launch', tool: 'claude', cwd: '/w/ledge/app', dirs: ['/w/ledge/docs'], name: 'Otto', prompt: 'Review', machineId: 'local' }, { name: 'Otto', project: 'Ledge', projectId: 'ledge' });
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });

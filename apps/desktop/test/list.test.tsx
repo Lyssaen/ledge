@@ -26,7 +26,7 @@ const decisions: Decisions = { busy: () => false, landed: null, decide: () => fa
 const chip = (name: RegExp) => within(screen.getByRole('group', { name: 'Filter by state' })).getByRole('button', { name });
 
 /** A filing that never drags. */
-const idle: Filing = { dragging: null, over: null, seated: null, dragProps: () => ({ draggable: true, onDragStart() {}, onDragEnd() {} }), dropProps: () => ({ onDragOver() {}, onDragLeave() {}, onDrop() {} }), file() {} };
+const idle: Filing = { dragging: null, over: null, seated: null, dragProps: () => ({ draggable: true, onDragStart() {}, onDragEnd() {} }), dropProps: () => ({ onDragOver() {}, onDragLeave() {}, onDrop() {} }), file() {}, markSeated() {} };
 
 describe('the List', () => {
   it('groups by project, Sans projet last, what waits first in its group, with its stripe', async () => {

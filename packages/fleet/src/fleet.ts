@@ -187,7 +187,9 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       p.status = s;
       if (s !== 'open') {
         p.fresh = false;
-        if (operations.delete(c.id)) emit({ type: 'error', message: `${c.label} is offline` });
+        // A launch in flight names its request, as the daemon's refusal does, so the form that sent it hears it.
+        const op = operations.get(c.id);
+        if (operations.delete(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : {}) });
         for (const [requestId, owner] of inspections) if (owner === c.id) { inspections.delete(requestId); const repos = unfound.get(requestId) ?? []; unfound.delete(requestId); emit({ type: 'repos.info', requestId, repos }); }
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }

@@ -13,7 +13,7 @@ const noFiling: Filing = {
   dragging: null, over: null, seated: null,
   dragProps: () => ({ draggable: true, onDragStart: () => {}, onDragEnd: () => {} }),
   dropProps: () => ({ onDragOver: () => {}, onDragLeave: () => {}, onDrop: () => {} }),
-  file: () => {}
+  file: () => {}, markSeated: () => {}
 };
 
 describe('a project table', () => {

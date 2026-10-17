@@ -124,6 +124,12 @@ describe('multi-machine connections', () => {
     expect(got.filter(m => m.type === 'repos.info')).toEqual([{ type: 'repos.info', requestId: 'r1', repos: [{ path: '/w/a', exists: false, branch: null }, { path: '/w/b', exists: false, branch: null }] }]);
     expect(server.sent).toEqual([]);
   });
+  it('a launch in flight on a machine that drops is refused with its request', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'session.launch', tool: 'claude', cwd: '/w/a', machineId: 'server' });
+    server.set('unreachable');
+    expect(got.filter(m => m.type === 'error')).toEqual([{ type: 'error', message: 'dev-server is offline', request: 'session.launch' }]);
+  });
   it('answers an inspection pending on a machine that drops', () => {
     const { client, server, got } = setup();
     client.send({ type: 'repos.inspect', requestId: 'r1', paths: ['/w/a'], machineId: 'server' });

@@ -42,6 +42,8 @@
 .composer-preview small{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .preview-empty{width:30px;height:30px;border-radius:50%;border:1.5px dashed var(--input);flex-shrink:0}
 .composer-missing{font-size:11px;color:var(--destructive);white-space:nowrap}
+/* A refusal or a silence: a sentence that may wrap, beside the buttons. */
+p.composer-missing{margin:0;white-space:normal;max-width:45%}
 .composer-footer .ledge-btn kbd{margin-left:4px;font-size:9px!important;background:color-mix(in srgb,var(--primary-foreground) 15%,transparent)!important;color:inherit!important;border-color:transparent!important}
 .composer-footer [aria-disabled=true]{opacity:.55}
 @media(max-width:700px){.composer-tools{grid-template-columns:1fr}.composer-footer{flex-wrap:wrap}.composer-preview{flex-basis:100%}}
