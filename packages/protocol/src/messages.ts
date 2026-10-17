@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { PendingSchema, SessionSchema, ToolSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema } from './chat.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
+import { ReposScanSchema, ReposFoundSchema } from './scan.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
 import { SshAliasSchema } from './ssh.js';
@@ -64,6 +65,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   DocumentContentSchema,
   DocumentErrorSchema,
   ReposInfoSchema,
+  ReposFoundSchema,
   /** `recents`: the folders of past sessions, most recent first. `launcher`: the command that runs `ledge` inside WSL
    *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. `daemon`: absent
    *  from daemons older than the auto-update. */
@@ -106,6 +108,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.route'), qid: z.string().min(1).max(100), text: z.string().min(1).max(20000), tool: ToolSchema.optional(), context: RoutingContextSchema }),
   DocumentReadSchema,
   ReposInspectSchema,
+  ReposScanSchema,
   /** The overlay starts a session: `cwd` is a WSL path (`~` allowed), `name` a preferred bot name (the daemon picks a
    *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation.
    *  With `qid` it is the chat card of that turn: the daemon launches the turn's proposal and ignores the other fields. */

@@ -197,6 +197,18 @@ describe('protocol: launching with several folders and inspecting repos', () => 
     expect(parseServerMessage(info)).toEqual(info);
     expect(() => parseServerMessage({ ...info, repos: [{ path: '/w', exists: true }] })).toThrow();
   });
+  it('parses repos.scan and repos.found (lot 11): a machineId to route, a bounded list, truncated and an optional error', () => {
+    const q = { type: 'repos.scan', requestId: 's1', machineId: 'm1' };
+    expect(parseClientMessage(q)).toEqual(q);
+    expect(parseClientMessage({ type: 'repos.scan', requestId: 's1' })).not.toHaveProperty('machineId');
+    expect(() => parseClientMessage({ ...q, requestId: '' })).toThrow();
+    expect(() => parseClientMessage({ ...q, requestId: 'x'.repeat(101) })).toThrow();
+    const found = { type: 'repos.found', requestId: 's1', repos: [{ path: '/w/ledge', branch: 'main', remote: 'github.com/paradow/ledge' }, { path: '/w/empty', branch: null }], truncated: false };
+    expect(parseServerMessage(found)).toEqual(found);
+    expect(parseServerMessage({ ...found, repos: [], error: 'offline' })).toEqual({ ...found, repos: [], error: 'offline' });
+    expect(() => parseServerMessage({ ...found, truncated: undefined })).toThrow();
+    expect(() => parseServerMessage({ ...found, repos: Array.from({ length: 501 }, (_, i) => ({ path: `/w/${i}`, branch: null })) })).toThrow();
+  });
 });
 
 describe('relay from the chat (spec 2026-10-12 relay §5)', () => {

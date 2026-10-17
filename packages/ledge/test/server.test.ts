@@ -125,6 +125,24 @@ describe('server: extra folders and repos.inspect', () => {
     ] });
     c.close();
   });
+  it('repos.scan answers repos.found on the same socket: home, then the parents of recent and live folders outside home', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ledge-scan-home-')); const away = mkdtempSync(join(tmpdir(), 'ledge-scan-away-')); const far = mkdtempSync(join(tmpdir(), 'ledge-scan-far-'));
+    const init = (p: string, remote?: string) => { mkdirSync(p, { recursive: true }); execFileSync('git', ['init', '-q', '-b', 'main', p]); if (remote) execFileSync('git', ['-C', p, 'remote', 'add', 'origin', remote]); };
+    init(join(home, 'w/app'), 'https://bob:secret@github.com/paradow/app.git');
+    init(join(away, 'sib')); mkdirSync(join(away, 'recent'));
+    init(join(far, 'other')); mkdirSync(join(far, 'live'));
+    store.touchRecent(join(away, 'recent'), 'recent', T0);
+    store.upsert(mk('a', { cwd: join(far, 'live') }));
+    const srv2 = await startServer({ store, tmux, port: 0, home });
+    const c = await connect({ port: srv2.port }); await c.next('snapshot');
+    c.send({ type: 'repos.scan', requestId: 's1' });
+    const found = await c.next('repos.found', 5000);
+    expect({ ...found, repos: [...found.repos].sort((a, b) => a.path.localeCompare(b.path)) }).toEqual({ type: 'repos.found', requestId: 's1', truncated: false, repos: [
+      { path: join(home, 'w/app'), branch: 'main', remote: 'github.com/paradow/app' },
+      { path: join(away, 'sib'), branch: 'main' }, { path: join(far, 'other'), branch: 'main' }
+    ].sort((a, b) => a.path.localeCompare(b.path)) });
+    c.close(); await srv2.close();
+  });
 });
 
 describe('server: origin check', () => {

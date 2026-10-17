@@ -76,6 +76,20 @@ describe('daemon client + store', () => {
     client.close();
   });
 
+  it('answers repos.scan from found, empty by default', async () => {
+    const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never });
+    const got: unknown[] = []; client.onMessage(m => { if (m.type === 'repos.found') got.push(m); });
+    client.connect(); await sleep(80);
+    client.send({ type: 'repos.scan', requestId: 's1' }); await sleep(50);
+    mock.found.push({ path: '/w/ledge', branch: 'main', remote: 'github.com/paradow/ledge' }, { path: '/w/new', branch: null });
+    client.send({ type: 'repos.scan', requestId: 's2' }); await sleep(50);
+    expect(got).toEqual([
+      { type: 'repos.found', requestId: 's1', repos: [], truncated: false },
+      { type: 'repos.found', requestId: 's2', repos: [{ path: '/w/ledge', branch: 'main', remote: 'github.com/paradow/ledge' }, { path: '/w/new', branch: null }], truncated: false }
+    ]);
+    client.close();
+  });
+
   it('answers folder.list from folders, with error not found for an unknown path', async () => {
     mock.folders.set('/w', { entries: ['a', 'b'], repos: [{ name: 'a', branch: 'dev' }] });
     const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never });

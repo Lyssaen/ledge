@@ -222,6 +222,53 @@ describe('multi-machine connections', () => {
     local.emit({ type: 'repos.info', requestId: 'r2', repos: [{ path: '/w/b', exists: true, branch: 'dev' }] });
     expect(got.filter(m => m.type === 'repos.info').map(m => m.type === 'repos.info' && m.requestId)).toEqual(['r1', 'r2']);
   });
+  it('routes repos.scan to its machine without machineId (local by default) and relays only that machine\'s repos.found', () => {
+    const { client, local, server, got } = setup();
+    client.fleet!.select('server');
+    client.send({ type: 'repos.scan', requestId: 's1', machineId: 'server' });
+    client.send({ type: 'repos.scan', requestId: 's2' });
+    expect(server.sent).toEqual([{ type: 'repos.scan', requestId: 's1' }]);
+    expect(local.sent).toEqual([{ type: 'repos.scan', requestId: 's2' }]);
+    const found: ServerMessage = { type: 'repos.found', requestId: 's1', repos: [{ path: '/w/ledge', branch: 'main', remote: 'github.com/paradow/ledge' }], truncated: false };
+    local.emit(found); // not the machine asked
+    local.emit({ ...found, requestId: 'unknown' });
+    expect(got.filter(m => m.type === 'repos.found')).toEqual([]);
+    server.emit(found);
+    expect(got.filter(m => m.type === 'repos.found')).toEqual([found]);
+    server.emit(found); // answered already
+    local.emit({ type: 'repos.found', requestId: 's2', repos: [], truncated: true });
+    expect(got.filter(m => m.type === 'repos.found').map(m => m.type === 'repos.found' && m.requestId)).toEqual(['s1', 's2']);
+  });
+  it('answers a repos.scan for an offline machine, and one pending on a machine that drops, with error offline', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'repos.scan', requestId: 's1', machineId: 'server' });
+    server.set('unreachable');
+    client.send({ type: 'repos.scan', requestId: 's2', machineId: 'server' });
+    client.send({ type: 'repos.scan', requestId: 's3', machineId: 'nowhere' });
+    expect(got.filter(m => m.type === 'repos.found')).toEqual([
+      { type: 'repos.found', requestId: 's1', repos: [], truncated: false, error: 'offline' },
+      { type: 'repos.found', requestId: 's2', repos: [], truncated: false, error: 'offline' },
+      { type: 'repos.found', requestId: 's3', repos: [], truncated: false, error: 'offline' }
+    ]);
+    expect(server.sent).toEqual([{ type: 'repos.scan', requestId: 's1' }]);
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
+  it('an older daemon refusing repos.scan answers error outdated, leaving inspections, listings and another machine\'s scan pending', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'repos.scan', requestId: 's1', machineId: 'server' });
+    client.send({ type: 'repos.scan', requestId: 's2' });
+    client.send({ type: 'repos.inspect', requestId: 'r1', paths: ['/a'], machineId: 'server' });
+    client.send({ type: 'folder.list', path: '/w', machineId: 'server', requestId: 'f1' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'repos.scan' });
+    expect(got.filter(m => m.type === 'repos.found')).toEqual([{ type: 'repos.found', requestId: 's1', repos: [], truncated: false, error: 'outdated' }]);
+    expect(got.filter(m => m.type === 'error' || m.type === 'repos.info' || m.type === 'folder.listing')).toEqual([]);
+    server.emit({ type: 'repos.found', requestId: 's1', repos: [], truncated: false }); // no longer pending
+    local.emit({ type: 'repos.found', requestId: 's2', repos: [], truncated: false });
+    expect(got.filter(m => m.type === 'repos.found').map(m => m.type === 'repos.found' && m.requestId)).toEqual(['s1', 's2']);
+    server.set('unreachable'); // the inspection and the listing were still pending
+    expect(got.filter(m => m.type === 'repos.found')).toHaveLength(2);
+    expect(got.filter(m => m.type === 'repos.info' || m.type === 'folder.listing')).toHaveLength(2);
+  });
   it('an unrelated error from a machine keeps its launch in flight: a later drop still refuses the launch', () => {
     const { client, server, got } = setup();
     client.send({ type: 'session.launch', tool: 'claude', cwd: '/w/a', machineId: 'server' });

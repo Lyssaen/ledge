@@ -8,6 +8,7 @@ export * from './messages.js';
 export * from './names.js';
 export * from './proposal.js';
 export * from './repos.js';
+export * from './scan.js';
 export * from './topic.js';
 export * from './routing.js';
 export * from './ssh.js';

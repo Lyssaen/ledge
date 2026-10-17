@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http';
+import { homedir } from 'node:os';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, type ClientMessage, type DaemonInfo, type Decision, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
@@ -12,6 +13,7 @@ import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
 import { spawnSession } from '../spawn.js';
 import { inspectRepos } from './repos.js';
+import { extraRoots, scanRepos } from './scan.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
 import { loginShellEnv } from '../shell-path.js';
 import { log } from '../log.js';
@@ -276,6 +278,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return send(ws, await readDocument(msg, { cwd: session?.cwd, home: opts.home ?? process.env.HOME ?? '' }));
       }
       case 'repos.inspect': return send(ws, { type: 'repos.info', requestId: msg.requestId, repos: await inspectRepos(msg.paths, { home: opts.home }) });
+      // Lot 11: home, then the parents of the recent and live folders outside it. Answered even when it fails: an `error` for
+      // repos.scan reads, to the fleet, as a daemon too old to know it. The remotes it carries are never logged.
+      case 'repos.scan': {
+        const home = opts.home ?? homedir();
+        const extra = extraRoots(home, [...store.recents().map(r => r.cwd), ...store.all().filter(s => s.state !== 'exited').map(s => s.cwd)]);
+        try { return send(ws, { type: 'repos.found', requestId: msg.requestId, ...await scanRepos({ home, extra }) }); }
+        catch (e) { log(`repos.scan failed: ${(e as Error).message}`); return send(ws, { type: 'repos.found', requestId: msg.requestId, repos: [], truncated: false, error: 'scan failed' }); }
+      }
       case 'snapshot.request': return sendSnapshot(ws);
       case 'machines.set': {
         writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender
