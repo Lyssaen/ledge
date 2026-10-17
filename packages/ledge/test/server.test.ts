@@ -394,7 +394,7 @@ describe('server', () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.decide', id: 'a', decision: 'deny', note: 'Use\npnpm' });
     expect((await c.next('session.thread.item', 3000)).item).toMatchObject({ kind: 'permission', decision: 'deny' });
-    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape'], ['text', 'ledge-a', 'Use pnpm'], ['keys', 'ledge-a', 'Enter']]);
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape'], ['keys', 'ledge-a', 'C-u'], ['text', 'ledge-a', 'Use pnpm'], ['keys', 'ledge-a', 'Enter']]);
     c.close();
   });
 
@@ -522,7 +522,7 @@ describe('server', () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.reply', id: 'a', text: 'Vert pomme' });
     await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
-    expect(tmux.sent).toEqual([['text', 'ledge-a', '3'], ['text', 'ledge-a', 'Vert pomme'], ['keys', 'ledge-a', 'Enter']]);
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '3'], ['keys', 'ledge-a', 'C-u'], ['text', 'ledge-a', 'Vert pomme'], ['keys', 'ledge-a', 'Enter']]);
     c.close();
   });
 

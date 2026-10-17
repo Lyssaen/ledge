@@ -286,10 +286,15 @@ function optionNumber(text: string, pending: Pending | undefined): number | null
 const FREE_ROW = /^Type something\.?$/;
 const NO_FREE_ROW = 'no free-text row in this dialog, answer in the terminal';
 
-/** Option `n` (1-based) is a row that takes text: its digit selects it, the text goes in once it is, then Enter. */
+// Ctrl+U empties the field the cursor is in before a text goes in: a row's text, or the input's draft typed in the
+// terminal (Claude Code 2.1.302, seen in tmux: « Tell Claude what to change » and the main prompt; Ctrl+Y pastes a draft
+// cleared this way back). A tmux key name, sent as a key, never as text.
+const CLEAR: KeyPlan = [{ keys: ['C-u'] }];
+
+/** Option `n` (1-based) is a row that takes text: its digit selects it, the row cleared and the text typed once it is, then Enter. */
 function rowPlan(n: number, text: string): KeyPlan {
   const row = new RegExp(`^\\s*❯\\s*${n}\\.\\s`, 'm');
-  return [...digit(n), { until: p => row.test(p) }, { text }, { keys: ['Enter'] }];
+  return [...digit(n), { until: p => row.test(p) }, ...CLEAR, { text }, { keys: ['Enter'] }];
 }
 
 function freeTextPlan(text: string, pane: string | undefined): KeyPlan {
@@ -338,7 +343,7 @@ function notePlan(note: string, pane: string | undefined): KeyPlan {
   const d = pane ? parseDialog(pane) : null;
   const row = d?.kind === 'plan' ? d.options.findIndex(o => PLAN_NOTE_ROW.test(o)) : -1;
   if (row >= 0) return rowPlan(row + 1, text);
-  return [{ keys: ['Escape'] }, { until: atRest, denied: true }, { text }, { keys: ['Enter'] }];
+  return [{ keys: ['Escape'] }, { until: atRest, denied: true }, ...CLEAR, { text }, { keys: ['Enter'] }];
 }
 
 export const claudeAdapter: Adapter = {

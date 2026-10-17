@@ -61,6 +61,18 @@ describe('tmux', () => {
     expect((await tmux.capture(n, 10))!.split('\n')).toEqual(['echo hi;', 'echo hi;', ';', ';']);
     await tmux.killSession(n);
   });
+  it('sends a key name as a key: C-u is Ctrl+U (here the line kill of a cooked tty), never the text « C-u »', async () => {
+    const n = 'ledge-t4';
+    await tmux.newSession({ name: n, cwd: '/tmp', env: {}, command: ['cat'] });
+    await sleep(200);
+    await tmux.sendText(n, 'brouillon');
+    await tmux.sendKeys(n, ['C-u']);
+    await tmux.sendText(n, 'note');
+    await tmux.sendKeys(n, ['Enter']);
+    await sleep(300);
+    expect((await tmux.capture(n, 10))!.split('\n').map(l => l.trimEnd())).toEqual(['note', 'note']);
+    await tmux.killSession(n);
+  });
   it('rejects text containing newlines', async () => {
     await expect(tmux.sendText(name, 'a\nb')).rejects.toThrow(/newline/);
     await expect(tmux.sendText(name, 'a\rb')).rejects.toThrow(/newline/);

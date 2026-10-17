@@ -100,7 +100,8 @@ describe('claude adapter: keys', () => {
   });
   it('answers a question in free text through its "Type something." row: its digit, then the text once it has the cursor, then Enter', () => {
     const plan = claudeAdapter.replyPlan('fix all three\nthen run tests', q, fx('claude2-question'));
-    expect(plan.filter(s => !('until' in s))).toEqual([{ text: '3' }, { text: 'fix all three then run tests' }, { keys: ['Enter'] }]);
+    // Ctrl+U first: whatever the row held (a draft typed in the terminal) gives way to the text.
+    expect(plan).toEqual([{ text: '3' }, { until: expect.any(Function) }, { keys: ['C-u'] }, { text: 'fix all three then run tests' }, { keys: ['Enter'] }]);
     const wait = plan[1] as { until: (p: string) => boolean };
     expect(wait.until(tail(fx('claude2-question-other-focused'), 30))).toBe(true);
     expect(wait.until(tail(fx('claude2-question'), 30))).toBe(false);
@@ -254,10 +255,12 @@ describe('claude adapter: always and a note (lot 6a)', () => {
     const onlyClear = fx('claude2-plan').replace('❯ 1. Yes, and use auto mode', '❯ 1. Yes, clear context and auto-accept edits (shift+tab)');
     expect(() => claudeAdapter.keysFor('always', plan, onlyClear)).toThrow('no "always" option in this dialog, answer in the terminal');
   });
-  it('deny with a note: Escape, then the note once the input is back; a plan takes it in its own row', () => {
+  it('deny with a note: Escape, then the note once the input is back; a plan takes it in its own row; Ctrl+U clears either first', () => {
     // After Esc the refusal is done: a wait that fails there says so (`denied`); the plan's row only selects, nothing refused yet.
-    expect(claudeAdapter.keysFor('deny', perm, fx('claude2-permission-bash'), 'Use\npnpm')).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function), denied: true }, { text: 'Use pnpm' }, { keys: ['Enter'] }]);
-    expect(claudeAdapter.keysFor('deny', plan, fx('claude2-plan'), 'Garde la v1')).toEqual([{ text: '3' }, { until: expect.any(Function) }, { text: 'Garde la v1' }, { keys: ['Enter'] }]);
+    // Ctrl+U (a key, not text) empties the input's draft or the row's text so the note is all that is sent (Claude Code 2.1.302:
+    // Ctrl+Y pastes a cleared draft back).
+    expect(claudeAdapter.keysFor('deny', perm, fx('claude2-permission-bash'), 'Use\npnpm')).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function), denied: true }, { keys: ['C-u'] }, { text: 'Use pnpm' }, { keys: ['Enter'] }]);
+    expect(claudeAdapter.keysFor('deny', plan, fx('claude2-plan'), 'Garde la v1')).toEqual([{ text: '3' }, { until: expect.any(Function) }, { keys: ['C-u'] }, { text: 'Garde la v1' }, { keys: ['Enter'] }]);
   });
   it('the note waits for the screen it is meant for: the input at rest, or the plan row selected', () => {
     const rest = (claudeAdapter.keysFor('deny', perm, fx('claude2-permission-bash'), 'Use pnpm')[1] as Until).until;
@@ -270,7 +273,7 @@ describe('claude adapter: always and a note (lot 6a)', () => {
   });
   it('a plan dialog without its own row takes the note like a permission; the trust dialog takes none', () => {
     const noRow = fx('claude2-plan').replace('3. Tell Claude what to change', '3. Keep planning');
-    expect(claudeAdapter.keysFor('deny', plan, noRow, 'Garde la v1')).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function), denied: true }, { text: 'Garde la v1' }, { keys: ['Enter'] }]);
+    expect(claudeAdapter.keysFor('deny', plan, noRow, 'Garde la v1')).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function), denied: true }, { keys: ['C-u'] }, { text: 'Garde la v1' }, { keys: ['Enter'] }]);
     expect(() => claudeAdapter.keysFor('deny', perm, fx('claude2-trust'), 'non')).toThrow(/answer in the terminal/);
   });
 });
