@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
+import type { DaemonClient } from '@ledge/fleet';
 import type { Helper, Session, ThreadItem } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -8,11 +9,14 @@ import { repoOf } from '../list/model';
 import { machineOf } from '../nav/agents';
 import type { NavAction, NavState } from '../nav/state';
 import { useScreenKeys, type ScreenKeyHandler } from '../nav/screenKeys';
+import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
-import { changedFiles, relativeTo } from './changes';
+import { changedFiles, findFile } from './changes';
 import { Changes } from './Changes';
 import { memoKey, type SessionMemory } from './memory';
+import { clampSplit } from './prefs';
 import { Reply } from './Reply';
+import { SidePane, tabId, type PaneTab } from './SidePane';
 import { Thread } from './Thread';
 import { atEnd, displayIds, exchanges, helperOf, unreadFrom } from './thread';
 
@@ -29,6 +33,10 @@ export interface SessionPageProps {
   onShowKids(): void;
   /** O: show or hide the terminal. */
   onTerminal(): void;
+  /** The side pane's share of the page (desktop.session, written by the Workspace's owner). */
+  split: number; onSplit(v: number): void;
+  /** The documents beside the thread are read through it. */
+  client: DaemonClient;
 }
 
 /** After the last scroll, the reading position is written down this late (and when the page closes). */
@@ -42,8 +50,9 @@ type View = 'thread' | 'changes';
 const VIEWS: ReadonlyArray<{ view: View; icon: readonly string[] }> = [{ view: 'thread', icon: SHELL_ICONS.thread }, { view: 'changes', icon: SHELL_ICONS.diff }];
 
 /** A session's page, or one of its subagents' (session.tsx SessionPage): the heading and its Thread / Changes switch, the flat
- *  thread or the changed files, the pinned request and the reply. Mounted again for each agent (Workspace's key), so what
- *  belongs to a page (unfolded actions, the view, the file shown) starts over. */
+ *  thread or the changed files, the pinned request and the reply, and beside the thread the side pane's documents and
+ *  changes. Mounted again for each agent (Workspace's key), so what belongs to a page (unfolded actions, the view, the file
+ *  shown, the pane's tabs) starts over. */
 export function SessionPage(p: SessionPageProps): JSX.Element {
   const { session, helper, items, memory } = p;
   const { t, lang } = useI18n();
@@ -78,14 +87,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const [listOpen, setListOpen] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const files = useMemo(() => (items ? changedFiles(items, session.cwd, helper?.id) : []), [items, session.cwd, helper?.id]);
-  // The file asked for: by its path, else by its path below the cwd (an absolute path for an entry kept relative), else by an
-  // older path of it (an action before a rename); else the first.
-  const current = useMemo(() => {
-    if (file === null) return files[0];
-    const shown = relativeTo(file, session.cwd);
-    return files.find(f => f.path === file) ?? files.find(f => f.shown === shown)
-      ?? files.find(f => f.from === shown || f.touches.some(x => x.from === shown)) ?? files[0];
-  }, [files, file, session.cwd]);
+  // The file asked for (findFile), else the first.
+  const current = useMemo(() => (file === null ? undefined : findFile(files, file, session.cwd)) ?? files[0], [files, file, session.cwd]);
   // Back on the thread: where the reader left it, or (from « tour 2 ») the action, which the flash brings into view.
   const returning = useRef<'restore' | 'aim' | null>(null);
   const switchView = (v: View) => {
@@ -94,7 +97,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     setListOpen(false);
     setView(v);
   };
-  // Stable: the thread is memoised on it.
+  // Stable: the pane's « Toutes les modifications » (and the thread before it).
   const showChanges = useCallback((path: string) => { setFile(path); setView('changes'); }, []);
   const showInThread = useCallback((toolId: string) => {
     returning.current = 'aim';
@@ -106,6 +109,56 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     if (!current) return;
     setFile(files[(files.indexOf(current) + d + files.length) % files.length]!.path);
   };
+
+  /* The side pane: a tab per document or change opened from the thread (or from Changes, which gives way to the thread). */
+  const [tabs, setTabs] = useState<readonly PaneTab[]>([]);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+  const viewNow = useRef(view);
+  viewNow.current = view;
+  // Stable: the thread is memoised on what opens a tab.
+  const openTab = useCallback((tab: PaneTab) => {
+    const id = tabId(tab);
+    setTabs(ts => (ts.some(x => tabId(x) === id) ? ts : [...ts, tab]));
+    setActiveTab(id);
+    if (viewNow.current !== 'thread') { returning.current = 'restore'; setListOpen(false); setView('thread'); }
+  }, []);
+  const openDoc = useCallback((path: string) => openTab({ kind: 'doc', path }), [openTab]);
+  const openDiff = useCallback((path: string) => openTab({ kind: 'diff', path }), [openTab]);
+  // Its neighbour takes over: the next one, else the one before.
+  const closeTab = (id: string) => {
+    const at = tabs.findIndex(x => tabId(x) === id);
+    const next = tabs.filter(x => tabId(x) !== id);
+    setTabs(next);
+    if (activeTab === id) setActiveTab(next.length > 0 ? tabId(next[Math.min(at, next.length - 1)]!) : null);
+  };
+  const active = tabs.find(x => tabId(x) === activeTab);
+  const paneShown = active !== undefined && view === 'thread';
+  // J / K on a change: the tab moves to the next or previous changed file, in place (onto that file's tab if it has one).
+  const stepPane = (d: 1 | -1) => {
+    if (active?.kind !== 'diff' || files.length === 0) return;
+    const found = findFile(files, active.path, session.cwd);
+    const at = found ? files.indexOf(found) : -1;
+    const next: PaneTab = { kind: 'diff', path: files[at < 0 ? (d === 1 ? 0 : files.length - 1) : (at + d + files.length) % files.length]!.path };
+    setTabs(ts => {
+      const moved = ts.map(x => (tabId(x) === activeTab ? next : x));
+      return moved.filter((x, i) => moved.findIndex(y => tabId(y) === tabId(x)) === i);
+    });
+    setActiveTab(tabId(next));
+  };
+  const onSplit = (v: number) => {
+    const x = clampSplit(v);
+    if (x !== null && x !== p.split) p.onSplit(x);
+  };
+  // Narrow, the pane lies over the thread and stops above the reply (session.css: --reply-h).
+  const main = useRef<HTMLDivElement>(null);
+  const [replyH, setReplyH] = useState(0);
+  useLayoutEffect(() => {
+    const el = main.current?.querySelector<HTMLElement>('.session-reply');
+    if (!el) return;
+    const ro = new ResizeObserver(() => setReplyH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   /* Scrolling: open on the marker, else where the reader left, else at the end; then follow the end only while the reader is there. */
   const scroller = useRef<HTMLDivElement>(null);
@@ -169,20 +222,22 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     if (shown) memory.set(key, { scroll: pos.current, ...(last !== null && { seen: last }) });
   }, [memory, key]);
 
-  // The page's keys: Escape closes the narrow file list first; the reply area takes R, Y / N and 1…9; O shows or hides the
-  // terminal; J / K walk the changed files (never while typing: useKeys; a held key moves one file).
+  // The page's keys: Escape closes the narrow file list first, then the pane's active tab (else navigation goes back); the
+  // reply area takes R, Y / N and 1…9; O shows or hides the terminal; J / K walk the changed files, or the pane's change on
+  // the thread (never while typing: useKeys; a held key moves one file).
   const replyKeys = useRef<ScreenKeyHandler | null>(null);
   useScreenKeys(e => {
     if (e.key === 'Escape' && view === 'changes' && listOpen) { setListOpen(false); return true; }
+    if (e.key === 'Escape' && paneShown) { closeTab(activeTab!); return true; }
     if (replyKeys.current?.(e)) return true;
     if (e.key === 'o' || e.key === 'O') { p.onTerminal(); return true; }
     const k = e.key.toLowerCase();
-    if (view === 'changes' && files.length > 0 && (k === 'j' || k === 'k')) {
-      if (e.repeat) return false;
-      stepFile(k === 'j' ? 1 : -1);
-      return true;
-    }
-    return false;
+    if (k !== 'j' && k !== 'k') return false;
+    const walk = view === 'changes' ? files.length > 0 : paneShown && active.kind === 'diff' && files.length > 0;
+    if (!walk) return false;
+    if (e.repeat) return false;
+    (view === 'changes' ? stepFile : stepPane)(k === 'j' ? 1 : -1);
+    return true;
   });
   // ← / → on a tab: the other view, and the focus with it.
   const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
@@ -214,8 +269,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
         <span className="pane-meta mono" title={t.session.meta}>{machine} · {repoOf(session)}</span>
         {kids.length > 0 && <><span className="spacer" /><button type="button" className="kids-pill" title={t.session.kidsPillTitle} onClick={p.onShowKids}><Icon d={SHELL_ICONS.subagents} size={13} />{t.session.kidsPill(kids.length)}</button></>}
       </div>
-      <div className="session-split">
-        <div className="session-main">
+      <div className={cls('session-split', paneShown && 'has-pane')} style={{ '--split': `${p.split * 100}%`, '--reply-h': `${replyH}px` } as CSSProperties}>
+        <div className="session-main" ref={main}>
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
           <div className="session-body" role="tabpanel" {...(view === 'thread' ? { 'aria-label': th.label } : { 'aria-labelledby': 'session-tab-changes' })}>
             <div className="messages session-thread" ref={scroller} onScroll={onScroll} hidden={view !== 'thread'}>
@@ -228,7 +283,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
               {items === undefined ? <p className="muted">{offline ? th.notLoaded : th.loading}</p>
                 : xs.length === 0 ? <p className="muted">{th.empty}</p>
                 : <Thread session={session} helper={helper} items={items} xs={xs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
-                    flash={flash} onChange={showChanges} />}
+                    flash={flash} onChange={openDiff} onDocument={openDoc} />}
             </div>
             {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}
             {view === 'changes' && !loaded && <div className="changes-empty"><p className="muted">{offline ? th.notLoaded : th.loading}</p></div>}
@@ -241,6 +296,10 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
           <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
             notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} />
         </div>
+        {paneShown && (
+          <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}
+            onAllChanges={showChanges} onDocument={openDoc} session={session} files={files} client={p.client} />
+        )}
       </div>
     </section>
   );

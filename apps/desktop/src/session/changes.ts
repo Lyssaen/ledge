@@ -43,6 +43,14 @@ export function changedFiles(items: readonly ThreadItem[], cwd: string, helperId
   }));
 }
 
+/** The file an action names: by its path, else by its path below the cwd (an absolute path for an entry kept relative), else
+ *  by an older path of it (an action before a rename); undefined when none. */
+export function findFile(files: readonly ChangedFile[], path: string, cwd: string): ChangedFile | undefined {
+  const shown = relativeTo(path, cwd);
+  return files.find(f => f.path === path) ?? files.find(f => f.shown === shown)
+    ?? files.find(f => f.from === shown || f.touches.some(x => x.from === shown));
+}
+
 /** Grouped by the folder of `shown` (« . » at the root), in order of first appearance. */
 export function byFolder(files: readonly ChangedFile[]): Array<{ dir: string; files: ChangedFile[] }> {
   const groups: Array<{ dir: string; files: ChangedFile[] }> = [];

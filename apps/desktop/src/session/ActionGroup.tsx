@@ -52,7 +52,7 @@ interface RowProps {
   tool: ToolItem; now: number; live: boolean; expanded: boolean; onExpand(): void;
   /** Lit for a moment: the reader came back to it from « Modifié par ». */
   flash: boolean;
-  /** « Voir la modification »: its first file in the Changes view. */
+  /** « Voir la modification »: its first file's change in the side pane. */
   onChange(path: string): void;
 }
 

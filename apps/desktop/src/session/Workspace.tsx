@@ -1,5 +1,4 @@
 import { useMemo, useState, type JSX } from 'react';
-import type { DaemonClient } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
 import { AgentsRail } from './AgentsRail';
 import type { SessionPrefs } from './prefs';
@@ -9,8 +8,7 @@ import { TerminalPane } from './TerminalPane';
 import { subagentOf } from './thread';
 import { useThread } from './useThread';
 
-export interface WorkspaceProps extends Omit<SessionPageProps, 'items' | 'helper' | 'onShowKids' | 'onTerminal'> {
-  client: DaemonClient;
+export interface WorkspaceProps extends Omit<SessionPageProps, 'items' | 'helper' | 'onShowKids' | 'onTerminal' | 'split' | 'onSplit'> {
   prefs: SessionPrefs; setPrefs(fn: (p: SessionPrefs) => SessionPrefs): void;
   order: readonly Session[]; projects: Projects | null; projectIdOf(s: Session): string | null;
 }
@@ -34,7 +32,8 @@ export function Workspace({ client, prefs, setPrefs, order, projects, projectIdO
     <div className={`conversation-workspace${prefs.terminal ? ' with-terminal' : ''}`}>
       <AgentsRail session={p.session} helper={helper} order={order} projects={projects} projectIdOf={projectIdOf} nav={p.nav} dispatch={p.dispatch} flash={flash} />
       {/* Only the page starts over for each agent (its key): the rail and the terminal stay, with the focus and the scroll. */}
-      <SessionPage key={memoKey(p.session.id, helper?.id)} {...p} items={items} helper={helper} onShowKids={showKids} onTerminal={() => setPrefs(x => ({ ...x, terminal: !x.terminal }))} />
+      <SessionPage key={memoKey(p.session.id, helper?.id)} {...p} items={items} helper={helper} onShowKids={showKids} onTerminal={() => setPrefs(x => ({ ...x, terminal: !x.terminal }))}
+        client={client} split={prefs.split} onSplit={v => setPrefs(x => ({ ...x, split: v }))} />
       {prefs.terminal && <TerminalPane client={client} session={p.session} notify={p.notify} />}
     </div>
   );

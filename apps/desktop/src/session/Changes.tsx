@@ -1,4 +1,4 @@
-import { Fragment, type JSX } from 'react';
+import type { JSX } from 'react';
 import type { Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -6,7 +6,7 @@ import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { byFolder, type ChangedFile } from './changes';
-import { Delta, DiffView } from './DiffView';
+import { Delta, FileDiffs } from './DiffView';
 
 export interface ChangesProps {
   files: readonly ChangedFile[];
@@ -49,8 +49,6 @@ export function Changes({ files, current, onFile, onTouch, listOpen, onListOpen,
     try { void navigator.clipboard?.writeText(file.path).catch(() => undefined); } catch { /* the notice says it */ }
     notify(tc.copied(file.path));
   };
-  const withDiff = file.touches.filter(x => x.diff !== null);
-  const many = file.touches.length > 1;
   return (
     <div className="changes-view">
       <div className="changes-layout">
@@ -98,15 +96,7 @@ export function Changes({ files, current, onFile, onTouch, listOpen, onListOpen,
             </div>
           </div>
           {/* Keyed by the file: another one opens at its top, its folds closed. */}
-          <div key={file.path} className="diff-scroll">
-            {withDiff.length === 0 ? <p className="muted" style={{ padding: 20 }}>{tc.noDiff}</p> : file.touches.map((x, i) => (
-              <Fragment key={`${x.tool.id}:${i}`}>
-                {many && <div className="diff-hunk mono">{x.tool.tool} · {tc.turn(x.turn)}</div>}
-                {x.diff && <DiffView diff={x.diff} />}
-                {x.diff?.cut && <p className="muted diff-cut">{tc.cut}</p>}
-              </Fragment>
-            ))}
-          </div>
+          <FileDiffs key={file.path} file={file} />
         </div>
       </div>
     </div>

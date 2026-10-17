@@ -8,6 +8,8 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
   const sessions = new Map<string, Session>();
   const received: ClientMessage[] = [];
   const threads = new Map<string, ThreadItem[]>();
+  /** The documents `document.read` finds, by the path asked for: `document.content` when the path is there, `document.error` 'not_found' otherwise. */
+  const documents = new Map<string, string>();
   /** What the snapshot carries beside the sessions (the launch form's inputs); set before a client connects. */
   const extras: { recents?: Recent[]; launcher?: string[]; daemon?: DaemonInfo } = {};
   const bc = (m: ServerMessage) => { for (const c of wss.clients) if (c.readyState === WebSocket.OPEN) c.send(JSON.stringify(m)); };
@@ -20,11 +22,11 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     ws.send(JSON.stringify(snapshot()));
     if (machinesList) ws.send(JSON.stringify({ type: 'machines', machines: machinesList })); // like the daemon, right after the snapshot
     if (projectsState) ws.send(JSON.stringify({ type: 'projects', projects: projectsState })); // then the projects
-    ws.on('message', d => { last = ws; try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify(snapshot())); if (m.type === 'session.thread') { const items = threads.get(m.id); if (items) ws.send(JSON.stringify({ type: 'session.thread', id: m.id, items })); } if (m.type === 'projects.set') { projectsState = m.projects; bc({ type: 'projects', projects: m.projects }); } } catch { /* ignore */ } });
+    ws.on('message', d => { last = ws; try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify(snapshot())); if (m.type === 'session.thread') { const items = threads.get(m.id); if (items) ws.send(JSON.stringify({ type: 'session.thread', id: m.id, items })); } if (m.type === 'document.read') { const text = documents.get(m.path); ws.send(JSON.stringify(text === undefined ? { type: 'document.error', requestId: m.requestId, path: m.path, code: 'not_found' } : { type: 'document.content', requestId: m.requestId, path: m.path, text, bytes: Buffer.byteLength(text), modifiedAt: T0 })); } if (m.type === 'projects.set') { projectsState = m.projects; bc({ type: 'projects', projects: m.projects }); } } catch { /* ignore */ } });
   });
   return {
     get clientCount() { return [...wss.clients].filter(c => c.readyState === WebSocket.OPEN).length; },
-    port, url: `ws://127.0.0.1:${port}`, sessions, received, extras, threads,
+    port, url: `ws://127.0.0.1:${port}`, sessions, received, extras, threads, documents,
     upsert(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); },
     remove(id: string) { sessions.delete(id); bc({ type: 'session.removed', id }); },
     preview(id: string, lines: string[]) { bc({ type: 'session.preview', id, lines }); },

@@ -1,7 +1,8 @@
-import { useMemo, useState, type JSX } from 'react';
+import { Fragment, useMemo, useState, type JSX } from 'react';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { SHELL_ICONS } from '../shell/icons';
+import type { ChangedFile } from './changes';
 import { diffRows, type DiffLine, type ParsedDiff } from './diff';
 
 /** Lines added and removed (session.tsx Delta). */
@@ -40,6 +41,25 @@ export function DiffView({ diff }: { diff: ParsedDiff }): JSX.Element {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** A file's diffs as its actions left them, in order (the Changes view and the side pane): a header per action when there are
+ *  several, the cut ones said so; no diff at all, « no recorded difference ». Keyed by its file where it is shown. */
+export function FileDiffs({ file }: { file: ChangedFile }): JSX.Element {
+  const { t } = useI18n();
+  const tc = t.session.changes;
+  const many = file.touches.length > 1;
+  return (
+    <div className="diff-scroll">
+      {file.touches.every(x => x.diff === null) ? <p className="muted" style={{ padding: 20 }}>{tc.noDiff}</p> : file.touches.map((x, i) => (
+        <Fragment key={`${x.tool.id}:${i}`}>
+          {many && <div className="diff-hunk mono">{x.tool.tool} · {tc.turn(x.turn)}</div>}
+          {x.diff && <DiffView diff={x.diff} />}
+          {x.diff?.cut && <p className="muted diff-cut">{tc.cut}</p>}
+        </Fragment>
+      ))}
     </div>
   );
 }

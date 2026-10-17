@@ -1,6 +1,7 @@
-import { Fragment, memo, type JSX, type ReactNode } from 'react';
+import { Fragment, memo, useCallback, useMemo, type JSX, type ReactNode } from 'react';
 import type { Helper, HelperItem, Session, ThreadItem } from '@ledge/protocol';
 import { ThreadMarkdown } from '@ledge/ui/documents/markdown';
+import type { DocumentReference } from '@ledge/ui/documents/references';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import type { NavAction } from '../nav/state';
@@ -9,7 +10,7 @@ import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import { ActionGroup } from './ActionGroup';
-import { helperOf, timeMark, type Exchange, type Segment } from './thread';
+import { docRefs, helperOf, timeMark, type Exchange, type Segment } from './thread';
 
 const CHIP_MARK = { accept: '✓', always: '✓', deny: '✕', unknown: '·' } as const;
 
@@ -24,13 +25,32 @@ export interface ThreadProps {
   dispatch(a: NavAction): void;
   /** The action reached from the Changes view (« tour 2 »), lit for a moment; null: none. */
   flash: string | null;
-  /** « Voir la modification »: the file in the Changes view. Stable (the page's callback). */
+  /** « Voir la modification »: the file's change in the side pane. Stable (the page's callback). */
   onChange(path: string): void;
+  /** A document link or card in a message: the document in the side pane. Stable (the page's callback). */
+  onDocument(path: string): void;
 }
 
-/** What the agent said: parsed again only when its text changes, never on the page's clock. */
-const Say = memo(function Say({ kind, text }: { kind: 'message' | 'reply'; text: string }): JSX.Element {
-  return <div className={`agent-message ${kind}`}><div className="msg-body"><ThreadMarkdown text={text} /></div></div>;
+const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
+
+/** What the agent said, and a card for each document it names (docRefs): parsed again only when its text changes, never on
+ *  the page's clock. */
+const Say = memo(function Say({ kind, text, onDocument }: { kind: 'message' | 'reply'; text: string; onDocument(path: string): void }): JSX.Element {
+  const { t } = useI18n();
+  const refs = useMemo(() => docRefs(text), [text]);
+  const onLink = useCallback((ref: DocumentReference) => onDocument(ref.path), [onDocument]);
+  return (
+    <div className={`agent-message ${kind}`}>
+      <div className="msg-body"><ThreadMarkdown text={text} onDocument={onLink} /></div>
+      {refs.map(path => (
+        <button key={path} type="button" className="document-card" onClick={() => onDocument(path)}>
+          <Icon d={SHELL_ICONS.file} size={16} />
+          <span><strong>{nameOf(path)}</strong><small className="mono">{path}</small></span>
+          <span className="doc-open">{t.session.thread.read}<Icon d={ICONS.chevronRight.d} size={13} /></span>
+        </button>
+      ))}
+    </div>
+  );
 });
 
 interface TurnProps {
@@ -41,12 +61,12 @@ interface TurnProps {
   now: number;
   unread: string | null; since: string; dispatch(a: NavAction): void;
   /** The flashed action when it is in this exchange, else null (the others are left alone). */
-  flash: string | null; onChange(path: string): void;
+  flash: string | null; onChange(path: string): void; onDocument(path: string): void;
 }
 
 /** One exchange: its time, the prompt as a bubble, the agent named once, then what it said, decided and did. Rendered again
  *  only when what it shows changes: the clock's tick reaches the exchange whose action runs, not the ones before it. */
-const Turn = memo(function Turn({ session, helper, items, x, at, running, last, now, unread, since, dispatch, flash, onChange }: TurnProps): JSX.Element {
+const Turn = memo(function Turn({ session, helper, items, x, at, running, last, now, unread, since, dispatch, flash, onChange, onDocument }: TurnProps): JSX.Element {
   const { t } = useI18n();
   const th = t.session.thread;
   const offline = session.offline === true;
@@ -78,7 +98,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
     }
     const { item } = s;
     let node: ReactNode;
-    if (s.kind === 'say') node = <Say kind={s.item.kind} text={s.item.text} />;
+    if (s.kind === 'say') node = <Say kind={s.item.kind} text={s.item.text} onDocument={onDocument} />;
     else if (s.kind === 'decision') {
       const d = s.item.decision!;
       node = <div className={`decision-chip ${d}`}><span className="chip-mark">{CHIP_MARK[d]}</span><span>{th.decided[d]}</span><code>{s.item.text}</code></div>;
@@ -111,13 +131,13 @@ const holds = (x: Exchange, id: string) => x.segments.some(s => s.kind === 'tool
 /** The flat thread (session.tsx renderTurn / renderItem): one section per exchange, the frozen or ended note after the last
  *  one. Memoised: the store's changes elsewhere (another session's preview, the chat, an error) leave it alone, its props
  *  being the session, its items and their exchanges, the clock and the page's stable callbacks. */
-export const Thread = memo(function Thread({ session, helper, items, xs, now, unread, since, dispatch, flash, onChange }: ThreadProps): JSX.Element {
+export const Thread = memo(function Thread({ session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onDocument }: ThreadProps): JSX.Element {
   const { lang } = useI18n();
   const offline = session.offline === true;
   return <>{xs.map((x, i) => (
     <Turn key={x.key} session={session} helper={helper} items={items} x={x} at={timeMark(x.at, now, lang)} last={i === xs.length - 1}
       running={!offline && x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running'))}
       now={ticks(x) ? now : 0} unread={unread} since={since} dispatch={dispatch}
-      flash={flash !== null && holds(x, flash) ? flash : null} onChange={onChange} />
+      flash={flash !== null && holds(x, flash) ? flash : null} onChange={onChange} onDocument={onDocument} />
   ))}</>;
 });

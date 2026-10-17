@@ -55,8 +55,8 @@ it('« turn 2 » goes back to the action in the thread and flashes it; « View t
   expect(tab(/^Thread/)).toHaveAttribute('aria-selected', 'true');
   expect(document.querySelector('[data-tool="e9"]')).toHaveClass('flash');
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="w1"]')!).getByRole('button', { name: 'View the change' }));
-  expect(tab(/^Changes/)).toHaveAttribute('aria-selected', 'true');
-  expect(pane().querySelector('.file-title code')).toHaveTextContent('docs/guide.md');
+  expect(tab(/^Thread/)).toHaveAttribute('aria-selected', 'true');
+  expect(within(screen.getByRole('complementary', { name: 'Reading pane' })).getByText('Change · guide.md')).toBeVisible();
 });
 it('« View the change » on an absolute path finds the file a relative path opened', async () => {
   const { user } = await openOtto([
@@ -67,7 +67,9 @@ it('« View the change » on an absolute path finds the file a relative path ope
   await user.click(within(screen.getByRole('navigation', { name: 'Changed files' })).getByRole('button', { name: /b\.ts/ }));
   await user.click(within(pane()).getByRole('button', { name: /^Edit · turn 2/ }));
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="k2"]')!).getByRole('button', { name: 'View the change' }));
-  expect(pane().querySelector('.file-title code')).toHaveTextContent('src/b.ts');
+  const side = screen.getByRole('complementary', { name: 'Reading pane' });
+  expect(side.querySelector('.side-title code')).toHaveTextContent('src/b.ts');
+  expect([...side.querySelectorAll('.diff-line .code')].map(c => c.textContent)).toEqual(['x', 'y', 'y', 'z']);   // both actions' diffs
 });
 it('on a narrow page, Escape closes the file list and the page stays; the next Escape leaves it', async () => {
   const { user } = await openOtto();

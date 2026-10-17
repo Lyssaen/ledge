@@ -152,6 +152,19 @@ const fr = {
       unfold: (n: number) => plural(n, `Afficher ${n} ligne inchangée`, `Afficher ${n} lignes inchangées`),
       cut: 'Diff limité aux 80 premières lignes.', noDiff: 'Ce fichier n’a pas de différence enregistrée.'
     },
+    pane: {
+      label: 'Volet de lecture', tabs: 'Documents ouverts', closeTab: (l: string) => `Fermer ${l}`,
+      grow: 'Agrandir', shrink: 'Réduire', growTitle: 'Agrandir le volet (65 %)', shrinkTitle: 'Réduire le volet (50 %)',
+      close: 'Fermer', closeTitle: 'Fermer le volet (Échap)', closeShort: 'Fermer (Échap)',
+      resize: 'Redimensionner le volet', allChanges: 'Toutes les modifications',
+      diffTitle: (f: string) => `Modification · ${f}`, diffLabel: (f: string) => `± ${f}`,
+      reading: 'Lecture du document…',
+      errors: {
+        not_found: 'Document introuvable.', too_large: 'Document trop volumineux (1 Mo au plus).',
+        offline: 'La machine est hors ligne : le document ne peut pas être lu.', timeout: 'Le document n’est pas arrivé à temps.',
+        other: 'Le document n’a pas pu être lu.'
+      } as Record<'not_found' | 'too_large' | 'offline' | 'timeout' | 'other', string>
+    },
     terminal: {
       title: 'Terminal', empty: 'Aucune sortie reçue pour l’instant.', readOnly: 'Aperçu en lecture seule', offline: 'Hors ligne',
       open: 'Ouvrir dans un terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`
@@ -202,6 +215,7 @@ const fr = {
       decided: { accept: 'Accordé', always: 'Toujours autorisé', deny: 'Refusé', unknown: 'Répondu dans le terminal' } as Record<'accept' | 'always' | 'deny' | 'unknown', string>,
       helperLaunched: 'Sous-agent lancé', openHelper: (n: string, task: string) => `Ouvrir ${n} : ${task}`,
       seeChange: 'Voir la modification', seeChangeShort: 'Voir',
+      read: 'Lire',
       unread: 'Nouveau depuis votre dernière visite', latest: 'Aller au dernier message',
       lost: (m: string) => `Connexion perdue avec ${m}`,
       lostBody: 'Le fil est figé : ce qui suit est le dernier état connu, l’activité actuelle n’est pas connue.',
@@ -355,6 +369,19 @@ const en: typeof fr = {
       unfold: (n) => pluralEn(n, 'Show 1 unchanged line', `Show ${n} unchanged lines`),
       cut: 'Diff limited to the first 80 lines.', noDiff: 'This file has no recorded difference.'
     },
+    pane: {
+      label: 'Reading pane', tabs: 'Open documents', closeTab: (l) => `Close ${l}`,
+      grow: 'Enlarge', shrink: 'Shrink', growTitle: 'Enlarge the pane (65 %)', shrinkTitle: 'Shrink the pane (50 %)',
+      close: 'Close', closeTitle: 'Close the pane (Esc)', closeShort: 'Close (Esc)',
+      resize: 'Resize the pane', allChanges: 'All changes',
+      diffTitle: (f) => `Change · ${f}`, diffLabel: (f) => `± ${f}`,
+      reading: 'Reading the document…',
+      errors: {
+        not_found: 'Document not found.', too_large: 'Document too large (1 MB at most).',
+        offline: 'The machine is offline: the document cannot be read.', timeout: 'The document did not arrive in time.',
+        other: 'The document could not be read.'
+      }
+    },
     terminal: {
       title: 'Terminal', empty: 'No output received yet.', readOnly: 'Read-only preview', offline: 'Offline',
       open: 'Open in a terminal', openFailed: (n) => `${n}’s terminal could not open.`
@@ -404,6 +431,7 @@ const en: typeof fr = {
       decided: { accept: 'Allowed', always: 'Always allowed', deny: 'Denied', unknown: 'Answered in the terminal' },
       helperLaunched: 'Subagent started', openHelper: (n, task) => `Open ${n}: ${task}`,
       seeChange: 'View the change', seeChangeShort: 'View',
+      read: 'Read',
       unread: 'New since your last visit', latest: 'Go to the latest message',
       lost: (m) => `Connection lost with ${m}`,
       lostBody: 'The thread is frozen: what follows is the last known state; what the agent is doing now is not known.',

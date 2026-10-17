@@ -1,6 +1,7 @@
 import type { FileChange, Helper, HelperItem, Session, ThreadItem, ToolItem } from '@ledge/protocol';
 import { helperThread, turns } from '@ledge/ui/thread/turns';
 import { elapsedMs, liveTool } from '@ledge/ui/thread/tools';
+import { findDocumentReferences } from '@ledge/ui/documents/references';
 import type { Lang } from '../i18n/lang';
 
 export type ToolKind = 'read' | 'search' | 'command' | 'edit';
@@ -139,4 +140,16 @@ export function helperOf(session: Session, items: readonly ThreadItem[] | undefi
 /** The subagent of a place: helperOf, else — known by neither (its thread not there yet, or gone) — named by its id alone, finished. */
 export function subagentOf(session: Session, items: readonly ThreadItem[] | undefined, id: string): Helper {
   return helperOf(session, items, id) ?? { id, kind: 'subagent', task: '', state: 'exited' };
+}
+
+/** A message shows at most this many document cards. */
+const DOC_CARDS = 3;
+/** The Markdown files a message names or links (findDocumentReferences), distinct, in order, three at most. */
+export function docRefs(text: string): string[] {
+  const out: string[] = [];
+  for (const { reference } of findDocumentReferences(text)) {
+    if (!out.includes(reference.path)) out.push(reference.path);
+    if (out.length === DOC_CARDS) break;
+  }
+  return out;
 }
