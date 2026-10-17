@@ -1,10 +1,11 @@
-import { afterEach, expect, it } from 'vitest';
-import { cleanup, screen, within } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import type { ThreadItem, ToolItem } from '@ledge/protocol';
 import { T0 } from '@ledge/fleet/test/mockDaemon';
+import { saveReduced } from '../src/motionPreferences';
 import { boot, closeDaemons, listSessions, ottoThread } from './helpers';
 
-afterEach(async () => { cleanup(); localStorage.clear(); await closeDaemons(); });
+afterEach(async () => { cleanup(); saveReduced(false); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllEnvs(); await closeDaemons(); });
 
 const todo = (id: string, todos: unknown, tool = 'TodoWrite'): ToolItem => ({ kind: 'tool', id, at: T0, turn: 1, tool, label: tool, input: JSON.stringify(todos, null, 2), status: 'success', files: [] });
 const v1 = todo('d1', { todos: [{ content: 'Lire', status: 'completed', activeForm: 'Lecture' }, { content: 'Écrire', status: 'in_progress', activeForm: 'Écriture des tests' }, { content: 'Publier', status: 'pending', activeForm: 'Publication' }] });
@@ -82,4 +83,37 @@ it("a subagent's page shows its own list, not its parent's", async () => {
   expect(head).toHaveTextContent('2/2');
   expect(head).toHaveTextContent('All done');
   expect(head).toHaveAttribute('aria-expanded', 'false');
+});
+
+it("each box says what it is; an emptied list hides the bar, and a list that comes back is folded", async () => {
+  const { d, user } = await openOtto([{ ...v1, at: new Date().toISOString(), turn: 2 }]);
+  await user.click(document.querySelector<HTMLElement>('.todo-head')!);
+  expect(within(document.querySelector<HTMLElement>('.todo-list')!).getAllByRole('img').map(e => e.getAttribute('aria-label'))).toEqual(['Done', 'In progress', 'To do']);
+  d.threadItem('otto', { ...todo('e1', { todos: [] }), at: new Date().toISOString(), turn: 2 });
+  await waitFor(() => expect(document.querySelector('.todo-bar')).toBeNull());
+  d.threadItem('otto', { ...v1, id: 'd9', at: new Date().toISOString(), turn: 2 });
+  await waitFor(() => expect(document.querySelector('.todo-head')).not.toBeNull());
+  expect(document.querySelector('.todo-head')).toHaveAttribute('aria-expanded', 'false');
+});
+it('two tasks with the same text are both listed', async () => {
+  const error = vi.spyOn(console, 'error');
+  const { user } = await openOtto([{ ...todo('d4', { todos: [{ content: 'Relire', status: 'completed' }, { content: 'Relire', status: 'pending' }] }), at: new Date().toISOString(), turn: 2 }]);
+  await user.click(document.querySelector<HTMLElement>('.todo-head')!);
+  expect([...document.querySelectorAll('.todo-list li')].map(li => li.className)).toEqual(['completed', 'pending']);
+  expect(error.mock.calls.filter(c => String(c[0]).includes('same key'))).toEqual([]);
+});
+it('the dot of the task in progress pulses only live, and stands still under reduced motion', async () => {
+  vi.stubEnv('VITE_LEDGE_MOTION', '1'); // the suite runs with motion off
+  await openOtto([{ ...v1, at: new Date().toISOString(), turn: 2 }]);
+  const dot = document.querySelector('.todo-dot')!;
+  expect(dot).not.toHaveClass('still');
+  act(() => saveReduced(true));
+  expect(document.querySelector('.todo-dot')).toHaveClass('still');
+});
+it('offline, the dot stands still', async () => {
+  vi.stubEnv('VITE_LEDGE_MOTION', '1');
+  const { d } = await openOtto([{ ...v1, at: new Date().toISOString(), turn: 2 }]);
+  expect(document.querySelector('.todo-dot')).not.toHaveClass('still');
+  d.upsert({ ...listSessions().find(x => x.id === 'otto')!, offline: true });
+  await waitFor(() => expect(document.querySelector('.todo-dot')).toHaveClass('still'));
 });

@@ -19,6 +19,13 @@ it('the latest list wins; a subagent keeps its own; none without updates', () =>
   expect(latestTodos([v1, { ...v2, helperId: 'h1' }], 'h1')).toEqual(todosOf(v2));
   expect(latestTodos([])).toBeNull();
 });
+it('the latest update wins even when it empties the list; an unreadable one leaves the list before it', () => {
+  expect(latestTodos([v1, todo('e', { todos: [] })])).toBeNull();
+  expect(latestTodos([v1, todo('b', { todos: [{ content: ' ', status: 'pending' }] })])).toBeNull();
+  expect(latestTodos([v1, { ...v1, id: 'x', input: '{oops' }])).toEqual(todosOf(v1));
+  // Another agent's update does not stop the search.
+  expect(latestTodos([v1, { ...todo('e', { todos: [] }), helperId: 'h1' }])).toEqual(todosOf(v1));
+});
 it('list updates are not actions: they fold into the summary', () => {
   const read: ToolItem = { kind: 'tool', id: 'r', at: T0, turn: 1, tool: 'Read', label: 'a', status: 'success', durationMs: 100, files: [] };
   const [x] = exchanges([v1, read, { ...v1, id: 'd2' }]);

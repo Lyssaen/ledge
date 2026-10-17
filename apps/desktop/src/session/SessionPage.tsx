@@ -115,6 +115,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   /* The work plan: the shown thread's latest list (a subagent's own), folded until the reader unfolds it. */
   const todos = useMemo(() => (items ? latestTodos(items, helper?.id) : null), [items, helper?.id]);
   const [todoOpen, setTodoOpen] = useState(false);
+  // The bar gone (an emptied list), a list that comes back later shows folded.
+  if (todos === null && todoOpen) setTodoOpen(false);
   const toggleTodos = useCallback(() => setTodoOpen(o => !o), []);
   const todoShown = todoOpen && todos !== null && view === 'thread';
 
