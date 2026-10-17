@@ -119,15 +119,18 @@ function Shell({ client }: { client?: DaemonClient }) {
   const launched = useRef<{ name: string; project: string; projectId: string } | null>(null);
   const launcher = useLaunch(fleetView, id => {
     const preview = launched.current;
-    // The table is the launched session's own, once listed (the daemon lists it before answering); the preview's until then.
+    // The table is the launched session's own, once listed (the daemon lists it before answering), or none (« Sans projet »: the
+    // form's project is no table then, as for a chat card); the preview's until then.
     const s = sessions.find(x => x.id === id);
-    const own = s ? projects?.projects.find(p => p.id === projectIdOf(s)) : undefined;
-    const table = own ? { id: own.id, name: own.name } : preview ? { id: preview.projectId, name: preview.project } : null;
+    const ownId = s ? projectIdOf(s) : null;
+    const own = ownId ? projects?.projects.find(p => p.id === ownId) : undefined;
+    const table = own ? { id: own.id, name: own.name } : s ? { id: 'none', name: null } : preview ? { id: preview.projectId, name: preview.project } : null;
     dispatch({ type: 'modal', modal: null });
     // Only the overview's filter follows; a session page (its rail's « New session here ») stays where it is.
     if (place.kind === 'overview' && place.project !== 'all' && place.project !== table?.id) dispatch({ type: 'home', project: 'all' });
     filing.markSeated(id);
-    if (table) notify(t.launch.started(s?.name ?? preview?.name ?? '', table.name));
+    const name = s?.name ?? preview?.name ?? '';
+    if (table) notify(table.name !== null ? t.launch.started(name, table.name) : t.launch.startedNoTable(name));
   });
   // A chat card's session started (the daemon listed it before answering): the chat stays open; if the current filter hides its
   // table, the filter goes back to All without leaving the page; the seat lights and the notice names who starts where (lot 7's words),

@@ -14,8 +14,8 @@ export interface ChatCardsOptions {
   turnReady(qid: string): boolean;
   /** The machine that answered this turn: a card's session starts there. */
   turnMachine(qid: string): string | undefined;
-  /** The card's session started (its qualified id) from this proposal: called once per launch. */
-  onLaunched(id: string, proposal: ChatProposal): void;
+  /** The card's session started (its qualified id): called once per launch. */
+  onLaunched(id: string): void;
 }
 export interface ChatCards {
   launchingQid: string | null; relayingQid: string | null;
@@ -75,11 +75,11 @@ export function useChatCards(o: ChatCardsOptions): ChatCards {
       // The daemon answers the launch, then marks the turn: the answer is announced at once, the card waits for its turn. Another
       // launch's answer (the New session form's: another machine, harness or folder, as useLaunch tells them apart) is passed over.
       if (!l.announced && lastLaunched && lastLaunched.seq > l.launchedSeq) {
-        if (answers({ type: 'session.launch', tool: l.from.tool, cwd: l.from.cwd, ...(l.machineId ? { machineId: l.machineId } : {}) }, lastLaunched.id, sessions)) { l.announced = true; latest.current.onLaunched(lastLaunched.id, l.from); }
+        if (answers({ type: 'session.launch', tool: l.from.tool, cwd: l.from.cwd, ...(l.machineId ? { machineId: l.machineId } : {}) }, lastLaunched.id, sessions)) { l.announced = true; latest.current.onLaunched(lastLaunched.id); }
         else l.launchedSeq = lastLaunched.seq;
       }
       const p = chat.find(x => x.qid === l.qid)?.proposal;
-      if (p?.launchedId && !l.announced) { l.announced = true; latest.current.onLaunched(p.launchedId, l.from); }
+      if (p?.launchedId && !l.announced) { l.announced = true; latest.current.onLaunched(p.launchedId); }
       const refused = errors.some(e => e.seq > l.errorSeq && e.id === undefined && (e.request === 'session.launch' || e.message === p?.error));
       if (!p || p.launchedId || p.error !== l.from.error || refused || !ready) freeLaunch();
     }

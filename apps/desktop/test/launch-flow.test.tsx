@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { daemonStore, type DaemonError } from '@ledge/fleet';
-import { closeDaemons, openLaunch, type MockDaemon } from './helpers';
+import { closeDaemons, LAUNCH_PROJECTS, openLaunch, type MockDaemon } from './helpers';
 import { LAUNCH_TIMEOUT_MS, type LaunchMessage } from '../src/launch/model';
 import { useLaunch } from '../src/launch/useLaunch';
 
@@ -39,6 +39,22 @@ describe('launching', () => {
     await waitFor(() => expect(scroll).toHaveBeenCalledWith(expect.objectContaining({ block: 'center' })));
     expect(scroll.mock.contexts.at(-1)).toBe(document.querySelector('.agent-seat.just-seated'));
     expect(launches(d)).toHaveLength(1);
+  });
+
+  it('an agent that lands with no table (its folder left the project meanwhile) is said to start with no project, never at the form’s table', async () => {
+    const { d, user, form } = await openLaunch({ list: false });
+    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
+    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    d.holdLaunch();
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await waitFor(() => expect(launches(d)).toHaveLength(1));
+    const name = launches(d)[0]!.name!;
+    const [ledge, ...others] = LAUNCH_PROJECTS.projects;
+    d.projects({ projects: [{ ...ledge!, repos: ledge!.repos.filter(r => r.path !== '/w/ledge/app') }, ...others], rules: [] });
+    d.releaseLaunch();
+    await waitFor(() => expect(dialog()).toBeNull());
+    expect(await screen.findByText(`${name} is starting, with no project.`)).toBeVisible();
+    expect(screen.queryByText(/ is starting at the Ledge table\./)).toBeNull();
   });
 
   it('a refusal stays in the form with its message and values; a retry is possible', async () => {

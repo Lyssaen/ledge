@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'rea
 import { daemonStore, useDaemon, type DaemonClient } from '@ledge/fleet';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
-import type { ChatProposal } from '@ledge/protocol';
 import type { FleetView } from '../fleet/useFleet';
 import { chatCopy, useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
@@ -16,7 +15,7 @@ export interface ChatPanelProps {
   paused: boolean;
   /** Changes each time the chat is asked for (/, an open button), even already open: the field takes the focus again. */
   focus?: number;
-  onClose(): void; onOpenSession(id: string): void; onLaunched(id: string, proposal: ChatProposal): void;
+  onClose(): void; onOpenSession(id: string): void; onLaunched(id: string): void;
 }
 
 /** Desktop's Ledge chat, docked on the right (observatory.tsx, `ledge-chat-panel`): the island's ChatView in its docked mode, on

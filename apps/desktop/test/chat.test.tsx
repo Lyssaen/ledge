@@ -345,7 +345,7 @@ describe('useChatCards', () => {
     expect(send).toHaveBeenCalledWith({ type: 'session.launch', tool: 'codex', cwd: '/w/ledge/app', prompt: 'Relis la PR', qid: 'q-1' });
     expect(result.current.launchingQid).toBe('q-1');
     rerender({ chat, lastLaunched: { id: 'local:launch-1', seq: 1 }, errors: [], ready: true });
-    expect(onLaunched).toHaveBeenCalledWith('local:launch-1', PROPOSAL);
+    expect(onLaunched).toHaveBeenCalledExactlyOnceWith('local:launch-1');
     expect(result.current.launchingQid).toBe('q-1');                   // still waiting for the history
     const marked = [turnWith({ proposal: { ...PROPOSAL, launchedId: 'local:launch-1' } })];
     rerender({ chat: marked, lastLaunched: { id: 'local:launch-1', seq: 1 }, errors: [], ready: true });
@@ -367,7 +367,7 @@ describe('useChatCards', () => {
     const card = fakeSession('local:launch-2', { name: 'Neo', tool: 'codex', cwd: '/w/ledge/app/' });
     rerender({ chat, lastLaunched: { id: 'local:launch-2', seq: 3 }, errors: [], ready: true, sessions: [form, card] });
     expect(onLaunched).toHaveBeenCalledTimes(1);
-    expect(onLaunched).toHaveBeenCalledWith('local:launch-2', PROPOSAL);
+    expect(onLaunched).toHaveBeenCalledExactlyOnceWith('local:launch-2');
   });
 
   it('a card of a machine that is not ready does not launch; one whose machine falls is freed', () => {
