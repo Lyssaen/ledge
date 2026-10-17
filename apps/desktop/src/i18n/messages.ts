@@ -137,6 +137,7 @@ const fr = {
   },
   session: {
     meta: 'Machine et dépôts',
+    subagent: 'Sous-agent',
     rail: {
       label: (p: string) => `Agents du projet ${p}`, kids: (n: number) => `Sous-agents · ${n}`, kidsOf: (n: string) => `Sous-agents de ${n}`, newHere: 'Nouvelle session ici'
     },
@@ -372,6 +373,7 @@ const en: typeof fr = {
   },
   session: {
     meta: 'Machine and repositories',
+    subagent: 'Subagent',
     rail: {
       label: (p) => `Agents of the project ${p}`, kids: (n) => `Subagents · ${n}`, kidsOf: (n) => `Subagents of ${n}`, newHere: 'New session here'
     },

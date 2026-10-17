@@ -183,17 +183,18 @@ export function atEnd(el: { scrollHeight: number; scrollTop: number; clientHeigh
   return el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_SLACK;
 }
 
-/** Le sous-agent d'une page : session.helpers d'abord, sinon l'élément helper du fil (kind = agentType ?? 'subagent', state 'exited'), sinon null. */
-export function helperOf(session: Session, items: readonly ThreadItem[] | undefined, id: string): Helper | null {
+/** Le sous-agent d'une page : session.helpers d'abord, sinon l'élément helper du fil (kind = agentType ?? `unnamed`, state 'exited'), sinon null.
+ *  `unnamed` : le nom traduit d'un sous-agent qui n'en a pas (t.session.subagent). */
+export function helperOf(session: Session, items: readonly ThreadItem[] | undefined, id: string, unnamed: string): Helper | null {
   const live = session.helpers.find(h => h.id === id);
   if (live) return live;
   const row = items?.find((i): i is HelperItem => i.kind === 'helper' && i.id === id);
-  return row ? { id, kind: row.agentType ?? 'subagent', task: row.task, state: 'exited' } : null;
+  return row ? { id, kind: row.agentType ?? unnamed, task: row.task, state: 'exited' } : null;
 }
 
-/** The subagent of a place: helperOf, else — known by neither (its thread not there yet, or gone) — named by its id alone, finished. */
-export function subagentOf(session: Session, items: readonly ThreadItem[] | undefined, id: string): Helper {
-  return helperOf(session, items, id) ?? { id, kind: 'subagent', task: '', state: 'exited' };
+/** The subagent of a place: helperOf, else — known by neither (its thread not there yet, or gone) — named `unnamed`, finished. */
+export function subagentOf(session: Session, items: readonly ThreadItem[] | undefined, id: string, unnamed: string): Helper {
+  return helperOf(session, items, id, unnamed) ?? { id, kind: unnamed, task: '', state: 'exited' };
 }
 
 /** A message shows at most this many document cards. */

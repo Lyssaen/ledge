@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ThreadItem, ToolItem } from '@ledge/protocol';
 import { fakeSession, T0 } from '@ledge/fleet/test/mockDaemon';
-import { atEnd, displayIds, exchanges, fmtDur, helperOf, kindOf, pendingPlan, planOf, summarize, timeMark, unreadFrom, verbOf, type Exchange } from '../src/session/thread';
+import { atEnd, displayIds, exchanges, fmtDur, helperOf, kindOf, pendingPlan, planOf, subagentOf, summarize, timeMark, unreadFrom, verbOf, type Exchange } from '../src/session/thread';
 
 const at = (s: number) => new Date(Date.parse(T0) + s * 1000).toISOString();
 const tool = (id: string, s: number, name: string, label: string, extra: Partial<ToolItem> = {}): ToolItem =>
@@ -75,9 +75,15 @@ describe('session thread model', () => {
   });
   it("a subagent from the session, else from the thread's row", () => {
     const otto = fakeSession('local:otto', { helpers: [{ id: 'h2', kind: 'Review', task: 'Relire', state: 'working' }] });
-    expect(helperOf(otto, items, 'h2')).toEqual({ id: 'h2', kind: 'Review', task: 'Relire', state: 'working' });
-    expect(helperOf(otto, items, 'h1')).toEqual({ id: 'h1', kind: 'Explore', task: 'Lire le code', state: 'exited' });
-    expect(helperOf(otto, undefined, 'h9')).toBeNull();
+    expect(helperOf(otto, items, 'h2', 'Subagent')).toEqual({ id: 'h2', kind: 'Review', task: 'Relire', state: 'working' });
+    expect(helperOf(otto, items, 'h1', 'Subagent')).toEqual({ id: 'h1', kind: 'Explore', task: 'Lire le code', state: 'exited' });
+    expect(helperOf(otto, undefined, 'h9', 'Subagent')).toBeNull();
+  });
+  it('a subagent without a name of its own takes the translated one given', () => {
+    const otto = fakeSession('local:otto');
+    const row = { kind: 'helper' as const, id: 'h3', at: '2026-10-13T10:00:00.000Z', turn: 1, task: 'Relire', state: 'working' as const };
+    expect(helperOf(otto, [row], 'h3', 'Sous-agent')).toEqual({ id: 'h3', kind: 'Sous-agent', task: 'Relire', state: 'exited' });
+    expect(subagentOf(otto, undefined, 'h9', 'Subagent')).toEqual({ id: 'h9', kind: 'Subagent', task: '', state: 'exited' });
   });
 });
 

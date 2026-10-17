@@ -89,7 +89,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
     : <><SessionBot session={session} size={20} /><strong>{session.name}</strong></>;
 
   const helperCard = (item: HelperItem) => {
-    const h = helperOf(session, items, item.id)!;
+    const h = helperOf(session, items, item.id, t.session.subagent)!;
     return (
       <button type="button" className="helper-card" data-helper={item.id} aria-label={th.openHelper(h.kind, item.task)} onClick={() => dispatch({ type: 'open', id: session.id, helper: item.id })}>
         <span className="helper-icon"><Icon d={SHELL_ICONS.subagents} size={12} />{th.helperLaunched}</span>

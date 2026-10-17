@@ -153,7 +153,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   /* Plans: a card per ExitPlanMode action in the thread, and the pinned request's own ('pending': Codex and Cursor have no
      such action). The pinned plan is read from the card whose action waits, else from the request. */
   const askerId = session.pending?.helperId;
-  const asker = askerId === undefined ? session.name : helperOf(session, items, askerId)?.kind ?? session.name;
+  const asker = askerId === undefined ? session.name : helperOf(session, items, askerId, t.session.subagent)?.kind ?? session.name;
   // As Reply shows it: none offline; on a subagent's page, only its own.
   const shown = offline ? undefined : session.pending;
   const request = shown?.kind === 'plan' && (helper ? shown.helperId === helper.id : true) ? shown : undefined;

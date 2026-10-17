@@ -105,6 +105,16 @@ describe('the session page', () => {
     expect(document.querySelector('.session-page')).toHaveAttribute('data-helper', 'h1');
   });
 
+  it('a subagent without a name of its own is « Subagent », translated', async () => {
+    const sessions = listSessions().map(s => (s.name === 'Otto' ? { ...s, helpers: [] } : s));
+    const { d, user } = await boot({ sessions, list: true });
+    d.thread('otto', ottoThread().map(i => (i.kind === 'helper' ? { ...i, agentType: undefined } : i)));
+    await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+    await user.click(await thread().findByRole('button', { name: 'Open Subagent: Lire le code' }));
+    expect(document.querySelector('.turn-author')).toHaveTextContent('Subagent');
+    expect(within(screen.getByRole('banner')).getByText('Subagent')).toBeVisible();
+  });
+
   it('a subagent page before its thread came: it waits, without crashing', async () => {
     const { user } = await boot({ sessions: listSessions(), list: true });
     await user.click(within(screen.getByRole('listitem', { name: /^Otto,/ })).getByRole('button', { name: 'Show 1 subagent' }));

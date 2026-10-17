@@ -1,5 +1,6 @@
 import { useMemo, useState, type JSX } from 'react';
 import type { Projects, Session } from '@ledge/protocol';
+import { useI18n } from '../i18n/lang';
 import { AgentsRail } from './AgentsRail';
 import type { SessionPrefs } from './prefs';
 import { memoKey } from './memory';
@@ -19,9 +20,10 @@ export interface WorkspaceProps extends Omit<SessionPageProps, 'items' | 'helper
  *  session place: switching agent changes its props (useThread follows the id) and mounts a new SessionPage only. */
 export function Workspace({ client, prefs, setPrefs, order, projects, projectIdOf, ...p }: WorkspaceProps): JSX.Element {
   const items = useThread(client, p.session);
+  const unnamed = useI18n().t.session.subagent;
   const id = p.nav.place.kind === 'session' ? p.nav.place.helper : undefined;
   // The same object while nothing it is read from changes: the thread is memoised on it.
-  const helper = useMemo(() => (id === undefined ? null : subagentOf(p.session, items, id)), [p.session, items, id]);
+  const helper = useMemo(() => (id === undefined ? null : subagentOf(p.session, items, id, unnamed)), [p.session, items, id, unnamed]);
   // « N sous-agents »: the subagents show (if hidden), then their group in the rail scrolls into view and lights up.
   const [flash, setFlash] = useState(0);
   const showKids = () => {
