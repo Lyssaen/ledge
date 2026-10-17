@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { parseClientMessage, type ClientMessage, type DaemonInfo, type Machines, type Projects, type Recent, type ServerMessage, type Session } from '@ledge/protocol';
+import { parseClientMessage, type ClientMessage, type DaemonInfo, type Machines, type Projects, type Recent, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
 
 export async function createMockDaemon(opts: { port?: number } = {}) {
   const wss = new WebSocketServer({ host: '127.0.0.1', port: opts.port ?? 0 });
@@ -7,6 +7,7 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
   const port = (wss.address() as { port: number }).port;
   const sessions = new Map<string, Session>();
   const received: ClientMessage[] = [];
+  const threads = new Map<string, ThreadItem[]>();
   /** What the snapshot carries beside the sessions (the launch form's inputs); set before a client connects. */
   const extras: { recents?: Recent[]; launcher?: string[]; daemon?: DaemonInfo } = {};
   const bc = (m: ServerMessage) => { for (const c of wss.clients) if (c.readyState === WebSocket.OPEN) c.send(JSON.stringify(m)); };
@@ -19,14 +20,18 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     ws.send(JSON.stringify(snapshot()));
     if (machinesList) ws.send(JSON.stringify({ type: 'machines', machines: machinesList })); // like the daemon, right after the snapshot
     if (projectsState) ws.send(JSON.stringify({ type: 'projects', projects: projectsState })); // then the projects
-    ws.on('message', d => { last = ws; try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify(snapshot())); if (m.type === 'projects.set') { projectsState = m.projects; bc({ type: 'projects', projects: m.projects }); } } catch { /* ignore */ } });
+    ws.on('message', d => { last = ws; try { const m = parseClientMessage(JSON.parse(String(d))); received.push(m); if (m.type === 'snapshot.request') ws.send(JSON.stringify(snapshot())); if (m.type === 'session.thread') { const items = threads.get(m.id); if (items) ws.send(JSON.stringify({ type: 'session.thread', id: m.id, items })); } if (m.type === 'projects.set') { projectsState = m.projects; bc({ type: 'projects', projects: m.projects }); } } catch { /* ignore */ } });
   });
   return {
     get clientCount() { return [...wss.clients].filter(c => c.readyState === WebSocket.OPEN).length; },
-    port, url: `ws://127.0.0.1:${port}`, sessions, received, extras,
+    port, url: `ws://127.0.0.1:${port}`, sessions, received, extras, threads,
     upsert(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); },
     remove(id: string) { sessions.delete(id); bc({ type: 'session.removed', id }); },
     preview(id: string, lines: string[]) { bc({ type: 'session.preview', id, lines }); },
+    /** The thread `session.thread` returns for `id` (raw); an id without one gets no reply, so the page stays loading. */
+    thread(id: string, items: ThreadItem[]) { threads.set(id, items); },
+    /** A live item: stored and broadcast as `session.thread.item`. */
+    threadItem(id: string, item: ThreadItem) { threads.set(id, [...(threads.get(id) ?? []).filter(i => i.id !== item.id), item]); bc({ type: 'session.thread.item', id, item }); },
     /** The daemon's machines list (spec 2026-10-14 §5.2), pushed to every client. */
     machines(list: Machines) { machinesList = list; bc({ type: 'machines', machines: list }); },
     /** The local daemon's projects (build spec §5), pushed to every client; a client's projects.set is stored and broadcast back. */
