@@ -218,3 +218,73 @@ describe('Settings › Machines', () => {
     expect(configure).not.toHaveBeenCalled();
   });
 });
+
+describe('Settings › Machines: Escape closes what is open before it leaves Settings', () => {
+  const inSettings = () => screen.queryByRole('navigation', { name: 'Settings sections' });
+
+  it('Escape in the form closes it (the draft goes, nothing is sent); the next Escape leaves Settings', async () => {
+    const { client, user } = await open();
+    const configure = vi.spyOn(client.fleet!, 'configure');
+    await fill(user, 'Nas', 'na');
+    expect(form().getByRole('textbox', { name: 'SSH alias' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('form')).toBeNull();
+    expect(inSettings()).not.toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: 'Your machines' })).toBeVisible();
+    expect(names()).toEqual(['Local', 'Dev SSH']);
+    await user.keyboard('{Escape}');
+    expect(inSettings()).toBeNull();
+    expect(configure).not.toHaveBeenCalled();
+    expect(saved()).toEqual([]);
+  });
+
+  it('Escape closes the edit form too, and the machine comes back to the list', async () => {
+    const { user } = await open();
+    await user.click(entry('Dev SSH').getByRole('button', { name: 'Edit' }));
+    expect(screen.queryByRole('article', { name: 'Dev SSH' })).toBeNull();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('form')).toBeNull();
+    expect(names()).toEqual(['Local', 'Dev SSH']);
+    expect(inSettings()).not.toBeNull();
+  });
+
+  it('Escape in a remove confirmation cancels it and stays in Settings', async () => {
+    const { client, user } = await open(THREE);
+    const configure = vi.spyOn(client.fleet!, 'configure');
+    await user.click(entry('NAS').getByRole('button', { name: 'Remove' }));
+    expect(entry('NAS').getByRole('alert')).toBeVisible();
+    await user.keyboard('{Escape}');
+    expect(entry('NAS').queryByRole('alert')).toBeNull();
+    expect(names()).toEqual(['Local', 'Dev SSH', 'NAS']);
+    expect(inSettings()).not.toBeNull();
+    expect(configure).not.toHaveBeenCalled();
+  });
+
+  it('while a save waits for the daemon, Escape neither closes the form nor leaves Settings: the outcome still shows', async () => {
+    const { d, user } = await open();
+    await fill(user, 'Nas', 'nas');
+    await user.click(form().getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sets(d)).toHaveLength(1));
+    await user.keyboard('{Escape}');
+    expect(inSettings()).not.toBeNull();
+    expect(form().getByRole('button', { name: 'Saving…' })).toBeDisabled();
+    expect(form().getByRole('textbox', { name: 'Machine name' })).toHaveValue('Nas');
+    act(() => d.machines(sets(d)[0]!.machines));
+    expect(await screen.findByRole('article', { name: 'Nas' })).toBeVisible();
+    expect(screen.queryByRole('form')).toBeNull();
+    expect(saved()).toEqual(['Setting saved · Nas added']);
+  });
+
+  it('while a removal waits for the daemon, Escape keeps its confirmation and Settings', async () => {
+    const { d, user } = await open(THREE);
+    await user.click(entry('NAS').getByRole('button', { name: 'Remove' }));
+    await user.click(within(entry('NAS').getByRole('alert')).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(sets(d)).toHaveLength(1));
+    await user.keyboard('{Escape}');
+    expect(inSettings()).not.toBeNull();
+    expect(entry('NAS').getByRole('alert')).toBeVisible();
+    act(() => d.machines(sets(d)[0]!.machines));
+    await waitFor(() => expect(names()).toEqual(['Local', 'Dev SSH']));
+    expect(saved()).toEqual(['Setting saved · NAS removed']);
+  });
+});

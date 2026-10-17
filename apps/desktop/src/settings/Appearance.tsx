@@ -9,6 +9,7 @@ import { useMotionPreferences } from '../motionPreferences';
 import { setAccent, setTheme, useAccent, useTheme, type Theme } from '../shell/theme';
 import { Card, Row, Segmented, SwitchRow } from './controls';
 import { appliedUiScale, loadUiScale, saveUiScale } from './scale';
+import { useEscapeLayer } from './escape';
 import type { SettingsContext } from './SettingsPage';
 
 const THEME_CARDS: readonly Theme[] = ['light', 'dark'];
@@ -88,6 +89,13 @@ function AccentRow({ ctx }: { ctx: SettingsContext }): JSX.Element {
     setAccent(ok === DEFAULT_ACCENT ? null : ok);
     ctx.saved(a.accentSaved(ok));
   };
+  // Escape while the field differs from the stored color (being typed, or invalid): the stored color comes back, nothing is kept.
+  useEscapeLayer(() => {
+    const stored = accent ?? DEFAULT_ACCENT;
+    if (draft === stored && !invalid) return false;
+    setDraft(stored); setInvalid(false);
+    return true;
+  });
   const coral = () => {
     setDraft(DEFAULT_ACCENT); setInvalid(false);
     if (accent === null) return;

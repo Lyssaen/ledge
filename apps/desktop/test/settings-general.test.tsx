@@ -226,6 +226,31 @@ describe('Settings › Appearance', () => {
     expect(saved()).toEqual(['Setting saved · Ledge’s color #12ab34', 'Setting saved · Ledge’s color: Coral']);
   });
 
+  it('Escape in the hex field puts the stored color back and stays in Settings; the next Escape leaves', async () => {
+    const { user } = await openSettings('Appearance');
+    const hex = screen.getByRole('textbox', { name: 'Hex code' });
+    await user.clear(hex);
+    await user.type(hex, '#12');
+    await user.keyboard('{Escape}');
+    expect(hex).toHaveValue('#e85d4a');
+    expect(screen.getByRole('heading', { level: 1, name: 'Appearance' })).toBeVisible();
+    await user.tab();                                                        // leaving the field keeps nothing
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(localStorage.getItem('desktop.accent')).toBeNull();
+    // An invalid value already said (the field left): Escape takes it back too.
+    await user.clear(hex);
+    await user.type(hex, '#zz');
+    await user.tab();
+    expect(screen.getByRole('alert')).toHaveTextContent('Invalid color');
+    await user.keyboard('{Escape}');
+    expect(hex).toHaveValue('#e85d4a');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Appearance' })).toBeVisible();
+    expect(saved()).toEqual([]);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
+  });
+
   it('the picker keeps the color it lands on, not each one it passes over: one change, one notice', async () => {
     await openSettings('Appearance');
     const picker = screen.getByLabelText('Custom color');

@@ -6,6 +6,7 @@ import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n, type Lang } from '../i18n/lang';
 import { SECTIONS, type NavAction, type SectionId } from '../nav/state';
+import { useScreenKeys } from '../nav/screenKeys';
 import type { Alerts } from '../notify/useAlerts';
 import type { DaemonUpdate } from '../update/daemon';
 import { updateReady, useUpdate } from '../update/store';
@@ -18,6 +19,7 @@ import { Projects } from './Projects';
 import { Shortcuts } from './Shortcuts';
 import { About } from './About';
 import { shownOf } from './machines';
+import { EscapeLayersContext, escapeLayers, type EscapeLayers } from './escape';
 
 /** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,
  *  in `lang` when given), the fleet, its client (what a machine says of its folders) and its machines, the projects, the sessions, navigation, the alerts (the Sounds' Test), the
@@ -77,6 +79,10 @@ export function SettingsPage({ section, ctx }: { section: SectionId; ctx: Settin
   const { dispatch } = ctx;
   // As the sidebar's gear inside Settings: the chat closes, then Escape takes the place back.
   const back = () => { dispatch({ type: 'chat', open: false }); dispatch({ type: 'escape' }); };
+  // Escape closes what a section has open first (a machine form or confirmation, an accent being edited), then goes back; a held
+  // Escape closes the one thing its first press did, no more, and never leaves the page (its repeats are taken and do nothing).
+  const layers = useRef<EscapeLayers>({ list: [] }).current;
+  useScreenKeys(e => e.key === 'Escape' && (e.repeat || escapeLayers(layers)));
   const alert = (id: SectionId): string | null =>
     id === 'machines' && ctx.machines.some(m => shownOf(m) === 'offline') ? s.machineOffline
     : id === 'about' && (updateReady(update) || ctx.daemonUpdate.offer !== 'none') ? s.updateWaiting
@@ -100,7 +106,7 @@ export function SettingsPage({ section, ctx }: { section: SectionId; ctx: Settin
         <section className="settings-content" key={section} aria-labelledby={titleId}>
           {/* Inside a section a header is no banner (HTML-AAM); role="none" says so to the tools that miss the rule, so the top bar stays the only one. */}
           <header className="settings-head" role="none"><h1 id={titleId}>{t.sections[section]}</h1><p>{s.hints[section]}</p></header>
-          <SectionBody section={section} ctx={ctx} />
+          <EscapeLayersContext.Provider value={layers}><SectionBody section={section} ctx={ctx} /></EscapeLayersContext.Provider>
         </section>
       </div>
     </div>

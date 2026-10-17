@@ -6,6 +6,7 @@ import { useI18n } from '../i18n/lang';
 import { Card } from './controls';
 import { ALIAS, checkDraft, configsOf, MAX_MACHINES, sameMachines, shownOf, without, withDraft, type MachineDraft } from './machines';
 import { useMachineEditor, type SaveOutcome } from './useMachineEditor';
+import { useEscapeLayer } from './escape';
 import type { SettingsContext } from './SettingsPage';
 
 const SERVER_GLYPH = ['M4 3h16v7H4z', 'M4 14h16v7H4z', 'M7 6.5h.01', 'M7 17.5h.01'];
@@ -49,6 +50,14 @@ export function Machines({ ctx }: { ctx: SettingsContext }): JSX.Element {
     setForm({ editing: m?.id ?? null, draft: { label: m?.label ?? '', ssh: m?.ssh ?? '' }, help: !m });
   };
   const closeForm = () => { editor.clearProbe(); setForm(null); setFailure(null); };
+  // Escape: the confirmation, then the form, close (the draft goes, as with Cancel); while a save waits for the daemon it closes
+  // nothing and does not leave Settings either: its outcome still has to show.
+  useEscapeLayer(() => {
+    if (editor.saving) return form !== null || confirming !== null;
+    if (confirming !== null) { setConfirming(null); return true; }
+    if (form) { closeForm(); return true; }
+    return false;
+  });
   const setDraft = (patch: Partial<MachineDraft>) => setForm(f => (f ? { ...f, draft: { ...f.draft, ...patch } } : f));
 
   const editing = form?.editing ? machines.find(m => m.id === form.editing) : undefined;
