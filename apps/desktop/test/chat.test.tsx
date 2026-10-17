@@ -85,6 +85,23 @@ describe('the Ledge chat docked on the right', () => {
     await waitFor(() => expect(d.received).toContainEqual({ type: 'chat.cancel', qid: asks(d)[0]!.qid }));
   });
 
+  it('an answer that finishes while the search palette is open leaves the focus there; Escape then closes the palette, not the chat', async () => {
+    const { d, user } = await openChat();
+    await user.type(field(), 'Who reviews?{Enter}');
+    await waitFor(() => expect(asks(d)).toHaveLength(1));
+    await user.keyboard('{Control>}k{/Control}');
+    const search = await screen.findByRole('combobox');
+    await waitFor(() => expect(search).toHaveFocus());
+    const { qid } = asks(d)[0]!;
+    d.push({ type: 'chat.done', qid, text: '**Otto** relit la PR.', at: new Date().toISOString() });
+    await panel().findByText(/relit la PR\./);
+    await waitFor(() => expect(field()).toBeEnabled());
+    expect(search).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
+  });
+
   it('opening a linked name opens the agent’s page and closes the chat', async () => {
     const env = await openChat();
     await ask(env, 'Who reviews?', '**Otto** relit la PR.');

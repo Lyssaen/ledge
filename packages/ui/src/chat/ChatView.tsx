@@ -68,6 +68,7 @@ export function ChatView(p: ChatViewProps) {
   const [text, setText] = useState('');
   const field = useRef<HTMLInputElement | null>(null);
   const thread = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   const setField = (el: HTMLInputElement | null) => {
     field.current = el;
     const r = p.inputRef; if (typeof r === 'function') r(el); else if (r) (r as { current: HTMLInputElement | null }).current = el;
@@ -80,7 +81,14 @@ export function ChatView(p: ChatViewProps) {
   const lit = useRef<string | null>(null);
   const hover = p.onAgentHover && ((id: string | null) => { if (id === lit.current) return; lit.current = id; p.onAgentHover!(id); });
   useLayoutEffect(() => { const el = thread.current; if (visible && el) el.scrollTop = el.scrollHeight; }, [turns, live?.text]);
-  useEffect(() => { if (visible && !busy) field.current?.focus({ preventScroll: true }); }, [visible, busy]);
+  // Between questions the field takes the focus back. Docked (Desktop), only from the page or from inside the chat: a dialog opened
+  // meanwhile (the search palette…) keeps it.
+  useEffect(() => {
+    if (!visible || busy) return;
+    const at = document.activeElement;
+    if (p.docked && at && at !== document.body && !root.current?.contains(at)) return;
+    field.current?.focus({ preventScroll: true });
+  }, [visible, busy]);
   // The resident pulses while Ledge reads.
   const [pulse, setPulse] = useState(0);
   useEffect(() => { if (!busy || !visible || p.reducedMotion) return; const id = setInterval(() => setPulse(k => k + 1), 1400); return () => clearInterval(id); }, [busy, visible, p.reducedMotion]);
@@ -88,7 +96,7 @@ export function ChatView(p: ChatViewProps) {
   const repos = groupSessions(p.sessions).length;
   const mascot = (size: number, pulsing = false) => <ResidentMascot size={size} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} gestureKey={pulsing && busy ? pulse : undefined} gestureKind="pulse" />;
   return (
-    <div data-layer="chat" data-delay={p.docked ? undefined : enterDelay} inert={p.docked ? undefined : !visible} style={p.docked
+    <div ref={root} data-layer="chat" data-delay={p.docked ? undefined : enterDelay} inert={p.docked ? undefined : !visible} style={p.docked
       ? { height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }
       : { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay : 0]]) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: CHAT_HEADER_H, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px', borderBottom: '1px solid var(--sidebar-border)' }}>

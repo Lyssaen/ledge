@@ -57,4 +57,38 @@ describe('the docked chat', () => {
     render(ui({ docked: true, inputRef: ref }));
     expect(ref.current).toBe(screen.getByLabelText('Ask'));
   });
+
+  describe('when an answer finishes', () => {
+    const asking: ChatTurn[] = [{ qid: 'q2', question: 'more?', askedAt: T0, steps: [] }];
+    const outside = () => { const b = document.createElement('button'); b.textContent = 'elsewhere'; document.body.append(b); return b; };
+
+    it('docked: a focus taken elsewhere (a dialog) stays there', () => {
+      const { rerender } = render(ui({ docked: true, turns: asking }));
+      const other = outside();
+      other.focus();
+      rerender(ui({ docked: true, turns: [{ ...asking[0]!, answeredAt: T0, answer: 'done' }] }));
+      expect(other).toHaveFocus();
+      other.remove();
+    });
+
+    it('docked: with the focus nowhere (the page) or in the chat, the field takes it back', () => {
+      const { rerender, container } = render(ui({ docked: true, turns: asking }));
+      (document.activeElement as HTMLElement | null)?.blur();
+      rerender(ui({ docked: true, turns: [{ ...asking[0]!, answeredAt: T0, answer: 'done' }] }));
+      expect(screen.getByLabelText('Ask')).toHaveFocus();
+      rerender(ui({ docked: true, turns: [...turns, { ...asking[0]!, qid: 'q3' }] }));
+      (container.querySelector('button[aria-label="Close"]') as HTMLElement).focus();
+      rerender(ui({ docked: true, turns: [...turns, { ...asking[0]!, qid: 'q3', answeredAt: T0, answer: 'done' }] }));
+      expect(screen.getByLabelText('Ask')).toHaveFocus();
+    });
+
+    it('the island (not docked) takes the focus back as before', () => {
+      const { rerender } = render(ui({ turns: asking }));
+      const other = outside();
+      other.focus();
+      rerender(ui({ turns: [{ ...asking[0]!, answeredAt: T0, answer: 'done' }] }));
+      expect(screen.getByLabelText('Ask')).toHaveFocus();
+      other.remove();
+    });
+  });
 });
