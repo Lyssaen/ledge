@@ -25,7 +25,22 @@ export const fr = {
     terminalShow: 'Afficher le terminal', terminalHide: 'Masquer le terminal', terminalShowTitle: 'Afficher le terminal (O)', terminalHideTitle: 'Masquer le terminal (O)'
   },
   foot: { sessions: 'Sessions locales et SSH', search: 'Une session', chat: 'Chat Ledge', shortcuts: 'Raccourcis' },
-  sections: { general: 'Général', appearance: 'Apparence', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', projects: 'Projets', shortcuts: 'Raccourcis', about: 'À propos' } as Record<SectionId, string>,
+  sections: { general: 'Général', appearance: 'Apparence', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', projects: 'Projets', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
+  settings: {
+    nav: 'Sections des réglages', back: 'Retour à l’atelier',
+    saved: (what: string) => `Réglage enregistré · ${what}`,
+    hints: {
+      general: 'Langue, démarrage, harnais par défaut et mises à jour.',
+      appearance: 'Thème, couleur de Ledge, échelle et mouvements.',
+      notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
+      sounds: 'Les signaux sonores de votre équipe.',
+      machines: 'Cette machine et vos serveurs SSH. Une seule liste pour l’île et Ledge Desktop.',
+      projects: 'Projets, dépôts et dossiers mémorisés.',
+      shortcuts: 'Les raccourcis de l’application.',
+      about: 'Versions et mises à jour.'
+    } as Record<SectionId, string>,
+    machineOffline: 'Une machine est hors ligne', updateWaiting: 'Une mise à jour est disponible'
+  },
   pending: 'Cet écran arrive bientôt.',
   chunkFailed: 'Cette partie de Ledge n’a pas pu se charger. Relancez l’application.',
   close: 'Fermer',

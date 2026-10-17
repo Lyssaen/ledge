@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type JSX, type ReactNode } from 'react';
 import { useI18n } from '../i18n/lang';
 
-/** The note in place of a part whose chunk did not load, in the manner of Pending. */
+/** The note in place of a part whose chunk did not load (the `.pending` frame of the screens once waiting for their lot). */
 function ChunkFailed(): JSX.Element {
   const { t } = useI18n();
   return <section className="pending" role="alert"><p>{t.chunkFailed}</p></section>;

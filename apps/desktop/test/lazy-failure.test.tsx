@@ -33,7 +33,8 @@ describe('a part of the app whose chunk fails to load', () => {
     ['the session page', '../src/session/Workspace', async () => (await import('../src/session/lazy')).SessionPlace],
     ['the New session form', '../src/launch/LaunchComposer', async () => (await import('../src/launch/lazy')).LaunchPlace],
     ['the project editor', '../src/projects/ProjectEditor', async () => (await import('../src/projects/lazy')).EditorPlace],
-    ['the chat', '../src/chat/ChatPanel', async () => (await import('../src/chat/lazy')).ChatPlace]
+    ['the chat', '../src/chat/ChatPanel', async () => (await import('../src/chat/lazy')).ChatPlace],
+    ['the Settings page', '../src/settings/SettingsPage', async () => (await import('../src/settings/lazy')).SettingsPlace]
   ];
   for (const [name, module, place] of places) {
     it(`${name}: the note, the rest of the page stays`, async () => {

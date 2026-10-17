@@ -20,7 +20,8 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
       if (mod && !e.altKey && key === 'k') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'search' } }); return; }
-      if (mod && !e.altKey && e.key === ',') { e.preventDefault(); dispatch({ type: 'settings' }); return; }
+      // Ctrl , opens Settings on General; inside Settings it keeps the section open (it only closes the dialog or the chat).
+      if (mod && !e.altKey && e.key === ',') { e.preventDefault(); dispatch(state.place.kind === 'settings' ? { type: 'settings', section: state.place.section } : { type: 'settings' }); return; }
       if (e.key === 'Escape') {
         // A dialog, then the chat, close first; then the screen may take it (even while typing: it decides); else navigation.
         if (!state.modal && !state.chat && screen.current?.(e)) { e.preventDefault(); return; }

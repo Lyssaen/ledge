@@ -20,9 +20,12 @@ import { useKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
-import { Pending } from './shell/Pending';
 import { LaunchPlace, loadComposer } from './launch/lazy';
 import { ChatPlace, loadChat } from './chat/lazy';
+import { loadSettings, SettingsPlace } from './settings/lazy';
+import type { SettingsContext } from './settings/SettingsPage';
+import { daemonTarget, useDaemonUpdate } from './update/daemon';
+import { useUpdate } from './update/store';
 import { useLaunch } from './launch/useLaunch';
 import { Atelier } from './atelier/Atelier';
 import { List } from './list/List';
@@ -46,16 +49,18 @@ const NO_PROJECTS: readonly Project[] = [];
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
 const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'reconcile' ? reconcile(s, a.sessions, a.projects) : navReducer(s, a));
 
-/** The Atelier's shell: sidebar, top bar, the current place (the atelier, the List, a session; the other screens wait for their lot), footer, chat and dialogs;
+/** The Atelier's shell: sidebar, top bar, the current place (the atelier, the List, a session, Settings), footer, chat and dialogs;
  *  the real fleet, toasts and sounds, and the tray. */
 function Shell({ client }: { client?: DaemonClient }) {
   const fleetView = useFleet(client);
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
   const projects = useProjects(fleetClient);
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
-  // Toasts and sounds from session changes (spec 2026-10-14 §10); no daemon update can start before the settings (lot 10).
-  useAlerts({ sessions, machines, status });
+  // The local daemon's update, started from Settings › About; while it runs, the daemon's restart is expected and silent.
+  const daemonUpdate = useDaemonUpdate(fleet, machines, daemonTarget(useUpdate()));
+  // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
+  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdate.running });
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
   useEffect(() => onTrayAction(action => {
     if (action === 'dnd') setDnd(!getDnd());
@@ -106,8 +111,8 @@ function Shell({ client }: { client?: DaemonClient }) {
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
   // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
   const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
-  // The session page's, the New session form's, the project editor's and the chat's chunks are fetched once the shell is up, so a first opening rarely waits for them.
-  useEffect(() => { void loadWorkspace(); void loadComposer(); void loadEditor(); void loadChat(); }, []);
+  // The session page's, the New session form's, the project editor's, the chat's and the settings' chunks are fetched once the shell is up, so a first opening rarely waits for them.
+  useEffect(() => { void loadWorkspace(); void loadComposer(); void loadEditor(); void loadChat(); void loadSettings(); }, []);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
@@ -167,13 +172,18 @@ function Shell({ client }: { client?: DaemonClient }) {
     notify(d.done(name) + (agents === 0 ? '' : to === null ? d.doneNone(agents) : d.doneMoved(agents, to)));
   };
 
+  // What the Settings page's sections receive; « Setting saved · … » goes through the app's toast, once per accepted change.
+  const settings: SettingsContext = {
+    notify, saved: what => notify(t.settings.saved(what)), fleet, machines, projects, projectIdOf, sessions, dispatch, alerts, daemonUpdate, lang
+  };
+
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={nav.modal !== null}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
         <section className="workspace">
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal} />
-          {place.kind === 'settings' ? <Pending title={t.sections[place.section]} />
+          {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} order={order} projects={projects} projectIdOf={projectIdOf} />
             : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />

@@ -17,7 +17,22 @@ export const en: Messages = {
     terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)'
   },
   foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts' },
-  sections: { general: 'General', appearance: 'Appearance', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Shortcuts', about: 'About' },
+  sections: { general: 'General', appearance: 'Appearance', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
+  settings: {
+    nav: 'Settings sections', back: 'Back to the atelier',
+    saved: (what) => `Setting saved · ${what}`,
+    hints: {
+      general: 'Language, start-up, default harness and updates.',
+      appearance: 'Theme, Ledge’s color, scale and motion.',
+      notifications: 'Who lets you know, and when to leave you alone.',
+      sounds: 'Your team’s sound cues.',
+      machines: 'This machine and your SSH servers. One list for the island and Ledge Desktop.',
+      projects: 'Projects, repositories and remembered folders.',
+      shortcuts: 'The app’s keyboard shortcuts.',
+      about: 'Versions and updates.'
+    },
+    machineOffline: 'A machine is offline', updateWaiting: 'An update is available'
+  },
   pending: 'This screen is coming soon.',
   chunkFailed: 'This part of Ledge could not load. Restart the app.',
   close: 'Close',
