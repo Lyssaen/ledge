@@ -10,8 +10,9 @@ export function session(id: string, extra: Partial<Session> = {}): Session {
 
 /** Simulates the local ledge daemon inside the page: a snapshot, then the machines list, and a `push` for later updates.
  *  Like the daemon (spec §5.3) it keeps the machines list: `machines.set` replaces it and is broadcast back as `machines`,
- *  and every new connection (reload, reconnect) gets the current list. The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]> } = {}) {
+ *  and every new connection (reload, reconnect) gets the current list. A `document.read` is answered from `extras.documents` by its path
+ *  (`document.content`), or `document.error` `not_found`. The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string> } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -32,6 +33,12 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       if (msg.type === 'projects.set') { projects = msg.projects; ws.send(JSON.stringify({ type: 'projects', projects })); }
       if (msg.type === 'session.decide') { const s = sessions.get(msg.id); if (s) { const { pending: _p, ...rest } = s; const next = { ...rest, state: 'working' as const }; sessions.set(s.id, next); ws.send(JSON.stringify({ type: 'session.updated', session: next })); } }
       if (msg.type === 'session.thread') { const items = threads.get(msg.id); if (items) ws.send(JSON.stringify({ type: 'session.thread', id: msg.id, items })); }
+      if (msg.type === 'document.read') {
+        const text = extras.documents?.[msg.path];
+        ws.send(JSON.stringify(text === undefined
+          ? { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'not_found' }
+          : { type: 'document.content', requestId: msg.requestId, path: msg.path, text, bytes: new TextEncoder().encode(text).length, modifiedAt: T0 }));
+      }
       if (msg.type === 'machines.set') { machines = msg.machines; ws.send(JSON.stringify({ type: 'machines', machines })); }
     });
   });
