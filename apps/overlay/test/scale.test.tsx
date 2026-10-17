@@ -46,8 +46,8 @@ describe('App UI scales (browser)', () => {
       expect(document.documentElement.dataset.panelScale).toBe('1');
       expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('2');
       expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1');
-      // The 38 px island at 2x hangs from the top edge, 76 px high.
-      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: '0px', height: '76px' });
+      // The 10 px filet at 2x hangs from the top edge, 20 px high.
+      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: '0px', height: '20px' });
       expect(localStorage.getItem('ledge.handleScale')).toBe('auto');
       expect(localStorage.getItem('ledge.panelScale')).toBe('auto');
       unmount();
@@ -56,7 +56,7 @@ describe('App UI scales (browser)', () => {
       expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('1.5');
       expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1.25');
       act(() => { Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1200 }); window.dispatchEvent(new Event('resize')); });
-      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: '0px', height: '57px' });
+      expect(document.querySelector('[data-surface]')).toHaveStyle({ top: '0px', height: '15px' });
     } finally {
       Object.defineProperty(window, 'innerHeight', { configurable: true, value: h });
     }

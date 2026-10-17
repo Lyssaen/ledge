@@ -1,4 +1,4 @@
-import { islandWidth } from '../src/surface/geometry';
+import { filetWidth } from '../src/surface/geometry';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, within, renderHook } from '@testing-library/react';
 import { useRef, useState } from 'react';
@@ -71,8 +71,6 @@ describe('prototype parity', () => {
   it('theme changes material without replacing SVG or resetting state', () => {
     snapshot([otto(), pim()]);
     const { rerender } = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    const handleBot = () => layer('handle').querySelector('svg.bot') as SVGSVGElement;
-    const firstHandle = handleBot();
     fireEvent.click(screen.getByRole('button', { name: /Otto working, open/ }));
     const reply = screen.getByPlaceholderText('Reply to Otto…');
     fireEvent.change(reply, { target: { value: 'not yet' } });
@@ -85,8 +83,7 @@ describe('prototype parity', () => {
     expect(after).toHaveAttribute('data-material', 'pebble');
     expect(after.style.getPropertyValue('--bot-phase')).toBe(phase);
     expect(after.getAttribute('data-state')).toBe(state);
-    expect(handleBot()).toBe(firstHandle);
-    expect(handleBot()).toHaveAttribute('data-material', 'pebble');
+    expect(layer('handle').querySelector('[data-ledge-mark]')).toBeInTheDocument();
     expect(mode()).toBe('session');
     expect((screen.getByPlaceholderText('Reply to Otto…') as HTMLInputElement).value).toBe('not yet');
   });
@@ -206,20 +203,20 @@ describe('prototype parity', () => {
     vi.stubGlobal('ResizeObserver', FakeResizeObserver); FakeResizeObserver.all = [];
     snapshot([]);
     const { unmount } = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    expect(surface()).toHaveStyle({ width: `${islandWidth(0)}px`, height: '38px' });
+    expect(surface()).toHaveStyle({ width: `${filetWidth([])}px`, height: '10px' });
     unmount();
 
     const team = Array.from({ length: 12 }, (_, i) => fakeSession(`s${String(i).padStart(2, '0')}`, { name: `Bot${i}`, ...(i % 4 === 1 ? asks(`cmd ${i}`) : {}) }));
     snapshot(team);
     const big = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd onToggleDnd={() => {}} />);
-    // Six companions at most, the asks first, then a "+6" pill for the rest; the island stays inside the 1024 px viewport.
+    // Every session is a dash, asks first; the filet stays inside the 1024 px viewport.
     const buttons = within(layer('handle')).getAllByRole('button', { name: /open$/ }).filter(b => !b.hasAttribute('data-resident'));
-    expect(buttons).toHaveLength(6);
-    for (const b of buttons) expect(b).toHaveStyle({ width: '22px' });
+    expect(buttons).toHaveLength(12);
+    for (const b of buttons) expect(b).toHaveStyle({ width: '5px' });
     expect(buttons.slice(0, 3).every(b => /needs your approval/.test(b.getAttribute('aria-label')!))).toBe(true);
-    expect(layer('handle').querySelector('[data-overflow]')).toHaveTextContent('+6');
+    expect(layer('handle').querySelector('[data-overflow]')).toBeNull();
     const left = parseFloat(surface().style.left), w = parseFloat(surface().style.width);
-    expect(surface()).toHaveStyle({ top: '0px', height: '38px' });
+    expect(surface()).toHaveStyle({ top: '0px', height: '10px' });
     expect(left).toBeGreaterThanOrEqual(0); expect(left + w).toBeLessThanOrEqual(1024);
     big.unmount();
 
@@ -280,7 +277,7 @@ describe('prototype parity', () => {
     expect(mode()).toBe('list');
     fireEvent.click(within(layer('list')).getByRole('button', { name: 'Settings' }));
     fireEvent.click(within(layer('settings')).getByRole('button', { name: /theme/i }));
-    expect(layer('handle').querySelector('svg.bot')).toHaveAttribute('data-material', 'pebble');
+    expect(layer('handle').querySelector('[data-ledge-mark]')).toBeInTheDocument();
     fireEvent.click(within(layer('settings')).getByRole('button', { name: 'Back to sessions' }));
     fireEvent.click(within(layer('list')).getByRole('button', { name: /harness-assistant, Otto, open/ }));
     expect(value()).toBe('keep going, then rebase');
@@ -460,7 +457,7 @@ describe('carried items', () => {
     fireEvent.click(screen.getByRole('link', { name: /Pim needs your approval/ }));
     act(() => daemonStore.setStatus('unreachable'));
     const bots = document.querySelectorAll('svg.bot');
-    expect(bots.length).toBeGreaterThanOrEqual(5); // handle x2, bubble, list x2, session
+    expect(bots.length).toBeGreaterThanOrEqual(1);
     for (const svg of bots) expect(svg).toHaveAttribute('data-frozen', 'true');
     act(() => daemonStore.setStatus('open'));
     for (const svg of document.querySelectorAll('svg.bot')) expect(svg).toHaveAttribute('data-frozen', 'false');

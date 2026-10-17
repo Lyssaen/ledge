@@ -107,7 +107,7 @@ test('Ctrl+Alt+N from the handle sizes the form to its content, the same as the 
   const viaShortcut = await height();
   await page.keyboard.press('Control+Alt+N');
   await expectMode(page, 'handle');
-  await expect.poll(height).toBe(38);
+  await expect.poll(height).toBe(10);
   // The reference: the form opened from the list, which already has the form's width.
   await page.keyboard.press('Control+Alt+L');
   await expectMode(page, 'list');

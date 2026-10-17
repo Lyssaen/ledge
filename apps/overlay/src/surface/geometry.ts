@@ -2,6 +2,8 @@ export const SIZES = { bubbleW: 440, bubbleH: 128, listW: 380, sessionW: 480, re
 /** The compact island, a row along the top edge (spec 2026-10-12 §3): margins, the Ledge mascot, the separator, the
  *  companions, the "+n" pill past six, the DND moon; and the discreet strip with one dot per session. */
 export const ISLAND = { h: 38, padL: 12, padR: 14, resident: 22, sepGap: 8, companion: 22, gap: 8, max: 6, pill: 30, moon: 12, stripH: 10, stripPad: 10, dotW: 6, dotH: 4, dotGap: 4 } as const;
+/** The resting notch (the validated filet): 10 px, Ledge's rectangle, a hairline before each machine, one dash per session. */
+export const FILET = { h: 10, pad: 6, ledge: 9, sep: 7, dash: 5, gap: 2, pip: 5 } as const;
 /** The surface's top + bottom border (border-box): added to a measured content height so nothing is clipped. None:
  *  the notch is borderless so it merges with the screen edge. */
 export const SURFACE_BORDER = 0;
@@ -40,6 +42,26 @@ export function islandWidth(n: number, dnd = false, pipes = 0): number {
   return ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap + shown * ISLAND.companion + (shown - 1) * ISLAND.gap + pipes * (ISLAND.sepGap + SIZES.separatorH) + (n > ISLAND.max ? ISLAND.gap + ISLAND.pill : 0) + moon + ISLAND.padR;
 }
 
+/** One machine's dashes: 5 px each, 2 px between them. */
+export const filetGroupWidth = (n: number) => n <= 0 ? 0 : n * FILET.dash + (n - 1) * FILET.gap;
+
+/** The resting notch's width. `groups` is the session count of each machine, in island order. `pip` adds the update dash. */
+export function filetWidth(groups: number[], pip = false): number {
+  return FILET.pad * 2 + FILET.ledge + groups.reduce((w, n) => w + FILET.sep + filetGroupWidth(n), 0) + (pip ? FILET.pip : 0);
+}
+
+/** The machines of an `islandOrder` list, each kept together. */
+export function machineGroups<T extends { machine?: string }>(ordered: T[]): T[][] {
+  const groups: T[][] = [];
+  for (const b of ordered) {
+    const machine = b.machine ?? 'local';
+    const last = groups[groups.length - 1];
+    if (!last || (last[0]!.machine ?? 'local') !== machine) groups.push([b]);
+    else last.push(b);
+  }
+  return groups;
+}
+
 /** The discreet strip's width: one dot per session (six at most), never narrower than the bare island. */
 export function stripWidth(n: number): number {
   const shown = Math.min(n, ISLAND.max);
@@ -54,7 +76,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 export const expandedWidth = (screenW: number, min: number) => clamp(Math.round(screenW * 0.6), min, SIZES.expandedMaxW);
 
 /** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of the list: an expanded (focused) row, the notice, the update card. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
-export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; /** Measured height of the open helper view. */ helperH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
+export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; /** The update dash on the resting notch. */ pip?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; /** Measured height of the open helper view. */ helperH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
 
 /** Everything hangs from the top edge of the work area, centred on the island's axis; `left` is clamped into the screen. */
 export function layout(input: LayoutInput): Layout {
@@ -63,16 +85,19 @@ export function layout(input: LayoutInput): Layout {
   const maxH = screenH - SIZES.margin;
   const axis = islandAxis(screenW, input.position);
   const place = (w: number) => clamp(Math.round(axis - w / 2), 0, Math.max(0, screenW - w));
-  const strip = mode === 'handle' && !!input.strip;
   const ordered = islandOrder(bots);
-  const handleW = strip ? stripWidth(n) : islandWidth(n, input.dnd, islandPipes(ordered));
-  const handle = { left: place(handleW), w: handleW, h: strip ? ISLAND.stripH : ISLAND.h };
+  const groups = machineGroups(ordered);
+  const handleW = mode === 'handle' ? filetWidth(groups.map(g => g.length), !!input.pip) : islandWidth(n, input.dnd, islandPipes(ordered));
+  const handle = { left: place(handleW), w: handleW, h: mode === 'handle' ? FILET.h : ISLAND.h };
   const slots: Slot[] = [];
-  let x = handle.left + ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap;
-  ordered.slice(0, ISLAND.max).forEach((b, i, shown) => {
-    if (pipeBefore(shown[i - 1], b)) x += ISLAND.sepGap + SIZES.separatorH;
-    slots.push({ id: b.id, size: ISLAND.companion, center: x + ISLAND.companion / 2 }); x += ISLAND.companion + ISLAND.gap;
-  });
+  let cursor = FILET.pad + FILET.ledge;
+  for (const group of groups) {
+    cursor += FILET.sep;
+    group.forEach((b, i) => {
+      slots.push({ id: b.id, size: FILET.dash, center: handle.left + cursor + FILET.dash / 2 });
+      cursor += FILET.dash + (i < group.length - 1 ? FILET.gap : 0);
+    });
+  }
   const view = (w: number, h: number): Layout => ({ left: place(w), top: 0, w, h: Math.min(maxH, h), slots, handle });
   if (mode === 'handle') return { left: handle.left, top: 0, w: handleW, h: handle.h, slots, handle };
   if (mode === 'bubble') return view(SIZES.bubbleW, input.bubbleH ?? SIZES.bubbleH);

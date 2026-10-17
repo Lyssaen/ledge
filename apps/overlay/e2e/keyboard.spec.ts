@@ -114,8 +114,8 @@ test('Ctrl+Alt+T switches the theme', async ({ page }) => {
 });
 
 test('a keyboard open while the window is still handle-sized never scrolls the page: the list hangs from the top edge', async ({ page }) => {
-  // Under Tauri the native window grows after the first paint of the open: the row takes focus while the viewport is still the island's 38 px.
-  await page.setViewportSize({ width: 1920, height: 38 });
+  // Under Tauri the native window grows after the first paint of the open: the row takes focus while the viewport is still the notch's 10 px.
+  await page.setViewportSize({ width: 1920, height: 10 });
   await fakeDaemon(page, sessions());
   await ready(page, 3);
   await page.keyboard.press('Control+Alt+L');

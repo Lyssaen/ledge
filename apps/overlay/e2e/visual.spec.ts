@@ -1,4 +1,4 @@
-import { islandWidth } from '../src/surface/geometry';
+import { filetWidth } from '../src/surface/geometry';
 import { test, expect, layer, expectMode, ready, surface } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 import { overview, team, perm, openList, restInside } from './scenarios';
@@ -15,13 +15,13 @@ const openSession = async (page: Page, row: string) => {
   await restInside(page);
 };
 
-test('island: one companion per session on the top edge, centred, 38 px high', async ({ page }) => {
-  // Quiet sessions: an ask would unfold its bubble while the island is measured.
+test('notch: one dash per session on the top edge, centred, 10 px high', async ({ page }) => {
+  // Quiet sessions: an ask would unfold its bubble while the notch is measured.
   await fakeDaemon(page, ['a', 'b', 'c', 'd'].map(id => session(id)));
   await ready(page, 4);
-  await expect.poll(async () => (await box(surface(page))).width).toBe(islandWidth(4));
+  await expect.poll(async () => (await box(surface(page))).width).toBe(filetWidth([4]));
   const s = await box(surface(page));
-  expect(s.y).toBe(0); expect(s.height).toBe(38);
+  expect(s.y).toBe(0); expect(s.height).toBe(10);
   expect(Math.abs(s.x + s.width / 2 - 800)).toBeLessThan(2);
 });
 
