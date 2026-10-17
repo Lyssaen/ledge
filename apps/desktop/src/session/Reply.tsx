@@ -96,6 +96,8 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
       return true;
     }
     if (!pending) return false;
+    // A held key repeats: once the first press lands, the next request would take the repeats. Only a new press decides.
+    if (e.repeat && (k === 'y' || k === 'n' || /^[1-9]$/.test(k))) return false;
     if (sort === 'approval' && (k === 'y' || k === 'n')) { decisions.decide(session, k === 'y' ? 'accept' : 'deny'); return true; }
     if (sort === 'plan' && (k === 'y' || k === 'n')) {
       if (k === 'y') decisions.decide(session, 'accept'); else askRevision(tp.reviseKey);

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { NOTE_MAX } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, listSessions, type MockDaemon } from './helpers';
@@ -62,6 +62,23 @@ describe('the pinned request and the reply', () => {
     d.push({ type: 'error', id: 'otto', message: 'the terminal did not take it', request: 'session.decide' });
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not send the decision to Otto: Local: the terminal did not take it'));
     expect(card('Approval requested').getByRole('button', { name: /^Allow/ })).toBeEnabled();
+  });
+
+  it('a held key decides nothing: Y, N and 1…9 repeated by the keyboard are ignored, the first press counts', async () => {
+    const { d } = await open('Otto');
+    fireEvent.keyDown(document.body, { key: 'y', repeat: true });
+    fireEvent.keyDown(document.body, { key: 'n', repeat: true });
+    await new Promise(r => setTimeout(r, 100));
+    expect(sent(d, 'session.decide')).toEqual([]);
+    expect(card('Approval requested').getByRole('button', { name: /^Allow/ })).toBeEnabled();
+    fireEvent.keyDown(document.body, { key: 'y' });
+    await waitFor(() => expect(sent(d, 'session.decide')).toHaveLength(1));
+    cleanup(); await closeDaemons();
+    const kit = { ...listSessions()[4]!, pending: { kind: 'question' as const, text: 'Quel port ?', options: ['8080', '3000'], source: 'hook' as const } };
+    const env = await open('Kit', [...listSessions().slice(0, 4), kit]);
+    fireEvent.keyDown(document.body, { key: '1', repeat: true });
+    await new Promise(r => setTimeout(r, 100));
+    expect(sent(env.d, 'session.reply')).toEqual([]);
   });
 
   it('a question: numbered choices answer with their digit, R writes freely', async () => {
