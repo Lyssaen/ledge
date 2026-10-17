@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { describe, it, expect, vi } from 'vitest';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspectRepos } from '../src/daemon/repos.js';
+import { listFolder } from '../src/daemon/folders.js';
 
 const dir = () => mkdtempSync(join(tmpdir(), 'ledge-repos-'));
 
@@ -42,6 +43,28 @@ describe('inspectRepos', () => {
     const git = async () => { live++; peak = Math.max(peak, live); await new Promise(r => setTimeout(r, 15)); live--; return 'main'; };
     const out = await inspectRepos(paths, { git });
     expect(peak).toBe(8); expect(out).toHaveLength(20); expect(out.every(r => r.branch === 'main')).toBe(true);
+  });
+  it('hands a freed slot to the one waiting: inspections arriving meanwhile and a listing never run more than 8 git at once', async () => {
+    let live = 0, peak = 0; const pending: (() => void)[] = [];
+    const git = () => new Promise<string>(r => { live++; peak = Math.max(peak, live); pending.push(() => { live--; r('main'); }); });
+    const home = dir();
+    for (let i = 0; i < 4; i++) { mkdirSync(join(home, `w${i}`)); writeFileSync(join(home, `w${i}`, '.git'), 'gitdir: /elsewhere\n'); }
+    const all: Promise<unknown>[] = [inspectRepos(Array.from({ length: 10 }, () => dir()), { git })];
+    await vi.waitFor(() => expect(live).toBe(8));
+    all.push(listFolder(home, home, undefined, git));
+    // One git ends; new inspections arrive at every microtask depth while its slot is handed over.
+    pending.shift()!();
+    for (let depth = 0; depth < 40; depth++) {
+      let p = Promise.resolve();
+      for (let i = 0; i < depth; i++) p = p.then(() => {});
+      all.push(p.then(() => inspectRepos([dir()], { git })));
+    }
+    await new Promise(r => setTimeout(r, 100));
+    expect(peak).toBe(8);
+    // Let everything finish, one git at a time.
+    let done = false; void Promise.all(all).then(() => { done = true; });
+    while (!done) { pending.shift()?.(); await new Promise(r => setTimeout(r, 5)); expect(live).toBeLessThanOrEqual(8); }
+    expect(peak).toBe(8);
   });
   it('a detached HEAD stays within 2 s in all for one path', async () => {
     const d = dir(); const t0 = Date.now();

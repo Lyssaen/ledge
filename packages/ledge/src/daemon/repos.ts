@@ -16,12 +16,13 @@ function runGit(cwd: string, args: string[]): Promise<string | null> {
   });
 }
 
-/** At most MAX_GIT paths being inspected at once, across every call (a listing's worktrees and the launch form's inspections together). */
+/** At most MAX_GIT paths being inspected at once, across every call (a listing's worktrees and the launch form's inspections together).
+ *  A freed slot is handed to the first one waiting, `live` unchanged: a call arriving before that one resumes cannot take it. */
 let live = 0; const waiting: (() => void)[] = [];
 async function slot<T>(job: () => Promise<T>): Promise<T> {
   if (live >= MAX_GIT) await new Promise<void>(r => waiting.push(r));
-  live++;
-  try { return await job(); } finally { live--; waiting.shift()?.(); }
+  else live++;
+  try { return await job(); } finally { const next = waiting.shift(); if (next) next(); else live--; }
 }
 
 /** For each path, echoed as asked (`~`, `..`, a trailing `/` are resolved only to look and to run git: the front finds its answer by the path it sent):
