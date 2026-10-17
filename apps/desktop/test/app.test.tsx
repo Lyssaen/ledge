@@ -58,4 +58,9 @@ describe('the bundle', () => {
     expect(app).not.toMatch(/from '@ledge\/ui\/documents\/markdown'/);
     expect(readFileSync(resolve(__dirname, '../src/session/lazy.tsx'), 'utf8')).toMatch(/import\('\.\/Workspace'\)/);
   });
+  it('the New session form comes in a chunk of its own: the shell does not import it', () => {
+    const app = readFileSync(resolve(__dirname, '../src/App.tsx'), 'utf8');
+    expect(app).not.toMatch(/from '\.\/launch\/LaunchComposer'/);
+    expect(readFileSync(resolve(__dirname, '../src/launch/lazy.tsx'), 'utf8')).toMatch(/import\('\.\/LaunchComposer'\)/);
+  });
 });

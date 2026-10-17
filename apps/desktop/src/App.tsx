@@ -23,7 +23,7 @@ import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { Pending } from './shell/Pending';
-import { LaunchComposer } from './launch/LaunchComposer';
+import { LaunchPlace, loadComposer } from './launch/lazy';
 import { useLaunch } from './launch/useLaunch';
 import { Atelier } from './atelier/Atelier';
 import { List } from './list/List';
@@ -105,8 +105,8 @@ function Shell({ client }: { client?: DaemonClient }) {
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
   // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
   const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
-  // The session page's chunk is fetched once the shell is up, so a first session rarely waits for it.
-  useEffect(() => { void loadWorkspace(); }, []);
+  // The session page's and the New session form's chunks are fetched once the shell is up, so a first opening rarely waits for them.
+  useEffect(() => { void loadWorkspace(); void loadComposer(); }, []);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
@@ -156,7 +156,7 @@ function Shell({ client }: { client?: DaemonClient }) {
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
       {nav.modal?.kind === 'launch' && (
         <Modal title={t.modalTitles.launch} wide onClose={close}>
-          <LaunchComposer client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
+          <LaunchPlace client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
             wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }) }}
             onEditProject={id => dispatch({ type: 'modal', modal: { kind: 'project', edit: id } })} onNewProject={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}
             launch={launcher.state} onLaunch={(msg, preview) => { launched.current = preview; launcher.launch(msg); }} onCancel={close} paused={nav.paused} />

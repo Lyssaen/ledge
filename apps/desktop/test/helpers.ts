@@ -12,6 +12,7 @@ import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
 import { activeCount } from '../src/nav/agents';
 import { loadWorkspace } from '../src/session/lazy';
+import { loadComposer } from '../src/launch/lazy';
 
 /** jsdom loads no stylesheet: the declarations of the top-level rules naming `selector` in one of the app's sheets (@media and @container blocks removed). */
 export function declarations(sheet: string, selector: string): string {
@@ -111,8 +112,9 @@ export async function closeDaemons(): Promise<void> {
  *  Ready once the Atelier counter shows the active sessions, the last project's row is in the sidebar and, with sessions,
  *  the first one is shown (its seat in the atelier, its row in the List). */
 export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false, machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }], repoInfo }: { sessions?: Session[]; projects?: Projects; list?: boolean; machines?: Machines; repoInfo?: ReadonlyMap<string, RepoInfo> } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
-  // The session page's own chunk is there before a test opens one: the page comes in the same render, as once preloaded in the app.
+  // The session page's and the New session form's own chunks are there before a test opens them: they come in the same render, as once preloaded in the app.
   await loadWorkspace();
+  await loadComposer();
   const d = await createMockDaemon(); daemons.push(d);
   d.machines(machines);
   d.projects(projects);
