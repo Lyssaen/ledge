@@ -182,6 +182,33 @@ describe('proposeProjects', () => {
     expect(proposeProjects({ projects, scans: [studio, old], sessions })).toEqual([]);
   });
 
+  it('never proposes a home kept in Git, nor a repository holding others, nor uses it to hold an agent', () => {
+    const dotfiles = 'github.com/me/dotfiles';
+    const box: ScanOf = { machine: 'box', label: 'Box', status: 'ok', truncated: false, repos: [{ path: '/home/box', branch: 'main', remote: dotfiles }] };
+    const scans = [{ ...local, repos: [...local.repos, { path: '/home/me', branch: 'main', remote: dotfiles }] }, { ...dev, repos: [...dev.repos, { path: '/home/dev', branch: 'main', remote: dotfiles }] }, box];
+    const r = proposeProjects({ ...input, scans, sessions: [...sessions, session('local:max', 'Max', '/home/me'), session('box:bo', 'Bo', '/home/box/tmp', 'box')] });
+    const repos = everyRepo(r);
+    for (const home of ['local:/home/me', 'dev:/home/dev', 'box:/home/box']) expect(repos).not.toContain(home);
+    expect(r.find(p => p.file.includes('local:kit'))!.repos.map(x => x.path)).toEqual(['/home/me/Téléchargements']);
+    expect(r.find(p => p.file.includes('box:bo'))!.repos.map(x => x.path)).toEqual(['/home/box/tmp']);
+    expect(r.flatMap(p => p.file)).not.toContain('local:max');
+    // A repository that holds another scanned repository, home or not.
+    const nested = proposeProjects({ ...input, scans: [{ ...local, repos: [{ path: '/w/big', branch: 'main' }, { path: '/w/big/inner', branch: 'main' }] }], sessions: [session('local:ivy', 'Ivy', '/w/big/docs')] });
+    expect(everyRepo(nested)).not.toContain('local:/w/big');
+    expect(nested.find(p => p.file.includes('local:ivy'))!.repos.map(x => x.path)).toEqual(['/w/big/docs']);
+  });
+
+  it("attaches a loose folder to an agents' folder that holds it", () => {
+    const r = proposeProjects({ ...input, sessions: [session('local:b', 'Bea', '/tmp/a/b'), session('local:a', 'Ada', '/tmp/a')] });
+    expect(r.filter(p => p.file.length)).toHaveLength(1);
+    expect(r[r.findIndex(p => p.file.length)]).toMatchObject({ file: ['local:a', 'local:b'], repos: [{ machine: 'local', path: '/tmp/a', why: { kind: 'agent', names: ['Ada', 'Bea'] } }] });
+  });
+
+  it('a path that only starts like a project repository is free', () => {
+    const r = proposeProjects({ ...input, scans: [local, { ...dev, repos: [...dev.repos, { path: '/home/dev/ledger', branch: 'main' }] }], sessions: [session('dev:ned', 'Ned', '/home/dev/ledger/src', 'dev')] });
+    expect(r.find(p => p.file.includes('dev:ned'))!.repos).toEqual([{ machine: 'dev', path: '/home/dev/ledger', why: { kind: 'agent', names: ['Ned'] } }]);
+  });
+
   it('summarises the repositories and their machines', () => {
     expect(containing('/home/me/Workspace/paper/paper-api', 'local')!.summary).toEqual({ repos: 4, machines: ['PC local', 'Dev SSH'], agents: [] });
   });
@@ -199,10 +226,28 @@ describe('proposeFor', () => {
     expect(p.repos[0]!.why).toEqual({ kind: 'naming', stem: 'paper' });
   });
 
-  it("from a project's editor, its id is the target", () => {
+  it("from a project's editor, the proposal that already targets it, the project keeping its name", () => {
     const p = proposeFor({ id: 'ledge', name: 'Ledge', file: [] }, all, input)!;
-    expect(p).toMatchObject({ targetId: 'ledge', color: 'blue', summary: { target: 'Ledge' } });
-    expect(p.repos.map(r => r.path)).toEqual(['/srv/mirrors/ledge']);
+    expect(p).toMatchObject({ targetId: 'ledge', name: 'Ledge', color: 'blue', summary: { target: 'Ledge' } });
+    expect(p.repos).toEqual([{ machine: 'dev', path: '/srv/mirrors/ledge', why: { kind: 'remote', remote: 'github.com/paradow/ledge', machines: ['Dev SSH'] } }]);
+    expect(p.pid).toBe(all.find(x => x.targetId === 'ledge')!.pid);
+    expect(proposeFor({ id: 'ledge', name: 'Paper', file: [] }, all, input)).toMatchObject({ targetId: 'ledge', name: 'Ledge' });
+  });
+
+  it("from a project's editor without a proposal for it, the others go to that project", () => {
+    const p = proposeFor({ id: 'commerce', name: 'Payment Service', file: [] }, all, input)!;
+    expect(p).toMatchObject({ targetId: 'commerce', name: 'Payment Service', color: 'green', summary: { target: 'Payment Service' } });
+    expect(p.repos.map(r => r.path)).toEqual(all[0]!.repos.map(r => r.path));
+  });
+
+  it('a new draft keeps its typed name, even when the proposal picked is an « add to »', () => {
+    const rest = all.slice(1); // the Ledge « add to » first
+    expect(proposeFor({ name: '', file: [] }, rest, input)).toMatchObject({ targetId: 'ledge', name: 'Ledge' });
+    const p = proposeFor({ name: 'Zz', file: [] }, rest, input)!;
+    expect(p.name).toBe('Zz');
+    expect(p.targetId).toBeUndefined();
+    expect(p.summary.target).toBeUndefined();
+    expect(p.color).toBe('amber');
   });
 
   it('with an agent to file, the proposal that holds it', () => {
@@ -219,5 +264,9 @@ describe('proposeFor', () => {
   it('null when nothing is free', () => {
     const none = { projects, scans: [], sessions: [] };
     expect(proposeFor({ name: 'paper', file: [] }, proposeProjects(none), none)).toBeNull();
+    const owned: Projects = { projects: [{ id: 'all', name: 'All', color: 'blue', description: '', repos: [{ machine: 'local', path: '/home/me' }, { machine: 'dev', path: '/home/dev' }, { machine: 'dev', path: '/srv' }] }], rules: [] };
+    const taken = { projects: owned, scans: [local, dev], sessions: [session('local:otto', 'Otto', '/home/me/Workspace')] };
+    expect(proposeProjects(taken)).toEqual([]);
+    expect(proposeFor({ name: 'paper', file: ['local:otto'] }, proposeProjects(taken), taken)).toBeNull();
   });
 });

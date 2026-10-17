@@ -41,7 +41,11 @@ function hash(s: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-/** What the scans and sessions give: the online machines in their order, the free repositories sorted, who owns the others. */
+/** A home kept in Git (dotfiles): `/root`, `/home/<user>`, `/Users/<user>`. */
+const HOME = /^\/(?:root|home\/[^/]+|Users\/[^/]+)$/;
+
+/** What the scans and sessions give: the online machines in their order, the free repositories sorted, who owns the others.
+ *  Machine order follows the order of `scans` (the fleet's order); within a machine, repositories are sorted by path. */
 function survey(input: Input) {
   const scans = input.scans.filter(s => s.status === 'ok');
   const order = new Map(scans.map((s, i) => [s.machine, i]));
@@ -58,7 +62,10 @@ function survey(input: Input) {
   }
   scanned.sort(byPlace);
   const ownerOf = (r: { machine: string; path: string }) => projectOf({ machineId: r.machine, cwd: r.path }, input.projects);
-  const free = scanned.filter(r => ownerOf(r) === null);
+  // Never free, nor a folder that holds an agent: a repository owned by a project (projectOf), a home kept in Git, or a repository
+  // that holds other scanned repositories on its machine (Task 1 lists home's own .git on purpose); either would swallow the rest.
+  const container = (r: Free) => HOME.test(r.path) || scanned.some(o => o.machine === r.machine && o.path !== r.path && under(o.path, r.path));
+  const free = scanned.filter(r => ownerOf(r) === null && !container(r));
   // Overlap: a remote a project's repository has.
   const remoteOwner = new Map<string, string>();
   for (const r of scanned) { const owner = ownerOf(r); if (owner && r.remote && !remoteOwner.has(r.remote)) remoteOwner.set(r.remote, owner); }
@@ -116,17 +123,24 @@ export function proposeProjects(input: Input): Proposal[] {
     .sort((a, b) => s.byPlace({ machine: a.machine, path: a.cwd }, { machine: b.machine, path: b.cwd }) || (a.x.id < b.x.id ? -1 : 1));
   type Folders = { folders: Map<string, { machine: string; path: string; names: string[] }>; file: string[] };
   const byFolderParent = new Map<string, Folders>();
+  const chosen: { machine: string; path: string; parent: string }[] = []; // the plain folders kept so far (an ancestor comes first: sorted by path)
   for (const a of loose) {
     const repo = s.free.filter(r => r.machine === a.machine && under(a.cwd, r.path)).sort((p, q) => q.path.length - p.path.length)[0];
     if (repo && claimed.has(at(repo.machine, repo.path))) { groups[claimed.get(at(repo.machine, repo.path))!]!.file.push(a.x.id); continue; }
-    const path = repo?.path ?? a.cwd;
-    if (!repo && (path === '/' || s.scanned.some(r => r.machine === a.machine && under(r.path, path)))) continue;
-    const g: Folders = byFolderParent.get(parentOf(path)) ?? { folders: new Map(), file: [] };
+    // A loose folder under one already kept goes with it, as a folder goes with the repository that holds it.
+    const holder = repo ? undefined : chosen.find(c => c.machine === a.machine && under(a.cwd, c.path));
+    const path = repo?.path ?? holder?.path ?? a.cwd;
+    if (!repo && !holder) {
+      if (path === '/' || s.scanned.some(r => r.machine === a.machine && under(r.path, path))) continue;
+      chosen.push({ machine: a.machine, path, parent: parentOf(path) });
+    }
+    const parent = holder?.parent ?? parentOf(path);
+    const g: Folders = byFolderParent.get(parent) ?? { folders: new Map(), file: [] };
     const f = g.folders.get(at(a.machine, path)) ?? { machine: a.machine, path, names: [] };
     if (!f.names.includes(a.x.name)) f.names.push(a.x.name);
     g.folders.set(at(a.machine, path), f);
     g.file.push(a.x.id);
-    byFolderParent.set(parentOf(path), g);
+    byFolderParent.set(parent, g);
   }
   for (const [parent, g] of byFolderParent) {
     const folders = [...g.folders.values()];
@@ -180,13 +194,18 @@ export function proposeProjects(input: Input): Proposal[] {
 
 /** « Laisser Ledge faire » depuis l'éditeur : avec un nom tapé, les dépôts libres dont le nom contient un de ses mots (> 2 lettres) ;
  *  sinon la proposition qui contient les sessions à ranger du brouillon ; sinon la première ; null s'il n'y a rien de libre.
- *  Avec `draft.id` (un projet existant), il est la cible ; un nom tapé est gardé. */
+ *  Avec `draft.id` (un projet existant) : d'abord la proposition qui vise déjà ce projet ; il est la cible de ce qui est rendu et
+ *  garde son nom. Un nouveau brouillon garde le nom tapé : une proposition « Ajouter à » retenue devient alors un nouveau projet. */
 export function proposeFor(draft: { id?: string; name: string; file: readonly string[] }, all: readonly Proposal[], input: Input): Proposal | null {
   const s = survey(input);
   const projects = input.projects.projects;
   const target = draft.id === undefined ? undefined : projects.find(p => p.id === draft.id);
   const firstFree = COLORS.find(c => !projects.some(p => p.color === c)) ?? 'blue';
   const name = draft.name.trim();
+  if (target) {
+    const aimed = all.find(p => p.targetId === target.id);
+    if (aimed) return finish({ name: target.name, targetId: target.id, repos: aimed.repos, file: unique([...aimed.file, ...draft.file]) }, projects, target.color, s, input.sessions);
+  }
   const words = key(name).split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2);
   if (words.length) {
     const repos = s.free.flatMap(r => {
@@ -198,6 +217,7 @@ export function proposeFor(draft: { id?: string; name: string; file: readonly st
   const pick = (draft.file.length ? all.find(p => p.file.some(id => draft.file.includes(id))) : undefined) ?? all[0];
   if (!pick) return null;
   const file = unique([...pick.file, ...draft.file]);
-  const targetId = target?.id ?? pick.targetId;
-  return finish({ name: name || pick.name, ...(targetId !== undefined ? { targetId } : {}), repos: pick.repos, file }, projects, pick.color, s, input.sessions);
+  const targetId = target ? target.id : name ? undefined : pick.targetId;
+  const color = pick.targetId !== undefined && targetId === undefined ? firstFree : pick.color;
+  return finish({ name: name || pick.name, ...(targetId !== undefined ? { targetId } : {}), repos: pick.repos, file }, projects, color, s, input.sessions);
 }
