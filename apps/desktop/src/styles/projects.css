@@ -40,7 +40,8 @@
 .pe-agents .chip{gap:4px}
 .pe-agent-bot{display:inline-flex}
 
-.pe-delete{display:flex;flex-direction:column;gap:12px;padding:14px 16px;border:1px solid color-mix(in srgb,var(--destructive) 40%,var(--border));border-radius:var(--radius-lg);background:color-mix(in srgb,var(--destructive) 6%,var(--card));font-size:13px;line-height:20px}
+.pe-delete-box{display:flex;flex-direction:column;gap:12px;padding:14px 16px;border:1px solid color-mix(in srgb,var(--destructive) 40%,var(--border));border-radius:var(--radius-lg);background:color-mix(in srgb,var(--destructive) 6%,var(--card));font-size:13px;line-height:20px}
+.pe-delete{display:flex;flex-direction:column;gap:12px}
 .pe-delete p{margin:0}
 .pe-delete ul{margin:0;padding-left:18px;color:var(--muted-foreground)}
 .pe-delete ul strong{color:var(--foreground)}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ClientMessage, Project, Projects, Session } from '@ledge/protocol';
 import type { DaemonClient } from '@ledge/fleet';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -54,7 +54,10 @@ describe('deleting a project', () => {
     expect(alert.tagName).toBe('DIV');
     expect(alert.querySelector('p')).toHaveTextContent('Ledge disappears from the sidebar and the atelier. Its repositories stay untouched on your machines.');
     expect(alert.querySelector('p strong')).toHaveTextContent(/^Ledge$/);
-    expect(items()).toEqual(['2 agents (Bix, Otto) will move to « No project ».', '1 remembered folder will be forgotten.']);
+    expect(items()).toEqual(['2 agents (Bix, Otto) will move to « No project ».', '1 remembered folder will be forgotten.', '1 repository leaves Ledge (the folders stay on your machines).']);
+    // The alert is the explanation only: the choice of where the agents go is outside it.
+    expect(within(alert).queryByRole('radio')).toBeNull();
+    expect(alert.contains(dialog.getByRole('group', { name: 'Its agents' }))).toBe(false);
     const move = within(dialog.getByRole('group', { name: 'Its agents' }));
     expect(move.getByRole('radio', { name: 'No project' })).toBeChecked();
     expect(move.getByRole('radio', { name: 'Move to…' })).not.toBeChecked();
@@ -80,7 +83,7 @@ describe('deleting a project', () => {
     await tick();
     expect(side.getByRole('button', { name: /^Ledge/ })).toBeVisible();
     expect(screen.getByRole('dialog', { name: 'Delete Ledge' })).toBeVisible();
-    expect(items()).toEqual(['2 agents (Bix, Otto) will move to « No project ».', '1 remembered folder will be forgotten.']);
+    expect(items()).toEqual(['2 agents (Bix, Otto) will move to « No project ».', '1 remembered folder will be forgotten.', '1 repository leaves Ledge (the folders stay on your machines).']);
 
     d.releaseProjects();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -97,8 +100,9 @@ describe('deleting a project', () => {
     const target = dialog.getByRole('combobox', { name: 'Target project' });
     expect(within(target).getAllByRole('option').map(o => o.textContent)).toEqual(['Payment Service', 'Docs']);
     expect(target).toHaveValue('payment');
-    expect(items()).toEqual(['2 agents (Bix, Otto) will join Payment Service.', '1 remembered folder will point to that project.']);
+    expect(items()).toEqual(['2 agents (Bix, Otto) will join Payment Service.', '1 remembered folder will point to that project.', '1 repository will join Payment Service.']);
     expect(document.querySelector('.pe-delete li strong')).toHaveTextContent(/^Payment Service$/);
+    expect(within(dialog.getByRole('alert')).queryByRole('combobox')).toBeNull();
     expect(dialog.queryByRole('button', { name: 'Delete Ledge' })).toBeNull();
 
     // Another target, then back to Payment Service.
@@ -160,7 +164,7 @@ describe('deleting a project', () => {
     await env.user.click(form.getByRole('button', { name: 'Edit the project' }));
     await env.user.click(within(screen.getByRole('dialog', { name: 'Edit Ledge' })).getByRole('button', { name: 'Delete the project' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Delete Ledge' }));
-    expect(items()).toEqual(['1 agent (Otto) will move to « No project ».', '1 remembered folder will be forgotten.']);
+    expect(items()).toEqual(['1 agent (Otto) will move to « No project ».', '1 remembered folder will be forgotten.', '1 repository leaves Ledge (the folders stay on your machines).']);
     await env.user.click(dialog.getByRole('button', { name: 'Delete Ledge' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.getByRole('status')).toHaveTextContent('Ledge deleted. 1 agent moves to « No project ».');
@@ -179,7 +183,7 @@ describe('deleting a project', () => {
     expect(dialog.getByRole('radio', { name: 'Move to…' })).toBeDisabled();
     expect(dialog.getByRole('radio', { name: 'Move to…' }).closest('label')).toHaveClass('disabled');
     expect(dialog.getByRole('radio', { name: 'No project' })).toBeChecked();
-    expect(items()).toEqual(['5 agents (Ana, Bo, Cy, Di…) will move to « No project ».', '0 remembered folders will be forgotten.']);
+    expect(items()).toEqual(['5 agents (Ana, Bo, Cy, Di…) will move to « No project ».', 'No remembered folder.', '1 repository leaves Ledge (the folders stay on your machines).']);
   });
 
   it('no agent at the table says so (the dialog alone: a table without agent has no menu)', async () => {
@@ -188,7 +192,53 @@ describe('deleting a project', () => {
       projectIdOf={s => (s.cwd === '/w/pay' ? 'payment' : null)} onClose={vi.fn()} onSaved={vi.fn()} onDeleted={vi.fn()} /></LangProvider>);
     fireEvent.click(screen.getByRole('button', { name: 'Delete the project' }));
     expect(within(screen.getByRole('dialog', { name: 'Delete Ledge' })).getByRole('alert')).toBeVisible();
-    expect(items()).toEqual(['No agent at this table.', '0 remembered folders will be forgotten.']);
+    expect(items()).toEqual(['No agent at this table.', 'No remembered folder.', '1 repository leaves Ledge (the folders stay on your machines).']);
+  });
+});
+
+describe('the deletion view: more', () => {
+  it('Ctrl ↵ does not confirm the deletion', async () => {
+    const { d, user } = await deleteLedge();
+    expect(screen.getByRole('radio', { name: 'No project' })).toHaveFocus();
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await tick();
+    expect(setsOf(d)).toEqual([]);
+    expect(screen.getByRole('dialog', { name: 'Delete Ledge' })).toBeVisible();
+  });
+
+  it('a daemon silent for 8 s: the view says so and can be confirmed again; a late confirmation still closes it and says so', async () => {
+    const { d, side, dialog } = await deleteLedge();
+    d.holdProjects();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      fireEvent.click(dialog.getByRole('button', { name: 'Delete Ledge' }));
+      expect(dialog.getByRole('button', { name: 'Saving…' })).toBeVisible();
+      act(() => { vi.advanceTimersByTime(8000); });
+      expect(dialog.getAllByRole('alert').map(a => a.textContent)).toContain('The daemon did not confirm the save.');
+      expect(dialog.getByRole('button', { name: 'Delete Ledge' })).toBeVisible();
+      expect(items()).toEqual(['2 agents (Bix, Otto) will move to « No project ».', '1 remembered folder will be forgotten.', '1 repository leaves Ledge (the folders stay on your machines).']);
+    } finally { vi.useRealTimers(); }
+    await waitFor(() => expect(setsOf(d)).toHaveLength(1));
+    expect(side.getByRole('button', { name: /^Ledge/ })).toBeVisible();
+    d.releaseProjects();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('status')).toHaveTextContent('Ledge deleted. 2 agents move to « No project ».');
+  });
+
+  it('a target whose name is also a word of the sentence: the name in bold is the target, where it stands', async () => {
+    const join: Project = { ...PAYMENT, name: 'join' };
+    const { user, dialog } = await deleteLedge({ projects: { ...STATE, projects: [LEDGE, join, DOCS] } });
+    await user.click(dialog.getByRole('radio', { name: 'Move to…' }));
+    const lis = [...document.querySelectorAll('.pe-delete li')];
+    expect(lis[0]!.innerHTML).toBe('2 agents (Bix, Otto) will join <strong>join</strong>.');
+    expect(lis[2]!.innerHTML).toBe('1 repository will join <strong>join</strong>.');
+  });
+
+  it('a project without repository has no repository line', async () => {
+    // Without /w/ledge, Otto is no longer at its table: Bix stays, through the remembered folder.
+    const { dialog } = await deleteLedge({ projects: { ...STATE, projects: [{ ...LEDGE, repos: [] }, PAYMENT, DOCS] } });
+    expect(items()).toEqual(['1 agent (Bix) will move to « No project ».', '1 remembered folder will be forgotten.']);
+    expect(dialog.getByRole('alert')).toHaveClass('pe-delete');
   });
 });
 
@@ -206,6 +256,16 @@ describe('the deletion copy', () => {
     expect(`${fr.rules(1)} ${fr.rulesMove(1)}`).toBe('1 dossier mémorisé pointera vers ce projet.');
     expect(`${fr.rules(2)} ${fr.rulesMove(2)}`).toBe('2 dossiers mémorisés pointeront vers ce projet.');
     expect(fr.noAgents).toBe('Aucun agent à cette table.');
+    expect(fr.noRules).toBe('Aucun dossier mémorisé.');
+    expect(fr.reposMove(1, 'Docs')).toBe('1 dépôt rejoindra Docs.');
+    expect(fr.reposMove(2, 'Docs')).toBe('2 dépôts rejoindront Docs.');
+    expect(fr.reposGone(1)).toBe('1 dépôt quittera Ledge (les dossiers restent sur vos machines).');
+    expect(fr.reposGone(3)).toBe('3 dépôts quitteront Ledge (les dossiers restent sur vos machines).');
+    expect(en.noRules).toBe('No remembered folder.');
+    expect(en.reposMove(1, 'Docs')).toBe('1 repository will join Docs.');
+    expect(en.reposMove(2, 'Docs')).toBe('2 repositories will join Docs.');
+    expect(en.reposGone(1)).toBe('1 repository leaves Ledge (the folders stay on your machines).');
+    expect(en.reposGone(2)).toBe('2 repositories leave Ledge (the folders stay on your machines).');
     expect([fr.their, fr.none, fr.moveTo, fr.target, fr.confirm('Ledge'), fr.moveAndDelete]).toEqual(['Ses agents', 'Sans projet', 'Déplacer vers…', 'Projet de destination', 'Supprimer Ledge', 'Déplacer et supprimer']);
     expect(fr.done('Ledge') + fr.doneMoved(1, 'Docs')).toBe('Ledge supprimé. 1 agent rejoint Docs.');
     expect(fr.done('Ledge') + fr.doneMoved(2, 'Docs')).toBe('Ledge supprimé. 2 agents rejoignent Docs.');

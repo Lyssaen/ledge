@@ -91,6 +91,9 @@ test('Edit project › Delete the project › Move to… Website: its agents joi
   const ledge = page.getByRole('region', { name: 'Ledge table' });
   await expect(ledge).toBeVisible();
   await expect(page.getByRole('region', { name: 'Website table' })).toHaveCount(0);
+  // Filtered: the Atelier row is not the active one (the project is), so its coming back below is the filter going back to All.
+  await expect(sidebarProjects(page).getByRole('button', { name: /^Ledge/ })).toHaveClass(/active/);
+  await expect(page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: /Atelier/ })).not.toHaveClass(/active/);
   await ledge.getByRole('button', { name: 'Actions of project Ledge' }).click();
   await page.getByRole('menu', { name: 'Actions of project Ledge' }).getByRole('menuitem', { name: 'Edit project' }).click();
   await expect(page.getByRole('dialog', { name: 'Edit Ledge' })).toBeVisible();
@@ -104,7 +107,8 @@ test('Edit project › Delete the project › Move to… Website: its agents joi
   await expect(confirm.getByRole('radio', { name: 'Move to…' })).toBeChecked();
   await expect(confirm.getByRole('combobox', { name: 'Target project' })).toHaveValue('website');
   await expect(confirm).toContainText(/5 agents \((\w+, ){3}\w+…\) will join Website\./);
-  await expect(confirm).toContainText('0 remembered folders will point to that project.');
+  await expect(confirm).toContainText('No remembered folder.');
+  await expect(confirm).toContainText('1 repository will join Website.');
   await confirm.getByRole('button', { name: 'Move and delete' }).click();
   await expect(confirm).toBeHidden();
   const sent = sets(daemon.received);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type ReactNode } from 'react';
 import { withoutProject, type DaemonClient, type Fleet, type MachineState } from '@ledge/fleet';
 import { normalizePath, PROJECT_COLORS, type Projects, type Repo, type RepoInfo, type Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
@@ -17,11 +17,12 @@ import { useProjectSave } from './useProjectSave';
 const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1) || path;
 const repoKey = (machine: string, path: string) => `${machine}\n${normalizePath(path)}`;
 type Known = { exists: boolean; branch: string | null };
-/** `part` in bold within `text` (a name inside a translated sentence). */
-const emphasis = (text: string, part: string): ReactNode => {
-  const i = text.indexOf(part);
-  return i < 0 ? text : <>{text.slice(0, i)}<strong>{part}</strong>{text.slice(i + part.length)}</>;
-};
+const SLOT = '\u0000';
+/** A translated sentence with `name` in bold where its slot stands: the sentence is written around a mark, never searched for the name
+ *  (which may also be one of its words). */
+const emphasis = (sentence: (slot: string) => string, name: string): ReactNode => (
+  <>{sentence(SLOT).split(SLOT).map((part, i) => <Fragment key={i}>{i > 0 && <strong>{name}</strong>}{part}</Fragment>)}</>
+);
 
 /** One machine's saved repositories, inspected (useRepoInfo, lot 7): the answer goes up to the editor. */
 function Inspect({ client, machine, paths, onInfos }: { client: DaemonClient; machine: string; paths: readonly string[]; onInfos(machine: string, infos: ReadonlyMap<string, RepoInfo>): void }): null {
@@ -164,15 +165,20 @@ export function ProjectEditor(p: {
     const rules = doomed?.rules ?? 0;
     const to = doomed?.target ?? null;
     const name = doomed?.project.name ?? d.name;
+    const repos = doomed?.project.repos.length ?? 0;
     return (
       <form className="pe" onSubmit={e => { e.preventDefault(); remove(); }} onKeyDown={onKeyDown}>
         <div className="pe-body">
-          <div className="pe-delete" role="alert">
-            <p>{emphasis(dl.lead(name), name)}</p>
-            <ul>
-              <li>{n === 0 ? dl.noAgents : <>{dl.agents(n, names)} {to ? emphasis(dl.toProject(n, to.name), to.name) : dl.toNone(n)}</>}</li>
-              <li>{dl.rules(rules)} {to ? dl.rulesMove(rules) : dl.rulesForget(rules)}</li>
-            </ul>
+          <div className="pe-delete-box">
+            {/* The alert is the explanation only, not the choice below it. */}
+            <div className="pe-delete" role="alert">
+              <p>{emphasis(x => dl.lead(x), name)}</p>
+              <ul>
+                <li>{n === 0 ? dl.noAgents : <>{dl.agents(n, names)} {to ? emphasis(x => dl.toProject(n, x), to.name) : dl.toNone(n)}</>}</li>
+                <li>{rules === 0 ? dl.noRules : `${dl.rules(rules)} ${to ? dl.rulesMove(rules) : dl.rulesForget(rules)}`}</li>
+                {repos > 0 && <li>{to ? emphasis(x => dl.reposMove(repos, x), to.name) : dl.reposGone(repos)}</li>}
+              </ul>
+            </div>
             <fieldset className="pe-move">
               <legend className="composer-label">{dl.their}</legend>
               <label className={`chip ${!to ? 'selected' : ''}`}>
