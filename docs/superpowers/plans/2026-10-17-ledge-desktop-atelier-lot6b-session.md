@@ -818,3 +818,28 @@ git commit -m "test(desktop): reviewing a session in the browser: J / K in Chang
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
+
+### Task 7: Les reports du lot 6a
+
+Ajoutée à l'exécution : les mineurs que la revue finale du lot 6a a renvoyés ici (registre du lot 6a, lignes « Final: deferred to 6b »), et le découpage du paquet.
+
+**Files:**
+- Modify : `packages/ledge/src/daemon/{server,history}.ts` et leurs tests, `packages/ledge/src/adapters/{claude,codex}.ts` si besoin, `apps/desktop/src/fleet/decisions.ts`, `apps/desktop/src/session/{Thread,AgentsRail,SessionPage,Reply}.tsx`, `apps/desktop/src/App.tsx` (ou le point de montage de la page), `apps/desktop/src/i18n/messages.ts`, `apps/desktop/test/*`
+
+Chaque point a son test, écrit d'abord :
+
+1. **Erreur « invalid message » sans `id`** : le daemon renvoie aussi `id` quand le message brut en porte un sous forme de chaîne de 200 caractères au plus ; une décision ou une réponse refusée par le schéma est alors refusée tout de suite côté Desktop, au lieu de finir « non confirmée » après 8 s.
+2. **Refus avec note dont la note ne part pas** (Claude, Codex : Échap est envoyé avant d'attendre `atRest`) : si l'attente expire, le refus a déjà eu lieu ; le daemon le dit par un code distinct et Desktop affiche « Refusé, mais la note n’a pas pu être tapée. » / « Refused, but the note could not be typed. », la note revenant dans le champ (au lieu de « décision non envoyée »).
+3. **`History.decide`** : supprimée (morte depuis le lot 6a), ses tests avec.
+4. **Une réponse à une question** (`Decided` sans décision) ne marque plus `unknown` la dernière permission non décidée : elle ne touche que la question.
+5. **Tests manquants** : une erreur sans `request` (daemon ancien) laisse la demande en vol jusqu'à son délai ; `replyUnconfirmed` ; sur la page d'un sous-agent : le terminal montre l'aperçu du parent, le badge de sous-agent, le titre du parent dans le fil d'Ariane.
+6. **« Aller au plus récent »** paraît aussi quand le contenu grandit sous la vue sans défilement (nouvel élément, carte épinglée qui apparaît, volet qui rétrécit la colonne) : `ResizeObserver` sur la colonne du fil.
+7. **Le repli 'subagent' non traduit** (`helperOf` et ses appelants) : une clé de `messages.ts` (`Sous-agent` / `Subagent`).
+8. **Les notes de chargement et de fil vide** sont dans la colonne de 760 px.
+9. **Le rail** : le `dotOf` local devient `railDotOf` ; un agent en erreur a le point rouge, comme dans la barre latérale ; l'`aria-label` posé sur un `<i>` nu passe sur un élément qui a un rôle (ou disparaît si le texte voisin suffit) ; une tâche vide dans le fil d'Ariane ne laisse pas de « · » seul.
+10. **Le paquet** : la page de session (ou le lecteur Markdown) est chargée par `React.lazy` derrière un `Suspense` sobre ; `pnpm --filter desktop build` ne signale plus de morceau de plus de 500 kB.
+
+- [ ] **Step 1 : Écrire les tests des points 1 à 9 ; vérifier qu'ils échouent** (`pnpm --filter @paradow/ledge exec vitest run <fichiers>`, `pnpm --filter desktop exec vitest run <fichiers>`)
+- [ ] **Step 2 : Implémenter les points 1 à 10**
+- [ ] **Step 3 : Vérifier** : `pnpm --filter @ledge/protocol test && pnpm --filter @paradow/ledge test && pnpm --filter @ledge/fleet test && pnpm --filter desktop test && pnpm -r typecheck && pnpm --filter desktop build && pnpm --filter desktop e2e` — tout passe, aucun avertissement de taille de morceau.
+- [ ] **Step 4 : Commits** (un par point ou par groupe cohérent, `fix(...)` / `refactor(...)` / `perf(desktop): …`, terminés par `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`)
