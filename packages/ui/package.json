@@ -16,6 +16,9 @@
     "./bots/*": "./src/bots/*",
     "./sounds/*": "./src/sounds/*.ts",
     "./ui/*": "./src/ui/*.tsx",
+    "./documents/markdown": "./src/documents/markdown.tsx",
+    "./documents/references": "./src/documents/references.ts",
+    "./documents/markdown.css": "./src/documents/markdown.css",
     "./i18n/lang": "./src/i18n/lang.tsx",
     "./i18n/copy": "./src/i18n/copy.tsx",
     "./styles/*": "./src/styles/*",
@@ -23,7 +26,7 @@
   },
   "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit" },
   "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" },
-  "dependencies": { "@ledge/fleet": "workspace:*", "@ledge/protocol": "workspace:*" },
+  "dependencies": { "@ledge/fleet": "workspace:*", "@ledge/protocol": "workspace:*", "react-markdown": "10.1.0", "remark-gfm": "4.0.1" },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.0", "@testing-library/react": "^16.1.0", "@types/node": "^22.7.0",
     "@types/react": "^19.0.0", "@types/react-dom": "^19.0.0", "@vitejs/plugin-react": "^4.3.0",

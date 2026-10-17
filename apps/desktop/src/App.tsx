@@ -9,7 +9,8 @@ import { useDecisions } from './fleet/decisions';
 import { useWaits } from './fleet/waits';
 import { useAlerts } from './notify/useAlerts';
 import { getDnd, setDnd, useDnd } from './notify/prefs';
-import { onTrayAction, setTrayLabels } from './tauri/bridge';
+import { MarkdownLinks } from '@ledge/ui/documents/markdown';
+import { onTrayAction, openUrl, setTrayLabels } from './tauri/bridge';
 import { useAppearance } from './shell/theme';
 import { initialNav, navReducer, reconcile, type NavAction, type NavState } from './nav/state';
 import { loadOverview, saveOverview } from './nav/overview';
@@ -122,5 +123,5 @@ export function App({ client }: { client?: DaemonClient } = {}) {
   const [lang] = useState<Lang>(loadLang);
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
   useAppearance();
-  return <LangProvider lang={lang}><Shell client={client} /></LangProvider>;
+  return <LangProvider lang={lang}><MarkdownLinks.Provider value={openUrl}><Shell client={client} /></MarkdownLinks.Provider></LangProvider>;
 }
