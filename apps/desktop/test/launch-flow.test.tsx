@@ -64,6 +64,21 @@ describe('launching', () => {
     expect(screen.getByText(/ is starting at the Ledge table\.$/)).toBeVisible();
   });
 
+  it('another command refused by the machine during a launch does not end it: the machine dropping later is the launch\'s refusal', async () => {
+    const { d, user, form } = await openLaunch();
+    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
+    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    d.holdLaunch();
+    await user.click(launchButton(form));
+    await waitFor(() => expect(launches(d)).toHaveLength(1));
+    d.reply({ type: 'error', id: 'otto', message: 'not waiting', request: 'session.decide' });   // another command's refusal
+    expect(launchButton(form)).toHaveTextContent(/^Launching…/);
+    await d.close();
+    // The fleet's « Local is offline » ends the launch at once (the form then names the machine missing, the refusal behind it), not 20 s of « Launching… ».
+    await waitFor(() => expect(launchButton(form)).toHaveTextContent(/^Launch(?!ing)/));
+    expect(form.getByRole('alert')).toHaveTextContent('No machine online');
+  });
+
   it('no answer within 20 s says so; a late answer after closing does not reopen or toast', async () => {
     const { d, form } = await openLaunch();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
