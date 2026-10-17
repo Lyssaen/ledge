@@ -48,10 +48,17 @@ describe('History', () => {
     h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist' }, 1));
     h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist' }, 1)); // Notification + hook: one row
     expect(h.items('s').filter(i => i.kind === 'permission')).toHaveLength(1);
-    h.record('s', ev('Decided', { source: 'daemon' }, 2));
-    expect(h.items('s')[1]).toMatchObject({ kind: 'permission', decision: 'unknown' });
-    h.decide('s', 'deny');
-    expect(h.items('s')[1]).toMatchObject({ decision: 'deny' });
+    h.record('s', ev('Decided', { source: 'daemon', decision: 'deny' }, 2));
+    expect(h.items('s')[1]).toMatchObject({ kind: 'permission', decision: 'deny' });
+  });
+
+  it('a reply to a question (a Decided without decision) leaves the permissions alone', () => {
+    const h = new History();
+    h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist' }));
+    h.record('s', ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Créer bye.txt ?', toolUseId: 'toolu_q', options: ['Oui', 'Non'] }, 1));
+    expect(h.record('s', ev('Decided', { source: 'daemon' }, 2))).toBeUndefined();
+    expect(h.items('s')[0]).toMatchObject({ kind: 'permission' });
+    expect(h.items('s')[0]).not.toHaveProperty('decision');
   });
 
   it('records no permission for a question tool, whose row already shows it', () => {
@@ -198,7 +205,7 @@ describe('History', () => {
     h.record('k', ev('UserPromptSubmit', { text: 'go' }));
     h.record('k', ev('PreToolUse', { tool: 'Bash', text: 'Bash · ls', toolUseId: 'toolu_1' }, 1));
     for (let i = 0; i < 50; i++) h.record('k', ev('PermissionRequest', { tool: 'Bash', text: `p${i}` }, 2 + i));
-    for (let i = 0; i < 50; i++) h.record('k', ev('Decided', { source: 'daemon' }, 60 + i));
+    for (let i = 0; i < 50; i++) h.record('k', ev('Decided', { source: 'daemon', decision: 'accept' }, 60 + i));
     h.record('k', ev('PostToolUse', { tool: 'Bash', toolUseId: 'toolu_1', output: 'a b' }, 200));
     await h.flush();
     const file = join(dir, 'history', 'k.jsonl');

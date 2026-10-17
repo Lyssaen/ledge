@@ -332,14 +332,14 @@ describe('server', () => {
     tmux = fakeTmux({ 'ledge-a': [pane, pane, 'Running…'] }); await srv.close();
     const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
     history.record('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'ls' });
-    history.record('a', { name: 'Decided', at: T0, source: 'pane' }); // answered in the terminal: unknown
+    // `ls` was answered in the terminal: never decided here.
     store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'mkdir zz-ledge-probe', tool: 'Bash', source: 'hook' } }));
     store.apply('a', { name: 'PermissionRequest', at: '2026-10-09T18:00:05.000Z', source: 'hook', tool: 'Bash', text: 'mkdir zz-ledge-probe' });
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.decide', id: 'a', decision: 'always' });
     expect((await c.next('session.thread.item', 3000)).item).toMatchObject({ text: 'mkdir zz-ledge-probe', decision: 'always' });
     await expect(c.next('session.thread.item', 300)).rejects.toThrow(/timeout/);
-    expect(history.items('a').map(i => i.kind === 'permission' && [i.text, i.decision])).toEqual([['ls', 'unknown'], ['mkdir zz-ledge-probe', 'always']]);
+    expect(history.items('a').map(i => i.kind === 'permission' && [i.text, i.decision])).toEqual([['ls', undefined], ['mkdir zz-ledge-probe', 'always']]);
     c.close();
   });
   it('an answer the harness does not offer is refused before any key, and the refusal names its request', async () => {
