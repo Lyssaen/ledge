@@ -150,3 +150,17 @@ it('a plan whose steps are headings: counted, no step shown twice as the intro; 
   expect(document.querySelector('[data-plan-card="p2"] .plan-card-foot')).not.toHaveTextContent(/steps?/);
   expect(screen.getByRole('region', { name: 'Plan to approve' })).not.toHaveTextContent(/steps?:/);
 });
+it('the pinned request reads its own plan: a stale waiting card with another plan is not it', async () => {
+  const v2 = '# Plan : autre chose\n\nUn autre plan.\n\n1. Faire\n2. Vérifier';
+  const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : autre chose', body: v2, source: 'hook' } });
+  const { d, user } = await boot({ sessions: [...listSessions(), pia], list: true });
+  d.thread('pia', [exit('p0', 'running')]);
+  await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await screen.findByText('Proposed plan');
+  await user.click(within(screen.getByRole('region', { name: 'Plan to approve' })).getByRole('button', { name: 'Read the plan' }));
+  expect(side().getByText('Plan : autre chose', { selector: 'strong' })).toBeVisible();
+  expect(status()).toBe(HINT);
+  expect(card('p0').getByRole('button', { name: /Read the plan/ })).toBeVisible();
+  await user.click(card('p0').getByRole('button', { name: /Read the plan/ }));
+  expect(status()).not.toContain('Answer below the thread');
+});

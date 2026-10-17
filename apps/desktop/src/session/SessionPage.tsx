@@ -160,13 +160,20 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const shown = offline ? undefined : session.pending;
   const request = shown?.kind === 'plan' && (helper ? shown.helperId === helper.id : true) ? shown : undefined;
   const canAnswer = request !== undefined && session.source !== 'hook_only' && !helper;
-  // The waiting card: only the thread's last plan can still be proposed (exchanges revises those it supersedes).
-  const requestKey = useMemo(() => {
-    let key = 'pending';
-    for (const x of xs) for (const s of x.segments) if (s.kind === 'plan' && s.plan.status === 'proposed') key = s.plan.key;
-    return key;
-  }, [xs]);
   const requestPlan = useMemo(() => (request ? pendingPlan(request) : null), [request]);
+  // The waiting card: a proposed card of the thread the request belongs to (main, or the subagent that asks) holding the
+  // request's plan — the same text, else the same title; none: the request's own tab ('pending').
+  const requestFrom = request?.helperId;
+  const requestKey = useMemo(() => {
+    if (!requestPlan || requestFrom !== helper?.id) return 'pending';
+    let byText: string | undefined, byTitle: string | undefined;
+    for (const x of xs) for (const s of x.segments) {
+      if (s.kind !== 'plan' || s.plan.status !== 'proposed') continue;
+      if (s.plan.markdown === requestPlan.markdown) byText = s.plan.key;
+      else if (s.plan.title === requestPlan.title) byTitle = s.plan.key;
+    }
+    return byText ?? byTitle ?? 'pending';
+  }, [xs, requestPlan, requestFrom, helper?.id]);
   // Once answered, the request's plan stays readable in its tab, its fate untold.
   const [lastRequest, setLastRequest] = useState<{ plan: PlanDoc; by: string } | null>(null);
   if (requestPlan && (lastRequest?.plan.markdown !== requestPlan.markdown || lastRequest.by !== asker)) setLastRequest({ plan: requestPlan, by: asker });
