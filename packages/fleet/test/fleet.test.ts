@@ -136,6 +136,37 @@ describe('multi-machine connections', () => {
     server.set('unreachable');
     expect(got.filter(m => m.type === 'repos.info')).toEqual([{ type: 'repos.info', requestId: 'r1', repos: [{ path: '/w/a', exists: false, branch: null }] }]);
   });
+  it('an older daemon refusing repos.inspect (« invalid message ») answers « not found » for each path, as a drop does', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'repos.inspect', requestId: 'r1', paths: ['/w/a', '/w/b'], machineId: 'server' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'repos.inspect' });
+    expect(got.filter(m => m.type === 'repos.info')).toEqual([{ type: 'repos.info', requestId: 'r1', repos: [{ path: '/w/a', exists: false, branch: null }, { path: '/w/b', exists: false, branch: null }] }]);
+    server.emit({ type: 'repos.info', requestId: 'r1', repos: [{ path: '/w/a', exists: true, branch: 'main' }] }); // the inspection is no longer pending
+    server.set('unreachable');
+    expect(got.filter(m => m.type === 'repos.info')).toHaveLength(1);
+  });
+  it('a refused inspection of one machine leaves another machine\'s pending', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'repos.inspect', requestId: 'r1', paths: ['/w/a'], machineId: 'server' });
+    client.send({ type: 'repos.inspect', requestId: 'r2', paths: ['/w/b'] });
+    server.emit({ type: 'error', message: 'invalid message', request: 'repos.inspect' });
+    local.emit({ type: 'repos.info', requestId: 'r2', repos: [{ path: '/w/b', exists: true, branch: 'dev' }] });
+    expect(got.filter(m => m.type === 'repos.info').map(m => m.type === 'repos.info' && m.requestId)).toEqual(['r1', 'r2']);
+  });
+  it('an unrelated error from a machine keeps its launch in flight: a later drop still refuses the launch', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'session.launch', tool: 'claude', cwd: '/w/a', machineId: 'server' });
+    server.emit({ type: 'error', id: 'same', message: 'not waiting', request: 'session.decide' });
+    server.set('unreachable');
+    expect(got.filter(m => m.type === 'error').at(-1)).toEqual({ type: 'error', message: 'dev-server is offline', request: 'session.launch' });
+  });
+  it('the launch\'s own refusal ends it: a later drop says nothing more of it', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'session.launch', tool: 'claude', cwd: '/w/a', machineId: 'server' });
+    server.emit({ type: 'error', message: 'no such folder', request: 'session.launch' });
+    server.set('unreachable');
+    expect(got.filter(m => m.type === 'error')).toEqual([{ type: 'error', message: 'dev-server: no such folder', request: 'session.launch' }]);
+  });
   it('validates loopback connections, aliases and duplicate destinations', () => {
     // The url is never read: a non-loopback local url is replaced by the pinned one, a remote url is dropped.
     expect(parseMachines([{ ...LOCAL_MACHINE, url: 'ws://example.org:47831' }])[0]!.url).toBe(LOCAL_MACHINE.url);
