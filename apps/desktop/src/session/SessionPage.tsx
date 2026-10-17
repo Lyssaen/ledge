@@ -1,14 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { Helper, Session, ThreadItem } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
-import { SPINNER, SPINNER_STILL } from '@ledge/ui/thread/tools';
 import { useI18n } from '../i18n/lang';
 import type { Decisions } from '../fleet/decisions';
 import { whenOf, type Wait } from '../list/time';
 import { repoOf } from '../list/model';
 import { machineOf } from '../nav/agents';
 import type { NavAction, NavState } from '../nav/state';
-import { useMotionPreferences } from '../motionPreferences';
 import { SHELL_ICONS } from '../shell/icons';
 import { memoKey, type SessionMemory } from './memory';
 import { Thread } from './Thread';
@@ -36,7 +34,6 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const { session, helper, items, memory } = p;
   const { t, lang } = useI18n();
   const th = t.session.thread;
-  const { reduced } = useMotionPreferences();
   const offline = session.offline === true;
   const key = memoKey(session.id, helper?.id);
   // What the last visit left, read once.
@@ -47,16 +44,19 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const unread = useRef<string | null | undefined>(undefined);
   if (unread.current === undefined && items !== undefined) unread.current = unreadFrom(ids, memo.seen);
 
-  // The live time and the spinner move only while an action runs (online); the spinner holds still with reduced motion.
+  // The clock: every second while an action runs (online), every 30 s otherwise (« il y a » keeps up). The spinner turns on
+  // its own (Spinner), so neither tick renders more than the times.
   const running = !offline && xs.some(x => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running')));
   const [now, setNow] = useState(Date.now);
-  const [frame, setFrame] = useState(0);
   useEffect(() => {
     const clock = setInterval(() => setNow(Date.now()), running ? 1000 : 30_000);
-    const spin = running && !reduced ? setInterval(() => setFrame(f => (f + 1) % SPINNER.length), 80) : null;
-    return () => { clearInterval(clock); if (spin) clearInterval(spin); };
-  }, [running, reduced]);
-  const spin = offline || reduced ? SPINNER_STILL : SPINNER[frame]!;
+    return () => clearInterval(clock);
+  }, [running]);
+  // A frozen thread's times stand still: offline, the actions count up to the last instant shown before the machine fell.
+  const [frozenAt, setFrozenAt] = useState<number | null>(offline ? now : null);
+  if (offline && frozenAt === null) setFrozenAt(now);
+  else if (!offline && frozenAt !== null) setFrozenAt(null);
+  const times = offline ? frozenAt ?? now : now;
 
   /* Scrolling: open on the marker, else where the reader left, else at the end; then follow the end only while the reader is there. */
   const scroller = useRef<HTMLDivElement>(null);
@@ -124,7 +124,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
               )}
               {items === undefined ? <p className="muted">{offline ? th.notLoaded : th.loading}</p>
                 : xs.length === 0 ? <p className="muted">{th.empty}</p>
-                : <Thread session={session} helper={helper} items={items} xs={xs} now={now} spin={spin} unread={unread.current ?? null} since={since} dispatch={p.dispatch} />}
+                : <Thread session={session} helper={helper} items={items} xs={xs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch} />}
             </div>
             {!atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
           </div>

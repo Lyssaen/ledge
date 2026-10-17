@@ -1,4 +1,4 @@
-import { Fragment, type JSX, type ReactNode } from 'react';
+import { Fragment, memo, type JSX, type ReactNode } from 'react';
 import type { Helper, HelperItem, Session, ThreadItem } from '@ledge/protocol';
 import { ThreadMarkdown } from '@ledge/ui/documents/markdown';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -15,7 +15,8 @@ const CHIP_MARK = { accept: '✓', always: '✓', deny: '✕', unknown: '·' } a
 
 export interface ThreadProps {
   session: Session; helper: Helper | null; items: readonly ThreadItem[]; xs: readonly Exchange[];
-  now: number; spin: string;
+  /** The clock; offline, the instant the thread froze (its times stand still). */
+  now: number;
   /** The first item new since the last visit, frozen for the life of the page; null: nothing new. */
   unread: string | null;
   /** « Session terminée · il y a 2 h », « Plus aucune nouvelle… · il y a 2 h » : `whenOf(…).text`. */
@@ -23,9 +24,14 @@ export interface ThreadProps {
   dispatch(a: NavAction): void;
 }
 
+/** What the agent said: parsed again only when its text changes, never on the page's clock. */
+const Say = memo(function Say({ kind, text }: { kind: 'message' | 'reply'; text: string }): JSX.Element {
+  return <div className={`agent-message ${kind}`}><div className="msg-body"><ThreadMarkdown text={text} /></div></div>;
+});
+
 /** The flat thread (session.tsx renderTurn / renderItem): one section per exchange, its time, the prompt as a bubble, the
  *  agent named once, then what it said, decided and did; the frozen or ended note after the last one. */
-export function Thread({ session, helper, items, xs, now, spin, unread, since, dispatch }: ThreadProps): JSX.Element {
+export function Thread({ session, helper, items, xs, now, unread, since, dispatch }: ThreadProps): JSX.Element {
   const { t, lang } = useI18n();
   const th = t.session.thread;
   const offline = session.offline === true;
@@ -52,11 +58,11 @@ export function Thread({ session, helper, items, xs, now, spin, unread, since, d
   const segment = (s: Segment): ReactNode => {
     if (s.kind === 'tools') {
       const first = s.tools.find(x => x.id === unread);
-      return <ActionGroup key={s.key} tools={s.tools} now={now} spin={spin} live={!offline} marker={first ? marker(first.id) : null} />;
+      return <ActionGroup key={s.key} tools={s.tools} now={now} live={!offline} marker={first ? marker(first.id) : null} />;
     }
     const { item } = s;
     let node: ReactNode;
-    if (s.kind === 'say') node = <div className={`agent-message ${s.item.kind}`}><div className="msg-body"><ThreadMarkdown text={s.item.text} /></div></div>;
+    if (s.kind === 'say') node = <Say kind={s.item.kind} text={s.item.text} />;
     else if (s.kind === 'decision') {
       const d = s.item.decision!;
       node = <div className={`decision-chip ${d}`}><span className="chip-mark">{CHIP_MARK[d]}</span><span>{th.decided[d]}</span><code>{s.item.text}</code></div>;

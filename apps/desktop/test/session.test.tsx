@@ -1,14 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ThreadItem } from '@ledge/protocol';
 import { SPINNER, SPINNER_STILL } from '@ledge/ui/thread/tools';
 import { boot, closeDaemons, declarations, listSessions, ottoThread } from './helpers';
 import { createSessionMemory, memoKey } from '../src/session/memory';
 import { saveReduced } from '../src/motionPreferences';
 
-afterEach(async () => { cleanup(); localStorage.clear(); saveReduced(false); vi.unstubAllEnvs(); await closeDaemons(); });
+// Each message's Markdown counts its renders (the real reader still renders): the page's ticks must spare it.
+const renders = vi.hoisted(() => new Map<string, number>());
+vi.mock('@ledge/ui/documents/markdown', async importOriginal => {
+  const real = await importOriginal<typeof import('@ledge/ui/documents/markdown')>();
+  return { ...real, ThreadMarkdown: (p: Parameters<typeof real.ThreadMarkdown>[0]) => { renders.set(p.text, (renders.get(p.text) ?? 0) + 1); return real.ThreadMarkdown(p); } };
+});
+
+afterEach(async () => { cleanup(); localStorage.clear(); saveReduced(false); vi.unstubAllEnvs(); vi.useRealTimers(); renders.clear(); await closeDaemons(); });
 
 const thread = () => within(screen.getByRole('region', { name: 'Session thread' }));
 async function openOtto(o: { offline?: boolean; withThread?: boolean } = {}) {
@@ -189,6 +196,38 @@ describe('the session page', () => {
     await waitFor(() => expect(mark()).not.toBe(first));
     saveReduced(true);
     await waitFor(() => expect(mark()).toBe(SPINNER_STILL));
+  });
+
+  it('the spinner and the clock tick alone: a message is not rendered again', async () => {
+    vi.stubEnv('VITE_LEDGE_MOTION', '1');
+    await openOtto();
+    const live = await thread().findByRole('status', { name: 'Action running' });
+    await thread().findByText('Deux tests échouent.');
+    const before = renders.get('Deux tests échouent.');
+    const mark = () => thread().getByRole('status', { name: 'Action running' }).querySelector('.action-mark')!.textContent!;
+    const time = live.querySelector('.action-time')!.textContent;
+    const frames = new Set([mark()]);
+    await waitFor(() => { frames.add(mark()); expect(frames.size).toBeGreaterThan(2); });      // the spinner turns…
+    await waitFor(() => expect(thread().getByRole('status', { name: 'Action running' }).querySelector('.action-time')).not.toHaveTextContent(time!), { timeout: 2500 }); // …and the clock ticked
+    expect(renders.get('Deux tests échouent.')).toBe(before);
+  });
+
+  it('a frozen thread\'s times stand still while the clock runs on', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval', 'Date'] });
+    const { d } = await openOtto();
+    await thread().findByRole('status', { name: 'Action running' });
+    await d.close();
+    const banner = await screen.findByText('Connection lost with Local');
+    const group = () => document.querySelector('.turn.current .action-group')!;
+    await waitFor(() => expect(group().querySelector('.action-summary')).not.toBeNull());
+    fireEvent.click(group().querySelector('.action-summary')!);
+    const summary = group().querySelector('.action-summary')!.textContent;
+    const row = group().querySelector('.action-row .action-time')!.textContent;
+    const since = banner.parentElement!.textContent;
+    await act(async () => { vi.advanceTimersByTime(60_000); });
+    expect(banner.parentElement!.textContent).not.toBe(since);                                    // the clock ran: « for 13 min »
+    expect(group().querySelector('.action-summary')!.textContent).toBe(summary);
+    expect(group().querySelector('.action-row .action-time')!.textContent).toBe(row);
   });
 
   it('the styles port the mockup: a reading column of 760 px, 14 / 23 px text, the side pane never leaves the thread under 440 px', () => {
