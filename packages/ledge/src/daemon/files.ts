@@ -15,7 +15,9 @@ function fromPatch(patch: string): FileChange[] {
   for (const line of patch.split('\n')) {
     const m = /^\*\*\* (Add|Update|Delete) File: (.+)$/.exec(line);
     if (m) { flush(); cur = { file: { path: m[2]!.trim(), change: m[1] === 'Add' ? 'add' : m[1] === 'Update' ? 'edit' : 'delete' }, lines: [] }; continue; }
-    if (/^\*\*\* (Begin|End) Patch/.test(line) || /^\*\*\* Move to:/.test(line)) continue;
+    const mv = /^\*\*\* Move to: (.+)$/.exec(line);
+    if (mv) { if (cur && cur.file.change === 'edit') { cur.file.from = cur.file.path; cur.file.path = mv[1]!.trim(); } continue; }
+    if (/^\*\*\* (Begin|End) Patch/.test(line)) continue;
     if (cur && cur.file.change !== 'delete') cur.lines.push(line);
   }
   flush();

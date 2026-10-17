@@ -5,7 +5,8 @@ export const ToolStatusSchema = z.enum(['running', 'success', 'failed', 'unknown
 export type ToolStatus = z.infer<typeof ToolStatusSchema>;
 
 /** A file an action touched, read from the action's input; confirmed only once the action succeeded. */
-export const FileChangeSchema = z.object({ path: z.string().min(1), change: z.enum(['add', 'edit', 'delete', 'write']), diff: z.string().optional() });
+/** `from`: the path before, for a renamed file (Codex `*** Move to:`). */
+export const FileChangeSchema = z.object({ path: z.string().min(1), from: z.string().min(1).optional(), change: z.enum(['add', 'edit', 'delete', 'write']), diff: z.string().optional() });
 export type FileChange = z.infer<typeof FileChangeSchema>;
 
 /** `turn` counts the prompts so far (0 before the first); `helperId` marks an item of a subagent's own thread. */

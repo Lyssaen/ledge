@@ -30,4 +30,8 @@ describe('filesOf', () => {
     expect(filesOf('Write', undefined)).toEqual([]);
     expect(filesOf(undefined, { file_path: '/x' })).toEqual([]);
   });
+  it('a Codex patch that moves a file names both paths', () => {
+    const patch = '*** Begin Patch\n*** Update File: src/a.ts\n*** Move to: src/b.ts\n@@\n-x\n+y\n*** End Patch';
+    expect(filesOf('apply_patch', { input: patch })).toEqual([{ path: 'src/b.ts', from: 'src/a.ts', change: 'edit', diff: '@@\n-x\n+y' }]);
+  });
 });
