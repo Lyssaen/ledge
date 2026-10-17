@@ -36,6 +36,24 @@ it('a document link opens beside the thread; the thread stays usable; Escape clo
   await user.keyboard('{Escape}');
   expect(document.querySelector('.session-page')).toBeNull();
 });
+it('a held Escape closes one layer, as one press does, and never leaves the page', async () => {
+  const { user } = await openOtto([...withDoc, { kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 2, tool: 'Write', label: '/w/ledge/docs/guide.md', status: 'success', files: [{ path: '/w/ledge/docs/guide.md', change: 'write', diff: '+ # Guide' }] }]);
+  await user.click(screen.getByRole('button', { name: /guide\.md.*Read/ }));
+  await user.click(screen.getByRole('button', { name: /^3 actions/ }));
+  await user.click(within(document.querySelector<HTMLElement>('[data-tool="t3"]')!).getByRole('button', { name: 'View the change' }));
+  (document.activeElement as HTMLElement).blur();
+  expect(side().getAllByRole('tab')).toHaveLength(2);
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  for (let i = 0; i < 4; i++) fireEvent.keyDown(document.body, { key: 'Escape', repeat: true });
+  expect(screen.getByRole('complementary', { name: 'Reading pane' })).toBeVisible();
+  expect(await side().findByText('Guide de Ledge')).toBeVisible();
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  for (let i = 0; i < 4; i++) fireEvent.keyDown(document.body, { key: 'Escape', repeat: true });
+  expect(screen.queryByRole('complementary', { name: 'Reading pane' })).toBeNull();
+  expect(document.querySelector('.session-page')).not.toBeNull();
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  expect(document.querySelector('.session-page')).toBeNull();
+});
 it('a document card under the message; several items become closable tabs; « View the change » opens a diff tab J / K walk', async () => {
   const { user } = await openOtto([...withDoc, { kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 2, tool: 'Write', label: '/w/ledge/docs/guide.md', status: 'success', files: [{ path: '/w/ledge/docs/guide.md', change: 'write', diff: '+ # Guide' }] }]);
   await user.click(screen.getByRole('button', { name: /guide\.md.*Read/ }));

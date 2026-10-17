@@ -321,10 +321,14 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   }, [memory, key]);
 
   // The page's keys: Escape closes the narrow file list first, then folds the work plan, then closes the pane's active tab
-  // (else navigation goes back); the reply area takes R, Y / N and 1…9; O shows or hides the terminal; J / K walk the
-  // changed files, or the pane's change on the thread (never while typing: useKeys; a held key moves one file).
+  // (else navigation goes back); a held Escape closes the one layer its first press did, no more, and never leaves the page
+  // (its repeats are taken and do nothing, as Y / N's are); the reply area takes R, Y / N and 1…9; O shows or hides the
+  // terminal; J / K walk the changed files, or the pane's change on the thread (never while typing: useKeys; a held key
+  // moves one file).
   const replyKeys = useRef<ScreenKeyHandler | null>(null);
   useScreenKeys(e => {
+    // Taken (true): a false would hand it to navigation, which goes back.
+    if (e.key === 'Escape' && e.repeat) return true;
     if (e.key === 'Escape' && view === 'changes' && listOpen) { setListOpen(false); return true; }
     if (e.key === 'Escape' && todoShown) { setTodoOpen(false); return true; }
     if (e.key === 'Escape' && paneShown) { closeTab(activeTab!); return true; }
