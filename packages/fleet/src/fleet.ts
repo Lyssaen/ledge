@@ -27,7 +27,11 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const messages = new Set<(m: ServerMessage) => void>(), statuses = new Set<(s: DaemonStatus) => void>(), listeners = new Set<() => void>();
   const turns = new Map<string, ChatTurn>(), bindings = new Map<string, Binding>();
   const documents = new Map<string, string>();
+  /** `repos.inspect` requestId -> the machine asked, so only its `repos.info` answers it. */
+  const inspections = new Map<string, string>();
   const operations = new Map<string, string>();
+  /** The paths of a pending inspection, to answer « not found » for each if its machine drops. */
+  const unfound = new Map<string, { path: string; exists: false; branch: null }[]>();
   let source: 'daemon' | 'local' = 'local';
   /** The local daemon's projects (build spec §5); the last ones stay while it is down. */
   let projects: Projects | null = null;
@@ -142,6 +146,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'session.launched') { operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'folder.listing') { if (machine === selected) emit(m); return; }
     if (m.type === 'document.content' || m.type === 'document.error') { if (documents.get(m.requestId) === machine) { documents.delete(m.requestId); emit(m); } return; }
+    if (m.type === 'repos.info') { if (inspections.get(m.requestId) === machine) { inspections.delete(m.requestId); unfound.delete(m.requestId); emit(m); } return; }
     if (m.type === 'chat.routed') {
       if (routing?.qid !== m.qid || routing.coordinator !== machine) return;
       const req = routing; routing = null;
@@ -183,6 +188,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (s !== 'open') {
         p.fresh = false;
         if (operations.delete(c.id)) emit({ type: 'error', message: `${c.label} is offline` });
+        for (const [requestId, owner] of inspections) if (owner === c.id) { inspections.delete(requestId); const repos = unfound.get(requestId) ?? []; unfound.delete(requestId); emit({ type: 'repos.info', requestId, repos }); }
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
         for (const [qid, b] of bindings) { const t = turns.get(qid); if (b.machine === c.id && t && !t.answeredAt && !t.error) fail(qid, `${c.label} is offline`); }
@@ -229,6 +235,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const origin = msg.sessionId ? splitId(msg.sessionId) : null;
         if (origin) { machine = origin.machine; outgoing = { ...msg, sessionId: origin.id }; }
         documents.set(msg.requestId, machine);
+      }
+      if (msg.type === 'session.launch' && msg.machineId) { machine = msg.machineId; const { machineId: _m, ...rest } = msg; outgoing = rest; }
+      if (msg.type === 'repos.inspect') {
+        machine = msg.machineId ?? 'local';
+        const { machineId: _m, ...rest } = msg; outgoing = rest;
+        const none = msg.paths.map(path => ({ path, exists: false as const, branch: null }));
+        if (!available(peers.get(machine))) { emit({ type: 'repos.info', requestId: msg.requestId, repos: none }); return; }
+        inspections.set(msg.requestId, machine); unfound.set(msg.requestId, none);
       }
       if (msg.type === 'update.daemon') machine = 'local';
       if (msg.type === 'snapshot.request') { publish(); history(); return; }

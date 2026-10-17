@@ -51,6 +51,16 @@ describe('daemon client + store', () => {
     client.close();
   });
 
+  it('answers repos.inspect from repoInfo, an unknown path existing on main', async () => {
+    mock.repoInfo.set('/w/gone', { path: '/w/gone', exists: false, branch: null });
+    const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never });
+    const got: unknown[] = []; client.onMessage(m => { if (m.type === 'repos.info') got.push(m); });
+    client.connect(); await sleep(80);
+    client.send({ type: 'repos.inspect', requestId: 'r', paths: ['/w/a', '/w/gone'] }); await sleep(50);
+    expect(got).toEqual([{ type: 'repos.info', requestId: 'r', repos: [{ path: '/w/a', exists: true, branch: 'main' }, { path: '/w/gone', exists: false, branch: null }] }]);
+    client.close();
+  });
+
   it('ignores a stale socket close after close() then connect()', async () => {
     const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never, minBackoffMs: 30, maxBackoffMs: 60 });
     const statuses: string[] = []; client.onStatus(s => statuses.push(s));
@@ -66,6 +76,7 @@ describe('daemon client + store', () => {
     const recents = [{ cwd: '/w/api-gateway', project: 'api-gateway', lastAt: '2026-10-10T09:00:00.000Z' }];
     mock.extras.recents = recents; mock.extras.launcher = ['/usr/bin/node', '/opt/ledge/cli.js'];
     const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never });
+    mock.options.autoLaunch = true;
     const detach = attachClient(client); client.connect(); await sleep(100);
     expect(daemonStore.getState().recents).toEqual(recents);
     expect(daemonStore.getState().launcher).toEqual(['/usr/bin/node', '/opt/ledge/cli.js']);
@@ -74,9 +85,9 @@ describe('daemon client + store', () => {
     mock.recents(more); await sleep(50);
     expect(daemonStore.getState().recents).toEqual(more);
     client.send({ type: 'session.launch', tool: 'claude', cwd: '/w/two' }); await sleep(50);
-    mock.launched(fakeSession('n1', { name: 'Juno', state: 'starting' })); await sleep(50);
-    expect(daemonStore.getState().lastLaunched).toEqual({ id: 'n1', seq: 1 });
-    expect(daemonStore.getState().byId.get('n1')?.state).toBe('starting');
+    // The mock answers a launch itself: a starting session, then session.launched.
+    expect(daemonStore.getState().lastLaunched).toEqual({ id: 'launch-1', seq: 1 });
+    expect(daemonStore.getState().byId.get('launch-1')).toMatchObject({ state: 'starting', cwd: '/w/two', source: 'launcher' });
     mock.launched(fakeSession('n2', { name: 'Nova', state: 'starting' })); await sleep(50);
     expect(daemonStore.getState().lastLaunched).toEqual({ id: 'n2', seq: 2 });
     // An older daemon's snapshot: no recents, no launcher.

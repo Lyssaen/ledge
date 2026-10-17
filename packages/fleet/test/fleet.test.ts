@@ -90,6 +90,46 @@ describe('multi-machine connections', () => {
     client.send({ type: 'document.read', requestId: 'unknown', path: '/w/a.md' });
     expect(local.sent).toEqual([]); expect(server.sent).toHaveLength(1);
   });
+  it('sends a launch to the machine it names, without machineId, and qualifies session.launched', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'session.launch', tool: 'claude', cwd: '/w/a', machineId: 'server', dirs: ['/w/b'] });
+    expect(server.sent).toEqual([{ type: 'session.launch', tool: 'claude', cwd: '/w/a', dirs: ['/w/b'] }]);
+    expect(local.sent).toEqual([]);
+    server.emit({ type: 'session.launched', id: 'new1' });
+    expect(got.filter(m => m.type === 'session.launched')).toEqual([{ type: 'session.launched', id: 'server:new1' }]);
+  });
+  it('sends a launch without machineId to the selected machine', () => {
+    const { client, local, server } = setup();
+    client.send({ type: 'session.launch', tool: 'claude', cwd: '/w/a' });
+    expect(local.sent).toHaveLength(1); expect(server.sent).toEqual([]);
+  });
+  it('routes repos.inspect to its machine and relays repos.info with the same requestId', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'repos.inspect', requestId: 'r1', paths: ['/w/a'], machineId: 'server' });
+    expect(server.sent).toEqual([{ type: 'repos.inspect', requestId: 'r1', paths: ['/w/a'] }]);
+    server.emit({ type: 'repos.info', requestId: 'r1', repos: [{ path: '/w/a', exists: true, branch: 'main' }] });
+    expect(got.filter(m => m.type === 'repos.info')).toEqual([{ type: 'repos.info', requestId: 'r1', repos: [{ path: '/w/a', exists: true, branch: 'main' }] }]);
+    client.send({ type: 'repos.inspect', requestId: 'r2', paths: ['/w/b'] });
+    expect(local.sent).toEqual([{ type: 'repos.inspect', requestId: 'r2', paths: ['/w/b'] }]);
+    local.emit({ type: 'repos.info', requestId: 'unknown', repos: [] });
+    server.emit({ type: 'repos.info', requestId: 'r2', repos: [] }); // not the machine asked
+    expect(got.filter(m => m.type === 'repos.info')).toHaveLength(1);
+  });
+  it('answers for an offline machine: an error for a launch, nothing found for an inspection', () => {
+    const { client, server, got } = setup();
+    server.set('unreachable');
+    client.send({ type: 'session.launch', tool: 'claude', cwd: '/w/a', machineId: 'server' });
+    client.send({ type: 'repos.inspect', requestId: 'r1', paths: ['/w/a', '/w/b'], machineId: 'server' });
+    expect(got.filter(m => m.type === 'error')).toEqual([{ type: 'error', message: 'dev-server is offline', request: 'session.launch' }]);
+    expect(got.filter(m => m.type === 'repos.info')).toEqual([{ type: 'repos.info', requestId: 'r1', repos: [{ path: '/w/a', exists: false, branch: null }, { path: '/w/b', exists: false, branch: null }] }]);
+    expect(server.sent).toEqual([]);
+  });
+  it('answers an inspection pending on a machine that drops', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'repos.inspect', requestId: 'r1', paths: ['/w/a'], machineId: 'server' });
+    server.set('unreachable');
+    expect(got.filter(m => m.type === 'repos.info')).toEqual([{ type: 'repos.info', requestId: 'r1', repos: [{ path: '/w/a', exists: false, branch: null }] }]);
+  });
   it('validates loopback connections, aliases and duplicate destinations', () => {
     // The url is never read: a non-loopback local url is replaced by the pinned one, a remote url is dropped.
     expect(parseMachines([{ ...LOCAL_MACHINE, url: 'ws://example.org:47831' }])[0]!.url).toBe(LOCAL_MACHINE.url);
