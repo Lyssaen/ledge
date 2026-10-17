@@ -9,12 +9,15 @@ const BARE = /^@@ ?(.*)$/;
  *  A last `…` line is the daemon's 80-line cut. */
 export function parseDiff(diff: string): ParsedDiff {
   const raw = diff.split('\n');
+  if (raw[raw.length - 1] === '') raw.pop();
   const cut = raw[raw.length - 1] === '…';
   if (cut) raw.pop();
   const out: ParsedDiff = { hunks: [], plus: 0, minus: 0, cut };
   if (!diff) return out;
   let cur: Hunk | null = null;
   let headed = false;
+  // Header-less: Claude writes `+ ${text}` on every line; anything else is glued (Codex Add File).
+  const claude = !raw.some(l => BARE.test(l)) && raw.every(l => (l[0] !== '+' && l[0] !== '-') || l[1] === ' ');
   let o = 0;
   let n = 0;
   for (const line of raw) {
@@ -32,7 +35,7 @@ export function parseDiff(diff: string): ParsedDiff {
     const sign = line[0];
     if (sign !== '+' && sign !== '-' && !(headed && (sign === ' ' || line === ''))) continue;
     if (!cur) { cur = { ctx: '', lines: [] }; out.hunks.push(cur); }
-    const text = headed ? line.slice(1) : line.slice(2);
+    const text = headed || !claude ? line.slice(1) : line.slice(2);
     if (sign === '+') { cur.lines.push({ t: 'add', ...(numbered ? { n } : {}), text }); n++; out.plus++; }
     else if (sign === '-') { cur.lines.push({ t: 'del', ...(numbered ? { o } : {}), text }); o++; out.minus++; }
     else { cur.lines.push({ t: 'ctx', ...(numbered ? { o, n } : {}), text }); o++; n++; }

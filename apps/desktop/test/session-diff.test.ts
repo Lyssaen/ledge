@@ -19,6 +19,15 @@ describe('session diffs', () => {
   it('a numbered hunk numbers its lines', () => {
     expect(lines(parseDiff('@@ -10,4 +10,5 @@ fn x()\n a\n-d\n+e\n+f\n g'))).toEqual(['ctx:10:10:a', 'del:11::d', 'add::11:e', 'add::12:f', 'ctx:12:13:g']);
   });
+  it('a Codex Add File diff is glued: no header, the first character after the sign is text', () => {
+    expect(lines(parseDiff('+export const x = 1;\n+  indented'))).toEqual(['add:::export const x = 1;', 'add:::  indented']);
+  });
+  it('a Claude diff keeps its indentation: only the space after the sign drops', () => {
+    expect(lines(parseDiff('+ \n+   foo\n- bar'))).toEqual(['add:::', 'add:::  foo', 'del:::bar']);
+  });
+  it('a trailing empty line is no context line; an empty line inside a hunk is', () => {
+    expect(lines(parseDiff('@@ -1,3 +1,3 @@\n a\n\n-b\n'))).toEqual(['ctx:1:1:a', 'ctx:2:2:', 'del:3::b']);
+  });
   it('the 80-line cut is a flag, not a line; nothing is nothing', () => {
     const cut = parseDiff([...Array.from({ length: 80 }, (_, i) => `+ l${i}`), '…'].join('\n'));
     expect([cut.plus, cut.cut, cut.hunks[0]!.lines.length]).toEqual([80, true, 80]);
