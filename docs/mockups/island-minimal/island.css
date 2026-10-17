@@ -70,6 +70,8 @@ body { overflow: auto; background: var(--background); color: var(--foreground); 
 .dot { width: 10px; height: 10px; padding: 0; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center; flex-shrink: 0; }
 .dot::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: var(--dot, var(--info)); transition: transform 140ms cubic-bezier(.2,.8,.2,1); }
 .handle.filet { height: 10px; padding: 0 6px; }
+.handle.filet .ledge-mark { position: relative; z-index: 1; width: 9px; height: 6px; padding: 0; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center; flex-shrink: 0; }
+.handle.filet .ledge-mark::before { content: ''; width: 9px; height: 3px; border-radius: 1px; background: var(--sidebar-primary); }
 .handle.filet .sep { height: 6px; margin: 0 3px; }
 .handle.filet .dots { gap: 2px; }
 .handle.filet .dot { width: 5px; height: 6px; }

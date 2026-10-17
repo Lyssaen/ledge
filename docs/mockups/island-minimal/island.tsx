@@ -62,14 +62,14 @@ const SCENARIOS: { id: Scenario; label: string; hint: string }[] = [
   { id: 'chat', label: 'Chat', hint: 'Le chat de l’overlay, 480 px' },
 ];
 const PROPOSALS: { id: Proposal; label: string; hint: string }[] = [
-  { id: 'filet', label: 'Filet', hint: '76 × 10 px · les points seulement' },
+  { id: 'filet', label: 'Filet', hint: '85 × 10 px · Ledge, puis les points' },
   { id: 'points', label: 'Points', hint: '79 × 16 px · sans mascotte' },
   { id: 'mascot', label: 'Mascotte', hint: '23 × 20 px · une pastille s’il vous attend' },
   { id: 'count', label: 'Compte', hint: '35 × 20 px · Ledge et un nombre' },
 ];
 const HOT_ORDER: BotState[] = ['approval', 'error', 'question', 'readonly'];
 const KEEP: [string, string][] = [
-  ['Encoche', 'Quatre propositions, toutes plus petites que la barre de 141 × 28 px : filet 76 × 10, points 79 × 16, mascotte 23 × 20, compte 35 × 20.'],
+  ['Encoche', 'Quatre propositions, toutes plus petites que la barre de 141 × 28 px : filet 85 × 10, points 79 × 16, mascotte 23 × 20, compte 35 × 20.'],
   ['Notifications', 'La bulle de l’overlay sur main, 440 px : accord, question, terminé, et « +2 autres » quand la file a plusieurs demandes.'],
   ['Chat', 'Le chat de l’overlay, 480 px de large. Un clic sur l’encoche l’ouvre. Retour et fermer replient l’encoche.'],
 ];
@@ -127,6 +127,9 @@ function Notch({ proposal, groups, pip, pendingCount, theme, reduced, preview = 
       {pip && (preview ? <span className="notch-pip" /> : <button type="button" className="notch-pip" data-update-pip="new" aria-label="Ledge 0.6.0 est prêt" title="Ledge 0.6.0 est prêt" onClick={e => { e.stopPropagation(); onPip(); }} />)}
       {!pip && proposal === 'mascot' && signal && <span className="notch-pip notch-signal" data-state={signal} aria-hidden="true" />}
     </span>}
+    {proposal === 'filet' && (preview
+      ? <span className="ledge-mark" />
+      : <button type="button" className="ledge-mark" aria-label="Ledge, ouvrir" title="Ouvrir le chat" onClick={e => { e.stopPropagation(); onOpenChat(); }} />)}
     {strip && groups.map(g => <Fragment key={g[0].id}>
       <span className="sep" aria-hidden="true" />
       <span className="dots">{g.map(mark)}</span>
