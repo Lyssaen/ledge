@@ -337,8 +337,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
                   <span><strong>{th.lost(machine)}</strong> · {since}. {th.lostBody}</span>
                 </div>
               )}
-              {items === undefined ? <p className="muted">{offline ? th.notLoaded : th.loading}</p>
-                : xs.length === 0 ? <p className="muted">{th.empty}</p>
+              {items === undefined ? <p className="thread-note muted">{offline ? th.notLoaded : th.loading}</p>
+                : xs.length === 0 ? <p className="thread-note muted">{th.empty}</p>
                 : <Thread session={session} helper={helper} items={items} xs={xs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
                     flash={flash} onChange={openDiff} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan} />}
             </div>

@@ -123,9 +123,11 @@ describe('the session page', () => {
     expect(document.querySelector('.session-page')).toHaveAttribute('data-helper', 'h1');
   });
 
-  it('while the thread loads, it says so', async () => {
+  it('while the thread loads, it says so, in the reading column', async () => {
     await openOtto({ withThread: false });
     expect(await thread().findByText('Loading the thread…')).toBeVisible();
+    expect(thread().getByText('Loading the thread…')).toHaveClass('thread-note');
+    expect(declarations('session.css', '.session-thread>.thread-note')).toContain('max-width:var(--col);margin-inline:auto');
   });
 
   it('offline before the thread came: it says so', async () => {
@@ -138,6 +140,7 @@ describe('the session page', () => {
     d.thread('nova', []);
     await user.click(screen.getByRole('listitem', { name: /^Nova,/ }));
     expect(await thread().findByText('Nothing in the thread yet.')).toBeVisible();
+    expect(thread().getByText('Nothing in the thread yet.')).toHaveClass('thread-note');
   });
 
   it('a machine that falls freezes the thread it sent: a notice on top and at the end, nothing runs live', async () => {

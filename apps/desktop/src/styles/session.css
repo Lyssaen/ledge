@@ -389,3 +389,6 @@
 
 .pending-head strong{flex:1;min-width:0}
 .pending-head .spacer{display:none}
+
+/* Not in the mockup (its thread is always there): the loading and empty-thread notes sit in the reading column. */
+.session-thread>.thread-note{max-width:var(--col);margin-inline:auto}
