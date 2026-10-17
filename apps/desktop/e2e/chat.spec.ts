@@ -70,14 +70,15 @@ test('a session card: one click, the agent sits at the Ledge table with its seat
   await expect(card).toHaveAttribute('data-launch-card', 'proposed');
   await expect(card).toContainText('Fix the failing tests');
   await card.getByRole('button', { name: 'Start the session' }).click();
+  // The fake daemon names the agent `Agent 1`: it sits at the Ledge table, its seat lit (for 1.6 s: checked first, before
+  // anything that could outlast it), and the notice says where it starts.
+  const seat = ledgeTable(page).getByRole('button', { name: /^Agent 1,/ });
+  await expect(seat).toHaveClass(/just-seated/);
+  await expect(seat.locator('[data-badge]')).toHaveText('Starting');
   await expect.poll(() => sent(daemon.received, 'session.launch').length).toBe(1);
   const launch = sent(daemon.received, 'session.launch')[0]!;
   const qid = sent(daemon.received, 'chat.ask')[0]!.qid;
   expect(launch).toMatchObject({ qid, tool: 'claude', cwd: '/w/ledge', prompt: 'Fix the failing tests' });
-  // The fake daemon names the agent `Agent 1`: it sits at the Ledge table, its seat lit, and the notice says where it starts.
-  const seat = ledgeTable(page).getByRole('button', { name: /^Agent 1,/ });
-  await expect(seat).toHaveClass(/just-seated/);
-  await expect(seat.locator('[data-badge]')).toHaveText('Starting');
   await expect(page.locator('.toast')).toHaveText('Agent 1 is starting at the Ledge table.');
   // The card shows it started, the chat stays open, and nothing launched a second time.
   await expect(card).toHaveAttribute('data-launch-card', 'launched');
@@ -104,8 +105,8 @@ test('a 900 px window: the chat opens over the atelier, Escape closes it, and th
   expect(await pageNoSideScroll(page)).toBe(true);
   await page.keyboard.press('Escape');
   await expect(panel(page)).toHaveCount(0);
-  // The focus is back on the page: nothing inside a closed chat holds it, and the window's single keys answer again.
-  expect(await page.evaluate(() => document.activeElement === document.body || !document.activeElement?.closest('.ledge-chat-panel'))).toBe(true);
+  // The focus is back on the page, in no field, so the window's single keys answer again.
+  expect(await page.evaluate(() => document.activeElement?.matches('input, textarea, select, [contenteditable="true"]') ?? false)).toBe(false);
   await page.keyboard.press('n');
   await expect(page.getByRole('dialog', { name: 'New session' })).toBeVisible();
 });
