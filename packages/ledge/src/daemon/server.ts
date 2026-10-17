@@ -324,7 +324,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         finally { chatLaunches.delete(qid); }
         return;
       }
-      case 'folder.list': return send(ws, await listFolder(msg.path, opts.home));
+      case 'folder.list': return send(ws, await listFolder(msg.path, opts.home, msg.requestId));
       case 'folder.create': {
         const listing = await createFolder(msg.parent, msg.name, opts.home);
         if (!listing.error) log(`created folder ${listing.path}`);

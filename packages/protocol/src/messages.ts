@@ -80,7 +80,9 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** Answer to the requester of a `folder.list` or `folder.create`: `path` resolved (`~` expanded), `parent` null at the
    *  root, `entries` its subfolders by name (hidden ones left out). A failure keeps the asked path and says why in `error`,
    *  never in an `error` message, which the launch form reads as a failed launch. */
-  z.object({ type: z.literal('folder.listing'), path: z.string(), parent: z.string().nullable(), entries: z.array(z.string()), error: z.string().optional() }),
+  z.object({ type: z.literal('folder.listing'), path: z.string(), parent: z.string().nullable(), entries: z.array(z.string()), error: z.string().optional(),
+    /** The request this answers, when it carried one. */ requestId: z.string().optional(),
+    /** Those `entries` that are Git repositories, with their branch (the short commit when HEAD is detached). */ repos: z.array(z.object({ name: z.string(), branch: z.string() })).optional() }),
   /** The chat (spec 2026-10-11 §5): what Ledge reads, its words as they come, the final text, or why it stopped; the day's turns after each snapshot. */
   z.object({ type: z.literal('chat.step'), qid: z.string(), step: ChatStepSchema }),
   z.object({ type: z.literal('chat.delta'), qid: z.string(), text: z.string() }),
@@ -112,7 +114,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     /** Routing by the fleet, removed before the message reaches the daemon. */ machineId: z.string().optional() }),
   /** The launch form's folder browser: list a folder's subfolders (home when no `path`), or make `name` inside `parent`
    *  and list it. Both are answered with a `folder.listing`. */
-  z.object({ type: z.literal('folder.list'), path: z.string().optional() }),
+  z.object({ type: z.literal('folder.list'), path: z.string().optional(),
+    /** Routing by the fleet, removed before the message reaches the daemon. */ machineId: z.string().optional(),
+    /** Copied into the `folder.listing` that answers; the fleet relays only that listing, from the machine asked. */ requestId: z.string().min(1).max(100).optional() }),
   z.object({ type: z.literal('folder.create'), parent: z.string().min(1), name: z.string().min(1) }),
   z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1) }),
   /** The chat card's instruction (spec 2026-10-12 relay §4): sent now if the session is free, else queued until it is. */

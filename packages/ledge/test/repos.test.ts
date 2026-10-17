@@ -37,4 +37,17 @@ describe('inspectRepos', () => {
     expect(out[0]).toEqual({ path: d, exists: true, branch: null });
     expect(Date.now() - t0).toBeLessThan(4000);
   }, 10000);
+  it('runs at most 8 git at once', async () => {
+    const paths = Array.from({ length: 20 }, () => dir()); let live = 0, peak = 0;
+    const git = async () => { live++; peak = Math.max(peak, live); await new Promise(r => setTimeout(r, 15)); live--; return 'main'; };
+    const out = await inspectRepos(paths, { git });
+    expect(peak).toBe(8); expect(out).toHaveLength(20); expect(out.every(r => r.branch === 'main')).toBe(true);
+  });
+  it('a detached HEAD stays within 2 s in all for one path', async () => {
+    const d = dir(); const t0 = Date.now();
+    const git = (_c: string, args: string[]) => args.includes('--short=7') ? new Promise<string | null>(() => {}) : new Promise<string>(r => setTimeout(() => r('HEAD'), 1500));
+    const out = await inspectRepos([d], { git });
+    expect(out[0]).toEqual({ path: d, exists: true, branch: null });
+    expect(Date.now() - t0).toBeLessThan(2400);
+  }, 6000);
 });

@@ -935,8 +935,10 @@ describe('server', () => {
       const other = await connect({ port: srv2.port }); await other.next('snapshot');
       c.send({ type: 'folder.list' });
       expect(await c.next('folder.listing')).toMatchObject({ path: home(), entries: ['api-gateway'] });
+      c.send({ type: 'folder.list', requestId: 'r-9' });
+      expect(await c.next('folder.listing')).toMatchObject({ requestId: 'r-9', path: home() });
       c.send({ type: 'folder.create', parent: '~', name: 'new-project' });
-      expect(await c.next('folder.listing')).toEqual({ type: 'folder.listing', path: join(home(), 'new-project'), parent: home(), entries: [] });
+      expect(await c.next('folder.listing')).toEqual({ type: 'folder.listing', path: join(home(), 'new-project'), parent: home(), entries: [], repos: [] });
       c.send({ type: 'folder.create', parent: '~', name: 'new-project' });
       expect(await c.next('folder.listing')).toMatchObject({ path: home(), error: 'already exists: new-project' });
       await expect(other.next('folder.listing', 100)).rejects.toThrow(/timeout/);

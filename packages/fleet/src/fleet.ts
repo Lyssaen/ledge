@@ -31,11 +31,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const documents = new Map<string, string>();
   /** `repos.inspect` requestId -> the machine asked, so only its `repos.info` answers it. */
   const inspections = new Map<string, string>();
+  /** `folder.list` requestId -> the machine asked and the path, so only its `folder.listing` answers it (and a drop or a refusal answers « offline » or « not found »). */
+  const listings = new Map<string, { machine: string; path: string }>();
   const operations = new Map<string, string>();
   /** The paths of a pending inspection, to answer « not found » for each if its machine drops. */
   const unfound = new Map<string, { path: string; exists: false; branch: null }[]>();
   /** Each pending inspection of `machine` is answered « not found » for every path (the machine dropped, or does not know repos.inspect). */
-  const answerUnfound = (machine: string) => {
+  const answerUnfound = (machine: string, why = 'not found') => {
+    for (const [requestId, l] of listings) if (l.machine === machine) { listings.delete(requestId); emit({ type: 'folder.listing', requestId, path: l.path, parent: null, entries: [], error: why }); }
     for (const [requestId, owner] of inspections) if (owner === machine) { inspections.delete(requestId); const repos = unfound.get(requestId) ?? []; unfound.delete(requestId); emit({ type: 'repos.info', requestId, repos }); }
   };
   let source: 'daemon' | 'local' = 'local';
@@ -150,7 +153,11 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'session.preview') { p.previews.set(m.id, m.lines); if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.thread' || m.type === 'session.thread.item') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.launched') { operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
-    if (m.type === 'folder.listing') { if (machine === selected) emit(m); return; }
+    if (m.type === 'folder.listing') {
+      if (m.requestId !== undefined && listings.has(m.requestId)) { if (listings.get(m.requestId)!.machine === machine) { listings.delete(m.requestId); emit(m); } return; }
+      if (m.requestId === undefined && machine === selected) emit(m);
+      return;
+    }
     if (m.type === 'document.content' || m.type === 'document.error') { if (documents.get(m.requestId) === machine) { documents.delete(m.requestId); emit(m); } return; }
     if (m.type === 'repos.info') { if (inspections.get(m.requestId) === machine) { inspections.delete(m.requestId); unfound.delete(m.requestId); emit(m); } return; }
     if (m.type === 'chat.routed') {
@@ -188,6 +195,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (!p.fresh) { p.error = m.message; publish(); return; }
       // An older daemon does not know repos.inspect (« invalid message »): its pending inspections find nothing, as when it drops.
       if (m.request === 'repos.inspect') { answerUnfound(machine); return; }
+      if (m.request === 'folder.list' && [...listings.values()].some(l => l.machine === machine)) { answerUnfound(machine); return; }
       // Only the in-flight operation's own refusal ends it: another refused command leaves it waiting for its answer or the machine's drop.
       if (m.request !== undefined && OPERATIONS.has(m.request)) operations.delete(machine);
       emit({ ...m, ...(m.id ? { id: qualify(machine, m.id) } : {}), message: configs.length > 1 ? `${p.config.label}: ${m.message}` : m.message });
@@ -205,7 +213,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         // A launch in flight names its request, as the daemon's refusal does, so the form that sent it hears it.
         const op = operations.get(c.id);
         if (operations.delete(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : {}) });
-        answerUnfound(c.id);
+        answerUnfound(c.id, 'offline');
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
         for (const [qid, b] of bindings) { const t = turns.get(qid); if (b.machine === c.id && t && !t.answeredAt && !t.error) fail(qid, `${c.label} is offline`); }
@@ -260,6 +268,15 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const none = msg.paths.map(path => ({ path, exists: false as const, branch: null }));
         if (!available(peers.get(machine))) { emit({ type: 'repos.info', requestId: msg.requestId, repos: none }); return; }
         inspections.set(msg.requestId, machine); unfound.set(msg.requestId, none);
+      }
+      if (msg.type === 'folder.list') {
+        if (msg.machineId) machine = msg.machineId;
+        else if (msg.requestId !== undefined) machine = 'local';
+        const { machineId: _m, ...rest } = msg; outgoing = rest;
+        if (msg.requestId !== undefined) {
+          if (!available(peers.get(machine))) { emit({ type: 'folder.listing', requestId: msg.requestId, path: msg.path || '~', parent: null, entries: [], error: 'offline' }); return; }
+          listings.set(msg.requestId, { machine, path: msg.path || '~' });
+        }
       }
       if (msg.type === 'update.daemon') machine = 'local';
       if (msg.type === 'snapshot.request') { publish(); history(); return; }

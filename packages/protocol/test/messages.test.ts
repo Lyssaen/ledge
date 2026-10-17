@@ -161,6 +161,15 @@ describe('protocol: browsing folders from the launch form', () => {
     expect(parseClientMessage({ type: 'folder.list', path: '~/Workspace' })).toEqual({ type: 'folder.list', path: '~/Workspace' });
     expect(parseClientMessage({ type: 'folder.create', parent: '/w', name: 'new-project' })).toEqual({ type: 'folder.create', parent: '/w', name: 'new-project' });
     expect(() => parseClientMessage({ type: 'folder.create', parent: '/w', name: '' })).toThrow();
+    const asked = { type: 'folder.list', path: '/w', machineId: 'nas', requestId: 'r1' };
+    expect(parseClientMessage(asked)).toEqual(asked);
+    expect(() => parseClientMessage({ type: 'folder.list', requestId: '' })).toThrow();
+    expect(() => parseClientMessage({ type: 'folder.list', requestId: 'x'.repeat(101) })).toThrow();
+  });
+  it('folder.listing carries requestId and the repositories with their branch', () => {
+    const l = { type: 'folder.listing', requestId: 'r1', path: '/w', parent: '/', entries: ['a'], repos: [{ name: 'a', branch: 'main' }] };
+    expect(ServerMessageSchema.parse(l)).toEqual(l);
+    expect(() => ServerMessageSchema.parse({ ...l, repos: [{ name: 'a' }] })).toThrow();
   });
   it('parses folder.listing, with a parent, at the root, and carrying an error', () => {
     const listing = { type: 'folder.listing', path: '/w', parent: '/', entries: ['api', 'web'] };

@@ -115,6 +115,50 @@ describe('multi-machine connections', () => {
     server.emit({ type: 'repos.info', requestId: 'r2', repos: [] }); // not the machine asked
     expect(got.filter(m => m.type === 'repos.info')).toHaveLength(1);
   });
+  it('routes a folder.list with machineId and requestId to that machine, without machineId, and relays only its listing', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'folder.list', path: '/w', machineId: 'server', requestId: 'f1' });
+    expect(server.sent).toEqual([{ type: 'folder.list', path: '/w', requestId: 'f1' }]); expect(local.sent).toEqual([]);
+    const listing: ServerMessage = { type: 'folder.listing', requestId: 'f1', path: '/w', parent: '/', entries: ['a'], repos: [{ name: 'a', branch: 'main' }] };
+    local.emit(listing); // not the machine asked
+    server.emit({ ...listing, requestId: 'other' }); // not the request asked
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([]);
+    server.emit(listing);
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([listing]);
+    server.emit(listing); // answered once
+    expect(got.filter(m => m.type === 'folder.listing')).toHaveLength(1);
+  });
+  it('a folder.list with requestId and no machineId goes to the local machine, even when another is selected', () => {
+    const { client, local, server, got } = setup();
+    client.fleet!.select('server');
+    client.send({ type: 'folder.list', requestId: 'f1' });
+    expect(local.sent).toEqual([{ type: 'folder.list', requestId: 'f1' }]); expect(server.sent).toEqual([]);
+    local.emit({ type: 'folder.listing', requestId: 'f1', path: '/h', parent: '/', entries: [] });
+    expect(got.filter(m => m.type === 'folder.listing')).toHaveLength(1);
+  });
+  it('answers a folder.list for an offline machine with error offline, and for a machine that drops', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'folder.list', path: '/w', machineId: 'server', requestId: 'f1' });
+    server.set('unreachable');
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([{ type: 'folder.listing', requestId: 'f1', path: '/w', parent: null, entries: [], error: 'offline' }]);
+    client.send({ type: 'folder.list', path: '/x', machineId: 'server', requestId: 'f2' });
+    expect(got.filter(m => m.type === 'folder.listing').at(-1)).toEqual({ type: 'folder.listing', requestId: 'f2', path: '/x', parent: null, entries: [], error: 'offline' });
+    expect(server.sent).toEqual([{ type: 'folder.list', path: '/w', requestId: 'f1' }]);
+  });
+  it('a machine refusing folder.list answers « not found » for the pending request', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'folder.list', path: '/w', machineId: 'server', requestId: 'f1' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'folder.list' });
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([{ type: 'folder.listing', requestId: 'f1', path: '/w', parent: null, entries: [], error: 'not found' }]);
+  });
+  it('a folder.list without requestId keeps the old behaviour: the selected machine, relayed only from it', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'folder.list', path: '/w' });
+    expect(local.sent).toEqual([{ type: 'folder.list', path: '/w' }]);
+    const l: ServerMessage = { type: 'folder.listing', path: '/w', parent: '/', entries: [] };
+    server.emit(l); expect(got.filter(m => m.type === 'folder.listing')).toEqual([]);
+    local.emit(l); expect(got.filter(m => m.type === 'folder.listing')).toEqual([l]);
+  });
   it('answers for an offline machine: an error for a launch, nothing found for an inspection', () => {
     const { client, server, got } = setup();
     server.set('unreachable');

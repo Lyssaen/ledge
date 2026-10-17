@@ -61,6 +61,16 @@ describe('daemon client + store', () => {
     client.close();
   });
 
+  it('answers folder.list from folders, with error not found for an unknown path', async () => {
+    mock.folders.set('/w', { entries: ['a', 'b'], repos: [{ name: 'a', branch: 'dev' }] });
+    const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never });
+    const got: unknown[] = []; client.onMessage(m => { if (m.type === 'folder.listing') got.push(m); });
+    client.connect(); await sleep(80);
+    client.send({ type: 'folder.list', path: '/w', requestId: 'q' }); client.send({ type: 'folder.list', path: '/nope', requestId: 'q2' }); await sleep(50);
+    expect(got).toEqual([{ type: 'folder.listing', requestId: 'q', path: '/w', parent: '/', entries: ['a', 'b'], repos: [{ name: 'a', branch: 'dev' }] }, { type: 'folder.listing', requestId: 'q2', path: '/nope', parent: null, entries: [], error: 'not found' }]);
+    client.close();
+  });
+
   it('ignores a stale socket close after close() then connect()', async () => {
     const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never, minBackoffMs: 30, maxBackoffMs: 60 });
     const statuses: string[] = []; client.onStatus(s => statuses.push(s));
