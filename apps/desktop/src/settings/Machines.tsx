@@ -4,13 +4,10 @@ import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { Card } from './controls';
-import { ALIAS, checkDraft, configsOf, MAX_MACHINES, sameMachines, without, withDraft, type MachineDraft } from './machines';
+import { ALIAS, checkDraft, configsOf, MAX_MACHINES, sameMachines, shownOf, without, withDraft, type MachineDraft } from './machines';
 import { useMachineEditor, type SaveOutcome } from './useMachineEditor';
 import type { SettingsContext } from './SettingsPage';
 
-type Shown = 'online' | 'connecting' | 'offline';
-/** « En ligne » is `ready`; a machine whose last try ended in an error is offline even while its client waits to try again. */
-const shownOf = (m: MachineState): Shown => (m.ready ? 'online' : m.error || m.status === 'unreachable' ? 'offline' : 'connecting');
 const SERVER_GLYPH = ['M4 3h16v7H4z', 'M4 14h16v7H4z', 'M7 6.5h.01', 'M7 17.5h.01'];
 const LOCAL_GLYPH = ['M3 4h18v12H3z', 'M12 16v4', 'M8 20h8'];
 

@@ -17,6 +17,7 @@ import { Machines } from './Machines';
 import { Projects } from './Projects';
 import { Shortcuts } from './Shortcuts';
 import { About } from './About';
+import { shownOf } from './machines';
 
 /** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,
  *  in `lang` when given), the fleet, its client (what a machine says of its folders) and its machines, the projects, the sessions, navigation, the alerts (the Sounds' Test), the
@@ -64,7 +65,7 @@ function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContex
 }
 
 /** The mockup's Settings page: the sections on the left (« Back to the atelier » first, as Escape; a dot on Machines while a
- *  machine is offline, on About while an update of the app or of the local daemon waits), the section's title, hint and cards
+ *  machine shows offline (not while it connects), on About while an update of the app or of the local daemon waits), the section's title, hint and cards
  *  on the right, scrolled back to the top at each change of section. */
 export function SettingsPage({ section, ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
@@ -77,7 +78,7 @@ export function SettingsPage({ section, ctx }: { section: SectionId; ctx: Settin
   // As the sidebar's gear inside Settings: the chat closes, then Escape takes the place back.
   const back = () => { dispatch({ type: 'chat', open: false }); dispatch({ type: 'escape' }); };
   const alert = (id: SectionId): string | null =>
-    id === 'machines' && ctx.machines.some(m => !m.ready) ? s.machineOffline
+    id === 'machines' && ctx.machines.some(m => shownOf(m) === 'offline') ? s.machineOffline
     : id === 'about' && (updateReady(update) || ctx.daemonUpdate.offer !== 'none') ? s.updateWaiting
     : null;
 

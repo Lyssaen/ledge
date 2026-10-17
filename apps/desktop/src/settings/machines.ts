@@ -41,3 +41,8 @@ export const without = (list: readonly MachineConfig[], id: string): MachineConf
 /** Same machines, same order, same names and aliases: the daemon's broadcast has reached the fleet. */
 export const sameMachines = (a: readonly MachineConfig[], b: readonly MachineConfig[]): boolean =>
   a.length === b.length && a.every((m, i) => m.id === b[i]!.id && m.label === b[i]!.label && (m.ssh ?? null) === (b[i]!.ssh ?? null));
+
+export type Shown = 'online' | 'connecting' | 'offline';
+/** How a machine shows (its entry's status, the Machines tab's dot): « En ligne » is `ready`; a machine whose last try ended in an
+ *  error is offline even while its client waits to try again; else it is connecting. */
+export const shownOf = (m: MachineState): Shown => (m.ready ? 'online' : m.error || m.status === 'unreachable' ? 'offline' : 'connecting');

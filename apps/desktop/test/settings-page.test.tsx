@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { boot, closeDaemons, TWO_PROJECTS } from './helpers';
 
 beforeEach(() => localStorage.clear());
@@ -77,6 +77,21 @@ describe('the Settings page', () => {
     d.machines([{ id: 'local', label: 'Local' }, { id: 'nas', label: 'NAS', ssh: 'nas' }]);   // NAS never connects on the mock
     await waitFor(() => expect(within(tab('Machines')).getByRole('img', { name: 'A machine is offline' })).toHaveClass('side-alert'));
     expect(tab('About').querySelector('.side-alert')).toBeNull();
+  });
+
+  it('the Machines dot follows the page: none for a machine « Connecting… », one for an offline one', async () => {
+    const { d, user } = await boot({ projects: TWO_PROJECTS, machines: [{ id: 'local', label: 'Local' }] });
+    await user.keyboard('{Control>},{/Control}');
+    await user.click(tab('Machines'));
+    d.machines([{ id: 'local', label: 'Local' }, { id: 'nas', label: 'NAS', ssh: 'nas' }]);
+    const nas = () => within(screen.getByRole('article', { name: 'NAS' }));
+    await waitFor(() => expect(nas().getByText('Offline')).toBeVisible());
+    expect(within(tab('Machines')).getByRole('img', { name: 'A machine is offline' })).toBeVisible();
+    fireEvent.click(nas().getByRole('button', { name: 'Reconnect' }));
+    expect(nas().getByText('Connecting…')).toBeVisible();
+    expect(tab('Machines').querySelector('.side-alert')).toBeNull();
+    await waitFor(() => expect(nas().getByText('Offline')).toBeVisible());
+    expect(within(tab('Machines')).getByRole('img', { name: 'A machine is offline' })).toBeVisible();
   });
 
   it('Keyboard shortcuts: the app’s table under « In Ledge Desktop », Ctrl , first; no Windows-wide card', async () => {
