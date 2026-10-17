@@ -95,6 +95,19 @@ export function ProjectEditor(p: {
   }), []);
 
   const set = (patch: Partial<ProjectDraft>) => setD(x => ({ ...x, ...patch }));
+  // A repository removed: the focus goes to the next row's « Remove », else the previous one's, else « Ajouter un dépôt »
+  // (the typed path while the browser is open).
+  const reposRef = useRef<HTMLElement>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
+  const refocus = useRef<number | null>(null);
+  const removeRepo = (i: number) => { refocus.current = i; setD(x => ({ ...x, repos: x.repos.filter((_, j) => j !== i) })); };
+  useEffect(() => {
+    const i = refocus.current;
+    if (i === null) return;
+    refocus.current = null;
+    const rows = reposRef.current?.querySelectorAll<HTMLElement>('.pe-repo-remove') ?? [];
+    (rows[i] ?? rows[i - 1] ?? addRef.current ?? reposRef.current?.querySelector<HTMLElement>('.picker-typed input'))?.focus();
+  }, [d.repos]);
   const taken = (machine: string, path: string) => d.repos.some(r => r.machine === machine && normalizePath(r.path) === path);
   const onAdd = ({ branch, ...repo }: Repo & { branch: string | null }) => {
     setD(x => ({ ...x, repos: [...x.repos, repo] }));
@@ -230,7 +243,7 @@ export function ProjectEditor(p: {
           <label className="composer-label" htmlFor={`${ids}-description`}>{c.description} <small>{c.optional}</small></label>
           <input id={`${ids}-description`} value={d.description} maxLength={120} placeholder={c.descriptionPlaceholder} onChange={e => set({ description: e.target.value })} />
         </div>
-        <section className="pe-repos" aria-labelledby={`${ids}-repos`}>
+        <section ref={reposRef} className="pe-repos" aria-labelledby={`${ids}-repos`}>
           <div className="pe-repos-head"><span className="composer-label" id={`${ids}-repos`}>{c.repos(d.repos.length)}</span></div>
           {d.repos.length > 0 ? (
             <ul className="pe-repo-list">
@@ -256,7 +269,7 @@ export function ProjectEditor(p: {
                       {/* A repository belongs to one project only: said before saving, and nothing is sent while it stands. */}
                       {owner && <small className="set-error">{c.problems.repo_taken(owner.name)}</small>}
                     </span>
-                    <Button size="icon" variant="ghost" aria-label={c.remove(baseName(r.path), label)} onClick={() => setD(x => ({ ...x, repos: x.repos.filter((_, j) => j !== i) }))}>
+                    <Button size="icon" variant="ghost" className="pe-repo-remove" aria-label={c.remove(baseName(r.path), label)} onClick={() => removeRepo(i)}>
                       <Icon d={ICONS.close.d} size={14} />
                     </Button>
                   </li>
@@ -279,7 +292,7 @@ export function ProjectEditor(p: {
             </div>
           )}
           {adding ? <FolderPicker client={p.client} machines={machines} taken={taken} onAdd={onAdd} />
-            : <Button size="sm" variant="outline" onClick={() => setAdding(true)}><Icon d={ICONS.plus.d} size={14} />{c.addRepo}</Button>}
+            : <Button ref={addRef} size="sm" variant="outline" onClick={() => setAdding(true)}><Icon d={ICONS.plus.d} size={14} />{c.addRepo}</Button>}
         </section>
       </div>
       <footer className="composer-footer">

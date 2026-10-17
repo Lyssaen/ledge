@@ -263,6 +263,19 @@ describe('the project editor: editing a project', () => {
     expect(setsOf(d)[0]!.projects.projects[0]!.repos).toEqual([{ machine: 'local', path: '/w/ledge' }, { machine: 'local', path: '/w/notes' }, { machine: 'dev', path: '/srv/ledge' }]);
   });
 
+  it('removing a repository moves the focus to the next row\'s « Remove », else the previous one\'s, else « Add a repository »', async () => {
+    const { user, dialog } = await editLedge();
+    await user.click(dialog.getByRole('button', { name: 'Remove notes (Local)' }));
+    expect(dialog.getByRole('button', { name: 'Remove gone (Local)' })).toHaveFocus();
+    await user.click(dialog.getByRole('button', { name: 'Remove ledge (Dev SSH)' }));
+    expect(dialog.getByRole('button', { name: 'Remove gone (Local)' })).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(dialog.getByRole('button', { name: 'Remove ledge (Local)' })).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(dialog.getByText('Working repositories · 0')).toBeVisible();
+    expect(dialog.getByRole('button', { name: 'Add a repository' })).toHaveFocus();
+  });
+
   it('a repository another project has: its row says so as an error, Save names the problem, nothing is sent, the values stay', async () => {
     const { d, user, dialog } = await editLedge();
     await user.click(dialog.getByRole('button', { name: 'Add a repository' }));
