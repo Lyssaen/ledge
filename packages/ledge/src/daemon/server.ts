@@ -421,9 +421,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       try { raw = JSON.parse(String(data)); msg = parseClientMessage(raw); }
       catch (e) {
         log(`invalid message: ${(e as Error).message}`);
-        // The type it carried, when it has one: a newer front's value this daemon does not know is refused by name.
-        const type = (raw as { type?: unknown } | null | undefined)?.type;
-        return send(ws, { type: 'error', message: 'invalid message', ...(typeof type === 'string' && type.length <= 64 ? { request: type } : {}) });
+        // The type and the id it carried, when it has them: a newer front's value this daemon does not know is refused by
+        // name, for that very session, at once (not left to the front's own timeout).
+        const { type, id } = (raw ?? {}) as { type?: unknown; id?: unknown };
+        return send(ws, { type: 'error', message: 'invalid message', ...(typeof id === 'string' && id.length <= 200 ? { id } : {}), ...(typeof type === 'string' && type.length <= 64 ? { request: type } : {}) });
       }
       handle(ws, msg).catch(e => {
         if (msg.type === 'document.read') return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });

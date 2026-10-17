@@ -960,6 +960,11 @@ describe('server', () => {
     const err = await c.next('error');
     expect(err.message).toMatch(/invalid/i);
     expect(err.request).toBe('session.decide'); // the type it carried, though the message did not parse
+    expect(err.id).toBe('zzz'); // and its id: the front refuses that very send at once
+    c.send({ type: 'session.reply', id: 'y'.repeat(201), text: 42 } as never);
+    expect(await c.next('error')).toEqual({ type: 'error', message: 'invalid message', request: 'session.reply' }); // too long an id is not echoed
+    c.send({ type: 'session.reply', id: 7, text: 'x' } as never);
+    expect(await c.next('error')).toEqual({ type: 'error', message: 'invalid message', request: 'session.reply' }); // nor one that is not a string
     c.send({ type: 'snapshot.request' });
     await c.next('snapshot');
     c.close();
