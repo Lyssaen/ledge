@@ -69,6 +69,13 @@ export function deletion(state: Projects, id: string, sessions: readonly Session
   return { agents: sessions.filter(s => projectIdOf(s) === id), rules: state.rules.filter(r => r.project === id).length };
 }
 
+/** The same values to save (the id aside): name, colour, description, repositories in order, agents to file. */
+export function sameDraft(a: ProjectDraft, b: ProjectDraft): boolean {
+  return a.name === b.name && a.color === b.color && a.description === b.description
+    && a.repos.length === b.repos.length && a.repos.every((r, i) => r.machine === b.repos[i]!.machine && normalizePath(r.path) === normalizePath(b.repos[i]!.path))
+    && a.file.length === b.file.length && a.file.every((x, i) => x === b.file[i]);
+}
+
 /** Confirmed when the broadcast holds the project as sent: id, name, colour, description, repos in order. */
 export function saved(state: Projects, sent: Project): boolean {
   const p = state.projects.find(x => x.id === sent.id);

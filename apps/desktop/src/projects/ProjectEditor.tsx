@@ -9,7 +9,7 @@ import { ruleFor } from '../atelier/filing';
 import { isUp } from '../launch/model';
 import { useRepoInfo } from '../launch/useRepoInfo';
 import { SessionBot } from '../shell/SessionBot';
-import { afterSave, alsoIn, COLOR_ORDER, deletion, draftProblem, removed, saved, type ProjectDraft } from './draft';
+import { afterSave, alsoIn, COLOR_ORDER, deletion, draftProblem, removed, saved, sameDraft, type ProjectDraft } from './draft';
 import { FolderPicker } from './FolderPicker';
 import { ProjectSwatch } from './ProjectSwatch';
 import { useProjectSave } from './useProjectSave';
@@ -48,12 +48,17 @@ export function ProjectEditor(p: {
   const c = t.projects;
   const { machines, projects } = p;
   const [d, setD] = useState<ProjectDraft>(p.initial);
+  // The draft now, for a confirmation that comes in an effect: closing on it would drop what was edited since the send.
+  const draftNow = useRef(d);
+  draftNow.current = d;
+  // « new » until the daemon has confirmed the project: a confirmation the editor stays open after (edited since) makes it an edit.
+  const [mode, setMode] = useState(p.mode);
   const [tried, setTried] = useState(false);
   // A new project without repository opens on the folder browser.
   const [adding, setAdding] = useState(p.mode === 'new' && p.initial.repos.length === 0);
   // What is known of each repository (by machine and path): from the browser when added, from repos.inspect for the saved ones.
   const [known, setKnown] = useState<ReadonlyMap<string, Known>>(() => new Map());
-  const { state, send, reset } = useProjectSave(p.fleet, projects);
+  const { state, confirming, send, reset } = useProjectSave(p.fleet, projects);
   const nameRef = useRef<HTMLInputElement>(null);
   useEffect(() => { nameRef.current?.focus(); }, []);
   // Deleting: where its agents go (null: « Sans projet »). Entering the view focuses that choice; leaving it, « Supprimer le projet ».
@@ -97,12 +102,14 @@ export function ProjectEditor(p: {
   // « Ranger aussi »: the sessions the editor was opened to file (« Ranger dans… › Nouveau projet… »), still listed.
   const candidates = p.initial.file.map(id => p.sessions.find(s => s.id === id)).filter((s): s is Session => s !== undefined);
 
-  const problem = draftProblem(d, projects);
+  const saving = state.status === 'saving';
+  // While saving, and on the render of the broadcast that confirms (which already holds the project, its name and its repositories),
+  // the draft is not checked against a state that contains it.
+  const problem = saving || confirming ? null : draftProblem(d, projects);
   const nameProblem = problem && (problem.code === 'name_empty' || problem.code === 'name_taken') ? c.problems[problem.code] : null;
   const problemText = !problem ? null
     : problem.code === 'repo_taken' ? c.problems.repo_taken(projects.projects.find(x => x.id === problem.project)?.name ?? problem.project)
     : c.problems[problem.code];
-  const saving = state.status === 'saving';
   const save = () => {
     setTried(true);
     if (problem) { if (nameProblem) nameRef.current?.focus(); return; }
@@ -111,10 +118,15 @@ export function ProjectEditor(p: {
     const sent = next.projects.find(x => x.id === id)!;
     const filed = p.sessions.filter(s => d.file.includes(s.id));
     const rules = filed.map(s => ruleFor(s, id));
-    const created = p.mode === 'new';
+    const created = mode === 'new';
+    const sentDraft = d;
     send(next,
       st => saved(st, sent) && rules.every(r => st.rules.some(x => x.machine === r.machine && x.path === r.path && x.project === r.project)),
-      () => latest.current.onSaved(id, created, filed));
+      () => {
+        // Edited since the send (after a timeout, say): the project exists as sent; the editor stays open on it, the newer values kept.
+        if (!sameDraft(draftNow.current, sentDraft)) { setD(x => ({ ...x, id })); setMode('edit'); return; }
+        latest.current.onSaved(id, created, filed);
+      });
   };
   // Only Ctrl / ⌘ ↵ and the main button save: a plain Enter in a field or on a radio would submit the form implicitly.
   const onKeyDown = (e: KeyboardEvent) => {
@@ -221,7 +233,7 @@ export function ProjectEditor(p: {
                 const online = !!m && isUp(m);
                 const label = labelOf(r.machine);
                 const info = known.get(repoKey(r.machine, r.path));
-                const owner = alsoIn(r, d, projects);
+                const owner = saving || confirming ? undefined : alsoIn(r, d, projects);
                 return (
                   <li key={`${r.machine}:${r.path}:${i}`}>
                     <span className="pe-repo-main">
@@ -279,7 +291,7 @@ export function ProjectEditor(p: {
           : state.status === 'refused' ? <p className="composer-missing" role="alert">{c.refused[state.reason]}</p> : null}
         <Button variant="ghost" onClick={p.onClose}>{c.cancel}</Button>
         <Button variant="primary" type="submit" aria-disabled={!!problem || saving}>
-          {saving ? c.saving : p.mode === 'new' ? c.create : c.save}<Kbd>Ctrl ↵</Kbd>
+          {saving ? c.saving : mode === 'new' ? c.create : c.save}<Kbd>Ctrl ↵</Kbd>
         </Button>
       </footer>
     </form>

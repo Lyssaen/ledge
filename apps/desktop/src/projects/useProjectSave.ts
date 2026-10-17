@@ -16,8 +16,9 @@ interface Waiting { confirm: (p: Projects) => boolean; onDone: () => void; timer
  *  checked at once, then each broadcast), and only then calls `onDone`. A refusal is named from the error (`DaemonOffline` → offline,
  *  `DaemonOutdated` → outdated, any other, zod's included → invalid), UNCONFIRMED_MS of silence is `timeout`. A confirmation that
  *  comes after the timeout still ends the save (the editor is still open). One send at a time while saving; a timed out one may be
- *  sent again, and the new send replaces it. After `reset` (or unmounting), nothing that arrives counts. */
-export function useProjectSave(fleet: Pick<Fleet, 'setProjects'>, projects: Projects | null): { state: SaveState; send(next: Projects, confirm: (p: Projects) => boolean, onDone: () => void): void; reset(): void } {
+ *  sent again, and the new send replaces it (also when it is refused at once). After `reset` (or unmounting), nothing that arrives
+ *  counts. `confirming`: this render's `projects` holds what is being waited for (the wait ends in the effect right after). */
+export function useProjectSave(fleet: Pick<Fleet, 'setProjects'>, projects: Projects | null): { state: SaveState; confirming: boolean; send(next: Projects, confirm: (p: Projects) => boolean, onDone: () => void): void; reset(): void } {
   const [state, setState] = useState<SaveState>(IDLE);
   // A synchronous mirror of the send in flight: two Ctrl ↵ in the same frame see the first one before React renders again.
   const waiting = useRef<Waiting | null>(null);
@@ -35,6 +36,7 @@ export function useProjectSave(fleet: Pick<Fleet, 'setProjects'>, projects: Proj
     try {
       fleet.setProjects(next);
     } catch (e) {
+      drop();
       const name = e instanceof Error ? e.name : '';
       setState({ status: 'refused', reason: name === 'DaemonOffline' ? 'offline' : name === 'DaemonOutdated' ? 'outdated' : 'invalid' });
       return;
@@ -67,5 +69,6 @@ export function useProjectSave(fleet: Pick<Fleet, 'setProjects'>, projects: Proj
     setState(s => (s.status === 'idle' ? s : IDLE));
   }, []);
 
-  return { state, send, reset };
+  const confirming = waiting.current !== null && projects !== null && waiting.current.confirm(projects);
+  return { state, confirming, send, reset };
 }

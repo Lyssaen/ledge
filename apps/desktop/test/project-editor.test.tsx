@@ -129,6 +129,52 @@ describe('the project editor: a new project from the sidebar', () => {
     expect(side.getByRole('button', { name: /^Paper Rendering/ })).toBeVisible();
   });
 
+  it('edited after the 8 s: the late confirmation keeps the editor open with the newer values, now on the project it created; Save sends them', async () => {
+    const { d, side, dialog, name } = await openNew();
+    fireEvent.change(name, { target: { value: 'Paper Rendering' } });
+    d.holdProjects();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    fireEvent.click(dialog.getByRole('button', { name: /^Create the project/ }));
+    act(() => { vi.advanceTimersByTime(8000); });
+    expect(dialog.getByRole('alert')).toHaveTextContent('The daemon did not confirm the save.');
+    vi.useRealTimers();
+    fireEvent.change(dialog.getByRole('textbox', { name: /^Description/ }), { target: { value: 'Fonts and pages' } });
+    await waitFor(() => expect(setsOf(d)).toHaveLength(1));
+    d.releaseProjects();
+    await waitFor(() => expect(side.getByRole('button', { name: /^Paper Rendering/ })).toBeVisible());
+    await tick();
+    // Still open, the newer edit kept, the refusal gone, no problem (the project it created is its own): « Save » now.
+    expect(screen.getByRole('dialog', { name: 'New project' })).toBeVisible();
+    expect(dialog.getByRole('textbox', { name: /^Description/ })).toHaveValue('Fonts and pages');
+    expect(dialog.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/Paper Rendering created/)).toBeNull();
+    expect(dialog.queryByRole('button', { name: /^Create the project/ })).toBeNull();
+    fireEvent.click(dialog.getByRole('button', { name: /^Save/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(setsOf(d)).toHaveLength(2);
+    expect(setsOf(d)[1]!.projects.projects).toHaveLength(4);
+    expect(setsOf(d)[1]!.projects.projects[3]).toEqual({ id: 'paper-rendering', name: 'Paper Rendering', color: 'violet', description: 'Fonts and pages', repos: [] });
+    expect(screen.getByRole('status')).toHaveTextContent('Paper Rendering saved.');
+  });
+
+  it('a successful create never shows a problem, not even on the render of the broadcast that holds it (its own name and repository)', async () => {
+    const { user, dialog, name } = await openNew();
+    const alerts: string[] = [];
+    const seen = new MutationObserver(records => {
+      for (const r of records) for (const n of r.addedNodes) {
+        if (!(n instanceof HTMLElement)) continue;
+        for (const a of [n, ...n.querySelectorAll('*')]) if (a.getAttribute('role') === 'alert' || a.classList.contains('composer-missing') || a.classList.contains('set-error')) alerts.push(a.textContent ?? '');
+      }
+    });
+    await user.type(name, 'Paper Rendering');
+    await user.click(await dialog.findByRole('button', { name: 'Add paper (Local)' }));
+    seen.observe(document.body, { childList: true, subtree: true });
+    await user.click(dialog.getByRole('button', { name: /^Create the project/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    seen.disconnect();
+    expect(alerts).toEqual([]);
+  });
+
   it('the local daemon offline: the editor says nothing was saved; the fleet refused before sending', async () => {
     const { d, side, user, client } = await boot();
     const setProjects = vi.spyOn(client.fleet!, 'setProjects');
@@ -411,6 +457,33 @@ describe('useProjectSave', () => {
     act(() => result.current.reset());
     rerender({ ...next });
     expect(onDone).toHaveBeenCalledOnce();
+  });
+
+  it('a retry refused at once drops the timed out wait: its late broadcast no longer ends anything', () => {
+    vi.useFakeTimers();
+    const fleet = { setProjects: vi.fn() };
+    const onDone = vi.fn();
+    const { result, rerender } = renderHook((p: Projects) => useProjectSave(fleet, p), { initialProps: state });
+    act(() => result.current.send(next, holds, onDone));
+    act(() => { vi.advanceTimersByTime(8000); });
+    fleet.setProjects.mockImplementationOnce(() => { throw named('DaemonOffline'); });
+    act(() => result.current.send(next, holds, onDone));
+    expect(result.current.state).toEqual({ status: 'refused', reason: 'offline' });
+    rerender(next);
+    expect(onDone).not.toHaveBeenCalled();
+    expect(result.current.state).toEqual({ status: 'refused', reason: 'offline' });
+  });
+
+  it('confirming: true on the render of the broadcast that holds what was sent, before the wait ends', () => {
+    const fleet = { setProjects: vi.fn() };
+    const seen: boolean[] = [];
+    const { result, rerender } = renderHook((p: Projects) => { const r = useProjectSave(fleet, p); seen.push(r.confirming); return r; }, { initialProps: state });
+    act(() => result.current.send(next, holds, vi.fn()));
+    expect(result.current.confirming).toBe(false);
+    seen.length = 0;
+    rerender(next);
+    expect(seen[0]).toBe(true);
+    expect(result.current.confirming).toBe(false);
   });
 
   it('unmounted while waiting: no timer outlives it', () => {
