@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { CATEGORIES, VOLUMES } from '@ledge/ui/sounds/preferences';
 import { Button } from '@ledge/ui/ui/Button';
 import { useI18n } from '../i18n/lang';
@@ -14,6 +14,8 @@ export function Sounds({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const { sounds, setSounds } = useSoundPrefs();
   const [dnd] = useDnd();
   const [refused, setRefused] = useState(false);
+  // The refusal belongs to a click under Do not disturb: once it is lifted the note goes, and it does not come back by itself.
+  useEffect(() => { if (!dnd) setRefused(false); }, [dnd]);
   const { saved } = ctx;
   return (
     <>
@@ -27,14 +29,14 @@ export function Sounds({ ctx }: { ctx: SettingsContext }): JSX.Element {
                 onChange={v => { if (v === sounds.volume) return; setSounds({ volume: v }); saved(c.volumeSaved(c.volumes[v])); }} />
               <Button size="sm" variant="outline" onClick={() => setRefused(ctx.alerts.test() === 'dnd')}>{c.test}</Button>
             </div>
-            {refused && dnd && <span className="set-hint" role="status"><strong className="set-warn">{c.dndOn}</strong></span>}
+            {refused && <span className="set-hint" role="status"><strong className="set-warn">{c.dndOn}</strong></span>}
           </Row>
           <div className="set-row stack">
             <span className="set-label" id="play-when">{c.when}</span>
             <div className="check-list" role="group" aria-labelledby="play-when">
               {CATEGORIES.map(k => (
                 <label key={k}>
-                  <input type="checkbox" checked={sounds.categories[k]} onChange={e => { setSounds({ categories: { [k]: e.target.checked } }); saved(c.categories[k]); }} />{c.categories[k]}
+                  <input type="checkbox" checked={sounds.categories[k]} onChange={e => { setSounds({ categories: { [k]: e.target.checked } }); saved(c.categorySaved(c.categories[k], e.target.checked)); }} />{c.categories[k]}
                 </label>
               ))}
             </div>

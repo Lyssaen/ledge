@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState, type JSX } from 'react';
 
+/** Test hook: every `notify` call is pushed here (a notice replaces the previous one on screen, so the DOM cannot count them). */
+let history: string[] | null = null;
+export function recordToastsForTests(): string[] { return (history = []); }
+
 /** One notice at a time (observatory.tsx's `notice`): it stays `ms` (6 s by default, like the mockup), and a new one
  *  replaces it and restarts the clock. */
 export function useToast(ms = 6000): { notice: string | null; notify(text: string): void } {
   // An object per notice, so the same text said twice still restarts the clock.
   const [toast, setToast] = useState<{ text: string } | null>(null);
-  const notify = useCallback((text: string) => setToast({ text }), []);
+  const notify = useCallback((text: string) => { history?.push(text); setToast({ text }); }, []);
   useEffect(() => {
     if (toast === null) return;
     const timer = setTimeout(() => setToast(null), ms);

@@ -41,9 +41,11 @@ import { loadChat } from '../src/chat/lazy';
 import { applyUiScale, resetAppliedUiScaleForTests } from '../src/settings/scale';
 import { saveReduced } from '../src/motionPreferences';
 import { resetAppearanceForTests } from '../src/shell/theme';
-import { boot, closeDaemons, TWO_PROJECTS, type MockDaemon } from './helpers';
+import { boot, closeDaemons, recordToasts, savedNotices, TWO_PROJECTS, type MockDaemon } from './helpers';
 
+let log: string[] = [];
 beforeEach(async () => {
+  log = recordToasts();
   saveReduced(false); resetAppliedUiScaleForTests();
   localStorage.clear(); resetAppearanceForTests();
   bridge.getAutostart = () => Promise.resolve(false);
@@ -58,7 +60,8 @@ afterEach(async () => { for (const d of daemons.splice(0)) await d.close(); awai
 
 const LOCAL = [{ id: 'local', label: 'Local' }];
 const nav = (name: string) => within(screen.getByRole('navigation', { name }));
-const toasts = (pattern: RegExp) => within(screen.getByRole('status')).queryAllByText(pattern);
+/** Every « Setting saved » said since the test began (the screen keeps only the last one, which cannot count them). */
+const saved = () => savedNotices(log);
 const sw = (name: string) => screen.getByRole('switch', { name });
 const asks = (d: MockDaemon) => d.received.filter((m): m is Extract<ClientMessage, { type: 'chat.ask' }> => m.type === 'chat.ask');
 
@@ -93,7 +96,7 @@ describe('Settings › General: the language', () => {
     const { user } = await bootFrench();
     expect(document.documentElement.lang).toBe('fr');
     expect(bridge.labels.at(-1)).toEqual({ open: 'Ouvrir Ledge Desktop', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', quit: 'Quitter Ledge Desktop' });
-    expect(toasts(/Réglage enregistré|Setting saved/)).toHaveLength(0);
+    expect(saved()).toEqual([]);
     const group = screen.getByRole('radiogroup', { name: 'Langue' });
     expect(within(group).getByRole('radio', { name: 'Français' })).toBeChecked();
     await user.click(within(group).getByRole('radio', { name: 'English' }));
@@ -103,8 +106,8 @@ describe('Settings › General: the language', () => {
     expect(localStorage.getItem('desktop.lang')).toBe('en');
     await waitFor(() => expect(bridge.labels.at(-1)).toEqual({ open: 'Open Ledge Desktop', newSession: 'New session', dnd: 'Do not disturb', quit: 'Quit Ledge Desktop' }));
     expect(within(screen.getByRole('radiogroup', { name: 'Language' })).getByRole('radio', { name: 'English' })).toBeChecked();
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · English']);
-    expect(toasts(/Réglage enregistré/)).toHaveLength(0);
+    expect(saved()).toEqual(['Setting saved · English']);
+    expect(saved()).toHaveLength(1);
   });
 
   it('English failing to load leaves the app in French, and says so; nothing is saved', async () => {
@@ -118,7 +121,7 @@ describe('Settings › General: the language', () => {
     expect(document.documentElement.lang).toBe('fr');
     expect(localStorage.getItem('desktop.lang')).toBe('fr');
     expect(bridge.labels.at(-1)?.open).toBe('Ouvrir Ledge Desktop');
-    expect(toasts(/Réglage enregistré|Setting saved/)).toHaveLength(0);
+    expect(saved()).toEqual([]);
   });
 });
 
@@ -142,14 +145,14 @@ describe('Settings › General: start with Windows', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Windows did not take this setting.');
     expect(sw('Start with Windows')).toHaveAttribute('aria-checked', 'false');
     expect(sw('Start with Windows')).toBeEnabled();
-    expect(toasts(/Setting saved/)).toHaveLength(0);
+    expect(saved()).toEqual([]);
     const calls: boolean[] = [];
     bridge.setAutostart = on => { calls.push(on); return Promise.resolve(on); };
     await user.click(sw('Start with Windows'));
     await waitFor(() => expect(sw('Start with Windows')).toHaveAttribute('aria-checked', 'true'));
     expect(calls).toEqual([true]);
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Start with Windows']);
+    expect(saved()).toEqual(['Setting saved · Start with Windows']);
   });
 });
 
@@ -160,7 +163,7 @@ describe('Settings › General: the default agent', () => {
     expect(within(group).getByRole('radio', { name: 'Claude Code' })).toBeChecked();
     await user.click(within(group).getByRole('radio', { name: 'Codex' }));
     expect(localStorage.getItem('desktop.tool')).toBe('"codex"');
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Default agent: Codex']);
+    expect(saved()).toEqual(['Setting saved · Default agent: Codex']);
     await user.click(within(screen.getByRole('complementary', { name: 'Sidebar' })).getByRole('button', { name: /^Chat Ledge/ }));
     const field = () => within(screen.getByRole('complementary', { name: 'Chat Ledge' })).getByRole('textbox', { name: 'Ask Ledge' });
     await user.type(field(), 'Who reviews?{Enter}');
@@ -191,7 +194,7 @@ describe('Settings › General: updates', () => {
     await user.click(updates.getByRole('switch', { name: 'Check for updates' }));
     expect(updates.getByRole('switch', { name: 'Check for updates' })).toHaveAttribute('aria-checked', 'false');
     expect(localStorage.getItem('desktop.update.auto')).toBe('0');
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Manual update checks']);
+    expect(saved()).toEqual(['Setting saved · Manual update checks']);
   });
 });
 
@@ -208,19 +211,19 @@ describe('Settings › Appearance', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Invalid color: use # and six hexadecimal characters.');
     expect(hex).toHaveAttribute('aria-invalid', 'true');
     expect(localStorage.getItem('desktop.accent')).toBeNull();
-    expect(toasts(/Setting saved/)).toHaveLength(0);
+    expect(saved()).toEqual([]);
     await user.clear(hex);
     await user.type(hex, '#12AB34');
     await user.tab();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(localStorage.getItem('desktop.accent')).toBe('#12ab34');
     expect(screen.getByLabelText('Custom color')).toHaveValue('#12ab34');
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Ledge’s color #12ab34']);
+    expect(saved()).toEqual(['Setting saved · Ledge’s color #12ab34']);
     await user.click(screen.getByRole('button', { name: 'Coral' }));
     expect(localStorage.getItem('desktop.accent')).toBeNull();
     expect(hex).toHaveValue('#e85d4a');
     expect(screen.getByRole('button', { name: 'Coral' })).toBeDisabled();
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Ledge’s color: Coral']);
+    expect(saved()).toEqual(['Setting saved · Ledge’s color #12ab34', 'Setting saved · Ledge’s color: Coral']);
   });
 
   it('the picker keeps the color it lands on, not each one it passes over: one change, one notice', async () => {
@@ -229,10 +232,10 @@ describe('Settings › Appearance', () => {
     for (const v of ['#110000', '#111100', '#112233']) fireEvent.input(picker, { target: { value: v } });
     expect(screen.getByRole('textbox', { name: 'Hex code' })).toHaveValue('#112233');
     expect(localStorage.getItem('desktop.accent')).toBeNull();
-    expect(toasts(/Setting saved/)).toHaveLength(0);
+    expect(saved()).toEqual([]);
     fireEvent.change(picker);
     expect(localStorage.getItem('desktop.accent')).toBe('#112233');
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Ledge’s color #112233']);
+    expect(saved()).toEqual(['Setting saved · Ledge’s color #112233']);
   });
 
   it('the scale goes through saveUiScale; « Auto » shows the factor it resolved to', async () => {
@@ -242,7 +245,7 @@ describe('Settings › Appearance', () => {
     await user.click(group().getByRole('radio', { name: '150%' }));
     await waitFor(() => expect(zoom.calls).toEqual([1.5]));
     expect(group().getByRole('radio', { name: '150%' })).toBeChecked();
-    await waitFor(() => expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Interface scale 150%']));
+    await waitFor(() => expect(saved()).toEqual(['Setting saved · Interface scale 150%']));
     await user.click(group().getByRole('radio', { name: 'Auto' }));
     await waitFor(() => expect(zoom.calls).toEqual([1.5, 'auto']));
     expect(await group().findByRole('radio', { name: 'Auto (125%)' })).toBeChecked();
@@ -257,17 +260,17 @@ describe('Settings › Appearance', () => {
     expect(zoom.calls).toEqual([1.5, 'auto']);
     await act(async () => { zoom.answers[1]!(1.25); });
     expect(await group().findByRole('radio', { name: 'Auto (125%)' })).toBeChecked();
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Interface scale Auto']);
+    expect(saved()).toEqual(['Setting saved · Interface scale Auto']);
     await act(async () => { zoom.answers[0]!(1.5); });
     expect(group().getByRole('radio', { name: 'Auto (125%)' })).toBeChecked();
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Interface scale Auto']);
+    expect(saved()).toEqual(['Setting saved · Interface scale Auto']);
   });
 
   it('« Auto » opens with the factor the start-up applied', async () => {
     await applyUiScale('auto', { setZoom: () => Promise.resolve(), screenHeight: () => Promise.resolve(3240) });
     await openSettings('Appearance');
     expect(within(screen.getByRole('radiogroup', { name: 'Interface scale' })).getByRole('radio', { name: 'Auto (150%)' })).toBeChecked();
-    expect(toasts(/Setting saved/)).toHaveLength(0);
+    expect(saved()).toEqual([]);
   });
 
   it('the theme cards and reduced motion apply at once, each saved once', async () => {
@@ -277,11 +280,11 @@ describe('Settings › Appearance', () => {
     await user.click(themes.getByRole('radio', { name: /^Light/ }));
     expect(document.documentElement.dataset.theme).toBe('light');
     expect(localStorage.getItem('desktop.theme')).toBe('light');
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Light theme · Pebble']);
+    expect(saved()).toEqual(['Setting saved · Light theme · Pebble']);
     expect(sw('Reduced motion')).toHaveAttribute('aria-checked', 'false');
     await user.click(sw('Reduced motion'));
     expect(sw('Reduced motion')).toHaveAttribute('aria-checked', 'true');
     expect(localStorage.getItem('desktop.reducedMotion')).toBe('true');
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Reduced motion']);
+    expect(saved()).toEqual(['Setting saved · Light theme · Pebble', 'Setting saved · Reduced motion']);
   });
 });

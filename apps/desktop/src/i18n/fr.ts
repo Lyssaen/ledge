@@ -103,6 +103,7 @@ export const fr = {
       test: 'Tester', dndOn: 'Ne pas déranger est actif : aucun son.',
       when: 'Jouer un son quand',
       categories: { requests: 'Un bot a besoin de vous · accord, question', finished: 'Un bot ou Ledge a terminé sa tâche', errors: 'Quelque chose échoue', decisions: 'Vous acceptez ou refusez', team: 'Un bot arrive ou part' } as Record<SoundCategory, string>,
+      categorySaved: (label: string, on: boolean): string => `${label} : ${on ? 'activé' : 'désactivé'}`,
       behind: 'Seulement quand le terminal est derrière', behindHint: 'Si Windows Terminal est la fenêtre au premier plan, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
       behindSaved: (on: boolean): string => (on ? 'Sons seulement terminal derrière' : 'Sons toujours'),
       note: 'Un seul son à la fois, pour l’île et Ledge Desktop ensemble : une rafale de demandes ne joue qu’une fois. Ouvrir, fermer et survoler restent silencieux.'

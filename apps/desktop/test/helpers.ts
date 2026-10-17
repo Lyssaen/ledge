@@ -141,3 +141,8 @@ export async function openLaunch(opts: { repoInfo?: Map<string, RepoInfo>; list?
   await env.user.keyboard('n');
   return { ...env, form: within(await screen.findByRole('dialog', { name: 'New session' })) };
 }
+
+/** Starts counting the app's notices (call it in `beforeEach`): the list is every notice said since, « Setting saved » included. */
+export { recordToastsForTests as recordToasts } from '../src/shell/Toast';
+/** The « Setting saved » notices said since `recordToasts()`, in either language (the DOM shows only the last one). */
+export const savedNotices = (all: readonly string[]): string[] => all.filter(x => /^(Setting saved|Réglage enregistré)/.test(x));

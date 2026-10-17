@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, screen, within } from '@testing-library/react';
-import { boot, closeDaemons, TWO_PROJECTS } from './helpers';
+import { boot, closeDaemons, recordToasts, savedNotices, TWO_PROJECTS } from './helpers';
 
 // The Test button reaches the app's one player: here a spy, so nothing is played for real.
 const played = vi.hoisted(() => ({ calls: [] as unknown[][] }));
@@ -8,11 +8,12 @@ vi.mock('../src/notify/player', () => ({ appPlayer: () => ({ play: (...a: unknow
 
 import { getDnd, resetDndForTests, resetSoundPrefsForTests, setDnd } from '../src/notify/prefs';
 
-beforeEach(() => { localStorage.clear(); resetDndForTests(); resetSoundPrefsForTests(); played.calls = []; });
+let log: string[] = [];
+beforeEach(() => { log = recordToasts(); localStorage.clear(); resetDndForTests(); resetSoundPrefsForTests(); played.calls = []; });
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
 const nav = () => within(screen.getByRole('navigation', { name: 'Settings sections' }));
-const toasts = (pattern: RegExp) => within(screen.getByRole('status')).queryAllByText(pattern);
+const saved = () => savedNotices(log);
 const sw = (name: string) => screen.getByRole('switch', { name });
 const stored = () => JSON.parse(localStorage.getItem('desktop.sounds') ?? 'null');
 
@@ -29,14 +30,16 @@ describe('Settings › Notifications', () => {
   it('Do not disturb follows the switch, and a change made elsewhere (the tray) shows in the page', async () => {
     const { user } = await open('Notifications');
     expect(sw('Do not disturb')).toHaveAttribute('aria-checked', 'false');
-    expect(toasts(/Setting saved/)).toHaveLength(0);
+    expect(saved()).toEqual([]);
     await user.click(sw('Do not disturb'));
     expect(getDnd()).toBe(true);
     expect(sw('Do not disturb')).toHaveAttribute('aria-checked', 'true');
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Do not disturb on']);
+    expect(saved()).toEqual(['Setting saved · Do not disturb on']);
     act(() => setDnd(false));
     expect(sw('Do not disturb')).toHaveAttribute('aria-checked', 'false');
-    expect(toasts(/Setting saved/)).toHaveLength(1);
+    act(() => setDnd(true));
+    expect(sw('Do not disturb')).toHaveAttribute('aria-checked', 'true');
+    expect(saved()).toHaveLength(1);
   });
 
   it('what a finished agent does: four choices, kept in desktop.notify, one notice', async () => {
@@ -46,7 +49,9 @@ describe('Settings › Notifications', () => {
     expect(within(group).getByRole('radio', { name: 'Alert and sound' })).toBeChecked();
     await user.click(within(group).getByRole('radio', { name: 'Session state only' }));
     expect(localStorage.getItem('desktop.notify')).toBe('none');
-    expect(toasts(/Setting saved/)).toHaveLength(1);
+    expect(saved()).toEqual(['Setting saved · When an agent is done: Session state only']);
+    await user.click(within(group).getByRole('radio', { name: 'Session state only' }));
+    expect(saved()).toHaveLength(1);
   });
 });
 
@@ -56,7 +61,7 @@ describe('Settings › Sounds', () => {
     expect(sw('Sounds')).toHaveAttribute('aria-checked', 'false');
     expect(screen.getByRole('button', { name: 'Test' })).toBeDisabled();
     expect(screen.getByRole('checkbox', { name: /Something fails/ })).toBeDisabled();
-    expect(toasts(/Setting saved/)).toHaveLength(0);
+    expect(saved()).toEqual([]);
     expect(localStorage.getItem('desktop.sounds')).toBeNull();
   });
 
@@ -68,7 +73,7 @@ describe('Settings › Sounds', () => {
     expect(stored().categories.errors).toBe(false);
     expect(stored().categories.requests).toBe(true);
     expect(screen.getByRole('checkbox', { name: /Something fails/ })).not.toBeChecked();
-    expect(toasts(/Setting saved · Something fails/)).toHaveLength(1);
+    expect(saved()).toEqual(['Setting saved · Sounds on', 'Setting saved · Something fails: off']);
   });
 
   it('volume and « only when the terminal is behind » are kept', async () => {
@@ -78,7 +83,8 @@ describe('Settings › Sounds', () => {
     expect(stored().volume).toBe('loud');
     await user.click(sw('Only when the terminal is behind'));
     expect(stored().onlyWhenTerminalBehind).toBe(false);
-    expect(toasts(/Setting saved/).map(n => n.textContent)).toEqual(['Setting saved · Sounds even when the terminal is in front']);
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Volume' })).getByRole('radio', { name: 'Loud' }));
+    expect(saved()).toEqual(['Setting saved · Sounds on', 'Setting saved · Volume loud', 'Setting saved · Sounds even when the terminal is in front']);
   });
 
   it('Test plays the question cue at the chosen volume; under Do not disturb it says so and plays nothing', async () => {
@@ -92,5 +98,9 @@ describe('Settings › Sounds', () => {
     await user.click(screen.getByRole('button', { name: 'Test' }));
     expect(played.calls).toHaveLength(1);
     expect(screen.getByText('Do not disturb is on: no sound.')).toBeVisible();
+    act(() => setDnd(false));
+    expect(screen.queryByText('Do not disturb is on: no sound.')).toBeNull();
+    act(() => setDnd(true));
+    expect(screen.queryByText('Do not disturb is on: no sound.')).toBeNull();
   });
 });

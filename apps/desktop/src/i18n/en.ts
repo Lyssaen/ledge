@@ -93,6 +93,7 @@ export const en: Messages = {
       test: 'Test', dndOn: 'Do not disturb is on: no sound.',
       when: 'Play a sound when',
       categories: { requests: 'A bot needs you · approval, question', finished: 'A bot or Ledge has finished its task', errors: 'Something fails', decisions: 'You allow or deny', team: 'A bot arrives or leaves' },
+      categorySaved: (label, on) => `${label}: ${on ? 'on' : 'off'}`,
       behind: 'Only when the terminal is behind', behindHint: 'If Windows Terminal is the front window, you are already looking: no sound, the bubble still shows.',
       behindSaved: (on) => (on ? 'Sounds only when the terminal is behind' : 'Sounds even when the terminal is in front'),
       note: 'One sound at a time, for the island and Ledge Desktop together: a burst of requests plays once. Opening, closing and hovering stay silent.'
