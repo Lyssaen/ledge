@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, parseProposalBlock, parseRelayBlock, type ChatProposal, type ChatRelay, type ChatTurn, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { extractProposal, parseProposalBlock, parseRelayBlock, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -33,6 +33,8 @@ export interface ChatDeps {
   userHome?: string;
   /** The environment the chat process runs in (the login shell's PATH, like a launched agent). */
   env: () => Promise<NodeJS.ProcessEnv>;
+  /** The projects and folder rules as the daemon holds them now (read at each question); a daemon with none omits it. */
+  projects?: () => Projects;
   now?: () => string; today?: () => string; uuid?: () => string; bin?: string[]; bins?: Partial<Record<Tool, string[]>>; spawn?: typeof nodeSpawn; timeoutMs?: number;
 }
 
@@ -116,7 +118,7 @@ export function createChat(deps: ChatDeps): Chat {
   }
 
   async function run(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
-    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), now: now(), capture, git: cwd => gitSummary(cwd) });
+    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), projects: deps.projects?.(), now: now(), capture, git: cwd => gitSummary(cwd) });
     if (mine.cancelled) return CANCELLED;
     const { sessionId, resume } = await daySession(fresh, tool);
     const label = TOOL_LABEL[tool];

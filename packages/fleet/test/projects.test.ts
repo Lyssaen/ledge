@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ProjectsSchema, type Project, type Projects } from '@ledge/protocol';
+import { ProjectsSchema, projectOf as protocolProjectOf, type Project, type Projects } from '@ledge/protocol';
 import { newProjectId, projectOf, withoutProject, withProject, withRule } from '../src/projects';
 
 const A: Project = { id: 'a', name: 'A', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] };
@@ -8,25 +8,7 @@ const state: Projects = { projects: [A, B], rules: [{ machine: 'local', path: '/
 const at = (cwd: string, machineId?: string) => ({ cwd, machineId });
 
 describe('projectOf', () => {
-  it('matches a repo folder and what is under it, never a sibling sharing the prefix', () => {
-    expect(projectOf(at('/w/ledge'), state)).toBe('a');
-    expect(projectOf(at('/w/ledge/app/src'), state)).toBe('a');
-    expect(projectOf(at('/w/ledge-docs'), state)).toBeNull();
-  });
-  it('picks the deepest path, and a rule over a repo on the same path', () => {
-    expect(projectOf(at('/w/ledge/docs/x'), state)).toBe('b');
-    expect(projectOf(at('/w/ledge'), { ...state, rules: [{ machine: 'local', path: '/w/ledge', project: 'b' }] })).toBe('b');
-  });
-  it('only looks at the session machine; no machine means local', () => {
-    expect(projectOf(at('/w/api', 'devbox'), state)).toBe('b');
-    expect(projectOf(at('/w/api', 'local'), state)).toBeNull();
-    expect(projectOf(at('/w/ledge/x', 'devbox'), state)).toBeNull();
-    expect(projectOf(at('/tmp/scratch/a'), state)).toBe('b');
-  });
-  it('tolerates a trailing slash in the session cwd', () => { expect(projectOf(at('/w/ledge/'), state)).toBe('a'); });
-  it('ignores a rule naming a project that is gone', () => {
-    expect(projectOf(at('/tmp/scratch'), { projects: [A], rules: [{ machine: 'local', path: '/tmp/scratch', project: 'zz' }] })).toBeNull();
-  });
+  it('is the protocol function, re-exported', () => { expect(projectOf).toBe(protocolProjectOf); });
 });
 
 describe('edits', () => {

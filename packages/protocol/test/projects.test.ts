@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PROJECT_COLORS, ProjectsSchema, normalizePath, parseClientMessage, parseServerMessage, projectsProblems, type ProjectColor, type Projects, type Repo } from '../src/index.js';
+import { PROJECT_COLORS, ProjectsSchema, normalizePath, parseClientMessage, projectOf, parseServerMessage, projectsProblems, type ProjectColor, type Projects, type Repo } from '../src/index.js';
 
 const p = (id: string, name: string, repos: Repo[] = [], color: ProjectColor = 'blue') => ({ id, name, color, description: '', repos });
 const r = (machine: string, path: string): Repo => ({ machine, path });
@@ -35,5 +35,31 @@ describe('projects schema', () => {
     expect(parseServerMessage({ type: 'projects', projects })).toEqual({ type: 'projects', projects });
     expect(parseClientMessage({ type: 'projects.set', projects })).toEqual({ type: 'projects.set', projects });
     expect(() => parseClientMessage({ type: 'projects.set', projects: { projects: [p('a', ''), p('a', 'B')], rules: [] } })).toThrow();
+  });
+});
+
+describe('projectOf', () => {
+  const A = { id: 'a', name: 'A', color: 'blue' as const, description: '', repos: [{ machine: 'local', path: '/w/ledge' }] };
+  const B = { id: 'b', name: 'B', color: 'green' as const, description: '', repos: [{ machine: 'local', path: '/w/ledge/docs' }, { machine: 'devbox', path: '/w/api' }] };
+  const state: Projects = { projects: [A, B], rules: [{ machine: 'local', path: '/tmp/scratch', project: 'b' }] };
+  const at = (cwd: string, machineId?: string) => ({ cwd, machineId });
+  it('matches a repo folder and what is under it, never a sibling sharing the prefix', () => {
+    expect(projectOf(at('/w/ledge'), state)).toBe('a');
+    expect(projectOf(at('/w/ledge/app/src'), state)).toBe('a');
+    expect(projectOf(at('/w/ledge-docs'), state)).toBeNull();
+  });
+  it('picks the deepest path, and a rule over a repo on the same path', () => {
+    expect(projectOf(at('/w/ledge/docs/x'), state)).toBe('b');
+    expect(projectOf(at('/w/ledge'), { ...state, rules: [{ machine: 'local', path: '/w/ledge', project: 'b' }] })).toBe('b');
+  });
+  it('only looks at the session machine; no machine means local', () => {
+    expect(projectOf(at('/w/api', 'devbox'), state)).toBe('b');
+    expect(projectOf(at('/w/api', 'local'), state)).toBeNull();
+    expect(projectOf(at('/w/ledge/x', 'devbox'), state)).toBeNull();
+    expect(projectOf(at('/tmp/scratch/a'), state)).toBe('b');
+  });
+  it('tolerates a trailing slash in the session cwd', () => { expect(projectOf(at('/w/ledge/'), state)).toBe('a'); });
+  it('ignores a rule naming a project that is gone', () => {
+    expect(projectOf(at('/tmp/scratch'), { projects: [A], rules: [{ machine: 'local', path: '/tmp/scratch', project: 'zz' }] })).toBeNull();
   });
 });

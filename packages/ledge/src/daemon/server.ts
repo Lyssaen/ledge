@@ -90,7 +90,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
-  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now });
+  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects });
   const router = createRouter({ env: agentEnv });
   const wss = new WebSocketServer({
     host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT, maxPayload: MAX_FRAME,

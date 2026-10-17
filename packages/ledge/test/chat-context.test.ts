@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { dirname } from 'node:path';
 import { join } from 'node:path';
-import type { Session } from '@ledge/protocol';
+import type { Projects, Session } from '@ledge/protocol';
 import { writeContext, stepFor } from '../src/chat/context.js';
 
 const T0 = '2026-10-11T10:00:00.000Z';
@@ -21,6 +21,41 @@ describe('writeContext', () => {
     const empty = mkdtempSync(join(tmpdir(), 'ctx-'));
     await writeContext(empty, { sessions: [], now: T0, capture: async () => null, git: async () => null });
     expect(readFileSync(join(empty, 'folders.md'), 'utf8')).toContain('(none yet)');
+  });
+
+  const PROJECTS: Projects = {
+    projects: [
+      { id: 'ledge', name: 'Ledge', color: 'blue', description: 'The agent cockpit.', repos: [{ machine: 'local', path: '/w/ledge' }, { machine: 'devbox', path: '/srv/ledge' }] },
+      { id: 'api', name: 'API', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/api' }] }
+    ],
+    rules: [{ machine: 'local', path: '/tmp/scratch', project: 'api' }]
+  };
+
+  it('writes projects.md with each project, its description, its repositories and the remembered folders', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    const ctx = await writeContext(dir, { sessions: [], projects: PROJECTS, now: T0, capture: async () => null, git: async () => null });
+    const md = readFileSync(join(dir, 'projects.md'), 'utf8');
+    expect(md).toContain('## Ledge'); expect(md).toContain('The agent cockpit.');
+    expect(md).toContain('- local : /w/ledge'); expect(md).toContain('- devbox : /srv/ledge'); expect(md).toContain('## API'); expect(md).toContain('- local : /w/api');
+    expect(md).toContain('Dossiers rangés'); expect(md).toContain('- local : /tmp/scratch → API');
+    expect(md.indexOf('## API')).toBeLessThan(md.indexOf('Dossiers rangés'));
+    expect(stepFor(join(dir, 'projects.md'), ctx)).toBeNull();
+  });
+
+  it('says there is no project when there are none', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    await writeContext(dir, { sessions: [mk('a')], now: T0, capture: async () => null, git: async () => null });
+    expect(readFileSync(join(dir, 'projects.md'), 'utf8')).toContain('Aucun projet.');
+    expect(readFileSync(join(dir, 'sessions.md'), 'utf8')).toContain('- Projet : Sans projet');
+  });
+
+  it('gives each session its project in sessions.md', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    const sessions = [mk('a', { cwd: '/w/ledge/src' }), mk('b', { name: 'Nova', cwd: '/w/elsewhere' }), mk('c', { name: 'Zed', cwd: '/srv/ledge', machineId: 'devbox' })];
+    await writeContext(dir, { sessions, projects: PROJECTS, now: T0, capture: async () => null, git: async () => null });
+    const md = readFileSync(join(dir, 'sessions.md'), 'utf8');
+    const section = (name: string) => md.slice(md.indexOf(`## ${name} `)).split('\n## ')[0];
+    expect(section('Otto')).toContain('- Projet : Ledge'); expect(section('Nova')).toContain('- Projet : Sans projet'); expect(section('Zed')).toContain('- Projet : Ledge');
   });
 
   it('writes sessions.md and one file per source, and maps them to steps', async () => {

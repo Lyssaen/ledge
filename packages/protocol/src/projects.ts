@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MachineIdSchema } from './machines.js';
+import type { Session } from './session.js';
 
 /** The eight project colours of the mockup, stored by key so a front may restyle them. */
 export const PROJECT_COLORS = { blue: '#3b82f6', green: '#10b981', amber: '#f59e0b', violet: '#8b5cf6', teal: '#14b8a6', pink: '#ec4899', red: '#ef4444', slate: '#64748b' } as const;
@@ -66,3 +67,21 @@ export const ProjectsSchema = z.object({ projects: z.array(ProjectSchema).max(10
 export type Projects = z.infer<typeof ProjectsSchema>;
 
 export const DEFAULT_PROJECTS: Projects = { projects: [], rules: [] };
+
+const under = (cwd: string, path: string) => path === '/' || cwd === path || cwd.startsWith(`${path}/`);
+
+/**
+ * The project a session belongs to (build spec §5): among the repos and rules of the session's machine whose folder holds its
+ * `cwd`, the deepest wins; on the same folder a rule (the user put the agent away) wins over a repo. `null`: « Sans projet ».
+ */
+export function projectOf(session: Pick<Session, 'machineId' | 'cwd'>, state: Projects): string | null {
+  const machine = session.machineId ?? 'local';
+  const cwd = normalizePath(session.cwd);
+  const known = new Set(state.projects.map(p => p.id));
+  const candidates = [
+    ...state.projects.flatMap(p => p.repos.filter(r => r.machine === machine).map(r => ({ project: p.id, path: r.path, rule: false }))),
+    ...state.rules.filter(r => r.machine === machine && known.has(r.project)).map(r => ({ project: r.project, path: r.path, rule: true }))
+  ].filter(c => under(cwd, c.path));
+  candidates.sort((x, y) => y.path.length - x.path.length || Number(y.rule) - Number(x.rule));
+  return candidates[0]?.project ?? null;
+}

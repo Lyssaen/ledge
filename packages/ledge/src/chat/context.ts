@@ -1,9 +1,9 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import type { ChatStep, Recent, Session } from '@ledge/protocol';
+import { DEFAULT_PROJECTS, projectOf, type ChatStep, type Projects, type Recent, type Session } from '@ledge/protocol';
 
-export interface ContextInput { sessions: Session[]; recents?: Recent[]; capture: (s: Session) => Promise<string[] | null>; git: (cwd: string) => Promise<string | null>; now: string }
+export interface ContextInput { sessions: Session[]; recents?: Recent[]; projects?: Projects; capture: (s: Session) => Promise<string[] | null>; git: (cwd: string) => Promise<string | null>; now: string }
 export interface Context { dir: string; steps: Map<string, ChatStep>; repoPaths: string[] }
 
 const STATE: Record<Session['state'], string> = {
@@ -13,15 +13,18 @@ const STATE: Record<Session['state'], string> = {
 
 /**
  * The folder Ledge reads before answering (spec 2026-10-11 §5.3): `sessions.md` names every session and the files that
- * describe it; `folders.md` lists the recent folders; `pane-<id>.txt`, `reply-<id>.md` and `git-<id>.txt` exist only where there is something to read.
+ * describe it; `folders.md` lists the recent folders; `projects.md` the projects, their repositories and remembered folders; `pane-<id>.txt`, `reply-<id>.md` and `git-<id>.txt` exist only where there is something to read.
  */
 export async function writeContext(dir: string, input: ContextInput): Promise<Context> {
   await rm(dir, { recursive: true, force: true }); await mkdir(dir, { recursive: true });
   const steps = new Map<string, ChatStep>();
+  const projects = input.projects ?? DEFAULT_PROJECTS;
+  const nameOf = new Map(projects.projects.map(p => [p.id, p.name]));
   const lines = [`# Ledge sessions at ${input.now}`, '', 'Each session below lists the files that describe it, in this folder.', ''];
   for (const s of input.sessions) {
     lines.push(`## ${s.name} (${s.tool}) — ${STATE[s.state]}`, `- id: ${s.id}`, `- topic: ${s.topic ?? '(none yet)'}`, `- folder: ${s.cwd}`,
       `- repository: ${s.repo ?? s.project}${s.branch ? `, branch ${s.branch}${s.worktree ? ' (linked worktree)' : ''}` : ''}`, `- started: ${s.startedAt}, last activity: ${s.lastActivityAt}`);
+    lines.push(`- Projet : ${nameOf.get(projectOf(s, projects) ?? '') ?? 'Sans projet'}`);
     if (s.source === 'hook_only') lines.push('- read-only: Ledge cannot send to it');
     if (s.pending) lines.push(`- pending ${s.pending.kind}: ${s.pending.text}`);
     const live = s.helpers.filter(h => h.state !== 'exited');
@@ -38,6 +41,9 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
   const recents = input.recents ?? [];
   await writeFile(join(dir, 'folders.md'), ['# Recent folders', '', 'The folders the user started sessions in, most recent first.', '',
     ...(recents.length ? recents.map(r => `- ${r.project}: ${r.cwd} (last used ${r.lastAt})`) : ['- (none yet)']), ''].join('\n'));
+  // The projects (build spec §5): a remote daemon knows none, so its `projects.md` says so.
+  await writeFile(join(dir, 'projects.md'), ['# Projets', '', ...(projects.projects.length ? projects.projects.flatMap(p => [`## ${p.name}`, ...(p.description ? [p.description] : []), '', ...p.repos.map(r => `- ${r.machine} : ${r.path}`), '']) : ['Aucun projet.', '']),
+    ...(projects.rules.length ? ['## Dossiers rangés', '', ...projects.rules.map(r => `- ${r.machine} : ${r.path} → ${nameOf.get(r.project) ?? r.project}`), ''] : [])].join('\n'));
   const repoPaths = [...new Set(input.sessions.map(s => s.repoPath ?? s.cwd).filter(p => p && !coversHome(p)).map(p => resolve(p)))];
   return { dir, steps, repoPaths };
 }

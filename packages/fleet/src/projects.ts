@@ -1,23 +1,8 @@
-import { normalizePath, type Project, type Projects, type Repo, type Rule, type Session } from '@ledge/protocol';
+import { normalizePath, type Project, type Projects, type Repo, type Rule } from '@ledge/protocol';
 
-const under = (cwd: string, path: string) => path === '/' || cwd === path || cwd.startsWith(`${path}/`);
 const sameFolder = (a: { machine: string; path: string }, b: { machine: string; path: string }) => a.machine === b.machine && a.path === b.path;
 
-/**
- * The project a session belongs to (build spec §5): among the repos and rules of the session's machine whose folder holds its
- * `cwd`, the deepest wins; on the same folder a rule (the user put the agent away) wins over a repo. `null`: « Sans projet ».
- */
-export function projectOf(session: Pick<Session, 'machineId' | 'cwd'>, state: Projects): string | null {
-  const machine = session.machineId ?? 'local';
-  const cwd = normalizePath(session.cwd);
-  const known = new Set(state.projects.map(p => p.id));
-  const candidates = [
-    ...state.projects.flatMap(p => p.repos.filter(r => r.machine === machine).map(r => ({ project: p.id, path: r.path, rule: false }))),
-    ...state.rules.filter(r => r.machine === machine && known.has(r.project)).map(r => ({ project: r.project, path: r.path, rule: true }))
-  ].filter(c => under(cwd, c.path));
-  candidates.sort((x, y) => y.path.length - x.path.length || Number(y.rule) - Number(x.rule));
-  return candidates[0]?.project ?? null;
-}
+export { projectOf } from '@ledge/protocol';
 
 /** Adds a project, or replaces the one with its id where it stands. */
 export function withProject(state: Projects, project: Project): Projects {
