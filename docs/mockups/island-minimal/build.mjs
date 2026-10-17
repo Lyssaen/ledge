@@ -28,7 +28,7 @@ const paths = [
   'docs/mockups/island-minimal/island.css',
 ];
 const css = (await Promise.all(paths.map(p => readFile(resolve(root, p), 'utf8')))).map(s => s.replace(/^@import .*;\s*$/gm, '')).join('\n');
-const html = `<!doctype html><html lang="fr" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>L’île minimale</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"><style>${css}</style></head><body><div id="root"></div><script>${result.outputFiles[0].text.replaceAll('</script', '<\\/script')}</script></body></html>`;
+const html = `<!doctype html><html lang="fr" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>L’île, petite</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"><style>${css}</style></head><body><div id="root"></div><script>${result.outputFiles[0].text.replaceAll('</script', '<\\/script')}</script></body></html>`;
 const output = resolve(root, 'docs/mockups/ledge-island-minimal.html');
 await writeFile(output, html);
 if (process.argv[2]) await writeFile(resolve(process.argv[2]), html);

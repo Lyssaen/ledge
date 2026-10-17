@@ -31,50 +31,44 @@ const AGENTS: Agent[] = [
   { id: 'ash', name: 'Ash', tool: 'cursor', project: 'Studio', machine: 'studio', task: 'Vérifier la version distante', state: 'working' },
 ];
 const ASKS: Record<string, Ask> = {
-  otto: { id: 'ask-otto', agent: 'otto', kind: 'approval', title: 'Otto attend votre accord', detail: 'pnpm --filter @ledge/overlay test -- --run' },
-  nova: { id: 'ask-nova', agent: 'nova', kind: 'question', title: 'Nova a une question', detail: 'Migration progressive ou courte fenêtre de maintenance ?' },
-  lou: { id: 'ask-lou', agent: 'lou', kind: 'approval', title: 'Lou attend votre accord', detail: 'pnpm up --latest && pnpm test' },
+  otto: { id: 'ask-otto', agent: 'otto', kind: 'approval', title: 'Otto · pnpm test', detail: 'pnpm --filter @ledge/overlay test -- --run' },
+  nova: { id: 'ask-nova', agent: 'nova', kind: 'question', title: 'Nova · question', detail: 'Migration progressive ou courte fenêtre de maintenance ?' },
+  lou: { id: 'ask-lou', agent: 'lou', kind: 'approval', title: 'Lou · pnpm up', detail: 'pnpm up --latest && pnpm test' },
 };
 const NOTICES: Record<'done' | 'error' | 'offline', Omit<Notice, 'key'>> = {
   done: { kind: 'done', agent: 'sage', title: 'Sage a terminé', sub: '2 min · le calcul arrondit par ligne' },
-  error: { kind: 'error', agent: 'iris', title: 'Iris s’est arrêtée', sub: 'ECONNREFUSED · le paiement de test ne répond plus' },
+  error: { kind: 'error', agent: 'iris', title: 'Iris · erreur', sub: 'ECONNREFUSED · le paiement de test ne répond plus' },
   offline: { kind: 'offline', title: 'Studio SSH', sub: 'Reconnexion automatique' },
 };
 const NOTICE_MS = 6000;
 const SCENARIOS: { id: Scenario; label: string; hint: string }[] = [
-  { id: 'idle', label: 'Repos', hint: 'Rien à faire' },
-  { id: 'approval', label: 'Accord', hint: 'La seule décision sur l’île' },
-  { id: 'question', label: 'Question', hint: 'Répondre ouvre Desktop' },
-  { id: 'done', label: 'Terminé', hint: 'Une ligne, six secondes' },
-  { id: 'error', label: 'Erreur', hint: 'Une ligne, six secondes' },
-  { id: 'offline', label: 'Hors ligne', hint: 'Une ligne, six secondes' },
-  { id: 'queue', label: 'File', hint: 'Le compteur et les lamelles' },
+  { id: 'idle', label: 'Repos', hint: 'La barre, rien de plus' },
+  { id: 'approval', label: 'Accord', hint: 'Deux signes' },
+  { id: 'question', label: 'Question', hint: 'Le rang ouvre Desktop' },
+  { id: 'done', label: 'Terminé', hint: 'Trois mots, six secondes' },
+  { id: 'error', label: 'Erreur', hint: 'Trois mots, six secondes' },
+  { id: 'offline', label: 'Hors ligne', hint: 'Trois mots, six secondes' },
+  { id: 'queue', label: 'File', hint: 'Un chiffre' },
   { id: 'name', label: 'Un nom', hint: 'Clic sur un point' },
-  { id: 'pip', label: 'Pastille', hint: 'La mise à jour part dans Desktop' },
+  { id: 'pip', label: 'Pastille', hint: 'Un point rouge' },
   { id: 'chat', label: 'Chat', hint: 'La mascotte ouvre Desktop' },
 ];
 const KEEP: [string, string][] = [
-  ['Encoche', 'Mascotte Ledge, un point coloré par agent, un filet entre les machines, les congés dans le bord de l’écran.'],
-  ['Accord', 'Refuser et Autoriser. Y, N et Entrée. C’est le seul geste qui ne peut pas attendre.'],
-  ['Avis', 'Terminé, erreur, machine hors ligne : une ligne et une barre de 6 s. Le clic ouvre la session.'],
-  ['File', 'Le même rang, un compteur, les lamelles en dessous.'],
-  ['Pastille', 'Le point rouge sur la mascotte. L’installation se fait dans Ledge Desktop.'],
+  ['La barre', '28 px de haut, au repos comme lorsqu’elle parle. Mascotte, points, filet entre les machines.'],
+  ['Accord', 'Un nom et deux signes, × et ✓. Y, N, Entrée. La commande complète est dans Desktop.'],
+  ['Avis', '« Sage a terminé », « Iris · erreur », « Studio SSH ». Une barre de 6 s. Le clic ouvre la session.'],
+  ['File', 'Le même rang, un chiffre, deux lamelles de quelques pixels.'],
 ];
 const HANDOFF: [string, string][] = [
-  ['Chat', 'Un clic sur la mascotte. L’île reste compacte.'],
-  ['Question', 'Le bouton Répondre. Les choix et le texte court s’écrivent dans Desktop.'],
-  ['Un agent', 'Un clic sur son point : une ligne « Rio · Préparer la version 0.6 », puis sa session.'],
-  ['Avis et pastille', 'Le rang, ou le point rouge, ouvre la session ou les mises à jour.'],
+  ['Chat et pastille', 'La mascotte et le point rouge. L’île ne s’élargit pas.'],
+  ['Question', 'Le rang entier est le bouton. Les choix s’écrivent dans Desktop.'],
+  ['Un agent', 'Un clic sur son point : « Rio · version 0.6 », puis sa session.'],
 ];
 const DROPPED: [string, string][] = [
-  ['Visages au repos', 'Les têtes et les noms quittent l’île compacte. La couleur du point porte l’état.'],
-  ['Chat, menu, quitter', 'Le fil, les réglages, Ne pas déranger et Quitter vivent dans Ledge Desktop.'],
-  ['Carte de commande', 'La commande tient dans la ligne atténuée. Plus de lien Ouvrir ni de Plus tard.'],
-  ['Question détaillée', 'Plus de pastilles numérotées ni de champ court sur l’île.'],
-  ['Aperçu et OK', 'Plus de carte au clic, plus de bouton OK sur un avis.'],
+  ['La grande ligne', 'La version précédente s’ouvrait sur 520 px. Ici le rang reste sous 250 px, à la même hauteur que le repos.'],
+  ['Les phrases', 'Plus de sous-titre, plus de commande affichée, plus de bouton Répondre.'],
+  ['Visages, chat, menu', 'Les têtes au repos, le fil, les réglages, Ne pas déranger et Quitter vivent dans Ledge Desktop.'],
 ];
-
-const mini = { height: 26, padding: '0 10px', fontSize: 12, gap: 6, borderRadius: 7 } as const;
 
 function useReducedMotion() {
   const [r, setR] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -89,7 +83,7 @@ function useReducedMotion() {
 
 /** The notch follows its content, so a dot row and a sentence can share one transition. */
 function useBox(ref: React.RefObject<HTMLDivElement | null>, key: unknown) {
-  const [box, setBox] = useState({ w: 220, h: 38 });
+  const [box, setBox] = useState({ w: 150, h: 28 });
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -151,7 +145,7 @@ function App() {
     const queue = s === 'approval' ? [ASKS.otto] : s === 'question' ? [ASKS.nova] : s === 'queue' ? [ASKS.otto, ASKS.nova, ASKS.lou] : [];
     setPending(queue);
     if (s === 'chat') { setMode('handle'); openDesktop('Ouverture du chat'); return; }
-    if (s === 'name') { setMode('name'); setNameId('rio'); announce('Rio · Préparer la version 0.6'); return; }
+    if (s === 'name') { setMode('name'); setNameId('rio'); announce('Rio · version 0.6'); return; }
     if (s === 'done' || s === 'error' || s === 'offline') {
       const n = { ...NOTICES[s], key: Date.now() };
       setNotice(n); setMode('notice'); announce(`${n.title}. ${n.sub}`);
@@ -210,7 +204,7 @@ function App() {
 
   return <div className="min" data-scenario={scenario} data-mode={mode} data-reduced={reduced || undefined}>
     <header className="min-top">
-      <div><h1>L’île, minimale</h1><p>Une ligne quand on a besoin de vous. Le reste s’ouvre dans Ledge Desktop.</p></div>
+      <div><h1>L’île, petite</h1><p>Elle tient dans la barre. Une demande ajoute un nom et, pour un accord, deux signes.</p></div>
       <span className="min-mock">Maquette · données simulées</span>
       <Button variant="outline" size="sm" aria-pressed={theme === 'light'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? 'Thème clair' : 'Thème sombre'}</Button>
     </header>
@@ -224,13 +218,13 @@ function App() {
         <div className="stage-windows" aria-hidden="true"><div className="win win-term"><i /><i /><i /><i /><i /></div><div className="win win-editor"><i /><i /><i /><i /></div></div>
         <div className="island-wrap" style={{ width: box.w }}>
           <Shoulders left={0} w={box.w} transition={motion} opacity={1} />
-          {mode === 'ask' && waiting.length > 0 && <div className="queue-slivers" aria-hidden="true">{waiting.slice(0, 2).map((p, i) => <i key={p.id} style={{ width: `calc(100% - ${(i + 1) * 28}px)` }} />)}</div>}
+          {mode === 'ask' && waiting.length > 0 && <div className="queue-slivers" aria-hidden="true">{waiting.slice(0, 2).map((p, i) => <i key={p.id} style={{ width: `calc(100% - ${(i + 1) * 16}px)` }} />)}</div>}
           <div className="island" data-mode={mode} data-surface style={{ width: box.w, height: box.h }}>
             <div ref={contentRef} className="island-content" key={`${mode}-${shownId ?? ''}-${notice?.key ?? ''}-${nameId ?? ''}`}>
               {mode === 'handle' && <div className="handle">
                 <span className="resident">
                   <button type="button" data-resident aria-label="Ledge, ouvrir" title="Ouvrir le chat dans Ledge Desktop" onClick={() => openDesktop('Ouverture du chat')}>
-                    <ResidentMascot size={22} theme={theme} reducedMotion={reduced} center={{ x: 0, y: 0 }} />
+                    <ResidentMascot size={16} theme={theme} reducedMotion={reduced} center={{ x: 0, y: 0 }} />
                   </button>
                   {pip && <button type="button" className="pip" data-update-pip="new" aria-label="Ledge 0.6.0 est prêt" title="Ledge 0.6.0 est prêt" onClick={() => openDesktop('Ouverture des mises à jour')} />}
                 </span>
@@ -246,28 +240,28 @@ function App() {
                 </Fragment>)}
               </div>}
 
-              {mode === 'ask' && ask && <div className="row" data-kind={ask.kind}>
-                <Bot tool={agent(ask.agent).tool} state={ask.kind} pose={1} size={26} theme={theme} seed={ask.agent} reducedMotion={reduced} nodKey={nods[ask.agent] ?? 0} />
-                <div className="row-copy">
-                  <strong>{ask.title}</strong>
-                  <small className={ask.kind === 'approval' ? 'mono' : undefined}>{ask.detail}</small>
-                </div>
+              {mode === 'ask' && ask && ask.kind === 'question' && <button type="button" className="row row-hit" data-kind="question" title={ask.detail} aria-label={`${ask.title}. ${ask.detail}`} onClick={() => { openDesktop(`Ouverture de la question de ${agent(ask.agent).name}`); fold(); }}>
+                <Bot tool={agent(ask.agent).tool} state="question" pose={1} size={16} theme={theme} seed={ask.agent} reducedMotion={reduced} />
+                <strong>{ask.title}</strong>
                 {waiting.length > 0 && <span className="count" aria-label={`${waiting.length} autres demandes`}>{waiting.length}</span>}
-                {ack ? <span className="ack" role="status"><Icon size={13} {...ICONS.check} />{ack}</span> : <span className="row-actions">
-                  {ask.kind === 'approval' ? <>
-                    <Button variant="outline" size="sm" style={mini} onClick={() => resolve(ask, `Refus envoyé à ${agent(ask.agent).name}.`)}>Refuser</Button>
-                    <Button variant="primary" size="sm" style={mini} onClick={() => resolve(ask, `Accord envoyé à ${agent(ask.agent).name}.`)}>Autoriser</Button>
-                  </> : <Button variant="primary" size="sm" style={mini} onClick={() => { openDesktop(`Ouverture de la question de ${agent(ask.agent).name}`); fold(); }}>Répondre<Icon size={12} {...ICONS.external} /></Button>}
-                </span>}
+              </button>}
+
+              {mode === 'ask' && ask && ask.kind === 'approval' && <div className="row" data-kind="approval" title={ask.detail}>
+                <Bot tool={agent(ask.agent).tool} state="approval" pose={1} size={16} theme={theme} seed={ask.agent} reducedMotion={reduced} nodKey={nods[ask.agent] ?? 0} />
+                <strong>{ask.title}</strong>
+                {waiting.length > 0 && <span className="count" aria-label={`${waiting.length} autres demandes`}>{waiting.length}</span>}
+                {ack ? <span className="ack" role="status" aria-label={ack}><Icon size={13} {...ICONS.check} /></span> : <>
+                  <button type="button" className="icon-btn" aria-label="Refuser" onClick={() => resolve(ask, `Refus envoyé à ${agent(ask.agent).name}.`)}><Icon size={12} {...ICONS.close} /></button>
+                  <button type="button" className="icon-btn yes" aria-label="Autoriser" onClick={() => resolve(ask, `Accord envoyé à ${agent(ask.agent).name}.`)}><Icon size={12} {...ICONS.check} /></button>
+                </>}
               </div>}
 
               {mode === 'notice' && notice && <NoticeRow notice={notice} agent={notice.agent ? agent(notice.agent) : undefined} theme={theme} reduced={reduced} held={held}
                 onHold={setHeld} onDone={fold} onOpen={() => { openDesktop(notice.agent ? `Ouverture de la session de ${agent(notice.agent).name}` : 'Ouverture des machines'); fold(); }} />}
 
-              {mode === 'name' && named && <button type="button" className="row row-hit" data-kind="name" onClick={() => { openDesktop(`Ouverture de la session de ${named.name}`); fold(); }}>
-                <Bot tool={named.tool} state={visual(named)} pose={1} size={26} theme={theme} seed={named.id} reducedMotion={reduced} frozen={offline.includes(named.machine)} />
-                <div className="row-copy"><strong>{named.name} · {named.task}</strong><small>{named.project} · {MACHINES[named.machine]}</small></div>
-                <span className="row-go" aria-hidden="true"><Icon size={14} {...ICONS.chevronRight} /></span>
+              {mode === 'name' && named && <button type="button" className="row row-hit" data-kind="name" title={`${named.task} · ${named.project} · ${MACHINES[named.machine]}`} onClick={() => { openDesktop(`Ouverture de la session de ${named.name}`); fold(); }}>
+                <Bot tool={named.tool} state={visual(named)} pose={1} size={16} theme={theme} seed={named.id} reducedMotion={reduced} frozen={offline.includes(named.machine)} />
+                <strong>{named.name} · {named.id === 'rio' ? 'version 0.6' : named.task}</strong>
               </button>}
             </div>
           </div>
@@ -278,8 +272,8 @@ function App() {
       </section>
 
       <aside className="scope" aria-labelledby="scope-title">
-        <h2 id="scope-title">Une ligne, et c’est tout</h2>
-        <p>Proposition à côté de l’île sobre, déjà en revue. Cette page ne change pas l’application.</p>
+        <h2 id="scope-title">La même hauteur, au repos et en demande</h2>
+        <p>28 px de haut, moins de 250 px de large. Proposition. Cette page ne change pas l’application.</p>
         <h3><span className="dot-key keep" />Sur l’île</h3>
         <ul>{KEEP.map(([t, d]) => <li key={t}><strong>{t}</strong><span>{d}</span></li>)}</ul>
         <h3><span className="dot-key move" />Ouvre Ledge Desktop</h3>
@@ -294,10 +288,9 @@ function App() {
 
 function NoticeRow({ notice, agent, theme, reduced, held, onHold, onDone, onOpen }: { notice: Notice; agent?: Agent; theme: 'dark' | 'light'; reduced: boolean; held: boolean; onHold: (v: boolean) => void; onDone: () => void; onOpen: () => void }) {
   const state: BotState = notice.kind === 'done' ? 'idle' : 'error';
-  return <button type="button" className="row row-hit" data-kind={notice.kind} onClick={onOpen} onMouseEnter={() => onHold(true)} onMouseLeave={() => onHold(false)} onFocus={() => onHold(true)} onBlur={() => onHold(false)}>
-    {agent ? <Bot tool={agent.tool} state={state} pose={1} size={26} theme={theme} seed={agent.id} reducedMotion={reduced} /> : <span className="machine-dot" aria-hidden="true" />}
-    <span className="row-copy"><strong>{notice.title}</strong><small>{notice.sub}</small></span>
-    <span className="row-go" aria-hidden="true"><Icon size={14} {...ICONS.chevronRight} /></span>
+  return <button type="button" className="row row-hit" data-kind={notice.kind} title={notice.sub} aria-label={`${notice.title}. ${notice.sub}`} onClick={onOpen} onMouseEnter={() => onHold(true)} onMouseLeave={() => onHold(false)} onFocus={() => onHold(true)} onBlur={() => onHold(false)}>
+    {agent ? <Bot tool={agent.tool} state={state} pose={1} size={16} theme={theme} seed={agent.id} reducedMotion={reduced} /> : <span className="machine-dot" aria-hidden="true" />}
+    <strong>{notice.title}</strong>
     <span className="drain" aria-hidden="true"><i data-run={reduced ? undefined : true} style={{ animationPlayState: held ? 'paused' : 'running' }} onAnimationEnd={onDone} /></span>
   </button>;
 }
