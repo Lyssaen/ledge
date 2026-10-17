@@ -101,8 +101,7 @@
 /* office.css: on a subagent's page, its parent (bot and name) before it. */
 .breadcrumb .crumb-parent { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
-/* launch.css: the dialog widths and the chat panel. */
-.modal.composer-modal { width: 640px; }
+/* launch.css: the chat panel (lot 9); the composer's rules are in launch.css. */
 .ledge-chat-panel { width: 400px; flex-shrink: 0; position: relative; display: flex; flex-direction: column; border-left: 1px solid var(--sidebar-border); background: var(--sidebar); }
 .ledge-chat-panel .chat-drawer-content { position: relative; flex: 1; min-height: 0; }
 @media (max-width: 1250px) { .ledge-chat-panel { width: 340px; } }

@@ -89,7 +89,7 @@ describe('the Atelier shell', () => {
     const { side, user } = await boot({ projects: TWO_PROJECTS });
     await user.click(side.getByRole('button', { name: /New session/ }));
     const dialog = screen.getByRole('dialog', { name: 'New session' });
-    expect(within(dialog).getByRole('region', { name: 'New session' })).toBeVisible();
+    expect(within(dialog).getByRole('textbox', { name: 'Instruction' })).toBeVisible();
     await user.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     await user.click(side.getByRole('button', { name: 'New project' }));

@@ -249,6 +249,19 @@ const fr = {
       boxes: { completed: 'Fait', in_progress: 'En cours', pending: 'À faire' } as Record<TodoStatus, string>
     }
   },
+  launch: {
+    prompt: 'Consigne', placeholder: 'Que doit faire l’agent ? Décrivez le résultat attendu.',
+    suggestions: 'Suggestions', ideas: ['Relire la dernière pull request', 'Corriger les tests qui échouent', 'Mettre à jour la documentation'] as readonly string[],
+    agent: 'Agent',
+    tools: { claude: ['Claude Code', 'Conception, revue'], codex: ['Codex', 'Code et tests'], cursor: ['Cursor Agent', 'Dans l’éditeur'] } as Record<'claude' | 'codex' | 'cursor', readonly [string, string]>,
+    project: 'Projet', machine: 'Machine', offline: 'hors ligne', offlineTitle: 'Hors ligne : reconnectez la machine dans les réglages',
+    repos: (m: string) => `Dépôts sur ${m}`, noGit: 'Dossier sans Git', notFound: 'introuvable', oneRepo: (t: string) => `Un seul dépôt pour ${t}`,
+    noRepos: (p: string, m: string) => `Aucun dépôt de ${p} sur ${m}.`, editProject: 'Modifier le projet',
+    noProjects: 'Aucun projet pour l’instant.', noProjectsBody: 'Créez un projet pour y lancer des agents.', newProject: 'Nouveau projet',
+    newAgent: 'Un nouvel agent', joins: (n: string, t: string) => `${n} rejoindra la table ${t}`, seat: (n: number, m: string, r: string) => `Place ${n} · ${m} · ${r}`, noRepo: 'aucun dépôt',
+    missing: { tool: 'Choisissez un agent', prompt: 'Écrivez la consigne', machine: 'Aucune machine en ligne', repos: 'Choisissez au moins un dépôt' } as Record<'tool' | 'prompt' | 'machine' | 'repos', string>,
+    cancel: 'Annuler', launch: 'Lancer', launching: 'Lancement…'
+  },
   stateLabel: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
   botReadOnly: 'Lecture seule',
@@ -484,6 +497,19 @@ const en: typeof fr = {
       doneOf: (d, n) => `${d}/${n} done`, inProgress: (t) => `in progress: ${t}`,
       boxes: { completed: 'Done', in_progress: 'In progress', pending: 'To do' }
     }
+  },
+  launch: {
+    prompt: 'Instruction', placeholder: 'What should the agent do? Describe the expected result.',
+    suggestions: 'Suggestions', ideas: ['Review the latest pull request', 'Fix the failing tests', 'Update the documentation'],
+    agent: 'Agent',
+    tools: { claude: ['Claude Code', 'Design, review'], codex: ['Codex', 'Code and tests'], cursor: ['Cursor Agent', 'In the editor'] },
+    project: 'Project', machine: 'Machine', offline: 'offline', offlineTitle: 'Offline: reconnect the machine in Settings',
+    repos: (m) => `Repositories on ${m}`, noGit: 'Folder without Git', notFound: 'not found', oneRepo: (t) => `One repository only for ${t}`,
+    noRepos: (p, m) => `No repository of ${p} on ${m}.`, editProject: 'Edit the project',
+    noProjects: 'No project yet.', noProjectsBody: 'Create a project to launch agents in it.', newProject: 'New project',
+    newAgent: 'A new agent', joins: (n, t) => `${n} will join the ${t} table`, seat: (n, m, r) => `Seat ${n} · ${m} · ${r}`, noRepo: 'no repository',
+    missing: { tool: 'Choose an agent', prompt: 'Write the instruction', machine: 'No machine online', repos: 'Choose at least one repository' },
+    cancel: 'Cancel', launch: 'Launch', launching: 'Launching…'
   },
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },

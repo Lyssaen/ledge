@@ -6,7 +6,7 @@ import userEvent, { type UserEvent } from '@testing-library/user-event';
 import WebSocket from 'ws';
 import { createElement, type ComponentType } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
-import type { Projects, Session, ThreadItem } from '@ledge/protocol';
+import type { Machines, Projects, RepoInfo, Session, ThreadItem } from '@ledge/protocol';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
@@ -36,6 +36,23 @@ export const PROJECTS: Projects = {
   rules: []
 };
 export const TWO_PROJECTS: Projects = { ...PROJECTS, projects: PROJECTS.projects.slice(0, 2) };
+
+/** The New session form's fixture: PROJECTS with Ledge's two repositories on local (app on desktop, docs on main) and one on NAS,
+ *  a rule keeping the /w/ledge sessions at the Ledge table, and Docs only on NAS (no repository on local). */
+export const LAUNCH_PROJECTS: Projects = {
+  projects: [
+    { ...PROJECTS.projects[0]!, repos: [{ machine: 'local', path: '/w/ledge/app' }, { machine: 'local', path: '/w/ledge/docs' }, { machine: 'nas', path: '/srv/ledge' }] },
+    PROJECTS.projects[1]!,
+    { ...PROJECTS.projects[2]!, repos: [{ machine: 'nas', path: '/srv/docs' }] }
+  ],
+  rules: [{ machine: 'local', path: '/w/ledge', project: 'ledge' }]
+};
+export const LAUNCH_REPOS = (): Map<string, RepoInfo> => new Map([
+  ['/w/ledge/docs', { path: '/w/ledge/docs', exists: true, branch: 'main' }],
+  ['/w/ledge/app', { path: '/w/ledge/app', exists: true, branch: 'desktop' }]
+]);
+/** Local, and NAS that never connects (the mock's snapshot names no SSH alias): offline. */
+export const LOCAL_AND_NAS: Machines = [{ id: 'local', label: 'Local' }, { id: 'nas', label: 'NAS', ssh: 'nas' }];
 
 export const DEFAULT_SESSIONS: Session[] = [
   fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission' }),
@@ -89,23 +106,32 @@ export async function closeDaemons(): Promise<void> {
   for (const d of daemons.splice(0)) await d.close();
 }
 
-/** Mounts the app on a mock daemon (machines Local and Dev SSH). `list` writes `desktop.overview` on the List before rendering.
+/** Mounts the app on a mock daemon (machines Local and Dev SSH unless `machines` says otherwise; `repoInfo`: what `repos.inspect` answers).
+ *  `list` writes `desktop.overview` on the List before rendering.
  *  Ready once the Atelier counter shows the active sessions, the last project's row is in the sidebar and, with sessions,
  *  the first one is shown (its seat in the atelier, its row in the List). */
-export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false }: { sessions?: Session[]; projects?: Projects; list?: boolean } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
+export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false, machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }], repoInfo }: { sessions?: Session[]; projects?: Projects; list?: boolean; machines?: Machines; repoInfo?: ReadonlyMap<string, RepoInfo> } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
   // The session page's own chunk is there before a test opens one: the page comes in the same render, as once preloaded in the app.
   await loadWorkspace();
   const d = await createMockDaemon(); daemons.push(d);
-  d.machines([{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }]);
+  d.machines(machines);
   d.projects(projects);
+  for (const [path, info] of repoInfo ?? []) d.repoInfo.set(path, info);
   for (const s of sessions) d.upsert(s);
   if (list) localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false }));
   const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
   const view = render(createElement(App as ComponentType<{ client?: DaemonClient }>, { client }));
   const side = within(await screen.findByRole('complementary', { name: /sidebar/i }));
   await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(sessions))));
-  const last = projects.projects[projects.projects.length - 1]!;
-  await side.findByRole('button', { name: new RegExp(`^${last.name}`) });
+  const last = projects.projects[projects.projects.length - 1];
+  if (last) await side.findByRole('button', { name: new RegExp(`^${last.name}`) });
   if (sessions.length > 0) await screen.findByRole(list ? 'listitem' : 'button', { name: new RegExp(`^${sessions[0]!.name},`) });
   return { d, side, view, client, user: userEvent.setup() };
+}
+
+/** The app on the List with listSessions, LAUNCH_PROJECTS, Local and NAS (offline), then N: the New session dialog. */
+export async function openLaunch(opts: { repoInfo?: Map<string, RepoInfo> } = {}) {
+  const env = await boot({ sessions: listSessions(), list: true, projects: LAUNCH_PROJECTS, machines: LOCAL_AND_NAS, repoInfo: opts.repoInfo ?? LAUNCH_REPOS() });
+  await env.user.keyboard('n');
+  return { ...env, form: within(await screen.findByRole('dialog', { name: 'New session' })) };
 }

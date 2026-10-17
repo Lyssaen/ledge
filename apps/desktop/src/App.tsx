@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { projectOf, useDaemon, useProjects, type DaemonClient } from '@ledge/fleet';
-import type { Projects, Session } from '@ledge/protocol';
+import type { Project, Projects, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { LangProvider, loadLang, useI18n, type Lang } from './i18n/lang';
@@ -23,6 +23,7 @@ import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { Pending } from './shell/Pending';
+import { LaunchComposer, type LaunchState } from './launch/LaunchComposer';
 import { Atelier } from './atelier/Atelier';
 import { List } from './list/List';
 import { Modal } from './shell/Modal';
@@ -36,6 +37,10 @@ import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
 import { subagentOf } from './session/thread';
 import { useStored } from './state/useStored';
+
+const NO_PROJECTS: readonly Project[] = [];
+// Task 5 wires the real launch (useLaunch): until then the form never sends.
+const IDLE: LaunchState = { status: 'idle' };
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
@@ -105,6 +110,9 @@ function Shell({ client }: { client?: DaemonClient }) {
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
+  // The New session form starts on the overview's project filter (a project id, not « all » nor « none »).
+  const base = place.kind === 'settings' ? place.back : place;
+  const filter = base.project !== 'all' && base.project !== 'none' ? base.project : undefined;
 
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
@@ -128,8 +136,16 @@ function Shell({ client }: { client?: DaemonClient }) {
       </div>
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
-      {(nav.modal?.kind === 'launch' || nav.modal?.kind === 'project') && (() => {
-        const title = nav.modal.kind === 'project' && nav.modal.edit !== undefined ? t.modalTitles.editProject : t.modalTitles[nav.modal.kind];
+      {nav.modal?.kind === 'launch' && (
+        <Modal title={t.modalTitles.launch} wide onClose={close}>
+          <LaunchComposer client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
+            wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }) }}
+            onEditProject={id => dispatch({ type: 'modal', modal: { kind: 'project', edit: id } })} onNewProject={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}
+            launch={IDLE} onLaunch={() => {}} onCancel={close} />
+        </Modal>
+      )}
+      {nav.modal?.kind === 'project' && (() => {
+        const title = nav.modal.edit !== undefined ? t.modalTitles.editProject : t.modalTitles.project;
         return <Modal title={title} wide onClose={close}><Pending title={title} /></Modal>;
       })()}
       <Toast notice={notice} />
