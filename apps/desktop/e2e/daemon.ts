@@ -1,6 +1,8 @@
 import type { Page, WebSocketRoute } from '@playwright/test';
 import type { ClientMessage, DaemonInfo, Machines, Projects, Recent, Session, ThreadItem } from '@ledge/protocol';
 
+/** How long a launched session stays `starting` in the fake daemon before it is `working`. */
+export const LAUNCH_SETTLE_MS = 1500;
 export const T0 = new Date(Date.now() - 5 * 60_000).toISOString();
 /** A local daemon that can route the chat between machines (spec 2026-10-14 §5.3): the fleet coordinates through it. */
 export const ROUTING: DaemonInfo = { version: '0.6.0', install: 'npm', systemd: true, routing: true };
@@ -11,8 +13,11 @@ export function session(id: string, extra: Partial<Session> = {}): Session {
 /** Simulates the local ledge daemon inside the page: a snapshot, then the machines list, and a `push` for later updates.
  *  Like the daemon (spec §5.3) it keeps the machines list: `machines.set` replaces it and is broadcast back as `machines`,
  *  and every new connection (reload, reconnect) gets the current list. A `document.read` is answered from `extras.documents` by its path
- *  (`document.content`), or `document.error` `not_found`. The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string> } = {}) {
+ *  (`document.content`), or `document.error` `not_found`. A `repos.inspect` is answered from `extras.repoInfo` by path (default: the folder exists, on
+ *  `main`). A `session.launch` is answered as the daemon does: a `starting` session (`launched-<n>`, the message's name, harness and folder) is listed,
+ *  then `session.launched`, and LAUNCH_SETTLE_MS later it is `working`; `launches: 'manual'` leaves the answer to the test (`launched`, `refuse`).
+ *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; launches?: 'auto' | 'manual' } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -20,6 +25,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   let projects: Projects | undefined = extras.projects;
   let socket: WebSocketRoute | null = null;
   let up = true;
+  let launches = 0;
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
     if (!up) { ws.close(); return; }
     socket = ws;
@@ -40,6 +46,24 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
           : { type: 'document.content', requestId: msg.requestId, path: msg.path, text, bytes: new TextEncoder().encode(text).length, modifiedAt: T0 }));
       }
       if (msg.type === 'machines.set') { machines = msg.machines; ws.send(JSON.stringify({ type: 'machines', machines })); }
+      if (msg.type === 'repos.inspect') {
+        ws.send(JSON.stringify({ type: 'repos.info', requestId: msg.requestId, repos: msg.paths.map(path => ({ path, ...(extras.repoInfo?.[path] ?? { exists: true, branch: 'main' }) })) }));
+      }
+      if (msg.type === 'session.launch' && extras.launches !== 'manual') {
+        const id = `launched-${++launches}`;
+        const project = msg.cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || msg.cwd;
+        const name = msg.name ?? `Agent ${launches}`;
+        const s = session(id, { name, tool: msg.tool, cwd: msg.cwd, project, title: `${name} · ${project}`, state: 'starting', startedAt: new Date().toISOString(), lastActivityAt: new Date().toISOString() });
+        sessions.set(id, s);
+        ws.send(JSON.stringify({ type: 'session.updated', session: s }));
+        ws.send(JSON.stringify({ type: 'session.launched', id }));
+        setTimeout(() => {
+          if (sessions.get(id)?.state !== 'starting') return;
+          const next = { ...s, state: 'working' as const, lastActivityAt: new Date().toISOString() };
+          sessions.set(id, next);
+          try { socket?.send(JSON.stringify({ type: 'session.updated', session: next })); } catch { /* the page is gone */ }
+        }, LAUNCH_SETTLE_MS);
+      }
     });
   });
   const push = (m: unknown) => socket?.send(JSON.stringify(m));
