@@ -177,7 +177,7 @@ function Shell({ client }: { client?: DaemonClient }) {
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} />}
         </section>
         {nav.chat && (
-          <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} onClose={() => dispatch({ type: 'chat', open: false })}
+          <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}
             onOpenSession={id => dispatch({ type: 'open', id })} onLaunched={chatLaunched} />
         )}
       </div>

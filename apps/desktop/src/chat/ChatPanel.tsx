@@ -14,13 +14,15 @@ export interface ChatPanelProps {
   client: DaemonClient; view: FleetView;
   /** « Figer les animations »: the mascots stand still, as with reduced motion. */
   paused: boolean;
+  /** Changes each time the chat is asked for (/, an open button), even already open: the field takes the focus again. */
+  focus?: number;
   onClose(): void; onOpenSession(id: string): void; onLaunched(id: string, proposal: ChatProposal): void;
 }
 
 /** Desktop's Ledge chat, docked on the right (observatory.tsx, `ledge-chat-panel`): the island's ChatView in its docked mode, on
  *  the real fleet. Questions go to the daemon with Claude; nothing is sent while the local daemon is offline. A name hovered or
  *  focused lights its agent; a session card launches in one click and seats the agent (`onLaunched`); a relay card sends as in the island. */
-export function ChatPanel({ client, view, paused, onClose, onOpenSession, onLaunched }: ChatPanelProps): JSX.Element {
+export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession, onLaunched }: ChatPanelProps): JSX.Element {
   const { t } = useI18n();
   const copy = useMemo(() => chatCopy(t), [t]);
   const theme = useTheme();
@@ -34,9 +36,10 @@ export function ChatPanel({ client, view, paused, onClose, onOpenSession, onLaun
   const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, sessions: view.sessions, turnReady, turnMachine, onLaunched });
   const [hovered, setHovered] = useState<string | null>(null);
   useAgentHighlight(hovered);
-  // Every way in (/, the sidebar, the top bar, the footer, Ledge's desk) mounts the panel: the field takes the focus.
+  // Every way in (/, the sidebar, the top bar, the footer, Ledge's desk) mounts the panel: the field takes the focus; asked for
+  // again while open (/ from the page, the top bar, the footer), it takes it back.
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { inputRef.current?.focus({ preventScroll: true }); }, []);
+  useEffect(() => { inputRef.current?.focus({ preventScroll: true }); }, [focus]);
 
   const ask = (text: string) => {
     if (offline) return;

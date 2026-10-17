@@ -16,7 +16,8 @@ export type Modal =
   | { kind: 'launch'; project?: string }               // project : la table ou le projet d'où on l'a demandée (lot 7)
   | { kind: 'project'; edit?: string; file?: string }  // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8)
   | null;
-export interface NavState { place: Place; modal: Modal; chat: boolean; fullscreen: boolean; helpers: boolean; paused: boolean }
+/** chatFocus: bumped each time the chat is asked for (/, an open button), even already open: its field takes the focus again. */
+export interface NavState { place: Place; modal: Modal; chat: boolean; chatFocus: number; fullscreen: boolean; helpers: boolean; paused: boolean }
 export type NavAction =
   | { type: 'home'; project?: ProjectFilter; view?: View }
   | { type: 'view'; view: View }
@@ -31,7 +32,7 @@ export type NavAction =
   | { type: 'escape' };
 
 export function initialNav(overview: Overview): NavState {
-  return { place: { kind: 'overview', view: overview.view, project: 'all' }, modal: null, chat: false, fullscreen: false, helpers: overview.helpers, paused: overview.paused };
+  return { place: { kind: 'overview', view: overview.view, project: 'all' }, modal: null, chat: false, chatFocus: 0, fullscreen: false, helpers: overview.helpers, paused: overview.paused };
 }
 
 type Base = Exclude<Place, { kind: 'settings' }>;
@@ -59,7 +60,10 @@ export function navReducer(s: NavState, a: NavAction): NavState {
     case 'settings':
       return { ...s, place: { kind: 'settings', section: a.section ?? 'general', back: baseOf(place) }, modal: null, chat: false };
     case 'modal': return { ...s, modal: a.modal };
-    case 'chat': return { ...s, chat: a.open ?? !s.chat };
+    case 'chat': {
+      const chat = a.open ?? !s.chat;
+      return chat ? { ...s, chat, chatFocus: s.chatFocus + 1 } : { ...s, chat };
+    }
     case 'fullscreen': return s.fullscreen === a.on ? s : { ...s, fullscreen: a.on };
     case 'helpers': return { ...s, helpers: !s.helpers };
     case 'paused': return { ...s, paused: !s.paused };

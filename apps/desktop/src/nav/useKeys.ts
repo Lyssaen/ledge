@@ -27,6 +27,8 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
         e.preventDefault(); dispatch({ type: 'escape' }); return;
       }
       if (state.modal?.kind === 'search') return;
+      // The chat open, / from outside a field brings the focus back to it (in its field, / is typed).
+      if (state.chat && !state.modal && e.key === '/' && !mod && !e.altKey && !typing(document.activeElement)) { e.preventDefault(); dispatch({ type: 'chat', open: true }); return; }
       if (state.modal || state.chat || typing(document.activeElement)) return;
 
       const { place } = state;

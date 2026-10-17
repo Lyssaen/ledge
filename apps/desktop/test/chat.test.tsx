@@ -65,6 +65,21 @@ describe('the Ledge chat docked on the right', () => {
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
   });
 
+  it('/ and the top bar’s chat button bring the focus back to the field of a chat already open', async () => {
+    const { user } = await openChat();
+    act(() => field().blur());
+    expect(document.activeElement).toBe(document.body);
+    await user.keyboard('/');
+    await waitFor(() => expect(field()).toHaveFocus());
+    expect(field()).toHaveValue('');
+    await user.keyboard('/');                                            // in the field, / is typed
+    expect(field()).toHaveValue('/');
+    act(() => field().blur());
+    await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Chat Ledge' }));
+    await waitFor(() => expect(field()).toHaveFocus());
+    expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
+  });
+
   it('a question goes out with a qid and Claude; the steps, then the answer show, its agent names linked', async () => {
     const env = await openChat();
     await ask(env, 'Who reviews?', '**Otto** relit la PR.');

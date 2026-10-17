@@ -13,8 +13,16 @@ describe('nav state', () => {
   beforeEach(() => localStorage.clear());
 
   it('starts on the overview of the stored view, nothing open', () => {
-    expect(s0).toEqual({ place: { kind: 'overview', view: 'atelier', project: 'all' }, modal: null, chat: false, fullscreen: false, helpers: true, paused: false });
+    expect(s0).toEqual({ place: { kind: 'overview', view: 'atelier', project: 'all' }, modal: null, chat: false, chatFocus: 0, fullscreen: false, helpers: true, paused: false });
     expect(initialNav({ ...o, view: 'list' }).place).toEqual({ kind: 'overview', view: 'list', project: 'all' });
+  });
+  it('asking for the chat when it is already open asks its field for the focus again; closing it does not', () => {
+    const opened = navReducer(s0, { type: 'chat', open: true });
+    expect(opened.chat).toBe(true);
+    const again = navReducer(opened, { type: 'chat', open: true });
+    expect(again.chat).toBe(true);
+    expect(again.chatFocus).toBeGreaterThan(opened.chatFocus);
+    expect(navReducer(again, { type: 'chat', open: false }).chatFocus).toBe(again.chatFocus);
   });
   it('opens a session from a filtered overview and comes back to it', () => {
     let s = navReducer(s0, { type: 'home', project: 'ledge' });
