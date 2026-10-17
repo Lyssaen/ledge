@@ -11,6 +11,17 @@ body { overflow: auto; background: var(--background); color: var(--foreground); 
 .min-top p { margin: 2px 0 0; color: var(--muted-foreground); font-size: 13px; }
 .min-mock { font-size: 12px; color: var(--muted-foreground); padding: 3px 8px; border: 1px dashed var(--border); border-radius: 6px; }
 
+.gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 14px; }
+.gallery button { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--card-foreground); cursor: pointer; text-align: left; }
+.gallery button[aria-pressed="true"] { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.gallery-stage { position: relative; height: 64px; border-radius: 8px; overflow: hidden; background: radial-gradient(120% 90% at 20% 110%, #3b2a4a 0%, transparent 60%), radial-gradient(90% 80% at 90% 0%, #1f3b4d 0%, transparent 65%), #141821; }
+:root[data-theme="light"] .gallery-stage { background: radial-gradient(120% 90% at 20% 110%, #e9c9c3 0%, transparent 60%), radial-gradient(90% 80% at 90% 0%, #b9cfdc 0%, transparent 65%), #cfd6de; }
+.gallery-notch { position: absolute; top: 0; left: 50%; width: max-content; transform: translateX(-50%); background: var(--notch); color: var(--sidebar-foreground); pointer-events: none; }
+.gallery-notch[data-notch="filet"] { border-radius: 0 0 5px 5px; }
+.gallery-notch[data-notch="points"] { border-radius: 0 0 8px 8px; }
+.gallery-notch[data-notch="mascot"], .gallery-notch[data-notch="count"] { border-radius: 0 0 10px 10px; }
+.gallery strong { font-size: 13px; font-weight: 600; }
+.gallery small { font-size: 11px; line-height: 15px; color: var(--muted-foreground); text-wrap: pretty; }
 .min-scenarios { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; scrollbar-width: thin; }
 .min-scenarios button { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); color: var(--card-foreground); cursor: pointer; text-align: left; }
 .min-scenarios button:hover { background: var(--accent); }
@@ -34,7 +45,7 @@ body { overflow: auto; background: var(--background); color: var(--foreground); 
 .taskbar i { width: 22px; height: 22px; border-radius: 6px; background: color-mix(in srgb, var(--foreground) 14%, transparent); }
 .taskbar i.tb-ledge { background: var(--primary); }
 
-/* At rest the notch is a 28px bar. A notification or the chat grows to the overlay's own sizes (bubble 440, chat 480). */
+/* At rest the notch is one of four small proposals. A notification or the chat grows to the overlay's own sizes (bubble 440, chat 480). */
 .island-wrap { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 2; transition: width 260ms cubic-bezier(.2,.8,.2,1); }
 .island { position: relative; background: var(--notch); color: var(--sidebar-foreground); border-radius: 0 0 14px 14px; overflow: clip; box-sizing: border-box;
   transition: width 260ms cubic-bezier(.2,.8,.2,1), height 260ms cubic-bezier(.2,.8,.2,1); }
@@ -44,14 +55,42 @@ body { overflow: auto; background: var(--background); color: var(--foreground); 
 .island[data-mode="handle"] .island-content { animation-delay: 0ms; }
 @keyframes island-in { from { opacity: 0; transform: translateY(-6px); } }
 
-.handle { height: 28px; display: flex; align-items: center; padding: 0 10px 0 8px; box-sizing: border-box; }
-.resident { position: relative; width: 16px; height: 16px; flex-shrink: 0; }
+.island[data-notch="filet"] { border-radius: 0 0 5px 5px; }
+.island[data-notch="points"] { border-radius: 0 0 8px 8px; }
+.island[data-notch="mascot"], .island[data-notch="count"] { border-radius: 0 0 10px 10px; }
+.handle { height: 28px; width: max-content; display: flex; align-items: center; padding: 0 10px 0 8px; box-sizing: border-box; position: relative; }
+.handle-open { position: absolute; inset: 0; border: 0; background: transparent; cursor: pointer; }
+.resident { position: relative; z-index: 1; width: 16px; height: 16px; flex-shrink: 0; }
 .resident > button { width: 16px; height: 16px; padding: 0; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center; }
-.resident > button.pip { position: absolute; top: -2px; right: -3px; z-index: 1; width: 6px; height: 6px; border-radius: 999px; border: 1.5px solid var(--notch); box-sizing: content-box; background: var(--sidebar-primary); }
-.sep { width: 1px; height: 10px; margin: 0 5px; background: color-mix(in srgb, var(--sidebar-foreground) 28%, transparent); flex-shrink: 0; }
-.dots { display: flex; align-items: center; gap: 1px; }
+.resident > button.pip, .resident > button.notch-pip, .notch-pip { position: absolute; top: -2px; right: -3px; z-index: 2; width: 6px; height: 6px; padding: 0; border-radius: 999px; border: 1.5px solid var(--notch); box-sizing: content-box; background: var(--sidebar-primary); cursor: pointer; }
+.handle.mascot .resident > button.notch-pip, .handle.notch-count .resident > button.notch-pip, .handle.mascot .notch-signal { width: 5px; height: 5px; border-width: 1px; }
+.handle.mascot .resident > button.notch-pip, .handle.notch-count .resident > button.notch-pip { background: var(--sidebar-primary); }
+.sep { position: relative; z-index: 1; width: 1px; height: 10px; margin: 0 5px; background: color-mix(in srgb, var(--sidebar-foreground) 28%, transparent); flex-shrink: 0; pointer-events: none; }
+.dots { position: relative; z-index: 1; display: flex; align-items: center; gap: 1px; }
 .dot { width: 10px; height: 10px; padding: 0; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center; flex-shrink: 0; }
 .dot::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: var(--dot, var(--info)); transition: transform 140ms cubic-bezier(.2,.8,.2,1); }
+.handle.filet { height: 10px; padding: 0 6px; }
+.handle.filet .sep { height: 6px; margin: 0 3px; }
+.handle.filet .dots { gap: 2px; }
+.handle.filet .dot { width: 5px; height: 6px; }
+.handle.filet .dot::before { width: 5px; height: 3px; border-radius: 1px; }
+.handle.filet .notch-pip { position: relative; top: auto; right: auto; width: 5px; height: 3px; border: 0; border-radius: 1px; }
+.handle.filet .dot[data-hot]::before { box-shadow: none; }
+.handle.points { height: 16px; padding: 0 6px; }
+.handle.points .sep { height: 8px; margin: 0 3px; }
+.handle.points .dot { width: 6px; height: 8px; }
+.handle.points .dot::before { width: 4px; height: 4px; }
+.handle.points .notch-pip { position: relative; top: auto; right: auto; width: 4px; height: 4px; border: 0; }
+.handle.mascot { height: 20px; padding: 0 5px 0 4px; }
+.handle.mascot .resident, .handle.mascot .resident > button { width: 14px; height: 14px; }
+.handle.notch-count { height: 20px; padding: 0 7px 0 4px; gap: 5px; }
+.handle.notch-count .resident, .handle.notch-count .resident > button { width: 12px; height: 12px; }
+.tally { position: relative; z-index: 1; border: 0; background: transparent; color: var(--muted-foreground); font: inherit; font-size: 11px; line-height: 14px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; padding: 0; }
+.tally[data-hot] { color: var(--dot, var(--danger-text)); }
+.tally[data-state="approval"], .tally[data-state="error"], .notch-signal[data-state="approval"], .notch-signal[data-state="error"] { --dot: var(--danger-text); }
+.tally[data-state="question"], .notch-signal[data-state="question"] { --dot: var(--warning); }
+.tally[data-state="readonly"], .notch-signal[data-state="readonly"] { --dot: var(--muted-foreground); }
+.notch-signal { background: var(--dot, var(--danger-text)); }
 .dot[data-state="working"], .dot[data-state="starting"] { --dot: var(--info); }
 .dot[data-state="approval"], .dot[data-state="error"] { --dot: var(--danger-text); }
 .dot[data-state="question"] { --dot: var(--warning); }
@@ -106,7 +145,7 @@ body { overflow: auto; background: var(--background); color: var(--foreground); 
 .scope li span { color: var(--muted-foreground); font-size: 12px; line-height: 17px; text-wrap: pretty; }
 .scope-keys { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; line-height: 22px; color: var(--muted-foreground); }
 
-@media (max-width: 980px) { .min-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 980px) { .min-grid, .gallery { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) {
   .min { padding: 16px; }
   .stage { height: 640px; }

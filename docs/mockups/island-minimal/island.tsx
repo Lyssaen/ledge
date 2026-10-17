@@ -20,6 +20,8 @@ type Ask = { id: string; agent: string; kind: 'approval' | 'question'; text: str
 type Notice = { key: number; kind: 'done' | 'error' | 'offline'; agent?: string; title: string; sub: string };
 type Mode = 'handle' | 'bubble' | 'name' | 'chat';
 type Scenario = 'idle' | 'approval' | 'question' | 'done' | 'error' | 'offline' | 'queue' | 'name' | 'pip' | 'chat';
+type Proposal = 'filet' | 'points' | 'mascot' | 'count';
+type NotchAgent = { id: string; name: string; task: string; state: BotState };
 
 const MACHINES: Record<Machine, string> = { local: 'PC local', dev: 'Dev SSH', studio: 'Studio SSH' };
 const ORDER: Machine[] = ['local', 'dev', 'studio'];
@@ -48,7 +50,7 @@ const NOTICES: Record<'done' | 'error' | 'offline', Omit<Notice, 'key'>> = {
   offline: { kind: 'offline', title: 'Studio SSH est hors ligne', sub: 'Ash est en pause jusqu’au retour de la machine' },
 };
 const SCENARIOS: { id: Scenario; label: string; hint: string }[] = [
-  { id: 'idle', label: 'Repos', hint: 'L’encoche seule' },
+  { id: 'idle', label: 'Repos', hint: 'L’encoche choisie, au calme' },
   { id: 'approval', label: 'Accord', hint: 'Bulle de l’overlay, 440 px' },
   { id: 'question', label: 'Question', hint: 'Bulle de l’overlay, 440 px' },
   { id: 'done', label: 'Terminé', hint: 'Bulle de l’overlay, 440 px' },
@@ -56,21 +58,28 @@ const SCENARIOS: { id: Scenario; label: string; hint: string }[] = [
   { id: 'offline', label: 'Hors ligne', hint: 'Même cadre, 440 px' },
   { id: 'queue', label: 'File', hint: 'Bulle et « +2 autres »' },
   { id: 'name', label: 'Un nom', hint: 'Le point reste court' },
-  { id: 'pip', label: 'Pastille', hint: 'L’encoche ne s’ouvre pas' },
+  { id: 'pip', label: 'Pastille', hint: 'Le point rouge reste sur l’encoche' },
   { id: 'chat', label: 'Chat', hint: 'Le chat de l’overlay, 480 px' },
 ];
+const PROPOSALS: { id: Proposal; label: string; hint: string }[] = [
+  { id: 'filet', label: 'Filet', hint: '76 × 10 px · les points seulement' },
+  { id: 'points', label: 'Points', hint: '79 × 16 px · sans mascotte' },
+  { id: 'mascot', label: 'Mascotte', hint: '23 × 20 px · une pastille s’il vous attend' },
+  { id: 'count', label: 'Compte', hint: '35 × 20 px · Ledge et un nombre' },
+];
+const HOT_ORDER: BotState[] = ['approval', 'error', 'question', 'readonly'];
 const KEEP: [string, string][] = [
-  ['Encoche', '28 px de haut au repos : la mascotte et un point par agent, un filet entre les machines.'],
+  ['Encoche', 'Quatre propositions, toutes plus petites que la barre de 141 × 28 px : filet 76 × 10, points 79 × 16, mascotte 23 × 20, compte 35 × 20.'],
   ['Notifications', 'La bulle de l’overlay sur main, 440 px : accord, question, terminé, et « +2 autres » quand la file a plusieurs demandes.'],
-  ['Chat', 'Le chat de l’overlay, 480 px de large. La mascotte l’ouvre. Retour et fermer replient l’encoche.'],
+  ['Chat', 'Le chat de l’overlay, 480 px de large. Un clic sur l’encoche l’ouvre. Retour et fermer replient l’encoche.'],
 ];
 const HANDOFF: [string, string][] = [
   ['Ouvrir', 'Le lien et le bouton Ouvrir de la bulle partent vers Ledge Desktop. Ici, un toast le dit.'],
-  ['Pastille', 'Le point rouge reste sur la mascotte. L’installation s’ouvre dans Desktop.'],
+  ['Pastille', 'Le point rouge reste sur l’encoche. L’installation s’ouvre dans Desktop.'],
   ['Un agent sans demande', 'Un clic sur son point tient en une ligne. La session, elle, s’ouvre dans Desktop.'],
 ];
 const DROPPED: [string, string][] = [
-  ['Les têtes au repos', 'Les visages quittent l’encoche. Ils reviennent dans la bulle et dans le chat, à leur taille.'],
+  ['Les têtes des agents', 'Les visages des agents quittent l’encoche. Ils reviennent dans la bulle et dans le chat, à leur taille.'],
   ['Le menu de l’île', 'Réglages, Ne pas déranger et Quitter restent dans Ledge Desktop.'],
 ];
 
@@ -86,6 +95,47 @@ function sessionFor(a: Agent, pending?: Session['pending'], state?: Session['sta
     tmuxSession: a.id, state: state ?? (pending?.kind === 'question' ? 'waiting_input' : pending ? 'waiting_permission' : a.state === 'error' ? 'error' : a.state === 'idle' ? 'idle' : 'working'),
     helpers: [], startedAt: now(), lastActivityAt: now(), source: 'launcher', pending,
   };
+}
+
+function hottest(states: BotState[]): BotState | null {
+  return HOT_ORDER.find(s => states.includes(s)) ?? null;
+}
+
+function Notch({ proposal, groups, pip, pendingCount, theme, reduced, preview = false, onOpenChat, onDot, onPip }: {
+  proposal: Proposal; groups: NotchAgent[][]; pip: boolean; pendingCount: number; theme: 'dark' | 'light'; reduced: boolean; preview?: boolean;
+  onOpenChat: () => void; onDot: (id: string) => void; onPip: () => void;
+}) {
+  const Tag = preview ? 'span' : 'div';
+  const agents = groups.flat();
+  const signal = hottest(agents.map(a => a.state));
+  const showMascot = proposal === 'mascot' || proposal === 'count';
+  const strip = proposal === 'filet' || proposal === 'points';
+  const tally = pendingCount > 0 ? pendingCount : agents.length;
+  const mark = (a: NotchAgent) => {
+    const hot = a.state === 'approval' || a.state === 'question' || a.state === 'error';
+    const hollow = a.state === 'readonly';
+    const props = { className: 'dot', 'data-state': a.state, 'data-hot': hot || undefined, 'data-hollow': hollow || undefined };
+    if (preview) return <span key={a.id} {...props} />;
+    return <button key={a.id} type="button" {...props} aria-label={`${a.name}, ${STATE_LABEL[a.state]}, ouvrir`} title={`${a.name} · ${a.task}`} onClick={e => { e.stopPropagation(); onDot(a.id); }} />;
+  };
+  return <Tag className={`handle ${proposal === 'count' ? 'notch-count' : proposal}`} data-proposal={proposal} aria-hidden={preview || undefined}>
+    {!preview && <button type="button" className="handle-open" tabIndex={strip ? 0 : -1} aria-hidden={strip ? undefined : true} aria-label="Ouvrir le chat" onClick={onOpenChat} />}
+    {showMascot && <span className="resident">
+      {preview ? <ResidentMascot size={proposal === 'count' ? 12 : 14} theme={theme} reducedMotion={reduced} center={{ x: 0, y: 0 }} /> : <button type="button" data-resident aria-label="Ledge, ouvrir" title="Ouvrir le chat" onClick={onOpenChat}>
+        <ResidentMascot size={proposal === 'count' ? 12 : 14} theme={theme} reducedMotion={reduced} center={{ x: 0, y: 0 }} />
+      </button>}
+      {pip && (preview ? <span className="notch-pip" /> : <button type="button" className="notch-pip" data-update-pip="new" aria-label="Ledge 0.6.0 est prêt" title="Ledge 0.6.0 est prêt" onClick={e => { e.stopPropagation(); onPip(); }} />)}
+      {!pip && proposal === 'mascot' && signal && <span className="notch-pip notch-signal" data-state={signal} aria-hidden="true" />}
+    </span>}
+    {strip && groups.map(g => <Fragment key={g[0].id}>
+      <span className="sep" aria-hidden="true" />
+      <span className="dots">{g.map(mark)}</span>
+    </Fragment>)}
+    {strip && pip && (preview ? <span className="notch-pip" /> : <button type="button" className="notch-pip" data-update-pip="new" aria-label="Ledge 0.6.0 est prêt" title="Ledge 0.6.0 est prêt" onClick={e => { e.stopPropagation(); onPip(); }} />)}
+    {proposal === 'count' && (preview
+      ? <span className="tally" data-hot={pendingCount > 0 || undefined} data-state={pendingCount > 0 ? signal ?? undefined : undefined}>{tally}</span>
+      : <button type="button" className="tally" data-hot={pendingCount > 0 || undefined} data-state={pendingCount > 0 ? signal ?? undefined : undefined} aria-label={pendingCount > 0 ? `${pendingCount} en attente, ouvrir le chat` : `${tally} sessions, ouvrir le chat`} onClick={onOpenChat}>{tally}</button>)}
+  </Tag>;
 }
 
 function useReducedMotion() {
@@ -122,6 +172,7 @@ function App() {
   const reduced = useReducedMotion();
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
+  const [proposal, setProposal] = useState<Proposal>('filet');
   const [scenario, setScenario] = useState<Scenario>('idle');
   const [mode, setMode] = useState<Mode>('handle');
   const [agents, setAgents] = useState(AGENTS);
@@ -216,7 +267,7 @@ function App() {
     const key = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       if (e.key === 'Escape' && mode !== 'handle') { e.preventDefault(); fold(); return; }
-      if (el.closest('.min-scenarios, .min-top') || el.closest('input, textarea')) return;
+      if (el.closest('.min-scenarios, .min-top, .gallery') || el.closest('input, textarea')) return;
       if (mode !== 'bubble' || !ask || bubbleAck || e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === 'Enter' && el.tagName === 'BUTTON') return;
       const k = e.key.toLowerCase();
@@ -232,9 +283,9 @@ function App() {
     const p = pending.find(x => x.agent === a.id);
     return p ? p.kind : a.state;
   };
-  const groups = ORDER.map(m => agents.filter(a => a.machine === m)).filter(g => g.length).map(g => [...g.filter(a => pending.some(p => p.agent === a.id)), ...g.filter(a => !pending.some(p => p.agent === a.id))]);
+  const groups = ORDER.map(m => agents.filter(a => a.machine === m)).filter(g => g.length).map(g => [...g.filter(a => pending.some(p => p.agent === a.id)), ...g.filter(a => !pending.some(p => p.agent === a.id))].map(a => ({ id: a.id, name: a.name, task: a.task, state: visual(a) })));
   const named = nameId ? agent(nameId) : null;
-  const resting = useBox(contentRef, mode === 'handle' || mode === 'name', `${mode}-${nameId}-${pip}-${pending.map(p => p.id).join()}-${agents.map(a => a.state).join()}-${offline.join()}`);
+  const resting = useBox(contentRef, mode === 'handle' || mode === 'name', `${proposal}-${mode}-${nameId}-${pip}-${pending.map(p => p.id).join()}-${agents.map(a => a.state).join()}-${offline.join()}`);
   const box = mode === 'chat' ? { w: SIZES.sessionW, h: CHAT_H } : mode === 'bubble' ? { w: SIZES.bubbleW, h: slotH } : resting;
   const motion = reduced ? 'none' : 'left 260ms cubic-bezier(.2,.8,.2,1), width 260ms cubic-bezier(.2,.8,.2,1)';
   const sessions = agents.map(a => sessionFor(a));
@@ -242,12 +293,29 @@ function App() {
   const bubbleSession = ask ? sessionFor(agent(ask.agent), { kind: ask.kind === 'question' ? 'question' : 'permission', text: ask.text, options: ask.options, source: 'hook' })
     : notice?.kind === 'done' && notice.agent ? sessionFor(agent(notice.agent), undefined, 'idle') : null;
 
-  return <LangProvider lang="fr"><div className="min" data-scenario={scenario} data-mode={mode} data-reduced={reduced || undefined}>
+  const galleryGroups = ORDER.map(m => AGENTS.filter(a => a.machine === m)).filter(g => g.length).map(g => g.map(a => ({
+    id: a.id, name: a.name, task: a.task,
+    state: (a.id === 'otto' ? 'approval' : a.id === 'nova' ? 'question' : 'working') as BotState,
+  })));
+
+  return <LangProvider lang="fr"><div className="min" data-scenario={scenario} data-mode={mode} data-proposal={proposal} data-reduced={reduced || undefined}>
     <header className="min-top">
-      <div><h1>L’île, petite encoche</h1><p>Au repos, quelques points. Une notification ou le chat reprennent la taille de l’overlay sur main.</p></div>
+      <div><h1>L’île, quatre encoches</h1><p>Quatre encoches plus petites. La bulle reste à 440 px, le chat à 480 px.</p></div>
       <span className="min-mock">Maquette · données simulées</span>
       <Button variant="outline" size="sm" aria-pressed={theme === 'light'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? 'Thème clair' : 'Thème sombre'}</Button>
     </header>
+
+    <nav className="gallery" aria-label="Propositions d’encoche">
+      {PROPOSALS.map(p => <button key={p.id} type="button" data-proposal={p.id} aria-pressed={proposal === p.id} onClick={() => setProposal(p.id)}>
+        <span className="gallery-stage">
+          <span className="gallery-notch" data-notch={p.id}>
+            <Notch proposal={p.id} groups={galleryGroups} pip={false} pendingCount={2} theme={theme} reduced={reduced} preview onOpenChat={() => {}} onDot={() => {}} onPip={() => {}} />
+          </span>
+        </span>
+        <strong>{p.label}</strong>
+        <small>{p.hint}</small>
+      </button>)}
+    </nav>
 
     <nav className="min-scenarios" aria-label="Scénarios">
       {SCENARIOS.map(s => <button key={s.id} type="button" data-scenario-btn={s.id} aria-pressed={scenario === s.id} onClick={() => run(s.id)}><strong>{s.label}</strong><small>{s.hint}</small></button>)}
@@ -257,27 +325,10 @@ function App() {
       <section className="stage" aria-label="Bureau simulé">
         <div className="stage-windows" aria-hidden="true"><div className="win win-term"><i /><i /><i /><i /><i /></div><div className="win win-editor"><i /><i /><i /><i /></div></div>
         <div className="island-wrap" style={{ width: box.w }}>
-          <Shoulders left={0} w={box.w} transition={motion} opacity={1} />
-          <div className="island" data-mode={mode} data-surface style={{ width: box.w, height: box.h }} onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)}>
+          <Shoulders left={0} w={box.w} strip={mode === 'handle'} transition={motion} opacity={1} />
+          <div className="island" data-mode={mode} data-notch={mode === 'handle' ? proposal : undefined} data-surface style={{ width: box.w, height: box.h }} onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)}>
             <div ref={contentRef} className="island-content" key={`${mode}-${shownId ?? ''}-${notice?.key ?? ''}-${nameId ?? ''}`}>
-              {mode === 'handle' && <div className="handle">
-                <span className="resident">
-                  <button type="button" data-resident aria-label="Ledge, ouvrir" title="Ouvrir le chat" onClick={openChat}>
-                    <ResidentMascot size={16} theme={theme} reducedMotion={reduced} center={{ x: 0, y: 0 }} />
-                  </button>
-                  {pip && <button type="button" className="pip" data-update-pip="new" aria-label="Ledge 0.6.0 est prêt" title="Ledge 0.6.0 est prêt" onClick={() => openDesktop('Ouverture des mises à jour')} />}
-                </span>
-                {groups.map(g => <Fragment key={g[0].machine}>
-                  <span className="sep" aria-hidden="true" />
-                  <span className="dots">
-                    {g.map(a => {
-                      const state = visual(a);
-                      const hot = state === 'approval' || state === 'question' || state === 'error';
-                      return <button key={a.id} type="button" className="dot" data-state={state} data-hot={hot || undefined} data-hollow={state === 'readonly' || undefined} aria-label={`${a.name}, ${STATE_LABEL[state]}, ouvrir`} title={`${a.name} · ${a.task}`} onClick={() => openDot(a.id)} />;
-                    })}
-                  </span>
-                </Fragment>)}
-              </div>}
+              {mode === 'handle' && <Notch proposal={proposal} groups={groups} pip={pip} pendingCount={pending.length} theme={theme} reduced={reduced} onOpenChat={openChat} onDot={openDot} onPip={() => openDesktop('Ouverture des mises à jour')} />}
 
               {mode === 'bubble' && (ask || notice?.kind === 'done') && bubbleSession && <div ref={slotRef} style={{ position: 'relative', width: SIZES.bubbleW, height: slotH }}>
                 <Bubble session={bubbleSession} moreCount={waiting.length} visible paused={reduced || held} ack={bubbleAck} kind={notice?.kind === 'done' ? 'finished' : 'ask'} elapsedMs={notice?.kind === 'done' ? 120000 : undefined}
@@ -305,8 +356,8 @@ function App() {
       </section>
 
       <aside className="scope" aria-labelledby="scope-title">
-        <h2 id="scope-title">Petite encoche, grandes notifications</h2>
-        <p>L’encoche au repos prend le moins de place possible. La bulle et le chat gardent la taille de l’overlay sur main. Cette page ne change pas l’application.</p>
+        <h2 id="scope-title">Quatre encoches, mêmes notifications</h2>
+        <p>Seule l’encoche au repos change. La bulle (440 px) et le chat (480 px) gardent la taille de l’overlay sur main. Cette page ne change pas l’application.</p>
         <h3><span className="dot-key keep" />Comme sur main</h3>
         <ul>{KEEP.map(([t, d]) => <li key={t}><strong>{t}</strong><span>{d}</span></li>)}</ul>
         <h3><span className="dot-key move" />Part dans Ledge Desktop</h3>
