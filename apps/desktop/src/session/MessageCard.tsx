@@ -14,7 +14,8 @@ const LONG_CHARS = 200;
 const LONG_LINES = 3;
 export const isLong = (text: string): boolean => text.length > LONG_CHARS || text.split('\n').length > LONG_LINES;
 /** A folded line's text: the first line, without Markdown's `*` and backticks. */
-export const firstLine = (text: string): string => text.split('\n')[0]!.replace(/[`*]/g, '');
+export const firstLine = (text: string): string =>
+  (text.split('\n').map(l => l.trim()).find(Boolean) ?? '').replace(/^(?:#+|>|-|\*)\s*/, '').replace(/[`*]/g, '');
 
 export interface MessageCardProps {
   item: SentItem | ReceivedItem;

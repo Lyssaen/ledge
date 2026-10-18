@@ -149,6 +149,25 @@ describe('messages between agents in the thread', () => {
     await waitFor(() => expect(document.querySelector('.message-card.lit')).toBeNull(), { timeout: 4000 });
   });
 
+  it('« Voir dans le fil de Nova » lights the paired message once Nova\u2019s thread arrives after the page mounted', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const { d, user } = await openOtto([prompt('p1', 0, 1, 'Préviens Nova'), sent('s1', 1, 1, { received: 'recv-1-0' })]);
+    d.thread('nova', []); // Nova's page mounts on an empty thread; the paired message is pushed afterwards
+    await user.click(await thread().findByRole('button', { name: /Voir dans le fil de Nova/ }));
+    await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:nova'));
+    expect(document.querySelector('.message-card.lit')).toBeNull();
+    d.threadItem('nova', received('recv-1-0', 3, 1, { from: 'otto', peer: 'otto', sent: 's1' }));
+    await waitFor(() => expect(document.querySelector('.message-card.lit[data-message="recv-1-0"]')).not.toBeNull());
+  });
+
+  it('a folded line is the first non-empty line, without its Markdown marker', async () => {
+    const { user } = await openOtto([received('r1', 0, 1, { text: '\n# Titre du rapport\nSuite du texte.' }), received('r2', 1, 1, { text: '  > Citation\nAutre' }), received('r3', 2, 1, { text: '- Point\nAutre' })]);
+    await user.click(await thread().findByRole('button', { name: /Replier/ }));
+    const lines = [...document.querySelectorAll('.session-thread .message-line .message-line-text')].map(l => l.textContent);
+    expect(lines).toEqual(['Titre du rapport', 'Citation', 'Point']);
+  });
+
   it('« Nouveau » marks a received message or a sent one that arrived while away', async () => {
     const { d, user } = await openOtto([prompt('p1', 0, 1, 'Préviens Nova')]);
     await thread().findByText('Préviens Nova');
