@@ -11,6 +11,7 @@ import { useScreenKeys } from '../nav/screenKeys';
 import type { NavAction, NavState } from '../nav/state';
 import { roomWidth, sceneOf, walkOrder } from './layout';
 import { LedgeDesk } from './LedgeDesk';
+import { MessageLayer, useMessageClock } from './MessageLayer';
 import { ProjectTable } from './ProjectTable';
 import { Unassigned } from './Unassigned';
 import { useAtelierView } from './useAtelierView';
@@ -56,6 +57,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
   const filter = place.kind === 'settings' ? place.back.project : place.project;
   const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter), [order, projects, projectIdOf, filter]);
   const walk = useMemo(() => walkOrder(scene), [scene]);
+  const now = useMessageClock(sessions);
 
   const [focusedId, setFocusedId] = useState<string | null>(null);
   // The chosen agent left the walk (gone, filed elsewhere, filtered out): nothing stays chosen.
@@ -122,12 +124,13 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
     </div>
     <div className="overview-scroll atelier" id="view-panel-atelier" role="tabpanel" aria-labelledby="view-tab-atelier" ref={view.scrollRef}>
       <div ref={view.shellRef} className={`office-shell ${nav.paused ? 'office-paused' : ''} ${reduced ? 'office-reduced' : ''}`}>
+        <MessageLayer sessions={sessions} now={now} paused={nav.paused} reduced={reduced} dispatch={dispatch} />
         <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
         <div className={`project-grid ${scene.tables.length === 1 ? 'focused' : ''}`}>
           {scene.tables.map(({ project, mains }) => (
             <ProjectTable key={project.id} project={project} mains={mains} order={order} helpers={nav.helpers} paused={nav.paused}
               isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
-              actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt} />
+              sessions={sessions} now={now} actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt} />
           ))}
         </div>
         {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}

@@ -28,7 +28,7 @@ type Overrides = Partial<Omit<ProjectTableProps, 'mains' | 'dispatch'>>;
 function tableElement(mains: readonly Session[], overrides: Overrides = {}, dispatch: ProjectTableProps['dispatch'] = vi.fn()) {
   return (
     <LangProvider lang="en">
-      <ProjectTable project={ledge} mains={mains} order={mains} helpers paused={false} isolated={false} focusedId={null} seated={null} dispatch={dispatch} filing={noFiling} actions={noActions} menuId={null} onMenu={() => {}} {...overrides} />
+      <ProjectTable project={ledge} mains={mains} order={mains} helpers paused={false} isolated={false} focusedId={null} seated={null} dispatch={dispatch} filing={noFiling} sessions={mains} now={Date.now()} actions={noActions} menuId={null} onMenu={() => {}} {...overrides} />
     </LangProvider>
   );
 }
