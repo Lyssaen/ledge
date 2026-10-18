@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { describe, it, expect, vi, onTestFinished } from 'vitest';
+import { closeSync, constants, mkdirSync, mkdtempSync, openSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { inspectRepos } from '../src/daemon/repos.js';
+import { inspectRepos, readGitFile } from '../src/daemon/repos.js';
 import { listFolder } from '../src/daemon/folders.js';
 
 const dir = () => mkdtempSync(join(tmpdir(), 'ledge-repos-'));
@@ -80,4 +81,37 @@ describe('inspectRepos', () => {
     expect(out[0]).toEqual({ path: d, exists: true, branch: null });
     expect(calls).toHaveLength(1); expect(Date.now() - t0).toBeLessThan(2400);
   }, 6000);
+  it.skipIf(process.platform === 'win32')('a HEAD that is a FIFO, or too long, gives no branch and leaves a sound repository answered at once', async () => {
+    const fifos: string[] = [];
+    const repo = (head: string | 'fifo') => {
+      const d = dir(); mkdirSync(join(d, '.git'));
+      if (head === 'fifo') { execFileSync('mkfifo', [join(d, '.git', 'HEAD')]); fifos.push(join(d, '.git', 'HEAD')); }
+      else writeFileSync(join(d, '.git', 'HEAD'), head);
+      return d;
+    };
+    const stalled = Array.from({ length: 8 }, () => repo('fifo'));
+    const long = repo('ref: refs/heads/' + 'x'.repeat(1 << 20) + '\n');
+    const sound = repo('ref: refs/heads/main\n');
+    // Should a read get stuck on a FIFO, a writer opening and closing it lets it go once the test ends, timed out or not.
+    onTestFinished(() => { for (const f of fifos) { try { closeSync(openSync(f, constants.O_WRONLY | constants.O_NONBLOCK)); } catch { /* no reader */ } } });
+    const t0 = Date.now();
+    const first = await inspectRepos([...stalled, long], {});
+    expect(first.map(r => r.branch)).toEqual(Array(9).fill(null));
+    expect(await inspectRepos([sound], {})).toEqual([{ path: sound, exists: true, branch: 'main' }]);
+    expect(Date.now() - t0).toBeLessThan(1000);
+  }, 10000);
+});
+
+describe('readGitFile', () => {
+  it.skipIf(process.platform === 'win32')('reads a regular file; refuses a FIFO (without waiting for a writer), a folder, a file over its bound', async () => {
+    const d = dir();
+    writeFileSync(join(d, 'config'), '[remote "origin"]\n');
+    execFileSync('mkfifo', [join(d, 'fifo')]);
+    writeFileSync(join(d, 'big'), 'x'.repeat(65));
+    expect(await readGitFile(join(d, 'config'))).toBe('[remote "origin"]\n');
+    await expect(readGitFile(join(d, 'fifo'))).rejects.toThrow(/not a regular file/);
+    await expect(readGitFile(d)).rejects.toThrow(/not a regular file/);
+    await expect(readGitFile(join(d, 'big'), 64)).rejects.toThrow(/over 64 bytes/);
+    expect(await readGitFile(join(d, 'big'), 65)).toHaveLength(65);
+  });
 });

@@ -1,7 +1,7 @@
-import { readdir as fsReaddir, readFile as fsReadFile } from 'node:fs/promises';
+import { readdir as fsReaddir } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import type { FoundRepo } from '@ledge/protocol';
-import { headBranch, inspectRepos } from './repos.js';
+import { headBranch, inspectRepos, readGitFile } from './repos.js';
 import { repositoryId } from './git.js';
 
 /** How deep under each root, how many folders read, how long, how many repositories: past any of them the list is partial (`truncated`). */
@@ -99,7 +99,7 @@ async function describe(dir: string, dotIsFile: boolean, home: string, readFile:
 export async function scanRepos(opts: ScanOptions): Promise<{ repos: FoundRepo[]; truncated: boolean }> {
   const now = opts.now ?? Date.now;
   const readdir = opts.readdir ?? ((p: string) => fsReaddir(p, { withFileTypes: true }));
-  const readFile = opts.readFile ?? ((p: string) => fsReadFile(p, 'utf8'));
+  const readFile = opts.readFile ?? ((p: string) => readGitFile(p));
   const depth = opts.limits?.depth ?? SCAN_DEPTH, maxDirs = opts.limits?.dirs ?? SCAN_DIRS, ms = opts.limits?.ms ?? SCAN_MS, maxRepos = opts.limits?.repos ?? SCAN_REPOS;
   const deadline = now() + ms;
   // The hard stop, in real time: a folder or a git that never answers cannot hold the walk past its time.

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { readFile, stat } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { RepoInfo } from '@ledge/protocol';
@@ -8,6 +9,8 @@ const GIT_TIMEOUT_MS = 2000;
 /** The most git processes running at once. */
 const MAX_GIT = 8;
 const MIN_LEFT_MS = 100;
+/** More than any HEAD holds (`ref: refs/heads/` and a branch name): a longer one is not a HEAD git wrote. */
+const MAX_HEAD_BYTES = 1024;
 
 /** Runs `git -C cwd <args>`: its trimmed output, or null (not a repository, git absent, too slow). */
 function runGit(cwd: string, args: string[]): Promise<string | null> {
@@ -25,11 +28,25 @@ async function slot<T>(job: () => Promise<T>): Promise<T> {
   try { return await job(); } finally { const next = waiting.shift(); if (next) next(); else live--; }
 }
 
+/** A small file's text, read for what git wrote (a HEAD, a config, a `.git` file): rejects one that is not a regular file or holds over
+ *  `max` bytes. Opened without blocking and checked on the open file: a FIFO (or a device) would otherwise hold one of libuv's few
+ *  threads until someone writes to it, and stall every file read behind it. */
+export async function readGitFile(path: string, max = 64 * 1024): Promise<string> {
+  const fh = await open(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+  try {
+    if (!(await fh.stat()).isFile()) throw new Error(`not a regular file: ${path}`);
+    const buf = Buffer.alloc(max + 1);
+    const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+    if (bytesRead > max) throw new Error(`over ${max} bytes: ${path}`);
+    return buf.toString('utf8', 0, bytesRead);
+  } finally { await fh.close(); }
+}
+
 /** The branch named by a `.git` folder's HEAD (the short commit when detached), read without running git: an empty repository has
- *  its branch there before any commit. Null when HEAD is missing or names no local branch. */
+ *  its branch there before any commit. Null when HEAD is missing, not a regular file, or names no local branch. */
 export async function headBranch(dotGit: string): Promise<string | null> {
   let head: string;
-  try { head = (await readFile(join(dotGit, 'HEAD'), 'utf8')).trim(); } catch { return null; }
+  try { head = (await readGitFile(join(dotGit, 'HEAD'), MAX_HEAD_BYTES)).trim(); } catch { return null; }
   const ref = /^ref: refs\/heads\/(.+)$/.exec(head);
   if (ref) return ref[1]!;
   return /^[0-9a-f]{7,}$/i.test(head) ? head.slice(0, 7) : null;
