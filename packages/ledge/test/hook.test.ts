@@ -457,6 +457,7 @@ describe('prompts and the chat marker', () => {
   it('labels SendMessage with its summary', () => {
     const tool_input = { to: 'a-bf', summary: 'OK pour la sidebar', message: 'long' };
     expect(mapClaudeHook('PreToolUse', { session_id: 's', tool_name: 'SendMessage', tool_input }, at)?.event.text).toBe('OK pour la sidebar');
+    expect(mapClaudeHook('PreToolUse', { session_id: 's', tool_name: 'SendMessage', tool_input: { to: 'a-bf', summary: '', message: 'long' } }, at)?.event.text).toBe('→ a-bf');
     const m = mapClaudeHook('PreToolUse', { session_id: 's', tool_name: 'SendMessage', tool_input: { to: 'a-bf', message: 'long' } }, at);
     expect(m?.event.text).toBe('→ a-bf');
     expect(m?.event.toolInput).toEqual({ to: 'a-bf', message: 'long' });

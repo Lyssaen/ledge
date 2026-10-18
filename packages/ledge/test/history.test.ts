@@ -282,8 +282,18 @@ describe('messages between agents', () => {
       { from: 'uds:/run/user/1000/cc-socks/1.sock', name: 'a-2d', text: 'Deux' }
     ]);
     expect(crossSession('<cross-session-message from-mode="prompting" from="uds:x">\nSans nom</cross-session-message>')).toEqual([{ from: 'uds:x', text: 'Sans nom' }]);
+    expect(crossSession(tag('a-bf', 'Je cite <cross-session-message from="x"> dans ma phrase'))).toEqual([{ from: 'uds:/run/user/1000/cc-socks/1.sock', name: 'a-bf', text: 'Je cite <cross-session-message from="x"> dans ma phrase' }]);
     expect(crossSession('Lance les tests')).toBeUndefined();
     expect(crossSession('<agent-message from="a">\nrapport')).toBeUndefined();
+  });
+
+  it('syncs the agent messages into a turn opened by a received message', () => {
+    const p = join(dir, 'r.jsonl');
+    writeFileSync(p, JSON.stringify({ uuid: 'r1', timestamp: later(2), type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Bien reçu.' }] } }) + '\n');
+    const h = new History();
+    h.record('s', ev('UserPromptSubmit', { text: '<cross-session-message from="uds:x" from-name="a-bf">\nSalut\n</cross-session-message>' }));
+    expect(h.items('s')[0]).toMatchObject({ kind: 'received' });
+    expect(h.sync('s', p, { now: 2000 }).map(i => i.id)).toEqual(['msg-r1']);
   });
 
   it('a SendMessage is a sent message: sending, delivered, never a tool row', () => {

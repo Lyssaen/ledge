@@ -449,6 +449,23 @@ describe('server', () => {
     expect(history.items('a')[0]).toMatchObject({ id: 'toolu_1', status: 'read' });
     expect(store.get('a')!.lastMessage).toMatchObject({ id: 'toolu_2', summary: 'Deux' });
   });
+  it('parallel sends: a late result of the older call never takes the last message back', async () => {
+    await srv.close();
+    const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+    store.upsert(mk('a'));
+    const T1 = '2026-10-09T18:00:02.000Z';
+    const call = (name: 'PreToolUse' | 'PostToolUse', at: string, id: string) => store.apply('a', { name, at, source: 'hook', tool: 'SendMessage', toolUseId: id, toolInput: { to: 'a-bf', message: id } });
+    call('PreToolUse', T0, 'toolu_1'); call('PreToolUse', T1, 'toolu_2'); call('PostToolUse', '2026-10-09T18:00:03.000Z', 'toolu_2'); call('PostToolUse', '2026-10-09T18:00:04.000Z', 'toolu_1');
+    expect(store.get('a')!.lastMessage).toMatchObject({ id: 'toolu_2', at: T1 });
+  });
+  it('a failed send never becomes the last message', async () => {
+    await srv.close();
+    const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+    store.upsert(mk('a'));
+    store.apply('a', { name: 'PostToolUseFailure', at: T0, source: 'hook', tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'a-bf', message: 'Raté' }, error: 'no such peer' });
+    expect(history.items('a')[0]).toMatchObject({ kind: 'sent', status: 'failed' });
+    expect(store.get('a')!.lastMessage).toBeUndefined();
+  });
   it('a decision from Ledge settles only its own permission, never an older one answered in the terminal', async () => {
     const pane = fx('claude2-permission-bash');
     tmux = fakeTmux({ 'ledge-a': [pane, pane, 'Running…'] }); await srv.close();

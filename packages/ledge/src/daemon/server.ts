@@ -140,7 +140,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeHistory = history ? [
     history.onItem((id, item) => {
       broadcast({ type: 'session.thread.item', id, item });
-      if (item.kind === 'sent' && item.status !== 'read' && store.get(id)?.lastMessage?.id !== item.id) {
+      // A late result of an older parallel call (same `at` as its call) never takes the last message back; a failed send never flies.
+      const cur = store.get(id)?.lastMessage;
+      if (item.kind === 'sent' && item.status !== 'read' && item.status !== 'failed' && cur?.id !== item.id && (!cur || item.at >= cur.at)) {
         store.patch(id, { lastMessage: { id: item.id, to: item.to, ...(item.peer ? { peer: item.peer } : {}), summary: item.summary ?? item.text.split('\n')[0]!.slice(0, 120), at: item.at } });
       }
     }),
