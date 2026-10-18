@@ -150,3 +150,11 @@
 .undo-toast button kbd{font-size:10px}
 .undo-toast>i{position:absolute;left:0;bottom:0;height:2px;width:100%;background:var(--primary);transform-origin:left;animation:undo-time linear forwards}
 @keyframes undo-time{to{transform:scaleX(0)}}
+
+/* manage.css: the confirmation of ending, archiving or deleting a session. */
+.confirm-modal { width: 420px; }
+.confirm-content { padding: 16px 20px 18px; }
+.confirm-content p { margin: 0; font-size: 13px; line-height: 20px; }
+.confirm-content .confirm-extra { margin-top: 10px; font-size: 12px; line-height: 18px; color: var(--muted-foreground); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.ledge-btn.danger-btn { background: var(--destructive) !important; border-color: var(--destructive) !important; color: var(--destructive-foreground) !important; }

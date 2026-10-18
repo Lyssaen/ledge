@@ -38,6 +38,8 @@ import { onFullscreenLeft, setWindowFullscreen } from './shell/fullscreen';
 import { Toast, useToast } from './shell/Toast';
 import { preloadPlaces } from './shell/preload';
 import { useFiling } from './atelier/filing';
+import { useSessionActions } from './manage/useSessionActions';
+import { ConfirmDialog } from './manage/ConfirmDialog';
 import { SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
@@ -96,6 +98,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const { notice, action: noticeAction, notify, undo } = useToast();
   const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
   // Allow / Deny from the List (and, lot 6, the session): one send per request; a refusal or a silence is said in the toast.
+  // End, archive, resume, restore, delete (lot 8): the confirmation below; the atelier, the List and the session page hand it their menus.
+  const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
@@ -219,6 +223,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}
           notify={notify} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}
+      {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <Toast notice={notice} action={noticeAction} onAction={undo} />
     </ScreenKeysContext.Provider>
   );

@@ -365,6 +365,28 @@ export const fr = {
     replyUnconfirmed: (name: string) => `Ledge n’a pas vu la réponse à ${name} aboutir. Vérifiez le fil.`,
     noteNotTyped: 'Refusé, mais la note n’a pas pu être tapée.'
   },
+  manage: {
+    undo: 'Annuler',
+    archived: (name: string, kids: number): string => `${name} est archivé${kids > 0 ? ` avec ${kids} ${plural(kids, 'sous-agent', 'sous-agents')}` : ''}.`,
+    archivedMany: (n: number): string => `${n} sessions archivées.`,
+    refused: (name: string, message: string): string => `${name} : ${message}`,
+    confirm: {
+      title: {
+        end: (names: readonly string[]): string => `Terminer ${names.length === 1 ? names[0] : `ces ${names.length} sessions`} ?`,
+        archive: (names: readonly string[]): string => `Terminer et archiver ${names.length === 1 ? names[0] : `ces ${names.length} sessions`} ?`,
+        delete: (names: readonly string[]): string => `Supprimer ${names.length === 1 ? names[0] : `ces ${names.length} sessions`} ?`
+      },
+      body: {
+        end: (names: readonly string[]): string => `L’agent s’arrête maintenant, même au milieu d’une tâche. Sa conversation reste lisible et ${names.length > 1 ? 'les sessions restent à leur table, marquées' : 'il reste à sa table, marqué'} « Terminée ».`,
+        archive: (names: readonly string[], live: number): string => `${live === 1 && names.length === 1 ? `${names[0]} travaille encore : Ledge l’arrête, puis le range dans les Archives.` : `${live} ${plural(live, 'session travaille', 'sessions travaillent')} encore : Ledge les arrête, puis les range dans les Archives.`} Vous pourrez relire la conversation ou la reprendre plus tard.`,
+        delete: (names: readonly string[], live: number, archived: boolean): string => `${names.length > 1 ? `Ces ${names.length} sessions disparaissent` : `${names[0]} disparaît`} de Ledge${archived ? ', archives comprises' : ''} : fil, documents et position à la table. ${live > 0 ? `${live > 1 ? `${live} sessions travaillent` : 'La session travaille'} encore : Ledge ${live > 1 ? 'les' : 'l’'}arrête d’abord. ` : ''}L’historique gardé par l’outil de l’agent sur la machine n’est pas touché.`
+      },
+      ok: { end: 'Terminer', archive: 'Terminer et archiver', delete: 'Supprimer définitivement' },
+      kids: (kind: 'end' | 'archive' | 'delete', kids: number, names: readonly string[]): string => `${kids} ${plural(kids, 'sous-agent', 'sous-agents')} ${kind === 'delete' ? (kids > 1 ? 'sont supprimés' : 'est supprimé') : kind === 'end' ? (kids > 1 ? 's’arrêtent' : 's’arrête') : (kids > 1 ? 'partent' : 'part')} avec ${names.length > 1 ? 'eux' : names[0]}.`,
+      offline: (kind: 'end' | 'archive' | 'delete', names: readonly string[]): string => `${names.join(', ')} : machine injoignable. Ledge ${kind === 'delete' ? 'l’oublie' : 'le range'} sans pouvoir l’arrêter ; l’agent s’arrêtera de lui-même ou au retour de la machine.`,
+      cancel: 'Annuler'
+    }
+  },
   session: {
     meta: 'Machine et dépôts',
     subagent: 'Sous-agent',

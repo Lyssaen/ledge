@@ -346,6 +346,28 @@ export const en: Messages = {
     replyUnconfirmed: (name) => `Ledge did not see the reply to ${name} land. Check the thread.`,
     noteNotTyped: 'Refused, but the note could not be typed.'
   },
+  manage: {
+    undo: 'Undo',
+    archived: (name, kids) => `${name} is archived${kids > 0 ? ` with ${kids} ${pluralEn(kids, 'subagent', 'subagents')}` : ''}.`,
+    archivedMany: (n) => `${n} sessions archived.`,
+    refused: (name, message) => `${name}: ${message}`,
+    confirm: {
+      title: {
+        end: (names) => `End ${names.length === 1 ? names[0] : `these ${names.length} sessions`}?`,
+        archive: (names) => `End and archive ${names.length === 1 ? names[0] : `these ${names.length} sessions`}?`,
+        delete: (names) => `Delete ${names.length === 1 ? names[0] : `these ${names.length} sessions`}?`
+      },
+      body: {
+        end: (names) => `The agent stops now, even in the middle of a task. Its conversation stays readable and ${names.length > 1 ? 'the sessions stay at their table, marked' : 'it stays at its table, marked'} “Finished”.`,
+        archive: (names, live) => `${live === 1 && names.length === 1 ? `${names[0]} is still working: Ledge stops it, then files it in the Archives.` : `${live} ${pluralEn(live, 'session is', 'sessions are')} still working: Ledge stops them, then files them in the Archives.`} You can read the conversation or resume it later.`,
+        delete: (names, live, archived) => `${names.length > 1 ? `These ${names.length} sessions disappear` : `${names[0]} disappears`} from Ledge${archived ? ', archives included' : ''}: thread, documents and place at the table. ${live > 0 ? `${live > 1 ? `${live} sessions are` : 'The session is'} still working: Ledge stops ${live > 1 ? 'them' : 'it'} first. ` : ''}The history the agent's tool keeps on the machine is not touched.`
+      },
+      ok: { end: 'End', archive: 'End and archive', delete: 'Delete for good' },
+      kids: (kind, kids, names) => `${kids} ${pluralEn(kids, 'subagent', 'subagents')} ${kind === 'delete' ? (kids > 1 ? 'are deleted' : 'is deleted') : kind === 'end' ? (kids > 1 ? 'stop' : 'stops') : (kids > 1 ? 'leave' : 'leaves')} with ${names.length > 1 ? 'them' : names[0]}.`,
+      offline: (kind, names) => `${names.join(', ')}: machine unreachable. Ledge ${kind === 'delete' ? 'forgets it' : 'files it'} without being able to stop it; the agent stops by itself or when the machine returns.`,
+      cancel: 'Cancel'
+    }
+  },
   session: {
     meta: 'Machine and repositories',
     subagent: 'Subagent',

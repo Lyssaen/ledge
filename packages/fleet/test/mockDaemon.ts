@@ -73,8 +73,8 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
     launched(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); last?.send(JSON.stringify({ type: 'session.launched', id: s.id })); },
     /** Any reply to the last requester alone, e.g. a `session.launched` for a session that is never listed. */
     reply(m: ServerMessage) { last?.send(JSON.stringify(m)); },
-    /** A launch refused: an `error` with no id, to the last requester. */
-    refuse(message: string) { last?.send(JSON.stringify({ type: 'error', message })); },
+    /** A refusal: an `error` to the last requester; with `id` and `request` it is the daemon's answer to that session's message (`no conversation to resume`). */
+    refuse(message: string, id?: string, request?: string) { last?.send(JSON.stringify({ type: 'error', message, ...(id !== undefined ? { id } : {}), ...(request !== undefined ? { request } : {}) })); },
     /** The next launches get no answer until `releaseLaunch` (whatever `autoLaunch` says). */
     holdLaunch() { holding = true; },
     /** Answers the held launches as `autoLaunch` does (a `starting` session, then `session.launched` to each sender); later ones are answered by `autoLaunch` again.
