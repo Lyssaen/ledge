@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -8,7 +8,11 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { Projects, ServerMessage, Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
-import { createChat } from '../src/chat/service.js';
+import { createChat, tooWide } from '../src/chat/service.js';
+
+// The daemon's log lines, read here (a dropped project path is logged with its reason).
+const logged = vi.hoisted(() => [] as string[]);
+vi.mock('../src/log.js', () => ({ log: (line: string) => { logged.push(line); } }));
 
 const FAKE = fileURLToPath(new URL('./fake-claude.mjs', import.meta.url));
 const tmux = { async capture() { return null; } } as any;
@@ -279,6 +283,28 @@ describe('chat service', () => {
       const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(block) }) });
       await chat.ask('q1', 'x', () => {});
       expect(chat.history()[0]!.projectProposal).toEqual({ name: 'Paper', repos: [{ path: join(userHome, 'paper'), why: 'kept' }] });
+    });
+    it('tooWide: the root, a home, what holds the user\'s home, a top-level folder, a folder of homes (WSL\'s Windows ones too); a repository is not', () => {
+      const home = '/home/me';
+      expect(tooWide('/', home)).toBe('the root');
+      for (const p of ['/home/me', '/home/other', '/root', '/Users/kim', '/mnt/c/Users/kim']) expect(tooWide(p, home)).toBe('a home folder');
+      expect(tooWide('/srv/me/home', '/srv/me/home')).toBe('a home folder');
+      expect(tooWide('/srv/me', '/srv/me/home')).toBe('a folder holding the home');
+      for (const p of ['/home', '/Users', '/mnt/c', '/mnt/d/Users', '/mnt/wsl']) expect(tooWide(p, home)).toBe('a folder of homes');
+      for (const p of ['/usr', '/srv', '/tmp', '/w']) expect(tooWide(p, home)).toBe('a top-level folder');
+      for (const p of ['/home/me/dev', '/home/me/dev/paper', '/w/ledge', '/mnt/c/Users/kim/dev', '/srv/me/other']) expect(tooWide(p, home)).toBeNull();
+      expect(tooWide('/srv/me/homework', '/srv/me/home')).toBeNull();
+    });
+    it('drops what holds the user\'s home and a top-level folder, each with its log line, and keeps the rest', async () => {
+      const outer = mkdtempSync(join(tmpdir(), 'outer-'));
+      const userHome = join(outer, 'me'); mkdirSync(join(userHome, 'paper'), { recursive: true });
+      const block = JSON.stringify({ name: 'Paper', repos: [{ path: outer, why: 'holds the home' }, { path: '/usr', why: 'top level' }, { path: '~/paper', why: 'kept' }] });
+      const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(block) }) });
+      logged.length = 0;
+      await chat.ask('q1', 'x', () => {});
+      expect(chat.history()[0]!.projectProposal).toEqual({ name: 'Paper', repos: [{ path: join(userHome, 'paper'), why: 'kept' }] });
+      expect(logged).toContain(`chat q1: project path dropped: a folder holding the home: ${outer}`);
+      expect(logged).toContain('chat q1: project path dropped: a top-level folder: /usr');
     });
     it('only / and homes: no proposal', async () => {
       const userHome = mkdtempSync(join(tmpdir(), 'home-'));

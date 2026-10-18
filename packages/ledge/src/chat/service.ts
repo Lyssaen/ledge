@@ -50,7 +50,21 @@ const HISTORY_MAX = 50;
 const PANE_LINES = 40;
 
 /** A home folder (`/root`, `/home/<user>`, `/Users/<user>`): never a project's repository (the fleet's proposals.ts rule). */
-const HOME = /^\/(?:root|home\/[^/]+|Users\/[^/]+)$/;
+const HOME = /^\/(?:root|home\/[^/]+|Users\/[^/]+|mnt\/[^/]+\/Users\/[^/]+)$/;
+/** Where homes live: `/home`, `/Users`, a WSL drive (`/mnt/c`) and its `Users`. */
+const HOMES = /^\/(?:home|Users|mnt\/[^/]+(?:\/Users)?)$/;
+
+/** Why a project path from the chat is too wide to propose (it would swallow every repository below it), or null: the root, a home
+ *  (anyone's, WSL's Windows ones included, or the user's), a folder of homes, a folder that holds the user's home, a top-level folder
+ *  (`/x`). `path` and `userHome` are resolved. */
+export function tooWide(path: string, userHome: string): string | null {
+  if (path === '/') return 'the root';
+  if (HOME.test(path) || path === userHome) return 'a home folder';
+  if (HOMES.test(path)) return 'a folder of homes';
+  if (userHome.startsWith(`${path}/`)) return 'a folder holding the home';
+  if (/^\/[^/]+$/.test(path)) return 'a top-level folder';
+  return null;
+}
 const sameStep = (a: ChatTurn['steps'][number], b: ChatTurn['steps'][number]) => a.kind === b.kind && a.id === b.id && a.path === b.path;
 
 /** One conversation with Ledge per day, run by the chosen harness (spec 2026-10-11 §5). */
@@ -114,7 +128,7 @@ export function createChat(deps: ChatDeps): Chat {
     return { id: s!.id, name: s!.name, tool: s!.tool, text: block.text };
   }
   /** A project block as a card (lot 11, task 5): only the paths that are folders on this machine now stay (resolved, `~` included,
-   *  once each), never `/` nor a home (it would swallow every repository, as the Settings proposer knows); the others are dropped with
+   *  once each), never one `tooWide` names (it would swallow every repository, as the Settings proposer knows); the others are dropped with
    *  a log line, and with none left there is no card. Nothing is created here. */
   async function projectFrom(raw: string, qid: string): Promise<ChatProjectProposal | undefined> {
     const block = parseProjectBlock(raw);
@@ -123,7 +137,8 @@ export function createChat(deps: ChatDeps): Chat {
     for (const r of block.repos) {
       try {
         const path = await resolveFolder(r.path, deps.userHome);
-        if (path === '/' || HOME.test(path) || path === resolve(deps.userHome ?? homedir())) { log(`chat ${qid}: project path dropped: a root or home folder: ${path}`); continue; }
+        const wide = tooWide(path, resolve(deps.userHome ?? homedir()));
+        if (wide) { log(`chat ${qid}: project path dropped: ${wide}: ${path}`); continue; }
         if (!repos.some(x => x.path === path)) repos.push({ path, why: r.why });
       } catch (e) { log(`chat ${qid}: project path dropped: ${(e as Error).message}`); }
     }

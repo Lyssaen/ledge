@@ -451,6 +451,22 @@ describe('a project proposed in the chat (lot 11 task 5)', () => {
     act(() => hook.result.current.review('nas:q-1'));
     expect(proposalOf(onProposal.mock.calls[0]![0] as string)).toMatchObject({ repos: [{ machine: 'nas', path: '/srv/backups' }], summary: { repos: 1, machines: ['NAS'], agents: [] } });
   });
+
+  it('a folder that holds another project\'s repository (on the same machine) is left out; one holding only the target\'s stays', () => {
+    const wrapper = ({ children }: { children: ReactNode }) => <LangProvider lang="en">{children}</LangProvider>;
+    const turnOf = (qid: string, projectProposal: ChatProjectProposal): ChatTurn => ({ qid, question: 'Create', askedAt: '2026-10-17T10:00:00.000Z', steps: [], answer: 'ok', answeredAt: '2026-10-17T10:00:01.000Z', projectProposal });
+    const turns = [
+      // /w holds Payment's /w/pay; /w/ledge holds Ledge's /w/ledge/app; /srv holds Ledge's /srv/ledge, but on NAS.
+      turnOf('q-new', { name: 'Work', repos: [{ path: '/w', why: 'everything' }, { path: '/w/ledge', why: 'Ledge' }, { path: '/srv', why: 'other machine' }, { path: '/home/me/work', why: 'kept' }] }),
+      turnOf('q-add', { name: 'Ledge', addTo: 'Ledge', repos: [{ path: '/w', why: 'holds Payment' }, { path: '/w/ledge', why: 'holds only Ledge' }] })
+    ];
+    const onProposal = vi.fn();
+    const hook = renderHook(() => useProjectReview({ chat: turns, projects: LAUNCH_PROJECTS, machines: [{ id: 'local', label: 'Local' }], notify: vi.fn(), onProposal }), { wrapper });
+    act(() => hook.result.current.review('q-new'));
+    expect((proposalOf(onProposal.mock.calls[0]![0] as string)!.repos).map(r => r.path)).toEqual(['/srv', '/home/me/work']);
+    act(() => hook.result.current.review('q-add'));
+    expect((proposalOf(onProposal.mock.calls[1]![0] as string)!.repos).map(r => r.path)).toEqual(['/w/ledge']);
+  });
 });
 
 describe('useChatCards', () => {
