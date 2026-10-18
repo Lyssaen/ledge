@@ -4,7 +4,9 @@ import { useToast } from '../src/shell/Toast';
 import { useKeys } from '../src/nav/useKeys';
 import { initialNav } from '../src/nav/state';
 import type { Overview } from '../src/nav/overview';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { ConfirmDialog } from '../src/manage/ConfirmDialog';
+import { LangProvider } from '../src/i18n/lang';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { createDesktopFleet } from '../src/fleet/useFleet';
@@ -170,5 +172,28 @@ describe('Ctrl Z', () => {
     expect(run).toHaveBeenCalledTimes(1);
     await user.keyboard('{Control>}z{/Control}');
     expect(run).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('an open confirmation', () => {
+  const confirm = { kind: 'delete' as const, names: ['Old'], live: 0, offline: [], archived: true, kids: 0, ids: ['old'] };
+  function Asking({ dispatch, run, cancel }: { dispatch: () => void; run: () => void; cancel: () => void }) {
+    const { notify, undo } = useToast();
+    useKeys(dispatch, { state: initialNav({ view: 'atelier', helpers: false, paused: false } as Overview), order: [], screen: { current: null }, undo, confirming: { cancel } });
+    return <><button onClick={() => notify('Archivé.', { label: 'Annuler', run })}>archive</button><ConfirmDialog c={confirm} onConfirm={() => {}} onCancel={cancel} /></>;
+  }
+  it('owns the keyboard: Escape from the close button cancels without navigating; ? and Ctrl Z do nothing', async () => {
+    const dispatch = vi.fn(), run = vi.fn(), cancel = vi.fn();
+    const user = userEvent.setup();
+    render(<LangProvider lang="en"><Asking dispatch={dispatch} run={run} cancel={cancel} /></LangProvider>);
+    // The toast is up before the dialog's focus matters: Ctrl Z would take it back if the dialog did not own the keys.
+    fireEvent.click(screen.getByRole('button', { name: 'archive' }));
+    await user.keyboard('?');
+    await user.keyboard('{Control>}z{/Control}');
+    screen.getByRole('button', { name: 'Close' }).focus();
+    await user.keyboard('{Escape}');
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalled();
   });
 });

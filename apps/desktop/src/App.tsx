@@ -104,7 +104,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
-  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo });
+  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null });
   // The window may leave full screen by itself (Escape in a browser, the OS): the layout follows.
   useEffect(() => onFullscreenLeft(() => dispatch({ type: 'fullscreen', on: false })), []);
   // The window follows the full screen state (not at mount: nothing was asked yet).

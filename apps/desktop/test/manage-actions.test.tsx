@@ -35,6 +35,7 @@ function Harness({ client }: { client: DaemonClient }) {
       <button onClick={() => a.request('end', ['local:nova', 'local:h1'])}>end nova</button>
       <button onClick={() => a.request('delete', ['local:old'])}>delete old</button>
       <button onClick={() => a.resume('local:bix')}>resume bix</button>
+      <button onClick={() => a.resume('local:nova')}>resume nova</button>
       <button onClick={() => a.restore('local:old')}>restore old</button>
       <span aria-label="allowed">{String(a.allowed('local:bix'))}</span>
       {a.pending && <ConfirmDialog c={a.pending} onConfirm={a.confirm} onCancel={a.cancel} />}
@@ -161,6 +162,29 @@ describe('session actions', () => {
       await waitFor(() => expect(d.received.some(m => m.type === 'session.resume')).toBe(true));
       act(() => d.refuse('no conversation to resume', 'bix', 'session.resume'));
       await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(t.manage.refused('Bix', 'no conversation to resume')));
+    } finally { await d.close(); }
+  });
+
+  it('a machine that went back to an older daemon while the dialog was open gets no archive or delete', async () => {
+    const { d, user, sent } = await setup();
+    try {
+      await user.click(screen.getByText('delete old'));
+      await screen.findByRole('alertdialog');
+      d.extras.daemon = OLD;
+      await d.dropClients();
+      await waitFor(() => expect(screen.getByLabelText('allowed')).toHaveTextContent('false'), { timeout: 6000 });
+      await user.click(screen.getByRole('button', { name: t.manage.confirm.ok.delete }));
+      await new Promise(r => setTimeout(r, 150));
+      expect(types(sent())).not.toContain('session.delete');
+    } finally { await d.close(); }
+  }, 15_000);
+
+  it('a session that still works is not resumed', async () => {
+    const { d, user, sent } = await setup();
+    try {
+      await user.click(screen.getByText('resume nova'));
+      await new Promise(r => setTimeout(r, 150));
+      expect(types(sent())).not.toContain('session.resume');
     } finally { await d.close(); }
   });
 });

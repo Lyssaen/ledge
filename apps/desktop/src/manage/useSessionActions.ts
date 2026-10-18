@@ -72,7 +72,8 @@ export function useSessionActions(o: { client: Pick<DaemonClient, 'send'>; sessi
     const c = pending;
     if (!c) return;
     setPending(null);
-    const list = c.ids.map(id => byId.get(id)).filter((s): s is Session => s !== undefined);
+    // A machine may have come back with an older daemon while the dialog was open: ending (an old message) still goes, the rest does not.
+    const list = c.ids.map(id => byId.get(id)).filter((s): s is Session => s !== undefined && (c.kind === 'end' || allowedSession(s)));
     if (c.kind === 'archive') archiveNow(list);
     else for (const s of list) client.send(c.kind === 'end' ? { type: 'session.kill', id: s.id } : { type: 'session.delete', id: s.id });
   };
@@ -100,7 +101,7 @@ export function useSessionActions(o: { client: Pick<DaemonClient, 'send'>; sessi
 
   return {
     request,
-    resume: id => sendOne('session.resume', id, () => true),
+    resume: id => sendOne('session.resume', id, s => !isLive(s)),
     restore: id => sendOne('session.restore', id, s => inArchive.has(s.id)),
     pending, confirm, cancel: () => setPending(null), allowed
   };
