@@ -7,7 +7,7 @@ import { attachClient, daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
 import { DEFAULT_SOUNDS, resetSoundPrefsForTests } from '../src/sounds/preferences';
 import { MESSAGES } from '../src/i18n/messages';
-import { filetWidth } from '../src/surface/geometry';
+import { filetWidth, islandWidth, ISLAND } from '../src/surface/geometry';
 import { SHOULDER_R, STRIP_SHOULDER_R } from '../src/surface/Shoulders';
 
 let mock: Awaited<ReturnType<typeof createMockDaemon>>; let client: ReturnType<typeof createDaemonClient>; let detach: () => void;
@@ -101,18 +101,24 @@ describe('<Surface>', () => {
     expect(surface()).toHaveStyle({ width: `${filetWidth([2])}px` });
   });
 
-  it('hovering the handle no longer opens a list; a bot opens a peek and the resident opens the chat', async () => {
+  it('hovering the filet wakes it into the compact island, no list; a robot opens a peek and the resident opens the chat', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    expect(surface()).toHaveStyle({ width: `${filetWidth([2])}px` });
+    expect(document.querySelectorAll('[data-layer="handle"] svg.bot')).toHaveLength(0);
     fireEvent.mouseEnter(document.querySelector('[data-surface]')!);
     await act(async () => { vi.advanceTimersByTime(180); });
     expect(surface()).toHaveAttribute('data-mode', 'handle');
-    expect(surface()).toHaveStyle({ width: `${filetWidth([2])}px` });
+    expect(surface()).toHaveAttribute('data-awake', 'true');
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px`, height: `${ISLAND.h}px` });
+    expect(document.querySelectorAll('[data-layer="handle"] svg.bot')).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: /Pim working, open/ }));
     expect(surface()).toHaveAttribute('data-mode', 'peek');
     expect(surface()).toHaveStyle({ width: '360px' });
     expect(document.querySelector('[data-layer="peek"]')).toHaveTextContent('Pim');
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(surface()).toHaveStyle({ width: `${filetWidth([2])}px` });
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    fireEvent.mouseEnter(surface());
+    expect(surface()).toHaveStyle({ width: `${islandWidth(2)}px` });
     fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
     await act(async () => { vi.advanceTimersByTime(180); });
     expect(surface()).toHaveAttribute('data-mode', 'chat');
@@ -494,7 +500,7 @@ describe('<Surface> island', () => {
     expect(surface()).toHaveAttribute('data-strip');
   });
 
-  it('discreet: a covering window shrinks the island to the strip 500 ms after the fold; hovering the band redeploys it', async () => {
+  it('discreet: a covering window shrinks the island to the strip 500 ms after the fold; hovering the band wakes it', async () => {
     mount();
     cover(true);
     expect(surface()).not.toHaveAttribute('data-strip');
@@ -506,7 +512,9 @@ describe('<Surface> island', () => {
     const left = parseFloat(surface().style.left);
     fireEvent.mouseMove(document, { clientX: left - 10, clientY: 4 });
     expect(surface()).not.toHaveAttribute('data-strip');
-    expect(surface()).toHaveStyle({ height: '10px' });
+    // The pointer in the band wakes the notch into the compact island.
+    expect(surface()).toHaveAttribute('data-awake', 'true');
+    expect(surface()).toHaveStyle({ height: `${ISLAND.h}px` });
     await act(async () => { vi.advanceTimersByTime(200); });
     expect(surface()).toHaveAttribute('data-mode', 'handle');
     cover(false);

@@ -1,5 +1,6 @@
 import { test, expect, layer, expectMode, ready } from './fixtures';
 import { fakeDaemon, session } from './daemon';
+import { wake } from './scenarios';
 
 test('Ledge stays in the notch without sessions, greets the empty panel, and remains beside new dashes', async ({ page }) => {
   const daemon = await fakeDaemon(page, []);
@@ -10,6 +11,7 @@ test('Ledge stays in the notch without sessions, greets the empty panel, and rem
   await expect(resident.locator('[data-ledge-mark]')).toBeVisible();
   await expect(layer(page, 'handle').locator('svg')).toHaveCount(0);
 
+  await wake(page);
   await resident.click();
   await expectMode(page, 'chat');
   await expect(layer(page, 'chat').getByRole('textbox', { name: 'Ask Ledge' })).toBeVisible();
@@ -27,15 +29,17 @@ test('Ledge stays in the notch without sessions, greets the empty panel, and rem
   await expect(resident).toBeVisible();
 });
 
-test('a dash peeks at its session; the rectangle opens the chat', async ({ page }) => {
+test('at rest a dash; awake, its robot peeks at its session and Ledge opens the chat', async ({ page }) => {
   await fakeDaemon(page, [session('a', { name: 'Otto', state: 'idle' })]);
   await ready(page, 1);
   const dash = layer(page, 'handle').getByRole('button', { name: 'Otto available, open' });
   await expect(dash).toHaveCSS('width', '5px');
-  await dash.click();
+  await wake(page);
+  await layer(page, 'handle').getByRole('button', { name: 'Otto available, open' }).click();
   await expectMode(page, 'peek');
   await page.keyboard.press('Escape');
   await expectMode(page, 'handle');
+  await wake(page);
   await layer(page, 'handle').locator('[data-resident]').click();
   await expectMode(page, 'chat');
 });

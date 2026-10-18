@@ -1,5 +1,6 @@
 import { test, expect, expectMode } from './fixtures';
 import { fakeDaemon, session } from './daemon';
+import { wake } from './scenarios';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -15,6 +16,7 @@ test('the update pip notes Ledge Desktop and does not start an install', async (
   await page.goto('/');
   const pip = page.locator('[data-update-pip="new"]');
   await expect(pip).toBeVisible();
+  await wake(page);
   await pip.click();
   await expectMode(page, 'handle');
   await expect(page.getByRole('status')).toContainText('Opening updates in Ledge Desktop');

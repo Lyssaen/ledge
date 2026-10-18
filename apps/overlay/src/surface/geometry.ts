@@ -76,7 +76,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 export const expandedWidth = (screenW: number, min: number) => clamp(Math.round(screenW * 0.6), min, SIZES.expandedMaxW);
 
 /** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of the list: an expanded (focused) row, the notice, the update card. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
-export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; /** The update dash on the resting notch. */ pip?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; /** Measured height of the open helper view. */ helperH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
+export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; /** The update dash on the resting notch. */ pip?: boolean; /** The pointer is over the notch: the compact island instead of the filet (handle mode). */ awake?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; /** Measured height of the open helper view. */ helperH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
 
 /** Everything hangs from the top edge of the work area, centred on the island's axis; `left` is clamped into the screen. */
 export function layout(input: LayoutInput): Layout {
@@ -87,15 +87,25 @@ export function layout(input: LayoutInput): Layout {
   const place = (w: number) => clamp(Math.round(axis - w / 2), 0, Math.max(0, screenW - w));
   const ordered = islandOrder(bots);
   const groups = machineGroups(ordered);
-  const handleW = mode === 'handle' ? filetWidth(groups.map(g => g.length), !!input.pip) : islandWidth(n, input.dnd, islandPipes(ordered));
-  const handle = { left: place(handleW), w: handleW, h: mode === 'handle' ? FILET.h : ISLAND.h };
+  // At rest the notch is the filet; awake (under the pointer) it is the compact island with its robots.
+  const filet = mode === 'handle' && !input.awake;
+  const handleW = filet ? filetWidth(groups.map(g => g.length), !!input.pip) : islandWidth(n, input.dnd, islandPipes(ordered));
+  const handle = { left: place(handleW), w: handleW, h: filet ? FILET.h : ISLAND.h };
   const slots: Slot[] = [];
-  let cursor = FILET.pad + FILET.ledge;
-  for (const group of groups) {
-    cursor += FILET.sep;
-    group.forEach((b, i) => {
-      slots.push({ id: b.id, size: FILET.dash, center: handle.left + cursor + FILET.dash / 2 });
-      cursor += FILET.dash + (i < group.length - 1 ? FILET.gap : 0);
+  if (filet) {
+    let cursor = FILET.pad + FILET.ledge;
+    for (const group of groups) {
+      cursor += FILET.sep;
+      group.forEach((b, i) => {
+        slots.push({ id: b.id, size: FILET.dash, center: handle.left + cursor + FILET.dash / 2 });
+        cursor += FILET.dash + (i < group.length - 1 ? FILET.gap : 0);
+      });
+    }
+  } else {
+    let x = handle.left + ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap;
+    ordered.slice(0, ISLAND.max).forEach((b, i, shown) => {
+      if (pipeBefore(shown[i - 1], b)) x += ISLAND.sepGap + SIZES.separatorH;
+      slots.push({ id: b.id, size: ISLAND.companion, center: x + ISLAND.companion / 2 }); x += ISLAND.companion + ISLAND.gap;
     });
   }
   const view = (w: number, h: number): Layout => ({ left: place(w), top: 0, w, h: Math.min(maxH, h), slots, handle });

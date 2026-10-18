@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import type { Session } from '@ledge/protocol';
 import { session } from './daemon';
-import { expectMode, surface } from './fixtures';
+import { expect, expectMode, surface } from './fixtures';
 
 /** The mockup's scenarios as daemon data (only what the protocol carries). */
 export const perm = { state: 'waiting_permission' as const, pending: { kind: 'permission' as const, text: 'pnpm test --filter overlay', source: 'hook' as const } };
@@ -58,8 +58,14 @@ export async function hoverHandle(page: Page) {
   const h = (await surface(page).boundingBox())!;
   await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2, { steps: 2 });
 }
+/** Hovers the resting filet until it has grown into the compact island and its robots, ready to click. */
+export async function wake(page: Page) {
+  await hoverHandle(page);
+  await expect(surface(page)).toHaveAttribute('data-awake', 'true');
+}
 /** Opens the chat by clicking Ledge. The composer takes focus once the panel is up. */
 export async function openChat(page: Page) {
+  await wake(page);
   await page.locator('[data-resident]').click();
   await expectMode(page, 'chat');
 }
