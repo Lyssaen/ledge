@@ -1,5 +1,5 @@
 import type { Pending } from '@ledge/protocol';
-import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch, type ShownCommand } from './types.js';
 
 const rtrim = (l: string) => l.replace(/\s+$/, '');
 const isBlank = (l: string) => l.trim() === '';
@@ -34,7 +34,8 @@ const RULE = /^─{10,}$/;
 /** How far above the footer the rule can be: a long command wraps over many lines. */
 const DIALOG_MAX = 40;
 
-type Dialog = { question: string; subject: string };
+/** `drawn`: the subject's pane lines, as drawn. */
+type Dialog = { question: string; subject: string; drawn: string[] };
 
 function parseDialog(lines: string[]): Dialog | null {
   const end = lastNonBlank(lines);
@@ -47,7 +48,7 @@ function parseDialog(lines: string[]): Dialog | null {
   const q = body.findIndex(l => l.endsWith('?') && !/\((y|tab|shift\+tab)\)$/.test(l));
   if (q < 0) return null;
   const subject = body.slice(0, q).filter(Boolean).join(' ');
-  return { question: body[q]!, subject };
+  return { question: body[q]!, subject, drawn: lines.slice(rule + 1, rule + 1 + q) };
 }
 
 /** `$  npm test in .` is a shell command and the folder it runs in: Ledge shows the command. */
@@ -56,6 +57,17 @@ function dialogText(d: Dialog): string {
   const cmd = d.subject.match(SHELL_SUBJECT);
   if (cmd) return cmd[1]!;
   return d.subject ? `${d.question} ${d.subject}` : d.question;
+}
+/** The shell command a dialog shows, its lines without the `$` and the folder it runs in, or undefined. */
+function dialogCommand(d: Dialog): ShownCommand | undefined {
+  if (!SHELL_SUBJECT.test(d.subject)) return undefined;
+  const command = shownCommand(d.drawn);
+  const { lines, ends } = command;
+  lines[0] = lines[0]!.replace(/^\$\s+/, '');
+  // The folder may wrap to a line of its own.
+  if (/^in\s+\S+$/.test(lines.at(-1)!)) { lines.pop(); ends.pop(); }
+  else lines[lines.length - 1] = lines.at(-1)!.replace(/\s+in\s+\S+$/, '');
+  return command;
 }
 
 // The workspace trust dialog, shown before anything else in a folder Cursor Agent has not seen. Its box
@@ -205,7 +217,7 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   const plan = parsePlan(lines);
   if (plan) return { kind: 'plan', text: plan.title, options: plan.options, ...(plan.body ? { body: plan.body } : {}) };
   const d = parseDialog(lines);
-  const command = d?.subject.match(SHELL_SUBJECT)?.[1];
+  const command = d && dialogCommand(d);
   return d ? { kind: 'permission', text: dialogText(d), ...(command ? { command } : {}) } : null;
 }
 

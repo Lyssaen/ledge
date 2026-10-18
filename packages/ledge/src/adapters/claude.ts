@@ -1,5 +1,5 @@
 import type { Pending } from '@ledge/protocol';
-import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch, type ShownCommand } from './types.js';
 
 // Claude Code 2.x draws a dialog at the bottom of the pane, without a box:
 //
@@ -123,12 +123,14 @@ function parseDialog(pane: string): Dialog | null {
   };
 }
 
-/** The lines between the dialog's dashed rules (a command, a diff), or ''. */
-function dashedBody(header: string[]): string {
+/** The pane lines between the dialog's dashed rules (a command, a diff), or none. */
+function dashed(header: string[]): string[] {
   const d1 = header.findIndex(l => DASHED.test(l.trim()));
   const d2 = d1 < 0 ? -1 : header.findIndex((l, i) => i > d1 && DASHED.test(l.trim()));
-  return d2 > d1 + 1 ? header.slice(d1 + 1, d2).map(l => l.trim()).filter(Boolean).join('\n') : '';
+  return d2 > d1 + 1 ? header.slice(d1 + 1, d2) : [];
 }
+/** The lines between the dialog's dashed rules, trimmed, or ''. */
+const dashedBody = (header: string[]) => dashed(header).map(l => l.trim()).filter(Boolean).join('\n');
 
 /** A permission's subject: the dashed-rule body (the command), or the title and the line after it. */
 function permissionText(header: string[], question: string): string {
@@ -140,9 +142,10 @@ function permissionText(header: string[], question: string): string {
 }
 
 /** The command a « Bash command » dialog shows between its dashed rules, or undefined. */
-function bashCommand(header: string[]): string | undefined {
+function bashCommand(header: string[]): ShownCommand | undefined {
   if (!/^Bash command$/i.test(header.find(l => !isBlank(l))?.trim() ?? '')) return undefined;
-  return dashedBody(header) || undefined;
+  const command = shownCommand(dashed(header));
+  return command.lines.length ? command : undefined;
 }
 
 // The workspace trust dialog, shown before anything else in a folder Claude Code has not seen. Its options carry no

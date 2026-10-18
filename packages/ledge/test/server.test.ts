@@ -46,6 +46,11 @@ function fakeTmux(panes: Record<string, string[]>): Tmux & { sent: string[][]; o
 let srv: Awaited<ReturnType<typeof startServer>>; let store: Store; let tmux: ReturnType<typeof fakeTmux>;
 // The bottom of a Claude Code 2.x permission dialog.
 const PROMPT = 'x\n' + '─'.repeat(40) + '\n Bash command\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend';
+/** The same dialog showing `command` between its dashed rules, its lines drawn as they are. */
+const bashPrompt = (command: string) => ['x', '─'.repeat(80), ' Bash command', '╌'.repeat(80), ...command.split('\n').map(l => ` ${l}`), '╌'.repeat(80),
+  ' Do you want to proceed?', ' ❯ 1. Yes', '   2. No', '', ' Esc to cancel · Tab to amend'].join('\n');
+/** A Claude Code 2.x question dialog (« Which? »), its third option the one the hook does not list. */
+const QUESTION = 'x\n' + '─'.repeat(40) + '\n Which?\n\n ❯ 1. Red\n   2. Blue\n   3. Type something.\n\n Enter to select · ↑/↓ to navigate · Esc to cancel';
 beforeEach(async () => {
   process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
   store = new Store();
@@ -506,6 +511,38 @@ describe('server', () => {
     expect(store.get('a')).toMatchObject({ state: 'waiting_permission', pending: { text: 'pnpm test' } });
     c.close();
   });
+  it('a dialog taller than the capture is read whole before any key, or gets none', async () => {
+    const command = ['cat > notes.txt <<EOF', ...Array.from({ length: 70 }, (_, i) => `line ${i}`), 'EOF'].join('\n');
+    const tall = bashPrompt(command);
+    let pane = tall; let deepest = Infinity;
+    tmux = fakeTmux({}); await srv.close();
+    // The capture reads the last `lines` lines of the pane, no more than tmux keeps (`deepest`).
+    tmux.capture = async (_n, lines) => pane.split('\n').slice(-Math.min(lines, deepest)).join('\n');
+    tmux.sendText = async (n, t) => { tmux.sent.push(['text', n, t]); pane = 'Running…'; };
+    tmux.sendKeys = async (n, k) => { tmux.sent.push(['keys', n, ...k]); pane = 'Running…'; };
+    tmux.width = async () => 80;
+    srv = await startServer({ store, tmux, port: 0 });
+    const pending = { kind: 'permission' as const, text: command, tool: 'Bash', source: 'hook' as const };
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    // Its top out of every capture: the command on screen cannot be checked, nothing is typed.
+    deepest = 60;
+    store.upsert(mk('a', { state: 'waiting_permission', pending }));
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    expect((await c.next('error', 3000)).message).toBe('the request on screen cannot be checked, answer in the terminal');
+    expect(tmux.sent).toEqual([]);
+    // Read whole, it is another command than the one approved.
+    deepest = Infinity;
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { ...pending, text: command.replace('line 3\n', 'line 3 ') } }));
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    expect((await c.next('error', 3000)).message).toBe('the request changed, look again');
+    expect(tmux.sent).toEqual([]);
+    // Read whole, it is the one approved.
+    store.upsert(mk('a', { state: 'waiting_permission', pending }));
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    await until(() => store.get('a')?.state === 'working', 3000);
+    expect(tmux.sent).toEqual([['text', 'ledge-a', '1']]);
+    c.close();
+  });
   it('a note on a question is refused for every harness, and a reply refusal names session.reply', async () => {
     store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
@@ -736,6 +773,8 @@ describe('server', () => {
   });
 
   it('a digit past the known options is still a selection (hook options omit the dialog extras)', async () => {
+    tmux = fakeTmux({ 'ledge-a': [QUESTION, QUESTION, 'Running…'] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0 });
     store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', options: ['Red', 'Blue'], source: 'hook' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.reply', id: 'a', text: '3' });
@@ -745,6 +784,8 @@ describe('server', () => {
   });
 
   it('reply with an option number to a question sends the digit alone (2.x selects on the digit)', async () => {
+    tmux = fakeTmux({ 'ledge-a': [QUESTION, QUESTION, 'Running…'] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0 });
     store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', options: ['Red', 'Blue'], source: 'pane' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.reply', id: 'a', text: '2' });
@@ -1107,6 +1148,8 @@ describe('server', () => {
   });
 
   it('a failing key plan marks the session error and replies with an error', async () => {
+    tmux = fakeTmux({ 'ledge-a': [QUESTION, QUESTION, 'Running…'] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0 });
     store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.reply', id: 'a', text: '2' });
@@ -1233,7 +1276,7 @@ describe('session thread (spec 2026-10-13 §5)', () => {
     const transcript = join(dir, 'c.jsonl');
     writeFileSync(transcript, JSON.stringify({ uuid: 'u1', timestamp: '2026-10-09T18:00:30.000Z', type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Je lance les tests.' }] } }) + '\n');
     store.upsert(mk('a'));
-    const server = await startServer({ store, tmux: fakeTmux({ 'ledge-a': [PROMPT, ''] }), port: 0, history });
+    const server = await startServer({ store, tmux: fakeTmux({ 'ledge-a': [bashPrompt('pnpm test'), ''] }), port: 0, history });
     const c = await connect({ port: server.port, host: '127.0.0.1', timeoutMs: 2000 });
     await c.next('snapshot', 2000);
     c.send({ type: 'session.thread', id: 'a' });
@@ -1254,8 +1297,7 @@ describe('session thread (spec 2026-10-13 §5)', () => {
   });
   it('records no decision when a newer prompt replaced the one decided while the keys were typed', async () => {
     const store = new Store(); const history = new History({ dir: join(process.env.LEDGE_HOME!, 'history') });
-    const NEWER = PROMPT.replace('Bash command', 'Bash command (rm -rf dist)');
-    const tmux = fakeTmux({ 'ledge-a': [PROMPT, NEWER] });
+    const tmux = fakeTmux({ 'ledge-a': [bashPrompt('pnpm test'), bashPrompt('rm -rf dist')] });
     store.upsert(mk('a'));
     const server = await startServer({ store, tmux, port: 0, history, verify: { attempts: 2, intervalMs: 20 } });
     const c = await connect({ port: server.port, host: '127.0.0.1', timeoutMs: 2000 });

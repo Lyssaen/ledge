@@ -1,4 +1,4 @@
-import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
 
 // Codex CLI 0.162 draws its dialogs at the bottom of the pane, without a box, the footer on the last line:
 //
@@ -80,12 +80,14 @@ function parseDialog(pane: string): Dialog | null {
   return { kind, header, options: raw.map(label), details: raw.map(detail), raw };
 }
 
-/** The non-blank run of header lines starting at `from`, trimmed. */
-function run(header: string[], from: number): string[] {
+/** The non-blank run of header lines starting at `from`, as drawn. */
+function rawRun(header: string[], from: number): string[] {
   const out: string[] = [];
-  for (let i = from; i < header.length && !isBlank(header[i]!); i++) out.push(header[i]!.trim());
+  for (let i = from; i < header.length && !isBlank(header[i]!); i++) out.push(header[i]!);
   return out;
 }
+/** The same run, trimmed. */
+const run = (header: string[], from: number) => rawRun(header, from).map(l => l.trim());
 
 function approvalText(header: string[]): string {
   const cmd = header.findIndex(l => /^\s*\$\s/.test(l));
@@ -122,7 +124,9 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   if (d.kind === 'plan') return { kind: 'plan', text: 'Implement this plan?', options: d.options };
   if (d.kind === 'confirm') return { kind: 'permission', text: confirmText(d.header), options: d.options };
   const cmd = d.header.findIndex(l => /^\s*\$\s/.test(l));
-  return { kind: 'permission', text: approvalText(d.header), options: d.options, ...(cmd >= 0 ? { command: run(d.header, cmd).join(' ').replace(/^\$\s+/, '') } : {}) };
+  const command = cmd >= 0 ? shownCommand(rawRun(d.header, cmd)) : undefined;
+  if (command) command.lines[0] = command.lines[0]!.replace(/^\$\s+/, '');
+  return { kind: 'permission', text: approvalText(d.header), options: d.options, ...(command ? { command } : {}) };
 }
 
 /** Works on the server's short capture: the footer is the last line of every dialog. */

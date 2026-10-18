@@ -7,7 +7,7 @@ import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
-import { STALE, dialogShows } from '../adapters/types.js';
+import { STALE, dialogMismatch } from '../adapters/types.js';
 import { verifyGone } from '../adapters/verify.js';
 import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
@@ -163,6 +163,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const UNTIL_POLL_MS = 50;
   /** Enough for a dialog's bottom or a long draft wrapped in the input line, with the status under it. */
   const UNTIL_LINES = 30;
+  /** Lines read to check a dialog taller than DETECT_LINES (a long command): its subject is above them. */
+  const CHECK_LINES = 500;
 
   async function runPlan(s: Session, plan: KeyPlan): Promise<void> {
     if (!s.tmuxSession) throw new Error('session has no terminal (started without ledge)');
@@ -210,7 +212,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // The request checked before the capture may have been replaced while it ran: no key for one the user did not see.
         if (!stillTheSame()) throw new Error(STALE);
         // Nor for another dialog already on screen whose hook has not come yet: the daemon still holds the old request.
-        if (decided && !dialogShows(adapter.detectPrompt(before), decided)) throw new Error(STALE);
+        // One taller than the capture is read whole, or gets no key.
+        if (decided) {
+          const shown = adapter.detectPrompt(before) ?? adapter.detectPrompt(await tmux.capture(s.tmuxSession!, CHECK_LINES) ?? '');
+          const refused = dialogMismatch(shown, decided, await tmux.width?.(s.tmuxSession!) ?? undefined);
+          if (refused) throw new Error(refused);
+        }
       }
       const plan = typeof planFor === 'function' ? planFor(before ?? '') : planFor;
       // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.

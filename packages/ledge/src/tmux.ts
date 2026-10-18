@@ -10,6 +10,8 @@ export interface Tmux {
   sendKeys(name: string, keys: string[]): Promise<void>;
   /** Last `lines` lines, or null when the capture failed (distinct from an empty pane). */
   capture(name: string, lines: number): Promise<string | null>;
+  /** The pane's width in columns, or null when tmux cannot tell. */
+  width?(name: string): Promise<number | null>;
   hasSession(name: string): Promise<boolean>;
   /** Empty when no tmux server runs; throws on any other failure. */
   listSessions(): Promise<string[]>;
@@ -81,6 +83,11 @@ export function realTmux(socket = 'ledge', opts: { scope?: () => Promise<boolean
       const r = await t(['capture-pane', '-p', '-J', '-t', `=${name}:`, '-S', String(-lines)]);
       if (r.code !== 0) return null;
       return r.stdout.replace(/\s+$/g, '').split('\n').slice(-lines).join('\n');
+    },
+    async width(name) {
+      const r = await t(['display-message', '-p', '-t', `=${name}:`, '#{pane_width}']);
+      const n = Number(r.stdout.trim());
+      return r.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
     },
     async hasSession(name) {
       return (await t(['has-session', '-t', `=${name}`])).code === 0;

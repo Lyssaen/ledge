@@ -16,7 +16,7 @@ const AT_REST = ['codex-idle-after-turn', 'codex-idle-draft', 'codex-interrupted
 describe('codex adapter: detection (Codex CLI 0.162 captures)', () => {
   it('detects a command approval with the command and its options', () => {
     expect(codexAdapter.detectPrompt(fx('codex-permission-exec'))).toEqual({
-      kind: 'permission', text: "printf '%s\\n' hi > hello.txt", command: "printf '%s\\n' hi > hello.txt",
+      kind: 'permission', text: "printf '%s\\n' hi > hello.txt", command: { lines: ["printf '%s\\n' hi > hello.txt"], ends: [32] },
       options: ['Yes, proceed', "Yes, and don't ask again for commands that start with `printf '%s\\n' hi > hello.txt`", 'No, and tell Codex what to do differently']
     });
   });

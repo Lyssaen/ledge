@@ -10,14 +10,15 @@ const perm = { kind: 'permission' as const, text: 'echo ledge-perm-probe', sourc
 describe('cursor adapter: permission (Cursor Agent 2026.10 capture)', () => {
   it('detects Run this command? at the bottom and extracts the shell command', () => {
     expect(cursorAdapter.detectPrompt(fx('cursor-permission'))).toEqual({
-      kind: 'permission', text: 'echo ledge-perm-probe', command: 'echo ledge-perm-probe'
+      kind: 'permission', text: 'echo ledge-perm-probe', command: { lines: ['echo ledge-perm-probe'], ends: [30] }
     });
   });
   it('joins a command wrapped over several lines (a subagent\'s find)', () => {
     expect(cursorAdapter.detectPrompt(fx('cursor-permission-wrapped'))).toEqual({
       kind: 'permission',
       text: `find "/tmp/ledge-cursor-sub/proj" \\( -path '*/.git/objects' -o -path '*/.git/objects/*' \\) -prune -o -print 2>/dev/null | sort`,
-      command: `find "/tmp/ledge-cursor-sub/proj" \\( -path '*/.git/objects' -o -path '*/.git/objects/*' \\) -prune -o -print 2>/dev/null | sort`
+      // Its lines as drawn, and where each ends: the first one is full, the TUI wrapped it.
+      command: { lines: [`find "/tmp/ledge-cursor-sub/proj" \\( -path '*/.git/objects' -o -path '*/.git/objects/*' \\) -prune -o -print`, '2>/dev/null | sort'], ends: [111, 27] }
     });
   });
   it('ignores a quoted dialog, the working chrome, the idle input and an answered trust box', () => {
