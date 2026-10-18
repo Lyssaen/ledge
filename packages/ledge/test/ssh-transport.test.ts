@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { DEFAULT_ISLAND_PREFS } from '@ledge/protocol';
 import { PassThrough } from 'node:stream';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { once } from 'node:events';
@@ -67,13 +68,13 @@ describe('SSH application transport', () => {
     await until(() => got.length === 2); expect(got[1]?.message).toBe('snapshot.request');
     ws.close(); await until(() => child.exitCode !== null || child.signalCode !== null);
   });
-  it('bridge drops the daemon machines and projects frames and a front machines.set or projects.set, staying up', async () => {
+  it('bridge drops the daemon machines, projects and island frames and a front machines.set, projects.set or island.set, staying up', async () => {
     const { wss, port } = await wsServer(), input = new PassThrough(), output = new PassThrough();
     const got: unknown[] = []; let text = ''; output.on('data', b => { text += String(b); });
-    wss.on('connection', ws => { ws.send(JSON.stringify({ type: 'snapshot', sessions: [] })); ws.send(JSON.stringify({ type: 'machines', machines: [{ id: 'local', label: 'Local' }] })); ws.send(JSON.stringify({ type: 'projects', projects: { projects: [], rules: [] } })); ws.send(JSON.stringify({ type: 'error', message: 'after' })); ws.on('message', b => got.push(JSON.parse(String(b)))); });
+    wss.on('connection', ws => { ws.send(JSON.stringify({ type: 'snapshot', sessions: [] })); ws.send(JSON.stringify({ type: 'machines', machines: [{ id: 'local', label: 'Local' }] })); ws.send(JSON.stringify({ type: 'projects', projects: { projects: [], rules: [] } })); ws.send(JSON.stringify({ type: 'island', prefs: null })); ws.send(JSON.stringify({ type: 'error', message: 'after' })); ws.on('message', b => got.push(JSON.parse(String(b)))); });
     const done = bridge({ input, output, port });
-    await until(() => text.includes('after')); expect(text).not.toContain('machines'); expect(text).not.toContain('projects');
-    input.write('{"type":"machines.set","machines":[{"id":"local","label":"Local"}]}\n{"type":"projects.set","projects":{"projects":[],"rules":[]}}\n{"type":"snapshot.request"}\n');
+    await until(() => text.includes('after')); expect(text).not.toContain('machines'); expect(text).not.toContain('projects'); expect(text).not.toContain('island');
+    input.write('{"type":"machines.set","machines":[{"id":"local","label":"Local"}]}\n{"type":"projects.set","projects":{"projects":[],"rules":[]}}\n{"type":"island.set","prefs":' + JSON.stringify(DEFAULT_ISLAND_PREFS) + '}\n{"type":"snapshot.request"}\n');
     await until(() => got.length === 1); expect(got).toEqual([{ type: 'snapshot.request' }]);
     input.end(); await done;
   });

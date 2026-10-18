@@ -7,6 +7,7 @@ import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from '
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
 import { SshAliasSchema } from './ssh.js';
 import { MachinesSchema } from './machines.js';
+import { IslandPrefsSchema } from './island.js';
 import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
@@ -99,6 +100,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('machines'), machines: MachinesSchema }),
   /** The local daemon's projects and folder rules (spec 2026-10-16 build §5), sent to local clients only. */
   z.object({ type: z.literal('projects'), projects: ProjectsSchema }),
+  /** The island's settings shared by the local fronts; null until a front sets them (the island then sends its own). Local clients only. */
+  z.object({ type: z.literal('island'), prefs: IslandPrefsSchema.nullable() }),
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
     /** Ce que le front doit reconnaître au-delà du texte (NOTE_NOT_TYPED) ; une chaîne libre, qu'un front plus ancien ignore. */ code: z.string().optional() })
 ]);
@@ -154,7 +157,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** Replaces the daemon's machines list (first connected front wins); refused unless valid. */
   z.object({ type: z.literal('machines.set'), machines: MachinesSchema }),
   /** Replaces the local daemon's projects and rules as a whole; refused unless valid. */
-  z.object({ type: z.literal('projects.set'), projects: ProjectsSchema })
+  z.object({ type: z.literal('projects.set'), projects: ProjectsSchema }),
+  /** Replaces the island's settings as a whole; refused unless valid. */
+  z.object({ type: z.literal('island.set'), prefs: IslandPrefsSchema })
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 

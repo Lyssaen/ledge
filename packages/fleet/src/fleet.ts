@@ -1,4 +1,4 @@
-import { ChatTurnSchema, ProjectsSchema, type ChatTurn, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
+import { ChatTurnSchema, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type ChatTurn, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
 
@@ -53,6 +53,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   let source: 'daemon' | 'local' = 'local';
   /** The local daemon's projects (build spec §5); the last ones stay while it is down. */
   let projects: Projects | null = null;
+  /** The local daemon's island settings: undefined until it sends them, null while none was set. */
+  let island: IslandPrefs | null | undefined;
   let routing: PendingRoute | null = null, resetAt = '', lastStatus: DaemonStatus = 'connecting';
   const emit = (m: ServerMessage) => messages.forEach(fn => fn(m));
   const day = () => new Date().toISOString().slice(0, 10);
@@ -145,6 +147,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'projects') {
       if (machine !== 'local') return;
       projects = m.projects; listeners.forEach(fn => fn());
+      return;
+    }
+    // So are the island's settings: one copy per host, set from Desktop and applied by the island.
+    if (m.type === 'island') {
+      if (machine !== 'local') return;
+      island = m.prefs; listeners.forEach(fn => fn());
       return;
     }
     machineMessages.forEach(fn => fn(machine, m));
@@ -341,6 +349,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         // A daemon that knows projects sends them after its snapshot; one that never did would refuse projects.set as invalid.
         if (projects === null) throw Object.assign(new Error('Update the local Ledge daemon: it does not know projects'), { name: 'DaemonOutdated' });
         local.send({ type: 'projects.set', projects: valid });
+      },
+      island: () => island,
+      setIsland(next) {
+        const valid = IslandPrefsSchema.parse(next);
+        const local = peers.get('local')!.client;
+        if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
+        if (island === undefined) throw Object.assign(new Error('Update the local Ledge daemon: it does not know the island settings'), { name: 'DaemonOutdated' });
+        local.send({ type: 'island.set', prefs: valid });
       }
     }
   };

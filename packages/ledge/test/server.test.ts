@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
 import type { ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
+import { DEFAULT_ISLAND_PREFS } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
@@ -1411,5 +1412,42 @@ describe('machines list', () => {
     expect(gotR.some(m => m.type === 'machines')).toBe(false);
     expect(existsSync(paths().machines)).toBe(false);
     r.close(); a.close(); await s.close();
+  });
+});
+
+describe('island settings', () => {
+  const prefs = { ...DEFAULT_ISLAND_PREFS, position: 'left' as const, shows: { ...DEFAULT_ISLAND_PREFS.shows, say: false } };
+  it('sends null after the projects while none was set', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const ws = await open(s.port); const got = collect(ws);
+    await until(() => got.some(m => m.type === 'island'));
+    expect(got.map(m => m.type).slice(0, 4)).toEqual(['snapshot', 'machines', 'projects', 'island']);
+    expect(got.find(m => m.type === 'island')).toEqual({ type: 'island', prefs: null });
+    ws.close(); await s.close();
+  });
+  it('island.set is written first, broadcast to every local client and read back on the next start', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const a = await open(s.port), b = await open(s.port); const gotB = collect(b);
+    await until(() => gotB.some(m => m.type === 'island'));
+    a.send(JSON.stringify({ type: 'island.set', prefs }));
+    await until(() => gotB.filter(m => m.type === 'island').length === 2);
+    expect(gotB.filter(m => m.type === 'island').at(-1)).toEqual({ type: 'island', prefs });
+    expect(JSON.parse(readFileSync(paths().island, 'utf8'))).toEqual(prefs);
+    a.close(); b.close(); await s.close();
+    const again = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const c = await open(again.port); const gotC = collect(c);
+    await until(() => gotC.some(m => m.type === 'island'));
+    expect(gotC.find(m => m.type === 'island')).toEqual({ type: 'island', prefs });
+    c.close(); await again.close();
+  });
+  it('refuses an invalid island.set: nothing written, nothing broadcast', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
+    const a = await open(s.port), b = await open(s.port); const gotA = collect(a), gotB = collect(b);
+    await until(() => gotB.some(m => m.type === 'island'));
+    a.send(JSON.stringify({ type: 'island.set', prefs: { ...prefs, islandScale: 3 } }));
+    await until(() => gotA.some(m => m.type === 'error'));
+    expect(gotB.filter(m => m.type === 'island')).toHaveLength(1);
+    expect(existsSync(paths().island)).toBe(false);
+    a.close(); b.close(); await s.close();
   });
 });

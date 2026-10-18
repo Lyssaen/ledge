@@ -3,6 +3,7 @@ export * from './decisions.js';
 export * from './documents.js';
 export * from './session.js';
 export * from './machines.js';
+export * from './island.js';
 export * from './projects.js';
 export * from './messages.js';
 export * from './names.js';

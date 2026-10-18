@@ -21,6 +21,7 @@ import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
 import { readMachines, writeMachines } from './machines.js';
 import { readProjects, writeProjects } from './projects.js';
+import { readIsland, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createRelay } from './relay.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -85,7 +86,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; scan?: typeof scanRepos }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -114,6 +115,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The projects and folder rules shared by every local front (build spec §5); never sent to a remote peer. */
   let projects = readProjects(projectsFile);
   const projectsMsg = (): ServerMessage => ({ type: 'projects', projects });
+  const islandFile = opts.islandFile ?? paths().island;
+  /** The island's settings, set from Desktop (atelier spec §7); never sent to a remote peer. */
+  let island = readIsland(islandFile);
+  const islandMsg = (): ServerMessage => ({ type: 'island', prefs: island });
   const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
   // Remote peers must never receive local snapshots, sessions, previews or chat broadcasts.
   const localClients = new Set<WebSocket>();
@@ -143,6 +148,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true } } : {}) });
     send(ws, machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     send(ws, projectsMsg()); // then the shared projects (build spec §5)
+    send(ws, islandMsg()); // then the island's settings
     for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
     send(ws, { type: 'chat.history', turns: chat.history() });
   };
@@ -305,6 +311,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         writeProjects(msg.projects, projectsFile); // first: a failing write leaves memory unchanged and reaches the sender
         projects = msg.projects; // already validated by parseClientMessage
         return broadcast(projectsMsg());
+      }
+      case 'island.set': {
+        writeIsland(msg.prefs, islandFile); // first: a failing write leaves memory unchanged and reaches the sender
+        island = msg.prefs; // already validated by parseClientMessage
+        return broadcast(islandMsg());
       }
       case 'session.register': {
         let incoming = msg.session;

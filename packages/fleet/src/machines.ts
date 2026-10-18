@@ -1,4 +1,4 @@
-import { MachinesSchema, type Machine } from '@ledge/protocol';
+import { MachinesSchema, type Machine, type IslandPrefs } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
@@ -33,6 +33,10 @@ export interface Fleet {
   projects(): Projects | null;
   /** Asks the local daemon to replace them; applied on its broadcast. Throws when invalid, `DaemonOffline` when not connected, `DaemonOutdated` when it never sent projects. */
   setProjects(next: Projects): void;
+  /** The island's settings as the local daemon holds them: undefined until it speaks of them, null while none was set; kept while it is down. */
+  island(): IslandPrefs | null | undefined;
+  /** Asks the local daemon to replace them; applied on its broadcast. Throws when invalid, `DaemonOffline` when not connected, `DaemonOutdated` when it never sent them. */
+  setIsland(next: IslandPrefs): void;
 }
 export const LOCAL_MACHINE: MachineConfig = { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' };
 /** The shared list rules live in the protocol; the fleet only pins the local URL (spec §5.1). */
