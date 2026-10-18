@@ -192,17 +192,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     inFlight.add(id);
     try {
       const adapter = adapterFor(s.tool);
-      let before: string | null = null;
-      if (requirePrompt) {
-        before = s.tmuxSession ? await tmux.capture(s.tmuxSession, DETECT_LINES) : null;
-        if (before === null || !adapter.promptStillVisible(before.split('\n').slice(-5).join('\n'))) throw new Error(NO_PROMPT);
-      }
-      const plan = typeof planFor === 'function' ? planFor(before ?? '') : planFor;
       const decided = s.pending;
       const stillTheSame = () => {
         const cur = store.get(id)?.pending;
         return cur === decided || (!!cur && !!decided && cur.kind === decided.kind && cur.text === decided.text);
       };
+      let before: string | null = null;
+      if (requirePrompt) {
+        before = s.tmuxSession ? await tmux.capture(s.tmuxSession, DETECT_LINES) : null;
+        if (before === null || !adapter.promptStillVisible(before.split('\n').slice(-5).join('\n'))) throw new Error(NO_PROMPT);
+        // The request checked before the capture may have been replaced while it ran: no key for one the user did not see.
+        if (!stillTheSame()) throw new Error(STALE);
+      }
+      const plan = typeof planFor === 'function' ? planFor(before ?? '') : planFor;
       // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.
       const promptGone = () => decided && adapter.promptGone
         ? verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)

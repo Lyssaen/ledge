@@ -451,6 +451,22 @@ describe('server', () => {
     expect(tmux.sent).toEqual([['text', 'ledge-a', '2']]);
     c.close();
   });
+  it('a request that changes while the terminal is read gets no key: the decision is stale', async () => {
+    const realCapture = tmux.capture;
+    // The capture that looks for the prompt is when the agent swaps the request the user saw for another.
+    tmux.capture = async (n, l) => {
+      store.apply('a', { name: 'PermissionRequest', at: '2026-10-09T18:00:09.000Z', source: 'hook', tool: 'Bash', text: 'rm -rf dist' });
+      tmux.capture = realCapture;
+      return realCapture(n, l);
+    };
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: 'npm test' } });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the request changed, look again', request: 'session.decide' });
+    expect(tmux.sent).toEqual([]);
+    expect(store.get('a')).toMatchObject({ state: 'waiting_permission', pending: { text: 'rm -rf dist' } });
+    c.close();
+  });
   it('a note on a question is refused for every harness, and a reply refusal names session.reply', async () => {
     store.upsert(mk('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
