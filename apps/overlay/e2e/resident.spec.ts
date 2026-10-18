@@ -27,17 +27,15 @@ test('Ledge stays in the notch without sessions, greets the empty panel, and rem
   await expect(resident).toBeVisible();
 });
 
-test('a dash opens its session; the rectangle opens home', async ({ page }) => {
+test('a dash peeks at its session; the rectangle opens the chat', async ({ page }) => {
   await fakeDaemon(page, [session('a', { name: 'Otto', state: 'idle' })]);
   await ready(page, 1);
   const dash = layer(page, 'handle').getByRole('button', { name: 'Otto available, open' });
   await expect(dash).toHaveCSS('width', '5px');
   await dash.click();
-  await expectMode(page, 'session');
-  await page.keyboard.press('Escape');
-  await expectMode(page, 'list');
+  await expectMode(page, 'peek');
   await page.keyboard.press('Escape');
   await expectMode(page, 'handle');
   await layer(page, 'handle').locator('[data-resident]').click();
-  await expectMode(page, 'list');
+  await expectMode(page, 'chat');
 });
