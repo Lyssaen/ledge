@@ -4,6 +4,7 @@ import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon } from '@ledge/ui/ui/icons';
 import type { Wait } from '../list/time';
 import { useI18n } from '../i18n/lang';
+import { dotOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
 import { useDnd } from '../notify/prefs';
 import { closeWindow, isWindowMaximized, minimizeWindow, onWindowResized, toggleMaximizeWindow } from '../tauri/bridge';
@@ -16,7 +17,7 @@ const ms = (iso: string) => Date.parse(iso) || 0;
  *  (the shell's `waits`, as the List's « depuis »), else the last activity. */
 export function waitingSessions(sessions: readonly Session[], waits: ReadonlyMap<string, Wait>): Session[] {
   const since = (s: Session) => ms(waits.get(s.id)?.since ?? s.lastActivityAt);
-  return sessions.filter(s => !s.offline && (s.state === 'waiting_permission' || s.state === 'waiting_input')).sort((a, b) => since(a) - since(b));
+  return sessions.filter(s => { const d = dotOf(s); return d === 'approval' || d === 'question'; }).sort((a, b) => since(a) - since(b));
 }
 
 /** Whether the window is maximised, kept fresh by each resize (maximising and restoring resize it). */
@@ -35,7 +36,7 @@ function useMaximized(): boolean {
 /** The « Commande » window bar that replaces Windows' own: the word mark, the search field (it opens the palette, as Ctrl K),
  *  the waiting sessions' pill, « Ne pas déranger », the chat, and the window buttons. The bar and its gaps are the drag region
  *  (Tauri drags and maximises on a double click from the element that carries the attribute, not from its children). */
-export function TitleBar({ dispatch, sessions, waits }: { dispatch: (a: NavAction) => void; sessions: readonly Session[]; waits: ReadonlyMap<string, Wait> }) {
+export function TitleBar({ dispatch, sessions, waits, blocked }: { blocked: boolean; dispatch: (a: NavAction) => void; sessions: readonly Session[]; waits: ReadonlyMap<string, Wait> }) {
   const { t } = useI18n();
   const [dnd, setDnd] = useDnd();
   const maximized = useMaximized();
@@ -45,23 +46,25 @@ export function TitleBar({ dispatch, sessions, waits }: { dispatch: (a: NavActio
   return (
     <div className="titlebar" role="group" aria-label={t.titlebar.label} {...drag}>
       <div className="titlebar-left" {...drag}><span className="titlebar-mark" data-brand {...drag}>Ledge<span className="brand-dot">.</span></span></div>
-      <div className="titlebar-mid" {...drag}>
-        <button className="titlebar-cmd" aria-label={t.titlebar.search} onClick={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}>
+      <div className="titlebar-mid" inert={blocked} {...drag}>
+        <button className="titlebar-cmd" disabled={blocked} aria-label={t.titlebar.search} onClick={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}>
           <Icon d={SHELL_ICONS.search} size={14} /><span>{t.titlebar.search}</span><Kbd>Ctrl K</Kbd>
         </button>
       </div>
       <div className="titlebar-right" {...drag}>
+        <div className="titlebar-tools" inert={blocked}>
         {first && (
-          <button className="titlebar-wait" aria-label={t.titlebar.waiting(waiting.length)} title={t.titlebar.waiting(waiting.length)} onClick={() => dispatch({ type: 'open', id: first.id })}>
+          <button className="titlebar-wait" disabled={blocked} aria-label={t.titlebar.waiting(waiting.length)} title={t.titlebar.waiting(waiting.length)} onClick={() => dispatch({ type: 'open', id: first.id })}>
             <i />{waiting.length}
           </button>
         )}
-        <button className="titlebar-ib" aria-label={t.titlebar.dnd} title={dnd ? t.titlebar.dndOn : t.titlebar.dnd} aria-pressed={dnd} onClick={() => setDnd(!dnd)}>
+        <button className="titlebar-ib" disabled={blocked} aria-label={t.titlebar.dnd} title={dnd ? t.titlebar.dndOn : t.titlebar.dnd} aria-pressed={dnd} onClick={() => setDnd(!dnd)}>
           <Icon d={BELL} size={16} />
         </button>
-        <button className="titlebar-ib" aria-label={t.side.chat} title={t.top.chat} onClick={() => dispatch({ type: 'chat', open: true })}>
+        <button className="titlebar-ib" disabled={blocked} aria-label={t.side.chat} title={t.top.chat} onClick={() => dispatch({ type: 'chat', open: true })}>
           <Icon d={SHELL_ICONS.chat} size={16} />
         </button>
+        </div>
         <div className="titlebar-caps">
           <button aria-label={t.titlebar.minimize} title={t.titlebar.minimize} onClick={minimizeWindow}>
             <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" /></svg>

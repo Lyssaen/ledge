@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { boot, closeDaemons, listSessions, TWO_PROJECTS } from './helpers';
 import { resetDndForTests } from '../src/notify/prefs';
 
@@ -101,5 +101,32 @@ describe('the « Commande » title bar', () => {
     expect(screen.queryByRole('group', { name: 'Window bar' })).toBeNull();
     await user.keyboard('{Escape}');
     expect(screen.getByRole('group', { name: 'Window bar' })).toBeVisible();
+  });
+
+  it('behind a dialog or a pending confirmation, the search, the pill, the bell and the chat do nothing; the window buttons stay live', async () => {
+    const { user } = await boot({ sessions: listSessions(), list: true });
+    const field = bar().getByRole('button', { name: 'Go to a session, a project, a setting…' });
+    await user.keyboard('n');
+    expect(await screen.findByRole('dialog', { name: 'New session' })).toBeVisible();
+    await user.click(field);
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible();
+    expect(field.closest('[inert]')).not.toBeNull();
+    expect(bar().getByRole('button', { name: /waiting/ }).closest('[inert]')).not.toBeNull();
+    expect(bar().getByRole('button', { name: 'Close' }).closest('[inert]')).toBeNull();
+    await user.click(bar().getByRole('button', { name: 'Minimize' }));
+    expect(win.minimize).toHaveBeenCalledTimes(1);
+  });
+
+  it('with a confirmation pending, the pill and the search field do nothing and the confirmation stays', async () => {
+    const { user } = await boot({ sessions: listSessions(), daemon: { version: '0.7.0', install: 'npm', systemd: true, archive: true } });
+    fireEvent.contextMenu(await screen.findByRole('button', { name: /^Bix,/ }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete…' }));
+    expect(await screen.findByRole('alertdialog', { name: 'Delete Bix?' })).toBeVisible();
+    await user.click(bar().getByRole('button', { name: /waiting/ }));
+    await user.click(bar().getByRole('button', { name: 'Go to a session, a project, a setting…' }));
+    expect(screen.getByRole('alertdialog', { name: 'Delete Bix?' })).toBeVisible();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(within(screen.getByRole('banner')).queryByText('Otto')).toBeNull();
   });
 });

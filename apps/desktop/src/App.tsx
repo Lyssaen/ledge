@@ -198,7 +198,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
 
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
-      {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} />}
+      {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={nav.modal !== null || actions.pending !== null} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={nav.modal !== null}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
         <section className="workspace">
