@@ -111,3 +111,8 @@ const nullSnapshot = () => null;
 export function useProjects(client: DaemonClient): Projects | null {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.projects ?? nullSnapshot, nullSnapshot);
 }
+const undefinedSnapshot = () => undefined;
+/** The island's settings as the local daemon holds them: undefined until it speaks of them, null while none was set. */
+export function useIsland(client: DaemonClient): IslandPrefs | null | undefined {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.island ?? undefinedSnapshot, undefinedSnapshot);
+}
