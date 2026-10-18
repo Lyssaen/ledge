@@ -52,11 +52,11 @@ export const team = (): Session[] => ['Otto', 'Nova', 'Pim', 'Bix', 'Lu', 'Milo'
 
 /** Hovers the island with the real mouse, coming from below it. The sober island does not open a panel for this. */
 export async function hoverHandle(page: Page) {
-  // The island and every panel share the axis, so the centre x holds while a panel folds; y = 12 is inside the
-  // island at any scale, under the hot band. Two steps only: a pending ask unfolds its bubble 540 ms after the
-  // sessions arrive unless the island is hovered first, and each step costs the loaded browser ~50 ms.
+  // The notch and every panel share the axis, so the centre holds while a panel folds. The resting filet is 10 px,
+  // so the pointer aims at its middle rather than a fixed y. Two steps only: a pending ask unfolds its bubble
+  // 540 ms after the sessions arrive unless the notch is hovered first, and each step costs the loaded browser ~50 ms.
   const h = (await surface(page).boundingBox())!;
-  await page.mouse.move(h.x + h.width / 2, 12, { steps: 2 });
+  await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2, { steps: 2 });
 }
 /** Opens the chat by clicking Ledge. The composer takes focus once the panel is up. */
 export async function openChat(page: Page) {

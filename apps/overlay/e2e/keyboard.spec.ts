@@ -68,7 +68,8 @@ test('Ctrl+Alt+T switches the theme', async ({ page }) => {
 });
 
 test('a keyboard open while the window is still handle-sized never scrolls the page', async ({ page }) => {
-  await page.setViewportSize({ width: 1920, height: 38 });
+  // Under Tauri the native window grows after the first paint of the open: the bubble takes focus while the viewport is still the notch's 10 px.
+  await page.setViewportSize({ width: 1920, height: 10 });
   await page.addInitScript(() => localStorage.setItem('ledge.dnd', '1'));
   await fakeDaemon(page, asking());
   await ready(page, 3);
