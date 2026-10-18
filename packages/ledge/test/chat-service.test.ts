@@ -247,6 +247,39 @@ describe('chat service', () => {
     chat.markLaunched('nope', 'n2', m => out.push(m)); chat.markFailed('nope', 'x', m => out.push(m));
     expect(out).toHaveLength(2);
   });
+  describe('project proposal (lot 11 task 5)', () => {
+    const projectFence = (json: string) => 'Je propose **Paper** avec ses dépôts.\n\n```ledge-project\n' + json + '\n```';
+    it('keeps the paths that exist on this machine (resolved, ~ included, once each), drops an invented one, and joins the proposal to chat.done', async () => {
+      const userHome = mkdtempSync(join(tmpdir(), 'home-')); mkdirSync(join(userHome, 'paper-fonts')); mkdirSync(join(userHome, 'paper-templates'));
+      const block = JSON.stringify({ name: 'Paper', description: 'Les polices', addTo: 'Ledge', repos: [
+        { path: '~/paper-fonts/', why: 'Nommé paper-*' }, { path: '/nope/invented-by-the-model', why: 'inventé' },
+        { path: join(userHome, 'paper-templates'), why: 'Même préfixe' }, { path: join(userHome, 'paper-fonts'), why: 'en double' }] });
+      const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(block) }) });
+      const out: ServerMessage[] = [];
+      await chat.ask('q1', 'crée un projet Paper', m => out.push(m));
+      const projectProposal = { name: 'Paper', description: 'Les polices', addTo: 'Ledge', repos: [
+        { path: join(userHome, 'paper-fonts'), why: 'Nommé paper-*' }, { path: join(userHome, 'paper-templates'), why: 'Même préfixe' }] };
+      expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je propose **Paper** avec ses dépôts.', at: expect.any(String), projectProposal });
+      expect(chat.history()[0]).toMatchObject({ answer: 'Je propose **Paper** avec ses dépôts.', projectProposal });
+      expect(chat.history()[0]).not.toHaveProperty('proposal');
+    });
+    it('no proposal when no path exists here, for a file, or for a bad block; the answer stands alone', async () => {
+      const file = join(mkdtempSync(join(tmpdir(), 'f-')), 'a.txt'); writeFileSync(file, 'x');
+      for (const json of [JSON.stringify({ name: 'Paper', repos: [{ path: '/nope/a', why: 'x' }, { path: file, why: 'y' }, { path: 'relative/b', why: 'z' }] }), '{"name": "Paper", "repos": []}', '{"name":']) {
+        const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(json) }) });
+        const out: ServerMessage[] = [];
+        await chat.ask('q1', 'x', m => out.push(m));
+        expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je propose **Paper** avec ses dépôts.', at: expect.any(String) });
+        expect(chat.history()[0]).not.toHaveProperty('projectProposal');
+      }
+    });
+    it('a blank description or addTo is left out', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'proj-'));
+      const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(JSON.stringify({ name: 'Paper', description: '  ', addTo: ' ', repos: [{ path: dir, why: 'x' }] })) }) });
+      await chat.ask('q1', 'x', () => {});
+      expect(chat.history()[0]!.projectProposal).toEqual({ name: 'Paper', repos: [{ path: dir, why: 'x' }] });
+    });
+  });
   describe('relay (spec 2026-10-12 relay §4)', () => {
     const relayFence = (json: string) => 'Je transmets à Otto.\n\n```ledge-relay\n' + json + '\n```';
     const session = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: 'Otto', tool: 'codex', cwd: '/w/ledge', project: 'ledge', title: 'Otto · ledge',

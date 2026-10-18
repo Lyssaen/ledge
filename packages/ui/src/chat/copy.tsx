@@ -23,6 +23,8 @@ export interface ChatCopy {
       queued: string; sentTo: string; failed: Say;
       pill: { yours: string; working: string; waiting: string; stopped: string };
     };
+    /** The project card (lot 11): `title` a new project, `complete` an existing one to add to. Desktop only shows it; the island fills it. */
+    project: { label: string; title: Say; complete: Say; repos: (n: number) => string; review: string };
   };
   machines: { destination: string; local: string; offline: string; choose: Say; clarification: string };
   time: { seconds: (n: number) => string; minutes: (n: number) => string; hours: (n: number) => string; locale: string };

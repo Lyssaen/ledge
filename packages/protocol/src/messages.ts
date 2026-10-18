@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { PendingSchema, SessionSchema, ToolSchema } from './session.js';
-import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema } from './chat.js';
+import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema, ChatProjectProposalSchema } from './chat.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
@@ -88,7 +88,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** The chat (spec 2026-10-11 §5): what Ledge reads, its words as they come, the final text, or why it stopped; the day's turns after each snapshot. */
   z.object({ type: z.literal('chat.step'), qid: z.string(), step: ChatStepSchema }),
   z.object({ type: z.literal('chat.delta'), qid: z.string(), text: z.string() }),
-  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), relay: ChatRelaySchema.optional() }),
+  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), relay: ChatRelaySchema.optional(), projectProposal: ChatProjectProposalSchema.optional() }),
   z.object({ type: z.literal('chat.error'), qid: z.string(), message: z.string() }),
   z.object({ type: z.literal('chat.history'), turns: z.array(ChatTurnSchema) }),
   /** The daemon updating itself: npm is running, then the service restarts (the socket closes right after). */

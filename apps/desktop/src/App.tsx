@@ -154,6 +154,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The form closed (Escape, Cancel, another dialog): nothing is waited for any more; a late answer is not announced.
   const { reset: resetLaunch } = launcher;
   useEffect(() => { if (nav.modal?.kind !== 'launch') resetLaunch(); }, [nav.modal?.kind, resetLaunch]);
+  // A chat card's project proposal (lot 11): the editor opens on it, as Settings › Projects' « Review » does; nothing is written before its button.
+  const openProposal = useCallback((pid: string) => dispatch({ type: 'modal', modal: { kind: 'project', proposal: pid } }), []);
   // A project the daemon confirmed: the editor closes and the notice says what happened (with the agents filed, for a new one).
   const projectSaved = (id: string, created: boolean, filed: Session[]) => {
     dispatch({ type: 'modal', modal: null });
@@ -195,7 +197,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         </section>
         {nav.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}
-            onOpenSession={id => dispatch({ type: 'open', id })} onLaunched={chatLaunched} />
+            onOpenSession={id => dispatch({ type: 'open', id })} onLaunched={chatLaunched}
+            projects={projects} notify={notify} onProposal={openProposal} />
         )}
       </div>
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}

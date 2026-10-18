@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, parseProposalBlock, parseRelayBlock, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { extractProposal, parseProjectBlock, parseProposalBlock, parseRelayBlock, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -110,6 +110,22 @@ export function createChat(deps: ChatDeps): Chat {
     if (why) { log(`chat ${qid}: relay ignored: ${why} ${block.session}`); return undefined; }
     return { id: s!.id, name: s!.name, tool: s!.tool, text: block.text };
   }
+  /** A project block as a card (lot 11, task 5): only the paths that are folders on this machine now stay (resolved, `~` included,
+   *  once each); the others are dropped with a log line, and with none left there is no card. Nothing is created here. */
+  async function projectFrom(raw: string, qid: string): Promise<ChatProjectProposal | undefined> {
+    const block = parseProjectBlock(raw);
+    if (!block) { log(`chat ${qid}: project ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
+    const repos: ChatProjectProposal['repos'] = [];
+    for (const r of block.repos) {
+      try {
+        const path = await resolveFolder(r.path, deps.userHome);
+        if (!repos.some(x => x.path === path)) repos.push({ path, why: r.why });
+      } catch (e) { log(`chat ${qid}: project path dropped: ${(e as Error).message}`); }
+    }
+    if (repos.length === 0) { log(`chat ${qid}: project ignored: no path exists on this machine`); return undefined; }
+    const description = block.description?.trim();
+    return { name: block.name, ...(description ? { description } : {}), repos, ...(block.addTo ? { addTo: block.addTo } : {}) };
+  }
   const turnOf = (qid: string) => turns.find(t => t.qid === qid);
 
   /** One run; the context folder (terminal tails, last replies) is removed once it ends, whatever the outcome. */
@@ -143,10 +159,12 @@ export function createChat(deps: ChatDeps): Chat {
     const { text, kind, raw } = extractProposal(answer);
     const proposal = kind === 'session' ? await proposalFrom(raw!, tool, turn.qid) : undefined;
     const relay = kind === 'relay' ? relayFrom(raw!, turn.qid) : undefined;
+    const projectProposal = kind === 'project' ? await projectFrom(raw!, turn.qid) : undefined;
     turn.answer = text; turn.answeredAt = now();
     if (proposal) turn.proposal = proposal;
     if (relay) turn.relay = relay;
-    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal } : {}), ...(relay ? { relay } : {}) });
+    if (projectProposal) turn.projectProposal = projectProposal;
+    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal } : {}), ...(relay ? { relay } : {}), ...(projectProposal ? { projectProposal } : {}) });
     return { ok: true };
   }
 

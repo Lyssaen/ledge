@@ -34,6 +34,11 @@ const prefixOf = (name: string) => { const i = name.indexOf('-'); return i > 0 ?
 const stemName = (name: string) => titleCase(prefixOf(name) ?? name);
 const unique = <T>(xs: readonly T[]) => [...new Set(xs)];
 
+/** The first colour no project uses, in PROJECT_COLORS' order; `blue` when all are taken. */
+export function firstFreeColor(projects: readonly Pick<Project, 'color'>[]): ProjectColor {
+  return COLORS.find(c => !projects.some(p => p.color === c)) ?? 'blue';
+}
+
 /** cyrb53: a stable 53-bit hash, no Date nor random. */
 function hash(s: string): string {
   let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
@@ -202,7 +207,7 @@ export function proposeFor(draft: { id?: string; name: string; file: readonly st
   const s = survey(input);
   const projects = input.projects.projects;
   const target = draft.id === undefined ? undefined : projects.find(p => p.id === draft.id);
-  const firstFree = COLORS.find(c => !projects.some(p => p.color === c)) ?? 'blue';
+  const firstFree = firstFreeColor(projects);
   const name = draft.name.trim();
   if (target) {
     const aimed = all.find(p => p.targetId === target.id);

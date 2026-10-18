@@ -36,3 +36,31 @@ describe('the shared chat reads its copy from the app', () => {
     expect(openUrl).toHaveBeenCalledWith('https://example.com/x');
   });
 });
+
+describe('the project card (lot 11 task 5)', () => {
+  const projectProposal = { name: 'Paper', repos: [{ path: '/w/paper-fonts', why: 'Named paper-*' }, { path: '/w/paper-templates', why: 'Same prefix' }] };
+  const turns: ChatTurn[] = [{ qid: 'q1', question: 'Create a project', askedAt: T0, answeredAt: T0, steps: [], answer: 'I propose **Paper**.', projectProposal }];
+  const card = () => document.querySelector('[data-project-card]');
+  it('without onProject (the island) there is no card: the answer stands alone', () => {
+    render(<ChatCopyProvider value={copy}><ChatView {...base} turns={turns} now={Date.parse(T0)} /></ChatCopyProvider>);
+    expect(screen.getByText(/I propose/)).toBeInTheDocument();
+    expect(card()).toBeNull();
+  });
+  it('with onProject: the name, the count and « Review the proposal », which hands over the turn', () => {
+    const onProject = vi.fn();
+    render(<ChatCopyProvider value={copy}><ChatView {...base} turns={turns} now={Date.parse(T0)} onProject={onProject} /></ChatCopyProvider>);
+    const section = screen.getByRole('region', { name: 'Project proposal' });
+    expect(section).toHaveTextContent('Project proposal · Paper');
+    expect(section).toHaveTextContent('2 repos');
+    fireEvent.click(screen.getByRole('button', { name: 'Review the proposal' }));
+    expect(onProject).toHaveBeenCalledWith('q1');
+  });
+  it('« Complete X » when addTo names a project that exists (its current name), else the proposal\'s own name', () => {
+    const add: ChatTurn[] = [{ ...turns[0]!, projectProposal: { ...projectProposal, addTo: 'ledge' } }];
+    const { unmount } = render(<ChatCopyProvider value={copy}><ChatView {...base} turns={add} now={Date.parse(T0)} onProject={noop} projectNamed={n => (n === 'ledge' ? 'Ledge' : undefined)} /></ChatCopyProvider>);
+    expect(card()).toHaveTextContent('Complete Ledge');
+    unmount();
+    render(<ChatCopyProvider value={copy}><ChatView {...base} turns={add} now={Date.parse(T0)} onProject={noop} projectNamed={() => undefined} /></ChatCopyProvider>);
+    expect(card()).toHaveTextContent('Project proposal · Paper');
+  });
+});

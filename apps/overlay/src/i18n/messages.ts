@@ -199,6 +199,10 @@ const fr = {
       queued: 'travaille, j’enverrai dès qu’il aura fini', sentTo: 'Envoyé à', failed: (why: string) => `Échec de l’envoi : ${why}`,
       pill: { yours: 'à toi', working: 'travaille', waiting: 'attend ta réponse', stopped: 'arrêtée' }
     },
+    project: {
+      label: 'Proposition de projet', title: (name: string) => `Proposition de projet · ${name}`, complete: (name: string) => `Compléter ${name}`,
+      repos: (n: number) => `${n} dépôt${n > 1 ? 's' : ''}`, review: 'Vérifier la proposition'
+    },
   },
   help: {
     title: 'Au bout des doigts.',
@@ -435,6 +439,10 @@ const en: Messages = {
       send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',
       queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: (why: string) => `Could not send: ${why}`,
       pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
+    },
+    project: {
+      label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,
+      repos: (n: number) => `${n} ${n === 1 ? 'repository' : 'repositories'}`, review: 'Review the proposal'
     },
   },
   help: {

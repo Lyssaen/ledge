@@ -23,6 +23,8 @@ describe('read-only chat router', () => {
     expect(options?.env).toEqual({ LEDGE_CHAT: '1' });
     expect(JSON.parse(options!.question)).toEqual({ context, request: 'Lance' });
     expect(options?.persona).toContain('clarification');
+    // A project request goes to the local machine, which knows the projects (lot 11 task 5).
+    expect(options?.persona).toContain('Une demande de création ou de complément de projet va à la machine locale (local=true)');
   });
   it('times out, kills the harness, then accepts a new request', async () => {
     let killed = 0;

@@ -230,6 +230,19 @@ describe('relay from the chat (spec 2026-10-12 relay §5)', () => {
   });
 });
 
+describe('project proposal from the chat (lot 11 task 5)', () => {
+  const projectProposal = { name: 'Paper', description: 'Les polices', repos: [{ path: '/w/paper-fonts', why: 'Nommé paper-*' }], addTo: 'Ledge' };
+  it('a turn and chat.done carry a project proposal; old messages still parse', () => {
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', projectProposal })).toMatchObject({ projectProposal });
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z' })).not.toHaveProperty('projectProposal');
+    const turn = { qid: 'q1', question: 'crée un projet', askedAt: '2026-10-12T10:00:00.000Z', steps: [], projectProposal };
+    expect(parseServerMessage({ type: 'chat.history', turns: [turn] })).toEqual({ type: 'chat.history', turns: [turn] });
+  });
+  it('rejects a proposal without repositories', () => {
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', projectProposal: { ...projectProposal, repos: [] } })).toThrow();
+  });
+});
+
 describe('update messages', () => {
   it('keeps a snapshot without daemon info valid (older daemons)', () => {
     expect(parseServerMessage({ type: 'snapshot', sessions: [] })).toEqual({ type: 'snapshot', sessions: [] });

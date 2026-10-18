@@ -539,6 +539,10 @@ export const en: Messages = {
       queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: (why: string) => `Could not send: ${why}`,
       pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
     },
+    project: {
+      label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,
+      repos: (n: number) => `${n} ${n === 1 ? 'repository' : 'repositories'}`, review: 'Review the proposal'
+    },
   },
   machines: { clarification: 'You can also answer in the chat.', destination: 'Destination', choose: (name: string) => `On ${name}.`, local: 'This machine', offline: 'Offline' },
   time: { seconds: (n: number) => `${n}s`, minutes: (n: number) => `${n}m`, hours: (n: number) => `${n}h`, locale: 'en-US' },

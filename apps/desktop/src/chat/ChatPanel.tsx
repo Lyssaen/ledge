@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'rea
 import { daemonStore, useDaemon, type DaemonClient } from '@ledge/fleet';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
+import type { Projects } from '@ledge/protocol';
 import type { FleetView } from '../fleet/useFleet';
 import { chatCopy, useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
@@ -9,6 +10,7 @@ import { useTheme } from '../shell/theme';
 import { useDefaultTool } from '../settings/tool';
 import { useAgentHighlight } from './useAgentHighlight';
 import { useChatCards } from './useChatCards';
+import { useProjectReview } from './projectReview';
 
 export interface ChatPanelProps {
   client: DaemonClient; view: FleetView;
@@ -17,12 +19,19 @@ export interface ChatPanelProps {
   /** Changes each time the chat is asked for (/, an open button), even already open: the field takes the focus again. */
   focus?: number;
   onClose(): void; onOpenSession(id: string): void; onLaunched(id: string): void;
+  /** The projects as the daemon holds them, for a project card (lot 11): « Complete X », the folders already taken. */
+  projects: Projects | null;
+  /** The app's toast (« This proposal no longer exists. »). */
+  notify(text: string): void;
+  /** A project card's proposal, kept by rememberProposal: the app opens the editor on its pid. */
+  onProposal(pid: string): void;
 }
 
 /** Desktop's Ledge chat, docked on the right (observatory.tsx, `ledge-chat-panel`): the island's ChatView in its docked mode, on
  *  the real fleet. Questions go to the daemon with the default agent (Settings › General); nothing is sent while the local daemon is offline. A name hovered or
- *  focused lights its agent; a session card launches in one click and seats the agent (`onLaunched`); a relay card sends as in the island. */
-export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession, onLaunched }: ChatPanelProps): JSX.Element {
+ *  focused lights its agent; a session card launches in one click and seats the agent (`onLaunched`); a relay card sends as in the island; a project card's « Review the proposal »
+ *  opens the project editor prefilled (nothing is created before its button). */
+export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession, onLaunched, projects, notify, onProposal }: ChatPanelProps): JSX.Element {
   const { t } = useI18n();
   const copy = useMemo(() => chatCopy(t), [t]);
   const theme = useTheme();
@@ -36,6 +45,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
   const turnReady = useCallback((qid: string) => !!view.fleet.turnMachine(qid)?.ready, [view.fleet]);
   const turnMachine = useCallback((qid: string) => view.fleet.turnMachine(qid)?.id, [view.fleet]);
   const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, sessions: view.sessions, turnReady, turnMachine, onLaunched });
+  const project = useProjectReview({ chat, projects, machines: view.machines, notify, onProposal });
   const [hovered, setHovered] = useState<string | null>(null);
   useAgentHighlight(hovered);
   // Every way in (/, the sidebar, the top bar, the footer, Ledge's desk) mounts the panel: the field takes the focus; asked for
@@ -66,6 +76,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
             onOpenSession={open} onTerminal={open} turnAvailable={turnReady}
             launchingQid={cards.launchingQid} onLaunchProposal={cards.launch}
             relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
+            onProject={project.review} projectNamed={project.projectNamed}
             onAgentHover={setHovered} inputRef={inputRef}
             theme={theme} frozen={offline !== null} reducedMotion={paused || reduced} />
         </ChatCopyProvider>

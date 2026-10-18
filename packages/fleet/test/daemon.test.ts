@@ -173,6 +173,14 @@ describe('daemon client + store', () => {
     expect(daemonStore.getState().chat[0]!.relay).toEqual(relay);
   });
 
+  it('chat.done keeps the project proposal', () => {
+    daemonStore.reset();
+    daemonStore.beginTurn({ qid: 'q1', question: 'crée un projet', askedAt: T0, steps: [] });
+    const projectProposal = { name: 'Paper', repos: [{ path: '/w/paper', why: 'Nommé paper' }] };
+    daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, projectProposal });
+    expect(daemonStore.getState().chat[0]!.projectProposal).toEqual(projectProposal);
+  });
+
   it('keeps the chat turns and the live answer', () => {
     daemonStore.reset();
     daemonStore.apply({ type: 'chat.history', turns: [{ qid: 'q0', question: 'hier', askedAt: T0, steps: [], answer: 'ok', answeredAt: T0 }] });

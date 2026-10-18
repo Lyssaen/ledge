@@ -319,6 +319,14 @@ describe('common chat routing', () => {
     server.set('unreachable');
     expect(got.at(-2)).toMatchObject({ type: 'error' });
   });
+  it('keeps a project proposal on the routed turn, with its machine (lot 11 task 5)', () => {
+    const { client, local, got } = setup();
+    client.send({ type: 'chat.ask', qid: 'q', text: 'Crée un projet Paper' });
+    local.emit({ type: 'chat.routed', qid: 'q', result: { machineId: 'local', text: 'Crée un projet Paper' } });
+    const projectProposal = { name: 'Paper', repos: [{ path: '/w/paper', why: 'Nommé paper' }] };
+    local.emit({ type: 'chat.done', qid: 'q', text: 'Je propose Paper.', at: new Date().toISOString(), projectProposal });
+    expect(lastHistory(got)[0]).toMatchObject({ machineId: 'local', projectProposal });
+  });
   it('a reply to an offline machine says which request it refuses', () => {
     const { client, server, got } = setup();
     server.set('unreachable');

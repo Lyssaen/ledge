@@ -22,6 +22,14 @@ describe('claudeArgs', () => {
     expect(PERSONA).toContain('pas en lecture seule');
     expect(PERSONA).not.toContain('jamais d\'instruction envoyée à une session');
   });
+  it('the persona reads projects.md and proposes a project only on an explicit request, with paths it read, addTo to complete one, and an answer that stands alone', () => {
+    expect(PERSONA).toContain('```ledge-project');
+    expect(PERSONA).toContain('projects.md');
+    expect(PERSONA).toContain('{"name": "<nom>", "description": "<une phrase>", "repos": [{"path": "<chemin absolu>", "why": "<pourquoi ce dépôt>"}], "addTo": "<nom exact d\'un projet de projects.md>"}');
+    expect(PERSONA).toContain('que si l\'utilisateur demande explicitement de créer un projet ou d\'en compléter un');
+    expect(PERSONA).toContain('n\'invente jamais de chemin');
+    expect(PERSONA).toContain('se suffit à elle-même');
+  });
   it('runs headless, restricted, read-only, streaming, with the day session', () => {
     const a = claudeArgs(opts());
     expect(a.slice(0, 2)).toEqual(['-p', '--restricted']);

@@ -72,15 +72,16 @@ export function draftFromProposal(p: Proposal, state: Projects): ProjectDraft {
  *  (`projectOf` needs a single answer, and the daemon refuses `duplicate_repo` across projects). */
 export type DraftProblem = { code: 'name_empty' } | { code: 'name_taken' } | { code: 'repo_duplicate'; index: number } | { code: 'repo_taken'; index: number; project: string } | { code: 'gone' };
 
-// projectsProblems ignores case only; the editor ignores accents too.
-const key = (name: string) => name.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLocaleLowerCase();
+/** A project name as the editor compares them (name_taken, the chat's `addTo`): projectsProblems ignores case only; the editor
+ *  ignores accents too. */
+export const nameKey = (name: string): string => name.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLocaleLowerCase();
 
 /** The first problem that prevents saving: gone, name_empty, name_taken, repo_duplicate, repo_taken. */
 export function draftProblem(d: ProjectDraft, state: Projects): DraftProblem | null {
   if (d.id !== undefined && !state.projects.some(p => p.id === d.id)) return { code: 'gone' };
-  const name = key(d.name);
+  const name = nameKey(d.name);
   if (name === '') return { code: 'name_empty' };
-  if (state.projects.some(p => p.id !== d.id && key(p.name) === name)) return { code: 'name_taken' };
+  if (state.projects.some(p => p.id !== d.id && nameKey(p.name) === name)) return { code: 'name_taken' };
   // Indexes in `d.repos`; an unchecked proposed repository is skipped.
   const seen = new Set<string>();
   for (const [index, r] of d.repos.entries()) {

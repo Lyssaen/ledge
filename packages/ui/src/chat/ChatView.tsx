@@ -10,6 +10,7 @@ import { relativeTime } from './format';
 import { inline } from './inline';
 import { LaunchCard } from './LaunchCard';
 import { RelayCard } from './RelayCard';
+import { ProjectCard } from './ProjectCard';
 import { groupSessions } from '@ledge/fleet';
 import type { DocumentReference } from '../documents/references';
 
@@ -27,6 +28,9 @@ export interface ChatViewProps {
   launchingQid?: string | null; onLaunchProposal?: (qid: string) => void; onTerminal?: (id: string) => void;
   /** The relay card's turn being sent (its qid) and its actions. */
   relayingQid?: string | null; onRelay?: (qid: string) => void; onRelayCancel?: (qid: string) => void;
+  /** The project card's « Review the proposal » (lot 11): without it (the island) there is no card, the answer stands alone.
+   *  `projectNamed`: the current name of the project an `addTo` designates, or undefined when none exists (then a new project). */
+  onProject?: (qid: string) => void; projectNamed?: (name: string) => string | undefined;
   /** Desktop: in the flow of its parent column (no absolute positioning, no fade), no Back button; Close stays in the header. */
   docked?: boolean;
   /** Hover or keyboard focus of a `ledge://session/<id>` link in an answer; null when it ends. */
@@ -155,7 +159,7 @@ export function ChatView(p: ChatViewProps) {
                       return text && <Answer text={text} sessions={p.sessions.filter(s => !turn.machineId || s.machineId === turn.machineId)} onOpen={p.onOpenSession} onDocument={p.onDocument ? ref => p.onDocument!(ref, turn.qid) : undefined} />;
                     })()}
                     {!!turn.choices?.length && turn === turns.at(-1) && <><div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{turn.choices.map(c => <Button key={c.id} variant="outline" size="sm" disabled={busy || !!p.offline} onClick={() => submit(t.machines.choose(c.label))} style={{ height: 30, padding: '0 10px', fontSize: 12 }}>{c.label}</Button>)}</div><small style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{t.machines.clarification}</small></>}
-                    {turn.machineName && (turn.proposal || turn.relay) && <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.machines.destination} : <strong style={{ color: 'var(--sidebar-foreground)' }}>{turn.machineId === 'local' ? t.machines.local : turn.machineName}</strong>{p.turnAvailable?.(turn.qid) === false && ` · ${t.machines.offline}`}</div>}
+                    {turn.machineName && (turn.proposal || turn.relay || (turn.projectProposal && p.onProject)) && <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.machines.destination} : <strong style={{ color: 'var(--sidebar-foreground)' }}>{turn.machineId === 'local' ? t.machines.local : turn.machineName}</strong>{p.turnAvailable?.(turn.qid) === false && ` · ${t.machines.offline}`}</div>}
                     {turn.answeredAt !== undefined && turn.relay ? (
                       <RelayCard relay={turn.relay} session={p.sessions.find(s => s.id === turn.relay!.id)} busy={p.relayingQid === turn.qid}
                         disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.relayingQid && p.relayingQid !== turn.qid) || !!p.launchingQid} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
@@ -164,6 +168,9 @@ export function ChatView(p: ChatViewProps) {
                       <LaunchCard proposal={turn.proposal} session={p.sessions.find(s => s.id === turn.proposal!.launchedId)} busy={p.launchingQid === turn.qid}
                         disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid}
                         onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
+                    )}
+                    {turn.answeredAt !== undefined && turn.projectProposal && p.onProject && (
+                      <ProjectCard proposal={turn.projectProposal} target={turn.projectProposal.addTo === undefined ? undefined : p.projectNamed?.(turn.projectProposal.addTo)} onReview={() => p.onProject!(turn.qid)} />
                     )}
                     {turn.answeredAt !== undefined && (
                       <div data-sources style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', paddingTop: 6, borderTop: '1px solid var(--sidebar-border)', fontSize: 11, lineHeight: '16px', color: 'var(--muted-foreground)' }}>

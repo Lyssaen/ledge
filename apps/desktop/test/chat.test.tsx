@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import type { DaemonError } from '@ledge/fleet';
-import type { ChatProposal, ChatTurn, ClientMessage, Session } from '@ledge/protocol';
+import type { ChatProjectProposal, ChatProposal, ChatTurn, ClientMessage, Session } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { boot, closeDaemons, declarations, DEFAULT_SESSIONS, LAUNCH_PROJECTS, type MockDaemon } from './helpers';
+import { boot, closeDaemons, declarations, DEFAULT_SESSIONS, LAUNCH_PROJECTS, recordToasts, type MockDaemon } from './helpers';
 import { loadChat } from '../src/chat/lazy';
 import { useChatCards } from '../src/chat/useChatCards';
+import { useProjectReview } from '../src/chat/projectReview';
+import { LangProvider } from '../src/i18n/lang';
+import { proposalOf } from '../src/projects/proposals';
 
 beforeEach(async () => { localStorage.clear(); await loadChat(); });
 // jsdom has no scrollIntoView: a test that stubs it leaves none behind.
@@ -42,7 +46,7 @@ async function ask(env: Awaited<ReturnType<typeof openChat>>, question: string, 
   await panel().findByText('Reads the sessions');
   d.push({ type: 'chat.delta', qid, text: answer.slice(0, 4) });
   const at = new Date().toISOString();
-  d.push({ type: 'chat.done', qid, text: answer, at, ...(extra.proposal ? { proposal: extra.proposal } : {}) });
+  d.push({ type: 'chat.done', qid, text: answer, at, ...(extra.proposal ? { proposal: extra.proposal } : {}), ...(extra.projectProposal ? { projectProposal: extra.projectProposal } : {}) });
   await waitFor(() => expect(panel().queryByText('Reads the sessions')).toBeNull());
   return { qid, question, askedAt: at, steps: [{ kind: 'sessions' }], answer, answeredAt: at, ...extra };
 }
@@ -324,6 +328,106 @@ describe('the Ledge chat docked on the right', () => {
     expect(declarations('shell.css', '.chat-hover')).toContain('outline:2pxsolidvar(--sidebar-primary)');
     expect(declarations('shell.css', '.chat-hover .ledge-bot')).toContain('filter:drop-shadow(008pxcolor-mix(insrgb,var(--sidebar-primary)60%,transparent))');
     expect(declarations('shell.css', '.ledge-chat-panel .chat-close')).toBe('');
+  });
+});
+
+describe('a project proposed in the chat (lot 11 task 5)', () => {
+  type ProjectsSet = Extract<ClientMessage, { type: 'projects.set' }>;
+  const setsOf = (d: MockDaemon) => d.received.filter((m): m is ProjectsSet => m.type === 'projects.set');
+  const tick = () => new Promise(r => setTimeout(r, 50));
+  /** Two free folders on Local, and /w/pay which Payment already has. */
+  const PAPER: ChatProjectProposal = { name: 'Paper', description: 'The fonts and templates', repos: [
+    { path: '/home/me/paper-fonts', why: 'Named paper-*, like the templates' }, { path: '/w/pay', why: 'Taken already' }, { path: '/home/me/paper-templates', why: 'Same prefix' }] };
+  let toasts: string[];
+  beforeEach(() => { toasts = recordToasts(); });
+
+  it('the card shows under the answer; « Review the proposal » opens the editor prefilled (checked, « Ledge · … »); nothing is sent before its button', async () => {
+    const env = await openChat();
+    await ask(env, 'Create a project Paper', 'I propose **Paper** with two repositories.', { projectProposal: PAPER });
+    const card = panel().getByRole('region', { name: 'Project proposal' });
+    expect(card).toHaveTextContent('Project proposal · Paper');
+    expect(card).toHaveTextContent('3 repositories');
+    await env.user.click(within(card).getByRole('button', { name: 'Review the proposal' }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
+    expect(prop.getByRole('textbox', { name: 'Name' })).toHaveValue('Paper');
+    expect(prop.getByRole('textbox', { name: /Description/ })).toHaveValue('The fonts and templates');
+    // The first colour no project uses (LAUNCH_PROJECTS: blue, green, amber).
+    expect(prop.getByRole('radio', { name: 'Violet' })).toBeChecked();
+    const fonts = prop.getByRole('checkbox', { name: 'Keep paper-fonts (Local)' });
+    expect(fonts).toBeChecked();
+    expect(fonts.closest('li')!.querySelector('.pe-why')).toHaveTextContent('Ledge · Named paper-*, like the templates');
+    expect(prop.getByRole('checkbox', { name: 'Keep paper-templates (Local)' })).toBeChecked();
+    // A folder another project has is left out.
+    expect(prop.queryByText('pay')).toBeNull();
+    expect(document.querySelector('.pe-proposal')).toHaveTextContent('2 repositories on Local.');
+    await tick();
+    expect(setsOf(env.d)).toEqual([]);
+    await env.user.click(prop.getByRole('button', { name: /^Create the project/ }));
+    await waitFor(() => expect(setsOf(env.d)).toHaveLength(1));
+    expect(setsOf(env.d)[0]!.projects.projects.at(-1)).toEqual({ id: 'paper', name: 'Paper', color: 'violet', description: 'The fonts and templates',
+      repos: [{ machine: 'local', path: '/home/me/paper-fonts' }, { machine: 'local', path: '/home/me/paper-templates' }] });
+  });
+
+  it('with an addTo that exists (case aside), the card says « Complete Ledge » and the editor « Add to Ledge »', async () => {
+    const env = await openChat();
+    await ask(env, 'Add the site to Ledge', 'I would add the site to **Ledge**.', { projectProposal: { name: 'Ledge site', addTo: 'LEDGE', repos: [{ path: '/home/me/site', why: 'Same remote as Ledge' }] } });
+    const card = panel().getByRole('region', { name: 'Project proposal' });
+    expect(card).toHaveTextContent('Complete Ledge');
+    await env.user.click(within(card).getByRole('button', { name: 'Review the proposal' }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal for Ledge' }));
+    expect(prop.getByRole('textbox', { name: 'Name' })).toHaveValue('Ledge');
+    expect(prop.getByRole('checkbox', { name: 'Keep site (Local)' })).toBeChecked();
+    expect(prop.getByRole('button', { name: /^Add to Ledge/ })).toBeVisible();
+    await tick();
+    expect(setsOf(env.d)).toEqual([]);
+  });
+
+  it('with an addTo that no longer exists, the editor opens a new project under the block\'s name', async () => {
+    const env = await openChat();
+    await ask(env, 'Add the site to Old', 'I would add the site to **Old**.', { projectProposal: { name: 'Site', addTo: 'Old', repos: [{ path: '/home/me/site', why: 'Same remote' }] } });
+    const card = panel().getByRole('region', { name: 'Project proposal' });
+    expect(card).toHaveTextContent('Project proposal · Site');
+    await env.user.click(within(card).getByRole('button', { name: 'Review the proposal' }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
+    expect(prop.getByRole('textbox', { name: 'Name' })).toHaveValue('Site');
+    expect(prop.getByRole('button', { name: /^Create the project/ })).toBeVisible();
+    expect(prop.queryByRole('button', { name: /^Add to/ })).toBeNull();
+  });
+
+  it('every folder taken meanwhile: nothing opens, and the notice says the proposal no longer exists', async () => {
+    const env = await openChat();
+    await ask(env, 'Create a project Pay', 'I propose **Pay**.', { projectProposal: { name: 'Pay', repos: [{ path: '/w/pay', why: 'x' }, { path: '/w/ledge/sub', why: 'y' }] } });
+    await env.user.click(panel().getByRole('button', { name: 'Review the proposal' }));
+    await waitFor(() => expect(toasts).toContain('This proposal no longer exists.'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('a turn erased by chat.reset after the card was drawn: nothing opens, the notice says so', () => {
+    const turn: ChatTurn = { qid: 'q-1', question: 'Create', askedAt: '2026-10-17T10:00:00.000Z', steps: [], answer: 'ok', answeredAt: '2026-10-17T10:00:01.000Z', projectProposal: PAPER };
+    const notify = vi.fn(); const onProposal = vi.fn();
+    const wrapper = ({ children }: { children: ReactNode }) => <LangProvider lang="en">{children}</LangProvider>;
+    const hook = renderHook((p: { chat: ChatTurn[] }) => useProjectReview({ chat: p.chat, projects: LAUNCH_PROJECTS, machines: [{ id: 'local', label: 'Local' }], notify, onProposal }), { initialProps: { chat: [turn] }, wrapper });
+    const review = hook.result.current.review;
+    hook.rerender({ chat: [] });
+    act(() => review('q-1'));
+    expect(onProposal).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith('This proposal no longer exists.');
+    // Before the reset, the same click kept the proposal and handed its pid over.
+    hook.rerender({ chat: [turn] });
+    act(() => hook.result.current.review('q-1'));
+    const pid = onProposal.mock.calls[0]![0] as string;
+    expect(proposalOf(pid)).toMatchObject({ name: 'Paper', color: 'violet', file: [], repos: [{ machine: 'local', path: '/home/me/paper-fonts', why: { kind: 'chat', text: 'Named paper-*, like the templates' } }, { machine: 'local', path: '/home/me/paper-templates', why: { kind: 'chat', text: 'Same prefix' } }] });
+    expect(proposalOf(pid)).not.toHaveProperty('targetId');
+  });
+
+  it('a turn another machine answered proposes the repositories on that machine (its label in the summary), its taken ones left out', () => {
+    const turn: ChatTurn = { qid: 'nas:q-1', machineId: 'nas', machineName: 'NAS', question: 'Create', askedAt: '2026-10-17T10:00:00.000Z', steps: [], answer: 'ok', answeredAt: '2026-10-17T10:00:01.000Z',
+      projectProposal: { name: 'Backups', repos: [{ path: '/srv/backups', why: 'Backups' }, { path: '/srv/docs', why: 'Docs has it' }] } };
+    const onProposal = vi.fn();
+    const wrapper = ({ children }: { children: ReactNode }) => <LangProvider lang="en">{children}</LangProvider>;
+    const hook = renderHook(() => useProjectReview({ chat: [turn], projects: LAUNCH_PROJECTS, machines: [{ id: 'local', label: 'Local' }, { id: 'nas', label: 'NAS' }], notify: vi.fn(), onProposal }), { wrapper });
+    act(() => hook.result.current.review('nas:q-1'));
+    expect(proposalOf(onProposal.mock.calls[0]![0] as string)).toMatchObject({ repos: [{ machine: 'nas', path: '/srv/backups' }], summary: { repos: 1, machines: ['NAS'], agents: [] } });
   });
 });
 
