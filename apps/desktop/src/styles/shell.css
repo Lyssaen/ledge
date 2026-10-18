@@ -84,6 +84,11 @@
 .header-actions .view-actions-sep { margin: 0 6px; }
 .footer-status { display: flex; align-items: center; gap: 16px; }
 .footer-status > span { display: flex; align-items: center; gap: 6px; }
+/* The island's state (mockup office.css and settings.css): its dot, hollow while it is hidden; it opens Settings › Island. */
+.overlay-state { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: var(--radius-sm); font-size: 10px; color: var(--muted-foreground); }
+.overlay-state i { width: 5px; height: 5px; background: var(--success); border-radius: 50%; display: inline-block; }
+.overlay-state:hover { background: var(--sidebar-accent); color: var(--foreground); }
+.overlay-state.off i { background: none; border: 1px solid var(--muted-foreground); box-sizing: border-box; }
 .crumb-session { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
 .crumb-session > strong { flex-shrink: 0; }
 .crumb-task { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 13px; }

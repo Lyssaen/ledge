@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, type JSX } from 'react';
 import type { DaemonClient, Fleet, MachineState } from '@ledge/fleet';
-import type { Projects as ProjectsState, Session } from '@ledge/protocol';
+import type { IslandPrefs, Projects as ProjectsState, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -12,6 +12,7 @@ import type { DaemonUpdate } from '../update/daemon';
 import { updateReady, useUpdate } from '../update/store';
 import { General } from './General';
 import { Appearance } from './Appearance';
+import { Island } from './Island';
 import { Notifications } from './Notifications';
 import { Sounds } from './Sounds';
 import { Machines } from './Machines';
@@ -22,7 +23,8 @@ import { shownOf } from './machineDrafts';
 import { EscapeLayersContext, escapeLayers, type EscapeLayers } from './escape';
 
 /** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,
- *  in `lang` when given), the fleet, its client (what a machine says of its folders) and its machines, the projects, the sessions, navigation, the alerts (the Sounds' Test), the
+ *  in `lang` when given), the fleet, its client (what a machine says of its folders) and its machines, the projects, the island's settings
+ *  (undefined until the local daemon speaks of them, null while none was set), the sessions, navigation, the alerts (the Sounds' Test), the
  *  local daemon's update, the language and how to change it (its strings load first: 'failed' leaves the language as it is),
  *  and whether the animations are frozen. */
 export interface SettingsContext {
@@ -32,6 +34,7 @@ export interface SettingsContext {
   client: DaemonClient;
   machines: readonly MachineState[];
   projects: ProjectsState | null;
+  island: IslandPrefs | null | undefined;
   projectIdOf(s: Session): string | null;
   sessions: readonly Session[];
   dispatch(a: NavAction): void;
@@ -46,6 +49,7 @@ export interface SettingsContext {
 const SECTION_ICONS: Record<SectionId, readonly string[]> = {
   general: ['M4 21v-7', 'M4 10V3', 'M12 21v-9', 'M12 8V3', 'M20 21v-5', 'M20 12V3', 'M1 14h6', 'M9 8h6', 'M17 16h6'],
   appearance: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 3v18'],
+  island: ['M3 5h18v14H3z', 'M9 5h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 6.5z'],
   notifications: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.94 1.94 0 0 0 3.4 0'],
   sounds: ['M11 5 6 9H2v6h4l5 4V5Z', 'M15.5 8.5a5 5 0 0 1 0 7', 'M19 5a10 10 0 0 1 0 14'],
   machines: ['M3 4h18v12H3z', 'M12 16v4', 'M8 20h8'],
@@ -58,11 +62,12 @@ const SECTION_ICONS: Record<SectionId, readonly string[]> = {
 function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
   if (section === 'general') return <General ctx={ctx} />;
   if (section === 'appearance') return <Appearance ctx={ctx} />;
+  if (section === 'island') return <Island ctx={ctx} />;
   if (section === 'notifications') return <Notifications ctx={ctx} />;
   if (section === 'sounds') return <Sounds ctx={ctx} />;
   if (section === 'machines') return <Machines ctx={ctx} />;
   if (section === 'projects') return <Projects ctx={ctx} />;
-  if (section === 'shortcuts') return <Shortcuts />;
+  if (section === 'shortcuts') return <Shortcuts ctx={ctx} />;
   return <About ctx={ctx} />;
 }
 

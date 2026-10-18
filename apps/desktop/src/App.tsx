@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { projectOf, useDaemon, useProjects, type DaemonClient } from '@ledge/fleet';
+import { projectOf, useDaemon, useIsland, useProjects, type DaemonClient } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -56,6 +56,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const fleetView = useFleet(client);
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
   const projects = useProjects(fleetClient);
+  const island = useIsland(fleetClient);
   const { t, lang } = useI18n();
   const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
   // The local daemon's update, started from Settings › About; while it runs, the daemon's restart is expected and silent.
@@ -178,7 +179,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // What the Settings page's sections receive; « Setting saved · … » goes through the app's toast, once per accepted change
   // (in the language just chosen, for the language itself: the render that speaks it has not happened yet).
   const settings: SettingsContext = {
-    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, projectIdOf, sessions, dispatch, alerts, daemonUpdate,
+    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, projectIdOf, sessions, dispatch, alerts, daemonUpdate,
     lang, setLang, paused: nav.paused
   };
 
@@ -193,7 +194,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} order={order} projects={projects} projectIdOf={projectIdOf} />
             : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
             : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} decisions={decisions} filing={filing} waits={waits} />}
-          {onOverview && <Footer dispatch={dispatch} localDown={localDown} />}
+          {onOverview && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>
         {nav.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}

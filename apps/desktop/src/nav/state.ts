@@ -4,8 +4,8 @@ import type { Overview } from './overview';
 export type View = 'atelier' | 'list';
 /** 'all', 'none' (Sans projet) or a project id. */
 export type ProjectFilter = string;
-export type SectionId = 'general' | 'appearance' | 'notifications' | 'sounds' | 'machines' | 'projects' | 'shortcuts' | 'about';
-export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'notifications', 'sounds', 'machines', 'projects', 'shortcuts', 'about'];
+export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'projects' | 'shortcuts' | 'about';
+export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'projects', 'shortcuts', 'about'];
 export type Place =
   | { kind: 'overview'; view: View; project: ProjectFilter }
   /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre » de la Liste). */

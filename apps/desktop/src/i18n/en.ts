@@ -17,19 +17,20 @@ export const en: Messages = {
     search: 'Search a session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
     terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)'
   },
-  foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts' },
-  sections: { general: 'General', appearance: 'Appearance', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
+  foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts', islandOn: 'Island active', islandOff: 'Island hidden', islandTitle: 'Island settings' },
+  sections: { general: 'General', appearance: 'Appearance', island: 'Island', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
   settings: {
     nav: 'Settings sections', back: 'Back to the atelier',
     saved: (what) => `Setting saved · ${what}`,
     hints: {
       general: 'Language, start-up, default agent and updates.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
+      island: 'The island at the top of the screen: where it sits and what it signals.',
       notifications: 'Who lets you know, and when to leave you alone.',
       sounds: 'Your team’s sound cues.',
       machines: 'This machine and your SSH servers. One list for the island and Ledge Desktop.',
       projects: 'Projects, repositories and remembered folders.',
-      shortcuts: 'The app’s keyboard shortcuts.',
+      shortcuts: 'In the app, and anywhere in Windows.',
       about: 'Versions and updates.'
     },
     machineOffline: 'A machine is offline', updateWaiting: 'An update is available',
@@ -170,7 +171,46 @@ export const en: Messages = {
         invalid: 'The daemon refused this change. Nothing changed.', timeout: 'The daemon did not confirm this change.'
       }
     },
+    island: {
+      bannerTitle: 'The island has no settings of its own any more.',
+      bannerBody: 'The menu of its Ledge chat opens this page, « Settings in Ledge Desktop ». The island keeps the essentials: letting you know, allowing or answering in one gesture, opening a session, talking to Ledge.',
+      outdated: 'The local daemon is too old for the island’s settings: update it.',
+      show: 'Show the island', showHint: 'The small island at the top of the screen. Hidden, Ledge Desktop still lets you know.', shown: 'Island shown', hidden: 'Island hidden',
+      preview: 'Island preview', bubble: 'Otto needs your approval',
+      caption: {
+        dnd: 'Do not disturb: requests stay in the island, without a bubble.',
+        strip: 'Discreet mode: a simple line under the maximised window.',
+        whole: 'Discreet mode off: the island stays whole above the window.',
+        rest: 'The island at rest, three agents living in it.',
+        hidden: 'The island is hidden. Ledge Desktop still lets you know.'
+      },
+      cover: 'Simulate a maximised window', uncover: 'Remove the window',
+      screen: 'Screen', screens: { primary: 'Main', second: 'Screen 2' },
+      screenHint: (size) => (size ? `The island sits at the top of this screen (${size}).` : 'The island sits at the top of this screen.'),
+      screenSaved: { primary: 'Main screen', second: 'Screen 2' },
+      position: 'Island position', positionHint: 'At the centre of the top edge, or a quarter of the way along to keep titles and tabs clear.',
+      positions: { left: 'Left', center: 'Centre', right: 'Right' }, positionSaved: (p) => `Position: ${p}`,
+      discreet: 'Discreet under a window', discreetHint: 'A simple line when a maximised window fills the screen; hovering unfolds it.', discreetOn: 'Discreet mode', discreetOff: 'Island always whole',
+      islandScale: 'Island size', islandScaleHint: 'The island and its companions at the top of the screen.', islandScaleSaved: (label) => `Island size ${label}`,
+      panelScale: 'Island windows size', panelScaleHint: 'Bubble, list, session and chat that open from the island.', panelScaleSaved: (label) => `Windows size ${label}`,
+      does: 'What the island does', doesNote: 'Approval requests and questions always show in the island. The rest is up to you.',
+      quick: 'Allow and answer from the island', quickHint: 'Allow, deny (Y / N) or answer in a line without opening Ledge Desktop.', quickOn: 'Quick answers in the island', quickOff: 'Answers in Ledge Desktop only',
+      finished: 'Bubble when an agent is done', finishedHint: 'A 6 s bubble under the island.', finishedOn: 'Task finished bubble', finishedOff: 'No task finished bubble',
+      say: 'Agents’ words', sayHint: 'A sentence from an agent, in a bubble that fades after 5 s.', sayOn: 'Agents’ words', sayOff: 'Words hidden',
+      helpers: 'Subagents in the island', helpersHint: 'The small bots on their main agent’s shoulder.', helpersOn: 'Subagents shown', helpersOff: 'Subagents hidden',
+      shortcut: 'Shortcut to open the island', shortcutHint: 'Opens the island’s session list, anywhere in Windows.', recordingHint: 'Press the combination you want. Esc to cancel.',
+      recorder: (keys) => `Shortcut to open the island: ${keys}. Edit`, press: 'Press…', edit: 'Edit', cancel: 'Cancel',
+      needsModifier: 'Add Ctrl, Alt or ⊞: the shortcut has to work anywhere in Windows.', shortcutSaved: (keys) => `Open the island: ${keys}`,
+      keyNames: { Win: '⊞' },
+      refused: {
+        offline: 'The local daemon is offline: nothing changed.', outdated: 'The local daemon is too old for the island’s settings: update it.',
+        invalid: 'The daemon refused this change. Nothing changed.', timeout: 'The daemon did not confirm this change.'
+      }
+    },
     shortcuts: {
+      global: 'Anywhere in Windows', globalNote: 'These shortcuts work even when Ledge Desktop is closed to the notification area.',
+      globalRows: { island: 'Open the island’s list', newSession: 'New session', theme: 'Switch the theme', dnd: 'Do not disturb, from the island' },
+      edit: 'Edit', editLabel: 'Edit the island’s shortcut',
       title: 'In Ledge Desktop',
       note: 'Y and N act only on the pinned request of the open session, never while typing.'
     },

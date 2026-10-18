@@ -3,6 +3,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { boot, closeDaemons, TWO_PROJECTS } from './helpers';
+import { DEFAULT_ISLAND_PREFS } from '@ledge/protocol';
 
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
@@ -21,7 +22,7 @@ describe('the Settings page', () => {
     expect(tab('General')).toHaveAttribute('aria-current', 'page');
     expect(nav().getAllByRole('button', { current: 'page' })).toHaveLength(1);
     expect(nav().getAllByRole('button').map(b => b.textContent)).toEqual([
-      'Back to the atelierEsc', 'General', 'Appearance', 'Notifications', 'Sounds', 'Machines', 'Projects', 'Keyboard shortcuts', 'About'
+      'Back to the atelierEsc', 'General', 'Appearance', 'Island', 'Notifications', 'Sounds', 'Machines', 'Projects', 'Keyboard shortcuts', 'About'
     ]);
   });
 
@@ -96,17 +97,23 @@ describe('the Settings page', () => {
     expect(within(tab('Machines')).getByRole('img', { name: 'A machine is offline' })).toBeVisible();
   });
 
-  it('Keyboard shortcuts: the app’s table under « In Ledge Desktop », Ctrl , first; no Windows-wide card', async () => {
-    const { user } = await boot({ projects: TWO_PROJECTS });
+  it('Keyboard shortcuts: « Anywhere in Windows » first, the island’s own as the daemon holds it with « Edit » to Settings › Island, then the app’s table under « In Ledge Desktop », Ctrl , first', async () => {
+    const { d, user } = await boot({ projects: TWO_PROJECTS });
+    d.push({ type: 'island', prefs: { ...DEFAULT_ISLAND_PREFS, shortcut: 'Ctrl Shift K' } });
     await user.keyboard('{Control>},{/Control}');
     await user.click(tab('Keyboard shortcuts'));
-    const card = within(screen.getByRole('region', { name: 'In Ledge Desktop' }));
-    const rows = [...document.querySelectorAll('.set-card .set-row')].map(r => [r.querySelector('.set-label')!.textContent, r.querySelector('kbd')!.textContent]);
+    expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['Anywhere in Windows', 'In Ledge Desktop']);
+    const rowsOf = (name: string) => [...screen.getByRole('region', { name }).querySelectorAll('.set-row')].map(r => [r.querySelector('.set-label')!.textContent, r.querySelector('kbd')!.textContent]);
+    await waitFor(() => expect(rowsOf('Anywhere in Windows')[0]).toEqual(['Open the island’s list', 'Ctrl Shift K']));
+    expect(rowsOf('Anywhere in Windows').slice(1)).toEqual([['New session', 'Ctrl Alt N'], ['Switch the theme', 'Ctrl Alt T'], ['Do not disturb, from the island', 'D']]);
+    const rows = rowsOf('In Ledge Desktop');
     expect(rows[0]).toEqual(['Open the settings', 'Ctrl ,']);
     expect(rows[1]).toEqual(['Search and open a session', 'Ctrl / ⌘ K']);
     expect(rows).toHaveLength(20);
-    expect(card.getByText('Show these shortcuts')).toBeVisible();
-    expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['In Ledge Desktop']);
+    expect(within(screen.getByRole('region', { name: 'In Ledge Desktop' })).getByText('Show these shortcuts')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Edit the island’s shortcut' }));
+    expect(title()).toHaveTextContent('Island');
+    expect(tab('Island')).toHaveAttribute('aria-current', 'page');
   });
 
   it('the sidebar’s footer is styled once, by sidebar.css: the Settings sheet does not repeat it', () => {

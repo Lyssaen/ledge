@@ -162,7 +162,7 @@ test('a 900 px window: the settings fit without a side scroll, their section bar
   expect(appearance.y).toBeCloseTo(general.y, 0);
   expect(appearance.x).toBeGreaterThan(general.x);
   // The bar scrolls sideways itself; neither the page nor the settings' scroller does, in any section.
-  for (const name of ['General', 'Appearance', 'Notifications', 'Sounds', 'Machines', 'Projects', 'Keyboard shortcuts', 'About']) {
+  for (const name of ['General', 'Appearance', 'Island', 'Notifications', 'Sounds', 'Machines', 'Projects', 'Keyboard shortcuts', 'About']) {
     await tab(page, name).click();
     await expect(heading(page)).toHaveText(name);
     expect(await pageNoSideScroll(page), `${name}: the page does not scroll sideways`).toBe(true);

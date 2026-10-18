@@ -1,5 +1,5 @@
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, Machines, Projects, Recent, Session, ThreadItem } from '@ledge/protocol';
+import type { ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, Projects, Recent, Session, ThreadItem } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -30,13 +30,16 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  proposal. A card's `session.launch { qid }` seats its agent as above, then broadcasts the `chat.history` where that turn's proposal has its
  *  `launchedId`; that agent stays `starting` (the test may `upsert` it), so what the launch lit is never raced by the settle.
  *  A `repos.scan` is answered by its `machineId` (default `local`) from `extras.found` with `repos.found` (after `scanDelayMs`, to hold the scan view): no entry, an empty list.
+ *  Like the daemon it keeps the island's settings (`extras.island`, default null: none set yet), sent after the projects, and an `island.set`
+ *  replaces them and is broadcast back as `island`; `island: 'unknown'` plays a daemon too old to speak of them.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown' } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
   let machines: Machines = extras.machines ?? [{ id: 'local', label: 'Local' }];
   let projects: Projects | undefined = extras.projects;
+  let island: IslandPrefs | null | 'unknown' = extras.island ?? null;
   let socket: WebSocketRoute | null = null;
   let up = true;
   let launches = 0;
@@ -47,10 +50,12 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     ws.send(JSON.stringify({ type: 'snapshot', sessions: [...sessions.values()], ...(extras.launcher ? { launcher: extras.launcher } : {}), ...(extras.recents ? { recents: extras.recents } : {}), ...(extras.daemon ? { daemon: extras.daemon } : {}) }));
     ws.send(JSON.stringify({ type: 'machines', machines }));
     if (projects) ws.send(JSON.stringify({ type: 'projects', projects }));
+    if (island !== 'unknown') ws.send(JSON.stringify({ type: 'island', prefs: island }));
     ws.onMessage(m => {
       let msg: ClientMessage;
       try { msg = JSON.parse(String(m)); } catch { return; }
       received.push(msg);
+      if (msg.type === 'island.set') { island = msg.prefs; ws.send(JSON.stringify({ type: 'island', prefs: island })); }
       if (msg.type === 'projects.set') { projects = msg.projects; ws.send(JSON.stringify({ type: 'projects', projects })); }
       if (msg.type === 'session.decide') { const s = sessions.get(msg.id); if (s) { const { pending: _p, ...rest } = s; const next = { ...rest, state: 'working' as const }; sessions.set(s.id, next); ws.send(JSON.stringify({ type: 'session.updated', session: next })); } }
       if (msg.type === 'session.thread') { const items = threads.get(msg.id); if (items) ws.send(JSON.stringify({ type: 'session.thread', id: msg.id, items })); }

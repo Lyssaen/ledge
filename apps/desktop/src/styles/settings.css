@@ -1,4 +1,4 @@
-/* Réglages (docs/mockups/desktop-observatory/settings.css, without the island's rules): left, the sections; right, cards of rows. */
+/* Réglages (docs/mockups/desktop-observatory/settings.css): left, the sections; right, cards of rows. */
 .settings-page{flex:1;min-height:0;display:flex}
 .settings-nav{width:224px;flex-shrink:0;display:flex;flex-direction:column;gap:2px;padding:16px 12px;border-right:1px solid var(--border);overflow:auto}
 .settings-back{justify-content:flex-start!important;margin:0 0 12px;color:var(--muted-foreground);white-space:nowrap}
@@ -89,6 +89,35 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 .accent-swatches label.on{box-shadow:0 0 0 2px var(--sidebar),0 0 0 4px var(--c)}
 .accent-swatches label:has(input:focus-visible){outline:2px solid var(--ring);outline-offset:4px}
 .accent-sample{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+
+/* Island preview: two screens, the island on the chosen one. */
+.island-preview{margin:0;display:flex;flex-direction:column;gap:10px}
+.preview-desk{display:flex;align-items:flex-end;justify-content:center;gap:14px;padding:18px 14px 12px;border-radius:var(--radius-lg);background:var(--well);border:1px solid var(--border)}
+.preview-screen{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
+.preview-glass{position:relative;width:100%;aspect-ratio:16/9;border-radius:6px;overflow:hidden;border:3px solid color-mix(in srgb,var(--foreground) 22%,var(--background));background:linear-gradient(160deg,color-mix(in srgb,var(--info) 30%,var(--muted)),color-mix(in srgb,var(--sidebar-primary) 22%,var(--muted)))}
+.preview-screen:not(.here) .preview-glass{opacity:.6}
+.preview-caption{font-size:10px;color:var(--muted-foreground);white-space:nowrap}
+.preview-caption strong{color:var(--foreground);font-weight:500}
+.preview-notch{position:absolute;top:0;height:calc(18px*var(--k));min-width:calc(78px*var(--k));padding:0 calc(8px*var(--k));display:flex;align-items:center;gap:calc(4px*var(--k));border-radius:0 0 calc(10px*var(--k)) calc(10px*var(--k));background:#000;transform:translateX(-50%);transition:left .3s,height .2s,min-width .2s}
+:root[data-theme=light] .preview-notch{background:#fff;box-shadow:0 1px 3px rgb(0 0 0/.25)}
+.preview-notch.pos-center{left:50%}.preview-notch.pos-left{left:25%}.preview-notch.pos-right{left:75%}
+.preview-notch.strip{height:3px;min-width:48px;padding:0;border-radius:0 0 3px 3px}
+.preview-notch i{width:calc(5px*var(--k));height:calc(5px*var(--k));border-radius:50%}
+.preview-notch .d-approval{background:var(--sidebar-primary)}.preview-notch .d-question{background:var(--warning)}.preview-notch .d-working{background:var(--info)}
+.preview-mascot{display:flex;margin-right:auto}
+.preview-bubble{position:absolute;top:calc(24px*var(--k,1));transform:translateX(-50%);padding:3px 7px;border-radius:6px;font-size:8px;line-height:11px;white-space:nowrap;background:var(--popover);color:var(--foreground);box-shadow:0 2px 6px rgb(0 0 0/.25);transition:left .3s}
+.preview-bubble.pos-center{left:50%}.preview-bubble.pos-left{left:25%}.preview-bubble.pos-right{left:75%}
+.preview-window{position:absolute;inset:0;background:var(--background);display:flex;flex-direction:column;gap:5px;padding:16px 10px}
+.preview-window i{height:5px;border-radius:3px;background:var(--muted)}
+.preview-window i:nth-child(2){width:70%}.preview-window i:nth-child(3){width:45%}
+.island-preview figcaption{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted-foreground)}
+.island-preview figcaption>span{flex:1}
+
+.key-recorder{display:inline-flex;align-items:center;gap:10px;height:32px;padding:0 6px 0 8px;border:1px solid var(--input)!important;border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground)}
+.key-recorder span{padding:0 6px;border-left:1px solid var(--border)}
+.key-recorder:hover{color:var(--foreground);border-color:var(--ring)!important}
+.key-recorder.recording{border-color:var(--sidebar-primary)!important;color:var(--foreground);box-shadow:0 0 0 3px color-mix(in srgb,var(--sidebar-primary) 18%,transparent)}
+.key-recorder:disabled{opacity:.5}
 
 /* Notifications */
 .time-range{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -186,7 +215,7 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
  .rule-entry{grid-template-columns:minmax(0,1fr) auto;row-gap:6px}.rule-arrow{display:none}
  .set-row:not(.stack){flex-wrap:wrap}.set-control{max-width:100%}
 }
-@media(max-width:600px){.event-grid thead th:not(:first-child){font-size:10px}.theme-picks{grid-template-columns:1fr 1fr}.accent-swatches{flex-wrap:wrap}}
+@media(max-width:600px){.event-grid thead th:not(:first-child){font-size:10px}.theme-picks{grid-template-columns:1fr 1fr}.accent-swatches{flex-wrap:wrap}.preview-desk{flex-direction:column;align-items:center}}
 
 /* Settings › Projects: Ledge's proposals (lot 11) */
 .ledge-suggest{padding:14px 18px}
