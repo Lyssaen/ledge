@@ -53,11 +53,13 @@ describe('global shortcuts', () => {
     field.remove();
   });
 
-  it('N opens New session, ? the shortcuts, / the chat', async () => {
+  it('N opens New session, ? the shortcuts, / focuses Ask Ledge', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
     await user.keyboard('n'); expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible(); await user.keyboard('{Escape}');
     await user.keyboard('?'); expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible(); await user.keyboard('{Escape}');
-    await user.keyboard('/'); expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
+    await user.keyboard('/');
+    expect(screen.getByRole('textbox', { name: 'Ask Ledge' })).toHaveFocus();
+    expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
   });
 
   it('Alt 1…9 open the main agents in order; Alt → / ← walk them, wrapping', async () => {
@@ -89,7 +91,7 @@ describe('global shortcuts', () => {
     await user.click(side.getByRole('button', { name: /^Ledge/ }));       // filter
     await user.keyboard('{Alt>}1{/Alt}');                                 // session
     await user.keyboard('{Control>},{/Control}');                         // settings
-    await user.keyboard('/');                                             // chat
+    await user.click(screen.getByRole('button', { name: 'Chat Ledge' })); // chat (the title bar; / focuses Ask Ledge)
     await user.keyboard('{Control>}k{/Control}');                         // modal
     const chat = () => screen.queryByRole('complementary', { name: 'Chat Ledge' });
     expect(screen.getByRole('dialog')).toBeVisible();

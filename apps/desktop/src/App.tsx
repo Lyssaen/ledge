@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { projectOf, useDaemon, useIsland, useProjects, type DaemonClient } from '@ledge/fleet';
+import { daemonStore, projectOf, useDaemon, useIsland, useProjects, type DaemonClient } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -49,6 +49,7 @@ import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
 import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
 import { ProjectDialog } from './projects/ProjectDialog';
+import { useDefaultTool } from './settings/tool';
 
 const NO_PROJECTS: readonly Project[] = [];
 
@@ -108,6 +109,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The session menu, from the atelier's seats and the session page's header « … » (one at a time).
   const sessionMenu = useSessionMenu({ client: fleetClient, sessions, notify });
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
+  // The sidebar's Ask Ledge, the same send as the chat panel: nothing goes out while the local daemon is offline (the chat still opens).
+  const [tool] = useDefaultTool();
+  const askLedge = (text: string) => {
+    if (!fleetView.machines.find(m => m.id === 'local')?.ready) { dispatch({ type: 'chat', open: true }); return; }
+    const qid = `q-${crypto.randomUUID()}`;
+    daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
+    fleetClient.send({ type: 'chat.ask', qid, text, tool });
+  };
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
@@ -203,7 +212,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     <ScreenKeysContext.Provider value={screenKeys}>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
-        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
+        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
+          actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
+          onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={0} revealCurrent={0} />
         <section className="workspace">
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />

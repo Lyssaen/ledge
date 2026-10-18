@@ -31,8 +31,12 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
         e.preventDefault(); dispatch({ type: 'escape' }); return;
       }
       if (state.modal?.kind === 'search') return;
-      // The chat open, / from outside a field brings the focus back to it (in its field, / is typed).
-      if (state.chat && !state.modal && e.key === '/' && !mod && !e.altKey && !typing(document.activeElement)) { e.preventDefault(); dispatch({ type: 'chat', open: true }); return; }
+      // / focuses Ask Ledge when the sidebar is showing; full screen has no sidebar, so it opens the chat (already open: its field takes the focus again). In a field, / is typed.
+      if (!state.modal && e.key === '/' && !mod && !e.altKey && !typing(document.activeElement)) {
+        const ask = document.querySelector<HTMLInputElement>('[data-ask-input]');
+        if (ask && !state.fullscreen) { e.preventDefault(); ask.focus(); return; }
+        e.preventDefault(); dispatch({ type: 'chat', open: true }); return;
+      }
       if (state.modal || state.chat || typing(document.activeElement)) return;
 
       const { place } = state;
@@ -55,8 +59,7 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       }
       if (mod || e.altKey) return;
       if (screen.current?.(e)) { e.preventDefault(); return; }
-      if (e.key === '/') { e.preventDefault(); dispatch({ type: 'chat', open: true }); }
-      else if (e.key === '?') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'shortcuts' } }); }
+      if (e.key === '?') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'shortcuts' } }); }
       else if (key === 'n' && !e.shiftKey && place.kind === 'overview') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'launch' } }); }
     };
     window.addEventListener('keydown', onKey);
