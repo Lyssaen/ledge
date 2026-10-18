@@ -334,3 +334,57 @@ Règles, tirées de la spec :
 
 - **Plan de Nova (sidebar).** Il consomme `FleetView.archived`, `SessionActions`, `SessionMenu` et `canManage`. Il porte la section Archives, « +N terminées » avec « Archiver », la recherche dans les archives, et la suppression de la vue Liste. Le pied de sa section Archives montre un sélecteur de délai qui n'a pas de daemon derrière dans cette version : il faut le retirer, ou attendre un plan dédié.
 - **Mise en service.** Publier le daemon (npm), puis le redémarrer ; ce redémarrage tue les sessions tmux de Ledge. Enfin, construire Desktop sous Windows.
+
+## Partie C — barre de fenêtre (demande ajoutée le 2026-10-18)
+
+### Task 11: La barre de fenêtre « Commande »
+
+L'utilisateur a choisi la proposition C « Commande » de la maquette `docs/mockups/ledge-titlebar.html` (onglet « C · Commande » ; les onglets A, B et D ne sont pas retenus). Ledge Desktop remplace la barre de Windows par une barre maison.
+
+**Files:**
+- Modify: `apps/desktop/src-tauri/tauri.conf.json` (`"decorations": false`)
+- Modify: `apps/desktop/src-tauri/capabilities/default.json` (ajouter `core:window:allow-minimize`, `core:window:allow-toggle-maximize`, `core:window:allow-close`, `core:window:allow-start-dragging`, `core:window:allow-is-maximized`)
+- Create: `apps/desktop/src/shell/TitleBar.tsx` (+ son style dans `apps/desktop/src/styles/shell.css`)
+- Modify: `apps/desktop/src/tauri/bridge.ts` (minimiser, agrandir/restaurer, fermer, état agrandi ; sans effet hors Tauri, comme `focusTerminal`)
+- Modify: `apps/desktop/src/App.tsx` (monter la barre au-dessus de `.application`)
+- Modify: `apps/desktop/src/shell/Sidebar.tsx` (retirer `.side-brand` et `.side-search`)
+- Modify: `apps/desktop/src/shell/TopBar.tsx` (retirer la recherche et le chat)
+- Modify: `apps/desktop/src/i18n/fr.ts`, `en.ts`
+- Test: `apps/desktop/test/titlebar.test.tsx`
+
+**Ce que la barre doit faire :**
+- **Dimensions :** 44 px de haut, sur toute la largeur, au-dessus de la barre latérale et de l'espace de travail.
+- **Style :** fond `var(--sidebar)`, bordure basse `var(--sidebar-border)`.
+- **À gauche :** le mot « Ledge. », dont le point est en `var(--sidebar-primary)`, en 13 px et graisse 650. La ligne de logo `.side-brand` (56 px) disparaît de la barre latérale.
+- **Au centre :** un champ de recherche qui ouvre la `SearchPalette` existante, placée sous la barre.
+  - Taille : 440 px de large au plus, 28 px de haut.
+  - Style : bordure `var(--input)`, fond `var(--background)`.
+  - Contenu : le texte « Aller à une session, un projet, un réglage… » et la touche Ctrl K.
+  - Le champ `.side-search` de la barre latérale est retiré.
+- **À droite, dans cet ordre :**
+  - une pastille avec le nombre de sessions qui attendent, en couleur `sidebar-primary`, qui ouvre la première d'entre elles ;
+  - « Ne pas déranger », une cloche qui partage l'état de la zone de notification et de `useDnd` ;
+  - le chat ;
+  - les boutons Windows.
+- **Boutons Windows :**
+  - 46 × 32, glyphes fins de 10 px, survol gris ;
+  - Fermer devient rouge `#c42b1c` au survol, texte blanc ;
+  - l'icône « restaurer » remplace « agrandir » quand la fenêtre est agrandie.
+- **En-tête :** la recherche et le chat sortent de `TopBar`. L'en-tête garde le fil d'Ariane, les contrôles de vue, les raccourcis et le plein écran.
+- **Déplacement :** toute la barre, sauf ses contrôles, porte `data-tauri-drag-region`. Un double-clic agrandit ou restaure.
+- **Plein écran (F11) :** la barre est cachée.
+
+**Reste à vérifier sous Windows (non testable ici) :** l'ombre et les bords redimensionnables avec `decorations:false`, et les permissions. Le survol d'Agrandir n'ouvre plus les dispositions Snap de Windows 11 ; c'est accepté.
+
+- [ ] **Step 1: Write the failing tests** in `titlebar.test.tsx` (avec `boot`) :
+  - `it('shows the word mark, the search field and the window buttons; the sidebar has neither brand nor search')` ;
+  - `it('the search field opens the search palette, as Ctrl K does')` ;
+  - `it('the waiting pill counts the sessions that wait and opens the first one')` : avec 2 sessions en `waiting_permission`, la pastille affiche `2`, et un clic ouvre la plus ancienne ;
+  - `it('the bell toggles Ne pas déranger, shared with useDnd')` ;
+  - `it('the window buttons call the bridge; the maximise icon becomes restore when maximised')` : simulez le bridge ;
+  - `it('the top bar no longer has search nor chat buttons')` ;
+  - `it('the title bar is hidden in full screen')`.
+- [ ] **Step 2: Run** `pnpm --filter desktop exec vitest run test/titlebar.test.tsx`. Expected: FAIL.
+- [ ] **Step 3: Implement.** Les tests et e2e existants qui cherchaient la recherche ou le chat dans l'en-tête ou la barre latérale suivent le déplacement.
+- [ ] **Step 4: Run** `pnpm --filter desktop test`, `pnpm --filter desktop e2e` et `pnpm --filter desktop typecheck`. Expected: PASS.
+- [ ] **Step 5: Commit** `feat(desktop): the « Commande » title bar replaces Windows' own`
