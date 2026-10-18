@@ -36,7 +36,7 @@ import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { SessionList, EXPANDED_ROW_H, ASK_H, NOTICE_GAP, type ListNotice } from './SessionList';
 import { SessionView, measureSessionH, SESSION_HEADER_H, READING_TERMINAL_H } from './SessionView';
 import { useI18n } from '../i18n/lang';
-import type { PipTone } from '../update/machine';
+import type { PipTone } from './Handle';
 import { transition, MOTION, ms, enterDelay } from '../motion';
 import { focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, focusOverlay, releaseFocus, isTauri, onForegroundCovered, setHotZone, quitApp } from '../tauri/bridge';
 import { Icon, ICONS } from '../ui/icons';
@@ -90,8 +90,6 @@ export interface SurfaceProps {
   /** The Screen setting: the monitors to choose from, the choice (null: the primary) and how to change it (live).
    *  `onSettingsOpen` fires when the Settings view opens, so the monitors can be listed again. */
   monitors?: MonitorInfo[]; monitor?: string | null; onMonitor?: (id: string | null) => void; onSettingsOpen?: () => void;
-  /** Launch at login (null or absent: not offered) and how to change it. */
-  autostart?: boolean | null; onAutostart?: (on: boolean) => void;
   /** The brand colour (null: factory coral) and how to change it (live). */
   accent?: string | null; onAccent?: (hex: string | null) => void;
   /** Plays the sound cues (one Web Audio player per app); a silent player when absent. */
@@ -106,7 +104,7 @@ export interface SurfaceProps {
 /** A text field or editable content: focus there means someone is filling it in. Radios, buttons and rows are not. */
 const isEditable = (el: Element | null) => !!el && ((el.tagName === 'INPUT' && !['radio', 'checkbox', 'button', 'submit'].includes((el as HTMLInputElement).type)) || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable);
 
-export function Surface({ screenH, screenW = window.innerWidth, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, accent = null, onAccent, soundPlayer, islandPosition = 'center', onIslandPosition, discreet = true, onDiscreet, desktopUpdate = null, visible = true, shows = DEFAULT_ISLAND_PREFS.shows, shortcut }: SurfaceProps) {
+export function Surface({ screenH, screenW = window.innerWidth, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, monitors, monitor = null, onMonitor, onSettingsOpen, accent = null, onAccent, soundPlayer, islandPosition = 'center', onIslandPosition, discreet = true, onDiscreet, desktopUpdate = null, visible = true, shows = DEFAULT_ISLAND_PREFS.shows, shortcut }: SurfaceProps) {
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
@@ -772,7 +770,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
           <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <SettingsView contentRef={settingsRef} visible={st.mode === 'settings'} enterDelay={enter} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} finished={prefs.finished} onFinished={prefs.setFinished} sounds={prefs.sounds} onSounds={prefs.setSounds} onTestSound={sounds.test} scales={scales} autoScales={autoScales} onScale={onScale}
               machines={client.fleet ? machines : undefined} onMachines={client.fleet?.configure} onProbe={client.fleet?.probe} onRetry={client.fleet?.retry}
-              monitors={monitors} monitor={monitor} onMonitor={onMonitor} autostart={autostart} onAutostart={onAutostart}
+              monitors={monitors} monitor={monitor} onMonitor={onMonitor}
               defaultTool={defaultTool} onDefaultTool={chooseDefaultTool} accent={accent} onAccent={onAccent}
               islandPosition={islandPosition} onIslandPosition={onIslandPosition} discreet={discreet} onDiscreet={onDiscreet}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />

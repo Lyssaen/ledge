@@ -11,7 +11,7 @@ import { CATEGORIES, FINISHED_VALUES, VOLUMES, type FinishedNotify, type SoundPr
 import { resolveMonitor, type MonitorInfo } from '../monitor';
 import { TOOLS } from '../defaultTool';
 import { toolName, duration } from '../format';
-import { compareVersions } from '../update/semver';
+import { compareVersions } from '@ledge/ui/semver';
 import type { DaemonInfo, Tool } from '@ledge/protocol';
 import { MachineSettings } from './MachineSettings';
 import type { MachineConfig, MachineState, ProbeResult } from '../daemon/machines';
@@ -33,8 +33,6 @@ export interface SettingsViewProps {
   /** The Screen setting: the monitors to choose from (none: the group is not shown), the choice (null: the primary)
    *  and how to change it (live). */
   monitors?: MonitorInfo[]; monitor?: string | null; onMonitor?: (id: string | null) => void;
-  /** Launch at Windows login (null or absent: not offered, the switch is not shown) and how to change it. */
-  autostart?: boolean | null; onAutostart?: (on: boolean) => void;
   /** The default harness (new sessions and the Ledge chat). */
   defaultTool?: Tool; onDefaultTool?: (tool: Tool) => void;
   /** The brand colour (null: factory coral) and how to change it (live). */
@@ -155,7 +153,6 @@ export function SettingsView(p: SettingsViewProps) {
           <Tabs<SettingsTab> id="ledge-settings" label={t.settings.tabs} value={tab} onChange={chooseTab} tabs={tabs.map(v => ({ value: v, label: tabLabel[v] }))} />
           <div role="tabpanel" id={panelId} aria-labelledby={tabId} style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
             {tab === 'display' && <>
-              {p.autostart != null && p.onAutostart && <Row><Switch label={t.settings.autostart} hint={t.settings.autostartHint} checked={p.autostart} onChange={p.onAutostart} /></Row>}
               <Row><Segmented<Tool> name="ledge-default-tool" label={t.settings.defaultTool} hint={t.settings.defaultToolHint} value={p.defaultTool ?? 'claude'} onChange={p.onDefaultTool} options={TOOLS.map(v => ({ value: v, label: toolName(v) }))} /></Row>
               {monitors.length > 0 && (
                 <Row><Segmented name="ledge-monitor" label={t.settings.screen} hint={chosen ? t.settings.screenHint(chosen.width, chosen.height) : t.settings.screenHintNone} value={chosenValue}

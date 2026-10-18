@@ -1,6 +1,6 @@
 /**
  * Everything the web app asks of the native shell goes through here. In a plain browser (dev, tests) every call is a
- * no-op or a DOM fallback; under Tauri it talks to the commands and events in `src-tauri/src/main.rs`:
+ * no-op or a DOM fallback; under Tauri it talks to the commands and events of Ledge Desktop's notch window (`apps/desktop/src-tauri/src/notch.rs`):
  *   set_frame { left, top, width, height }   the rectangle the page draws, from the work area's corner: the window itself
  *                                      covers the whole work area and only its region follows the frame (clicks pass outside it)
  *   set_hot_zone { left, width }       the island's x range (logical px): the cursor poller watches the top band around it

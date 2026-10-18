@@ -7,9 +7,11 @@ import { BADGE } from '../ui/Badge';
 import { transition } from '../motion';
 import { FILET, ISLAND, SIZES, islandOrder, machineGroups, pipeBefore, type Slot } from './geometry';
 import { useI18n } from '../i18n/lang';
-import type { PipTone } from '../update/machine';
 
 export interface HandleBot { id: string; name: string; tool: Tool; state: BotState; pose: 1 | 2 | 3; pending: boolean; lifted?: boolean; held?: boolean; readOnly?: boolean; /** The session's machine (absent: this one). */ machine?: string }
+
+/** The update dot's tone (null: none). The notch only ever shows `new`, when Ledge Desktop has an update waiting. */
+export type PipTone = 'new' | 'busy' | 'bad' | 'ok' | null;
 
 export interface HandleProps {
   bots: HandleBot[]; slots: Slot[]; visible: boolean; hoverId: string | null; onHover: (id: string | null) => void; onOpen: (id: string) => void; onOpenHome?: () => void;

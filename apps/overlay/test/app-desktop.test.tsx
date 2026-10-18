@@ -3,9 +3,6 @@ import { render, act } from '@testing-library/react';
 import { App } from '../src/App';
 import { setFallbackLang } from '../src/i18n/lang';
 
-const updates = vi.hoisted(() => ({ check: vi.fn(async () => null) }));
-vi.mock('../src/update/bridge', async orig => ({ ...(await orig<typeof import('../src/update/bridge')>()), checkForUpdate: updates.check }));
-
 class SilentSocket {
   onopen: (() => void) | null = null; onclose: (() => void) | null = null; onerror: (() => void) | null = null; onmessage: (() => void) | null = null;
   readyState = 0;
@@ -21,7 +18,7 @@ const quiet = () => (document.querySelector('[data-ledge-mark]') as HTMLElement)
 const pip = () => document.querySelector('[data-update-pip]');
 
 describe('App follows what Desktop decides', () => {
-  beforeEach(() => { vi.stubGlobal('WebSocket', SilentSocket); localStorage.clear(); updates.check.mockClear(); });
+  beforeEach(() => { vi.stubGlobal('WebSocket', SilentSocket); localStorage.clear(); });
   afterEach(() => { vi.unstubAllGlobals(); setFallbackLang('en'); });
 
   it('takes Desktop’s do-not-disturb, at start and live', () => {
@@ -52,11 +49,5 @@ describe('App follows what Desktop decides', () => {
     expect(pip()?.closest('button') ?? pip()).toHaveAccessibleName('Ledge 0.7.1 is ready');
     desktopSets('desktop.update.available', null);
     expect(pip()).toBeNull();
-  });
-
-  it('never checks for updates itself', async () => {
-    render(<App />);
-    await act(async () => { await new Promise(r => setTimeout(r, 30)); });
-    expect(updates.check).not.toHaveBeenCalled();
   });
 });

@@ -73,7 +73,6 @@ export function App() {
     migrated.current = true;
     try { client.fleet.setIsland(localIslandPrefs()); } catch { migrated.current = false; }
   }, [island, client]);
-  // Launch at login is Desktop's switch: `autostart={null}` hides it here.
   const onSettingsOpen = refreshMonitors;
   // The shell moves the overlay to the chosen monitor; the surface then lays itself out in that monitor's work area.
   useEffect(() => { saveMonitor(monitor); let live = true; setMonitor(monitor).then(() => Promise.all([screenHeight(monitor), screenWidth(monitor)])).then(([h, w]) => { if (live) { setWorkH(h); setWorkW(w); } }).catch(() => {}); return () => { live = false; }; }, [monitor]);
@@ -91,7 +90,6 @@ export function App() {
       <Surface desktopUpdate={desktopUpdate} screenH={workH} screenW={workW} handleScale={handleScale} panelScale={panelScale} scales={scales} autoScales={{ handle: autoScale(workH, 'handle'), panel: autoScale(workH, 'panel') }}
         onScale={(target, s) => setScales(x => ({ ...x, [target]: s }))}
         monitors={monitors} monitor={monitor} onMonitor={setMonitorChoice} onSettingsOpen={onSettingsOpen}
-        autostart={null}
         theme={theme} client={client} dnd={dnd} soundPlayer={player} onToggleDnd={() => setDnd(d => !d)} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
         accent={accent} onAccent={setAccent} islandPosition={islandPosition} onIslandPosition={setIslandPosition} discreet={discreet} onDiscreet={setDiscreet}
         visible={applied.visible} shows={applied.shows} shortcut={applied.shortcut} />

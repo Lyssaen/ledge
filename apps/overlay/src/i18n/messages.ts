@@ -17,9 +17,6 @@ const fr = {
     before: 'Avant d’ajouter un serveur', steps: [['L’alias fonctionne depuis WSL, sans mot de passe : ', 'ssh mon-serveur'], ['La clé du serveur est déjà approuvée (première connexion faite à la main).'], ['Node 22+ et tmux sont installés sur le serveur.'], ['Ledge est installé et démarré sur le serveur : ', 'npm i -g @paradow/ledge && ledge setup']] as ReadonlyArray<readonly [string, string?]>,
     probe: 'Tester la connexion', probing: 'Connexion à', probeOk: (v: string | undefined, n: number) => `${v ? `Ledge ${v}` : 'Ledge'} répond · ${n} session${n > 1 ? 's' : ''}`, savedAnyway: 'Le test est facultatif : une machine injoignable peut être enregistrée.',
     problem: { alias: 'Alias introuvable. Ajoutez un bloc Host pour cet alias dans ~/.ssh/config de WSL.', key: 'La clé SSH est refusée. Vérifiez IdentityFile pour cet alias dans ~/.ssh/config de WSL.', hostKey: 'La clé du serveur n’est pas encore approuvée. Connectez-vous une fois depuis WSL avec ssh et cet alias.', unreachable: 'Le serveur ne répond pas. Il est peut-être éteint, ou hors du réseau.', ledge: 'Ledge est absent ou trop ancien sur ce serveur. Installez-le, puis lancez « ledge setup ».', stopped: 'Le service Ledge ne tourne pas sur le serveur. Lancez « ledge setup » sur le serveur.', local: 'Mettez à jour Ledge sur cette machine pour rejoindre un serveur.', other: 'La connexion a échoué.' } as Record<SshProblem, string>, clarification: 'Vous pouvez aussi répondre dans le chat.', destination: 'Destination', choose: (name: string) => `Sur ${name}.`, configure: 'Configurer les machines' },
-  lang: { label: 'Langue', hint: 'La langue de Ledge.', fr: 'Français', en: 'English' },
-  /** The Windows tray icon's menu (its first line, the product and version, is not translated). */
-  tray: { open: 'Ouvrir Ledge', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', quit: 'Quitter Ledge' },
   time: { seconds: (n: number) => `${n} s`, minutes: (n: number) => `${n} min`, hours: (n: number) => `${n} h`, locale: 'fr-FR' },
   state: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   /** The bot's accessible state, read after the tool name. */
@@ -159,7 +156,6 @@ const fr = {
     launch: 'Ouverture d’une nouvelle session dans Ledge Desktop',
     update: 'Ouverture des mises à jour dans Ledge Desktop',
     machines: 'Ouverture des machines dans Ledge Desktop',
-    missing: 'Ledge Desktop n’est pas installé : installez-le pour ouvrir ceci.',
     failed: 'Ledge Desktop n’a pas pu démarrer.'
   },
   menu: {
@@ -175,7 +171,6 @@ const fr = {
     discreet: 'Mode discret sous une fenêtre', discreetHint: 'Un simple trait quand une fenêtre maximisée occupe l’écran ; un survol la redéploie.',
     screenPrimary: 'Principal', screenNth: (n: number) => `Écran ${n}`, screenMissing: 'Débranché',
     defaultTool: 'Harnais par défaut', defaultToolHint: 'Les nouvelles sessions et le chat Ledge. À changer si un quota est saturé.',
-    autostart: 'Lancer au démarrage', autostartHint: 'Ledge s’ouvre avec votre session Windows.',
     dnd: 'Ne pas déranger', dndHint: 'Les demandes restent dans l’encoche.',
     reduced: 'Mouvements réduits', reducedHint: 'Les états restent lisibles sans animation.',
     versions: 'Versions', versionsHint: 'Les deux moitiés de Ledge doivent avoir la même version.',
@@ -238,27 +233,6 @@ const fr = {
     note: 'Affiché aux trois premières ouvertures au clavier'
   },
   update: {
-    available: (v: string) => `Ledge ${v} est disponible`, current: (v: string) => `Vous avez la ${v}`, badgeNew: 'Nouveau',
-    update: 'Mettre à jour', later: 'Plus tard', notes: 'Notes complètes', retry: 'Réessayer', ok: 'OK', copy: 'Copier', copied: 'Copié', log: 'Journal du daemon',
-    keepRunning: (n: number) => n === 0 ? 'Ledge se ferme environ 20 s pour se mettre à jour.' : `Vos ${n} session${n > 1 ? 's' : ''} continue${n > 1 ? 'nt' : ''}. Ledge se ferme environ 20 s pour se mettre à jour.`,
-    running: (v: string) => `Mise à jour vers ${v}`, dontClose: 'Ne fermez pas Ledge', badgeRunning: 'En cours',
-    steps: { daemon: 'Daemon WSL mis à jour', restart: 'Daemon redémarré, sessions retrouvées', download: 'Téléchargement de l’application', install: 'Installation et redémarrage' },
-    remoteStep: (name: string) => `${name} mis à jour, sessions retrouvées`, servers: (list: string) => `Serveurs en retard : ${list}`, on: (name: string) => `Sur ${name}`,
-    updated: (v: string) => `Ledge ${v} est installé`, badgeUpdated: 'À jour',
-    manualTitle: 'Votre daemon tourne depuis un clone git', manualHint: 'Ledge ne touche pas à un clone. Mettez le daemon à jour dans WSL :', manualApp: 'Mettre à jour l’application', manualWait: (v: string) => `Le bouton s’active dès que le daemon annonce ${v}.`, badgeManual: 'Manuel',
-    failedBadge: 'Échec',
-    failed: {
-      'git-install': 'Votre daemon tourne depuis un clone git : mettez-le à jour vous-même.',
-      'no-systemd': 'Le daemon ne tourne pas comme service : il ne peut pas se relancer seul.',
-      'sessions-at-risk': 'Vos sessions tournent dans le service du daemon : un redémarrage les fermerait. Fermez-les, ou redémarrez WSL, puis réessayez.',
-      'npm-failed': 'Le daemon n’a pas pu se mettre à jour. Rien n’a changé.',
-      'busy': 'Une mise à jour est déjà en cours.',
-      'daemon-timeout': 'Le daemon ne répond plus.',
-      'sessions-lost': 'Toutes vos sessions ne sont pas revenues. L’application n’a pas été mise à jour.',
-      'download': 'L’application n’a pas pu être téléchargée. Elle n’a pas changé.'
-    },
-    timeoutCommand: 'systemctl --user status ledge-daemon',
-    missing: (names: string[]) => `Manquantes : ${names.join(', ')}`,
     pip: { new: (v: string) => `Ledge ${v} est prêt`, busy: 'Mise à jour en cours…', bad: 'La mise à jour a échoué', ok: 'Ledge est à jour' }
   },
   thread: {
@@ -283,8 +257,6 @@ const en: Messages = {
     before: 'Before adding a server', steps: [['The alias works from WSL, without a password: ', 'ssh my-server'], ['The server’s host key is already approved (first connection made by hand).'], ['Node 22+ and tmux are installed on the server.'], ['Ledge is installed and running on the server: ', 'npm i -g @paradow/ledge && ledge setup']],
     probe: 'Test the connection', probing: 'Connecting to', probeOk: (v: string | undefined, n: number) => `${v ? `Ledge ${v}` : 'Ledge'} answers · ${n} session${n > 1 ? 's' : ''}`, savedAnyway: 'The test is optional: an unreachable machine can be saved.',
     problem: { alias: 'Alias not found. Add a Host block for this alias to ~/.ssh/config in WSL.', key: 'The SSH key is refused. Check IdentityFile for this alias in ~/.ssh/config in WSL.', hostKey: 'The server’s host key is not approved yet. Connect once from WSL with ssh and this alias.', unreachable: 'The server does not answer. It may be off, or out of the network.', ledge: 'Ledge is missing or too old on this server. Install it, then run “ledge setup”.', stopped: 'The Ledge service is not running on the server. Run “ledge setup” on the server.', local: 'Update Ledge on this machine to reach a server.', other: 'The connection failed.' }, clarification: 'You can also answer in the chat.', destination: 'Destination', choose: (name: string) => `On ${name}.`, configure: 'Configure machines' },
-  lang: { label: 'Language', hint: 'The language of Ledge.', fr: 'Français', en: 'English' },
-  tray: { open: 'Open Ledge', newSession: 'New session', dnd: 'Do not disturb', quit: 'Quit Ledge' },
   time: { seconds: (n: number) => `${n}s`, minutes: (n: number) => `${n}m`, hours: (n: number) => `${n}h`, locale: 'en-US' },
   state: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },
@@ -421,7 +393,6 @@ const en: Messages = {
     launch: 'Opening a new session in Ledge Desktop',
     update: 'Opening updates in Ledge Desktop',
     machines: 'Opening machines in Ledge Desktop',
-    missing: 'Ledge Desktop is not installed: install it to open this.',
     failed: 'Ledge Desktop could not start.'
   },
   menu: {
@@ -437,7 +408,6 @@ const en: Messages = {
     discreet: 'Discreet under a window', discreetHint: 'A thin strip while a maximised window fills the screen; hovering brings the notch back.',
     screenPrimary: 'Primary', screenNth: (n: number) => `Screen ${n}`, screenMissing: 'Unplugged',
     defaultTool: 'Default harness', defaultToolHint: 'New sessions and the Ledge chat. Change it when a quota runs out.',
-    autostart: 'Launch at startup', autostartHint: 'Ledge opens when you sign in to Windows.',
     dnd: 'Do not disturb', dndHint: 'New asks stay in the notch.',
     reduced: 'Reduced motion', reducedHint: 'States stay readable without animation.',
     versions: 'Versions', versionsHint: 'Both halves of Ledge must run the same version.',
@@ -500,27 +470,6 @@ const en: Messages = {
     note: 'Shown on the first three keyboard opens'
   },
   update: {
-    available: (v: string) => `Ledge ${v} is available`, current: (v: string) => `You have ${v}`, badgeNew: 'New',
-    update: 'Update', later: 'Later', notes: 'Full notes', retry: 'Retry', ok: 'OK', copy: 'Copy', copied: 'Copied', log: 'Daemon log',
-    keepRunning: (n: number) => n === 0 ? 'Ledge closes for about 20 s to update.' : `Your ${n} session${n > 1 ? 's' : ''} keep${n > 1 ? '' : 's'} running. Ledge closes for about 20 s to update.`,
-    running: (v: string) => `Updating to ${v}`, dontClose: 'Do not close Ledge', badgeRunning: 'Running',
-    steps: { daemon: 'WSL daemon updated', restart: 'Daemon restarted, sessions found again', download: 'Downloading the app', install: 'Installing and restarting' },
-    remoteStep: (name: string) => `${name} updated, sessions found again`, servers: (list: string) => `Servers behind: ${list}`, on: (name: string) => `On ${name}`,
-    updated: (v: string) => `Ledge ${v} is installed`, badgeUpdated: 'Up to date',
-    manualTitle: 'Your daemon runs from a git clone', manualHint: 'Ledge does not touch a clone. Update the daemon in WSL:', manualApp: 'Update the app', manualWait: (v: string) => `The button turns on once the daemon reports ${v}.`, badgeManual: 'Manual',
-    failedBadge: 'Failed',
-    failed: {
-      'git-install': 'Your daemon runs from a git clone: update it yourself.',
-      'no-systemd': 'The daemon does not run as a service: it cannot restart itself.',
-      'sessions-at-risk': 'Your sessions run inside the daemon service: a restart would close them. Close them, or restart WSL, then retry.',
-      'npm-failed': 'The daemon could not update. Nothing changed.',
-      'busy': 'An update is already running.',
-      'daemon-timeout': 'The daemon is not answering.',
-      'sessions-lost': 'Not all your sessions came back. The app was not updated.',
-      'download': 'The app could not be downloaded. It did not change.'
-    },
-    timeoutCommand: 'systemctl --user status ledge-daemon',
-    missing: (names: string[]) => `Missing: ${names.join(', ')}`,
     pip: { new: (v: string) => `Ledge ${v} is ready`, busy: 'Update in progress…', bad: 'The update failed', ok: 'Ledge is up to date' }
   },
   thread: {
