@@ -117,8 +117,10 @@ describe('the Atelier shell', () => {
     const { d, side } = await boot({ projects: TWO_PROJECTS });
     d.upsert(fakeSession('rio', { name: 'Rio', cwd: '/w/pay', state: 'error' }));
     await waitFor(() => expect(side.getByRole('button', { name: /Payment Service Platform/ }).querySelectorAll('.side-dots i.dot-error')).toHaveLength(1));
-    // Red as the error badge, without the halo that marks an approval.
-    expect(declarations('sidebar.css', '.side-dots .dot-error')).toBe('background:var(--danger-text)');
+  });
+
+  it('an error session’s time is danger-text, without the approval halo', () => {
+    expect(declarations('sidebar.css', '.st-time.t-error')).toBe('color:var(--danger-text)');
   });
 
   it('the toast sits above a dialog and the narrow chat', () => {

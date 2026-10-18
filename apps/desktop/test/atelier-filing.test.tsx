@@ -152,8 +152,8 @@ describe('the filing styles', () => {
     expect(declarations('atelier.css', '.unassigned-card.is-dragged')).toBe('opacity:.4;border-style:dashed');
     expect(declarations('atelier.css', '.office-shell .drop-over .office-rug')).toContain('outline:2pxsolidvar(--sidebar-primary)');
     expect(declarations('atelier.css', '.just-seated')).toContain('animation:seat-pop');
-    expect(declarations('sidebar.css', '.side-project.drop-over')).toContain('outline:1.5pxsolidvar(--sidebar-primary)');
-    expect(declarations('sidebar.css', '.is-dragging .side-project:not(.drop-over)')).toBe('outline:1pxdashedvar(--input);outline-offset:-1px');
+    expect(declarations('sidebar.css', '.st-project.drop-over')).toContain('outline:1.5pxsolidvar(--sidebar-primary)');
+    expect(declarations('sidebar.css', '.is-dragging .st-project:not(.drop-over)')).toBe('outline:1pxdashedvar(--input);outline-offset:-1px');
     expect(declarations('shell.css', '.toast')).toContain('position:fixed');
   });
   it('a long name in the drop hint is cut inside the label; a long task wraps on its sheet; a long menu scrolls', () => {
