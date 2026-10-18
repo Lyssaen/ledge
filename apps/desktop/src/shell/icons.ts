@@ -22,6 +22,9 @@ export const SHELL_ICONS = {
   archive: ['M3 4h18v4H3z', 'M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8', 'M10 12h4'],
   trash: ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12', 'M9 7V4h6v3'],
   stop: ['M6 6h12v12H6z'],
+  // The « … » of a seat and of the session page's header (observatory.tsx's dotsIcon, drawn as fills).
+  dots: ['M5 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M12 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M19 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z'],
+  restore: ['M9 14 4 9l5-5', 'M4 9h11a5 5 0 0 1 0 10h-3'],
   resume: ['M4 12a8 8 0 1 0 2.3-5.6', 'M4 4v4h4', 'M10 9l5 3-5 3z'],
   // session.tsx: the thread's action kinds, the fold's chevron, « Aller au dernier message », the frozen thread.
   file: ['M14 3H6v18h12V8z', 'M14 3v5h4', 'M9 13h6', 'M9 17h6'],

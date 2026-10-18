@@ -394,3 +394,10 @@
 
 /* Not in the mockup (its thread is always there): the loading and empty-thread notes sit in the reading column. */
 .session-thread>.thread-note{max-width:var(--col);margin-inline:auto}
+
+/* An archived session: the banner over the page, the pill in the header (the mockup's manage.css). */
+.archived-banner{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--secondary) 70%,transparent);font-size:12px}
+.archived-banner>svg{color:var(--muted-foreground)}
+.archived-banner .ledge-btn{height:28px!important;font-size:12px!important;padding:0 10px!important;white-space:nowrap}
+.archived-banner .danger-outline{color:var(--danger-text)!important}
+.archived-pill{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--muted-foreground)}

@@ -41,7 +41,6 @@ export interface ProjectTableProps {
 }
 
 /** The mockup's « … » glyph (observatory.tsx, room-heading). */
-const DOTS = ['M5 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M12 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M19 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z'];
 const PENCIL = ['M4 20h4L19 9l-4-4L4 16z', 'M13.5 6.5l4 4'];
 
 type SheetMark = ReturnType<typeof sheetState>;
@@ -105,7 +104,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
       <Menu open={menu} onOpenChange={setMenu} label={t.atelier.actions(name)} className="room-menu-wrap" menuClassName="assign-menu room-menu"
         trigger={tr => (
           <button className="icon-action" aria-label={t.atelier.actions(name)} title={t.atelier.actionsTitle} {...tr}>
-            <Icon d={[]} fill={DOTS} size={14} />
+            <Icon d={[]} fill={SHELL_ICONS.dots} size={14} />
           </button>
         )}>
         <MenuItem onSelect={() => choose({ type: 'modal', modal: { kind: 'project', edit: id } })}>
@@ -164,7 +163,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
             </button>
             <button type="button" className={cls('seat-more', `place-${side}`)} style={{ left: at(x + 56 - 30) }} aria-label={t.manage.menu.label(s.name)} title={t.manage.menu.more}
               aria-haspopup="menu" aria-expanded={menuId === s.id} onClick={e => onMenu(s, e)}>
-              <Icon d={[]} fill={DOTS} size={13} />
+              <Icon d={[]} fill={SHELL_ICONS.dots} size={13} />
             </button>
             </Fragment>
           );

@@ -354,9 +354,14 @@ export const en: Messages = {
       kids: (n, name) => `${n} ${pluralEn(n, 'subagent leaves', 'subagents leave')} with ${name}.`,
       offline: (machine) => `${machine} is unreachable.`,
       cannotEnd: (machine) => `${machine} is unreachable: Ledge cannot stop it.`,
-      archiveFinished: 'Archive finished'
+      deleteKey: 'Del', archiveFinished: 'Archive finished'
     },
     rename: { title: (name) => `Rename ${name}`, label: 'Session name', save: 'Rename', cancel: 'Cancel' },
+    archivedBanner: {
+      pill: 'Archived', title: 'Archived session',
+      body: (ago) => `${ago} · the agent is stopped, the conversation is read-only.`,
+      restore: 'Put back at the table', delete: 'Delete…', resume: 'Resume'
+    },
     outdated: (machine) => `Update Ledge on ${machine}`,
     undo: 'Undo',
     archived: (name, kids) => `${name} is archived${kids > 0 ? ` with ${kids} ${pluralEn(kids, 'subagent', 'subagents')}` : ''}.`,

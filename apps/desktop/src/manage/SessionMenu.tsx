@@ -10,6 +10,7 @@ import { Menu, MenuItem } from '../shell/Menu';
 import { Modal } from '../shell/Modal';
 import { SHELL_ICONS } from '../shell/icons';
 import type { SessionActions } from './useSessionActions';
+import type { SessionMenuState } from './useSessionMenu';
 
 /** A session still runs when its machine answers and it has not exited. */
 export const isLiveSession = (s: Session): boolean => !s.offline && s.state !== 'exited';
@@ -51,7 +52,7 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
       <div className="session-menu-head"><strong>{s.name}</strong><small>{s.topic ?? s.title}</small></div>
       {item(m.open, ICONS.external.d, () => onOpen(s), { hint: '↵' })}
       {item(m.terminal, SHELL_ICONS.terminal, () => onTerminal(s), { hint: 'T', key: 't', disabled: s.offline ? m.offline(machine) : undefined })}
-      {item(m.rename, SHELL_ICONS.pencil, () => onRename(s), { hint: 'F2', key: 'F2', disabled: exited || undefined })}
+      {item(m.rename, SHELL_ICONS.pencil, () => onRename(s), { hint: 'F2', key: 'F2', disabled: exited || s.offline || undefined })}
       <button type="button" role="menuitem" aria-label={t.filing.moveTo} aria-haspopup="menu" aria-expanded={filingOpen} onClick={() => setFilingOpen(o => !o)}>
         <span><Icon d={ICONS.folder.d} size={14} />{m.moveTo}</span><Icon d={ICONS.chevronRight.d} size={12} />
       </button>
@@ -67,7 +68,7 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
       {item(live ? m.endAndArchive : m.archive, SHELL_ICONS.archive, () => actions.request('archive', [s.id]), { hint: 'E', key: 'e', disabled: outdated })}
       {note}
       <hr />
-      {item(m.delete, SHELL_ICONS.trash, () => actions.request('delete', [s.id]), { hint: 'Del', key: 'Delete', danger: true, disabled: outdated })}
+      {item(m.delete, SHELL_ICONS.trash, () => actions.request('delete', [s.id]), { hint: m.deleteKey, key: 'Delete', danger: true, disabled: outdated })}
     </Menu>
   );
 }
@@ -90,4 +91,18 @@ export function RenameDialog({ session: s, onRename, onClose }: { session: Sessi
       </form>
     </Modal>
   );
+}
+
+/** The menu and the rename dialog of a `useSessionMenu`, once for the page that owns it. */
+export function SessionMenuHost({ state, actions, filing, projects, currentOf, onOpen }: {
+  state: SessionMenuState; actions: SessionActions; filing: Filing; projects: readonly Project[]; currentOf(s: Session): string | null; onOpen(s: Session): void;
+}): JSX.Element {
+  const { menu, session, renaming } = state;
+  return (<>
+    {menu && session && (
+      <SessionMenu session={session} at={menu.at} actions={actions} filing={filing} projects={projects} current={currentOf(session)}
+        onOpen={onOpen} onTerminal={state.terminal} onRename={state.rename} onClose={state.close} />
+    )}
+    {renaming && <RenameDialog session={renaming} onRename={state.sendRename} onClose={state.closeRename} />}
+  </>);
 }

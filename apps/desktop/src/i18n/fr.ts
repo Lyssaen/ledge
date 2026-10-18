@@ -373,9 +373,14 @@ export const fr = {
       kids: (n: number, name: string): string => `${n} ${plural(n, 'sous-agent part', 'sous-agents partent')} avec ${name}.`,
       offline: (machine: string): string => `${machine} est injoignable.`,
       cannotEnd: (machine: string): string => `${machine} est injoignable : Ledge ne peut pas l’arrêter.`,
-      archiveFinished: 'Archiver les terminées'
+      deleteKey: 'Suppr', archiveFinished: 'Archiver les terminées'
     },
     rename: { title: (name: string): string => `Renommer ${name}`, label: 'Nom de la session', save: 'Renommer', cancel: 'Annuler' },
+    archivedBanner: {
+      pill: 'Archivée', title: 'Session archivée',
+      body: (ago: string): string => `${ago} · l’agent est arrêté, la conversation est en lecture seule.`,
+      restore: 'Remettre à la table', delete: 'Supprimer…', resume: 'Reprendre'
+    },
     outdated: (machine: string): string => `Mettez Ledge à jour sur ${machine}`,
     undo: 'Annuler',
     archived: (name: string, kids: number): string => `${name} est archivé${kids > 0 ? ` avec ${kids} ${plural(kids, 'sous-agent', 'sous-agents')}` : ''}.`,

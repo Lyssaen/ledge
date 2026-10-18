@@ -139,4 +139,20 @@ describe('the session menu in the atelier', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Open session' })).toBeEnabled();
     expect(sent(d)).toEqual([]);
   });
+
+  it('an offline session: Terminal and Rename… are disabled, and T and F2 do nothing', async () => {
+    const lost = fakeSession('lost', { name: 'Lost', cwd: '/w/ledge', state: 'working', offline: true });
+    const { d, user } = await boot({ sessions: [...SESSIONS, lost], daemon: CAN });
+    fireEvent.contextMenu(seat('Lost'));
+    const menu = await screen.findByRole('menu', { name: 'Manage Lost' });
+    expect(within(menu).getByRole('menuitem', { name: 'Terminal' })).toBeDisabled();
+    expect(within(menu).getByRole('menuitem', { name: 'Rename…' })).toBeDisabled();
+    expect(within(menu).getByRole('menuitem', { name: 'Delete…' })).toHaveTextContent('Del');
+    await user.keyboard('{Escape}');
+    await walkTo(user, 'Lost');
+    await user.keyboard('t');
+    await user.keyboard('{F2}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(sent(d).some(m => m.type === 'session.focus')).toBe(false);
+  });
 });

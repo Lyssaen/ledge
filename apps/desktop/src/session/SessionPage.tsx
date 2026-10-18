@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
-import type { Helper, Session, ThreadItem } from '@ledge/protocol';
+import { isArchived, type Helper, type Session, type ThreadItem } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import type { Decisions } from '../fleet/decisions';
@@ -15,6 +15,8 @@ import { changedFiles, findFile } from './changedFiles';
 import { Changes } from './Changes';
 import { memoKey, type SessionMemory } from './memory';
 import { clampSplit } from './prefs';
+import { ArchivedBanner } from '../manage/ArchivedBanner';
+import type { SessionActions } from '../manage/useSessionActions';
 import { Reply } from './Reply';
 import { SidePane, tabId, type PanePlan, type PaneTab } from './SidePane';
 import { Thread } from './Thread';
@@ -30,6 +32,8 @@ export interface SessionPageProps {
   items: ThreadItem[] | undefined;
   nav: NavState; dispatch(a: NavAction): void;
   decisions: Decisions; waits: ReadonlyMap<string, Wait>;
+  /** An archived session's banner: Reprendre, Remettre à la table, Supprimer…. */
+  actions: SessionActions;
   memory: SessionMemory; notify(text: string): void;
   /** « N sous-agents »: show this agent's subagents in the rail. */
   onShowKids(): void;
@@ -60,6 +64,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const { t, lang } = useI18n();
   const th = t.session.thread;
   const offline = session.offline === true;
+  const archived = isArchived(session);
   const key = memoKey(session.id, helper?.id);
   // What the last visit left, read once.
   const [memo] = useState(() => memory.get(key));
@@ -370,6 +375,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
         <span className="pane-meta mono" title={t.session.meta}>{machine} · {repoOf(session)}</span>
         {kids.length > 0 && <><span className="spacer" /><button type="button" className="kids-pill" title={t.session.kidsPillTitle} onClick={p.onShowKids}><Icon d={SHELL_ICONS.subagents} size={13} />{t.session.kidsPill(kids.length)}</button></>}
       </div>
+      {archived && <ArchivedBanner session={session} actions={p.actions} now={now} />}
       <div className={cls('session-split', paneShown && 'has-pane')} style={{ '--split': `${p.split * 100}%`, '--reply-h': `${replyH}px` } as CSSProperties}>
         <div className="session-main" ref={main}>
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
@@ -395,8 +401,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
             )}
             {view === 'thread' && !atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
           </div>
-          <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
-            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} />
+          {!archived && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
+            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} />}
         </div>
         {paneShown && (
           <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}
