@@ -142,11 +142,12 @@ test('the session content and the terminal preview scroll with thin scrollbars t
   const d = await fakeDaemon(page, overview());
   await ready(page, 4);
   await openSession(page, 'landing-page, Pim, ouvrir');
-  d.preview('pim', Array.from({ length: 30 }, (_, i) => `line ${i + 1}`));
+  // Twice what the terminal holds (30 lines fill it to the pixel): it overflows whatever the browser's line height.
+  d.preview('pim', Array.from({ length: 60 }, (_, i) => `line ${i + 1}`));
   const view = layer(page, 'session');
   // The terminal shows whole in reading mode, alongside the thread.
   await view.locator('[data-terminal-band]').click();
-  await expect(view.locator('pre')).toContainText('line 30');
+  await expect(view.locator('pre')).toContainText('line 60');
   for (const sel of ['[data-scroll]', 'pre']) expect(await view.locator(sel).first().evaluate(el => getComputedStyle(el).scrollbarWidth)).toBe('thin');
   const pre = view.locator('pre');
   expect(await pre.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
