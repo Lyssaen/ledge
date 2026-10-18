@@ -26,12 +26,15 @@ export function readPeers(dir: string = defaultDir()): ClaudePeer[] {
 /** The Ledge session a peer name (`name` or `name [ref]`) or address (`uds:…/<pid>.sock`) belongs to. */
 export function peerFor(target: string, peers: readonly ClaudePeer[], sessions: readonly Session[], dir: string = defaultDir()): Session | undefined {
   const name = target.replace(/ \[[^\]]*\]$/, '');
-  let peer = peers.find(p => p.name === name || p.address === name);
-  if (!peer && name.startsWith('uds:') && name.endsWith('.sock')) {
+  const found = peers.filter(p => p.name === name || p.address === name);
+  if (!found.length && name.startsWith('uds:') && name.endsWith('.sock')) {
     const pid = basename(name, '.sock');
-    if (/^\d+$/.test(pid)) peer = parsePeer(join(dir, `${pid}.json`));
+    const direct = /^\d+$/.test(pid) ? parsePeer(join(dir, `${pid}.json`)) : undefined;
+    if (direct) found.push(direct);
   }
-  if (!peer) return undefined;
-  const id = peer.sessionId;
-  return sessions.find(s => s.agentSessionId === id || s.transcriptPath?.endsWith(`/${id}.jsonl`));
+  for (const { sessionId: id } of found) {
+    const s = sessions.find(s => s.agentSessionId === id || s.transcriptPath?.endsWith(`/${id}.jsonl`));
+    if (s) return s;
+  }
+  return undefined;
 }

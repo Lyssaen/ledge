@@ -39,4 +39,17 @@ describe('peers: which Ledge session a Claude peer is', () => {
     expect(peerFor('ghost', readPeers(dir), [fake({ agentSessionId: ID })])).toBeUndefined();
     expect(readPeers(join(dir, 'missing'))).toEqual([]);
   });
+  it('two files with the same name: the live one wins whatever the directory order', () => {
+    writeFileSync(join(dir, '100.json'), JSON.stringify({ ...file, pid: 100, sessionId: 'stale-id', messagingSocketPath: '/x/100.sock' }));
+    const s = fake({ agentSessionId: ID });
+    const peers = readPeers(dir);
+    expect(peers.filter(p => p.name === 'harness-assistant-bf').length).toBe(2);
+    expect(peerFor('harness-assistant-bf', peers, [s])).toBe(s);
+    expect(peerFor('harness-assistant-bf', [...peers].reverse(), [s])).toBe(s);
+  });
+  it('strips a ref from an address, and a non-numeric pid address gives nothing', () => {
+    const s = fake({ agentSessionId: ID });
+    expect(peerFor(`uds:${sock} [7e2ea7]`, readPeers(dir), [s])).toBe(s);
+    expect(peerFor('uds:/x/abc.sock', [], [s], dir)).toBeUndefined();
+  });
 });
