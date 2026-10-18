@@ -13,7 +13,7 @@ const asking = () => [
 ];
 
 test('Ctrl+Alt+L opens the oldest ask; Y approves; a second press opens the chat', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('ledge.dnd', '1'));
+  await page.addInitScript(() => localStorage.setItem('desktop.dnd', '1'));
   const d = await fakeDaemon(page, asking());
   await ready(page, 3);
   await expectMode(page, 'handle');
@@ -70,7 +70,7 @@ test('Ctrl+Alt+T switches the theme', async ({ page }) => {
 test('a keyboard open while the window is still handle-sized never scrolls the page', async ({ page }) => {
   // Under Tauri the native window grows after the first paint of the open: the bubble takes focus while the viewport is still the notch's 10 px.
   await page.setViewportSize({ width: 1920, height: 10 });
-  await page.addInitScript(() => localStorage.setItem('ledge.dnd', '1'));
+  await page.addInitScript(() => localStorage.setItem('desktop.dnd', '1'));
   await fakeDaemon(page, asking());
   await ready(page, 3);
   await page.keyboard.press('Control+Alt+L');

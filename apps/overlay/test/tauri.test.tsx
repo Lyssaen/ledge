@@ -4,7 +4,7 @@ import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from './mockDaemon';
 import { frameOf, unionFrame, FRAME_PAD } from '../src/surface/frame';
 import { SHOULDER_R } from '../src/surface/Shoulders';
-// The native side, stubbed: `invoke` records commands, `listen` keeps the handler so a test can emit a shell event,
+// The native side, stubbed: `invoke` records commands, the window's `listen` keeps the handler so a test can emit a shell event,
 // the global shortcut plugin keeps each handler by its accelerator (`shortcut` is Ctrl+Alt+L's).
 const native = vi.hoisted(() => ({
   invoke: vi.fn(async (_cmd: string, _args?: unknown): Promise<unknown> => undefined),
@@ -15,8 +15,9 @@ const native = vi.hoisted(() => ({
   monitor: null as null | { scaleFactor: number; size: { height: number; width: number }; workArea: { size: { height: number; width: number } } }
 }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: native.invoke }));
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(async (name: string, cb: (e: { payload: unknown }) => void) => { native.listeners.set(name, cb); return () => { native.listeners.delete(name); native.unlisten(); }; })
+// The notch listens on its own window: the shell sends its events there only.
+vi.mock('@tauri-apps/api/webviewWindow', () => ({
+  getCurrentWebviewWindow: () => ({ listen: vi.fn(async (name: string, cb: (e: { payload: unknown }) => void) => { native.listeners.set(name, cb); return () => { native.listeners.delete(name); native.unlisten(); }; }) })
 }));
 vi.mock('@tauri-apps/api/window', () => ({ primaryMonitor: vi.fn(async () => native.monitor) }));
 vi.mock('@tauri-apps/plugin-global-shortcut', () => ({
@@ -196,32 +197,6 @@ describe('bridge', () => {
     await expect(b.setMonitor('x')).resolves.toBeUndefined();
   });
 
-  it('setTrayLabels sends the Quit label to the shell; in the browser and on a failure it is a no-op', async () => {
-    const browser = await loadBridge();
-    await browser.setTrayLabels({ open: 'Open Ledge', newSession: 'New session', dnd: 'Do not disturb', quit: 'Quit Ledge' });
-    expect(native.invoke).not.toHaveBeenCalled();
-    enterTauri(); const b = await loadBridge();
-    await b.setTrayLabels({ open: 'Ouvrir Ledge', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', quit: 'Quitter Ledge' });
-    expect(calls('set_tray_labels')).toEqual([{ open: 'Ouvrir Ledge', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', quit: 'Quitter Ledge' }]);
-    native.invoke.mockImplementation(async () => { throw new Error('no shell'); });
-    await expect(b.setTrayLabels({ open: 'Open Ledge', newSession: 'New session', dnd: 'Do not disturb', quit: 'Quit Ledge' })).resolves.toBeUndefined();
-  });
-
-  it('launch at startup is read and set through the shell; null in the browser, from `tauri dev` and on a failure', async () => {
-    const browser = await loadBridge();
-    await expect(browser.getAutostart()).resolves.toBeNull();
-    await expect(browser.setAutostart(true)).resolves.toBeNull();
-    expect(native.invoke).not.toHaveBeenCalled();
-    enterTauri(); const b = await loadBridge();
-    native.invoke.mockImplementation(async (cmd: string) => (cmd === 'get_autostart' ? true : false));
-    await expect(b.getAutostart()).resolves.toBe(true);
-    await expect(b.setAutostart(false)).resolves.toBe(false);
-    expect(calls('set_autostart')).toEqual([{ on: false }]);
-    native.invoke.mockImplementation(async () => { throw new Error('no shell'); });
-    await expect(b.getAutostart()).resolves.toBeNull();
-    await expect(b.setAutostart(true)).resolves.toBeNull();
-  });
-
   it('the hot zone goes to the shell once per distinct band; the foreground event reaches the page in both worlds', async () => {
     enterTauri();
     const b = await loadBridge();
@@ -351,21 +326,6 @@ describe('<Surface> under Tauri', () => {
     await mount({ tauri: true });
     await waitFor(() => expect(document.querySelector('[data-ledge-mark]')).not.toBeNull());
     expect(document.querySelector('[data-resident] svg')).toBeNull();
-  });
-
-  it('the Ledge tray opens the chat, notes a new session, and toggles DND', async () => {
-    const toggleDnd = vi.fn();
-    await mount({ tauri: true, onToggleDnd: toggleDnd });
-    await waitFor(() => expect(native.listeners.has('ledge://tray')).toBe(true));
-    const tray = native.listeners.get('ledge://tray')!;
-    await act(async () => tray({ payload: { action: 'open' } }));
-    await waitFor(() => expect(surface()).toHaveAttribute('data-mode', 'chat'));
-    await act(async () => tray({ payload: { action: 'new' } }));
-    await waitFor(() => expect(surface()).toHaveAttribute('data-mode', 'handle'));
-    expect(document.body.textContent).toContain('Ledge Desktop');
-    await act(async () => tray({ payload: { action: 'dnd' } }));
-    expect(toggleDnd).toHaveBeenCalledOnce();
-    expect(calls('focus_overlay').length).toBeGreaterThanOrEqual(2);
   });
 
   it('hovering the handle opens nothing; a click opens the chat and arms the outside-click watch', async () => {

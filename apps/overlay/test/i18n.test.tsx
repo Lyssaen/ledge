@@ -15,7 +15,7 @@ const list = [perm, fakeSession('b', { name: 'Pim', tool: 'codex', project: 'spe
 const noop = () => {};
 const viewProps = { preview: [], visible: true, reading: false, draft: '', onDraft: noop, onBack: noop, onClose: noop, onDecide: noop, onReply: noop, onInterrupt: noop, onKill: noop, onFocus: noop, onToggleReading: noop };
 
-afterEach(() => { localStorage.removeItem('ledge.lang'); setFallbackLang('en'); });
+afterEach(() => { localStorage.removeItem('desktop.lang'); setFallbackLang('en'); });
 
 describe('message catalogue', () => {
   it('French and English have the same keys', () => {
@@ -29,7 +29,7 @@ describe('message catalogue', () => {
     setFallbackLang('fr');
     expect(loadLang()).toBe('fr');
     saveLang('en'); expect(loadLang()).toBe('en');
-    localStorage.setItem('ledge.lang', 'de'); expect(loadLang()).toBe('fr');
+    localStorage.setItem('desktop.lang', 'de'); expect(loadLang()).toBe('fr');
   });
   it('plurals are explicit', () => {
     expect(MESSAGES.fr.list.summary(1, 1)).toBe('1 session · 1 demande pour vous');

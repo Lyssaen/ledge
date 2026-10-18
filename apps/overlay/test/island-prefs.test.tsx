@@ -142,7 +142,7 @@ async function boot() {
 const speak = async (p: IslandPrefs | null) => { await act(async () => { local().push({ type: 'island', prefs: p }); await sleep(20); }); };
 
 describe('App and the daemon’s island settings', () => {
-  beforeEach(() => { FakeSocket.all = []; vi.stubGlobal('WebSocket', FakeSocket); localStorage.clear(); localStorage.setItem('ledge.lang', 'en'); });
+  beforeEach(() => { FakeSocket.all = []; vi.stubGlobal('WebSocket', FakeSocket); localStorage.clear(); localStorage.setItem('desktop.lang', 'en'); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it('the island’s own values, a chosen monitor read as the second screen', () => {

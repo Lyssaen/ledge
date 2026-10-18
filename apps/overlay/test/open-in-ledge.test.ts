@@ -29,15 +29,15 @@ describe('openInLedge', () => {
     expect(heard).toEqual(['opening']);
     stop();
   });
-  it('says when Ledge Desktop is not installed, or could not start', async () => {
+  it('says when Ledge Desktop’s window could not be shown; there is no « not installed » any more', async () => {
     enterTauri();
     const heard: OpenOutcome[] = []; const stop = subscribeOpenInLedge((_, o) => heard.push(o));
-    native.invoke.mockRejectedValueOnce('not installed');
+    native.invoke.mockRejectedValueOnce('invalid target');
     openInLedge({ kind: 'settings' });
-    await vi.waitFor(() => expect(heard).toEqual(['opening', 'missing']));
-    native.invoke.mockRejectedValueOnce('open Ledge Desktop: access denied');
+    await vi.waitFor(() => expect(heard).toEqual(['opening', 'failed']));
+    native.invoke.mockRejectedValueOnce('not installed');
     openInLedge({ kind: 'machines' });
-    await vi.waitFor(() => expect(heard).toEqual(['opening', 'missing', 'opening', 'failed']));
+    await vi.waitFor(() => expect(heard).toEqual(['opening', 'failed', 'opening', 'failed']));
     stop();
   });
 });

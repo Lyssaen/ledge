@@ -66,7 +66,7 @@ describe('the Screen setting', () => {
   it('without a monitor list (no shell answer yet) the group is not shown', () => {
     render(<SettingsView {...base} />);
     expect(screen.queryByRole('group', { name: 'Screen' })).toBeNull();
-    expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Island size' })).toBeInTheDocument();
   });
 
   it('the French labels', () => {

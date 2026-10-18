@@ -35,15 +35,13 @@ import { createSilentPlayer, type SoundPlayer } from '../sounds/player';
 import { useMotionPreferences, useOsReducedMotion } from '../motionPreferences';
 import { SessionList, EXPANDED_ROW_H, ASK_H, NOTICE_GAP, type ListNotice } from './SessionList';
 import { SessionView, measureSessionH, SESSION_HEADER_H, READING_TERMINAL_H } from './SessionView';
-import { useI18n, type Lang } from '../i18n/lang';
+import { useI18n } from '../i18n/lang';
+import type { PipTone } from '../update/machine';
 import { transition, MOTION, ms, enterDelay } from '../motion';
-import { focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, onTrayAction, focusOverlay, releaseFocus, isTauri, onForegroundCovered, setHotZone, openUrl, quitApp } from '../tauri/bridge';
+import { focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, focusOverlay, releaseFocus, isTauri, onForegroundCovered, setHotZone, quitApp } from '../tauri/bridge';
 import { Icon, ICONS } from '../ui/icons';
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { useDelayed } from './useDelayed';
-import { UpdateCard } from '../update/UpdateCard';
-import { targetOf } from '../update/machine';
-import type { UpdateController } from '../update/useUpdate';
 import { frameOf, type Box } from './frame';
 import { Shoulders, SHOULDER_R, shoulderR } from './Shoulders';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
@@ -89,8 +87,6 @@ export interface SurfaceProps {
   handleScale?: number; panelScale?: number;
   /** The two size settings, the values Auto resolves to, and how to change them (Settings). */
   scales?: Record<ScaleTarget, UiScale>; autoScales?: Record<ScaleTarget, number>; onScale?: (target: ScaleTarget, s: UiScale) => void;
-  /** The Language setting (Settings). */
-  onLang?: (l: Lang) => void;
   /** The Screen setting: the monitors to choose from, the choice (null: the primary) and how to change it (live).
    *  `onSettingsOpen` fires when the Settings view opens, so the monitors can be listed again. */
   monitors?: MonitorInfo[]; monitor?: string | null; onMonitor?: (id: string | null) => void; onSettingsOpen?: () => void;
@@ -100,8 +96,8 @@ export interface SurfaceProps {
   accent?: string | null; onAccent?: (hex: string | null) => void;
   /** Plays the sound cues (one Web Audio player per app); a silent player when absent. */
   soundPlayer?: SoundPlayer;
-  /** The auto-update (App owns it): the card in the list, the pip on the island and on the gear. */
-  update?: UpdateController;
+  /** The version Ledge Desktop found and has not installed (null: none): the « new version » pip on the island. */
+  desktopUpdate?: string | null;
   /** The island's settings from Ledge Desktop (atelier spec §7): hidden, nothing is drawn and nothing takes the mouse, the
    *  asks are still counted; `shows` says what it shows besides asks and questions; the shortcut is only shown. */
   visible?: boolean; shows?: IslandPrefs['shows']; shortcut?: string;
@@ -110,7 +106,7 @@ export interface SurfaceProps {
 /** A text field or editable content: focus there means someone is filling it in. Radios, buttons and rows are not. */
 const isEditable = (el: Element | null) => !!el && ((el.tagName === 'INPUT' && !['radio', 'checkbox', 'button', 'submit'].includes((el as HTMLInputElement).type)) || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable);
 
-export function Surface({ screenH, screenW = window.innerWidth, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, accent = null, onAccent, soundPlayer, islandPosition = 'center', onIslandPosition, discreet = true, onDiscreet, update, visible = true, shows = DEFAULT_ISLAND_PREFS.shows, shortcut }: SurfaceProps) {
+export function Surface({ screenH, screenW = window.innerWidth, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, accent = null, onAccent, soundPlayer, islandPosition = 'center', onIslandPosition, discreet = true, onDiscreet, desktopUpdate = null, visible = true, shows = DEFAULT_ISLAND_PREFS.shows, shortcut }: SurfaceProps) {
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
@@ -247,13 +243,6 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     setResidentPointer(ctl.state().mode === 'handle' ? point : null);
   }), [ctl]);
   useEffect(() => onForegroundCovered(setCovered), []);
-  useEffect(() => onTrayAction(action => {
-    if (action === 'dnd') { onToggleDnd(); return; }
-    dispatch({ type: 'close' });
-    if (action === 'new') openInLedge({ kind: 'launch' });
-    else if (visibleRef.current) dispatch({ type: 'shortcut' });
-    void focusOverlay();
-  }), [dispatch, onToggleDnd]);
 
   // Daemon changes drive the machine. DND keeps the bot growing in the handle but never asks for a bubble.
   // A reply the daemon rejects comes back into its draft (unless something new was typed meanwhile).
@@ -479,23 +468,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const noticeRef = useRef<HTMLDivElement>(null);
   const noticeH = useMeasuredHeight(noticeRef, st.mode === 'list' && !!notice, ps);
   const noticeExtraH = notice ? NOTICE_GAP + (noticeH || 36) : 0;
-  // The update card sits under the notice and is measured the same way.
-  const updateCard = update && update.card.kind !== 'hidden' ? update.card : null;
-  const updateRef = useRef<HTMLDivElement>(null);
-  const updateH = useMeasuredHeight(updateRef, st.mode === 'list' && !!updateCard, ps);
-  // The measured box is the wrapper, which carries the card's top margin already.
-  const updateExtraH = updateCard ? updateH || NOTICE_GAP + 120 : 0;
-  // The « up to date » pip only stays six seconds.
-  const [okGone, setOkGone] = useState(false);
-  const okPip = update?.pip === 'ok';
-  useEffect(() => {
-    if (!okPip) { setOkGone(false); return; }
-    const timer = setTimeout(() => setOkGone(true), 6000);
-    return () => clearTimeout(timer);
-  }, [okPip]);
-  const updatePip = okPip && okGone ? null : update?.pip ?? null;
-  const updateVersion = update ? targetOf(update.state) ?? '' : '';
-  const gearLabel = update?.gear ? `${t.list.settings}, ${t.update.pip.new(updateVersion)}` : undefined;
+  // Desktop checks and installs; the island only says a version is there and hands the click to Desktop.
+  const updatePip: PipTone = desktopUpdate ? 'new' : null;
+  const updateVersion = desktopUpdate ?? '';
   /** The session's terminal tab: brought forward when it exists, else opened on the session (a daemon-launched one has none yet). */
   const openTab = (id: string) => {
     const s = byId.get(id); if (!s) return;
@@ -588,7 +563,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const strip = useDelayed(discreet && covered && st.mode === 'handle' && !st.hot && !st.hovering && bandPointer === null && !sayShown, STRIP_BACK_MS);
   // The resting filet wakes into the compact island and its robots while the pointer is over it or near it, or the keyboard is in it.
   const awake = st.mode === 'handle' && !strip && (st.hovering || st.hot || st.focusWithin || bandPointer !== null);
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, awake, pip: !!updatePip, dnd, readerExpanded: st.documentExpanded, bubbleH: st.mode === 'peek' ? (peekH ? peekH + SURFACE_CHROME_Y : undefined) : bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, awake, pip: !!updatePip, dnd, readerExpanded: st.documentExpanded, bubbleH: st.mode === 'peek' ? (peekH ? peekH + SURFACE_CHROME_Y : undefined) : bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
   geoRef.current = geo;
   // The shell watches the top band over the island's span (its depth and overhang are the shell's own constants).
   const hot = visible ? { left: Math.round(geo.handle.left), w: Math.round(geo.handle.w) } : HIDDEN_HOT;
@@ -774,8 +749,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
             <SessionList shortcut={shortcut} sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               disconnected={disconnected}
               onDismiss={id => { if (!unreachable) send({ type: 'session.dismiss', id }); }} offline={unreachable}
-              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} noticeRef={noticeRef} gearPip={!!update?.gear} gearLabel={gearLabel} updateRef={updateRef}
-              update={updateCard ? <UpdateCard view={updateCard} sessions={sessions.length} offline={unreachable} theme={theme} onUpdate={update!.start} onLater={update!.later} onRetry={update!.retry} onAck={update!.ackUpdated} onNotes={() => openUrl('https://github.com/Lyssaen/ledge/releases/latest')} /> : null} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
+              onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} noticeRef={noticeRef}
+              theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
               onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
@@ -795,12 +770,11 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               onLaunch={launch} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
           </div>
           <div aria-hidden={st.mode !== 'settings' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'settings' ? 'auto' : 'none', transform: `translateX(${st.mode === 'settings' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <SettingsView contentRef={settingsRef} onLang={onLang} visible={st.mode === 'settings'} enterDelay={enter} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} finished={prefs.finished} onFinished={prefs.setFinished} sounds={prefs.sounds} onSounds={prefs.setSounds} onTestSound={sounds.test} scales={scales} autoScales={autoScales} onScale={onScale}
+            <SettingsView contentRef={settingsRef} visible={st.mode === 'settings'} enterDelay={enter} theme={theme} dnd={dnd} reduced={motionPrefs.app} osReduced={osReduced} finished={prefs.finished} onFinished={prefs.setFinished} sounds={prefs.sounds} onSounds={prefs.setSounds} onTestSound={sounds.test} scales={scales} autoScales={autoScales} onScale={onScale}
               machines={client.fleet ? machines : undefined} onMachines={client.fleet?.configure} onProbe={client.fleet?.probe} onRetry={client.fleet?.retry}
               monitors={monitors} monitor={monitor} onMonitor={onMonitor} autostart={autostart} onAutostart={onAutostart}
               defaultTool={defaultTool} onDefaultTool={chooseDefaultTool} accent={accent} onAccent={onAccent}
               islandPosition={islandPosition} onIslandPosition={onIslandPosition} discreet={discreet} onDiscreet={onDiscreet}
-              about={update ? { app: update.state.app, daemon: update.state.daemon, latest: update.state.latest?.version ?? null, auto: update.auto, checkedAt: update.state.checkedAt, onAuto: update.setAuto, onCheck: update.checkNow } : undefined}
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'help' ? 'auto' : 'none', transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>

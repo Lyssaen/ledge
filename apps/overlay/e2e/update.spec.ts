@@ -2,13 +2,9 @@ import { test, expect, expectMode } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 import { wake } from './scenarios';
 
+/** Ledge Desktop found 0.3.0: the notch only reads it from the shared storage. */
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    (window as unknown as { __LEDGE_FAKE_UPDATE__: unknown }).__LEDGE_FAKE_UPDATE__ = {
-      version: '0.3.0', notes: '- Réponses depuis le chat\n- Île plus réactive',
-      downloadAndInstall: async (p: (done: number, total: number) => void) => { p(5, 10); }
-    };
-  });
+  await page.addInitScript(() => localStorage.setItem('desktop.update.available', '0.3.0'));
 });
 
 test('the update pip notes Ledge Desktop and does not start an install', async ({ page }) => {

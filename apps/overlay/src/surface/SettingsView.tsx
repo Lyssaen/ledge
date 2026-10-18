@@ -5,7 +5,6 @@ import { DetailHeader } from './DetailHeader';
 import { UI_SCALES, percent, type ScaleTarget, type UiScale } from '../scale';
 import { ISLAND_POSITIONS, type IslandPosition } from '../island';
 import { useI18n } from '../i18n/lang';
-import { LANGS, type Lang } from '../i18n/messages';
 import { Button } from '../ui/Button';
 import { Tabs, tabIds } from '../ui/Tabs';
 import { CATEGORIES, FINISHED_VALUES, VOLUMES, type FinishedNotify, type SoundPrefs, type SoundPatch } from '../sounds/preferences';
@@ -29,8 +28,6 @@ export interface SettingsViewProps {
   onToggleTheme?: () => void; onToggleDnd: () => void; onReduced: (on: boolean) => void; onBack: () => void; onClose: () => void;
   /** The handle and window size settings, the scales Auto resolves to on this screen, and how to change them (live). */
   scales?: Record<ScaleTarget, UiScale>; autoScales?: Record<ScaleTarget, number>; onScale?: (target: ScaleTarget, s: UiScale) => void;
-  /** The Language setting (applied live). */
-  onLang?: (l: Lang) => void;
   /** The island's position on the top edge and the discreet strip under a covering window (both applied live). */
   islandPosition?: IslandPosition; onIslandPosition?: (p: IslandPosition) => void; discreet?: boolean; onDiscreet?: (on: boolean) => void;
   /** The Screen setting: the monitors to choose from (none: the group is not shown), the choice (null: the primary)
@@ -63,7 +60,7 @@ function Switch({ label, hint, checked, onChange }: { label: string; hint: strin
   );
 }
 
-/** A labelled segmented radio group (Size, Language): native radios, so arrows and Tab behave as usual. */
+/** A labelled segmented radio group (Size, Island position): native radios, so arrows and Tab behave as usual. */
 export function Segmented<T extends string | number>({ name, label, hint, value, options, onChange }: { name: string; label: string; hint: string; value: T; options: Array<{ value: T; label: string; wide?: boolean }>; onChange?: (v: T) => void }) {
   return (
     <fieldset style={{ margin: 0, padding: '0 0 12px', border: 'none', minWidth: 0 }}>
@@ -133,10 +130,10 @@ export function monitorOptions(monitors: MonitorInfo[], choice: string | null, t
   return opts;
 }
 
-/** Preferences inside the same surface; they are the app's own (language, size, theme, colour, do not disturb, motion), not a local copy. */
+/** Preferences inside the same surface; they are the app's own (size, theme, colour, do not disturb, motion), not a local copy; the language is Desktop's. */
 export function SettingsView(p: SettingsViewProps) {
   const enterDelay = p.enterDelay ?? 120;
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const light = p.theme === 'light';
   const monitors = p.monitors ?? [];
   const choice = p.monitor ?? null;
@@ -160,7 +157,6 @@ export function SettingsView(p: SettingsViewProps) {
             {tab === 'display' && <>
               {p.autostart != null && p.onAutostart && <Row><Switch label={t.settings.autostart} hint={t.settings.autostartHint} checked={p.autostart} onChange={p.onAutostart} /></Row>}
               <Row><Segmented<Tool> name="ledge-default-tool" label={t.settings.defaultTool} hint={t.settings.defaultToolHint} value={p.defaultTool ?? 'claude'} onChange={p.onDefaultTool} options={TOOLS.map(v => ({ value: v, label: toolName(v) }))} /></Row>
-              <Row><Segmented name="ledge-lang" label={t.lang.label} hint={t.lang.hint} value={lang} onChange={p.onLang} options={LANGS.map(l => ({ value: l, label: t.lang[l] }))} /></Row>
               {monitors.length > 0 && (
                 <Row><Segmented name="ledge-monitor" label={t.settings.screen} hint={chosen ? t.settings.screenHint(chosen.width, chosen.height) : t.settings.screenHintNone} value={chosenValue}
                   onChange={p.onMonitor ? v => p.onMonitor!(v === 'primary' ? null : v) : undefined}

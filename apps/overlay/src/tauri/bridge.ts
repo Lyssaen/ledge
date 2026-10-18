@@ -12,20 +12,19 @@
  *   focus_terminal { title }           bring the matching terminal window forward (true when found)
  *   open_terminal { title, command }   open a Windows Terminal tab running `command` in WSL (true once spawned)
  *   open_url { url }                   open a web URL in the default browser (the webview never navigates)
- *   set_tray_labels { open, newSession, dnd, quit }  translated tray menu items
- *   get_autostart                      whether Ledge launches at login (null: not offered, a `tauri dev` build)
- *   set_autostart { on }               turn launch at login on or off; returns the state Windows now reports
+ *   open_in_ledge { target }           show Ledge Desktop's window on the target (the same process)
  *   event `ledge://outside-click`      a mouse button went down outside the window while the watch was armed
  *   event `ledge://cursor-near` { x, y } | null    cursor in the top band around the island, in logical work-area coordinates
  *   event `ledge://foreground` { covered }   a maximised or full-screen window took (or left) the foreground on the island's monitor
- *   event `ledge://tray` { action }    tray menu action
+ * The events are sent to this window only (`notch`); the tray and its menu are Ledge Desktop's.
  * Coordinates sent to the shell are logical px from the top of the chosen monitor's work area ("monitor px").
  * The page is never zoomed (each layer applies its own UI scale), so its CSS px are monitor px; `setFrame` still
  * takes an optional `zoom` (one CSS px = `zoom` monitor px) and round frames outward here. The shell
  * itself never knows about any zoom.
  */
 import { resolveMonitor, type MonitorInfo } from '../monitor';
-import { listen } from '@tauri-apps/api/event';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import type { EventCallback, UnlistenFn } from '@tauri-apps/api/event';
 
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const inTauri = isTauri;
@@ -33,7 +32,6 @@ const inTauri = isTauri;
 export interface Frame { left: number; top: number; w: number; h: number }
 export const OUTSIDE_CLICK_EVENT = 'ledge://outside-click';
 export const CURSOR_NEAR_EVENT = 'ledge://cursor-near';
-export const TRAY_EVENT = 'ledge://tray';
 export const FOREGROUND_EVENT = 'ledge://foreground';
 
 /** The work-area height, in logical (monitor) px, of the monitor the Screen setting `choice` resolves to (`null`: the
@@ -159,29 +157,10 @@ export function openUrl(url: string): void {
   window.open(url, '_blank', 'noopener');
 }
 
-/** Starts Ledge Desktop on `target` (the island's JSON), or hands it to the running one. 'missing': Ledge Desktop is not
- *  installed; 'browser': outside Tauri, nothing to start. */
-export async function openDesktop(target: string): Promise<'ok' | 'missing' | 'failed' | 'browser'> {
+/** Shows Ledge Desktop's window on `target` (the island's JSON); 'browser': outside Tauri, nothing to show. */
+export async function openDesktop(target: string): Promise<'ok' | 'failed' | 'browser'> {
   if (!inTauri()) return 'browser';
-  return invoke('open_in_ledge', { target }).then(() => 'ok' as const, e => (String(e).includes('not installed') ? 'missing' as const : 'failed' as const));
-}
-
-/** Relabels the tray menu in the overlay's language (the shell starts in French). */
-export async function setTrayLabels(labels: { open: string; newSession: string; dnd: string; quit: string }): Promise<void> {
-  if (!inTauri()) return;
-  await invoke('set_tray_labels', labels).catch(() => {});
-}
-
-/** Whether Ledge launches at Windows login. `null` when it is not offered: in the browser and in a `tauri dev` build. */
-export async function getAutostart(): Promise<boolean | null> {
-  if (!inTauri()) return null;
-  return invoke<boolean | null>('get_autostart').catch(() => null);
-}
-
-/** Turns launch at login on or off; resolves to the state Windows reports afterwards (`null`: not offered or failed). */
-export async function setAutostart(on: boolean): Promise<boolean | null> {
-  if (!inTauri()) return null;
-  return invoke<boolean | null>('set_autostart', { on }).catch(() => null);
+  return invoke('open_in_ledge', { target }).then(() => 'ok' as const, () => 'failed' as const);
 }
 
 /** Whether Windows Terminal is the foreground window (the "only when the terminal is behind" sound rule). False outside Tauri. */
@@ -190,12 +169,18 @@ export async function foregroundIsTerminal(): Promise<boolean> {
   return invoke<boolean>('foreground_is_terminal').catch(() => false);
 }
 
+/** Listens on this window only: the shell sends the notch's events to it (`emit_to("notch", …)`). A throw (no window
+ *  metadata) becomes a rejection the callers already swallow. */
+const listenHere = <T>(event: string, fn: EventCallback<T>): Promise<UnlistenFn> => {
+  try { return getCurrentWebviewWindow().listen<T>(event, fn); } catch (e) { return Promise.reject(e); }
+};
+
 /** A press outside the window while the watch is armed. In the browser it never fires: the surface listens to the
  *  document's own pointer presses there. */
 export function onOutsideClick(fn: () => void): () => void {
   if (!inTauri()) return () => {};
   let off = () => {}; let disposed = false;
-  void listen(OUTSIDE_CLICK_EVENT, () => { if (!disposed) fn(); }).then(un => {
+  void listenHere(OUTSIDE_CLICK_EVENT, () => { if (!disposed) fn(); }).then(un => {
     off = un;
     if (disposed) un();
   }).catch(() => {});
@@ -207,7 +192,7 @@ export function onOutsideClick(fn: () => void): () => void {
 export function onCursorProximity(fn: (point: { x: number; y: number } | null) => void): () => void {
   if (!inTauri()) return () => {};
   let off = () => {}; let disposed = false;
-  void listen<{ x: number; y: number } | null>(CURSOR_NEAR_EVENT, e => { if (!disposed) fn(e.payload); }).then(un => {
+  void listenHere<{ x: number; y: number } | null>(CURSOR_NEAR_EVENT, e => { if (!disposed) fn(e.payload); }).then(un => {
     off = un;
     if (disposed) un();
   }).catch(() => {});
@@ -223,18 +208,7 @@ export function onForegroundCovered(fn: (covered: boolean) => void): () => void 
     return () => window.removeEventListener('ledge:foreground', h);
   }
   let off = () => {}; let disposed = false;
-  void listen<{ covered: boolean }>(FOREGROUND_EVENT, e => { if (!disposed) fn(e.payload.covered); }).then(un => {
-    off = un;
-    if (disposed) un();
-  }).catch(() => {});
-  return () => { disposed = true; off(); };
-}
-
-export type TrayAction = 'open' | 'new' | 'dnd';
-export function onTrayAction(fn: (action: TrayAction) => void): () => void {
-  if (!inTauri()) return () => {};
-  let off = () => {}; let disposed = false;
-  void listen<{ action: TrayAction }>(TRAY_EVENT, e => { if (!disposed) fn(e.payload.action); }).then(un => {
+  void listenHere<{ covered: boolean }>(FOREGROUND_EVENT, e => { if (!disposed) fn(e.payload.covered); }).then(un => {
     off = un;
     if (disposed) un();
   }).catch(() => {});
@@ -261,7 +235,7 @@ export const onShortcut = (fn: () => void) => globalShortcut('l', fn);
 /** Ctrl+Alt+N: ask Ledge Desktop for a new session. The island no longer has the form. */
 export const onNewSessionShortcut = (fn: () => void) => globalShortcut('n', fn);
 
-/** Quit the island process. A no-op in the browser and in tests. Desktop quits with it once the two are integrated. */
+/** Quits Ledge: the notch and Desktop are one process. A no-op in the browser and in tests. */
 export async function quitApp(): Promise<void> {
   if (!inTauri()) return;
   const { exit } = await import('@tauri-apps/plugin-process');

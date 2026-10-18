@@ -7,7 +7,7 @@ test.describe('French by default', () => {
   test.use({ lang: null });
 
   test('the ask card and the chat menu read French, and settings leave for Ledge Desktop', async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem('ledge.dnd', '1'));
+    await page.addInitScript(() => localStorage.setItem('desktop.dnd', '1'));
     await fakeDaemon(page, otto());
     await ready(page, 1);
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr');

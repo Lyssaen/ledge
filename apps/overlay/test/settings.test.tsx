@@ -15,13 +15,13 @@ const tab = (name: string) => fireEvent.click(screen.getByRole('tab', { name }))
 
 describe('<SettingsView> tabs', () => {
   beforeEach(() => localStorage.clear());
-  it('opens on Display: language, screen sizes, theme and motion; the other groups wait in their tabs', () => {
+  it('opens on Display: screen sizes, theme and motion (the language is Desktop’s); the other groups wait in their tabs', () => {
     view();
     expect(screen.getByRole('tab', { name: 'Display' })).toHaveAttribute('aria-selected', 'true');
     const panel = screen.getByRole('tabpanel', { name: 'Display' });
     expect(panel).toHaveAttribute('id', 'ledge-settings-panel-display');
     expect(screen.getByRole('group', { name: 'Default harness' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Language' })).toBeNull();
     expect(screen.getByRole('group', { name: 'Island size' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /theme/ })).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Reduced motion' })).toBeInTheDocument();
@@ -30,7 +30,7 @@ describe('<SettingsView> tabs', () => {
     tab('Notifications');
     expect(screen.getByRole('switch', { name: 'Do not disturb' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'When a bot or Ledge finishes' })).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Language' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Island size' })).toBeNull();
     tab('Sounds');
     expect(screen.getByRole('switch', { name: 'Sounds' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Test' })).toBeInTheDocument();
@@ -151,7 +151,7 @@ describe('<SettingsView> About tab', () => {
     localStorage.setItem('ledge.settings.tab', 'about');
     view();
     expect(screen.getByRole('tab', { name: 'Display' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Island size' })).toBeInTheDocument();
   });
   it('shows both versions, flags a mismatch and checks on demand', () => {
     localStorage.setItem('ledge.settings.tab', 'about');

@@ -6,11 +6,11 @@ import type { ClientMessage } from '@ledge/protocol';
  * error or uncaught page error fails the test that produced it.
  */
 export const test = base.extend<{ errors: string[]; lang: 'en' | 'fr' | null }>({
-  /** The overlay defaults to French. The older specs read English: they run with `ledge.lang` = 'en' stored before the
+  /** The overlay defaults to French. The older specs read English: they run with Desktop's `desktop.lang` = 'en' stored before the
    *  app boots. `test.use({ lang: null })` leaves storage alone (the French default), 'fr' stores French. */
   lang: ['en', { option: true }],
   errors: [async ({ page, lang }, use) => {
-    if (lang) await page.addInitScript(l => { try { if (!sessionStorage.getItem('ledge.e2e.langSet')) { localStorage.setItem('ledge.lang', l); sessionStorage.setItem('ledge.e2e.langSet', '1'); } } catch { /* ignore */ } }, lang);
+    if (lang) await page.addInitScript(l => { try { if (!sessionStorage.getItem('ledge.e2e.langSet')) { localStorage.setItem('desktop.lang', l); sessionStorage.setItem('ledge.e2e.langSet', '1'); } } catch { /* ignore */ } }, lang);
     const errors: string[] = [];
     page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
     page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));

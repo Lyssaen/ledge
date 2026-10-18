@@ -10,17 +10,16 @@ export type LedgeTarget =
   | { kind: 'update' }
   | { kind: 'machines' };
 
-/** 'opening' at once; then 'missing' when Ledge Desktop is not installed, 'failed' when it could not be started. */
-export type OpenOutcome = 'opening' | 'missing' | 'failed';
+/** 'opening' at once; then 'failed' when Ledge Desktop's window could not be shown. */
+export type OpenOutcome = 'opening' | 'failed';
 type Listener = (target: LedgeTarget, outcome: OpenOutcome) => void;
 const listeners = new Set<Listener>();
 const tell = (target: LedgeTarget, outcome: OpenOutcome) => { for (const listener of listeners) listener(target, outcome); };
 
-/** Starts Ledge Desktop on the target (`ledge-desktop.exe --open <json>`; a running one gets it through its single
- *  instance) and tells the subscribers how it went. */
+/** Shows Ledge Desktop's window on the target (the same process: `open_in_ledge`) and tells the subscribers how it went. */
 export function openInLedge(target: LedgeTarget): void {
   tell(target, 'opening');
-  void openDesktop(JSON.stringify(target)).then(r => { if (r === 'missing' || r === 'failed') tell(target, r); });
+  void openDesktop(JSON.stringify(target)).then(r => { if (r === 'failed') tell(target, r); });
 }
 
 /** Subscribe to openings. The returned function removes the subscription. */
