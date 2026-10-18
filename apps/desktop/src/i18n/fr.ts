@@ -523,6 +523,8 @@ export const fr = {
         return head + (s.agents.length ? ` À ranger aussi : ${andList(s.agents)}.` : '');
       },
       nothing: 'Tous les dépôts trouvés appartiennent déjà à un projet. Ajoutez-en un à la main.',
+      /** Appended to the proposal and to « nothing »: the machines whose walk was cut short, so what was found may not be all. */
+      limited: (ms: readonly string[]) => ` · parcours limité sur ${andList(ms)}`,
       unscanned: 'Aucune machine n’a pu être parcourue.', again: 'Relancer',
       why: 'Ledge · ', keep: (n: string, m: string) => `Garder ${n} (${m})`, addTo: (n: string) => `Ajouter à ${n}`,
       gone: 'Cette proposition n’existe plus.',

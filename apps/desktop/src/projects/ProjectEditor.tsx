@@ -70,6 +70,8 @@ export function ProjectEditor(p: {
   const [scanned, setScanned] = useState<string[]>([]);
   // « Nothing »: every repository found is taken, or no machine could be scanned at all.
   const [nothing, setNothing] = useState<'taken' | 'unscanned' | null>(null);
+  // The machines whose walk was cut short in the last scan: said beside the proposal or « nothing », which may not be all there is.
+  const [limited, setLimited] = useState<string[]>([]);
   const scan = useLedgeScan(p.client, machines);
   const cancelRef = useRef<HTMLButtonElement>(null);
   // The draft now, for a confirmation that comes in an effect: closing on it would drop what was edited since the send.
@@ -103,6 +105,7 @@ export function ProjectEditor(p: {
 
   const runLedge = () => {
     setNothing(null);
+    setLimited([]);
     setScanned(machines.filter(isUp).map(m => m.label));
     scan.start();
     setScanning(true);
@@ -119,6 +122,7 @@ export function ProjectEditor(p: {
       const found = proposeFor({ ...(now.id !== undefined ? { id: now.id } : {}), name: now.name, file: now.file }, proposeProjects(input), input);
       resetScan();
       setScanning(false);
+      setLimited(scans.filter(sc => sc.status === 'ok' && sc.truncated).map(sc => sc.label));
       if (!found) { setNothing(scans.some(sc => sc.status === 'ok') ? 'taken' : 'unscanned'); return; }
       setD(applyProposal(now, found, state));
       setProposal(found);
@@ -335,6 +339,7 @@ export function ProjectEditor(p: {
   // The offer: a new project with neither name nor proposal. « Demander à Ledge »: once there is a name or a repository, the offer
   // gone, no proposal under way, and not next to the « nothing » note (which has its own « Relancer »).
   const fresh = mode === 'new' && !proposal && d.name === '';
+  const limitedNote = limited.length > 0 ? c.ledge.limited(limited) : '';
   const canAsk = !proposal && !fresh && !nothing && (d.name.trim() !== '' || d.repos.length > 0);
   return (
     <form className="pe" onSubmit={e => { e.preventDefault(); save(); }} onKeyDown={onKeyDown}>
@@ -350,14 +355,14 @@ export function ProjectEditor(p: {
         {nothing && (
           <div className="pe-proposal" role="status">
             <ResidentMascot size={28} theme={theme} paused={p.paused} reducedMotion={reduced} />
-            <div><span>{nothing === 'taken' ? c.ledge.nothing : c.ledge.unscanned}</span></div>
+            <div><span>{nothing === 'taken' ? c.ledge.nothing : c.ledge.unscanned}{limitedNote}</span></div>
             <Button variant="ghost" size="sm" onClick={runLedge}>{c.ledge.again}</Button>
           </div>
         )}
         {proposal && (
           <div className="pe-proposal">
             <ResidentMascot size={28} theme={theme} paused={p.paused} reducedMotion={reduced} />
-            <div><strong>{c.ledge.proposes}</strong><span>{c.ledge.summary(proposal.summary)} {c.ledge.check}</span></div>
+            <div><strong>{c.ledge.proposes}</strong><span>{c.ledge.summary(proposal.summary)} {c.ledge.check}{limitedNote}</span></div>
           </div>
         )}
         <div className="pe-identity">

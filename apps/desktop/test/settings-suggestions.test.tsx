@@ -95,6 +95,20 @@ describe('Settings › Projects: Ledge proposes', () => {
     expect(scansOf(d)).toHaveLength(1);
   });
 
+  it('a machine whose scan was limited keeps its line after the scan, with the cards', async () => {
+    const { d, user } = await open();
+    d.options.scanTruncated = true;
+    await ask(user);
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    expect(screen.getByText('Local · 5 repositories found · scan limited')).toBeVisible();
+    // A complete scan has no line of its own once done.
+    d.options.scanTruncated = false;
+    await user.click(screen.getByRole('button', { name: 'Run again' }));
+    await waitFor(() => expect(screen.queryByText(/scan limited/)).toBeNull());
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    expect(screen.queryByText('Local · 5 repositories found')).toBeNull();
+  });
+
   it('says so when everything is already filed', async () => {
     const { user } = await open([], SESSIONS.slice(0, 1));
     await ask(user);

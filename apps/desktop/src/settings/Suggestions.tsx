@@ -39,7 +39,8 @@ export function Suggestions({ ctx }: { ctx: SettingsContext }): JSX.Element {
   useEffect(() => scan.cancel, [scan.cancel]);
   const run = () => { setIgnored([]); scan.start(); };
   const review = (p: Proposal) => dispatch({ type: 'modal', modal: { kind: 'project', proposal: rememberProposal(p) } });
-  const skipped = scan.steps.filter(s => s.state !== 'done' && s.state !== 'waiting');
+  // Said after the scan too: the machines skipped, and those whose walk was cut short (« · parcours limité »).
+  const told = scan.steps.filter(s => (s.state === 'done' ? s.truncated : s.state !== 'waiting'));
 
   return (
     <section className="set-card ledge-suggest" aria-labelledby="ledge-suggest-title">
@@ -74,7 +75,7 @@ export function Suggestions({ ctx }: { ctx: SettingsContext }): JSX.Element {
               </div>
             </article>
           )) : <p className="set-hint">{scan.scans.some(s => s.status === 'ok') ? (proposals.length > 0 ? c.allIgnored : c.empty) : l.unscanned}</p>}
-          {skipped.map(s => <p key={s.machine} className="set-hint ledge-suggest-step">{l.step(s)}</p>)}
+          {told.map(s => <p key={s.machine} className="set-hint ledge-suggest-step">{l.step(s)}</p>)}
         </div>
       )}
     </section>

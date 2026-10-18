@@ -498,6 +498,7 @@ export const en: Messages = {
         return head + (s.agents.length ? ` Also to file: ${andList(s.agents)}.` : '');
       },
       nothing: 'Every repository found already belongs to a project. Add one by hand.',
+      limited: (ms) => ` · scan limited on ${andList(ms)}`,
       unscanned: 'No machine could be scanned.', again: 'Run again',
       why: 'Ledge · ', keep: (n, m) => `Keep ${n} (${m})`, addTo: (n) => `Add to ${n}`,
       gone: 'This proposal no longer exists.',

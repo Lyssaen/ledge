@@ -204,6 +204,33 @@ describe('« Let Ledge do it » in the project editor', () => {
 /** A client that answers nothing: for the dialog alone. */
 const silentClient = () => ({ send: vi.fn(), onMessage: () => () => {} }) as unknown as DaemonClient;
 
+describe('a scan cut short', () => {
+  it('the proposal says the scan was limited, and on which machines', async () => {
+    const { d, user, dialog } = await openNew(PAPER);
+    d.options.scanTruncated = true;
+    await user.click(dialog.getByRole('button', { name: 'Let Ledge do it' }));
+    await screen.findByRole('dialog', { name: 'Ledge proposal' }, { timeout: 3000 });
+    expect(document.querySelector('.pe-proposal')).toHaveTextContent('Ledge proposes2 repositories on Local. Uncheck what does not fit, then confirm: nothing is created before. · scan limited on Local');
+  });
+
+  it('« nothing free » after a limited scan does not claim completeness', async () => {
+    const { d, user, dialog } = await openNew([{ path: '/w/ledge', branch: 'main' }]);
+    d.options.scanTruncated = true;
+    await user.click(dialog.getByRole('button', { name: 'Let Ledge do it' }));
+    const back = within(await screen.findByRole('dialog', { name: 'New project' }, { timeout: 3000 }));
+    expect(await back.findByText('Every repository found already belongs to a project. Add one by hand. · scan limited on Local')).toBeVisible();
+    // Run again, complete: the clause goes.
+    d.options.scanTruncated = false;
+    await user.click(back.getByRole('button', { name: 'Run again' }));
+    expect(await back.findByText('Every repository found already belongs to a project. Add one by hand.', undefined, { timeout: 3000 })).toBeVisible();
+  });
+
+  it('says it in French too', () => {
+    expect(MESSAGES.fr.projects.ledge.limited(['Local', 'Dev'])).toBe(' · parcours limité sur Local et Dev');
+    expect(MESSAGES.en.projects.ledge.limited(['Local', 'Dev'])).toBe(' · scan limited on Local and Dev');
+  });
+});
+
 describe('the scan with no machine answering', () => {
   it('says that no machine could be scanned, not that everything is taken', async () => {
     render(<LangProvider lang="en"><ProjectDialog projects={PROJECTS} sessions={[]} machines={[machine('local', { ready: false })]} client={silentClient()}
