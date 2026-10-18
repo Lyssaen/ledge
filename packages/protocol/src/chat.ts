@@ -28,7 +28,7 @@ export type ChatRelay = z.infer<typeof ChatRelaySchema>;
  *  `addTo` names an existing project to complete. Nothing is created until the editor's button. */
 export const ChatProjectProposalSchema = z.object({
   name: z.string().min(1).max(80), description: z.string().max(500).optional(),
-  repos: z.array(z.object({ path: z.string().min(1), why: z.string().min(1).max(200) })).min(1).max(50),
+  repos: z.array(z.object({ path: z.string().min(1).max(4096), why: z.string().min(1).max(200) })).min(1).max(50),
   addTo: z.string().min(1).max(80).optional()
 });
 export type ChatProjectProposal = z.infer<typeof ChatProjectProposalSchema>;

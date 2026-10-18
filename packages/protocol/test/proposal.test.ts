@@ -88,8 +88,11 @@ describe('project blocks (lot 11 task 5)', () => {
     for (const v of [
       {}, { name: 'P', repos: [] }, { name: '  ', repos: [repo] }, { name: 'P', repos: [{ path: '', why: 'x' }] }, { name: 'P', repos: [{ path: '/w', why: ' ' }] },
       { name: 'x'.repeat(81), repos: [repo] }, { name: 'P', description: 'x'.repeat(501), repos: [repo] }, { name: 'P', repos: Array(51).fill(repo) },
-      { name: 'P', repos: [{ path: '/w', why: 'x'.repeat(201) }] }, { name: 'P', repos: [repo], addTo: 'x'.repeat(81) }
+      { name: 'P', repos: [{ path: '/w', why: 'x'.repeat(201) }] }, { name: 'P', repos: [repo], addTo: 'x'.repeat(81) },
+      { name: 'P', repos: [{ path: '/' + 'x'.repeat(4096), why: 'x' }] }
     ]) expect(parseProjectBlock(JSON.stringify(v))).toBeNull();
+    // A path of 4096 characters is still read.
+    expect(parseProjectBlock(JSON.stringify({ name: 'P', repos: [{ path: '/' + 'x'.repeat(4095), why: 'x' }] }))).not.toBeNull();
     expect(parseProjectBlock('{"name":')).toBeNull();
     expect(parseProjectBlock('null')).toBeNull();
   });

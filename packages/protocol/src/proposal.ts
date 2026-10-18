@@ -12,7 +12,7 @@ export type RelayBlock = z.infer<typeof RelayBlockSchema>;
  *  existing project to complete; only paths travel (the daemon keeps those that exist), each with the LLM's reason. */
 export const ProjectBlockSchema = z.object({
   name: z.string().trim().min(1).max(80), description: z.string().max(500).optional(),
-  repos: z.array(z.object({ path: z.string().min(1), why: z.string().trim().min(1).max(200) })).min(1).max(50),
+  repos: z.array(z.object({ path: z.string().min(1).max(4096), why: z.string().trim().min(1).max(200) })).min(1).max(50),
   addTo: z.string().trim().max(80).optional()
 });
 export type ProjectBlock = z.infer<typeof ProjectBlockSchema>;

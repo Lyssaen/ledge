@@ -238,8 +238,10 @@ describe('project proposal from the chat (lot 11 task 5)', () => {
     const turn = { qid: 'q1', question: 'crée un projet', askedAt: '2026-10-12T10:00:00.000Z', steps: [], projectProposal };
     expect(parseServerMessage({ type: 'chat.history', turns: [turn] })).toEqual({ type: 'chat.history', turns: [turn] });
   });
-  it('rejects a proposal without repositories', () => {
+  it('rejects a proposal without repositories, or with a path over 4096 characters', () => {
     expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', projectProposal: { ...projectProposal, repos: [] } })).toThrow();
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', projectProposal: { ...projectProposal, repos: [{ path: '/' + 'x'.repeat(4096), why: 'x' }] } })).toThrow();
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', projectProposal: { ...projectProposal, repos: [{ path: '/' + 'x'.repeat(4095), why: 'x' }] } })).toHaveProperty('projectProposal');
   });
 });
 
