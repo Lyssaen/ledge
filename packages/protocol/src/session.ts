@@ -78,6 +78,13 @@ export const SessionSchema =z.object({
   exitCode: z.number().int().nullable().optional(),
   exitedAt: z.string().datetime().optional(),
   lastError: z.string().optional(),
-  source: z.enum(['launcher', 'hook_only'])
+  source: z.enum(['launcher', 'hook_only']),
+  /** When the session was put in the archive (session management): set, it leaves the live list and waits to be restored, resumed or deleted. */
+  archivedAt: z.string().datetime().optional()
 });
 export type Session = z.infer<typeof SessionSchema>;
+
+/** Whether the session sits in the archive. */
+export function isArchived(s: Pick<Session, 'archivedAt'>): boolean {
+  return s.archivedAt !== undefined;
+}

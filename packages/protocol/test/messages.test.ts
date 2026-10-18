@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED, isArchived } from '../src/index.js';
 
 const T0 = '2026-10-09T18:02:00.000Z';
 
@@ -318,5 +318,24 @@ describe('decisions beyond accept and deny (lot 6a)', () => {
   it('always reaches the thread and the Decided event', () => {
     expect(SessionEventSchema.parse({ name: 'Decided', at: T0, source: 'daemon', decision: 'always' }).decision).toBe('always');
     expect(ThreadItemSchema.parse({ kind: 'permission', id: 'p', at: T0, turn: 0, tool: 'Bash', text: 'ls', decision: 'always' })).toMatchObject({ decision: 'always' });
+  });
+});
+
+describe('session management messages', () => {
+  it('parses archive, restore, resume and delete with an id', () => {
+    for (const type of ['session.archive', 'session.restore', 'session.resume', 'session.delete']) {
+      expect(parseClientMessage({ type, id: 'ab12' })).toEqual({ type, id: 'ab12' });
+    }
+  });
+  it('refuses them without an id', () => {
+    expect(() => parseClientMessage({ type: 'session.delete' })).toThrow();
+  });
+  it('keeps archivedAt on a session and agentSessionId on an event', () => {
+    expect(SessionSchema.parse({ ...session, archivedAt: '2026-10-18T10:00:00.000Z' }).archivedAt).toBe('2026-10-18T10:00:00.000Z');
+    expect(SessionEventSchema.parse({ name: 'Stop', at: T0, source: 'hook', agentSessionId: 'u-1' }).agentSessionId).toBe('u-1');
+  });
+  it('isArchived', () => {
+    expect(isArchived({ archivedAt: undefined })).toBe(false);
+    expect(isArchived({ archivedAt: '2026-10-18T10:00:00.000Z' })).toBe(true);
   });
 });

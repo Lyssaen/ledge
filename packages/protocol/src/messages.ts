@@ -44,7 +44,9 @@ export const SessionEventSchema = z.object({
   /** The session's transcript, or the helper's on SubagentStop; the daemon reads its tail for the agent's messages. */
   transcriptPath: z.string().optional(),
   /** Decided: what was chosen when the daemon knows it. */
-  decision: DecisionSchema.optional()
+  decision: DecisionSchema.optional(),
+  /** The agent's own session id when the hook names it, so the daemon can resume that conversation. */
+  agentSessionId: z.string().optional()
 });
 export type SessionEvent = z.infer<typeof SessionEventSchema>;
 
@@ -56,7 +58,7 @@ export type Recent = z.infer<typeof RecentSchema>;
 export const SEMVER = /^\d+\.\d+\.\d+$/;
 /** What the daemon knows of itself (spec 2026-10-12 auto-update §6): its version, how it was installed, whether it runs
  *  as the systemd service, and the command a person runs by hand when it cannot update itself. */
-export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional() });
+export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional(), archive: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -141,6 +143,14 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.interrupt'), id: z.string() }),
   /** Removes a finished (exited) or read-only (hook_only) session from the list; refused for a live launcher session. */
   z.object({ type: z.literal('session.dismiss'), id: z.string() }),
+  /** Puts a session in the archive: it leaves the live list but is kept. */
+  z.object({ type: z.literal('session.archive'), id: z.string() }),
+  /** Takes an archived session back out of the archive, as it was. */
+  z.object({ type: z.literal('session.restore'), id: z.string() }),
+  /** Starts the agent again on an archived session's conversation. */
+  z.object({ type: z.literal('session.resume'), id: z.string() }),
+  /** Deletes a session for good, archived or not. */
+  z.object({ type: z.literal('session.delete'), id: z.string() }),
   /** The user names the session's topic from the overlay (500 characters at most, the hook's prompt cap); an empty topic hands back to the automatic sources. */
   z.object({ type: z.literal('session.rename'), id: z.string(), topic: z.string().max(500) }),
   z.object({ type: z.literal('session.thread'), id: z.string() }),
