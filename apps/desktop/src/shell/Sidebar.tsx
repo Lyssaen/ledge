@@ -31,7 +31,7 @@ export function Sidebar({ nav, dispatch, sessions, machines, projects, order, pr
     <aside className="sidebar" aria-label={t.side.label}>
       <div className="side-brand">
         <ResidentMascot size={30} theme={theme} paused={nav.paused} reducedMotion={reduced} />
-        <strong>Ledge</strong>
+        <strong data-brand>Ledge<span className="brand-dot">.</span></strong>
         <span className="spacer" />
       </div>
       <div className="side-actions">

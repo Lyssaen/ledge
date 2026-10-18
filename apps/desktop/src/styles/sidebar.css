@@ -3,7 +3,9 @@
    from settings.css. Views, projects, machines with live state. */
 .sidebar{width:236px;padding:0;gap:0}
 .side-brand{height:56px;display:flex;align-items:center;gap:9px;padding:0 10px 0 16px;border-bottom:1px solid var(--sidebar-border)}
-.side-brand strong{font-size:16px;font-weight:600;letter-spacing:-.3px}
+.side-brand strong{font-size:18px;line-height:22px;font-weight:650;letter-spacing:-.02em}
+/* The island's word mark: « Ledge » and its dot in the accent colour. */
+.brand-dot{color:var(--sidebar-primary)}
 .side-actions{display:flex;flex-direction:column;gap:8px;padding:14px 12px 6px}
 .side-actions>.ledge-btn{width:100%;justify-content:center}
 .side-search{display:flex;align-items:center;gap:8px;height:34px;padding:0 9px;border:1px solid var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground);background:var(--background)}
