@@ -294,12 +294,22 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   useEffect(() => {
     if (flash === null || view !== 'thread') return;
     const frame = requestAnimationFrame(() => {
-      const row = [...(scroller.current?.querySelectorAll<HTMLElement>('[data-tool]') ?? [])].find(e => e.dataset.tool === flash);
+      const row = [...(scroller.current?.querySelectorAll<HTMLElement>('[data-tool],[data-message]') ?? [])].find(e => (e.dataset.tool ?? e.dataset.message) === flash);
       row?.scrollIntoView?.({ block: 'center' });
     });
     const off = setTimeout(() => setFlash(null), FLASH_MS);
     return () => { cancelAnimationFrame(frame); clearTimeout(off); };
   }, [flash, view]);
+  // Opened from « Voir dans le fil de X »: the message paired with the one clicked is brought into view and lit, once the thread is
+  // there (a message that is not in it is left alone). The reader no longer follows the end.
+  const aimed = useRef(p.nav.place.kind === 'session' ? p.nav.place.item : undefined);
+  useEffect(() => {
+    const id = aimed.current;
+    if (id === undefined || !items?.some(i => i.id === id)) return;
+    aimed.current = undefined;
+    follow.current = false;
+    setFlash(id);
+  }, [items]);
   const onScroll = () => {
     const el = scroller.current;
     if (!el || view !== 'thread') return;

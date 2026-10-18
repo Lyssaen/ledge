@@ -25,6 +25,8 @@ export interface MessageCardProps {
   /** The conversation's header, on its first message when the thread holds two or more with that peer; null: none. */
   header: { count: number } | null;
   folded: boolean;
+  /** Brought into view from the other agent's thread: lit for a moment. */
+  lit?: boolean;
   onFold(): void;
   /** « Voir dans le fil de X »: the peer's session. */
   onOpenPeer(): void;
@@ -32,7 +34,7 @@ export interface MessageCardProps {
 
 /** A message between this agent and another (the mockup's ExchangeCard): who wrote to whom, the summary and delivery of a
  *  sent one, its body clamped when long, a way to the peer's thread when the paired message is there; folded, one line. */
-export function MessageCard({ item, self, peer, header, folded, onFold, onOpenPeer }: MessageCardProps): JSX.Element {
+export function MessageCard({ item, self, peer, header, folded, lit, onFold, onOpenPeer }: MessageCardProps): JSX.Element {
   const { t } = useI18n();
   const tm = t.session.message;
   const [more, setMore] = useState(false);
@@ -52,7 +54,7 @@ export function MessageCard({ item, self, peer, header, folded, onFold, onOpenPe
   );
 
   if (folded) return <>{head}
-    <button type="button" className={`message-line ${item.kind}`} data-message={item.id} onClick={onFold}>
+    <button type="button" className={`message-line ${item.kind}${lit ? ' lit' : ''}`} data-message={item.id} onClick={onFold}>
       <span className="message-route">{bot(from, 14)}<strong>{from.name}</strong><Icon d={SHELL_ICONS.arrowRight} size={11} /><strong>{to.name}</strong></span>
       <span className="message-line-text">{lineText}</span>
       {sent && <Status item={item} peer={peerName} short />}
@@ -61,7 +63,7 @@ export function MessageCard({ item, self, peer, header, folded, onFold, onOpenPe
 
   const long = isLong(item.text);
   return <>{head}
-    <div className={`message-card ${item.kind}`} data-message={item.id} role="article">
+    <div className={`message-card ${item.kind}${lit ? ' lit' : ''}`} data-message={item.id} role="article">
       <div className="message-card-head">
         <span className="message-kicker"><Icon d={SHELL_ICONS.mail} size={12} />{sent ? tm.sent : tm.received}</span>
         <span className="message-route">{bot(from, 18)}<strong>{from.name}</strong><Icon d={SHELL_ICONS.arrowRight} size={12} />{bot(to, 18)}<strong>{to.name}</strong></span>

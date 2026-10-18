@@ -111,8 +111,10 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
     const key = peerKey(item);
     const conv = convs.get(key) ?? [];
     const peer = item.peer !== undefined ? peers.get(item.peer) ?? null : null;
+    const paired = item.kind === 'sent' ? item.received : item.sent;
     return <MessageCard item={item} self={session} peer={peer} header={conv[0] === item.id && conv.length > 1 ? { count: conv.length } : null}
-      folded={folded.has(key)} onFold={() => onFold(key)} onOpenPeer={() => peer && dispatch({ type: 'open', id: peer.id })} />;
+      folded={folded.has(key)} lit={flash === item.id} onFold={() => onFold(key)}
+      onOpenPeer={() => peer && dispatch({ type: 'open', id: peer.id, ...(paired !== undefined && { item: paired }) })} />;
   };
   // The marker opens the exchange above its time: on its prompt, else on the first message received that opens it.
   const opener = x.prompt?.id ?? x.received[0]?.id;
@@ -158,7 +160,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
 
 /** An action whose time counts on with the clock (running, or cut without a duration): its exchange takes every tick. */
 const ticks = (x: Exchange) => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.durationMs === undefined));
-const holds = (x: Exchange, id: string) => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.id === id));
+const holds = (x: Exchange, id: string) => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.id === id)) || messagesOf(x).some(m => m.id === id);
 const holdsPlan = (x: Exchange, key: string) => x.segments.some(s => s.kind === 'plan' && s.plan.key === key);
 
 const NONE: ReadonlySet<string> = new Set();

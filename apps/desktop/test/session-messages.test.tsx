@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import WebSocket from 'ws';
@@ -11,7 +11,7 @@ import { loadWorkspace } from '../src/session/lazy';
 import { listSessions, PROJECTS, type MockDaemon } from './helpers';
 
 const daemons: MockDaemon[] = [];
-afterEach(async () => { cleanup(); localStorage.clear(); for (const d of daemons.splice(0)) await d.close(); });
+afterEach(async () => { delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView; cleanup(); localStorage.clear(); for (const d of daemons.splice(0)) await d.close(); });
 
 const thread = () => within(screen.getByRole('tabpanel', { name: 'Fil de la session' }));
 const at = (s: number) => new Date(Date.now() - 600_000 + s * 1000).toISOString();
@@ -135,6 +135,18 @@ describe('messages between agents in the thread', () => {
     await user.click(await thread().findByRole('button', { name: /Voir dans le fil de Nova/ }));
     expect(await screen.findByRole('tabpanel', { name: 'Fil de la session' })).toBeVisible();
     expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:nova');
+  });
+
+  it('« Voir dans le fil de Nova » opens Nova on the paired message, lit', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const { d, user } = await openOtto([prompt('p1', 0, 1, 'Préviens Nova'), sent('s1', 1, 1, { received: 'recv-1-0' }), sent('s2', 2, 1, { received: 'recv-1-1' })]);
+    d.thread('nova', [received('recv-1-0', 3, 1, { from: 'otto', peer: 'otto', sent: 's1' }), received('recv-1-1', 4, 1, { from: 'otto', peer: 'otto', sent: 's2' })]);
+    await user.click((await thread().findAllByRole('button', { name: /Voir dans le fil de Nova/ }))[0]!);
+    await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:nova'));
+    await waitFor(() => expect(document.querySelector('.message-card.lit[data-message="recv-1-0"]')).not.toBeNull());
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    await waitFor(() => expect(document.querySelector('.message-card.lit')).toBeNull(), { timeout: 4000 });
   });
 
   it('« Nouveau » marks a received message or a sent one that arrived while away', async () => {
