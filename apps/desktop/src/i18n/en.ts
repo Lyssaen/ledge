@@ -7,14 +7,19 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('en', { type: 'co
 /** Desktop's copy in English, shaped by the French (see messages.ts, which loads it on demand). */
 export const en: Messages = {
   side: {
-    label: 'Sidebar', newSession: 'New session', search: 'Search', searchLabel: 'Search a session',
+    label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', settings: 'Settings'
+  },
+  titlebar: {
+    label: 'Window bar', search: 'Go to a session, a project, a setting…',
+    waiting: (n) => pluralEn(n, `${n} session waiting: open the first`, `${n} sessions waiting: open the first`),
+    dnd: 'Do not disturb', dndOn: 'Do not disturb: on', minimize: 'Minimize', maximize: 'Maximize', restore: 'Restore', close: 'Close'
   },
   crumb: { atelier: 'Atelier', list: 'List', settings: 'Settings', clearFilter: 'Remove the filter: show every project', clearFilterTitle: 'Every project (Esc)', escape: 'Esc', openParent: (n) => `Open ${n}’s conversation` },
   top: {
     viewTabs: 'Agents view', helpersHide: 'Hide subagents', helpersShow: 'Show subagents', pause: 'Freeze animations', play: 'Animate',
-    search: 'Search a session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
+    chat: 'Chat Ledge (/)', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
     terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)'
   },
   foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts', islandOn: 'Island active', islandOff: 'Island hidden', islandTitle: 'Island settings' },

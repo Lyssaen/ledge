@@ -20,6 +20,7 @@ import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { mainOrder } from './nav/agents';
 import { useKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
+import { TitleBar } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { LaunchPlace } from './launch/lazy';
@@ -197,6 +198,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
 
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
+      {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={nav.modal !== null}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
         <section className="workspace">

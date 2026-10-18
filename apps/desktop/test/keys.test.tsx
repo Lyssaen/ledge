@@ -112,8 +112,8 @@ describe('global shortcuts', () => {
   });
 
   it('focus goes back to the opener when the search closes, with the button or with Ctrl K', async () => {
-    const { side, user } = await boot({ projects: TWO_PROJECTS });
-    const btn = side.getByRole('button', { name: 'Search a session' });
+    const { user } = await boot({ projects: TWO_PROJECTS });
+    const btn = screen.getByRole('button', { name: 'Go to a session, a project, a setting…' });
     await user.click(btn);
     expect(screen.getByRole('combobox')).toHaveFocus();
     await user.keyboard('{Escape}');

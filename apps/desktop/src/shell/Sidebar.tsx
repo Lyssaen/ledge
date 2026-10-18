@@ -1,27 +1,22 @@
 import { type MachineState } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
-import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import { useMotionPreferences } from '../motionPreferences';
 import { activeCount, dotOf } from '../nav/agents';
 import type { NavAction, NavState } from '../nav/state';
 import type { Filing } from '../atelier/filing';
 import { SHELL_ICONS } from './icons';
-import { useTheme } from './theme';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 const needsYou = (s: Session) => { const d = dotOf(s); return d === 'approval' || d === 'question'; };
 
-/** The mockup's sidebar: Ledge, New session and search, the views, the projects with their agents' dots, « Sans projet »,
+/** The mockup's sidebar: New session, the views, the projects with their agents' dots, « Sans projet »,
  *  the machines and Settings. Each project is a drop target for an agent of « Sans projet »; « Sans projet » itself is not
  *  (a rule must name a project). */
 export function Sidebar({ nav, dispatch, sessions, machines, projects, order, projectIdOf, filing }: { nav: NavState; dispatch: (a: NavAction) => void; sessions: readonly Session[]; machines: readonly MachineState[]; projects: Projects | null; order: readonly Session[]; projectIdOf: (s: Session) => string | null; filing: Filing }) {
   const { t } = useI18n();
-  const theme = useTheme();
-  const { reduced } = useMotionPreferences();
   const { place } = nav;
   const filter = place.kind === 'overview' ? place.project : null;
   const unassigned = order.filter(s => projectIdOf(s) === null);
@@ -29,18 +24,10 @@ export function Sidebar({ nav, dispatch, sessions, machines, projects, order, pr
   const inSettings = place.kind === 'settings';
   return (
     <aside className="sidebar" aria-label={t.side.label}>
-      <div className="side-brand">
-        <ResidentMascot size={30} theme={theme} paused={nav.paused} reducedMotion={reduced} />
-        <strong data-brand>Ledge<span className="brand-dot">.</span></strong>
-        <span className="spacer" />
-      </div>
       <div className="side-actions">
         <Button variant="primary" onClick={() => dispatch({ type: 'modal', modal: { kind: 'launch' } })}>
           <Icon d={ICONS.plus.d} /><span>{t.side.newSession}</span><Kbd>N</Kbd>
         </Button>
-        <button className="side-search" onClick={() => dispatch({ type: 'modal', modal: { kind: 'search' } })} aria-label={t.side.searchLabel}>
-          <Icon d={SHELL_ICONS.search} size={14} /><span>{t.side.search}</span><Kbd>Ctrl K</Kbd>
-        </button>
       </div>
       <div className="side-scroll">
         <nav className="side-group" aria-label={t.side.views}>

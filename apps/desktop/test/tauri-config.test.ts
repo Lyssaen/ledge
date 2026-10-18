@@ -13,12 +13,15 @@ describe('Desktop Tauri config', () => {
     expect(conf.version).toBe(island.version);
     expect(conf.build.devUrl).toBe('http://localhost:1421');
   });
-  it('has one decorated, resizable main window remembering its state', () => {
+  it('has one undecorated (the title bar is home-made), resizable main window remembering its state', () => {
     const w = conf.app.windows[0];
-    expect(w).toMatchObject({ label: 'main', decorations: true, resizable: true, width: 1280, height: 800, minWidth: 640, minHeight: 480 });
+    expect(w).toMatchObject({ label: 'main', decorations: false, resizable: true, width: 1280, height: 800, minWidth: 640, minHeight: 480 });
     expect(w.transparent).not.toBe(true); expect(w.alwaysOnTop).not.toBe(true);
     expect(caps.permissions).toContain('window-state:default');
     expect(main).toContain('tauri_plugin_window_state::Builder');
+  });
+  it('lets the home-made title bar drag, minimise, maximise and close the window', () => {
+    for (const p of ['minimize', 'toggle-maximize', 'close', 'start-dragging', 'is-maximized']) expect(caps.permissions).toContain(`core:window:allow-${p}`);
   });
   it('starts hidden and shows itself after the window state is restored, unless launched minimized', () => {
     expect(conf.app.windows[0].visible).toBe(false);

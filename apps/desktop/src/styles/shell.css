@@ -22,6 +22,33 @@
 .modal-title { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
 .modal-title h2 { font-size: 16px; font-weight: 500; margin: 0; }
 
+/* The « Commande » window bar (docs/mockups/ledge-titlebar.html, C): 44 px over the sidebar and the workspace; the native bar is off. */
+:root { --titlebar-h: 44px; --close-hover: #c42b1c; --close-fg: #fff; }
+.titlebar { height: var(--titlebar-h); flex-shrink: 0; display: flex; align-items: stretch; background: var(--sidebar); border-bottom: 1px solid var(--sidebar-border); user-select: none; }
+.titlebar-left, .titlebar-right { display: flex; align-items: center; flex-shrink: 0; }
+.titlebar-left { padding-left: 14px; }
+.titlebar-right { gap: 2px; padding-left: 8px; }
+.titlebar-mid { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; padding: 0 16px; }
+.titlebar-mark { font-size: 13px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+.titlebar-cmd { width: min(440px, 100%); height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--muted-foreground); font-size: 12px; }
+.titlebar-cmd > span { flex: 1; min-width: 0; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.titlebar-cmd:hover { border-color: var(--ring); color: var(--foreground); }
+.titlebar-wait { display: inline-flex; align-items: center; gap: 6px; height: 22px; margin-right: 6px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 500; color: var(--sidebar-primary); background: color-mix(in srgb, var(--sidebar-primary) 12%, transparent); white-space: nowrap; }
+.titlebar-wait:hover { background: color-mix(in srgb, var(--sidebar-primary) 20%, transparent); }
+.titlebar-wait i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.titlebar-ib { width: 32px; height: 28px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--muted-foreground); }
+.titlebar-ib:hover { background: var(--accent); color: var(--foreground); }
+.titlebar-ib[aria-pressed=true] { color: var(--sidebar-primary); }
+.titlebar-caps { display: flex; align-self: stretch; margin-left: 6px; }
+.titlebar-caps button { width: 46px; height: 32px; display: grid; place-items: center; color: var(--foreground); }
+.titlebar-caps button:hover { background: color-mix(in srgb, var(--foreground) 8%, transparent); }
+.titlebar-caps button:active { background: color-mix(in srgb, var(--foreground) 5%, transparent); }
+.titlebar-caps button.close:hover { background: var(--close-hover); color: var(--close-fg); }
+.titlebar-caps svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 1; shape-rendering: crispEdges; }
+/* The dialogs open under the bar, which stays the window's (move, minimise, close). */
+body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
+@media (max-width: 850px) { .titlebar-cmd kbd { display: none; } .titlebar-caps button { width: 38px; } }
+
 /* observatory.css: full screen. */
 .immersive .sidebar { display: none; }
 .immersive .app-header { height: 48px; }

@@ -17,8 +17,8 @@ const MENU_WIDTH = 260;
 const VIEWS: readonly View[] = ['atelier', 'list'];
 
 /** The mockup's top bar: the breadcrumb on the left (no page title; on a subagent's page, its parent before it); on the right,
- *  icons only, in groups: view and display (overview only), or the open agent's state and the terminal toggle; then search,
- *  chat, shortcuts, and full screen. */
+ *  icons only, in groups: view and display (overview only), or the open agent's state, the terminal toggle and the session menu; then
+ *  shortcuts and full screen (search and chat are in the title bar). */
 export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal, manage }: {
   nav: NavState; dispatch: (a: NavAction) => void; session: Session | null; projects: Projects | null; projectIdOf: (s: Session) => string | null;
   /** The subagent whose page is open (session is then its parent). */
@@ -131,8 +131,6 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
       )}
       <div className="header-actions">
         {overview && <span className="view-actions-sep" />}
-        <Button variant="ghost" size="icon" aria-label={t.side.searchLabel} title={t.top.search} onClick={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}><Icon d={SHELL_ICONS.search} /></Button>
-        <Button variant="ghost" size="icon" aria-label={t.side.chat} title={t.top.chat} onClick={() => dispatch({ type: 'chat', open: true })}><Icon d={SHELL_ICONS.chat} /></Button>
         <Button variant="ghost" size="icon" aria-label={t.top.shortcuts} title={t.top.shortcuts} onClick={() => dispatch({ type: 'modal', modal: { kind: 'shortcuts' } })}><Icon d={SHELL_ICONS.help} /></Button>
         <span className="view-actions-sep" />
         <Button variant="ghost" size="icon" aria-label={nav.fullscreen ? t.top.fullscreenExit : t.top.fullscreen} title={nav.fullscreen ? t.top.fullscreenExit : t.top.fullscreen} onClick={() => dispatch({ type: 'fullscreen', on: !nav.fullscreen })}>

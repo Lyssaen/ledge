@@ -16,6 +16,7 @@
 * { box-sizing: border-box; }
 /* The mockup's base (observatory.css): the app is the whole window and nothing scrolls the page itself. */
 html, body, #root { height: 100%; margin: 0; background: var(--background); }
+#root { display: flex; flex-direction: column; }
 body { font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; color: var(--foreground); overflow: hidden; }
 button, input, select, textarea { font: inherit; }
 button { color: inherit; cursor: pointer; text-align: left; }

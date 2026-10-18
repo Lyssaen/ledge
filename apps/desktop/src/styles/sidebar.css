@@ -2,15 +2,10 @@
    swatch classes (the colour comes inline from PROJECT_COLORS); the footer rules come
    from settings.css. Views, projects, machines with live state. */
 .sidebar{width:236px;padding:0;gap:0}
-.side-brand{height:56px;display:flex;align-items:center;gap:9px;padding:0 10px 0 16px;border-bottom:1px solid var(--sidebar-border)}
-.side-brand strong{font-size:18px;line-height:22px;font-weight:650;letter-spacing:-.02em}
 /* The island's word mark: « Ledge » and its dot in the accent colour. */
 .brand-dot{color:var(--sidebar-primary)}
 .side-actions{display:flex;flex-direction:column;gap:8px;padding:14px 12px 6px}
 .side-actions>.ledge-btn{width:100%;justify-content:center}
-.side-search{display:flex;align-items:center;gap:8px;height:34px;padding:0 9px;border:1px solid var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground);background:var(--background)}
-.side-search>span{flex:1;text-align:left}
-.side-search:hover{border-color:var(--input);color:var(--foreground)}
 .side-scroll{flex:1;overflow:auto;padding:4px 12px 16px;display:flex;flex-direction:column;gap:18px}
 .side-group{display:flex;flex-direction:column;gap:2px}
 .side-group>nav{display:flex;flex-direction:column;gap:2px}
@@ -44,8 +39,8 @@
 .machine-dot{width:7px;height:7px;border-radius:50%;margin:0 4px 0 2px;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 18%,transparent);flex-shrink:0}
 .machine-dot.off{background:none;border:1.5px solid var(--muted-foreground);box-shadow:none}
 @media(max-width:1250px){.sidebar{width:210px}}
-@media(max-width:850px){.sidebar{width:60px}.side-brand{padding:0;justify-content:center}.side-brand strong,.side-brand .spacer,.side-brand .ledge-btn{display:none}
- .side-actions{padding:12px 8px 4px}.side-actions .ledge-btn span,.side-search span,.side-search kbd{display:none}.side-search{justify-content:center;padding:0}
+@media(max-width:850px){.sidebar{width:60px}
+ .side-actions{padding:12px 8px 4px}.side-actions .ledge-btn span,.side-actions .ledge-btn kbd{display:none}
  .side-scroll{padding:4px 8px}.side-label,.side-drop-help,.side-row>span,.side-row>small,.side-row kbd,.side-dots{display:none}.side-row{justify-content:center;padding:0}
  .side-count{position:absolute;top:2px;right:2px;min-width:14px;height:14px;font-size:8px}}
 /* settings.css: Settings at the foot of the sidebar. */

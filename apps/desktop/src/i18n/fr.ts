@@ -20,14 +20,19 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('fr', { type: 'co
 /** Desktop's copy in French: the source of truth, whose shape is `Messages` (see messages.ts, which loads it on demand). */
 export const fr = {
   side: {
-    label: 'Barre latérale', newSession: 'Nouvelle session', search: 'Rechercher', searchLabel: 'Rechercher une session',
+    label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
     machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', settings: 'Réglages'
+  },
+  titlebar: {
+    label: 'Barre de fenêtre', search: 'Aller à une session, un projet, un réglage…',
+    waiting: (n: number) => plural(n, `${n} session attend : ouvrir la première`, `${n} sessions attendent : ouvrir la première`),
+    dnd: 'Ne pas déranger', dndOn: 'Ne pas déranger : activé', minimize: 'Réduire', maximize: 'Agrandir', restore: 'Restaurer', close: 'Fermer'
   },
   crumb: { atelier: 'Atelier', list: 'Liste', settings: 'Réglages', clearFilter: 'Retirer le filtre : voir tous les projets', clearFilterTitle: 'Tous les projets (Échap)', escape: 'Échap', openParent: (n: string) => `Ouvrir la conversation de ${n}` },
   top: {
     viewTabs: 'Vue des agents', helpersHide: 'Masquer les sous-agents', helpersShow: 'Afficher les sous-agents', pause: 'Figer les animations', play: 'Animer',
-    search: 'Rechercher une session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
+    chat: 'Chat Ledge (/)', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
     terminalShow: 'Afficher le terminal', terminalHide: 'Masquer le terminal', terminalShowTitle: 'Afficher le terminal (O)', terminalHideTitle: 'Masquer le terminal (O)'
   },
   foot: { sessions: 'Sessions locales et SSH', search: 'Une session', chat: 'Chat Ledge', shortcuts: 'Raccourcis', islandOn: 'Île active', islandOff: 'Île masquée', islandTitle: 'Réglages de l’île' },
