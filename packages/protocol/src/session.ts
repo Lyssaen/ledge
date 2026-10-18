@@ -68,6 +68,8 @@ export const SessionSchema =z.object({
   pending: PendingSchema.optional(),
   helpers: z.array(HelperSchema).default([]),
   lastReply: ReplySchema.optional(),
+  /** The last message this session sent to another agent: its tool_use_id, the address, the peer's Ledge session id, a one-line summary. */
+  lastMessage: z.object({ id: z.string(), to: z.string(), peer: z.string().optional(), summary: z.string(), at: z.string().datetime() }).optional(),
   startedAt: z.string().datetime(),
   lastActivityAt: z.string().datetime(),
   lastHookAt: z.string().datetime().optional(),

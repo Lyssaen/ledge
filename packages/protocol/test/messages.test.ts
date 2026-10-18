@@ -319,6 +319,16 @@ describe('decisions beyond accept and deny (lot 6a)', () => {
     expect(SessionEventSchema.parse({ name: 'Decided', at: T0, source: 'daemon', decision: 'always' }).decision).toBe('always');
     expect(ThreadItemSchema.parse({ kind: 'permission', id: 'p', at: T0, turn: 0, tool: 'Bash', text: 'ls', decision: 'always' })).toMatchObject({ decision: 'always' });
   });
+
+  it("parses a sent and a received message, and a session's last message", () => {
+    const sent = { kind: 'sent', id: 'toolu_1', at: T0, turn: 2, to: 'harness-assistant-bf', peer: 'bc8e', summary: 'OK', text: 'Vas-y', status: 'read', received: 'recv-5-0' };
+    const received = { kind: 'received', id: 'recv-5-0', at: T0, turn: 5, from: 'harness-assistant-2d', peer: 'fce8', text: 'Vas-y', sent: 'toolu_1' };
+    expect(ThreadItemSchema.parse(sent)).toEqual(sent);
+    expect(ThreadItemSchema.parse(received)).toEqual(received);
+    expect(() => ThreadItemSchema.parse({ ...sent, status: 'lu' })).toThrow();
+    const lastMessage = { id: 'toolu_1', to: 'harness-assistant-bf', peer: 'bc8e', summary: 'OK', at: T0 };
+    expect(SessionSchema.parse({ ...session, lastMessage }).lastMessage).toEqual(lastMessage);
+  });
 });
 
 describe('session management messages', () => {
