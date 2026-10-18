@@ -34,6 +34,8 @@ interface BubbleProps {
   failure?: string;
   /** A decision for this request is in flight (sent from any path): the actions stay locked until the daemon answers. */
   deciding?: boolean;
+  /** Allow, deny or answer from the card (Desktop's « quick »); off, an ask only offers Open in Ledge and Later. */
+  quick?: boolean;
   /** Null when the actions may be used; otherwise why they are disabled (offline, read-only). */
   blocked?: string | null;
   frozen?: boolean;
@@ -47,7 +49,7 @@ interface BubbleProps {
   ref?: Ref<HTMLDivElement>;
 }
 
-export function Bubble({ session, moreCount, visible, paused, remainingMs, ack = null, kind = 'ask', elapsedMs, preview, failure, deciding = false, blocked = null, frozen = false, reducedMotion, onOpen, onDismiss, onDecide, onReply, theme = 'dark', ref }: BubbleProps) {
+export function Bubble({ session, moreCount, visible, paused, remainingMs, ack = null, kind = 'ask', elapsedMs, preview, failure, deciding = false, quick = true, blocked = null, frozen = false, reducedMotion, onOpen, onDismiss, onDecide, onReply, theme = 'dark', ref }: BubbleProps) {
   const pending = session?.pending;
   const notice = kind !== 'ask';
   const holdMs = FINISHED_BUBBLE_MS;
@@ -61,6 +63,8 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
   const disabled = locked || blocked !== null;
   const isQ = pending?.kind === 'question';
   const review = pending?.kind === 'diff' || pending?.kind === 'plan';
+  /** Decided in Ledge Desktop, not here: a diff or a plan, or any ask once the quick answers are off. */
+  const handOff = review || !quick;
   const [choice, setChoice] = useState<number | null>(null);
   const [reply, setReply] = useState('');
   const [nudge, setNudge] = useState(false);
@@ -106,7 +110,7 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
           {moreCount > 0 && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.bubble.more(moreCount)}</span>}
         </div>
       </div>
-      {isQ && kind === 'ask' && pending?.options && (
+      {isQ && kind === 'ask' && quick && pending?.options && (
         <div role="radiogroup" aria-label={t.bubble.choices} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {pending.options.map((option, i) => (
             <button key={option} type="button" role="radio" aria-checked={choice === i} disabled={disabled} onClick={() => { if (disabled) return; setChoice(i); setReply(''); setNudge(false); }}
@@ -129,10 +133,10 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
             <Button variant="outline" size="sm" onClick={() => onDismiss?.()}>{t.bubble.ok}</Button>
             <Button variant="primary" size="sm" onClick={() => onOpen()}>{t.bubble.openSession}</Button>
           </>
-        ) : review ? (
+        ) : handOff ? (
           <>
             <Button variant="outline" size="sm" onClick={() => onDismiss?.()}>{t.bubble.later}</Button>
-            <Button variant="primary" size="sm" onClick={() => onOpen()}>{t.bubble.reviewAction}</Button>
+            <Button variant="primary" size="sm" onClick={() => onOpen()}>{review ? t.bubble.reviewAction : t.bubble.openSession}</Button>
           </>
         ) : isQ ? (
           <Button variant="primary" size="sm" disabled={disabled} onClick={answer}>{t.bubble.reply}</Button>
@@ -143,7 +147,7 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
           </>
         )}
       </div>
-      {kind === 'ask' && !review && !locked && (
+      {kind === 'ask' && !handOff && !locked && (
         <div style={{ display: 'flex', gap: 12 }}>
           <button type="button" onClick={() => onOpen()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: 0, border: 0, background: 'transparent', color: 'var(--muted-foreground)', cursor: 'pointer', fontSize: 12 }}>{t.bubble.openSession}<Kbd>O</Kbd></button>
           <button type="button" onClick={() => onDismiss?.()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: 0, border: 0, background: 'transparent', color: 'var(--muted-foreground)', cursor: 'pointer', fontSize: 12 }}>{moreCount > 0 ? t.bubble.laterNext : t.bubble.later}<Kbd>Esc</Kbd></button>

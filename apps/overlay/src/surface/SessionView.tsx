@@ -134,6 +134,8 @@ export interface SessionViewProps {
   /** Native tracking (spec 2026-10-13 §6): the session's thread once received; undefined while it is on its way. */
   thread?: ThreadItem[];
   onOpenHelper?: (id: string) => void;
+  /** The sub-agents next to their main agent (Desktop's « shows helpers »); off, their tree is not drawn. */
+  helpers?: boolean;
   /** Removes a finished or read-only session from the list (shown only for those); `dismissOff` while offline. */
   onDismiss?: () => void; dismissOff?: boolean;
   /** Null when commands may be sent; otherwise why every send/decision path is disabled (offline, read-only). */
@@ -230,7 +232,7 @@ export function SessionView(p: SessionViewProps) {
             {readOnly ? <Badge state="readonly" tone={badgeState} caps /> : <Badge state={badgeState} caps />}
           </div>
           <h2 style={{ margin: 0, fontSize: 18, lineHeight: '26px', fontWeight: 650, letterSpacing: '-0.01em', overflowWrap: 'anywhere' }}>{title}</h2>
-          {readOnly && rows.length > 0 && <HelpersTree parent={s} helpers={rows} direction="down" t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
+          {readOnly && p.helpers !== false && rows.length > 0 && <HelpersTree parent={s} helpers={rows} direction="down" t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
           {p.thread !== undefined
             // The current answer is the card below when there is one, or the plan the request shows; otherwise (a request waits) it reads in the thread.
             ? <Thread session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} onDocument={p.onDocument} hideCurrentReply={!!(reply && doc) || (!!pending?.body && pending.body === s.lastReply?.text)} />
@@ -289,7 +291,7 @@ export function SessionView(p: SessionViewProps) {
       {!readOnly && (
         <div data-reply-area style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px 10px', borderTop: rule }}>
           {/* The helpers stay in view over the field, whatever the thread's scroll. */}
-          {rows.length > 0 && <HelpersTree parent={s} helpers={rows} direction="up" t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
+          {p.helpers !== false && rows.length > 0 && <HelpersTree parent={s} helpers={rows} direction="up" t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
             <textarea ref={replyField} data-reply rows={1} className="ledge-field" placeholder={t.session.replyPlaceholder(s.name)} aria-label={t.session.replyLabel(s.name)} aria-describedby="ledge-reply-hint" value={p.draft}
               onChange={e => p.onDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDraft(); } }}

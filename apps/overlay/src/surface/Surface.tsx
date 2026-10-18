@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
-import type { ChatProposal, Session, Tool } from '@ledge/protocol';
+import { DEFAULT_ISLAND_PREFS, type ChatProposal, type IslandPrefs, type Session, type Tool } from '@ledge/protocol';
 import { loadDefaultTool, saveDefaultTool } from '../defaultTool';
 import { useDaemon, daemonStore } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
@@ -69,6 +69,10 @@ const inside = (p: { x: number; y: number } | null, g: Layout) => p !== null && 
 const inBand = (p: { x: number; y: number } | null, g: Layout) => p !== null && p.y >= 0 && p.y <= HOT_BAND_H && p.x >= g.handle.left - HOT_BAND_OVERHANG && p.x < g.handle.left + g.handle.w + HOT_BAND_OVERHANG && !inside(p, g);
 /** One shared empty preview, so a session without one keeps a stable value across renders. */
 const NO_LINES: string[] = [];
+/** No frame at all while the island is hidden: the window takes the mouse nowhere. */
+const HIDDEN_FRAME = { left: 0, top: 0, w: 0, h: 0 } as const;
+/** A hot zone no cursor reaches while the island is hidden (the shell keeps watching one). */
+const HIDDEN_HOT = { left: -100_000, w: 0 } as const;
 /** How long the "X is starting in Y" line stays under the list header. */
 export const LAUNCH_NOTICE_MS = 6000;
 
@@ -98,12 +102,15 @@ export interface SurfaceProps {
   soundPlayer?: SoundPlayer;
   /** The auto-update (App owns it): the card in the list, the pip on the island and on the gear. */
   update?: UpdateController;
+  /** The island's settings from Ledge Desktop (atelier spec §7): hidden, nothing is drawn and nothing takes the mouse, the
+   *  asks are still counted; `shows` says what it shows besides asks and questions; the shortcut is only shown. */
+  visible?: boolean; shows?: IslandPrefs['shows']; shortcut?: string;
 }
 
 /** A text field or editable content: focus there means someone is filling it in. Radios, buttons and rows are not. */
 const isEditable = (el: Element | null) => !!el && ((el.tagName === 'INPUT' && !['radio', 'checkbox', 'button', 'submit'].includes((el as HTMLInputElement).type)) || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable);
 
-export function Surface({ screenH, screenW = window.innerWidth, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, accent = null, onAccent, soundPlayer, islandPosition = 'center', onIslandPosition, discreet = true, onDiscreet, update }: SurfaceProps) {
+export function Surface({ screenH, screenW = window.innerWidth, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, onLang, monitors, monitor = null, onMonitor, onSettingsOpen, autostart = null, onAutostart, accent = null, onAccent, soundPlayer, islandPosition = 'center', onIslandPosition, discreet = true, onDiscreet, update, visible = true, shows = DEFAULT_ISLAND_PREFS.shows, shortcut }: SurfaceProps) {
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
@@ -121,7 +128,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const osReduced = useOsReducedMotion();
   const reducedMotion = motionPrefs.reduced;
   const prefs = useSoundPrefs();
-  const finishedBubble = prefs.finished === 'both' || prefs.finished === 'bubble';
+  const finishedBubble = (prefs.finished === 'both' || prefs.finished === 'bubble') && shows.finished;
+  const quick = shows.quick;
+  const visibleRef = useRef(visible); visibleRef.current = visible;
   const [defaultTool, setDefaultTool] = useState(loadDefaultTool);
   const chooseDefaultTool = (tool: Tool) => { setDefaultTool(tool); saveDefaultTool(tool); };
   // Work time of the last finish per session, so the finished bubble can say "2m 40s of work".
@@ -156,6 +165,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
 
   // Ctrl+Alt+L opens the first ask, else the chat, and folds the chat. Focus follows so the card's keys arrive.
   useEffect(() => onShortcut(() => {
+    if (!visibleRef.current) return;
     dispatch({ type: 'shortcut' });
     void focusOverlay();
   }), [ctl, dispatch]);
@@ -180,7 +190,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       const pending = session?.pending;
       if (e.key === 'Enter' && !(el?.tagName === 'BUTTON') && (!typing || el?.dataset.reply !== undefined)) {
         e.preventDefault();
-        if (pending?.kind === 'question') {
+        if (!quick) openInLedge({ kind: 'session', id: st.bubbleId });
+        else if (pending?.kind === 'question') {
           const field = surfaceRef.current?.querySelector<HTMLInputElement>('[data-reply]');
           const chosen = surfaceRef.current?.querySelector<HTMLButtonElement>('[role="radio"][aria-checked="true"] span');
           const answer = field?.value.trim() || chosen?.textContent || '';
@@ -197,6 +208,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       if (typing) return;
       const k = e.key.toLowerCase();
       if (k === 'o') { e.preventDefault(); openInLedge(st.bubbleId.startsWith('machine:') ? { kind: 'machines' } : { kind: 'session', id: st.bubbleId }); }
+      else if (!quick) return;
       else if (pending?.kind === 'permission' && k === 'y') { if (decide(st.bubbleId, 'accept')) dispatch({ type: 'decidedInBubble' }); }
       else if (pending?.kind === 'permission' && k === 'n') { if (decide(st.bubbleId, 'deny')) dispatch({ type: 'decidedInBubble' }); }
       else if (pending?.kind === 'question' && /^[1-9]$/.test(k)) {
@@ -231,7 +243,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // The native poller covers the screen beyond the webview: the gaze and the top band both read it.
   useEffect(() => onCursorProximity(point => {
     if (point) pointer.current = point;
-    setBandPointer(inBand(point, geoRef.current) ? point : null);
+    setBandPointer(visibleRef.current && inBand(point, geoRef.current) ? point : null);
     setResidentPointer(ctl.state().mode === 'handle' ? point : null);
   }), [ctl]);
   useEffect(() => onForegroundCovered(setCovered), []);
@@ -239,7 +251,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     if (action === 'dnd') { onToggleDnd(); return; }
     dispatch({ type: 'close' });
     if (action === 'new') openInLedge({ kind: 'launch' });
-    else dispatch({ type: 'shortcut' });
+    else if (visibleRef.current) dispatch({ type: 'shortcut' });
     void focusOverlay();
   }), [dispatch, onToggleDnd]);
 
@@ -261,6 +273,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     if (c.kind === 'asked' || c.kind === 'left' || c.kind === 'failed') setFinishedUnread(x => { if (!(c.id in x)) return x; const { [c.id]: _gone, ...rest } = x; return rest; });
   }, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
 
+  // Hidden from Desktop: whatever was open folds; the asks stay queued for when it shows again.
+  useEffect(() => { if (!visible) { dispatch({ type: 'close' }); setBandPointer(null); } }, [visible, dispatch]);
   // DND folds the bubble and keeps the queue. Nothing unfolds on its own. Turning it off does not re-bubble.
   useEffect(() => { dispatch({ type: 'dnd', on: dnd }); }, [dnd, dispatch]);
   // A machine that drops gets a notice. Coming back removes it. Nothing unfolds during Do not disturb.
@@ -297,7 +311,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     // Page coordinates are work-area coordinates in both worlds: the native window covers the work area.
     const track = (e: PointerEvent | MouseEvent) => {
       pointer.current = { x: e.clientX, y: e.clientY };
-      setBandPointer(inBand(pointer.current, geoRef.current) ? pointer.current : null);
+      setBandPointer(visibleRef.current && inBand(pointer.current, geoRef.current) ? pointer.current : null);
       // The native poller covers the screen beyond the webview; browser previews use document events for the gaze too.
       if (!isTauri()) setResidentPointer(pointer.current);
     };
@@ -557,7 +571,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // A balloon speaks for 5 s once it is actually seen on the handle, then fades; a new situation (new ask, new finish)
   // speaks again. Leaving the handle before the 5 s are up restarts them on return. The unread state stays either way.
   const speakerKey = speaker ? `${speaker.id}|${speaker.seed}` : null;
-  const sayOnHandle = st.mode === 'handle' && speakerKey !== null;
+  const sayOnHandle = shows.say && st.mode === 'handle' && speakerKey !== null;
   const [sayExpired, setSayExpired] = useState<string | null>(null);
   useEffect(() => {
     if (!sayOnHandle || speakerKey === sayExpired) return;
@@ -571,7 +585,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, pip: !!updatePip, dnd, readerExpanded: st.documentExpanded, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
   geoRef.current = geo;
   // The shell watches the top band over the island's span (its depth and overhang are the shell's own constants).
-  useEffect(() => { setHotZone(Math.round(geo.handle.left), Math.round(geo.handle.w)); }, [geo.handle.left, geo.handle.w]);
+  const hot = visible ? { left: Math.round(geo.handle.left), w: Math.round(geo.handle.w) } : HIDDEN_HOT;
+  useEffect(() => { setHotZone(hot.left, hot.w); }, [hot.left, hot.w]);
 
   // Grow when the area grows, shrink otherwise; remembered per area so unrelated re-renders keep the direction.
   const areaNow = geo.w * geo.h;
@@ -678,8 +693,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const sr = shoulderR(geo.w, st.mode === 'handle');
   if (sr > 0) extras.push({ left: geo.left - sr, top: 0, w: geo.w + 2 * sr, h: sr });
   const frame = frameOf(geo, extras, { w: screenW, h: screenH });
-  useNativeFrame(frame, parseFloat(ms(SETTLE_MS)));
-  useEffect(() => { setOutsideWatch(panel); }, [panel]);
+  useNativeFrame(visible ? frame : HIDDEN_FRAME, parseFloat(ms(SETTLE_MS)));
+  useEffect(() => { setOutsideWatch(panel && visible); }, [panel, visible]);
   // The terminal tab is the fallback for read-only and offline sessions too: only the daemon message needs the daemon.
   const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); openTab(id); };
   const chooseOption = (n: number) => {
@@ -733,11 +748,11 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
         style={{ position: 'absolute', left: geo.left, top: 0, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--notch)', color: 'var(--sidebar-foreground)', borderRadius: `0px 0px ${radius}px ${radius}px`, opacity: unreachable ? 0.6 : 1, willChange: 'left, width, height',
           transition: surfaceTransition }}>
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-          <Handle updatePip={updatePip} updateVersion={updateVersion} onUpdate={() => openInLedge({ kind: 'update' })} bots={bots} slots={geo.slots} visible={st.mode === 'handle'} strip={strip} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} sayId={sayShown && speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+          <Handle updatePip={updatePip} updateVersion={updateVersion} onUpdate={() => openInLedge({ kind: 'update' })} bots={bots} slots={geo.slots} visible={st.mode === 'handle'} strip={strip} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} shortcut={shortcut} sayId={sayShown && speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : offlineMachine ? offlineMachine.label : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
-          ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} failure={st.bubbleId ? asks.failures[st.bubbleId] : undefined} blocked={bubbleSession ? blockedFor(bubbleSession) : null} frozen={unreachable} reducedMotion={reducedMotion}
+          quick={quick} ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} failure={st.bubbleId ? asks.failures[st.bubbleId] : undefined} blocked={bubbleSession ? blockedFor(bubbleSession) : null} frozen={unreachable} reducedMotion={reducedMotion}
           onOpen={() => { if (st.bubbleId === LEDGE_ID) dispatch({ type: 'bubbleClick' }); else if (st.bubbleId?.startsWith('machine:')) openInLedge({ kind: 'machines' }); else if (st.bubbleId) openInLedge({ kind: 'session', id: st.bubbleId }); }}
           onDismiss={() => dispatch({ type: st.bubbleKind === 'ask' ? 'defer' : 'close' })}
           onDecide={d => { if (st.bubbleId && !ctl.state().ack && decide(st.bubbleId, d)) dispatch({ type: 'decidedInBubble' }); }}
@@ -749,7 +764,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
         </div>
         <div data-panel style={{ position: 'absolute', inset: 0, zoom: ps, opacity: panel && st.mode !== 'peek' ? 1 : 0, pointerEvents: panel && st.mode !== 'peek' ? 'auto' : 'none', transition: transition([['opacity', panel && st.mode !== 'peek' ? 'fadeIn' : 'fadeOut', panel && st.mode !== 'peek' ? 120 : 0]]) }}>
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <SessionList sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
+            <SessionList shortcut={shortcut} sessions={sessions} visible={st.mode === 'list'} enterDelay={enter} selectedId={st.selectedId} focusedId={st.mode === 'list' ? focused?.id ?? null : null} dnd={dnd} onToggleDnd={onToggleDnd} onOpen={openRow} onDecide={decide} canDecide={canDecide}
               disconnected={disconnected}
               onDismiss={id => { if (!unreachable) send({ type: 'session.dismiss', id }); }} offline={unreachable}
               onClose={() => dispatch({ type: 'close' })} onSettings={() => dispatch({ type: 'settings' })} onHelp={() => dispatch({ type: 'help' })} onLaunch={() => dispatch({ type: 'launch' })} notice={notice} noticeRef={noticeRef} gearPip={!!update?.gear} gearLabel={gearLabel} updateRef={updateRef}
@@ -782,10 +797,10 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               onToggleTheme={onToggleTheme} onToggleDnd={onToggleDnd} onReduced={motionPrefs.setReduced} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'help' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'help' ? 'auto' : 'none', transform: `translateX(${st.mode === 'help' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <HelpView contentRef={helpRef} visible={st.mode === 'help'} enterDelay={enter} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
+            <HelpView shortcut={shortcut} contentRef={helpRef} visible={st.mode === 'help'} enterDelay={enter} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'session' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'session' ? 'auto' : 'none', transform: `translateX(${st.mode === 'session' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            {shown && <SessionView contentRef={sessionContentRef} replyRef={sessionReplyRef} session={shown} preview={shownPreview} visible={st.mode === 'session'} enterDelay={enter} reading={st.reading} draft={drafts[shown.id] ?? ''} thread={threads.get(shown.id)} onOpenHelper={id => dispatch({ type: 'openHelper', id })}
+            {shown && <SessionView helpers={shows.helpers} contentRef={sessionContentRef} replyRef={sessionReplyRef} session={shown} preview={shownPreview} visible={st.mode === 'session'} enterDelay={enter} reading={st.reading} draft={drafts[shown.id] ?? ''} thread={threads.get(shown.id)} onOpenHelper={id => dispatch({ type: 'openHelper', id })}
               blocked={blockedFor(shown)} deciding={asks.inFlight.has(shown.id)} failure={asks.failures[shown.id]} frozen={unreachable} reducedMotion={reducedMotion}
               onDraft={t => { setDrafts(x => ({ ...x, [shown.id]: t })); dispatch({ type: 'typing', on: t.length > 0 }); }}
               onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onDecide={d => decide(shown.id, d)} onReply={t => reply(shown.id, t)}
@@ -820,7 +835,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     </>
   );
   // Under Tauri the window covers the work area, so the page draws in work-area coordinates, like the browser preview.
-  return content;
+  // Hidden from Desktop: nothing at all.
+  return visible ? content : null;
 }
 
 /** The gear in the chat header: settings go to Desktop, Do not disturb stays here, Quit closes the island. */

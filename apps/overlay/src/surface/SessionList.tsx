@@ -56,6 +56,8 @@ export interface ListProps {
   noticeRef?: Ref<HTMLDivElement>;
   /** The update card under the notice, its measured box, and the pip on the settings gear (an update is pending); `gearLabel` is the gear's accessible name. */
   update?: ReactNode; updateRef?: Ref<HTMLDivElement>; gearPip?: boolean; gearLabel?: string;
+  /** The global shortcut as Desktop shows it (default: the messages' own). */
+  shortcut?: string;
   /**
    * The ask field above the sessions (shown when `onAsk` is set), matching the notch's mascot-then-bots stack; `onOpenChat`
    * opens the conversation without asking (Enter on the empty field, the mascot); `onTyping` reports focus and typing,
@@ -70,7 +72,7 @@ export interface ListProps {
   disconnected?: string[];
 }
 
-export function SessionList({ sessions, visible, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onOpenChat, onTyping, askDisabled = false, notice = null, noticeRef, update, updateRef, gearPip = false, gearLabel, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120, disconnected = [] }: ListProps) {
+export function SessionList({ sessions, visible, selectedId, focusedId = null, dnd, onToggleDnd, onOpen, onDecide, onClose, onSettings, onHelp, onHoverRow, onLaunch, onAsk, onOpenChat, onTyping, askDisabled = false, notice = null, noticeRef, update, updateRef, gearPip = false, gearLabel, canDecide = () => true, onDismiss, offline = false, theme = 'dark', frozen = false, reducedMotion, now = Date.now(), enterDelay = 120, disconnected = [], shortcut }: ListProps) {
   const { t } = useI18n();
   const waiting = sessions.filter(isPending).length;
   const oldestAsk = sessions.find(isPending)?.id ?? null;
@@ -168,7 +170,7 @@ export function SessionList({ sessions, visible, selectedId, focusedId = null, d
           <Icon size={13} {...ICONS.dnd} />{t.list.dnd}
         </button>
         <span style={{ flexGrow: 1 }} />
-        <Kbd>{t.shortcut}</Kbd>
+        <Kbd>{shortcut ?? t.shortcut}</Kbd>
         <Button variant="ghost" size="sm" aria-label={t.list.help} title={t.list.help} onClick={onHelp} style={{ height: 26, width: 26, padding: 0 }}><Kbd>?</Kbd></Button>
       </div>
     </div>

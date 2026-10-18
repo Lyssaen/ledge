@@ -20,6 +20,8 @@ export interface HandleProps {
   updatePip?: PipTone; updateVersion?: string;
   /** The update dot. Opening the install is Ledge Desktop's job. */
   onUpdate?: () => void;
+  /** The global shortcut as Desktop shows it, named in Ledge's tooltip. */
+  shortcut?: string;
   dnd?: boolean; unread?: boolean; sayId?: string | null; residentSignal?: { key: number; kind: ResidentGesture }; theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean;
 }
 
@@ -27,7 +29,7 @@ const PIP_COLOR: Record<Exclude<PipTone, null>, string> = { new: 'var(--sidebar-
 const mark = (color: string): CSSProperties => ({ display: 'block', width: FILET.dash, height: 3, borderRadius: 1, background: color });
 
 /** The resting notch: Ledge's rectangle in its colour, a hairline before each machine, one dash per session. */
-export function Handle({ bots, visible, onHover, onOpen, onOpenHome, strip = false, updatePip = null, updateVersion = '', onUpdate, dnd = false, unread = false, frozen = false }: HandleProps) {
+export function Handle({ bots, visible, onHover, onOpen, onOpenHome, strip = false, updatePip = null, updateVersion = '', onUpdate, dnd = false, unread = false, frozen = false, shortcut }: HandleProps) {
   const { t } = useI18n();
   const pipText = updatePip === 'new' ? t.update.pip.new(updateVersion) : updatePip ? t.update.pip[updatePip] : null;
   const groups = machineGroups(islandOrder(bots));
@@ -35,7 +37,7 @@ export function Handle({ bots, visible, onHover, onOpen, onOpenHome, strip = fal
   const dashButton: CSSProperties = { display: 'grid', placeItems: 'center', width: FILET.dash, height: 6, padding: 0, border: 0, background: 'transparent', cursor: 'pointer' };
   return (
     <div data-layer="handle" data-filet data-strip={strip || undefined} inert={!visible} style={{ ...layer, display: 'flex', alignItems: 'center', height: FILET.h, padding: `0 ${FILET.pad}px` }}>
-      <button data-resident type="button" aria-label={unread ? `${t.resident.name} ${t.resident.unread}, ${t.open}` : `${t.resident.name}, ${t.open}`} title={`${pipText ? `${pipText}. ` : ''}${frozen ? t.resident.offline : unread ? t.resident.unreadTip : t.resident.tip(bots.length)}`} onClick={() => onOpenHome?.()}
+      <button data-resident type="button" aria-label={unread ? `${t.resident.name} ${t.resident.unread}, ${t.open}` : `${t.resident.name}, ${t.open}`} title={`${pipText ? `${pipText}. ` : ''}${frozen ? t.resident.offline : unread ? t.resident.unreadTip : t.resident.tip(bots.length)}${shortcut ? ` · ${shortcut}` : ''}`} onClick={() => onOpenHome?.()}
         style={{ display: 'grid', placeItems: 'center', flexShrink: 0, width: FILET.ledge, height: 6, padding: 0, border: 0, background: 'transparent', cursor: 'pointer' }}>
         <span data-ledge-mark style={{ display: 'block', width: FILET.ledge, height: 3, borderRadius: 1, background: dnd ? 'var(--muted-foreground)' : 'var(--sidebar-primary)' }} />
       </button>
