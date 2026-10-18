@@ -432,6 +432,23 @@ describe('server', () => {
     expect(store.get('a')!.lastMessage).toMatchObject({ id: 'toolu_2', summary: 'Première ligne' });
     c.close();
   });
+  it('a result that lands before its call still sets the last message, at from that item', async () => {
+    await srv.close();
+    const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+    store.upsert(mk('a'));
+    store.apply('a', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'a-bf', message: 'Vite' } });
+    expect(store.get('a')!.lastMessage).toMatchObject({ id: 'toolu_1', summary: 'Vite', at: T0 });
+  });
+  it('an older sent message turning read does not replace a newer last message', async () => {
+    await srv.close();
+    const history = new History({ dir: tmpDir(), peerOf: t => ({ 'a-bf': 'b', 'a-2d': 'a' } as Record<string, string>)[t] }); srv = await startServer({ store, tmux, port: 0, history });
+    store.upsert(mk('a')); store.upsert(mk('b'));
+    store.apply('a', { name: 'PreToolUse', at: T0, source: 'hook', tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'a-bf', message: 'Un' } });
+    store.apply('a', { name: 'PreToolUse', at: '2026-10-09T18:00:02.000Z', source: 'hook', tool: 'SendMessage', toolUseId: 'toolu_2', toolInput: { to: 'a-bf', message: 'Deux' } });
+    store.apply('b', { name: 'UserPromptSubmit', at: '2026-10-09T18:00:04.000Z', source: 'hook', text: '<cross-session-message from="x" from-name="a-2d">\nUn\n</cross-session-message>' });
+    expect(history.items('a')[0]).toMatchObject({ id: 'toolu_1', status: 'read' });
+    expect(store.get('a')!.lastMessage).toMatchObject({ id: 'toolu_2', summary: 'Deux' });
+  });
   it('a decision from Ledge settles only its own permission, never an older one answered in the terminal', async () => {
     const pane = fx('claude2-permission-bash');
     tmux = fakeTmux({ 'ledge-a': [pane, pane, 'Running…'] }); await srv.close();

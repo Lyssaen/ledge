@@ -140,7 +140,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeHistory = history ? [
     history.onItem((id, item) => {
       broadcast({ type: 'session.thread.item', id, item });
-      if (item.kind === 'sent' && item.status === 'sending') {
+      if (item.kind === 'sent' && item.status !== 'read' && store.get(id)?.lastMessage?.id !== item.id) {
         store.patch(id, { lastMessage: { id: item.id, to: item.to, ...(item.peer ? { peer: item.peer } : {}), summary: item.summary ?? item.text.split('\n')[0]!.slice(0, 120), at: item.at } });
       }
     }),
