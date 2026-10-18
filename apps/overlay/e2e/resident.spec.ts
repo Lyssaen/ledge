@@ -12,11 +12,12 @@ test('Ledge stays in the notch without sessions, greets the empty panel, and rem
   await resident.hover();
   await expect(resident.locator('svg')).toHaveAttribute('data-gesture', 'happy');
   await resident.click();
-  await expectMode(page, 'list');
-  await expect(layer(page, 'list').locator('[data-empty] svg[aria-label="Ledge"]')).toBeVisible();
-  await expect(layer(page, 'list')).toHaveCSS('opacity', '1');
-  await expect(layer(page, 'list').locator('[data-launch-empty]')).toBeVisible();
+  await expectMode(page, 'chat');
+  await expect(layer(page, 'chat').getByRole('textbox', { name: 'Ask Ledge' })).toBeVisible();
+  await expect(layer(page, 'chat').getByRole('button', { name: 'Back to sessions' })).toHaveCount(0);
 
+  // The composer takes the first Escape (it only blurs). The next one folds the chat.
+  await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await expectMode(page, 'handle');
   daemon.upsert(session('a'));

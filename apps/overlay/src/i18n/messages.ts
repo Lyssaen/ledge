@@ -142,10 +142,30 @@ const fr = {
     finishedSub: (duration: string, project: string) => `${duration} de travail · ${project}`,
     finishedSubNoTime: (project: string) => project,
     ok: 'OK',
-    openSession: 'Ouvrir',
+    openSession: 'Ouvrir dans Ledge',
     pending: 'Envoyé, en attente du terminal', confirmed: 'Reçu',
-    later: 'Plus tard', reviewAction: 'Relire', deny: 'Refuser', approve: 'Autoriser',
+    later: 'Plus tard', laterNext: 'Plus tard, suivante', reviewAction: 'Relire dans Ledge', deny: 'Refuser', approve: 'Autoriser',
+    reply: 'Répondre', choices: 'Réponses proposées', short: 'Ou répondre en quelques mots…', shortLabel: 'Réponse courte',
+    choose: 'Choisissez une réponse ou écrivez-en une.', close: 'Fermer',
+    offline: 'Une machine est hors ligne', offlineSub: 'Reconnexion automatique', offlineBadge: 'Hors ligne',
+    failedTitle: (name: string) => `${name} s’est arrêtée sur une erreur`, errorSub: 'La session s’est arrêtée.',
     answer: (opt: string) => `Répondre : ${opt}`, firstOption: 'première option'
+  },
+  handoff: {
+    session: (name: string) => `Ouverture de ${name} dans Ledge Desktop`,
+    terminal: (name: string) => `Ouverture du terminal de ${name} dans Ledge Desktop`,
+    document: (path: string) => `Ouverture de ${path} dans Ledge Desktop`,
+    settings: 'Ouverture des réglages dans Ledge Desktop',
+    launch: 'Ouverture d’une nouvelle session dans Ledge Desktop',
+    update: 'Ouverture des mises à jour dans Ledge Desktop',
+    machines: 'Ouverture des machines dans Ledge Desktop',
+    noted: 'Noté pour Ledge Desktop. L’intégration l’ouvrira.'
+  },
+  menu: {
+    label: 'Menu de Ledge', gear: 'Menu de Ledge',
+    settings: 'Réglages dans Ledge Desktop', settingsHint: 'Affichage, machines, notifications, sons, mises à jour',
+    dnd: 'Ne pas déranger', dndHint: 'Les demandes attendent dans l’île, sans bulle ni son',
+    quit: 'Quitter Ledge'
   },
   settings: {
     title: 'Votre Ledge', tabs: 'Sections des réglages', tabDisplay: 'Affichage', tabNotifications: 'Notifications', tabSounds: 'Sons', tabAbout: 'À propos', islandSize: 'Taille de l’île', islandSizeHint: 'L’île et ses compagnons en haut de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
@@ -383,10 +403,30 @@ const en: Messages = {
     finishedSub: (duration: string, project: string) => `${duration} of work · ${project}`,
     finishedSubNoTime: (project: string) => project,
     ok: 'OK',
-    openSession: 'Open',
+    openSession: 'Open in Ledge',
     pending: 'Sent, waiting for the terminal', confirmed: 'Received',
-    later: 'Later', reviewAction: 'Review', deny: 'Deny', approve: 'Approve',
+    later: 'Later', laterNext: 'Later, next', reviewAction: 'Review in Ledge', deny: 'Deny', approve: 'Approve',
+    reply: 'Reply', choices: 'Suggested answers', short: 'Or answer in a few words…', shortLabel: 'Short answer',
+    choose: 'Choose an answer or write one.', close: 'Close',
+    offline: 'A machine is offline', offlineSub: 'Reconnecting on its own', offlineBadge: 'Offline',
+    failedTitle: (name: string) => `${name} stopped on an error`, errorSub: 'The session stopped.',
     answer: (opt: string) => `Answer: ${opt}`, firstOption: 'first option'
+  },
+  handoff: {
+    session: (name: string) => `Opening ${name} in Ledge Desktop`,
+    terminal: (name: string) => `Opening ${name}’s terminal in Ledge Desktop`,
+    document: (path: string) => `Opening ${path} in Ledge Desktop`,
+    settings: 'Opening settings in Ledge Desktop',
+    launch: 'Opening a new session in Ledge Desktop',
+    update: 'Opening updates in Ledge Desktop',
+    machines: 'Opening machines in Ledge Desktop',
+    noted: 'Noted for Ledge Desktop. Integration will open it.'
+  },
+  menu: {
+    label: 'Ledge menu', gear: 'Ledge menu',
+    settings: 'Settings in Ledge Desktop', settingsHint: 'Display, machines, notifications, sounds, updates',
+    dnd: 'Do not disturb', dndHint: 'Asks wait in the island, with no bubble and no sound',
+    quit: 'Quit Ledge'
   },
   settings: {
     title: 'Your Ledge', tabs: 'Settings sections', tabDisplay: 'Display', tabNotifications: 'Notifications', tabSounds: 'Sounds', tabAbout: 'About', islandSize: 'Island size', islandSizeHint: 'The island and its companions at the top of the screen.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,

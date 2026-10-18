@@ -16,13 +16,11 @@ const mode = () => document.querySelector('[data-surface]')!.getAttribute('data-
 const proposal: ChatProposal = { cwd: '/home/u/ledge', project: 'ledge', tool: 'claude', prompt: 'Fix the build' };
 const juno: Session = fakeSession('n1', { name: 'Juno', project: 'ledge', cwd: '/home/u/ledge', title: 'Juno · ledge', state: 'starting' });
 
-/** Opens the list, asks Ledge, and answers the turn with a proposal: the chat shows its card. */
+/** Opens the chat, asks Ledge, and answers the turn with a proposal: the chat shows its card. */
 function askAndPropose(): string {
   render(<Surface screenH={1080} theme="dark" client={client()} dnd={false} onToggleDnd={() => {}} />);
   act(() => { daemonStore.setStatus('open'); daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('a')] }); });
   act(() => { fireEvent.keyDown(window, { key: 'l', ctrlKey: true, altKey: true }); });
-  act(() => { vi.advanceTimersByTime(400); });
-  fireEvent.click(screen.getByRole('button', { name: 'Open the conversation with Ledge' }));
   const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
   fireEvent.change(input, { target: { value: 'open a session in ledge to fix the build' } }); fireEvent.keyDown(input, { key: 'Enter' });
   const ask = sent.find(m => m.type === 'chat.ask') as Extract<ClientMessage, { type: 'chat.ask' }>;
