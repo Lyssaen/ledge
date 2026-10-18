@@ -652,4 +652,9 @@ describe('the agent conversation id', () => {
     s = reduce(s, ev('PostToolUse', { helperId: 'h1', agentSessionId: 'x' }));
     expect(s.agentSessionId).toBe('b');
   });
+  it('an exited session still takes a late agent session id, and stays exited', () => {
+    const s = reduce(session('exited'), ev('SessionEnd', { agentSessionId: 'late' }));
+    expect(s.agentSessionId).toBe('late');
+    expect(s.state).toBe('exited');
+  });
 });

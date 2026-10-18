@@ -928,6 +928,49 @@ describe('server', () => {
       c.send({ type: 'session.restore', id: 'a' });
       const m = await c.next('session.updated');
       expect(m.session.archivedAt).toBeUndefined(); expect(m.session.state).toBe('exited');
+      // The retirement clock restarts from the restore, so the poller does not archive it again at once.
+      expect(m.session.restoredAt).toEqual(expect.any(String));
+      c.close();
+    });
+    it('a late SessionEnd for an archived exited session leaves it archived', async () => {
+      store.upsert(mk('a', { state: 'exited', exitCode: 0, exitedAt: T0, archivedAt: T0 }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.event', id: 'a', event: { name: 'SessionEnd', at: T0, source: 'hook', exitCode: 0 } });
+      c.send({ type: 'session.event', id: 'a', event: { name: 'Stop', at: T0, source: 'hook' } });
+      c.send({ type: 'snapshot.request' }); await c.next('snapshot');
+      expect(store.get('a')!.archivedAt).toBe(T0);
+      c.close();
+    });
+    it('a late SessionEnd for an archived running hook_only session leaves it archived, and exited', async () => {
+      store.upsert(mk('h', { source: 'hook_only', tmuxSession: null, archivedAt: T0 }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.event', id: 'h', event: { name: 'SessionEnd', at: T0, source: 'hook', exitCode: 0 } });
+      c.send({ type: 'snapshot.request' }); await c.next('snapshot');
+      expect(store.get('h')).toMatchObject({ state: 'exited', archivedAt: T0 });
+      c.close();
+    });
+    it('a running hook_only archived session comes back on its next hook', async () => {
+      store.upsert(mk('h', { source: 'hook_only', tmuxSession: null, archivedAt: T0 }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.event', id: 'h', event: { name: 'UserPromptSubmit', at: T0, source: 'hook', text: 'encore' } });
+      await until(() => store.get('h')?.archivedAt === undefined);
+      c.close();
+    });
+    it('a late hook for a deleted session does not bring it back', async () => {
+      store.upsert(mk('a', { state: 'exited', exitCode: 0, exitedAt: T0, tmuxSession: null }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.delete', id: 'a' }); await c.next('session.removed');
+      c.send({ type: 'session.event', id: 'a', event: { name: 'SessionEnd', at: T0, source: 'hook', exitCode: 0 } });
+      c.send({ type: 'session.event', id: 'a', event: { name: 'Stop', at: T0, source: 'hook' } });
+      c.send({ type: 'snapshot.request' }); await c.next('snapshot');
+      expect(store.get('a')).toBeUndefined();
+      c.close();
+    });
+    it('never creates a session from a SessionEnd for an unknown id', async () => {
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.event', id: 'z', cwd: '/w/x', event: { name: 'SessionEnd', at: T0, source: 'hook', exitCode: 0 } });
+      c.send({ type: 'snapshot.request' }); await c.next('snapshot');
+      expect(store.get('z')).toBeUndefined();
       c.close();
     });
     it('delete kills a live launcher session, then removes it and its thread', async () => {
@@ -997,7 +1040,50 @@ describe('server', () => {
       store.upsert(ended('ab12', { agentSessionId: 'u-1' }));
       const c = await resume('ab12'); c.send({ type: 'session.resume', id: 'ab12' });
       expect(await c.next('error')).toMatchObject({ id: 'ab12', message: 'the session is still running' });
+      await until(() => tmux.created.length === 1);
       expect(tmux.created).toHaveLength(1);
+      c.close();
+    });
+    /** Holds the spawn inside tmux.newSession until `release` is called. */
+    const holdSpawn = () => {
+      const orig = tmux.newSession.bind(tmux); let entered = false; let release!: () => void;
+      const gate = new Promise<void>(r => { release = r; });
+      tmux.newSession = async o => { entered = true; await gate; return orig(o); };
+      return { entered: () => entered, release: () => release() };
+    };
+    it('a delete during the spawn wins: no session, the new tmux killed', async () => {
+      store.upsert(ended('ab12', { agentSessionId: 'u-1' }));
+      const hold = holdSpawn();
+      const c = await resume('ab12'); await until(hold.entered);
+      c.send({ type: 'session.delete', id: 'ab12' }); await c.next('session.removed');
+      hold.release();
+      await until(() => tmux.sent.some(m => m[0] === 'kill' && m[1] === 'ledge-ab12'));
+      expect(store.get('ab12')).toBeUndefined();
+      c.send({ type: 'snapshot.request' }); const snap = await c.next('snapshot');
+      expect(snap.sessions.map(x => x.id)).not.toContain('ab12');
+      c.close();
+    });
+    it('an archive during the spawn wins: it stays archived and exited, the new tmux killed', async () => {
+      store.upsert(ended('ab12', { agentSessionId: 'u-1' }));
+      const hold = holdSpawn();
+      const c = await resume('ab12'); await until(hold.entered);
+      c.send({ type: 'session.archive', id: 'ab12' });
+      await until(() => !!store.get('ab12')?.archivedAt);
+      hold.release();
+      await until(() => tmux.sent.some(m => m[0] === 'kill' && m[1] === 'ledge-ab12'));
+      c.send({ type: 'snapshot.request' }); await c.next('snapshot');
+      expect(store.get('ab12')).toMatchObject({ state: 'exited', archivedAt: expect.any(String) });
+      c.close();
+    });
+    it('a failed spawn does not bring back a session deleted meanwhile', async () => {
+      store.upsert(ended('ab12', { agentSessionId: 'u-1' }));
+      let entered = false; let fail!: () => void;
+      tmux.newSession = async () => { entered = true; await new Promise<void>((_, rej) => { fail = () => rej(new Error('tmux is gone')); }); };
+      const c = await resume('ab12'); await until(() => entered);
+      c.send({ type: 'session.delete', id: 'ab12' }); await c.next('session.removed');
+      fail();
+      expect(await c.next('error')).toMatchObject({ id: 'ab12', message: 'tmux is gone', request: 'session.resume' });
+      expect(store.get('ab12')).toBeUndefined();
       c.close();
     });
     it('puts the session back and refuses with the reason when the launch fails', async () => {

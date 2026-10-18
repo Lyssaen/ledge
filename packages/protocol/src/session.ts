@@ -80,7 +80,9 @@ export const SessionSchema =z.object({
   lastError: z.string().optional(),
   source: z.enum(['launcher', 'hook_only']),
   /** When the session was put in the archive (session management): set, it leaves the live list and waits to be restored, resumed or deleted. */
-  archivedAt: z.string().datetime().optional()
+  archivedAt: z.string().datetime().optional(),
+  /** When the session was last taken out of the archive: the poller's retirement clock restarts from it, not from `exitedAt`. */
+  restoredAt: z.string().datetime().optional()
 });
 export type Session = z.infer<typeof SessionSchema>;
 

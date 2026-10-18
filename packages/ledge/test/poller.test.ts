@@ -120,6 +120,20 @@ describe('poller', () => {
     expect(changes).not.toContain('removed');
     p.stop();
   });
+  it('a restored old exited session stays at the table, and is archived again only retireMs after the restore', async () => {
+    const at = new Date(T0).toISOString();
+    store.upsert(mk('a', { state: 'exited', exitCode: 0, exitedAt: at, archivedAt: at }));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, deadCheckMs: 0, retireMs: 600000, now });
+    clock += 3_600_000; store.unarchive('a', now());
+    clock += 1000; await p.tick();
+    clock += 1000; await p.tick();
+    expect(store.get('a')!.archivedAt).toBeUndefined();
+    clock += 597_000; await p.tick(); // 599 s after the restore
+    expect(store.get('a')!.archivedAt).toBeUndefined();
+    clock += 2000; await p.tick(); // 601 s after the restore
+    expect(store.get('a')!.archivedAt).toBe(now());
+    p.stop();
+  });
   it('leaves an archived session alone', async () => {
     const at = new Date(T0).toISOString();
     store.upsert(mk('a', { state: 'exited', exitCode: 0, exitedAt: at, archivedAt: at }));

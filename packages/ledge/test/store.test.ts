@@ -53,16 +53,28 @@ describe('Store', () => {
   });
   it('starts empty on a corrupt journal and logs once', async () => {
     writeFileSync(join(dir, 'sessions.json'), '{"sessions": [ {"id": "a", ');
-    const s = new Store(); await expect(s.load()).resolves.toBeUndefined();
+    const s = new Store(); await expect(s.load()).resolves.toMatchObject({ clean: false });
     expect(s.all()).toEqual([]);
     const lines = readFileSync(join(dir, 'daemon.log'), 'utf8').trim().split('\n');
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/journal unreadable/);
+    // Kept aside, since the next save overwrites the journal.
+    expect(readFileSync(join(dir, 'sessions.json.incomplete'), 'utf8')).toBe('{"sessions": [ {"id": "a", ');
   });
   it('drops journal entries that fail the schema instead of crashing', async () => {
     writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ sessions: [mk('ok'), { id: 'bad', state: 'sleeping' }] }));
-    const s = new Store(); await s.load();
+    const s = new Store(); expect(await s.load()).toMatchObject({ clean: false });
     expect(s.all().map(x => x.id)).toEqual(['ok']);
+  });
+  it('load says whether it loaded cleanly: a whole journal is, a missing one is not', async () => {
+    expect(await new Store().load()).toMatchObject({ clean: false });
+    writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ sessions: [mk('ok')] }));
+    expect(await new Store().load()).toEqual({ clean: true });
+  });
+  it('a journal saved after an incomplete load still reads as incomplete on the next load', async () => {
+    writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ sessions: [mk('ok'), { id: 'bad', state: 'sleeping' }] }));
+    const s = new Store(); await s.load(); await s.save();
+    expect(await new Store().load()).toMatchObject({ clean: false });
   });
 });
 

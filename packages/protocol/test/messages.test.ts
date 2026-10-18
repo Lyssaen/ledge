@@ -332,6 +332,7 @@ describe('session management messages', () => {
   });
   it('keeps archivedAt on a session and agentSessionId on an event', () => {
     expect(SessionSchema.parse({ ...session, archivedAt: '2026-10-18T10:00:00.000Z' }).archivedAt).toBe('2026-10-18T10:00:00.000Z');
+    expect(SessionSchema.parse({ ...session, restoredAt: '2026-10-18T11:00:00.000Z' }).restoredAt).toBe('2026-10-18T11:00:00.000Z');
     expect(SessionEventSchema.parse({ name: 'Stop', at: T0, source: 'hook', agentSessionId: 'u-1' }).agentSessionId).toBe('u-1');
   });
   it('isArchived', () => {

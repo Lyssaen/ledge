@@ -60,6 +60,38 @@ describe('startDaemon', () => {
     expect(existsSync(join(dir, 'dead.jsonl'))).toBe(true);
   });
 
+  describe('an unclean journal keeps every thread', () => {
+    const tmux: Tmux = {
+      async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return ''; },
+      async hasSession() { return false; }, async listSessions() { return []; },
+      async killSession() {}, async setOption() {}, attachArgs: n => ['attach', n]
+    };
+    const threads = (ids: string[]) => {
+      const dir = paths().history; mkdirSync(dir, { recursive: true });
+      const line = JSON.stringify({ kind: 'prompt', id: 'prompt-1', at: T0, turn: 1, text: 'x' }) + '\n';
+      for (const id of ids) writeFileSync(join(dir, `${id}.jsonl`), line);
+      return () => ids.filter(id => existsSync(join(dir, `${id}.jsonl`)));
+    };
+    it('a corrupt sessions.json keeps every history file, on this start and the next', async () => {
+      process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
+      await ensureLedgeDir();
+      writeFileSync(paths().journal, '{"sessions": [ {"id": "a", ');
+      const kept = threads(['a', 'b']);
+      const d = await startDaemon({ port: 0, tmux }); await d.stop();
+      expect(kept()).toEqual(['a', 'b']);
+      const d2 = await startDaemon({ port: 0, tmux }); await d2.stop();
+      expect(kept()).toEqual(['a', 'b']);
+    });
+    it('an entry that fails the schema keeps the history files', async () => {
+      process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
+      await ensureLedgeDir();
+      writeFileSync(paths().journal, JSON.stringify({ sessions: [mk('ok', { state: 'exited', tmuxSession: null }), { id: 'bad', state: 'sleeping' }] }));
+      const kept = threads(['ok', 'bad', 'orphan']);
+      const d = await startDaemon({ port: 0, tmux }); await d.stop();
+      expect(kept()).toEqual(['ok', 'bad', 'orphan']);
+    });
+  });
+
   it('removes the history journals of the orphans at startup, and keeps those of the sessions in the store', async () => {
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
     await ensureLedgeDir();

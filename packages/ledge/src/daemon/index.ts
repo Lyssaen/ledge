@@ -12,7 +12,7 @@ import { createDaemonUpdater, realUpdaterDeps } from '../update/run-update.js';
 export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string } = {}): Promise<{ stop(): Promise<void>; port: number }> {
   await ensureLedgeDir();
   const store = new Store();
-  await store.load();
+  const loaded = await store.load();
   const tmux = opts.tmux ?? realTmux(opts.tmuxSocket ?? 'ledge');
   let live: Set<string> | null = null;
   try { live = new Set(await tmux.listSessions()); }
@@ -24,8 +24,10 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save() }));
   const history = new History();
   try { await history.load(); } catch (e) { log(`history not loaded: ${(e as Error).message}`); }
-  // Threads of sessions the store no longer holds (deleted, or past the archive cap) go now.
-  for (const id of history.ids()) if (!store.get(id)) history.forget(id);
+  // Threads of sessions the store no longer holds (deleted, or past the archive cap) go now; only when the journal was
+  // read whole: a session it lost is not a deleted one, and its thread must stay.
+  if (loaded.clean) { for (const id of history.ids()) if (!store.get(id)) history.forget(id); }
+  else log(`history cleanup skipped: ${loaded.reason}`);
   const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history });
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
   await writeFile(paths().pid, String(process.pid));
