@@ -116,6 +116,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
         ? <div className={`decision-chip plan ${d}`}><span className="chip-mark">{PLAN_MARK[d]}</span><span>{planDecided[d]}</span><strong>{planTitle(s.item.text)}</strong></div>
         : <div className={`decision-chip ${d}`}><span className="chip-mark">{CHIP_MARK[d]}</span><span>{th.decided[d]}</span><code>{s.item.text}</code></div>;
     } else if (s.kind === 'plan') node = <PlanCard plan={s.plan} open={planOpen === s.plan.key} onOpen={onPlan} />;
+    else if (s.kind === 'sent') return null; // drawn by the message card (next task)
     else node = helperCard(s.item);
     return <Fragment key={item.id}>{marker(item.id)}{node}</Fragment>;
   };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ThreadItem, ToolItem } from '@ledge/protocol';
 import { fakeSession, T0 } from '@ledge/fleet/test/mockDaemon';
-import { atEnd, displayIds, exchanges, fmtDur, helperOf, kindOf, pendingPlan, planOf, stepsOf, subagentOf, summarize, timeMark, unreadFrom, verbOf, type Exchange } from '../src/session/exchanges';
+import { atEnd, displayIds, exchanges, fmtDur, helperOf, kindOf, pendingPlan, planOf, stepsOf, peerKey, subagentOf, summarize, timeMark, unreadFrom, verbOf, type Exchange } from '../src/session/exchanges';
 
 const at = (s: number) => new Date(Date.parse(T0) + s * 1000).toISOString();
 const tool = (id: string, s: number, name: string, label: string, extra: Partial<ToolItem> = {}): ToolItem =>
@@ -23,9 +23,25 @@ const items: ThreadItem[] = [
   tool('t5', 62, 'Bash', 'npm test', { turn: 2, status: 'running' })
 ];
 const shape = (xs: Exchange[]) => xs.map(x => [x.prompt && `${x.prompt.from}:${x.prompt.text}`, ...x.segments.map(s =>
-  s.kind === 'tools' ? `tools:${s.tools.map(t => t.id).join(',')}` : s.kind === 'say' ? `say:${s.item.id}` : `${s.kind}:${s.item.id}`)]);
+  s.kind === 'tools' ? `tools:${s.tools.map(t => t.id).join(',')}` : s.kind === 'say' ? `say:${s.item.id}` : s.kind === 'sent' ? `sent:${s.item.id}` : `${s.kind}:${s.item.id}`)]);
 
 describe('session thread model', () => {
+  it('a received message opens its exchange, a sent one is a segment', () => {
+    const msgs: ThreadItem[] = [
+      { kind: 'received', id: 'recv-3-0', at: at(0), turn: 3, from: 'ledge-a', text: 'Salut' },
+      tool('t9', 1, 'Read', 'a', { turn: 3 }),
+      { kind: 'sent', id: 'toolu_7', at: at(2), turn: 3, to: 'ledge-a', text: 'Ok', status: 'delivered' }
+    ];
+    const xs = exchanges(msgs);
+    const last = xs.at(-1)!;
+    expect(last.prompt).toBeNull();
+    expect(last.received.map(r => r.id)).toEqual(['recv-3-0']);
+    expect(shape(xs).at(-1)).toEqual([null, 'tools:t9', 'sent:toolu_7']);
+    expect(displayIds(xs)).toEqual(['recv-3-0', 't9', 'toolu_7']);
+    expect(exchanges(items).every(x => x.received.length === 0)).toBe(true);
+    expect(peerKey(msgs[0] as never)).toBe('ledge-a');
+    expect(peerKey({ ...(msgs[2] as never as object), peer: 'p' } as never)).toBe('p');
+  });
   it('a flat thread by exchange: runs of actions fold, decided permissions and subagents stand between, the pending one is left out', () => {
     expect(shape(exchanges(items))).toEqual([
       ['you:Câble la liste', 'tools:t1,t2,t3', 'say:msg-1', 'decision:perm-1', 'tools:t4', 'helper:h1', 'say:reply-1'],
