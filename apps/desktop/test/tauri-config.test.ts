@@ -6,6 +6,8 @@ const conf = JSON.parse(readFileSync(resolve(root, 'src-tauri/tauri.conf.json'),
 const caps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/default.json'), 'utf8'));
 const island = JSON.parse(readFileSync(resolve(root, '../overlay/src-tauri/tauri.conf.json'), 'utf8'));
 const main = readFileSync(resolve(root, 'src-tauri/src/main.rs'), 'utf8');
+/** The commands in `generate_handler![…]`, whatever its line breaks (`notch::set_frame` reads `set_frame`). */
+const commands = (main.match(/generate_handler!\[([^\]]*)\]/)?.[1] ?? '').split(',').map((c) => c.trim().split('::').pop()).filter(Boolean);
 
 describe('Desktop Tauri config', () => {
   it('is its own app, versioned with the island', () => {
@@ -39,7 +41,7 @@ describe('Desktop Tauri config', () => {
     const builder = main.slice(main.indexOf('tauri::Builder::default()'));
     expect(builder.indexOf('.plugin(')).toBe(builder.indexOf('.plugin(tauri_plugin_single_instance::init('));
     expect(builder).toMatch(/tauri_plugin_single_instance::init\(\|app, args, _cwd\| \{\s*show_main\(app\);\s*if let Some\(target\) = ledge_native::desktop::open_target\(args\) \{ deliver_open\(app, target\); \}/);
-    expect(builder).toMatch(/take_open_target\]/);
+    expect(commands).toContain('take_open_target');
     expect(readFileSync(resolve(root, 'src-tauri/Cargo.toml'), 'utf8')).toMatch(/^tauri-plugin-single-instance = "2"$/m);
   });
   it('shares the island CSP and the updater key, with its own manifest', () => {
@@ -51,6 +53,9 @@ describe('Desktop Tauri config', () => {
     expect(conf.bundle.windows.nsis.installMode).toBe('currentUser');
     expect(caps.permissions).toContain('updater:default'); expect(caps.permissions).toContain('process:allow-restart');
     expect(main).toContain('tauri_plugin_updater::Builder::new().build()'); expect(main).toContain('tauri_plugin_process::init()');
+  });
+  it('registers the notch\'s commands beside its own', () => {
+    for (const c of ['set_frame', 'set_hot_zone', 'set_outside_watch', 'focus_overlay', 'release_focus', 'list_monitors', 'set_monitor', 'open_in_ledge']) expect(commands).toContain(c);
   });
   it('lets HTML5 drag and drop reach the page (native file drop off, or WebView2 swallows dragover/drop)', () => {
     expect(conf.app.windows[0].dragDropEnabled).toBe(false);
