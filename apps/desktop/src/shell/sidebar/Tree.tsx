@@ -104,18 +104,6 @@ export function Tree(p: {
   };
   useEffect(() => { if (p.current) openTo(p.current, false); }, [p.current]);
   useEffect(() => { if (p.revealCurrent && p.current) openTo(p.current, true); }, [p.revealCurrent]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey && e.shiftKey) || e.altKey || e.metaKey || e.key.toLowerCase() !== 'e') return;
-      const active = document.activeElement;
-      if (active instanceof HTMLElement && (active.matches('input, textarea, select') || active.isContentEditable)) return;
-      e.preventDefault();
-      const items = [...(treeRef.current?.querySelectorAll<HTMLElement>('[data-tree-key]') ?? [])];
-      (items.find(x => x.dataset.treeKey === latest.current.current) ?? items[0])?.focus();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   const onTreeKey = (e: ReactKeyboardEvent) => {
     const el = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>('[data-tree-key]') : null;
