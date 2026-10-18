@@ -343,3 +343,28 @@
 .zoom-controls{z-index:12}.overview-scroll.atelier .workspace-legend{z-index:11}
 /* With the chat docked the workspace narrows: the zoom bar drops its hint and the legend its footnote so they never meet. */
 .application:has(.ledge-chat-panel) .zoom-hint,.application:has(.ledge-chat-panel) .workspace-legend>span:last-child{display:none}
+
+/* Session management (docs/mockups/session-management/manage.css): the session menu, the « … » beside a seat, an agent leaving. */
+.session-menu{position:fixed;z-index:40;min-width:248px;max-width:300px;padding:4px;display:flex;flex-direction:column;background:var(--popover);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay)}
+.session-menu-head{padding:7px 8px 6px;display:flex;flex-direction:column;gap:1px}
+.session-menu-head strong{font-size:12px;font-weight:600}
+.session-menu-head small{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-menu hr{border:0;border-top:1px solid var(--border);margin:4px -4px}
+.session-menu [role=menuitem]{display:flex;align-items:center;justify-content:space-between;gap:12px;height:32px;padding:0 8px;border-radius:var(--radius-sm);font-size:13px;text-align:left}
+.session-menu [role=menuitem]>span{display:flex;align-items:center;gap:9px}
+.session-menu [role=menuitem] svg{color:var(--muted-foreground)}
+.session-menu [role=menuitem]:hover:not(:disabled),.session-menu [role=menuitem]:focus-visible{background:var(--accent);outline:none}
+.session-menu [role=menuitem]:disabled{opacity:.45}
+.session-menu [role=menuitem].danger,.session-menu [role=menuitem].danger svg{color:var(--danger-text)}
+.session-menu [role=menuitem].danger:hover:not(:disabled),.session-menu [role=menuitem].danger:focus-visible{background:color-mix(in srgb,var(--danger-text) 12%,transparent)}
+.session-menu-note{margin:0;padding:2px 8px 6px 31px;font-size:11px;line-height:15px;color:var(--muted-foreground)}
+.session-menu-sub{display:flex;flex-direction:column;margin:0 0 2px 22px;padding-left:6px;border-left:1px solid var(--border)}
+.rename-form{display:flex;flex-direction:column;gap:14px;min-width:320px}
+.rename-form input{height:36px;padding:0 10px;border:1px solid var(--input);border-radius:var(--radius-md);background:transparent;font-size:13px}
+.office-shell .seat-more{position:absolute;z-index:4;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:var(--muted-foreground);background:var(--popover);border:1px solid var(--border)!important;opacity:0;transition:opacity .12s}
+.office-shell .seat-more.place-t{top:14px}
+.office-shell .seat-more.place-b{top:290px}
+.agent-seat:hover+.seat-more,.agent-seat:focus-visible+.seat-more,.seat-more:hover,.seat-more:focus-visible,.seat-more[aria-expanded=true]{opacity:1}
+.seat-more:hover{color:var(--foreground)}
+.leaving{animation:leave .45s ease-in forwards;pointer-events:none}
+@keyframes leave{to{opacity:0;transform:translateY(-18px) scale(.82);filter:blur(1px)}}

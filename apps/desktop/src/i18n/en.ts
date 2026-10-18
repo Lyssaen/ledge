@@ -347,6 +347,17 @@ export const en: Messages = {
     noteNotTyped: 'Refused, but the note could not be typed.'
   },
   manage: {
+    menu: {
+      label: (name) => `Manage ${name}`, more: 'Manage the session (right click)',
+      open: 'Open session', terminal: 'Terminal', rename: 'Rename…', moveTo: 'Move to…', end: 'End session', resume: 'Resume session',
+      archive: 'Archive', endAndArchive: 'End and archive…', delete: 'Delete…',
+      kids: (n, name) => `${n} ${pluralEn(n, 'subagent leaves', 'subagents leave')} with ${name}.`,
+      offline: (machine) => `${machine} is unreachable.`,
+      cannotEnd: (machine) => `${machine} is unreachable: Ledge cannot stop it.`,
+      archiveFinished: 'Archive finished'
+    },
+    rename: { title: (name) => `Rename ${name}`, label: 'Session name', save: 'Rename', cancel: 'Cancel' },
+    outdated: (machine) => `Update Ledge on ${machine}`,
     undo: 'Undo',
     archived: (name, kids) => `${name} is archived${kids > 0 ? ` with ${kids} ${pluralEn(kids, 'subagent', 'subagents')}` : ''}.`,
     archivedMany: (n) => `${n} sessions archived.`,

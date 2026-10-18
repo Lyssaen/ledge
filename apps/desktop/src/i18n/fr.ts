@@ -366,6 +366,17 @@ export const fr = {
     noteNotTyped: 'Refusé, mais la note n’a pas pu être tapée.'
   },
   manage: {
+    menu: {
+      label: (name: string): string => `Gérer la session ${name}`, more: 'Gérer la session (clic droit)',
+      open: 'Ouvrir la session', terminal: 'Terminal', rename: 'Renommer…', moveTo: 'Ranger dans…', end: 'Terminer la session', resume: 'Reprendre la session',
+      archive: 'Archiver', endAndArchive: 'Terminer et archiver…', delete: 'Supprimer…',
+      kids: (n: number, name: string): string => `${n} ${plural(n, 'sous-agent part', 'sous-agents partent')} avec ${name}.`,
+      offline: (machine: string): string => `${machine} est injoignable.`,
+      cannotEnd: (machine: string): string => `${machine} est injoignable : Ledge ne peut pas l’arrêter.`,
+      archiveFinished: 'Archiver les terminées'
+    },
+    rename: { title: (name: string): string => `Renommer ${name}`, label: 'Nom de la session', save: 'Renommer', cancel: 'Annuler' },
+    outdated: (machine: string): string => `Mettez Ledge à jour sur ${machine}`,
     undo: 'Annuler',
     archived: (name: string, kids: number): string => `${name} est archivé${kids > 0 ? ` avec ${kids} ${plural(kids, 'sous-agent', 'sous-agents')}` : ''}.`,
     archivedMany: (n: number): string => `${n} sessions archivées.`,

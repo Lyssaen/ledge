@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useState, type JSX, type MouseEvent } from 'react';
+import type { DaemonClient } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { activeCount } from '../nav/agents';
+import { openSessionTerminal } from '../session/terminal';
+import { RenameDialog, SessionMenu } from '../manage/SessionMenu';
+import type { SessionActions } from '../manage/useSessionActions';
 import { useScreenKeys } from '../nav/screenKeys';
 import type { NavAction, NavState } from '../nav/state';
 import { roomWidth, sceneOf, walkOrder } from './layout';
@@ -22,6 +26,11 @@ export interface AtelierProps {
   projectIdOf: (s: Session) => string | null;
   /** Putting the agents of « Sans projet » away: the tables are targets, the cards drag, « Ranger dans… » files. */
   filing: Filing;
+  /** The session menu and its keys (E, Suppr, F2, T): end, archive, resume and delete with their confirmation. */
+  actions: SessionActions;
+  /** Terminal, rename and the keys talk to the daemon through it. */
+  client: DaemonClient;
+  notify(text: string): void;
 }
 
 /** The filtered project has no agent yet: say where its table will appear, and offer to start a session there. */
@@ -43,7 +52,7 @@ function EmptyProject({ project, dispatch }: { project: Project; dispatch: (a: N
 /** The atelier (observatory.tsx, atelier mode): Ledge's desk, a table per project with agents, the filtered project's
  *  empty state, « Sans projet », then the legend; the zoom bar beside it. The mosaic is fitted to the space, zoomed and panned
  *  (useAtelierView). J / K (or ↓ / ↑) walk the agents shown, Entrée opens the chosen one; + / − / 0 zoom, Space pans. */
-export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing }: AtelierProps): JSX.Element {
+export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing, actions, client, notify }: AtelierProps): JSX.Element {
   const { t } = useI18n();
   const { reduced } = useMotionPreferences();
   const { place } = nav;
@@ -55,6 +64,30 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
   // The chosen agent left the walk (gone, filed elsewhere, filtered out): nothing stays chosen.
   useEffect(() => { if (focusedId !== null && !walk.some(s => s.id === focusedId)) setFocusedId(null); }, [walk, focusedId]);
 
+  // The session menu (one at a time) and where the focus goes back when it closes; the session being renamed.
+  const [menu, setMenu] = useState<{ id: string; at: { x: number; y: number }; opener: HTMLElement | null } | null>(null);
+  const [renaming, setRenaming] = useState<Session | null>(null);
+  const menuSession = menu ? sessions.find(s => s.id === menu.id) ?? null : null;
+  useEffect(() => { if (menu !== null && menuSession === null) setMenu(null); }, [menu, menuSession]);
+  const menuAt = (s: Session, e: MouseEvent<HTMLElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    // A right click opens at the pointer (the keyboard's menu key reports none: under the seat); the « … » opens under itself.
+    const pointer = e.type === 'contextmenu' && (e.clientX !== 0 || e.clientY !== 0);
+    setMenu({ id: s.id, at: pointer ? { x: e.clientX, y: e.clientY } : { x: r.left, y: r.bottom + 4 }, opener: el.matches('button') ? el : el.querySelector<HTMLElement>('button[data-agent]') });
+  };
+  const closeMenu = () => {
+    const opener = menu?.opener;
+    setMenu(null);
+    // The menu's own button (the « … ») is given the focus by the menu itself; a context menu has none: back to the seat.
+    const active = document.activeElement;
+    if (opener?.isConnected && (active === null || active === document.body || active.closest('[role=menu]'))) opener.focus();
+  };
+  const terminal = (s: Session) => { void openSessionTerminal(client, s).then(ok => { if (!ok) notify(t.session.terminal.openFailed(s.name)); }); };
+  const rename = (s: Session) => { if (s.state !== 'exited') setRenaming(s); };
+
   // The mosaic's tiles, in render order: Ledge's desk, the tables, then the empty project or « Sans projet ».
   const tiles = useMemo(() => [
     LEDGE_TILE, ...scene.tables.map(t => roomWidth(t.mains.length)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
@@ -63,6 +96,8 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
   useScreenKeys(e => {
     if (view.keys(e)) return true;
     const target = e.target instanceof Element ? e.target : null;
+    // Renaming owns the keyboard (Escape closes it in the dialog itself).
+    if (renaming !== null) return false;
     if (target?.closest('[role=tablist],[role=menu]')) return false;
     const key = e.key.toLowerCase();
     const step = key === 'j' || key === 'arrowdown' ? 1 : key === 'k' || key === 'arrowup' ? -1 : 0;
@@ -74,6 +109,14 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
       // Compare ids as data, never build a selector from one.
       [...(view.scrollRef.current?.querySelectorAll<HTMLElement>('[data-agent]') ?? [])].find(el => el.dataset.agent === next.id)?.focus();
       return true;
+    }
+    // The chosen agent: E archives, Suppr deletes (each asks when it must), F2 renames, T opens its terminal.
+    const chosen = focusedId === null ? undefined : sessions.find(s => s.id === focusedId);
+    if (chosen) {
+      if (key === 'e') { actions.request('archive', [chosen.id]); return true; }
+      if (key === 'delete') { actions.request('delete', [chosen.id]); return true; }
+      if (key === 'f2') { rename(chosen); return true; }
+      if (key === 't') { terminal(chosen); return true; }
     }
     // A focused button or link keeps its own Entrée.
     if (e.key === 'Enter' && focusedId !== null && !target?.closest('button,a')) {
@@ -100,12 +143,13 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
         <div className={`project-grid ${scene.tables.length === 1 ? 'focused' : ''}`}>
           {scene.tables.map(({ project, mains }) => (
             <ProjectTable key={project.id} project={project} mains={mains} order={order} helpers={nav.helpers} paused={nav.paused}
-              isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing} />
+              isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
+              actions={actions} menuId={menu?.id ?? null} onMenu={menuAt} />
           ))}
         </div>
         {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
         <Unassigned sessions={scene.unassigned} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch}
-          filing={filing} projects={projects?.projects ?? []} />
+          filing={filing} projects={projects?.projects ?? []} onMenu={menuAt} />
       </div>
       <div className="workspace-legend">
         <span><i className="live-dot" />{t.atelier.legend.working}</span>
@@ -116,5 +160,10 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
         <span>{t.atelier.legend.helper}</span>
       </div>
     </div>
+    {menu && menuSession && (
+      <SessionMenu session={menuSession} at={menu.at} actions={actions} filing={filing} projects={projects?.projects ?? []} current={projectIdOf(menuSession)}
+        onOpen={s => dispatch({ type: 'open', id: s.id })} onTerminal={terminal} onRename={rename} onClose={closeMenu} />
+    )}
+    {renaming && <RenameDialog session={renaming} onRename={topic => client.send({ type: 'session.rename', id: renaming.id, topic })} onClose={() => setRenaming(null)} />}
   </>);
 }

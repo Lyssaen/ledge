@@ -51,7 +51,7 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
   }, [open, flip]);
 
   useEffect(() => {
-    if (open) menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    if (open) menu.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus();
   }, [open]);
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
   }, [open]);
 
   const onKeyDown = (e: ReactKeyboardEvent) => {
-    const items = [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const items = [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? [])];
     if (items.length === 0) return;
     const at = items.indexOf(document.activeElement as HTMLElement);
     let to: number;
