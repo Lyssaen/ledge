@@ -427,6 +427,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const offlineMachine = st.bubbleKind === 'offline' && st.bubbleId?.startsWith('machine:') ? machines.find(m => m.id === st.bubbleId!.slice('machine:'.length)) : undefined;
   const bubbleRef = useRef<HTMLDivElement>(null);
   const bubbleH = useMeasuredHeight(bubbleRef, st.mode === 'bubble', ps);
+  // The peek is its own card: it never takes the bubble's last height.
+  const peekRef = useRef<HTMLDivElement>(null);
+  const peekH = useMeasuredHeight(peekRef, st.mode === 'peek', ps, st.selectedId);
   // The open session sizes itself to its content (header + scroll content + reply area), up to the screen.
   const sessionContentRef = useRef<HTMLDivElement>(null); const sessionReplyRef = useRef<HTMLDivElement>(null);
   const contentH = useMeasuredHeight(sessionContentRef, st.mode === 'session', ps);
@@ -582,7 +585,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // The strip shows under a covering window once the island has been folded and left alone for 500 ms; a say
   // still hanging under its speaker keeps the island compact, the strip has no companion to hang it from.
   const strip = useDelayed(discreet && covered && st.mode === 'handle' && !st.hot && !st.hovering && bandPointer === null && !sayShown, STRIP_BACK_MS);
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, pip: !!updatePip, dnd, readerExpanded: st.documentExpanded, bubbleH: bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, pip: !!updatePip, dnd, readerExpanded: st.documentExpanded, bubbleH: st.mode === 'peek' ? (peekH ? peekH + SURFACE_CHROME_Y : undefined) : bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + updateExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
   geoRef.current = geo;
   // The shell watches the top band over the island's span (its depth and overhang are the shell's own constants).
   const hot = visible ? { left: Math.round(geo.handle.left), w: Math.round(geo.handle.w) } : HIDDEN_HOT;
@@ -760,7 +763,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
             const id = st.bubbleId; if (!id || ctl.state().ack || blockedFor(byId.get(id)) !== null || !asks.begin(id)) return;
             send({ type: 'session.reply', id, text }); sounds.user('accept'); dispatch({ type: 'decidedInBubble' });
           }} theme={theme} />
-        {st.mode === 'peek' && peekSession && <PeekCard session={peekSession} visible theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onClose={() => dispatch({ type: 'close' })} onOpen={() => openInLedge({ kind: 'session', id: peekSession.id })} />}
+        {st.mode === 'peek' && peekSession && <PeekCard ref={peekRef} session={peekSession} visible theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onClose={() => dispatch({ type: 'close' })} onOpen={() => openInLedge({ kind: 'session', id: peekSession.id })} />}
         </div>
         <div data-panel style={{ position: 'absolute', inset: 0, zoom: ps, opacity: panel && st.mode !== 'peek' ? 1 : 0, pointerEvents: panel && st.mode !== 'peek' ? 'auto' : 'none', transition: transition([['opacity', panel && st.mode !== 'peek' ? 'fadeIn' : 'fadeOut', panel && st.mode !== 'peek' ? 120 : 0]]) }}>
           <div aria-hidden={st.mode !== 'list' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'list' ? 'auto' : 'none', transform: `translateX(${detail ? -12 : 0}px)`, transition: transition([['transform', 'grow', 0]]) }}>

@@ -42,3 +42,19 @@ test('a click outside a keyboard-opened chat folds it', async ({ page }) => {
   await page.mouse.click(300, 700);
   await expectMode(page, 'handle');
 });
+
+for (const panel of ['1', '1.5', '2']) {
+  test(`the peek is as tall as its card at a ${panel} window size: its buttons are never cut off`, async ({ page }) => {
+    await page.addInitScript(v => { try { localStorage.setItem('ledge.panelScale', v); } catch { /* ignore */ } }, panel);
+    await fakeDaemon(page, [session('a'), session('b', { name: 'Pim', project: 'speos-api', topic: 'Split the settings view into tabs and keep the machines list' })]);
+    await ready(page, 2);
+    await layer(page, 'handle').getByRole('button', { name: /^Pim/ }).click();
+    await expectMode(page, 'peek');
+    const bottom = async () => { const s = (await surface(page).boundingBox())!; return s.y + s.height; };
+    // The surface grows from the notch: wait until it has settled, then the card's last pixel is inside it.
+    await expect.poll(async () => { const a = await bottom(); await page.waitForTimeout(150); return a === await bottom() && a > 40; }).toBe(true);
+    const card = (await layer(page, 'peek').boundingBox())!;
+    expect(card.y + card.height).toBeLessThanOrEqual(await bottom() + 1);
+    expect(card.y + card.height).toBeGreaterThan(await bottom() - 24);
+  });
+}
