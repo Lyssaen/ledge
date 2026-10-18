@@ -19,6 +19,7 @@ const OLD: DaemonInfo = { version: '0.6.0', install: 'npm', systemd: true };
 const bix = fakeSession('bix', { name: 'Bix', state: 'exited' });
 const nova = fakeSession('nova', { name: 'Nova', state: 'working', helpers: [{ id: 'h1', kind: 'Explore', task: 'Read', state: 'working' }] });
 const rio = fakeSession('rio', { name: 'Rio', state: 'working', offline: true });
+const ext = fakeSession('ext', { name: 'Ext', state: 'working', source: 'hook_only', tmuxSession: null });
 const old = fakeSession('old', { name: 'Old', state: 'exited', archivedAt: '2026-10-18T10:00:00.000Z' });
 
 /** The hook in the real fleet, toast and language, with a button per action. */
@@ -34,6 +35,9 @@ function Harness({ client }: { client: DaemonClient }) {
       <button onClick={() => a.request('archive', ['local:rio'])}>archive rio</button>
       <button onClick={() => a.request('end', ['local:nova', 'local:h1'])}>end nova</button>
       <button onClick={() => a.request('delete', ['local:old'])}>delete old</button>
+      <button onClick={() => a.request('archive', ['local:ext'])}>archive ext</button>
+      <button onClick={() => a.request('end', ['local:ext'])}>end ext</button>
+      <button onClick={() => a.request('delete', ['local:ext'])}>delete ext</button>
       <button onClick={() => a.resume('local:bix')}>resume bix</button>
       <button onClick={() => a.resume('local:nova')}>resume nova</button>
       <button onClick={() => a.restore('local:old')}>restore old</button>
@@ -48,7 +52,7 @@ function Harness({ client }: { client: DaemonClient }) {
 async function setup(daemon: DaemonInfo = CAN) {
   const d = await createMockDaemon();
   d.extras.daemon = daemon;
-  for (const s of [bix, nova, rio, old]) d.upsert(s);
+  for (const s of [bix, nova, rio, old, ext]) d.upsert(s);
   const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
   render(<LangProvider lang="en"><Harness client={client} /></LangProvider>);
   // Ready once the snapshot (with its capability) arrived.
@@ -92,6 +96,23 @@ describe('session actions', () => {
       // An offline session is archived at once too.
       await waitFor(() => expect(types(sent())).toContain('session.archive'));
       expect(screen.queryByRole('alertdialog')).toBeNull();
+    } finally { await d.close(); }
+  });
+
+  it('a session launched outside Ledge: archived at once with Undo, never ended, and deleting it does not promise to stop it', async () => {
+    const { d, user, sent } = await setup();
+    try {
+      await user.click(screen.getByText('end ext'));
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      await user.click(screen.getByText('archive ext'));
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      await waitFor(() => expect(sent()).toContainEqual({ type: 'session.archive', id: 'ext' }));
+      expect(screen.getByRole('button', { name: new RegExp(t.manage.undo) })).toBeInTheDocument();
+      expect(types(sent())).not.toContain('session.kill');
+      await user.click(screen.getByText('delete ext'));
+      const dialog = await screen.findByRole('alertdialog', { name: t.manage.confirm.title.delete(['Ext']) });
+      expect(dialog).toHaveAccessibleDescription(t.manage.confirm.body.delete(['Ext'], 0, false));
+      expect(dialog).not.toHaveTextContent(/stops/);
     } finally { await d.close(); }
   });
 

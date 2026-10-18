@@ -128,5 +128,20 @@ describe('the « Commande » title bar', () => {
     expect(screen.getByRole('alertdialog', { name: 'Delete Bix?' })).toBeVisible();
     expect(screen.queryByRole('combobox')).toBeNull();
     expect(within(screen.getByRole('banner')).queryByText('Otto')).toBeNull();
+    // The application behind is inert too, so Tab cannot leave the confirmation.
+    expect(document.querySelector('.application')).toHaveAttribute('inert');
+    await user.keyboard('{Escape}');
+    expect(document.querySelector('.application')).not.toHaveAttribute('inert');
+  });
+
+  it('behind the rename dialog, the search field and the pill are inert, and so is the application', async () => {
+    const { user } = await boot({ sessions: listSessions(), daemon: { version: '0.7.0', install: 'npm', systemd: true, archive: true } });
+    fireEvent.contextMenu(await screen.findByRole('button', { name: /^Nova,/ }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Rename…' }));
+    expect(await screen.findByRole('dialog', { name: /Rename Nova/ })).toBeVisible();
+    expect(bar().getByRole('button', { name: 'Go to a session, a project, a setting…' }).closest('[inert]')).not.toBeNull();
+    expect(bar().getByRole('button', { name: /waiting/ }).closest('[inert]')).not.toBeNull();
+    expect(bar().getByRole('button', { name: 'Close' }).closest('[inert]')).toBeNull();
+    expect(document.querySelector('.application')).toHaveAttribute('inert');
   });
 });

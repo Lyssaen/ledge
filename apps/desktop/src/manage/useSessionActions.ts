@@ -24,8 +24,8 @@ export interface SessionActions {
 export const UNDO_MS = 8000;
 const MANAGE_REQUESTS: ReadonlySet<string> = new Set(['session.kill', 'session.archive', 'session.restore', 'session.resume', 'session.delete']);
 
-/** A session still runs when its machine answers and it has not exited. */
-const isLive = (s: Session) => !s.offline && s.state !== 'exited';
+/** A session Ledge can stop: its machine answers, it has not exited, and Ledge launched it (one launched outside Ledge is read only). */
+const isLive = (s: Session) => !s.offline && s.state !== 'exited' && s.source !== 'hook_only';
 
 /** End (`session.kill`), archive, resume, restore and delete, with the confirmation each needs, the undo of an archiving, and the daemon's
  *  refusals said in a toast. Only principal sessions are known here: a subagent's id (or any unknown one) is ignored. */

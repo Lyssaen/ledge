@@ -14,6 +14,8 @@ import type { SessionMenuState } from './useSessionMenu';
 
 /** A session still runs when its machine answers and it has not exited. */
 export const isLiveSession = (s: Session): boolean => !s.offline && s.state !== 'exited';
+/** Ledge can stop a session only when it launched it and it still runs: one launched outside Ledge (hook_only) is read only. */
+export const isStoppable = (s: Session): boolean => isLiveSession(s) && s.source !== 'hook_only';
 
 export interface SessionMenuProps {
   session: Session;
@@ -37,7 +39,7 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
   const { t } = useI18n();
   const m = t.manage.menu;
   const [filingOpen, setFilingOpen] = useState(false);
-  const live = isLiveSession(s);
+  const stoppable = isStoppable(s);
   const exited = s.state === 'exited';
   const machine = machineOf(s);
   const outdated = actions.allowed(s.id) ? undefined : t.manage.outdated(machine);
@@ -64,8 +66,8 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
       <hr />
       {exited
         ? item(m.resume, SHELL_ICONS.resume, () => actions.resume(s.id), { disabled: outdated })
-        : item(m.end, SHELL_ICONS.stop, () => actions.request('end', [s.id]), { disabled: s.offline ? m.cannotEnd(machine) : undefined })}
-      {item(live ? m.endAndArchive : m.archive, SHELL_ICONS.archive, () => actions.request('archive', [s.id]), { hint: 'E', key: 'e', disabled: outdated })}
+        : item(m.end, SHELL_ICONS.stop, () => actions.request('end', [s.id]), { disabled: s.offline ? m.cannotEnd(machine) : s.source === 'hook_only' ? m.outsideLedge : undefined })}
+      {item(stoppable ? m.endAndArchive : m.archive, SHELL_ICONS.archive, () => actions.request('archive', [s.id]), { hint: 'E', key: 'e', disabled: outdated })}
       {note}
       <hr />
       {item(m.delete, SHELL_ICONS.trash, () => actions.request('delete', [s.id]), { hint: m.deleteKey, key: 'Delete', danger: true, disabled: outdated })}

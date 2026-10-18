@@ -97,6 +97,21 @@ describe('the session menu in the atelier', () => {
     expect(screen.queryByRole('button', { name: /Manage Explore/ })).toBeNull();
   });
 
+  it('a session launched outside Ledge cannot be ended from it: End is disabled with the reason, Archive archives it at once with Undo', async () => {
+    const ext = fakeSession('ext', { name: 'Ext', cwd: '/w/ledge', state: 'working', source: 'hook_only', tmuxSession: null });
+    const { d, user } = await boot({ sessions: [...SESSIONS, ext], daemon: CAN });
+    fireEvent.contextMenu(seat('Ext'));
+    const menu = await screen.findByRole('menu', { name: 'Manage Ext' });
+    const end = within(menu).getByRole('menuitem', { name: 'End session' });
+    expect(end).toBeDisabled();
+    expect(end).toHaveAttribute('title', 'Launched outside Ledge: Ledge cannot stop it.');
+    expect(within(menu).queryByRole('menuitem', { name: /^End and archive/ })).toBeNull();
+    await user.click(within(menu).getByRole('menuitem', { name: 'Archive' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await waitFor(() => expect(sent(d)).toContainEqual({ type: 'session.archive', id: 'ext' }));
+    expect(screen.getByRole('button', { name: /Undo/ })).toBeInTheDocument();
+  });
+
   it('Rename… is disabled for a finished session', async () => {
     await boot({ sessions: SESSIONS, daemon: CAN });
     fireEvent.contextMenu(seat('Bix'));

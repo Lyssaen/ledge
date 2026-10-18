@@ -378,6 +378,7 @@ export const fr = {
       kids: (n: number, name: string): string => `${n} ${plural(n, 'sous-agent part', 'sous-agents partent')} avec ${name}.`,
       offline: (machine: string): string => `${machine} est injoignable.`,
       cannotEnd: (machine: string): string => `${machine} est injoignable : Ledge ne peut pas l’arrêter.`,
+      outsideLedge: 'Lancée hors de Ledge : Ledge ne peut pas l’arrêter.',
       deleteKey: 'Suppr', archiveFinished: 'Archiver les terminées'
     },
     rename: { title: (name: string): string => `Renommer ${name}`, label: 'Nom de la session', save: 'Renommer', cancel: 'Annuler' },

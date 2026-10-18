@@ -359,6 +359,7 @@ export const en: Messages = {
       kids: (n, name) => `${n} ${pluralEn(n, 'subagent leaves', 'subagents leave')} with ${name}.`,
       offline: (machine) => `${machine} is unreachable.`,
       cannotEnd: (machine) => `${machine} is unreachable: Ledge cannot stop it.`,
+      outsideLedge: 'Launched outside Ledge: Ledge cannot stop it.',
       deleteKey: 'Del', archiveFinished: 'Archive finished'
     },
     rename: { title: (name) => `Rename ${name}`, label: 'Session name', save: 'Rename', cancel: 'Cancel' },
