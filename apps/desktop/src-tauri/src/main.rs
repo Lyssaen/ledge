@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod notch;
+
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -13,6 +15,8 @@ const TRAY_DND: &str = "dnd";
 const TRAY_QUIT: &str = "quit";
 /// Passed by the login item: the app starts in the tray, its window hidden.
 const MINIMIZED: &str = "--minimized";
+/// The Ledge Desktop window; the notch is the other one.
+const MAIN: &str = "main";
 
 #[derive(Clone, Serialize)]
 struct TrayPayload { action: String }
@@ -25,7 +29,7 @@ struct PendingOpen(std::sync::Mutex<Option<String>>);
 /// Keeps the island's target and tells the page (`ledge://open`), which then takes it.
 fn deliver_open(app: &AppHandle, target: String) {
     if let Some(p) = app.try_state::<PendingOpen>() { *p.0.lock().unwrap() = Some(target); }
-    let _ = app.emit("ledge://open", ());
+    let _ = app.emit_to(MAIN, "ledge://open", ());
 }
 
 /// The island's target waiting for the page, once.
@@ -45,6 +49,20 @@ fn foreground_is_terminal() -> bool { ledge_native::terminal::foreground_is_term
 fn open_terminal(title: String, command: Vec<String>) -> Result<bool, String> { ledge_native::terminal::open(&title, &command) }
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> { ledge_native::browser::open_url(&url) }
+
+/// The island's target if it is one JSON line, as `--open` would carry it.
+fn checked_target(target: &str) -> Result<&str, String> {
+    if ledge_native::desktop::valid_target(target) { Ok(target) } else { Err("invalid target".into()) }
+}
+
+/// « Open in Ledge »: the notch is a window of this app, so this window shows the target itself.
+#[tauri::command]
+fn open_in_ledge(app: AppHandle, target: String) -> Result<(), String> {
+    checked_target(&target)?;
+    show_main(&app);
+    deliver_open(&app, target);
+    Ok(())
+}
 #[tauri::command]
 fn get_autostart(app: AppHandle) -> Option<bool> {
     if cfg!(debug_assertions) { return None; }
@@ -75,7 +93,7 @@ fn tray_shows_window(id: &str) -> bool {
 }
 
 fn show_main(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
+    if let Some(w) = app.get_webview_window(MAIN) {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
@@ -96,7 +114,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, e| match e.id().as_ref() {
             TRAY_QUIT => app.exit(0),
             TRAY_OPEN => show_main(app),
-            id => { if tray_shows_window(id) { show_main(app); } let _ = app.emit("ledge://tray", TrayPayload { action: id.to_string() }); }
+            id => { if tray_shows_window(id) { show_main(app); } let _ = app.emit_to(MAIN, "ledge://tray", TrayPayload { action: id.to_string() }); }
         })
         .on_tray_icon_event(|tray, e| {
             if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = e {
@@ -107,6 +125,9 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     app.manage(Tray { open, new_session, dnd, quit });
     Ok(())
 }
+
+/// Close hides the Desktop window to the tray (spec 4.4); the notch is never closed by hand.
+fn hides_on_close(label: &str) -> bool { label == MAIN }
 
 /// Whether this launch asked to stay in the tray (the login item's argument).
 fn launched_minimized<I: IntoIterator<Item = String>>(args: I) -> bool { args.into_iter().any(|a| a == MINIMIZED) }
@@ -132,14 +153,25 @@ fn main() {
         }))
         .manage(PendingOpen::default())
         // Visibility is the launch's choice (setup below), never the restored state's.
-        .plugin(tauri_plugin_window_state::Builder::new().with_state_flags(StateFlags::all() & !StateFlags::VISIBLE).build())
+        // The notch places itself on the chosen monitor's work area: no saved state for it.
+        .plugin(tauri_plugin_window_state::Builder::new().with_state_flags(StateFlags::all() & !StateFlags::VISIBLE).with_denylist(&[notch::NOTCH]).build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![MINIMIZED])))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![focus_terminal, foreground_is_terminal, open_terminal, open_url, get_autostart, set_autostart, set_tray_labels, take_open_target])
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .manage(notch::OutsideWatch::default())
+        .manage(notch::PrevForeground::default())
+        .manage(notch::Screen::default())
+        .invoke_handler(tauri::generate_handler![
+            focus_terminal, foreground_is_terminal, open_terminal, open_url, get_autostart, set_autostart, set_tray_labels, take_open_target,
+            open_in_ledge, notch::set_frame, notch::set_hot_zone, notch::set_outside_watch, notch::focus_overlay, notch::release_focus,
+            notch::list_monitors, notch::set_monitor,
+        ])
         .setup(|app| {
             build_tray(app)?;
+            // Before the tray-only check: the notch shows even when the login item starts us minimized.
+            notch::setup(app)?;
             default_autostart(app);
             // The window is created hidden and the window-state plugin has already put it back in place: show it now,
             // without a flash at the default size, unless the login item launched us into the tray.
@@ -147,9 +179,10 @@ fn main() {
             if let Some(target) = ledge_native::desktop::open_target(std::env::args()) { deliver_open(app.handle(), target); }
             Ok(())
         })
-        // Close hides to the tray (spec 4.4).
         .on_window_event(|w, e| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = e { api.prevent_close(); let _ = w.hide(); }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = e {
+                if hides_on_close(w.label()) { api.prevent_close(); let _ = w.hide(); }
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running Ledge Desktop");
@@ -157,7 +190,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{launched_minimized, tray_shows_window, tray_title};
+    use super::{checked_target, hides_on_close, launched_minimized, tray_shows_window, tray_title};
     #[test]
     fn the_tray_tells_a_dev_build_from_an_installed_one() {
         assert_eq!(tray_title("0.5.2", false), "Ledge Desktop 0.5.2");
@@ -174,5 +207,17 @@ mod tests {
     fn do_not_disturb_from_the_tray_keeps_the_window_hidden() {
         assert!(!tray_shows_window("dnd"));
         assert!(tray_shows_window("new"));
+    }
+
+    #[test]
+    fn only_the_main_window_hides_on_close() {
+        assert!(hides_on_close("main"));
+        assert!(!hides_on_close("notch"));
+    }
+
+    #[test]
+    fn open_in_ledge_refuses_an_invalid_target() {
+        assert_eq!(checked_target("not json"), Err("invalid target".into()));
+        assert_eq!(checked_target(r#"{"kind":"settings"}"#), Ok(r#"{"kind":"settings"}"#));
     }
 }
