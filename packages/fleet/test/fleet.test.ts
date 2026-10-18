@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
 import type { DaemonClient, DaemonStatus } from '../src/client';
-import { LOCAL_MACHINE, parseMachines, probeMachine, sshProblem } from '../src/machines';
+import { LOCAL_MACHINE, parseMachines, probeMachine, sshProblem, terminalCommand, type MachineState } from '../src/machines';
 import { fakeSession } from './mockDaemon';
 
 const remote = { id: 'server', label: 'dev-server', url: 'ws://127.0.0.1:47832', ssh: 'dev-server' };
@@ -89,6 +89,18 @@ describe('multi-machine connections', () => {
     expect(server.sent[0]).toMatchObject({ type: 'document.read', sessionId: 'same' });
     client.send({ type: 'document.read', requestId: 'unknown', path: '/w/a.md' });
     expect(local.sent).toEqual([]); expect(server.sent).toHaveLength(1);
+  });
+  it('opens no terminal for an id or a launcher the WSL shell would read as more than words', () => {
+    const at = (ssh: string | undefined, launcher: string[]) => ({ ...LOCAL_MACHINE, ssh, launcher, status: 'open', ready: true, recents: [], sessions: [] }) as MachineState;
+    const node = ['/usr/bin/node', '/opt/ledge/cli.js'];
+    expect(terminalCommand(at(undefined, node), '3f2a')).toEqual(['/usr/bin/node', '/opt/ledge/cli.js', 'attach', '3f2a']);
+    expect(terminalCommand(at('dev-server', node), '9b1c-e2')).toEqual(['ssh', '-t', '--', 'dev-server', "'/usr/bin/node' '/opt/ledge/cli.js' 'attach' '9b1c-e2'"]);
+    // `wsl.exe --` hands the command to the user's shell, and wt only wraps an argument holding a space in double quotes.
+    for (const id of ['$(touch /tmp/x)', 'a;b', '`id`', 'a b', "a'b", 'a"b', 'a|b', 'a&b', 'a>b', '']) {
+      expect(terminalCommand(at('dev-server', node), id)).toBeNull();
+      expect(terminalCommand(at(undefined, node), id)).toBeNull();
+    }
+    expect(terminalCommand(at('dev-server', ['/usr/bin/node', '/opt/$(reboot)/cli.js']), '3f2a')).toBeNull();
   });
   it('sends a launch to the machine it names, without machineId, and qualifies session.launched', () => {
     const { client, local, server, got } = setup();

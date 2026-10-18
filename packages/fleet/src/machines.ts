@@ -86,8 +86,13 @@ export function splitId(id: string): { machine: string; id: string } | null {
   try { return { machine: id.slice(0, at), id: decodeURIComponent(id.slice(at + 1)) }; } catch { return null; }
 }
 const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
+/** A word every shell reads as itself, quoted or not: `wsl.exe --` hands the terminal's command to the user's WSL shell, after
+ *  Windows Terminal wrapped each argument holding a space in double quotes, so `$(…)`, a quote or a `;` there would run locally. */
+const SHELL_WORD = /^[\w@%+=:,./-]+$/;
 export function terminalCommand(machine: MachineState, rawId: string): string[] | null {
   if (!machine.launcher) return null;
+  // The launcher and the id come from the machine's daemon: a remote one must not run anything on this one.
+  if (![...machine.launcher, rawId, ...(machine.ssh ? [machine.ssh] : [])].every(w => SHELL_WORD.test(w))) return null;
   const command = [...machine.launcher, 'attach', rawId];
   return machine.ssh ? ['ssh', '-t', '--', machine.ssh, command.map(quote).join(' ')] : command;
 }
