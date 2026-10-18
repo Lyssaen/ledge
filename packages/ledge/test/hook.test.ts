@@ -449,6 +449,18 @@ describe('prompts and the chat marker', () => {
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back }, at)?.event.text).toBe(back);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back + 'x'.repeat(INPUT_MAX) }, at)?.event.text).toHaveLength(INPUT_MAX);
   });
+  it('keeps a cross-session message whole (up to INPUT_MAX)', () => {
+    const prompt = '<cross-session-message from="uds:/run/user/1000/cc-socks/1.sock" from-name="a-2d" from-mode="prompting">\n' + 'x'.repeat(3000);
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toHaveLength(prompt.length);
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(3000) }, at)?.event.text).toHaveLength(500);
+  });
+  it('labels SendMessage with its summary', () => {
+    const tool_input = { to: 'a-bf', summary: 'OK pour la sidebar', message: 'long' };
+    expect(mapClaudeHook('PreToolUse', { session_id: 's', tool_name: 'SendMessage', tool_input }, at)?.event.text).toBe('OK pour la sidebar');
+    const m = mapClaudeHook('PreToolUse', { session_id: 's', tool_name: 'SendMessage', tool_input: { to: 'a-bf', message: 'long' } }, at);
+    expect(m?.event.text).toBe('→ a-bf');
+    expect(m?.event.toolInput).toEqual({ to: 'a-bf', message: 'long' });
+  });
   it('Cursor beforeSubmitPrompt carries the prompt too', () => {
     const m = mapCursorHook('beforeSubmitPrompt', { session_id: 's', prompt: 'Corrige le test' }, at, {});
     expect(m?.event).toMatchObject({ name: 'UserPromptSubmit', text: 'Corrige le test' });
