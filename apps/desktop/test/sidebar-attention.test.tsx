@@ -86,6 +86,20 @@ describe('Your turn', () => {
     expect(region.getByRole('button', { name: 'Show less' })).toBeVisible();
   });
 
+  it('Alt ↓ does not open the next waiter while a delete confirmation is open', async () => {
+    const { side, user } = await boot({
+      sessions: listSessions(),
+      daemon: { version: '0.7.0', install: 'npm', systemd: true, archive: true }
+    });
+    fireEvent.contextMenu(within(side.getByRole('tree', { name: 'Projects, branches and sessions' })).getByRole('button', { name: /^Otto/ }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete…' }));
+    expect(await screen.findByRole('alertdialog', { name: 'Delete Otto?' })).toBeVisible();
+    await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
+    expect(screen.getByRole('alertdialog', { name: 'Delete Otto?' })).toBeVisible();
+    expect(banner().queryByText('Otto')).toBeNull();
+    expect(banner().queryByText('Kit')).toBeNull();
+  });
+
   it('Ctrl ⇧ E focuses the open session in the tree, else the first row', async () => {
     const { side, user } = await boot({ sessions: listSessions() });
     await user.keyboard('{Control>}{Shift>}e{/Shift}{/Control}');
