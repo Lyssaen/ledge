@@ -4,12 +4,19 @@ pub fn title_matches(title: &str, wanted: &str) -> bool {
     t.contains(&wanted.to_lowercase()) || t.contains("windows terminal")
 }
 
+/// `s` as one `wt.exe` argument: Windows Terminal splits its whole command line into subcommands at every `;` not
+/// preceded by a backslash, inside an argument too, and turns `\;` back into `;`. A session title `demo;calc.exe`
+/// left as is would run `calc.exe` as a second `wt` command.
+fn wt_arg(s: &str) -> String { s.replace(';', "\\;") }
+
 /// The `wt.exe` arguments that open a tab titled `title` in the current Windows Terminal window (a new one when none
 /// is open) running `command` inside the default WSL distribution. `command` is the daemon's launcher command plus
-/// `attach <id>`, passed verbatim: Windows Terminal hands everything after `wsl.exe --` to WSL untouched.
+/// `attach <id>`; Windows Terminal hands everything after `wsl.exe --` to WSL, once its `;` escapes are undone.
 pub fn terminal_args(title: &str, command: &[String]) -> Vec<String> {
-    let mut args: Vec<String> = ["-w", "0", "new-tab", "--title", title, "wsl.exe", "--"].iter().map(|s| s.to_string()).collect();
-    args.extend(command.iter().cloned());
+    let mut args: Vec<String> = ["-w", "0", "new-tab", "--title"].iter().map(|s| s.to_string()).collect();
+    args.push(wt_arg(title));
+    args.extend(["wsl.exe", "--"].iter().map(|s| s.to_string()));
+    args.extend(command.iter().map(|a| wt_arg(a)));
     args
 }
 
@@ -68,6 +75,12 @@ mod tests {
     #[test] fn a_terminal_tab_runs_the_launcher_command_in_wsl() {
         let cmd: Vec<String> = ["/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"].iter().map(|s| s.to_string()).collect();
         assert_eq!(terminal_args("Juno · api-gateway", &cmd), ["-w", "0", "new-tab", "--title", "Juno · api-gateway", "wsl.exe", "--", "/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"]);
+    }
+    #[test] fn a_semicolon_in_the_title_or_the_command_never_starts_another_wt_command() {
+        let cmd: Vec<String> = ["ssh", "-t", "--", "box", "'node' 'cli.js' 'attach' 'a;b'"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(terminal_args("demo;calc.exe;", &cmd), ["-w", "0", "new-tab", "--title", "demo\\;calc.exe\\;", "wsl.exe", "--", "ssh", "-t", "--", "box", "'node' 'cli.js' 'attach' 'a\\;b'"]);
+        // A backslash already before a `;` is kept: wt reads `\\;` back as `\;`.
+        assert_eq!(wt_arg("a\\;b"), "a\\\\;b");
     }
     #[test] fn matches_bot_title_or_terminal() {
         assert!(title_matches("Otto · harness-assistant - Windows Terminal", "Otto · harness-assistant"));
