@@ -120,9 +120,6 @@ importers:
       '@tauri-apps/plugin-process':
         specifier: ^2.4.0
         version: 2.4.0
-      '@tauri-apps/plugin-updater':
-        specifier: ^2.13.3
-        version: 2.13.3
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -139,9 +136,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.3.3(vite@6.4.4(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15))
-      '@tauri-apps/cli':
-        specifier: ^2.1.0
-        version: 2.12.1
       '@testing-library/jest-dom':
         specifier: ^6.6.0
         version: 6.10.0(@testing-library/dom@10.4.2)

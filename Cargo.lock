@@ -2051,33 +2051,19 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
+ "tauri-plugin-global-shortcut",
  "tauri-plugin-notification",
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
+ "windows 0.58.0",
 ]
 
 [[package]]
 name = "ledge-native"
 version = "0.6.0"
 dependencies = [
- "windows 0.58.0",
-]
-
-[[package]]
-name = "ledge-overlay"
-version = "0.6.0"
-dependencies = [
- "ledge-native",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-process",
- "tauri-plugin-updater",
  "windows 0.58.0",
 ]
 

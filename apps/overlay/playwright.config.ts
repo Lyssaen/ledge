@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 // e2e runs the real Vite app in Chromium; the daemon is simulated in the page via routeWebSocket (see e2e/daemon.ts).
-// Port 5199 so it never collides with `tauri dev` (1420) or the real daemon (47831).
+// Port 5199 so it never collides with the Vite dev server (1420) or the real daemon (47831).
 export default defineConfig({
   testDir: './e2e',
   outputDir: './e2e/.results',

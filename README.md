@@ -1,4 +1,4 @@
-<img src="apps/overlay/src-tauri/icons/128x128@2x.png" alt="The Ledge mascot" width="96" align="right">
+<img src="apps/desktop/src-tauri/icons/128x128@2x.png" alt="The Ledge mascot" width="96" align="right">
 
 # Ledge
 
@@ -128,10 +128,9 @@ The UI is plain web code under `src/`, developed and unit-tested in WSL; the Rus
 | `src/defaultTool.ts` | The default harness (`ledge.defaultTool`): new sessions and the Ledge chat start on it. Claude Code when nothing valid is stored. |
 | `src/bots/` | Façades over the mascots, which live in `packages/ui/src/bots/`: material, pose per state, halo in the state colour, breathing while waiting. |
 | `src/keyboard/` | Keyboard navigation (j/k, Alt ←/→ to the previous or next session, y/n, digits for a question's options, Esc) and the first-use coachmark. |
-| `src/update/` | The overlay's half of the auto-update: `machine.ts` (the pure update state machine, daemon first then app), `useUpdate.ts` (checks at startup and every 6 hours, drives the daemon and Tauri's updater), `bridge.ts` (the updater plugin, a no-op in a browser), `UpdateCard.tsx` (the card in the list), `prefs.ts`. The About tab of the settings shows both versions. |
 | `src/i18n/` | One typed catalogue, French (default) and English, same keys enforced by the type checker. |
 | `src/tauri/bridge.ts` | The only file that calls `invoke`: `set_frame`, `set_outside_watch`, `focus_overlay`, `release_focus`, `focus_terminal`, `open_terminal`, `list_monitors`, `set_monitor`, plus the `ledge://outside-click` event and the `Ctrl+Alt+L` and `Ctrl+Alt+N` global shortcuts. Everything degrades to no-ops in a browser. |
-| `src-tauri/src/main.rs` | The Rust shell: a borderless, transparent, always-on-top window outside the taskbar; a thread that polls the cursor every 50 ms, reports it in the hot band along the top edge (10 px high, the island plus 40 px on each side) for the hover and the mascot's gaze, tells the page when a maximised or full-screen window holds the foreground on the island's monitor (the discreet strip) and, while a panel shows, emits a press of the mouse outside the window (`GetAsyncKeyState`); window placement at `(left, top)` in physical pixels against the top edge of the monitor's work area; focus hand-back to the previously active window; `focus_terminal` finds the Windows Terminal window whose title matches the bot's tab (Win32 `EnumWindows`); `open_terminal` opens a Windows Terminal tab running `ledge attach <id>` in WSL (`wt.exe -w 0 new-tab`). The terminal and URL-opening code itself lives in `crates/ledge-native/src/` (`terminal.rs`, `browser.rs`), shared with other Tauri shells. |
+| `apps/desktop/src-tauri/src/notch.rs` | The notch is a window of Ledge Desktop (label `notch`), and this is its native side: a borderless, transparent, always-on-top window outside the taskbar; a thread that polls the cursor every 50 ms, reports it in the hot band along the top edge (10 px high, the island plus 40 px on each side) for the hover and the mascot's gaze, tells the page when a maximised or full-screen window holds the foreground on the island's monitor (the discreet strip) and, while a panel shows, emits a press of the mouse outside the window (`GetAsyncKeyState`); window placement at `(left, top)` in physical pixels against the top edge of the monitor's work area; focus hand-back to the previously active window; `focus_terminal` finds the Windows Terminal window whose title matches the bot's tab (Win32 `EnumWindows`); `open_terminal` opens a Windows Terminal tab running `ledge attach <id>` in WSL (`wt.exe -w 0 new-tab`). `focus_terminal`, `open_terminal` and `open_url` are Desktop's commands (`main.rs`), shared by both windows; their code lives in `crates/ledge-native/src/` (`terminal.rs`, `browser.rs`). |
 
 The overlay never talks to tmux or to the agent. Its only two outputs are WebSocket commands to the daemon and the native commands above.
 
@@ -339,12 +338,12 @@ Windows side, the overlay keeps its preferences in the WebView's `localStorage`:
 - A decision is locked in the overlay until the daemon confirms, rejects, or the connection drops, so a double click never sends two answers.
 - The overlay survives the daemon: it shows "daemon unreachable, retrying" under the island and reconnects with backoff.
 - The Windows app updates itself through Tauri's updater. Each release is signed with a minisign key, and the app checks the signature against the public key it ships with before installing anything. Releases are fetched from GitHub over HTTPS.
-- Update order is fixed: the daemon first, the app second. The overlay asks the daemon to run `npm i -g`, then restart the service, and compares the sessions before and after. The app is only installed if every session came back. If one is missing, or if the restart would close live sessions, nothing else changes and the card says why.
+- The daemon and the app update separately, each on your click in Ledge Desktop's settings. For the daemon, Ledge Desktop asks it to run `npm i -g`, then restart the service, and compares the sessions before and after. If one is missing, or if the restart would close live sessions, it says why.
 - The daemon refuses to update itself when it runs from a git clone or without systemd, and shows the manual command instead.
 
 ## How to install?
 
-Ledge has two halves: the `ledge` CLI and its daemon in WSL2, and the overlay on Windows. The WSL side installs from this repository. The Windows side is a ready-made installer from the [Releases](https://github.com/Lyssaen/ledge/releases) page, or one you build yourself.
+Ledge has two halves: the `ledge` CLI and its daemon in WSL2, and Ledge Desktop on Windows, which carries the notch. The WSL side installs from this repository. The Windows side is one ready-made installer from the [Releases](https://github.com/Lyssaen/ledge/releases) page, or one you build yourself.
 
 ### What you need
 
@@ -374,7 +373,7 @@ ledge status
 
 ### 2. Get the Windows installer
 
-Download `Ledge_<version>_x64-setup.exe` from the [latest release](https://github.com/Lyssaen/ledge/releases/latest). The release notes give its SHA-256.
+Download `Ledge.Desktop_<version>_x64-setup.exe` from the [latest release](https://github.com/Lyssaen/ledge/releases/latest). The release notes give its SHA-256.
 
 Or build it yourself. Clone the repository a second time, on the Windows disk, in PowerShell. Do not build from the `\\wsl$` path: `node_modules` must be the Windows one.
 
@@ -382,19 +381,19 @@ Or build it yourself. Clone the repository a second time, on the Windows disk, i
 git clone https://github.com/Lyssaen/ledge.git $HOME\Workspace\ledge
 cd $HOME\Workspace\ledge
 pnpm install --frozen-lockfile
-cd apps\overlay
+cd apps\desktop
 pnpm tauri build
 ```
 
-The installer lands in `target\release\bundle\nsis\Ledge_<version>_x64-setup.exe`.
+The installer lands in `target\release\bundle\nsis\Ledge Desktop_<version>_x64-setup.exe`. Without the updater's signing key, build with `pnpm tauri build --config nosign.json`, where `nosign.json` holds `{"bundle":{"createUpdaterArtifacts":false}}`.
 
-### 3. Install Ledge on Windows
+### 3. Install Ledge Desktop on Windows
 
-Run `Ledge_<version>_x64-setup.exe`. It installs for your user only, under `%LOCALAPPDATA%`, with no administrator prompt. The installer is not code-signed, so SmartScreen may warn the first time: More info, then Run anyway. At the end, Ledge starts:
+Run the installer. It installs for your user only, under `%LOCALAPPDATA%\Ledge Desktop`, with no administrator prompt. The installer is not code-signed, so SmartScreen may warn the first time: More info, then Run anyway. If the old « Ledge » app (the notch on its own, up to 0.6) is installed, the installer stops it and uninstalls it first, launch at login included: the notch now lives in Ledge Desktop. At the end, Ledge Desktop starts:
 
 - the Ledge mascot appears in the notification area, next to the clock;
-- the island appears at the top centre of your primary screen, a 38 px pill cut into the edge with the Ledge mascot on its left;
-- Ledge now starts with Windows. Settings > Display > `Lancer au démarrage` turns that off.
+- the notch appears at the top centre of your primary screen, a 38 px pill cut into the edge with the Ledge mascot on its left;
+- Ledge Desktop now starts with Windows, in the background (the notch, not the window). Réglages > Général > `Lancer au démarrage de Windows` turns that off.
 
 If the island says the daemon is unreachable, go back to step 1 and check the service in WSL.
 
@@ -412,7 +411,7 @@ The overlay speaks French by default. Settings > Langue switches it to English.
 
 ### Update
 
-Ledge checks for a new release at startup, then every 6 hours (Settings > À propos turns this off). It never updates without your click. When a release is out, a dot appears on the island's mascot and a card appears at the top of the list: click "Mettre à jour". Ledge updates the WSL daemon first, waits for your sessions to come back, then downloads and installs the Windows app, which restarts. Your sessions keep running. See the [tour](docs/tour.md#updating).
+Ledge Desktop checks for a new release at startup, then every 6 hours (Réglages > Général turns this off). It never updates without your click. When a release is out, a dot appears on the notch's mascot and in Ledge Desktop's settings: click "Mettre à jour" there. The WSL daemon has its own button in Réglages > À propos. Your sessions keep running. See the [tour](docs/tour.md#updating).
 
 To update by hand:
 
@@ -420,7 +419,7 @@ To update by hand:
 npm i -g @paradow/ledge@latest && systemctl --user restart ledge-daemon
 ```
 
-Then on Windows, quit Ledge from its tray menu and run the newer installer over the old one, downloaded from the releases. A daemon that runs from a git clone is never touched by the button: the card shows the command to run, and `git pull && pnpm install && pnpm --filter @paradow/ledge build` followed by the restart does the same job.
+Then on Windows, quit Ledge Desktop from its tray menu and run the newer installer over the old one, downloaded from the releases. A daemon that runs from a git clone is never touched by the button: Ledge Desktop shows the command to run, and `git pull && pnpm install && pnpm --filter @paradow/ledge build` followed by the restart does the same job.
 
 A tmux server started before the scoped-service version lives inside the daemon's service, so a restart would close its sessions. Ledge refuses to restart then, and says so. Close those sessions or restart WSL once; later sessions are safe.
 
@@ -434,7 +433,7 @@ ledge uninstall           # add --purge to also delete ~/.ledge (session journal
 
 It removes only Ledge's own entries from the Claude Code, Codex and Cursor Agent hooks, and keeps every other hook where it was. It stops the daemon, removes the `ledge-daemon.service` unit and deletes the `~/.local/bin/ledge` link. Sessions still running on Ledge's tmux server are reported, not killed. It leaves linger on, since other user services may need it. If a config file is not valid JSON, it is left untouched and the command ends with an error after doing the rest.
 
-On Windows: Settings > Apps > Installed apps > Ledge > Uninstall. It also removes launch at login. Then delete the clones if you no longer need them.
+On Windows: Settings > Apps > Installed apps > Ledge Desktop > Uninstall. It also removes launch at login. Then delete the clones if you no longer need them.
 
 More details: the WSL side in [packages/ledge/README.md](packages/ledge/README.md), the overlay, its first-build checklist and the key reference in [apps/overlay/README.md](apps/overlay/README.md).
 
@@ -458,7 +457,7 @@ pnpm test                           # pnpm -r test, then the release scripts' te
 pnpm --filter overlay dev           # the UI alone on http://localhost:1420, against a daemon running in WSL
 pnpm --filter overlay test:e2e      # Playwright, chromium
 LEDGE_SCREENSHOTS=1 pnpm --filter overlay exec playwright test e2e/screenshots.spec.ts   # refresh docs/screens (see docs/tour.md)
-pnpm --filter overlay tauri dev     # Windows only
+pnpm --filter desktop tauri dev     # Windows only: Ledge Desktop with the notch
 ```
 
 Layout:
@@ -469,7 +468,7 @@ packages/ledge/      src/cli, src/daemon, src/adapters, src/chat, test/ (fixture
 packages/ui/         shared React UI: mascots, i18n, accent, scale, motion, sounds
 packages/fleet/      shared multi-machine daemon client (fleet)
 crates/ledge-native/ shared Rust: terminal focus/open, URL opening, autostart marker
-apps/overlay/        src/ (React), src-tauri/ (Rust shell), e2e/ (Playwright)
+apps/overlay/        the notch's web app: src/ (React), e2e/ (Playwright); its window is Ledge Desktop's
 apps/desktop/        src/ (React), src-tauri/ (Rust shell): Ledge Desktop
 scripts/ test/       release scripts (set-version, latest-json) and their tests
 docs/                design specs, implementation plans, mockups, the approved prototype, and the tour with its captures
@@ -477,9 +476,9 @@ docs/                design specs, implementation plans, mockups, the approved p
 
 ### Ledge Desktop
 
-`apps/desktop` is the full-window companion app (team and meeting views, tray, updater). Run it with `pnpm --filter desktop dev` (UI) or `pnpm --filter desktop tauri dev` (Windows only), against a daemon in WSL.
-Its installer, `Ledge.Desktop_<version>_x64-setup.exe`, is published on the same release as the island's, with its own updater manifest (`latest-desktop.json`).
-Both apps, the three crates and the npm package always carry the same version: `pnpm version:set <x.y.z>` stamps all of them, and the release workflow does it from the tag.
+`apps/desktop` is the Windows app: its main window (team and meeting views, settings), the notch as a second window (`apps/overlay`, built into `dist/notch/`), the tray and the updater. Run it with `pnpm --filter desktop dev` (UI) or `pnpm --filter desktop tauri dev` (Windows only), against a daemon in WSL.
+Its installer, `Ledge.Desktop_<version>_x64-setup.exe`, is the only one on a release, with its updater manifest (`latest-desktop.json`).
+The Desktop and overlay packages, the two crates and the npm package always carry the same version: `pnpm version:set <x.y.z>` stamps all of them, and the release workflow does it from the tag.
 
 ## Design documents
 

@@ -126,8 +126,15 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Close hides the Desktop window to the tray (spec 4.4); the notch is never closed by hand.
-fn hides_on_close(label: &str) -> bool { label == MAIN }
+/// What a close request (the title bar's ×, Alt+F4) does to a window.
+#[derive(Debug, PartialEq, Eq)]
+enum CloseAction { Hide, Ignore, Close }
+
+/// The Desktop window hides to the tray (spec 4.4); the notch is never closed by hand, so its close requests are
+/// ignored (Quit, from the tray or the notch's menu, ends both windows).
+fn on_close(label: &str) -> CloseAction {
+    match label { MAIN => CloseAction::Hide, notch::NOTCH => CloseAction::Ignore, _ => CloseAction::Close }
+}
 
 /// Whether this launch asked to stay in the tray (the login item's argument).
 fn launched_minimized<I: IntoIterator<Item = String>>(args: I) -> bool { args.into_iter().any(|a| a == MINIMIZED) }
@@ -181,7 +188,11 @@ fn main() {
         })
         .on_window_event(|w, e| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = e {
-                if hides_on_close(w.label()) { api.prevent_close(); let _ = w.hide(); }
+                match on_close(w.label()) {
+                    CloseAction::Hide => { api.prevent_close(); let _ = w.hide(); }
+                    CloseAction::Ignore => api.prevent_close(),
+                    CloseAction::Close => {}
+                }
             }
         })
         .run(tauri::generate_context!())
@@ -190,7 +201,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_target, hides_on_close, launched_minimized, tray_shows_window, tray_title};
+    use super::{checked_target, launched_minimized, on_close, tray_shows_window, tray_title, CloseAction};
     #[test]
     fn the_tray_tells_a_dev_build_from_an_installed_one() {
         assert_eq!(tray_title("0.5.2", false), "Ledge Desktop 0.5.2");
@@ -210,9 +221,10 @@ mod tests {
     }
 
     #[test]
-    fn only_the_main_window_hides_on_close() {
-        assert!(hides_on_close("main"));
-        assert!(!hides_on_close("notch"));
+    fn closing_hides_the_main_window_and_never_closes_the_notch() {
+        assert_eq!(on_close("main"), CloseAction::Hide);
+        assert_eq!(on_close("notch"), CloseAction::Ignore);
+        assert_eq!(on_close("other"), CloseAction::Close);
     }
 
     #[test]

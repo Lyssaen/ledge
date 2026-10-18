@@ -8,7 +8,7 @@ const ROOT = resolve(__dirname, '..');
 const read = (f: string) => readFileSync(join(ROOT, f), 'utf8');
 
 const FILES = [
-  'apps/overlay/package.json', 'apps/overlay/src-tauri/tauri.conf.json', 'apps/overlay/src-tauri/Cargo.toml',
+  'apps/overlay/package.json',
   'apps/desktop/package.json', 'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/Cargo.toml',
   'crates/ledge-native/Cargo.toml', 'Cargo.lock', 'packages/ledge/package.json'
 ];
@@ -21,20 +21,20 @@ describe('version', () => {
   const lock = (name: string) => new RegExp(`^name = "${name}"\\r?\\nversion = "${pkg}"`, 'm').test(read('Cargo.lock'));
 
   it('is a plain MAJOR.MINOR.PATCH', () => expect(pkg).toMatch(/^\d+\.\d+\.\d+$/));
-  it('is the same in the overlay, the Desktop and the daemon packages and Tauri configs', () => {
-    expect(JSON.parse(read('apps/overlay/src-tauri/tauri.conf.json')).version).toBe(pkg);
+  it('is the same in the overlay, the Desktop and the daemon packages and the Tauri config', () => {
     expect(JSON.parse(read('apps/desktop/package.json')).version).toBe(pkg);
     expect(JSON.parse(read('apps/desktop/src-tauri/tauri.conf.json')).version).toBe(pkg);
     expect(JSON.parse(read('packages/ledge/package.json')).version).toBe(pkg);
   });
-  it('is the same in the three crates and their lock entries', () => {
-    expect(crate('apps/overlay/src-tauri/Cargo.toml', 'ledge-overlay')).toBe(true);
+  it('is the same in the two crates and their lock entries', () => {
     expect(crate('apps/desktop/src-tauri/Cargo.toml', 'ledge-desktop')).toBe(true);
     expect(crate('crates/ledge-native/Cargo.toml', 'ledge-native')).toBe(true);
-    for (const name of ['ledge-overlay', 'ledge-desktop', 'ledge-native']) {
+    for (const name of ['ledge-desktop', 'ledge-native']) {
       expect(lock(name), name).toBe(true);
       expect(read('Cargo.lock').match(new RegExp(`^name = "${name}"\\r?$`, 'gm'))?.length, name).toBe(1);
     }
+    // The old overlay shell is gone: the notch is a window of Ledge Desktop.
+    expect(read('Cargo.lock')).not.toMatch(/^name = "ledge-overlay"\r?$/m);
   });
 
   function copyTree(): string {
@@ -45,14 +45,14 @@ describe('version', () => {
   const run = (dir: string, v: string) =>
     spawnSync('node', [join(ROOT, 'scripts/set-version.mjs'), v], { cwd: dir, env: { ...process.env, LEDGE_VERSION_ROOT: dir }, encoding: 'utf8' });
 
-  it('stamps all nine targets, once each', () => {
+  it('stamps all eight targets, once each', () => {
     const dir = copyTree();
     const r = run(dir, 'v9.9.9');
     expect(r.status).toBe(0);
     for (const f of FILES.filter((f) => f.endsWith('.json'))) expect(JSON.parse(readFileSync(join(dir, f), 'utf8')).version).toBe('9.9.9');
     expect(readFileSync(join(dir, 'apps/desktop/src-tauri/Cargo.toml'), 'utf8')).toMatch(/^version = "9.9.9"/m);
     const l = readFileSync(join(dir, 'Cargo.lock'), 'utf8');
-    for (const name of ['ledge-overlay', 'ledge-desktop', 'ledge-native']) expect(l).toMatch(new RegExp(`^name = "${name}"\\r?\\nversion = "9.9.9"`, 'm'));
+    for (const name of ['ledge-desktop', 'ledge-native']) expect(l).toMatch(new RegExp(`^name = "${name}"\\r?\\nversion = "9.9.9"`, 'm'));
   });
   it('refuses to touch anything when one file lacks a single version line', () => {
     const dir = copyTree();

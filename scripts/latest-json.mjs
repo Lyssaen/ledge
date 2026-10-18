@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Writes the updater manifest the installed Ledge reads from releases/latest/download/latest.json (spec 2026-10-12 auto-update §4).
-// Usage: node scripts/latest-json.mjs v0.3.0 path/to/Ledge_0.3.0_x64-setup.exe notes.md > latest.json
+// Writes the updater manifest the installed Ledge Desktop reads from releases/latest/download/latest-desktop.json (spec 2026-10-12 auto-update §4).
+// Usage: node scripts/latest-json.mjs v0.7.0 path/to/Ledge.Desktop_0.7.0_x64-setup.exe notes.md > latest-desktop.json
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';

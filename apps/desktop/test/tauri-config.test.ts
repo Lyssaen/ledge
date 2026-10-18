@@ -4,15 +4,16 @@ import { resolve } from 'node:path';
 const root = resolve(__dirname, '..');
 const conf = JSON.parse(readFileSync(resolve(root, 'src-tauri/tauri.conf.json'), 'utf8'));
 const caps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/default.json'), 'utf8'));
-const island = JSON.parse(readFileSync(resolve(root, '../overlay/src-tauri/tauri.conf.json'), 'utf8'));
+const version = (pkg: string) => JSON.parse(readFileSync(resolve(root, pkg, 'package.json'), 'utf8')).version;
 const main = readFileSync(resolve(root, 'src-tauri/src/main.rs'), 'utf8');
 /** The commands in `generate_handler![…]`, whatever its line breaks (`notch::set_frame` reads `set_frame`). */
 const commands = (main.match(/generate_handler!\[([^\]]*)\]/)?.[1] ?? '').split(',').map((c) => c.trim().split('::').pop()).filter(Boolean);
 
 describe('Desktop Tauri config', () => {
-  it('is its own app, versioned with the island', () => {
+  it('is its own app, versioned with its package and the notch\'s web app it carries', () => {
     expect(conf.identifier).toBe('be.paradow.ledge.desktop'); expect(conf.productName).toBe('Ledge Desktop');
-    expect(conf.version).toBe(island.version);
+    expect(conf.version).toBe(version('.'));
+    expect(conf.version).toBe(version('../overlay'));
     expect(conf.build.devUrl).toBe('http://localhost:1421');
   });
   it('has one decorated, resizable main window remembering its state', () => {
@@ -30,9 +31,10 @@ describe('Desktop Tauri config', () => {
     // the restored state must not show the window itself: the launch decides
     expect(main).toContain('with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)');
   });
-  it('lets sound cues play before any click, with the island\'s WebView2 flags (WebView2 defaults kept)', () => {
+  it('lets sound cues play before any click, in both windows (WebView2 defaults kept)', () => {
     const args: string = conf.app.windows[0].additionalBrowserArgs;
-    expect(args).toBe(island.app.windows[0].additionalBrowserArgs);
+    // one WebView2 environment serves both windows: their flags must match, or the notch window fails to open
+    expect(conf.app.windows.find((w: { label: string }) => w.label === 'notch').additionalBrowserArgs).toBe(args);
     expect(args).toContain('--autoplay-policy=no-user-gesture-required');
     // setting the property replaces wry's defaults: they must be repeated
     expect(args).toContain('--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection');
@@ -44,9 +46,9 @@ describe('Desktop Tauri config', () => {
     expect(commands).toContain('take_open_target');
     expect(readFileSync(resolve(root, 'src-tauri/Cargo.toml'), 'utf8')).toMatch(/^tauri-plugin-single-instance = "2"$/m);
   });
-  it('shares the island CSP and the updater key, with its own manifest', () => {
-    expect(conf.app.security.csp).toBe(island.app.security.csp);
-    expect(conf.plugins.updater.pubkey).toBe(island.plugins.updater.pubkey);
+  it('reaches only the daemon and the fonts, and updates from its own manifest, signed with our key', () => {
+    expect(conf.app.security.csp).toBe("default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src ipc: http://ipc.localhost ws://127.0.0.1:47831");
+    expect(Buffer.from(conf.plugins.updater.pubkey, 'base64').toString()).toMatch(/^untrusted comment: minisign public key: 763CCCF3D01336AD\n/);
     expect(conf.plugins.updater.endpoints).toEqual(['https://github.com/Lyssaen/ledge/releases/latest/download/latest-desktop.json']);
     expect(conf.plugins.updater.windows.installMode).toBe('passive');
     expect(conf.bundle.createUpdaterArtifacts).toBe(true);
