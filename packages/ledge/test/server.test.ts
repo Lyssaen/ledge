@@ -735,23 +735,23 @@ describe('server', () => {
     it('a client that connects later gets the last preview right after the snapshot', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim' }));
       srv.preview('a', ['old']); srv.preview('a', ['● latest']);
-      const r = await recorder(); await r.until(5);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'session.preview', 'chat.history']);
-      expect(r.got[3]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
+      const r = await recorder(); await r.until(6);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'island', 'session.preview', 'chat.history']);
+      expect(r.got[4]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
       r.ws.terminate();
     });
     it('a snapshot.request gets the previews again after the snapshot', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']);
       const r = await recorder(); await r.until(3);
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(10);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'session.preview', 'chat.history', 'snapshot', 'machines', 'projects', 'session.preview', 'chat.history']);
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(12);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'island', 'session.preview', 'chat.history', 'snapshot', 'machines', 'projects', 'island', 'session.preview', 'chat.history']);
       r.ws.terminate();
     });
     it('a removed session drops its preview; a preview for an unknown session is ignored', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']); srv.preview('ghost', ['boo']);
       store.remove('a');
       const r = await recorder(); await r.until(1); await new Promise(res => setTimeout(res, 50));
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'chat.history']);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'island', 'chat.history']);
       store.upsert(mk('a'));
       r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(8); await new Promise(res => setTimeout(res, 50));
       expect(r.got.filter(m => m.type === 'session.preview')).toEqual([]);
