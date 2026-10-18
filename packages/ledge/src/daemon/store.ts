@@ -9,6 +9,8 @@ export type StoreChange = { type: 'updated'; session: Session } | { type: 'remov
 
 /** How many folders the launch form remembers. */
 export const MAX_RECENTS = 12;
+/** How many archived sessions a daemon keeps: past it, the oldest archived goes, with its thread. */
+export const ARCHIVE_MAX = 200;
 
 export class Store {
   private sessions = new Map<string, Session>();
@@ -65,6 +67,24 @@ export class Store {
     const cur = this.sessions.get(id); if (!cur) return;
     if ((Object.keys(fields) as Array<keyof typeof fields>).every(k => cur[k] === fields[k])) return;
     this.upsert({ ...cur, ...fields });
+  }
+
+  /** Sets the archive date (kept if already set), then drops the oldest archives past `ARCHIVE_MAX`. */
+  archive(id: string, at: string): Session | undefined {
+    const cur = this.sessions.get(id); if (!cur) return undefined;
+    const next = cur.archivedAt === undefined ? { ...cur, archivedAt: at } : cur;
+    if (next !== cur) this.upsert(next);
+    const archived = this.all().filter(s => s.archivedAt !== undefined).sort((a, b) => a.archivedAt!.localeCompare(b.archivedAt!));
+    for (const old of archived.slice(0, Math.max(0, archived.length - ARCHIVE_MAX))) this.remove(old.id);
+    return this.sessions.get(id);
+  }
+
+  unarchive(id: string): Session | undefined {
+    const cur = this.sessions.get(id); if (!cur) return undefined;
+    if (cur.archivedAt === undefined) return cur;
+    const { archivedAt: _gone, ...rest } = cur;
+    this.upsert(rest);
+    return rest;
   }
 
   /** Every event applied to a known session, before the reducer decides whether it changes anything. */

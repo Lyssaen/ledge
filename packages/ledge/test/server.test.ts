@@ -878,6 +878,69 @@ describe('server', () => {
     });
   });
 
+  describe('archive, restore and delete', () => {
+    const withHistory = async (panes: Record<string, string[]>) => {
+      tmux = fakeTmux(panes); await srv.close();
+      const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+      return history;
+    };
+    const archived = async (c: Awaited<ReturnType<typeof connect>>) => {
+      for (;;) { const m = await c.next('session.updated'); if (m.session.archivedAt) return m.session; }
+    };
+    it('archives a live launcher session: tmux killed, exited, archivedAt set, thread kept', async () => {
+      const history = await withHistory({ 'ledge-ab12': [''] });
+      store.upsert(mk('ab12')); history.record('ab12', { name: 'UserPromptSubmit', at: T0, source: 'hook', text: 'hello' });
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.archive', id: 'ab12' });
+      expect(await archived(c)).toMatchObject({ state: 'exited', archivedAt: expect.any(String) });
+      expect(tmux.sent).toContainEqual(['kill', 'ledge-ab12']);
+      expect(history.items('ab12')).not.toEqual([]);
+      c.close();
+    });
+    it('archives a live session whose tmux is already gone', async () => {
+      store.upsert(mk('a'));
+      tmux.killSession = async () => { throw new Error('no such session'); };
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.archive', id: 'a' });
+      expect(await archived(c)).toMatchObject({ state: 'exited' });
+      c.close();
+    });
+    it('archives a running hook_only session without stopping it', async () => {
+      store.upsert(mk('h', { source: 'hook_only', tmuxSession: null }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.archive', id: 'h' });
+      expect(await archived(c)).toMatchObject({ state: 'working' });
+      expect(tmux.sent.filter(m => m[0] === 'kill')).toEqual([]);
+      c.close();
+    });
+    it('restore clears archivedAt and keeps the session exited', async () => {
+      store.upsert(mk('a', { state: 'exited', exitCode: 0, exitedAt: T0, archivedAt: T0 }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.restore', id: 'a' });
+      const m = await c.next('session.updated');
+      expect(m.session.archivedAt).toBeUndefined(); expect(m.session.state).toBe('exited');
+      c.close();
+    });
+    it('delete kills a live launcher session, then removes it and its thread', async () => {
+      const history = await withHistory({ 'ledge-a': [''] });
+      store.upsert(mk('a')); history.record('a', { name: 'UserPromptSubmit', at: T0, source: 'hook', text: 'hello' });
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.delete', id: 'a' });
+      expect(await c.next('session.removed')).toEqual({ type: 'session.removed', id: 'a' });
+      expect(tmux.sent).toContainEqual(['kill', 'ledge-a']);
+      expect(history.items('a')).toEqual([]);
+      c.close();
+    });
+    it('refuses an unknown id for each of archive, restore and delete', async () => {
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      for (const type of ['session.archive', 'session.restore', 'session.delete'] as const) {
+        c.send({ type, id: 'nope' });
+        expect(await c.next('error')).toEqual({ type: 'error', id: 'nope', message: 'unknown session', request: type });
+      }
+      c.close();
+    });
+  });
+
   describe('launch from a chat card', () => {
     const home = () => process.env.LEDGE_HOME!;
     /** A chat holding one proposal for `q1`; the marks are recorded and broadcast as a history, like the real one. */

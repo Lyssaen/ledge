@@ -255,6 +255,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const NOT_OFFERED = 'this answer is not offered for this request, answer in the terminal';
 
   /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
+  /** A live session Ledge launched is stopped (its tmux killed, a failure only logged) and marked exited; any other is left as it is. */
+  async function endSession(s: Session): Promise<void> {
+    if (s.source !== 'launcher' || s.state === 'exited') return;
+    if (s.tmuxSession) await tmux.killSession(s.tmuxSession).catch(e => log(`kill of ${s.tmuxSession} failed: ${(e as Error).message}`));
+    store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' });
+  }
+
   async function replyTo(id: string, text: string): Promise<string | null> {
     const s = store.get(id); if (!s) return 'unknown session';
     if (s.source === 'hook_only') return READ_ONLY;
@@ -441,6 +448,23 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // Removal broadcasts session.removed, drops the remembered preview and is saved to the journal.
         // A dismissed hook_only session that is in fact still alive comes back on its next hook (the
         // hook-before-register path in session.event recreates it): acceptable, it is still running.
+        store.remove(msg.id);
+        return;
+      }
+      case 'session.archive': {
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        await endSession(s);
+        store.archive(msg.id, now());
+        return;
+      }
+      case 'session.restore': {
+        if (!store.get(msg.id)) return refuse('unknown session', msg.id);
+        store.unarchive(msg.id);
+        return;
+      }
+      case 'session.delete': {
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        await endSession(s);
         store.remove(msg.id);
         return;
       }

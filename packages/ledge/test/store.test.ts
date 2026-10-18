@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Store } from '../src/daemon/store.js';
+import { Store, ARCHIVE_MAX } from '../src/daemon/store.js';
 import type { Session } from '@ledge/protocol';
 
 const T0 = '2026-10-09T18:00:00.000Z';
@@ -104,5 +104,28 @@ describe('Store save serialization', () => {
     expect(store.get('a')).toMatchObject({ repo: 'r', branch: 'main' }); expect(seen).toEqual(['updated']);
     store.patch('a', { repo: 'r', repoPath: '/r', branch: 'main', worktree: false }); expect(seen).toEqual(['updated']);
     store.patch('zz', { branch: 'x' }); expect(seen).toEqual(['updated']);
+  });
+});
+
+describe('Store archive', () => {
+  it('archive is idempotent and survives a reload', async () => {
+    const s = new Store(); s.upsert(mk('a', 'exited'));
+    s.archive('a', T0); s.archive('a', '2026-10-10T00:00:00.000Z');
+    expect(s.get('a')?.archivedAt).toBe(T0);
+    await s.save();
+    const again = new Store(); await again.load();
+    expect(again.get('a')?.archivedAt).toBe(T0);
+    expect(again.unarchive('a')?.archivedAt).toBeUndefined();
+  });
+  it('keeps at most ARCHIVE_MAX archives, dropping the oldest', () => {
+    const s = new Store(); const removed: string[] = [];
+    s.onChange(c => { if (c.type === 'removed') removed.push(c.id); });
+    for (let i = 0; i <= ARCHIVE_MAX; i++) {
+      s.upsert(mk(`s${i}`, 'exited'));
+      s.archive(`s${i}`, new Date(Date.parse(T0) + i * 1000).toISOString());
+    }
+    expect(removed).toEqual(['s0']);
+    expect(s.get('s0')).toBeUndefined();
+    expect(s.all().length).toBe(ARCHIVE_MAX);
   });
 });
