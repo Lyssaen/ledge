@@ -22,8 +22,10 @@ describe('Shoulders', () => {
     expect(shoulderR(117)).toBe(SHOULDER_R);
     expect(shoulderR(117, true)).toBe(STRIP_SHOULDER_R);
     expect(shoulderR(10)).toBe(5);
+    // The box keeps the 12 px fillet's size; the 6 px fillet is drawn against the island, so a change of radius never parts them.
     const { container } = render(<Shoulders left={900} w={48} strip transition="none" opacity={1} />);
-    expect(box(container, 'left').h).toBe(STRIP_SHOULDER_R);
+    expect(box(container, 'left')).toMatchObject({ left: 900 - SHOULDER_R, h: SHOULDER_R });
+    expect(container.querySelector('[data-shoulder="left"] path')!.getAttribute('d')).toBe('M6,0 H13 V6 H12 A6,6 0 0 0 6,0 Z');
   });
   it('a path that fills the top-outer corner: from the screen edge, into the island, down its edge, back along the arc', () => {
     const { container } = render(<Shoulders left={900} w={117} transition="none" opacity={1} />);

@@ -126,12 +126,12 @@ The UI is plain web code under `src/`, developed and unit-tested in WSL; the Rus
 | `src/surface/geometry.ts`, `frame.ts`, `scale.ts` | Layout of the island (a 38 px row of 22 px slots, centred on the top edge of the chosen screen or a quarter of the way in) and of the native window frame (`left`, `top`, width, height), with the island and window scale handled as a CSS zoom on their own layer. Every view keeps its top on the screen edge and grows downwards: the list is 380 px; a session and the chat are 480 px (560 px when reading the raw reply). |
 | `src/reply/parse.ts` | Turns the agent's last markdown message into a title, a lead, classified sections and questions with options. Ordinary lists keep the markdown's bullets or numbers; done / verified / question blocks stay cards. |
 | `src/defaultTool.ts` | The default harness (`ledge.defaultTool`): new sessions and the Ledge chat start on it. Claude Code when nothing valid is stored. |
-| `src/bots/` | The mascots: material, pose per state, halo in the state colour, breathing while waiting. |
+| `src/bots/` | Façades over the mascots, which live in `packages/ui/src/bots/`: material, pose per state, halo in the state colour, breathing while waiting. |
 | `src/keyboard/` | Keyboard navigation (j/k, Alt ←/→ to the previous or next session, y/n, digits for a question's options, Esc) and the first-use coachmark. |
 | `src/update/` | The overlay's half of the auto-update: `machine.ts` (the pure update state machine, daemon first then app), `useUpdate.ts` (checks at startup and every 6 hours, drives the daemon and Tauri's updater), `bridge.ts` (the updater plugin, a no-op in a browser), `UpdateCard.tsx` (the card in the list), `prefs.ts`. The About tab of the settings shows both versions. |
 | `src/i18n/` | One typed catalogue, French (default) and English, same keys enforced by the type checker. |
 | `src/tauri/bridge.ts` | The only file that calls `invoke`: `set_frame`, `set_outside_watch`, `focus_overlay`, `release_focus`, `focus_terminal`, `open_terminal`, `list_monitors`, `set_monitor`, plus the `ledge://outside-click` event and the `Ctrl+Alt+L` and `Ctrl+Alt+N` global shortcuts. Everything degrades to no-ops in a browser. |
-| `src-tauri/src/main.rs` | The Rust shell: a borderless, transparent, always-on-top window outside the taskbar; a thread that polls the cursor every 50 ms, reports it in the hot band along the top edge (10 px high, the island plus 40 px on each side) for the hover and the mascot's gaze, tells the page when a maximised or full-screen window holds the foreground on the island's monitor (the discreet strip) and, while a panel shows, emits a press of the mouse outside the window (`GetAsyncKeyState`); window placement at `(left, top)` in physical pixels against the top edge of the monitor's work area; focus hand-back to the previously active window; `focus_terminal` finds the Windows Terminal window whose title matches the bot's tab (Win32 `EnumWindows`); `open_terminal` opens a Windows Terminal tab running `ledge attach <id>` in WSL (`wt.exe -w 0 new-tab`). |
+| `src-tauri/src/main.rs` | The Rust shell: a borderless, transparent, always-on-top window outside the taskbar; a thread that polls the cursor every 50 ms, reports it in the hot band along the top edge (10 px high, the island plus 40 px on each side) for the hover and the mascot's gaze, tells the page when a maximised or full-screen window holds the foreground on the island's monitor (the discreet strip) and, while a panel shows, emits a press of the mouse outside the window (`GetAsyncKeyState`); window placement at `(left, top)` in physical pixels against the top edge of the monitor's work area; focus hand-back to the previously active window; `focus_terminal` finds the Windows Terminal window whose title matches the bot's tab (Win32 `EnumWindows`); `open_terminal` opens a Windows Terminal tab running `ledge attach <id>` in WSL (`wt.exe -w 0 new-tab`). The terminal and URL-opening code itself lives in `crates/ledge-native/src/` (`terminal.rs`, `browser.rs`), shared with other Tauri shells. |
 
 The overlay never talks to tmux or to the agent. Its only two outputs are WebSocket commands to the daemon and the native commands above.
 
@@ -386,7 +386,7 @@ cd apps\overlay
 pnpm tauri build
 ```
 
-The installer lands in `apps\overlay\src-tauri\target\release\bundle\nsis\Ledge_<version>_x64-setup.exe`.
+The installer lands in `target\release\bundle\nsis\Ledge_<version>_x64-setup.exe`.
 
 ### 3. Install Ledge on Windows
 
@@ -454,7 +454,7 @@ Then:
 
 ```sh
 pnpm -r typecheck
-pnpm -r test                        # protocol, ledge (unit + tmux + end-to-end, needs tmux, no AI), overlay (vitest + jsdom)
+pnpm test                           # pnpm -r test, then the release scripts' tests; protocol, ledge (unit + tmux + end-to-end, needs tmux, no AI), overlay (vitest + jsdom)
 pnpm --filter overlay dev           # the UI alone on http://localhost:1420, against a daemon running in WSL
 pnpm --filter overlay test:e2e      # Playwright, chromium
 LEDGE_SCREENSHOTS=1 pnpm --filter overlay exec playwright test e2e/screenshots.spec.ts   # refresh docs/screens (see docs/tour.md)
@@ -466,9 +466,20 @@ Layout:
 ```
 packages/protocol/   zod schemas, PROTOCOL_PORT, topic helpers, chat turns
 packages/ledge/      src/cli, src/daemon, src/adapters, src/chat, test/ (fixtures/panes: captured dialogs)
+packages/ui/         shared React UI: mascots, i18n, accent, scale, motion, sounds
+packages/fleet/      shared multi-machine daemon client (fleet)
+crates/ledge-native/ shared Rust: terminal focus/open, URL opening, autostart marker
 apps/overlay/        src/ (React), src-tauri/ (Rust shell), e2e/ (Playwright)
+apps/desktop/        src/ (React), src-tauri/ (Rust shell): Ledge Desktop
+scripts/ test/       release scripts (set-version, latest-json) and their tests
 docs/                design specs, implementation plans, mockups, the approved prototype, and the tour with its captures
 ```
+
+### Ledge Desktop
+
+`apps/desktop` is the full-window companion app (team and meeting views, tray, updater). Run it with `pnpm --filter desktop dev` (UI) or `pnpm --filter desktop tauri dev` (Windows only), against a daemon in WSL.
+Its installer, `Ledge.Desktop_<version>_x64-setup.exe`, is published on the same release as the island's, with its own updater manifest (`latest-desktop.json`).
+Both apps, the three crates and the npm package always carry the same version: `pnpm version:set <x.y.z>` stamps all of them, and the release workflow does it from the tag.
 
 ## Design documents
 

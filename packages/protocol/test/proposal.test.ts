@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractProposal, parseProposalBlock, parseRelayBlock, hideProposal } from '../src/proposal.js';
+import { extractProposal, parseProposalBlock, parseProjectBlock, parseRelayBlock, hideProposal } from '../src/proposal.js';
 
 const block = (json: string) => '```ledge-session\n' + json + '\n```';
 
@@ -69,5 +69,36 @@ describe('relay blocks (spec 2026-10-12 relay §3)', () => {
     expect(hideProposal('Je transmets.\n```ledge-')).toBe('Je transmets.');
     expect(hideProposal(relay('{"session": "s1", "text": "x"}'))).toBe('Je transmets à **Otto**.');
     expect(hideProposal('Deux ')).toBe('Deux ');
+  });
+});
+
+describe('project blocks (lot 11 task 5)', () => {
+  const project = (json: string) => 'Je propose **Paper** avec deux dépôts.\n\n```ledge-project\n' + json + '\n```';
+  const valid = '{"name": " Paper ", "description": "Les polices", "repos": [{"path": "/w/paper-fonts", "why": " Nommé paper-* "}], "addTo": " Ledge "}';
+  it('extracts a ledge-project block and says it is a project', () => {
+    expect(extractProposal(project(valid))).toEqual({ text: 'Je propose **Paper** avec deux dépôts.', kind: 'project', raw: valid });
+    expect(extractProposal('A\n```ledge-project\n{"name":').kind).toBe('project');
+  });
+  it('parseProjectBlock reads the block, trims, and keeps the bounds', () => {
+    expect(parseProjectBlock(valid)).toEqual({ name: 'Paper', description: 'Les polices', repos: [{ path: '/w/paper-fonts', why: 'Nommé paper-*' }], addTo: 'Ledge' });
+    expect(parseProjectBlock('{"name": "Paper", "repos": [{"path": "/w/p", "why": "x"}]}')).toEqual({ name: 'Paper', repos: [{ path: '/w/p', why: 'x' }] });
+  });
+  it('an invalid block is ignored', () => {
+    const repo = { path: '/w/p', why: 'x' };
+    for (const v of [
+      {}, { name: 'P', repos: [] }, { name: '  ', repos: [repo] }, { name: 'P', repos: [{ path: '', why: 'x' }] }, { name: 'P', repos: [{ path: '/w', why: ' ' }] },
+      { name: 'x'.repeat(81), repos: [repo] }, { name: 'P', description: 'x'.repeat(501), repos: [repo] }, { name: 'P', repos: Array(51).fill(repo) },
+      { name: 'P', repos: [{ path: '/w', why: 'x'.repeat(201) }] }, { name: 'P', repos: [repo], addTo: 'x'.repeat(81) },
+      { name: 'P', repos: [{ path: '/' + 'x'.repeat(4096), why: 'x' }] }
+    ]) expect(parseProjectBlock(JSON.stringify(v))).toBeNull();
+    // A path of 4096 characters is still read.
+    expect(parseProjectBlock(JSON.stringify({ name: 'P', repos: [{ path: '/' + 'x'.repeat(4095), why: 'x' }] }))).not.toBeNull();
+    expect(parseProjectBlock('{"name":')).toBeNull();
+    expect(parseProjectBlock('null')).toBeNull();
+  });
+  it('hideProposal holds back a project block being typed, closed or not', () => {
+    expect(hideProposal('Je propose.\n```ledge-pro')).toBe('Je propose.');
+    expect(hideProposal('Je propose.\n```ledge-project\n{"name": "Pa')).toBe('Je propose.');
+    expect(hideProposal(project(valid))).toBe('Je propose **Paper** avec deux dépôts.');
   });
 });

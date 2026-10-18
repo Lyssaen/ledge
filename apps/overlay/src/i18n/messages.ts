@@ -10,7 +10,7 @@ import type { SshProblem } from '../daemon/machines';
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 const fr = {
-  machines: { title: 'Machines', target: 'Machine', hint: 'Le compagnon et son dossier vivent sur cette machine.', local: 'Cette machine', online: 'Connectée', offline: 'Hors ligne', reconnecting: (names: string) => `${names} : reconnexion en cours`, count: (n: number) => `${n} machines`, add: 'Ajouter une machine', save: 'Enregistrer', remove: 'Retirer', label: 'Nom', ssh: 'Alias SSH', invalid: 'Vérifiez le nom et l’alias SSH. Chaque alias ne peut être ajouté qu’une fois.',
+  machines: { title: 'Machines', target: 'Machine', hint: 'Le compagnon et son dossier vivent sur cette machine.', local: 'Cette machine', online: 'Connectée', offline: 'Hors ligne', reconnecting: (names: string) => `${names} : reconnexion en cours`, count: (n: number) => `${n} machines`, add: 'Ajouter une machine', save: 'Enregistrer', remove: 'Retirer', label: 'Nom', ssh: 'Alias SSH', invalid: 'Vérifiez le nom et l’alias SSH. Chaque alias ne peut être ajouté qu’une fois.', daemonOffline: 'Le démon Ledge local n’est pas connecté : réessayez dans un instant.',
     intro: 'Ledge rejoint vos serveurs par SSH, depuis WSL. Leurs sessions s’affichent dans vos projets, avec le nom de la machine.', localMeta: 'Local · WSL', connecting: 'Connexion…', version: (v: string) => `Ledge ${v}`, sessions: (n: number) => `${n} session${n > 1 ? 's' : ''}`,
     test: 'Tester', retry: 'Réessayer', edit: 'Modifier', cancel: 'Annuler', removeAsk: 'Retirer', removeNote: '? Ses sessions disparaissent de la liste. Rien n’est arrêté ni supprimé sur le serveur.', none: 'Aucun serveur pour l’instant. Vos sessions locales ne changent pas.',
     editTitle: (name: string) => `Modifier ${name}`, labelHint: 'Ce que vous verrez dans les sessions et le chat.', labelPlaceholder: 'Serveur de dev', sshHint: 'Le nom d’un bloc Host de ~/.ssh/config dans WSL.', duplicate: 'Cet alias est déjà ajouté.',
@@ -142,10 +142,30 @@ const fr = {
     finishedSub: (duration: string, project: string) => `${duration} de travail · ${project}`,
     finishedSubNoTime: (project: string) => project,
     ok: 'OK',
-    openSession: 'Ouvrir',
+    openSession: 'Ouvrir dans Ledge',
     pending: 'Envoyé, en attente du terminal', confirmed: 'Reçu',
-    later: 'Plus tard', reviewAction: 'Relire', deny: 'Refuser', approve: 'Autoriser',
+    later: 'Plus tard', laterNext: 'Plus tard, suivante', reviewAction: 'Relire dans Ledge', deny: 'Refuser', approve: 'Autoriser',
+    reply: 'Répondre', choices: 'Réponses proposées', short: 'Ou répondre en quelques mots…', shortLabel: 'Réponse courte',
+    choose: 'Choisissez une réponse ou écrivez-en une.', close: 'Fermer',
+    offline: 'Une machine est hors ligne', offlineSub: 'Reconnexion automatique', offlineBadge: 'Hors ligne',
+    failedTitle: (name: string) => `${name} s’est arrêtée sur une erreur`, errorSub: 'La session s’est arrêtée.',
     answer: (opt: string) => `Répondre : ${opt}`, firstOption: 'première option'
+  },
+  handoff: {
+    session: (name: string) => `Ouverture de ${name} dans Ledge Desktop`,
+    terminal: (name: string) => `Ouverture du terminal de ${name} dans Ledge Desktop`,
+    document: (path: string) => `Ouverture de ${path} dans Ledge Desktop`,
+    settings: 'Ouverture des réglages dans Ledge Desktop',
+    launch: 'Ouverture d’une nouvelle session dans Ledge Desktop',
+    update: 'Ouverture des mises à jour dans Ledge Desktop',
+    machines: 'Ouverture des machines dans Ledge Desktop',
+    noted: 'Noté pour Ledge Desktop. L’intégration l’ouvrira.'
+  },
+  menu: {
+    label: 'Menu de Ledge', gear: 'Menu de Ledge',
+    settings: 'Réglages dans Ledge Desktop', settingsHint: 'Affichage, machines, notifications, sons, mises à jour',
+    dnd: 'Ne pas déranger', dndHint: 'Les demandes attendent dans l’île, sans bulle ni son',
+    quit: 'Quitter Ledge'
   },
   settings: {
     title: 'Votre Ledge', tabs: 'Sections des réglages', tabDisplay: 'Affichage', tabNotifications: 'Notifications', tabSounds: 'Sons', tabAbout: 'À propos', islandSize: 'Taille de l’île', islandSizeHint: 'L’île et ses compagnons en haut de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
@@ -199,6 +219,10 @@ const fr = {
       queued: 'travaille, j’enverrai dès qu’il aura fini', sentTo: 'Envoyé à', failed: (why: string) => `Échec de l’envoi : ${why}`,
       pill: { yours: 'à toi', working: 'travaille', waiting: 'attend ta réponse', stopped: 'arrêtée' }
     },
+    project: {
+      label: 'Proposition de projet', title: (name: string) => `Proposition de projet · ${name}`, complete: (name: string) => `Compléter ${name}`,
+      repos: (n: number) => `${n} dépôt${n > 1 ? 's' : ''}`, review: 'Vérifier la proposition'
+    },
   },
   help: {
     title: 'Au bout des doigts.',
@@ -240,7 +264,7 @@ const fr = {
     you: 'Vous', loading: 'Le fil arrive…',
     empty: 'Le fil se remplit au prochain événement de l’agent.',
     liveLabel: 'Outil en cours',
-    permission: 'Permission demandée', decided: { accept: 'Autorisée', deny: 'Refusée', unknown: 'Répondue dans le terminal' }, undecided: 'En attente de votre décision',
+    permission: 'Permission demandée', decided: { accept: 'Autorisée', deny: 'Refusée', always: 'Toujours autorisée', unknown: 'Répondue dans le terminal' }, undecided: 'En attente de votre décision',
     cursorNote: 'Cette source ne transmet ni résultats ni messages intermédiaires.',
     helperOpen: 'Ouvrir la discussion', helperDone: 'Terminé', helperWorking: 'Au travail',
     backTo: 'Discussion principale', delegatedBy: 'Délégué par', instruction: 'Consigne', report: 'Rapport final', helperWaiting: 'attend son rapport…'
@@ -251,7 +275,7 @@ const fr = {
 export type Messages = typeof fr;
 
 const en: Messages = {
-  machines: { title: 'Machines', target: 'Machine', hint: 'The companion and its folder live on this machine.', local: 'This machine', online: 'Connected', offline: 'Offline', reconnecting: (names: string) => `${names}: reconnecting`, count: (n: number) => `${n} machines`, add: 'Add a machine', save: 'Save', remove: 'Remove', label: 'Name', ssh: 'SSH alias', invalid: 'Check the name and SSH alias. Each alias can only be added once.',
+  machines: { title: 'Machines', target: 'Machine', hint: 'The companion and its folder live on this machine.', local: 'This machine', online: 'Connected', offline: 'Offline', reconnecting: (names: string) => `${names}: reconnecting`, count: (n: number) => `${n} machines`, add: 'Add a machine', save: 'Save', remove: 'Remove', label: 'Name', ssh: 'SSH alias', invalid: 'Check the name and SSH alias. Each alias can only be added once.', daemonOffline: 'The local Ledge daemon is not connected: try again in a moment.',
     intro: 'Ledge reaches your servers over SSH, from WSL. Their sessions show in your projects, with the machine’s name.', localMeta: 'Local · WSL', connecting: 'Connecting…', version: (v: string) => `Ledge ${v}`, sessions: (n: number) => `${n} session${n === 1 ? '' : 's'}`,
     test: 'Test', retry: 'Retry', edit: 'Edit', cancel: 'Cancel', removeAsk: 'Remove', removeNote: '? Its sessions leave the list. Nothing is stopped or deleted on the server.', none: 'No servers yet. Your local sessions do not change.',
     editTitle: (name: string) => `Edit ${name}`, labelHint: 'What you will see in sessions and the chat.', labelPlaceholder: 'Dev server', sshHint: 'The name of a Host block in ~/.ssh/config in WSL.', duplicate: 'This alias is already added.',
@@ -379,10 +403,30 @@ const en: Messages = {
     finishedSub: (duration: string, project: string) => `${duration} of work · ${project}`,
     finishedSubNoTime: (project: string) => project,
     ok: 'OK',
-    openSession: 'Open',
+    openSession: 'Open in Ledge',
     pending: 'Sent, waiting for the terminal', confirmed: 'Received',
-    later: 'Later', reviewAction: 'Review', deny: 'Deny', approve: 'Approve',
+    later: 'Later', laterNext: 'Later, next', reviewAction: 'Review in Ledge', deny: 'Deny', approve: 'Approve',
+    reply: 'Reply', choices: 'Suggested answers', short: 'Or answer in a few words…', shortLabel: 'Short answer',
+    choose: 'Choose an answer or write one.', close: 'Close',
+    offline: 'A machine is offline', offlineSub: 'Reconnecting on its own', offlineBadge: 'Offline',
+    failedTitle: (name: string) => `${name} stopped on an error`, errorSub: 'The session stopped.',
     answer: (opt: string) => `Answer: ${opt}`, firstOption: 'first option'
+  },
+  handoff: {
+    session: (name: string) => `Opening ${name} in Ledge Desktop`,
+    terminal: (name: string) => `Opening ${name}’s terminal in Ledge Desktop`,
+    document: (path: string) => `Opening ${path} in Ledge Desktop`,
+    settings: 'Opening settings in Ledge Desktop',
+    launch: 'Opening a new session in Ledge Desktop',
+    update: 'Opening updates in Ledge Desktop',
+    machines: 'Opening machines in Ledge Desktop',
+    noted: 'Noted for Ledge Desktop. Integration will open it.'
+  },
+  menu: {
+    label: 'Ledge menu', gear: 'Ledge menu',
+    settings: 'Settings in Ledge Desktop', settingsHint: 'Display, machines, notifications, sounds, updates',
+    dnd: 'Do not disturb', dndHint: 'Asks wait in the island, with no bubble and no sound',
+    quit: 'Quit Ledge'
   },
   settings: {
     title: 'Your Ledge', tabs: 'Settings sections', tabDisplay: 'Display', tabNotifications: 'Notifications', tabSounds: 'Sounds', tabAbout: 'About', islandSize: 'Island size', islandSizeHint: 'The island and its companions at the top of the screen.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
@@ -436,6 +480,10 @@ const en: Messages = {
       queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: (why: string) => `Could not send: ${why}`,
       pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
     },
+    project: {
+      label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,
+      repos: (n: number) => `${n} ${n === 1 ? 'repository' : 'repositories'}`, review: 'Review the proposal'
+    },
   },
   help: {
     title: 'Keyboard',
@@ -477,7 +525,7 @@ const en: Messages = {
     you: 'You', loading: 'Loading the thread…',
     empty: 'The thread fills up with the agent’s next event.',
     liveLabel: 'Running tool',
-    permission: 'Permission requested', decided: { accept: 'Allowed', deny: 'Denied', unknown: 'Answered in the terminal' }, undecided: 'Waiting for your decision',
+    permission: 'Permission requested', decided: { accept: 'Allowed', deny: 'Denied', always: 'Always allowed', unknown: 'Answered in the terminal' }, undecided: 'Waiting for your decision',
     cursorNote: 'This source sends neither results nor intermediate messages.',
     helperOpen: 'Open the discussion', helperDone: 'Done', helperWorking: 'Working',
     backTo: 'Main discussion', delegatedBy: 'Delegated by', instruction: 'Instruction', report: 'Final report', helperWaiting: 'is waiting for its report…'

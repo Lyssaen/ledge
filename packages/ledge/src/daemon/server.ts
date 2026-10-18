@@ -1,20 +1,27 @@
 import type { IncomingMessage } from 'node:http';
+import { homedir } from 'node:os';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { PROTOCOL_PORT, SshAliasSchema, parseClientMessage, type ClientMessage, type DaemonInfo, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type Decision, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
+import { STALE, dialogMismatch } from '../adapters/types.js';
 import { verifyGone } from '../adapters/verify.js';
 import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
 import { spawnSession } from '../spawn.js';
+import { inspectRepos } from './repos.js';
+import { extraRoots, scanRepos } from './scan.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
 import { loginShellEnv } from '../shell-path.js';
 import { log } from '../log.js';
 import { createChat, type Chat } from '../chat/service.js';
 import { paths } from '../paths.js';
+import { readMachines, writeMachines } from './machines.js';
+import { readProjects, writeProjects } from './projects.js';
+import { readIsland, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createRelay } from './relay.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -25,20 +32,30 @@ import { MAX_FRAME } from '../transport/frames.js';
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
 
+/** The harnesses that take extra folders, and how. Claude only (verified: `claude --add-dir a b -- "prompt"`). */
+export const MULTI_DIR_ARGS: Partial<Record<Tool, (dirs: string[]) => string[]>> = { claude: dirs => ['--add-dir', ...dirs] };
+
 /** The agent's arguments for a `session.launch`: the resume flag, then the first instruction as the positional prompt. */
-export function launchArgs(msg: { tool: Tool; prompt?: string; continue?: boolean }): string[] {
+export function launchArgs(msg: { tool: Tool; prompt?: string; continue?: boolean; dirs?: string[] }): string[] {
   const prompt = msg.prompt?.trim();
-  return [...(msg.continue ? CONTINUE_ARGS[msg.tool] : []), ...(prompt ? [prompt] : [])];
+  const more = msg.dirs?.length ? MULTI_DIR_ARGS[msg.tool]?.(msg.dirs) : undefined;
+  // The `--` only follows --add-dir: the option is variadic and would swallow the prompt.
+  return [...(msg.continue ? CONTINUE_ARGS[msg.tool] : []), ...(more ?? []), ...(prompt ? [...(more ? ['--'] : []), prompt] : [])];
 }
 
 export { resolveFolder };
+
+/** A deny with a note whose deny keys went but whose input box never came back: refused, the note not typed (NOTE_NOT_TYPED). */
+class NoteNotTyped extends Error { constructor() { super('denied, but the note could not be typed'); } }
 
 /**
  * Origins allowed to open a WebSocket: the Tauri overlay (packaged and dev server). A browser always
  * sends Origin, so any web page is refused; Node clients (hook, launcher, status) send none and pass.
  */
 export const ALLOWED_ORIGINS: readonly string[] = [
-  'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420'
+  'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420',
+  // Desktop's Vite dev server (spec 2026-10-14 §5.4)
+  'http://localhost:1421', 'http://127.0.0.1:1421'
 ];
 
 export function originAllowed(origin: string | undefined): boolean {
@@ -69,14 +86,14 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
   // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
-  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now });
+  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects });
   const router = createRouter({ env: agentEnv });
   const wss = new WebSocketServer({
     host: opts.host ?? '127.0.0.1', port: opts.port ?? PROTOCOL_PORT, maxPayload: MAX_FRAME,
@@ -90,6 +107,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   await new Promise<void>((res, rej) => { wss.once('listening', res); wss.once('error', rej); });
   const port = (wss.address() as { port: number }).port;
 
+  const machinesFile = opts.machinesFile ?? paths().machines;
+  /** The machines list shared by every local front; copied so state never aliases DEFAULT_MACHINES. */
+  let machines = readMachines(machinesFile).map(m => ({ ...m }));
+  const machinesMsg = (): ServerMessage => ({ type: 'machines', machines });
+  const projectsFile = opts.projectsFile ?? paths().projects;
+  /** The projects and folder rules shared by every local front (build spec §5); never sent to a remote peer. */
+  let projects = readProjects(projectsFile);
+  const projectsMsg = (): ServerMessage => ({ type: 'projects', projects });
+  const islandFile = opts.islandFile ?? paths().island;
+  /** The island's settings, set from Desktop (atelier spec §7); never sent to a remote peer. */
+  let island = readIsland(islandFile);
+  const islandMsg = (): ServerMessage => ({ type: 'island', prefs: island });
   const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
   // Remote peers must never receive local snapshots, sessions, previews or chat broadcasts.
   const localClients = new Set<WebSocket>();
@@ -117,6 +146,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   });
   const sendSnapshot = (ws: WebSocket) => {
     send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true } } : {}) });
+    send(ws, machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
+    send(ws, projectsMsg()); // then the shared projects (build spec §5)
+    send(ws, islandMsg()); // then the island's settings
     for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
     send(ws, { type: 'chat.history', turns: chat.history() });
   };
@@ -131,6 +163,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const UNTIL_POLL_MS = 50;
   /** Enough for a dialog's bottom or a long draft wrapped in the input line, with the status under it. */
   const UNTIL_LINES = 30;
+  /** Lines read to check a dialog taller than DETECT_LINES (a long command): its subject is above them. */
+  const CHECK_LINES = 500;
 
   async function runPlan(s: Session, plan: KeyPlan): Promise<void> {
     if (!s.tmuxSession) throw new Error('session has no terminal (started without ledge)');
@@ -143,7 +177,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         for (;;) {
           const pane = await tmux.capture(s.tmuxSession, UNTIL_LINES);
           if (pane !== null && step.until(pane)) break;
-          if (Date.now() >= end) throw new Error(NOT_TAKEN);
+          if (Date.now() >= end) throw step.denied ? new NoteNotTyped() : new Error(NOT_TAKEN);
           await new Promise(r => setTimeout(r, UNTIL_POLL_MS));
         }
       }
@@ -156,38 +190,58 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * With `requirePrompt`, fail closed: the prompt must be on screen before anything is typed, else a
    * stale pending (or a dialog the adapter cannot read) would get keys meant for something else and
    * the "prompt gone" check would then report success. A plan given as a function is built from that
-   * same capture, so the keys match the dialog actually on screen. True once `Decided` is applied, false when a newer
-   * prompt arrived meanwhile and was left alone.
+   * same capture, so the keys match the dialog actually on screen. True once `Decided` is applied (with `decision`, so
+   * the thread names it at once), false when a newer prompt arrived meanwhile and was left alone.
    */
-  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean): Promise<boolean> {
+  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean, decision?: Decision): Promise<boolean> {
     const s = store.get(id);
     if (!s) throw new Error(`unknown session ${id}`);
     if (inFlight.has(id)) throw new Error('a decision is already in progress');
     inFlight.add(id);
     try {
       const adapter = adapterFor(s.tool);
+      const decided = s.pending;
+      const stillTheSame = () => {
+        const cur = store.get(id)?.pending;
+        return cur === decided || (!!cur && !!decided && pendingKey(cur) === pendingKey(decided));
+      };
       let before: string | null = null;
       if (requirePrompt) {
         before = s.tmuxSession ? await tmux.capture(s.tmuxSession, DETECT_LINES) : null;
         if (before === null || !adapter.promptStillVisible(before.split('\n').slice(-5).join('\n'))) throw new Error(NO_PROMPT);
+        // The request checked before the capture may have been replaced while it ran: no key for one the user did not see.
+        if (!stillTheSame()) throw new Error(STALE);
+        // Nor for another dialog already on screen whose hook has not come yet: the daemon still holds the old request.
+        // One taller than the capture is read whole, or gets no key.
+        if (decided) {
+          const shown = adapter.detectPrompt(before) ?? adapter.detectPrompt(await tmux.capture(s.tmuxSession!, CHECK_LINES) ?? '');
+          const refused = dialogMismatch(shown, decided, await tmux.width?.(s.tmuxSession!) ?? undefined);
+          if (refused) throw new Error(refused);
+        }
       }
       const plan = typeof planFor === 'function' ? planFor(before ?? '') : planFor;
-      const decided = s.pending;
-      const stillTheSame = () => {
-        const cur = store.get(id)?.pending;
-        return cur === decided || (!!cur && !!decided && cur.kind === decided.kind && cur.text === decided.text);
-      };
+      // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.
+      const promptGone = () => decided && adapter.promptGone
+        ? verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
+        : verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
       try { await runPlan(s, plan); }
       catch (e) {
+        // The deny keys went and the input box never came back for the note: if the request is gone, the refusal
+        // happened (the thread says so, unless a newer prompt came meanwhile: left alone) and only the note is missing;
+        // if it stays, nothing was refused.
+        if (e instanceof NoteNotTyped) {
+          if (await promptGone()) {
+            if (stillTheSame()) store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) });
+            throw e;
+          }
+          e = new Error(NOT_TAKEN);
+        }
         store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: (e as Error).message });
         throw e;
       }
-      // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.
-      const gone = decided && adapter.promptGone
-        ? await verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
-        : await verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
+      const gone = await promptGone();
       if (!stillTheSame()) return false; // a newer prompt arrived meanwhile: leave it alone
-      if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon' }); return true; }
+      if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) }); return true; }
       // The client gets an `error` reply for that id (via the caller's catch), so a retry from `error` reads as failed.
       store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: NOT_TAKEN });
       throw new Error(NOT_TAKEN);
@@ -198,6 +252,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const NO_PROMPT = 'no prompt visible in the terminal, open the tab';
   const NOT_TAKEN = 'the terminal did not take it';
   const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
+  const NOT_OFFERED = 'this answer is not offered for this request, answer in the terminal';
 
   /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
   async function replyTo(id: string, text: string): Promise<string | null> {
@@ -218,24 +273,59 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
   const chatLaunches = new Set<string>();
   /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
-  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean }): Promise<Session> {
+  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[] }): Promise<Session> {
+    if (req.dirs?.length && !MULTI_DIR_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes one folder`);
     const cwd = await resolveFolder(req.cwd, opts.home);
+    const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
     const live = store.all();
     const env = await agentEnv();
-    const session = await spawnSession({ tool: req.tool, args: launchArgs(req), name: req.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+    const session = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs }), name: req.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
     store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);
     log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
     return session;
   }
+  /** The scan in flight (lot 11): a `repos.scan` arriving while one walks gets that walk's result, under its own requestId. */
+  let scanning: ReturnType<typeof scanRepos> | null = null;
+  function sharedScan(): ReturnType<typeof scanRepos> {
+    if (scanning) return scanning;
+    const home = opts.home ?? homedir();
+    const extra = extraRoots(home, [...store.recents().map(r => r.cwd), ...store.all().filter(s => s.state !== 'exited').map(s => s.cwd)]);
+    const walk = (opts.scan ?? scanRepos)({ home, extra }).finally(() => { if (scanning === walk) scanning = null; });
+    return (scanning = walk);
+  }
   async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
+    /** A refusal names the request it answers, so a front can tell a refused reply from a refused decision. */
+    const refuse = (message: string, id?: string) => send(ws, { type: 'error', ...(id !== undefined ? { id } : {}), message, request: msg.type });
     switch (msg.type) {
       case 'document.read': {
         const session = msg.sessionId ? store.get(msg.sessionId) : undefined;
         if (msg.sessionId && !session) return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'session_missing' });
         return send(ws, await readDocument(msg, { cwd: session?.cwd, home: opts.home ?? process.env.HOME ?? '' }));
       }
+      case 'repos.inspect': return send(ws, { type: 'repos.info', requestId: msg.requestId, repos: await inspectRepos(msg.paths, { home: opts.home }) });
+      // Lot 11: home, then the parents of the recent and live folders outside it. Answered even when it fails: an `error` for
+      // repos.scan reads, to the fleet, as a daemon too old to know it. The remotes it carries are never logged.
+      case 'repos.scan': {
+        try { return send(ws, { type: 'repos.found', requestId: msg.requestId, ...await sharedScan() }); }
+        catch (e) { log(`repos.scan failed: ${(e as Error).message}`); return send(ws, { type: 'repos.found', requestId: msg.requestId, repos: [], truncated: false, error: 'scan failed' }); }
+      }
       case 'snapshot.request': return sendSnapshot(ws);
+      case 'machines.set': {
+        writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender
+        machines = msg.machines; // already validated by parseClientMessage
+        return broadcast(machinesMsg()); // every local client, the sender included
+      }
+      case 'projects.set': {
+        writeProjects(msg.projects, projectsFile); // first: a failing write leaves memory unchanged and reaches the sender
+        projects = msg.projects; // already validated by parseClientMessage
+        return broadcast(projectsMsg());
+      }
+      case 'island.set': {
+        writeIsland(msg.prefs, islandFile); // first: a failing write leaves memory unchanged and reaches the sender
+        island = msg.prefs; // already validated by parseClientMessage
+        return broadcast(islandMsg());
+      }
       case 'session.register': {
         let incoming = msg.session;
         const existing = store.get(incoming.id);
@@ -262,8 +352,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (msg.qid === undefined) return send(ws, { type: 'session.launched', id: (await launch(msg)).id });
         // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's.
         const qid = msg.qid; const p = chat.proposal(qid);
-        if (!p) return send(ws, { type: 'error', message: 'unknown proposal' });
-        if (p.launchedId || chatLaunches.has(qid)) return send(ws, { type: 'error', message: 'already launched' });
+        if (!p) return refuse('unknown proposal');
+        if (p.launchedId || chatLaunches.has(qid)) return refuse('already launched');
         chatLaunches.add(qid);
         try {
           const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt });
@@ -273,7 +363,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         finally { chatLaunches.delete(qid); }
         return;
       }
-      case 'folder.list': return send(ws, await listFolder(msg.path, opts.home));
+      case 'folder.list': return send(ws, await listFolder(msg.path, opts.home, msg.requestId));
       case 'folder.create': {
         const listing = await createFolder(msg.parent, msg.name, opts.home);
         if (!listing.error) log(`created folder ${listing.path}`);
@@ -302,7 +392,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.thread':
         return send(ws, { type: 'session.thread', id: msg.id, items: history?.items(msg.id) ?? [] });
       case 'session.rename': {
-        if (!store.get(msg.id)) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
+        if (!store.get(msg.id)) return refuse('unknown session', msg.id);
         store.apply(msg.id, { name: 'Renamed', at: now(), source: 'daemon', text: msg.topic });
         return;
       }
@@ -310,36 +400,44 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.apply(msg.id, { name: 'SessionEnd', at: now(), source: 'hook', exitCode: msg.exitCode });
         return;
       case 'session.decide': {
-        const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
-        if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
-        if (!s.pending) return send(ws, { type: 'error', id: msg.id, message: 'nothing to decide' });
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
+        // A decision is for the request the user saw: another one (or none) since is refused before any key.
+        if (msg.expect && (s.pending?.kind !== msg.expect.kind || s.pending.text !== msg.expect.text
+          || (msg.expect.key !== undefined && pendingKey(s.pending) !== msg.expect.key))) return refuse(STALE, msg.id);
+        if (!s.pending) return refuse('nothing to decide', msg.id);
         const pending = s.pending; const adapter = adapterFor(s.tool);
-        // Only a decision the terminal took lands in the thread: otherwise the last open permission may be the newer one.
-        if (await injectAndVerify(msg.id, pane => adapter.keysFor(msg.decision, pending, pane), true)) history?.decide(msg.id, msg.decision);
+        // What the harness cannot do is refused before any key (a question never takes `always` or a note).
+        if (msg.decision === 'always' && !offers(s.tool, pending.kind, 'always')) return refuse(NOT_OFFERED, msg.id);
+        if (msg.note !== undefined && (msg.decision !== 'deny' || !offers(s.tool, pending.kind, 'note'))) return refuse(NOT_OFFERED, msg.id);
+        const { decision, note } = msg;
+        // Only a decision the terminal took lands in the thread, through the `Decided` it carries: that settles the
+        // permission it answered and no other (an older one answered in the terminal keeps its own state).
+        await injectAndVerify(msg.id, pane => adapter.keysFor(decision, pending, pane, note), true, decision);
         return;
       }
       case 'session.reply': {
         const refused = await replyTo(msg.id, msg.text);
-        if (refused) send(ws, { type: 'error', id: msg.id, message: refused });
+        if (refused) refuse(refused, msg.id);
         return;
       }
       case 'session.interrupt': {
         const s = store.get(msg.id);
-        if (s?.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
+        if (s?.source === 'hook_only') return refuse(READ_ONLY, msg.id);
         if (!s?.tmuxSession) return;
         await tmux.sendKeys(s.tmuxSession, adapterFor(s.tool).interruptKeys());
         return;
       }
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;
-        if (s.source === 'hook_only') return send(ws, { type: 'error', id: msg.id, message: READ_ONLY });
+        if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
         if (s.tmuxSession) await tmux.killSession(s.tmuxSession);
         store.apply(msg.id, { name: 'PaneGone', at: now(), source: 'daemon' });
         return;
       }
       case 'session.dismiss': {
-        const s = store.get(msg.id); if (!s) return send(ws, { type: 'error', id: msg.id, message: 'unknown session' });
-        if (s.state !== 'exited' && s.source !== 'hook_only') return send(ws, { type: 'error', id: msg.id, message: 'the session is still running, kill it first' });
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        if (s.state !== 'exited' && s.source !== 'hook_only') return refuse('the session is still running, kill it first', msg.id);
         // Removal broadcasts session.removed, drops the remembered preview and is saved to the journal.
         // A dismissed hook_only session that is in fact still alive comes back on its next hook (the
         // hook-before-register path in session.event recreates it): acceptable, it is still running.
@@ -371,7 +469,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (req.url?.startsWith('/ssh/')) {
       if (remoteClients.size >= 20) { ws.close(1013, 'Too many remote connections'); return; }
       remoteClients.add(ws); ws.once('close', () => remoteClients.delete(ws));
-      const alias = SshAliasSchema.parse(req.url.slice(5));
+      const parsed = SshAliasSchema.safeParse(req.url.slice(5));
+      if (!parsed.success) { ws.close(1008, 'Invalid SSH alias'); remoteClients.delete(ws); return; }
+      const alias = parsed.data;
       void agentEnv().then(env => { if (ws.readyState === WebSocket.OPEN) (opts.ssh ?? serveSsh)(ws, alias, { env }); })
         .catch(e => { send(ws, { type: 'error', message: (e as Error).message }); ws.close(1011); });
       return;
@@ -380,12 +480,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sendSnapshot(ws);
     ws.on('message', data => {
       let msg: ClientMessage;
-      try { msg = parseClientMessage(JSON.parse(String(data))); }
-      catch (e) { log(`invalid message: ${(e as Error).message}`); return send(ws, { type: 'error', message: 'invalid message' }); }
+      let raw: unknown;
+      try { raw = JSON.parse(String(data)); msg = parseClientMessage(raw); }
+      catch (e) {
+        log(`invalid message: ${(e as Error).message}`);
+        // The type and the id it carried, when it has them: a newer front's value this daemon does not know is refused by
+        // name, for that very session, at once (not left to the front's own timeout).
+        const { type, id } = (raw ?? {}) as { type?: unknown; id?: unknown };
+        return send(ws, { type: 'error', message: 'invalid message', ...(typeof id === 'string' && id.length <= 200 ? { id } : {}), ...(typeof type === 'string' && type.length <= 64 ? { request: type } : {}) });
+      }
       handle(ws, msg).catch(e => {
         if (msg.type === 'document.read') return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
         log(`${msg.type} failed: ${(e as Error).message}`);
-        send(ws, { type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message });
+        send(ws, { type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message, request: msg.type, ...(e instanceof NoteNotTyped ? { code: NOTE_NOT_TYPED } : {}) });
       });
     });
   });

@@ -10,13 +10,15 @@ const perm = { kind: 'permission' as const, text: 'echo ledge-perm-probe', sourc
 describe('cursor adapter: permission (Cursor Agent 2026.10 capture)', () => {
   it('detects Run this command? at the bottom and extracts the shell command', () => {
     expect(cursorAdapter.detectPrompt(fx('cursor-permission'))).toEqual({
-      kind: 'permission', text: 'echo ledge-perm-probe'
+      kind: 'permission', text: 'echo ledge-perm-probe', command: { lines: ['echo ledge-perm-probe'], ends: [30] }
     });
   });
   it('joins a command wrapped over several lines (a subagent\'s find)', () => {
     expect(cursorAdapter.detectPrompt(fx('cursor-permission-wrapped'))).toEqual({
       kind: 'permission',
-      text: `find "/tmp/ledge-cursor-sub/proj" \\( -path '*/.git/objects' -o -path '*/.git/objects/*' \\) -prune -o -print 2>/dev/null | sort`
+      text: `find "/tmp/ledge-cursor-sub/proj" \\( -path '*/.git/objects' -o -path '*/.git/objects/*' \\) -prune -o -print 2>/dev/null | sort`,
+      // Its lines as drawn, and where each ends: the first one is full, the TUI wrapped it.
+      command: { lines: [`find "/tmp/ledge-cursor-sub/proj" \\( -path '*/.git/objects' -o -path '*/.git/objects/*' \\) -prune -o -print`, '2>/dev/null | sort'], ends: [111, 27] }
     });
   });
   it('ignores a quoted dialog, the working chrome, the idle input and an answered trust box', () => {
@@ -189,5 +191,53 @@ describe('cursor adapter: promptGone on approvals', () => {
     expect(cursorAdapter.promptGone!(fx('cursor-skip-field'), perm)).toBe(false);
     expect(cursorAdapter.promptGone!(fx('cursor-working'), perm)).toBe(true);
     expect(cursorAdapter.promptGone!(fx('cursor-permission-wrapped'), perm)).toBe(true);
+  });
+});
+
+describe('cursor adapter: a note (lot 6a)', () => {
+  const plan = { kind: 'plan' as const, text: 'Add line d to notes.txt', source: 'pane' as const };
+  type Until = { until: (p: string) => boolean };
+  it('deny with a note types it in the skip field, or in the plan revision field', () => {
+    expect(cursorAdapter.keysFor('deny', perm, fx('cursor-permission'), 'Use pnpm')).toEqual([{ text: 'n' }, { until: expect.any(Function) }, { text: 'Use pnpm' }, { until: expect.any(Function) }, { keys: ['Enter'] }]);
+    expect(cursorAdapter.keysFor('deny', plan, fx('cursor-plan'), 'Garde la v1')).toEqual([{ text: 'p' }, { until: expect.any(Function) }, { text: 'Garde la v1' }, { until: expect.any(Function) }, { keys: ['Enter'] }]);
+  });
+  it('each step waits for its screen: the field, then the note in it', () => {
+    const skip = cursorAdapter.keysFor('deny', perm, fx('cursor-permission'), 'Use\npnpm');
+    expect(skip[2]).toEqual({ text: 'Use pnpm' });
+    expect((skip[1] as Until).until(tail(fx('cursor-skip-field')))).toBe(true);
+    expect((skip[1] as Until).until(tail(fx('cursor-permission')))).toBe(false);
+    const typedIn = fx('cursor-skip-field').replace(/→ Tell the agent what to do instead.*$/m, '→ Use pnpm');
+    expect((skip[3] as Until).until(tail(typedIn))).toBe(true);
+    expect((skip[3] as Until).until(tail(fx('cursor-skip-field')))).toBe(false);
+    const revise = cursorAdapter.keysFor('deny', plan, fx('cursor-plan'), 'use the letter z instead');
+    expect((revise[1] as Until).until(fx('cursor-plan-revise'))).toBe(true);
+    expect((revise[1] as Until).until(fx('cursor-plan'))).toBe(false);
+    expect((revise[3] as Until).until(fx('cursor-plan-revise-typed'))).toBe(true);
+    expect((revise[3] as Until).until(fx('cursor-plan-revise'))).toBe(false);
+  });
+  it('already in the skip field the note goes straight in; the trust box takes none; always is never offered', () => {
+    expect(cursorAdapter.keysFor('deny', perm, fx('cursor-skip-field'), 'Use pnpm')).toEqual([{ text: 'Use pnpm' }, { until: expect.any(Function) }, { keys: ['Enter'] }]);
+    expect(() => cursorAdapter.keysFor('deny', perm, fx('cursor-trust'), 'non')).toThrow(/answer in the terminal/);
+    expect(() => cursorAdapter.keysFor('always', perm, fx('cursor-permission'))).toThrow('no "always" option in this dialog, answer in the terminal');
+  });
+});
+
+describe('cursor adapter: the dialog on screen must be the request (lot 6a review)', () => {
+  const plan = { kind: 'plan' as const, text: 'Add line d to notes.txt', source: 'pane' as const };
+  const question = { kind: 'question' as const, text: 'Which letter should be added?', source: 'pane' as const };
+  it('a plan up while a permission is pending, or the other way round: nothing is typed', () => {
+    for (const d of ['accept', 'deny'] as const) {
+      expect(() => cursorAdapter.keysFor(d, perm, fx('cursor-plan'))).toThrow('the request changed, look again');
+      expect(() => cursorAdapter.keysFor(d, plan, fx('cursor-permission'))).toThrow('the request changed, look again');
+      expect(() => cursorAdapter.keysFor(d, plan, fx('cursor-skip-field'))).toThrow('the request changed, look again');
+      expect(() => cursorAdapter.keysFor(d, plan, fx('cursor-trust'))).toThrow('the request changed, look again');
+      expect(() => cursorAdapter.keysFor(d, question, fx('cursor-permission'))).toThrow('the request changed, look again');
+      expect(() => cursorAdapter.keysFor(d, perm, fx('cursor-question'))).toThrow('the request changed, look again');
+    }
+    expect(() => cursorAdapter.keysFor('deny', perm, fx('cursor-plan'), 'Use pnpm')).toThrow('the request changed, look again');
+  });
+  it('the matching dialog still takes its keys', () => {
+    expect(cursorAdapter.keysFor('accept', plan, fx('cursor-plan'))).toEqual([{ text: 'b' }]);
+    expect(cursorAdapter.keysFor('accept', perm, fx('cursor-trust'))).toEqual([{ text: 'a' }]);
   });
 });

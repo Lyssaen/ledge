@@ -145,7 +145,7 @@ export async function focusTerminal(title: string): Promise<boolean> {
 }
 
 /** Opens a new Windows Terminal tab titled `title` running `command` inside WSL (`wt.exe -w 0 new-tab --title <title>
- *  wsl.exe -- <command>`): the tab of a session the overlay launched itself. True once the tab was spawned. */
+ *  wsl.exe --exec <command>`): the tab of a session the overlay launched itself. True once the tab was spawned. */
 export async function openTerminal(title: string, command: string[]): Promise<boolean> {
   if (!inTauri()) return false;
   return invoke<boolean>('open_terminal', { title, command }).catch(() => false);
@@ -251,5 +251,12 @@ function globalShortcut(key: string, fn: () => void): () => void {
 
 /** Ctrl+Alt+L: open or fold the list from the keyboard. */
 export const onShortcut = (fn: () => void) => globalShortcut('l', fn);
-/** Ctrl+Alt+N: open or fold the new-session form from the keyboard. */
+/** Ctrl+Alt+N: ask Ledge Desktop for a new session. The island no longer has the form. */
 export const onNewSessionShortcut = (fn: () => void) => globalShortcut('n', fn);
+
+/** Quit the island process. A no-op in the browser and in tests. Desktop quits with it once the two are integrated. */
+export async function quitApp(): Promise<void> {
+  if (!inTauri()) return;
+  const { exit } = await import('@tauri-apps/plugin-process');
+  await exit(0);
+}

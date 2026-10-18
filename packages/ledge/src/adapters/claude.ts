@@ -1,5 +1,5 @@
 import type { Pending } from '@ledge/protocol';
-import type { Adapter, KeyPlan, PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch, type ShownCommand } from './types.js';
 
 // Claude Code 2.x draws a dialog at the bottom of the pane, without a box:
 //
@@ -123,19 +123,29 @@ function parseDialog(pane: string): Dialog | null {
   };
 }
 
+/** The pane lines between the dialog's dashed rules (a command, a diff), or none. */
+function dashed(header: string[]): string[] {
+  const d1 = header.findIndex(l => DASHED.test(l.trim()));
+  const d2 = d1 < 0 ? -1 : header.findIndex((l, i) => i > d1 && DASHED.test(l.trim()));
+  return d2 > d1 + 1 ? header.slice(d1 + 1, d2) : [];
+}
+/** The lines between the dialog's dashed rules, trimmed, or ''. */
+const dashedBody = (header: string[]) => dashed(header).map(l => l.trim()).filter(Boolean).join('\n');
+
 /** A permission's subject: the dashed-rule body (the command), or the title and the line after it. */
 function permissionText(header: string[], question: string): string {
   const nonBlank = header.filter(l => !isBlank(l));
   const titleAndNext = nonBlank.slice(0, 2).filter(l => !DASHED.test(l.trim())).map(l => l.trim()).join(' ');
   // File dialogs ("Create file", "Edit file") put the diff between the dashed rules: name the file instead.
   if (/\bfile$/i.test(nonBlank[0]?.trim() ?? '')) return titleAndNext || question;
-  const d1 = header.findIndex(l => DASHED.test(l.trim()));
-  const d2 = d1 < 0 ? -1 : header.findIndex((l, i) => i > d1 && DASHED.test(l.trim()));
-  if (d2 > d1 + 1) {
-    const body = header.slice(d1 + 1, d2).map(l => l.trim()).filter(Boolean).join('\n');
-    if (body) return body;
-  }
-  return titleAndNext || question;
+  return dashedBody(header) || titleAndNext || question;
+}
+
+/** The command a « Bash command » dialog shows between its dashed rules, or undefined. */
+function bashCommand(header: string[]): ShownCommand | undefined {
+  if (!/^Bash command$/i.test(header.find(l => !isBlank(l))?.trim() ?? '')) return undefined;
+  const command = shownCommand(dashed(header));
+  return command.lines.length ? command : undefined;
 }
 
 // The workspace trust dialog, shown before anything else in a folder Claude Code has not seen. Its options carry no
@@ -180,7 +190,8 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   // Only a question's lines under an option are its description; elsewhere they wrap a long option.
   if (d.kind === 'question') return { kind: 'question', text: d.question, options: d.options, ...(d.details.some(Boolean) ? { optionDetails: d.details } : {}) };
   if (d.kind === 'plan') return { kind: 'plan', text: d.question, options: d.options };
-  return { kind: 'permission', text: permissionText(d.title, d.question), options: d.options };
+  const command = bashCommand(d.title);
+  return { kind: 'permission', text: permissionText(d.title, d.question), options: d.options, ...(command ? { command } : {}) };
 }
 
 /** Works on the server's short capture: the bottom of a dialog is its last options and the footer. */
@@ -286,16 +297,65 @@ function optionNumber(text: string, pending: Pending | undefined): number | null
 const FREE_ROW = /^Type something\.?$/;
 const NO_FREE_ROW = 'no free-text row in this dialog, answer in the terminal';
 
+// Ctrl+U empties the field the cursor is in before a text goes in: a row's text, or the input's draft typed in the
+// terminal (Claude Code 2.1.302, seen in tmux: « Tell Claude what to change » and the main prompt; Ctrl+Y pastes a draft
+// cleared this way back). A tmux key name, sent as a key, never as text.
+const CLEAR: KeyPlan = [{ keys: ['C-u'] }];
+
+/** Option `n` (1-based) is a row that takes text: its digit selects it, the row cleared and the text typed once it is, then Enter. */
+function rowPlan(n: number, text: string): KeyPlan {
+  const row = new RegExp(`^\\s*❯\\s*${n}\\.\\s`, 'm');
+  return [...digit(n), { until: p => row.test(p) }, ...CLEAR, { text }, { keys: ['Enter'] }];
+}
+
 function freeTextPlan(text: string, pane: string | undefined): KeyPlan {
   const d = pane ? parseDialog(pane) : null;
   const i = d?.kind === 'question' ? d.options.findIndex(o => FREE_ROW.test(o)) : -1;
   if (i < 0) throw new Error(NO_FREE_ROW);
-  const row = new RegExp(`^\\s*❯\\s*${i + 1}\\.\\s`, 'm');
-  return [...digit(i + 1), { until: p => row.test(p) }, { text }, { keys: ['Enter'] }];
+  return rowPlan(i + 1, text);
 }
 
 /** Accepting a plan keeps the permission mode as it was: never the option that turns on auto mode or auto edits. */
 const PLAN_ACCEPT = /\bmanually approve\b/i;
+
+// « Always », read on the dialog (a wrapped option's lines below it count, "… for this session" among them):
+//
+//   2. Yes, and always allow access to /home/user/project from this project        Bash
+//   2. Yes, and switch to accept edits (auto-approve file edits …) for this session  Write / Edit
+//   1. Yes, and use auto mode                                                       plan (2.1; "auto-accept edits" before)
+//
+// Auto mode answers every later prompt by itself: on a permission it is more than "don't ask again for this". On a plan,
+// 2.0.x lists « Yes, clear context and auto-accept edits » before « Yes, auto-accept edits »: clearing the context
+// would wipe the conversation, never part of « always ».
+const ALWAYS = /don't ask again|always allow|accept edits|for this session/i;
+const AUTO_MODE = /auto mode/i;
+const PLAN_ALWAYS = /accept edits|auto mode/i;
+const CLEAR_CONTEXT = /clear context/i;
+// A plan's own row for feedback: its digit selects it and the text typed replaces it, Enter sends it.
+const PLAN_NOTE_ROW = /Tell Claude what to change/i;
+
+/** The 1-based option of the dialog on screen that stops asking, or NO_ALWAYS. */
+function alwaysOption(pane: string | undefined): number {
+  const d = pane ? parseDialog(pane) : null;
+  const full = d ? d.options.map((o, i) => `${o} ${d.details[i] ?? ''}`) : [];
+  const i = d?.kind === 'plan' ? full.findIndex(o => PLAN_ALWAYS.test(o) && !CLEAR_CONTEXT.test(o))
+    : d?.kind === 'permission' ? full.findIndex(o => ALWAYS.test(o) && !AUTO_MODE.test(o)) : -1;
+  if (i < 0) throw new Error(NO_ALWAYS);
+  return i + 1;
+}
+
+/**
+ * Deny with a note: a plan takes it in its own row; elsewhere Esc refuses (the turn stops) and the note is the next
+ * prompt, typed once the input box is back.
+ */
+function notePlan(note: string, pane: string | undefined): KeyPlan {
+  if (pane && parseTrust(pane)) throw new Error(NO_NOTE);
+  const text = flatten(note);
+  const d = pane ? parseDialog(pane) : null;
+  const row = d?.kind === 'plan' ? d.options.findIndex(o => PLAN_NOTE_ROW.test(o)) : -1;
+  if (row >= 0) return rowPlan(row + 1, text);
+  return [{ keys: ['Escape'] }, { until: atRest, denied: true }, ...CLEAR, { text }, { keys: ['Enter'] }];
+}
 
 export const claudeAdapter: Adapter = {
   tool: 'claude',
@@ -305,8 +365,10 @@ export const claudeAdapter: Adapter = {
   previewLines,
   atRest,
   paneTitle,
-  keysFor(decision, pending, pane) {
-    if (decision === 'deny') return [{ keys: ['Escape'] }];
+  keysFor(decision, pending, pane, note) {
+    if (pane) assertDialogIs(pending, parseTrust(pane) ? 'permission' : parseDialog(pane)?.kind ?? null);
+    if (decision === 'always') return digit(alwaysOption(pane));
+    if (decision === 'deny') return note ? notePlan(note, pane) : [{ keys: ['Escape'] }];
     const t = pane ? parseTrust(pane) : null;
     if (t) {
       const step = t.trust > t.selected ? 'Down' : 'Up';
@@ -321,8 +383,7 @@ export const claudeAdapter: Adapter = {
   },
   freeText: true,
   replyPlan(text, pending, pane) {
-    // Tmux.sendText rejects newlines: flatten here, Enter is a separate key step.
-    const flat = text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+    const flat = flatten(text);
     const n = optionNumber(flat, pending);
     if (n !== null) return digit(n);
     if (pending?.kind === 'question') return freeTextPlan(flat, pane);

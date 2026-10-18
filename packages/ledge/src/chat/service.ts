@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, parseProposalBlock, parseRelayBlock, type ChatProposal, type ChatRelay, type ChatTurn, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { extractProposal, parseProjectBlock, parseProposalBlock, parseRelayBlock, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -33,6 +34,8 @@ export interface ChatDeps {
   userHome?: string;
   /** The environment the chat process runs in (the login shell's PATH, like a launched agent). */
   env: () => Promise<NodeJS.ProcessEnv>;
+  /** The projects and folder rules as the daemon holds them now (read at each question); a daemon with none omits it. */
+  projects?: () => Projects;
   now?: () => string; today?: () => string; uuid?: () => string; bin?: string[]; bins?: Partial<Record<Tool, string[]>>; spawn?: typeof nodeSpawn; timeoutMs?: number;
 }
 
@@ -46,6 +49,22 @@ const HISTORY_MAX = 50;
 /** The lines of a terminal Ledge gets to read. */
 const PANE_LINES = 40;
 
+/** A home folder (`/root`, `/home/<user>`, `/Users/<user>`): never a project's repository (the fleet's proposals.ts rule). */
+const HOME = /^\/(?:root|home\/[^/]+|Users\/[^/]+|mnt\/[^/]+\/Users\/[^/]+)$/;
+/** Where homes live: `/home`, `/Users`, a WSL drive (`/mnt/c`) and its `Users`. */
+const HOMES = /^\/(?:home|Users|mnt\/[^/]+(?:\/Users)?)$/;
+
+/** Why a project path from the chat is too wide to propose (it would swallow every repository below it), or null: the root, a home
+ *  (anyone's, WSL's Windows ones included, or the user's), a folder of homes, a folder that holds the user's home, a top-level folder
+ *  (`/x`). `path` and `userHome` are resolved. */
+export function tooWide(path: string, userHome: string): string | null {
+  if (path === '/') return 'the root';
+  if (HOME.test(path) || path === userHome) return 'a home folder';
+  if (HOMES.test(path)) return 'a folder of homes';
+  if (userHome.startsWith(`${path}/`)) return 'a folder holding the home';
+  if (/^\/[^/]+$/.test(path)) return 'a top-level folder';
+  return null;
+}
 const sameStep = (a: ChatTurn['steps'][number], b: ChatTurn['steps'][number]) => a.kind === b.kind && a.id === b.id && a.path === b.path;
 
 /** One conversation with Ledge per day, run by the chosen harness (spec 2026-10-11 §5). */
@@ -108,6 +127,25 @@ export function createChat(deps: ChatDeps): Chat {
     if (why) { log(`chat ${qid}: relay ignored: ${why} ${block.session}`); return undefined; }
     return { id: s!.id, name: s!.name, tool: s!.tool, text: block.text };
   }
+  /** A project block as a card (lot 11, task 5): only the paths that are folders on this machine now stay (resolved, `~` included,
+   *  once each), never one `tooWide` names (it would swallow every repository, as the Settings proposer knows); the others are dropped with
+   *  a log line, and with none left there is no card. Nothing is created here. */
+  async function projectFrom(raw: string, qid: string): Promise<ChatProjectProposal | undefined> {
+    const block = parseProjectBlock(raw);
+    if (!block) { log(`chat ${qid}: project ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
+    const repos: ChatProjectProposal['repos'] = [];
+    for (const r of block.repos) {
+      try {
+        const path = await resolveFolder(r.path, deps.userHome);
+        const wide = tooWide(path, resolve(deps.userHome ?? homedir()));
+        if (wide) { log(`chat ${qid}: project path dropped: ${wide}: ${path}`); continue; }
+        if (!repos.some(x => x.path === path)) repos.push({ path, why: r.why });
+      } catch (e) { log(`chat ${qid}: project path dropped: ${(e as Error).message}`); }
+    }
+    if (repos.length === 0) { log(`chat ${qid}: project ignored: no path exists on this machine`); return undefined; }
+    const description = block.description?.trim();
+    return { name: block.name, ...(description ? { description } : {}), repos, ...(block.addTo ? { addTo: block.addTo } : {}) };
+  }
   const turnOf = (qid: string) => turns.find(t => t.qid === qid);
 
   /** One run; the context folder (terminal tails, last replies) is removed once it ends, whatever the outcome. */
@@ -116,7 +154,7 @@ export function createChat(deps: ChatDeps): Chat {
   }
 
   async function run(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
-    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), now: now(), capture, git: cwd => gitSummary(cwd) });
+    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), projects: deps.projects?.(), now: now(), capture, git: cwd => gitSummary(cwd) });
     if (mine.cancelled) return CANCELLED;
     const { sessionId, resume } = await daySession(fresh, tool);
     const label = TOOL_LABEL[tool];
@@ -141,10 +179,12 @@ export function createChat(deps: ChatDeps): Chat {
     const { text, kind, raw } = extractProposal(answer);
     const proposal = kind === 'session' ? await proposalFrom(raw!, tool, turn.qid) : undefined;
     const relay = kind === 'relay' ? relayFrom(raw!, turn.qid) : undefined;
+    const projectProposal = kind === 'project' ? await projectFrom(raw!, turn.qid) : undefined;
     turn.answer = text; turn.answeredAt = now();
     if (proposal) turn.proposal = proposal;
     if (relay) turn.relay = relay;
-    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal } : {}), ...(relay ? { relay } : {}) });
+    if (projectProposal) turn.projectProposal = projectProposal;
+    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal } : {}), ...(relay ? { relay } : {}), ...(projectProposal ? { projectProposal } : {}) });
     return { ok: true };
   }
 

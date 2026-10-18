@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { DEFAULT_ISLAND_PREFS } from '@ledge/protocol';
 import { PassThrough } from 'node:stream';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { once } from 'node:events';
@@ -66,6 +67,32 @@ describe('SSH application transport', () => {
     ws.send(JSON.stringify({ type: 'snapshot.request' }));
     await until(() => got.length === 2); expect(got[1]?.message).toBe('snapshot.request');
     ws.close(); await until(() => child.exitCode !== null || child.signalCode !== null);
+  });
+  it('bridge drops the daemon machines, projects and island frames and a front machines.set, projects.set or island.set, staying up', async () => {
+    const { wss, port } = await wsServer(), input = new PassThrough(), output = new PassThrough();
+    const got: unknown[] = []; let text = ''; output.on('data', b => { text += String(b); });
+    wss.on('connection', ws => { ws.send(JSON.stringify({ type: 'snapshot', sessions: [] })); ws.send(JSON.stringify({ type: 'machines', machines: [{ id: 'local', label: 'Local' }] })); ws.send(JSON.stringify({ type: 'projects', projects: { projects: [], rules: [] } })); ws.send(JSON.stringify({ type: 'island', prefs: null })); ws.send(JSON.stringify({ type: 'error', message: 'after' })); ws.on('message', b => got.push(JSON.parse(String(b)))); });
+    const done = bridge({ input, output, port });
+    await until(() => text.includes('after')); expect(text).not.toContain('machines'); expect(text).not.toContain('projects'); expect(text).not.toContain('island');
+    input.write('{"type":"machines.set","machines":[{"id":"local","label":"Local"}]}\n{"type":"projects.set","projects":{"projects":[],"rules":[]}}\n{"type":"island.set","prefs":' + JSON.stringify(DEFAULT_ISLAND_PREFS) + '}\n{"type":"snapshot.request"}\n');
+    await until(() => got.length === 1); expect(got).toEqual([{ type: 'snapshot.request' }]);
+    input.end(); await done;
+  });
+  it('serveSsh drops remote machines and projects frames and a front machines.set or projects.set, link stays up', async () => {
+    const { wss, port } = await wsServer(); let child!: ChildProcessWithoutNullStreams;
+    wss.on('connection', ws => serveSsh(ws, 'server', { spawn: () => {
+      child = spawn(process.execPath, ['--input-type=module', '-e', `console.log(JSON.stringify({type:'snapshot',sessions:[]})); console.log(JSON.stringify({type:'machines',machines:[{id:'local',label:'Local'}]})); console.log(JSON.stringify({type:'projects',projects:{projects:[],rules:[]}})); process.stdin.setEncoding('utf8'); process.stdin.on('data',data=>{for(const l of data.trim().split('\\n')){const m=JSON.parse(l);console.log(JSON.stringify({type:'error',message:m.type}));}});`]);
+      cleanup.push(() => { child.kill('SIGKILL'); }); return child;
+    } }));
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`), got: { type: string; message?: string }[] = [];
+    ws.on('message', b => got.push(JSON.parse(String(b)))); cleanup.push(() => ws.terminate());
+    await until(() => got.length >= 1); expect(got[0]).toMatchObject({ type: 'snapshot' });
+    ws.send(JSON.stringify({ type: 'machines.set', machines: [{ id: 'local', label: 'Local' }] }));
+    ws.send(JSON.stringify({ type: 'projects.set', projects: { projects: [], rules: [] } }));
+    ws.send(JSON.stringify({ type: 'snapshot.request' }));
+    await until(() => got.some(m => m.type === 'error'));
+    expect(got.map(m => m.type)).toEqual(['snapshot', 'error']); expect(got[1]?.message).toBe('snapshot.request');
+    expect(ws.readyState).toBe(WebSocket.OPEN);
   });
   it('reports a missing remote bridge without marking the host ready', async () => {
     const { wss, port } = await wsServer();

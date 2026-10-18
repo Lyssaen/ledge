@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { DEFAULT_ISLAND_PREFS } from '@ledge/protocol';
 import { createDaemonClient } from './daemon/client';
 import { createFleetClient } from './daemon/fleet';
-import { loadMachines } from './daemon/machines';
+import { fleetOptions } from './surface/fleetOptions';
+import { loadMachines, useIsland } from './daemon/machines';
 import { attachClient } from './daemon/store';
 import { Surface } from './surface/Surface';
 import { useUpdate } from './update/useUpdate';
@@ -11,12 +13,12 @@ import { loadMonitor, saveMonitor, type MonitorInfo } from './monitor';
 import { LangProvider, loadLang, messagesFor, saveLang, type Lang } from './i18n/lang';
 import { createWebAudioPlayer } from './sounds/player';
 import { applyAccent, loadAccent, saveAccent } from './accent';
-import { loadIslandPosition, saveIslandPosition, loadDiscreet, saveDiscreet, type IslandPosition } from './island';
+import { loadIslandPosition, saveIslandPosition, loadDiscreet, saveDiscreet, loadIslandPrefs, saveIslandPrefs, localIslandPrefs, type IslandPosition } from './island';
 
 export function App() {
   // An isolated browser demo can point at a fake daemon without disturbing the live WSL daemon.
   const client = useMemo(() => import.meta.env.DEV && import.meta.env.VITE_LEDGE_DEMO_WS
-    ? createDaemonClient({ url: import.meta.env.VITE_LEDGE_DEMO_WS }) : createFleetClient(loadMachines()), []);
+    ? createDaemonClient({ url: import.meta.env.VITE_LEDGE_DEMO_WS }) : createFleetClient(loadMachines(), undefined, fleetOptions), []);
   // The work-area height in logical px. The page is never zoomed: each layer applies its own scale.
   const [workH, setWorkH] = useState(window.innerHeight);
   const [workW, setWorkW] = useState(window.innerWidth);
@@ -43,6 +45,30 @@ export function App() {
   useEffect(() => { const off = attachClient(client); client.connect(); return () => { off(); client.close(); }; }, [client]);
   const refreshMonitors = () => { listMonitors().then(setMonitors).catch(() => {}); };
   useEffect(refreshMonitors, []);
+  // The island's settings live in Ledge Desktop and come through the local daemon: they win over what the island stored,
+  // and are stored in turn, so an offline start keeps the last ones. The others (visible, shows, shortcut) apply from here.
+  const island = useIsland(client);
+  const [kept] = useState(loadIslandPrefs);
+  const applied = island ?? kept ?? DEFAULT_ISLAND_PREFS;
+  useEffect(() => {
+    if (!island) return;
+    saveIslandPrefs(island); setIslandPosition(island.position); setDiscreet(island.discreet);
+    setScales(x => (x.handle === island.islandScale && x.panel === island.panelScale ? x : { handle: island.islandScale, panel: island.panelScale }));
+  }, [island]);
+  // The second screen is the first one that is not the primary, listed again whenever it is asked for; none: the primary.
+  const screen = island?.screen;
+  useEffect(() => { if (screen === 'second') refreshMonitors(); }, [screen]);
+  useEffect(() => {
+    if (screen === 'primary') setMonitorChoice(null);
+    else if (screen === 'second' && monitors.length) setMonitorChoice(monitors.find(m => !m.primary)?.id ?? null);
+  }, [screen, monitors]);
+  // A daemon that holds no settings yet gets the island's own, once; the first front to send them wins, like the machines.
+  const migrated = useRef(false);
+  useEffect(() => {
+    if (island !== null || migrated.current || !client.fleet) return;
+    migrated.current = true;
+    try { client.fleet.setIsland(localIslandPrefs()); } catch { migrated.current = false; }
+  }, [island, client]);
   const refreshAutostart = () => { getAutostart().then(setAutostartState).catch(() => {}); };
   const onSettingsOpen = () => { refreshMonitors(); refreshAutostart(); };
   const onAutostart = (on: boolean) => { setAutostartState(on); setAutostart(on).then(setAutostartState).catch(() => {}); };
@@ -64,7 +90,8 @@ export function App() {
         monitors={monitors} monitor={monitor} onMonitor={setMonitorChoice} onSettingsOpen={onSettingsOpen}
         autostart={autostart} onAutostart={onAutostart}
         theme={theme} client={client} dnd={dnd} soundPlayer={player} onToggleDnd={() => setDnd(d => !d)} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
-        accent={accent} onAccent={setAccent} islandPosition={islandPosition} onIslandPosition={setIslandPosition} discreet={discreet} onDiscreet={setDiscreet} />
+        accent={accent} onAccent={setAccent} islandPosition={islandPosition} onIslandPosition={setIslandPosition} discreet={discreet} onDiscreet={setDiscreet}
+        visible={applied.visible} shows={applied.shows} shortcut={applied.shortcut} />
     </LangProvider>
   );
 }

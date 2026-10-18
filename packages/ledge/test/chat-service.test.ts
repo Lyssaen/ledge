@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -6,9 +6,13 @@ import { fileURLToPath } from 'node:url';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { ServerMessage, Session } from '@ledge/protocol';
+import type { Projects, ServerMessage, Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
-import { createChat } from '../src/chat/service.js';
+import { createChat, tooWide } from '../src/chat/service.js';
+
+// The daemon's log lines, read here (a dropped project path is logged with its reason).
+const logged = vi.hoisted(() => [] as string[]);
+vi.mock('../src/log.js', () => ({ log: (line: string) => { logged.push(line); } }));
 
 const FAKE = fileURLToPath(new URL('./fake-claude.mjs', import.meta.url));
 const tmux = { async capture() { return null; } } as any;
@@ -43,6 +47,26 @@ describe('chat service', () => {
     const chat = createChat({ store, tmux, home, today: () => '2026-10-11', env: async () => ({ ...process.env }), bin: [process.execPath, FAKE], spawn, ...extra });
     return { chat, spawned, store, home };
   }
+
+  it('reads the daemon’s projects at each question: a change between two questions is in the next context', async () => {
+    let home = '';
+    const seen: (string | null)[] = [];
+    const spawn = ((file: string, a: string[], o: object) => {
+      const f = join(home, 'chat', 'context', 'projects.md');
+      seen.push(existsSync(f) ? readFileSync(f, 'utf8') : null);
+      return nodeSpawn(file, a, o as never);
+    }) as unknown as typeof nodeSpawn;
+    let projects: Projects = { projects: [], rules: [] };
+    let reads = 0;
+    const s = setup({ spawn, projects: () => { reads++; return projects; } });
+    home = s.home;
+    await s.chat.ask('q1', 'x', () => {});
+    projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+    await s.chat.ask('q2', 'y', () => {});
+    expect(reads).toBe(2);
+    expect(seen[0]).toBeNull();
+    expect(seen[1]).toContain('## Ledge');
+  });
 
   it('reset clears the turns, forgets the day file, and the next question starts a new session (--session-id, not --resume)', async () => {
     const args: string[][] = [];
@@ -226,6 +250,74 @@ describe('chat service', () => {
     expect(out).toHaveLength(2);
     chat.markLaunched('nope', 'n2', m => out.push(m)); chat.markFailed('nope', 'x', m => out.push(m));
     expect(out).toHaveLength(2);
+  });
+  describe('project proposal (lot 11 task 5)', () => {
+    const projectFence = (json: string) => 'Je propose **Paper** avec ses dépôts.\n\n```ledge-project\n' + json + '\n```';
+    it('keeps the paths that exist on this machine (resolved, ~ included, once each), drops an invented one, and joins the proposal to chat.done', async () => {
+      const userHome = mkdtempSync(join(tmpdir(), 'home-')); mkdirSync(join(userHome, 'paper-fonts')); mkdirSync(join(userHome, 'paper-templates'));
+      const block = JSON.stringify({ name: 'Paper', description: 'Les polices', addTo: 'Ledge', repos: [
+        { path: '~/paper-fonts/', why: 'Nommé paper-*' }, { path: '/nope/invented-by-the-model', why: 'inventé' },
+        { path: join(userHome, 'paper-templates'), why: 'Même préfixe' }, { path: join(userHome, 'paper-fonts'), why: 'en double' }] });
+      const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(block) }) });
+      const out: ServerMessage[] = [];
+      await chat.ask('q1', 'crée un projet Paper', m => out.push(m));
+      const projectProposal = { name: 'Paper', description: 'Les polices', addTo: 'Ledge', repos: [
+        { path: join(userHome, 'paper-fonts'), why: 'Nommé paper-*' }, { path: join(userHome, 'paper-templates'), why: 'Même préfixe' }] };
+      expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je propose **Paper** avec ses dépôts.', at: expect.any(String), projectProposal });
+      expect(chat.history()[0]).toMatchObject({ answer: 'Je propose **Paper** avec ses dépôts.', projectProposal });
+      expect(chat.history()[0]).not.toHaveProperty('proposal');
+    });
+    it('no proposal when no path exists here, for a file, or for a bad block; the answer stands alone', async () => {
+      const file = join(mkdtempSync(join(tmpdir(), 'f-')), 'a.txt'); writeFileSync(file, 'x');
+      for (const json of [JSON.stringify({ name: 'Paper', repos: [{ path: '/nope/a', why: 'x' }, { path: file, why: 'y' }, { path: 'relative/b', why: 'z' }] }), '{"name": "Paper", "repos": []}', '{"name":']) {
+        const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(json) }) });
+        const out: ServerMessage[] = [];
+        await chat.ask('q1', 'x', m => out.push(m));
+        expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je propose **Paper** avec ses dépôts.', at: expect.any(String) });
+        expect(chat.history()[0]).not.toHaveProperty('projectProposal');
+      }
+    });
+    it('drops / and a home (the user\'s, ~ included), as the Settings proposer does, and keeps the rest', async () => {
+      const userHome = mkdtempSync(join(tmpdir(), 'home-')); mkdirSync(join(userHome, 'paper'));
+      const block = JSON.stringify({ name: 'Paper', repos: [{ path: '/', why: 'root' }, { path: '~', why: 'home' }, { path: userHome + '/', why: 'home again' }, { path: '~/paper', why: 'kept' }] });
+      const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(block) }) });
+      await chat.ask('q1', 'x', () => {});
+      expect(chat.history()[0]!.projectProposal).toEqual({ name: 'Paper', repos: [{ path: join(userHome, 'paper'), why: 'kept' }] });
+    });
+    it('tooWide: the root, a home, what holds the user\'s home, a top-level folder, a folder of homes (WSL\'s Windows ones too); a repository is not', () => {
+      const home = '/home/me';
+      expect(tooWide('/', home)).toBe('the root');
+      for (const p of ['/home/me', '/home/other', '/root', '/Users/kim', '/mnt/c/Users/kim']) expect(tooWide(p, home)).toBe('a home folder');
+      expect(tooWide('/srv/me/home', '/srv/me/home')).toBe('a home folder');
+      expect(tooWide('/srv/me', '/srv/me/home')).toBe('a folder holding the home');
+      for (const p of ['/home', '/Users', '/mnt/c', '/mnt/d/Users', '/mnt/wsl']) expect(tooWide(p, home)).toBe('a folder of homes');
+      for (const p of ['/usr', '/srv', '/tmp', '/w']) expect(tooWide(p, home)).toBe('a top-level folder');
+      for (const p of ['/home/me/dev', '/home/me/dev/paper', '/w/ledge', '/mnt/c/Users/kim/dev', '/srv/me/other']) expect(tooWide(p, home)).toBeNull();
+      expect(tooWide('/srv/me/homework', '/srv/me/home')).toBeNull();
+    });
+    it('drops what holds the user\'s home and a top-level folder, each with its log line, and keeps the rest', async () => {
+      const outer = mkdtempSync(join(tmpdir(), 'outer-'));
+      const userHome = join(outer, 'me'); mkdirSync(join(userHome, 'paper'), { recursive: true });
+      const block = JSON.stringify({ name: 'Paper', repos: [{ path: outer, why: 'holds the home' }, { path: '/usr', why: 'top level' }, { path: '~/paper', why: 'kept' }] });
+      const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(block) }) });
+      logged.length = 0;
+      await chat.ask('q1', 'x', () => {});
+      expect(chat.history()[0]!.projectProposal).toEqual({ name: 'Paper', repos: [{ path: join(userHome, 'paper'), why: 'kept' }] });
+      expect(logged).toContain(`chat q1: project path dropped: a folder holding the home: ${outer}`);
+      expect(logged).toContain('chat q1: project path dropped: a top-level folder: /usr');
+    });
+    it('only / and homes: no proposal', async () => {
+      const userHome = mkdtempSync(join(tmpdir(), 'home-'));
+      const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(JSON.stringify({ name: 'P', repos: [{ path: '/', why: 'x' }, { path: '~', why: 'y' }] })) }) });
+      await chat.ask('q1', 'x', () => {});
+      expect(chat.history()[0]).not.toHaveProperty('projectProposal');
+    });
+    it('a blank description or addTo is left out', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'proj-'));
+      const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(JSON.stringify({ name: 'Paper', description: '  ', addTo: ' ', repos: [{ path: dir, why: 'x' }] })) }) });
+      await chat.ask('q1', 'x', () => {});
+      expect(chat.history()[0]!.projectProposal).toEqual({ name: 'Paper', repos: [{ path: dir, why: 'x' }] });
+    });
   });
   describe('relay (spec 2026-10-12 relay §4)', () => {
     const relayFence = (json: string) => 'Je transmets à Otto.\n\n```ledge-relay\n' + json + '\n```';

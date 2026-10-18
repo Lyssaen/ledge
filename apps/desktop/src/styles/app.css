@@ -1,0 +1,29 @@
+@import "tailwindcss";
+@import "@ledge/ui/styles/base.css";
+@import "./shell.css";
+@import "./sidebar.css";
+@import "./atelier.css";
+@import "./list.css";
+@import "./session.css";
+@import "./launch.css";
+@import "./projects.css";
+@import "./settings.css";
+
+/* All UI colors come from Ledge's unchanged tokens.css snapshot. */
+:root { font-family: 'Geist', 'Segoe UI', system-ui, sans-serif; font-synthesis: none; color: var(--foreground); background: var(--background); --grow: cubic-bezier(.2,.8,.2,1); }
+:root[data-theme=dark] { color-scheme: dark; }
+:root[data-theme=light] { color-scheme: light; }
+* { box-sizing: border-box; }
+/* The mockup's base (observatory.css): the app is the whole window and nothing scrolls the page itself. */
+html, body, #root { height: 100%; margin: 0; background: var(--background); }
+body { font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; color: var(--foreground); overflow: hidden; }
+button, input, select, textarea { font: inherit; }
+button { color: inherit; cursor: pointer; text-align: left; }
+button:disabled { cursor: not-allowed; }
+button:not(.ledge-btn) { border: 0; background: none; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+a { color: inherit; text-decoration: none; }
+svg { flex-shrink: 0; }
+.muted { color: var(--muted-foreground); }
+.spacer { flex: 1; }

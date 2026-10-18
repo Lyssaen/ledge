@@ -1,0 +1,53 @@
+/* The sidebar, copied from the frozen mockup (docs/mockups/desktop-observatory/sidebar.css) without the per-project
+   swatch classes (the colour comes inline from PROJECT_COLORS); the footer rules come
+   from settings.css. Views, projects, machines with live state. */
+.sidebar{width:236px;padding:0;gap:0}
+.side-brand{height:56px;display:flex;align-items:center;gap:9px;padding:0 10px 0 16px;border-bottom:1px solid var(--sidebar-border)}
+.side-brand strong{font-size:16px;font-weight:600;letter-spacing:-.3px}
+.side-actions{display:flex;flex-direction:column;gap:8px;padding:14px 12px 6px}
+.side-actions>.ledge-btn{width:100%;justify-content:center}
+.side-search{display:flex;align-items:center;gap:8px;height:34px;padding:0 9px;border:1px solid var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground);background:var(--background)}
+.side-search>span{flex:1;text-align:left}
+.side-search:hover{border-color:var(--input);color:var(--foreground)}
+.side-scroll{flex:1;overflow:auto;padding:4px 12px 16px;display:flex;flex-direction:column;gap:18px}
+.side-group{display:flex;flex-direction:column;gap:2px}
+.side-group>nav{display:flex;flex-direction:column;gap:2px}
+.side-label{display:flex;align-items:center;justify-content:space-between;height:26px;padding:0 6px 0 10px;font-size:11px;color:var(--muted-foreground)}
+.side-label button{width:22px;height:22px;display:grid;place-items:center;border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.side-label button:hover{background:var(--sidebar-accent);color:var(--foreground)}
+.side-row{position:relative;display:flex;align-items:center;gap:10px;width:100%;height:34px;padding:0 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--muted-foreground);text-align:left}
+.side-row>span:first-of-type{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side-row:hover{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.side-row.active{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.side-row.active>svg{color:var(--sidebar-primary)}
+.side-row>small{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.side-row kbd{font-size:9px!important}
+.side-count{min-width:18px;height:18px;padding:0 5px;border-radius:999px;display:grid;place-items:center;font:600 10px 'Geist Mono',monospace;background:var(--sidebar-primary);color:var(--primary-foreground)}
+.side-swatch{width:9px;height:9px;border-radius:3px;margin:0 3px;flex-shrink:0;background:var(--info)}
+.side-dots{display:flex;gap:3px;align-items:center}
+.side-dots i{width:6px;height:6px;border-radius:50%;background:var(--info)}
+.side-dots .dot-approval{background:var(--sidebar-primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--sidebar-primary) 30%,transparent)}
+.side-dots .dot-question{background:var(--warning);box-shadow:0 0 0 2px color-mix(in srgb,var(--warning) 30%,transparent)}
+.side-dots .dot-done{background:var(--muted-foreground);opacity:.5}
+.side-dots .dot-offline{background:none;border:1px solid var(--muted-foreground);opacity:.7}
+/* Not in the mockup: an agent in error is red like its badge, without the halo that marks an approval. */
+.side-dots .dot-error{background:var(--danger-text)}
+.side-unassigned{border:1px dashed transparent}
+.side-unassigned:not(.active){border-color:var(--border)}
+.side-alert{width:6px;height:6px;border-radius:50%;background:var(--warning)}
+.side-project.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));color:var(--foreground);outline:1.5px solid var(--sidebar-primary)}
+.is-dragging .side-project:not(.drop-over){outline:1px dashed var(--input);outline-offset:-1px}
+.side-drop-help{margin:6px 10px 0;font-size:11px;line-height:15px;color:var(--muted-foreground)}
+.side-machine{height:30px;font-size:12px}
+.machine-dot{width:7px;height:7px;border-radius:50%;margin:0 4px 0 2px;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 18%,transparent);flex-shrink:0}
+.machine-dot.off{background:none;border:1.5px solid var(--muted-foreground);box-shadow:none}
+@media(max-width:1250px){.sidebar{width:210px}}
+@media(max-width:850px){.sidebar{width:60px}.side-brand{padding:0;justify-content:center}.side-brand strong,.side-brand .spacer,.side-brand .ledge-btn{display:none}
+ .side-actions{padding:12px 8px 4px}.side-actions .ledge-btn span,.side-search span,.side-search kbd{display:none}.side-search{justify-content:center;padding:0}
+ .side-scroll{padding:4px 8px}.side-label,.side-drop-help,.side-row>span,.side-row>small,.side-row kbd,.side-dots{display:none}.side-row{justify-content:center;padding:0}
+ .side-count{position:absolute;top:2px;right:2px;min-width:14px;height:14px;font-size:8px}}
+/* settings.css: Settings at the foot of the sidebar. */
+.side-footer{padding:8px 12px 12px;border-top:1px solid var(--sidebar-border)}
+.side-footer .side-row>svg{color:var(--muted-foreground)}
+.side-footer .side-row.active>svg{color:var(--sidebar-primary)}
+@media(max-width:850px){.side-footer{padding:8px}.side-footer .side-row{justify-content:center;padding:0}}

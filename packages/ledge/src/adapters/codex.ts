@@ -1,4 +1,4 @@
-import type { Adapter, KeyPlan, PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
 
 // Codex CLI 0.162 draws its dialogs at the bottom of the pane, without a box, the footer on the last line:
 //
@@ -41,7 +41,8 @@ function lastLine(lines: string[]): number {
   return i;
 }
 
-type Dialog = { kind: 'approval' | 'question' | 'plan' | 'confirm'; header: string[]; options: string[]; details: string[] };
+/** `raw`: each option as drawn, its key hint (`(p)`) still at the end. */
+type Dialog = { kind: 'approval' | 'question' | 'plan' | 'confirm'; header: string[]; options: string[]; details: string[]; raw: string[] };
 
 /** Option label: the description after two spaces and the key hint (`(y)`, `(esc)`) left out. */
 const label = (text: string) => text.split(/\s{2,}/)[0]!.replace(/\s+\([a-z]+\)$/, '').trim();
@@ -76,15 +77,17 @@ function parseDialog(pane: string): Dialog | null {
   const kind = APPROVAL_FOOTER.test(f) ? 'approval' : QUESTION_FOOTER.test(f) ? 'question' : SELECT_FOOTER.test(f) ? 'plan' : 'confirm';
   // A select footer is also any picker the user opens (/model, /permissions): only the plan question is the agent's.
   if (kind === 'plan' && !header.some(l => /^\s*Implement this plan\?\s*$/.test(l))) return null;
-  return { kind, header, options: raw.map(label), details: raw.map(detail) };
+  return { kind, header, options: raw.map(label), details: raw.map(detail), raw };
 }
 
-/** The non-blank run of header lines starting at `from`, trimmed. */
-function run(header: string[], from: number): string[] {
+/** The non-blank run of header lines starting at `from`, as drawn. */
+function rawRun(header: string[], from: number): string[] {
   const out: string[] = [];
-  for (let i = from; i < header.length && !isBlank(header[i]!); i++) out.push(header[i]!.trim());
+  for (let i = from; i < header.length && !isBlank(header[i]!); i++) out.push(header[i]!);
   return out;
 }
+/** The same run, trimmed. */
+const run = (header: string[], from: number) => rawRun(header, from).map(l => l.trim());
 
 function approvalText(header: string[]): string {
   const cmd = header.findIndex(l => /^\s*\$\s/.test(l));
@@ -120,7 +123,10 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   if (d.kind === 'question') return { kind: 'question', text: questionText(d.header), options: d.options, ...(d.details.some(Boolean) ? { optionDetails: d.details } : {}) };
   if (d.kind === 'plan') return { kind: 'plan', text: 'Implement this plan?', options: d.options };
   if (d.kind === 'confirm') return { kind: 'permission', text: confirmText(d.header), options: d.options };
-  return { kind: 'permission', text: approvalText(d.header), options: d.options };
+  const cmd = d.header.findIndex(l => /^\s*\$\s/.test(l));
+  const command = cmd >= 0 ? shownCommand(rawRun(d.header, cmd)) : undefined;
+  if (command) command.lines[0] = command.lines[0]!.replace(/^\$\s+/, '');
+  return { kind: 'permission', text: approvalText(d.header), options: d.options, ...(command ? { command } : {}) };
 }
 
 /** Works on the server's short capture: the footer is the last line of every dialog. */
@@ -185,14 +191,40 @@ function optionNumber(options: string[], re: RegExp): number | null {
  */
 export const REPLY_ENTER_DELAY_MS = 300;
 
+// « Always » is the approval's own option, its key at the end of the line: `p` for a command (« … for commands that
+// start with `…` »), `a` for files (« … for these files »). The plan question has none (« Yes, clear context and
+// implement » is not one).
+const ALWAYS = /don['’]t ask again/i;
+
+function alwaysKeys(d: Dialog | null): KeyPlan {
+  const i = d?.kind === 'approval' ? d.raw.findIndex(o => ALWAYS.test(o)) : -1;
+  const key = i < 0 ? undefined : d!.raw[i]!.match(/\(([a-z])\)\s*$/)?.[1];
+  if (!key) throw new Error(NO_ALWAYS);
+  return [{ text: key }];
+}
+
+/**
+ * Deny with a note. Esc answers « No, and tell Codex what to do differently »: the turn stops and the note is the next
+ * prompt, typed once the input box is back. On the plan question Esc only goes back: « No, stay in Plan mode » first.
+ */
+function noteKeys(d: Dialog | null, note: string): KeyPlan {
+  if (d?.kind === 'confirm') throw new Error(NO_NOTE);
+  const no = d?.kind === 'plan' ? optionNumber(d.options, /^No\b/) : null;
+  return [...(no ? digit(no) : [{ keys: ['Escape'] }]), { until: atRest, denied: true }, { text: flatten(note) }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
+}
+
 export const codexAdapter: Adapter = {
   tool: 'codex',
   detectPrompt,
   promptStillVisible,
   previewLines,
   atRest,
-  keysFor(decision, pending, pane) {
+  keysFor(decision, pending, pane, note) {
     const d = pane ? parseDialog(pane) : null;
+    // An approval or the hooks review answers a permission (or a diff).
+    if (d) assertDialogIs(pending, d.kind === 'approval' || d.kind === 'confirm' ? 'permission' : d.kind);
+    if (decision === 'always') return alwaysKeys(d);
+    if (decision === 'deny' && note) return noteKeys(d, note);
     if (decision === 'deny') {
       // Esc on the plan question only goes back; "No, stay in Plan mode" is the answer.
       const no = d?.kind === 'plan' ? optionNumber(d.options, /^No\b/) : null;
@@ -213,7 +245,7 @@ export const codexAdapter: Adapter = {
     return [{ text: 'y' }];
   },
   replyPlan(text, pending) {
-    const flat = text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+    const flat = flatten(text);
     if (pending?.kind === 'question' && /^[1-9]$/.test(flat)) return digit(Number(flat));
     return [{ text: flat }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
   },

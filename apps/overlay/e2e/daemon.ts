@@ -1,5 +1,5 @@
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { ClientMessage, DaemonInfo, Recent, Session } from '@ledge/protocol';
+import type { ClientMessage, DaemonInfo, IslandPrefs, Recent, Session } from '@ledge/protocol';
 
 export const T0 = new Date(Date.now() - 5 * 60_000).toISOString();
 export function session(id: string, extra: Partial<Session> = {}): Session {
@@ -7,14 +7,21 @@ export function session(id: string, extra: Partial<Session> = {}): Session {
 }
 
 /** Simulates the ledge daemon inside the page: answers the overlay's WebSocket with a snapshot and lets the test push updates. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { recents?: Recent[]; launcher?: string[]; daemon?: DaemonInfo } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], { island: islandPrefs, ...extras }: { recents?: Recent[]; launcher?: string[]; daemon?: DaemonInfo; /** The island's settings it holds (null: none yet); absent, a daemon that never speaks of them. */ island?: IslandPrefs | null } = {}) {
   const sessions = new Map(initial.map(s => [s.id, s]));
+  let island = islandPrefs;
   const received: ClientMessage[] = [];
   let socket: WebSocketRoute | null = null;
   await page.routeWebSocket(/127\.0\.0\.1:47831/, ws => {
     socket = ws;
     ws.send(JSON.stringify({ type: 'snapshot', sessions: [...sessions.values()], ...extras }));
-    ws.onMessage(m => { try { received.push(JSON.parse(String(m))); } catch { /* ignore */ } });
+    if (island !== undefined) ws.send(JSON.stringify({ type: 'island', prefs: island }));
+    ws.onMessage(m => {
+      let msg: ClientMessage; try { msg = JSON.parse(String(m)); } catch { return; }
+      received.push(msg);
+      // Like the daemon: keep the island's settings and broadcast them.
+      if (msg.type === 'island.set') { island = msg.prefs; ws.send(JSON.stringify({ type: 'island', prefs: island })); }
+    });
   });
   const send = (m: unknown) => socket?.send(JSON.stringify(m));
   return {
@@ -31,6 +38,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { recen
     listing(l: { path: string; parent: string | null; entries: string[]; error?: string }) { send({ type: 'folder.listing', ...l }); },
     /** A launch refused: an `error` with no id. */
     refuse(message: string) { send({ type: 'error', message }); },
+    /** The island's settings changed in Desktop: kept and broadcast. */
+    island(p: IslandPrefs) { island = p; send({ type: 'island', prefs: p }); },
     /** Any other server message (chat.done, chat.history, …). */
     emit(m: unknown) { send(m); }
   };

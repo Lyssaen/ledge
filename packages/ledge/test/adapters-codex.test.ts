@@ -16,7 +16,7 @@ const AT_REST = ['codex-idle-after-turn', 'codex-idle-draft', 'codex-interrupted
 describe('codex adapter: detection (Codex CLI 0.162 captures)', () => {
   it('detects a command approval with the command and its options', () => {
     expect(codexAdapter.detectPrompt(fx('codex-permission-exec'))).toEqual({
-      kind: 'permission', text: "printf '%s\\n' hi > hello.txt",
+      kind: 'permission', text: "printf '%s\\n' hi > hello.txt", command: { lines: ["printf '%s\\n' hi > hello.txt"], ends: [32] },
       options: ['Yes, proceed', "Yes, and don't ask again for commands that start with `printf '%s\\n' hi > hello.txt`", 'No, and tell Codex what to do differently']
     });
   });
@@ -126,5 +126,46 @@ describe('codex adapter: keys', () => {
   });
   it('interrupts with Esc (Ctrl+C twice would quit Codex)', () => {
     expect(codexAdapter.interruptKeys()).toEqual(['Escape']);
+  });
+});
+
+describe('codex adapter: always and a note (lot 6a)', () => {
+  const perm = pending('permission'); const diff = pending('diff'); const plan = pending('plan', { source: 'pane' });
+  type Until = { until: (p: string) => boolean };
+  it('always takes the option letter that stops asking', () => {
+    expect(codexAdapter.keysFor('always', perm, fx('codex-permission-exec'))).toEqual([{ text: 'p' }]);
+    expect(codexAdapter.keysFor('always', diff, fx('codex-permission-patch'))).toEqual([{ text: 'a' }]);
+  });
+  it('always with no such option on screen is refused', () => {
+    expect(() => codexAdapter.keysFor('always', plan, fx('codex-plan'))).toThrow('no "always" option in this dialog, answer in the terminal');
+    expect(() => codexAdapter.keysFor('always', perm, fx('codex-hooks-review'))).toThrow('no "always" option in this dialog, answer in the terminal');
+  });
+  it('deny with a note on a plan: stay in Plan mode, then the note', () => {
+    expect(codexAdapter.keysFor('deny', plan, fx('codex-plan'), 'Garde la v1')).toEqual([{ text: '3' }, { until: expect.any(Function), denied: true }, { text: 'Garde la v1' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }]);
+  });
+  it('deny with a note on an approval: Escape, the note once the input is back, Enter after the pause', () => {
+    const keys = codexAdapter.keysFor('deny', perm, fx('codex-permission-exec'), 'Use\npnpm');
+    expect(keys).toEqual([{ keys: ['Escape'] }, { until: expect.any(Function), denied: true }, { text: 'Use pnpm' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }]);
+    const rest = (keys[1] as Until).until;
+    expect(rest(tail(fx('codex-idle-after-turn'), 30))).toBe(true);
+    expect(rest(tail(fx('codex-permission-exec'), 30))).toBe(false);
+    expect(() => codexAdapter.keysFor('deny', perm, fx('codex-hooks-review'), 'non')).toThrow(/answer in the terminal/);
+  });
+});
+
+describe('codex adapter: the dialog on screen must be the request (lot 6a review)', () => {
+  it('a plan question up while an approval is pending, or the other way round: nothing is typed', () => {
+    for (const d of ['accept', 'always', 'deny'] as const) {
+      expect(() => codexAdapter.keysFor(d, pending('permission'), fx('codex-plan'))).toThrow('the request changed, look again');
+      expect(() => codexAdapter.keysFor(d, pending('diff'), fx('codex-plan'))).toThrow('the request changed, look again');
+      expect(() => codexAdapter.keysFor(d, pending('plan', { source: 'pane' }), fx('codex-permission-exec'))).toThrow('the request changed, look again');
+    }
+    expect(() => codexAdapter.keysFor('accept', pending('question'), fx('codex-permission-exec'))).toThrow('the request changed, look again');
+    expect(() => codexAdapter.keysFor('accept', pending('permission'), fx('codex-question'))).toThrow('the request changed, look again');
+    expect(() => codexAdapter.keysFor('accept', pending('plan', { source: 'pane' }), fx('codex-hooks-review'))).toThrow('the request changed, look again');
+  });
+  it('the matching dialog still takes its keys; no readable dialog keeps the fallbacks', () => {
+    expect(codexAdapter.keysFor('accept', pending('diff'), fx('codex-permission-patch'))).toEqual([{ text: 'y' }]);
+    expect(codexAdapter.keysFor('accept', pending('permission'))).toEqual([{ text: 'y' }]);
   });
 });

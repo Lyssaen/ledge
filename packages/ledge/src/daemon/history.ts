@@ -83,12 +83,6 @@ export class History {
     this.writes = this.writes.then(() => rm(join(this.dir, `${id}.jsonl`), { force: true })).catch(e => log(`history not removed for ${id}: ${(e as Error).message}`));
   }
 
-  /** The user's own decision, sent from the overlay: it lands on the last permission still undecided or only seen to vanish. */
-  decide(id: string, decision: 'accept' | 'deny'): ThreadItem | undefined {
-    const perm = [...this.items(id)].reverse().find(i => i.kind === 'permission' && (i.decision === undefined || i.decision === 'unknown'));
-    return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision }) : undefined;
-  }
-
   record(id: string, ev: SessionEvent): ThreadItem | undefined {
     const turn = this.turns.get(id) ?? 0;
     const common = { at: ev.at, turn, ...(ev.helperId ? { helperId: ev.helperId } : {}) };
@@ -135,8 +129,10 @@ export class History {
         return this.put(id, { kind: 'permission', id: `perm-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, text: ev.text });
       }
       case 'Decided': {
+        // Without a decision it answered a question (or the idle input line): no permission of the thread is its.
+        if (!ev.decision) return undefined;
         const perm = [...this.items(id)].reverse().find(i => i.kind === 'permission' && i.decision === undefined);
-        return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision: ev.decision ?? 'unknown' }) : undefined;
+        return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision: ev.decision }) : undefined;
       }
       case 'Stop': {
         if (!ev.helperId) this.settle(id, i => i.turn === turn && !i.helperId);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { layout, scaledLayout, islandWidth, islandPipes, stripWidth, islandOrder, ISLAND, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
+import { layout, scaledLayout, islandWidth, islandPipes, stripWidth, filetWidth, islandOrder, ISLAND, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
 import { frameOf } from '../src/surface/frame';
 const bots = (n: number, pending: number[] = []) => Array.from({ length: n }, (_, i) => ({ id: String(i), pending: pending.includes(i) }));
 const W = 1920, H = 1080;
@@ -13,18 +13,15 @@ describe('island geometry', () => {
     expect(islandWidth(40)).toBe(islandWidth(7));
     expect(islandWidth(40, true)).toBe(islandWidth(7) + 8 + ISLAND.moon);
     expect(islandWidth(40, true)).toBeLessThan(300);
-    const l = layout({ bots: bots(2), mode: 'handle', screenH: H, screenW: W });
-    expect(l).toMatchObject({ top: 0, w: islandWidth(2), h: ISLAND.h });
-    expect(l.left).toBe(Math.round(W / 2 - islandWidth(2) / 2));
-    expect(l.handle).toEqual({ left: l.left, w: l.w, h: ISLAND.h });
   });
-  it('slots run left to right after the separator, asks first, six at most', () => {
+  it('the filet shows every session, asks first, dashes 5 px apart by 2', () => {
     const l = layout({ bots: bots(8, [6]), mode: 'handle', screenH: H, screenW: W });
     expect(islandOrder(bots(8, [6])).map(b => b.id)).toEqual(['6', '0', '1', '2', '3', '4', '5', '7']);
-    expect(l.slots.map(s => s.id)).toEqual(['6', '0', '1', '2', '3', '4']);
-    const first = l.left + 12 + 22 + 8 + 1 + 8;
-    expect(l.slots[0]).toEqual({ id: '6', size: 22, center: first + 11 });
-    expect(l.slots[1]!.center).toBe(first + 22 + 8 + 11);
+    expect(l.slots.map(s => s.id)).toEqual(['6', '0', '1', '2', '3', '4', '5', '7']);
+    expect(l.w).toBe(filetWidth([8]));
+    const first = l.left + 6 + 9 + 7;
+    expect(l.slots[0]).toEqual({ id: '6', size: 5, center: first + 2.5 });
+    expect(l.slots[1]!.center).toBe(first + 5 + 2 + 2.5);
   });
   it('several machines: this machine first, asks first inside each machine, a 9 px pipe between two machines', () => {
     const fleet = [{ id: 'r1', pending: false, machine: 'srv' }, { id: 'l1', pending: false }, { id: 'r2', pending: true, machine: 'srv' }, { id: 'l2', pending: true, machine: 'local' }, { id: 'o1', pending: false, machine: 'other' }];
@@ -34,23 +31,32 @@ describe('island geometry', () => {
     expect(islandPipes(islandOrder(bots(8, [6])))).toBe(0);
     expect(islandWidth(5, false, 2)).toBe(islandWidth(5) + 2 * (8 + 1));
     const l = layout({ bots: fleet, mode: 'handle', screenH: H, screenW: W });
-    expect(l.w).toBe(islandWidth(5, false, 2));
-    const first = l.left + 12 + 22 + 8 + 1 + 8;
-    expect(l.slots.map(s => s.center - first - 11)).toEqual([0, 30, 30 + 9 + 30, 30 + 9 + 60, 30 + 9 + 60 + 9 + 30]);
-    // Only the shown companions count: a machine pushed past six behind the "+n" draws no pipe.
-    const many = [...bots(6), { id: 'x', pending: false, machine: 'srv' }];
-    expect(layout({ bots: many, mode: 'handle', screenH: H, screenW: W }).w).toBe(islandWidth(7));
+    expect(l.w).toBe(filetWidth([2, 2, 1]));
+    expect(l.slots.map(s => s.id)).toEqual(['l2', 'l1', 'r2', 'r1', 'o1']);
   });
-  it('no sessions: the mascot alone, no separator room', () => {
-    expect(layout({ bots: [], mode: 'handle', screenH: H, screenW: W })).toMatchObject({ w: 48, h: 38, slots: [] });
+  it('no sessions: Ledge’s rectangle alone', () => {
+    expect(layout({ bots: [], mode: 'handle', screenH: H, screenW: W })).toMatchObject({ w: 21, h: 10, slots: [] });
   });
-  it('the discreet strip: 10 px high, dots 6 x 4 spaced 4, only in handle mode', () => {
+  it('the resting notch is the filet: 10 px, Ledge’s rectangle, then one dash per session', () => {
+    expect(filetWidth([])).toBe(21);
+    expect(filetWidth([2])).toBe(40);
+    expect(filetWidth([3, 3, 1])).toBe(85);
+    expect(filetWidth([3, 3, 1], true)).toBe(90);
+    const s = layout({ bots: bots(2), mode: 'handle', screenH: H, screenW: W });
+    expect(s).toMatchObject({ top: 0, h: 10, w: filetWidth([2]) });
+    const origin = s.left + 6 + 9 + 7;
+    expect(s.slots.map(slot => slot.center - origin)).toEqual([2.5, 9.5]);
+    const fleet = [{ id: 'l1', pending: false }, { id: 'l2', pending: true }, { id: 'r1', pending: false, machine: 'srv' }];
+    const g = layout({ bots: fleet, mode: 'handle', screenH: H, screenW: W, pip: true });
+    expect(g.w).toBe(filetWidth([2, 1], true));
+    expect(g.slots.map(slot => slot.id)).toEqual(['l2', 'l1', 'r1']);
+    const bubble = layout({ bots: bots(3), mode: 'bubble', screenH: H, screenW: W });
+    expect(bubble).toMatchObject({ w: SIZES.bubbleW, h: SIZES.bubbleH });
+  });
+  it('the discreet flag does not change the filet; a bubble still opens at 440', () => {
     expect(stripWidth(0)).toBe(islandWidth(0));
-    expect(stripWidth(3)).toBe(Math.max(48, 10 + 3 * 6 + 2 * 4 + 10));
-    expect(stripWidth(9)).toBe(Math.max(48, 10 + 6 * 6 + 5 * 4 + 10));
     const s = layout({ bots: bots(3), mode: 'handle', screenH: H, screenW: W, strip: true });
-    expect(s).toMatchObject({ top: 0, h: ISLAND.stripH, w: stripWidth(3) });
-    expect(s.handle.h).toBe(ISLAND.stripH);
+    expect(s).toMatchObject({ top: 0, h: 10, w: filetWidth([3]) });
     const b = layout({ bots: bots(3), mode: 'bubble', screenH: H, screenW: W, strip: true });
     expect(b).toMatchObject({ w: SIZES.bubbleW, h: SIZES.bubbleH });
     expect(layout({ bots: bots(3), mode: 'list', screenH: H, screenW: W, strip: true }).w).toBe(SIZES.listW);
@@ -102,7 +108,7 @@ describe('island geometry', () => {
   });
   it('the island position moves the axis to a quarter of the screen, clamped inside it', () => {
     const left = layout({ bots: bots(2), mode: 'handle', screenH: H, screenW: W, position: 'left' });
-    expect(left.left).toBe(Math.round(W / 4 - islandWidth(2) / 2));
+    expect(left.left).toBe(Math.round(W / 4 - filetWidth([2]) / 2));
     const right = layout({ bots: bots(2), mode: 'list', screenH: H, screenW: W, position: 'right' });
     expect(right.left).toBe(Math.round((3 * W) / 4 - SIZES.listW / 2));
     // A view wider than the quarter: never off the left edge, never off the right one.
@@ -119,7 +125,7 @@ describe('island geometry', () => {
     const h2 = scaledLayout({ ...input, mode: 'handle' }, { handle: 2, panel: 1 });
     expect(h2).toMatchObject({ left: h1.left * 2, top: 0, w: h1.w * 2, h: h1.h * 2 });
     expect(h2.slots.map(s => s.center)).toEqual(h1.slots.map(s => s.center * 2));
-    expect(h2.handle).toEqual({ left: h1.left * 2, w: h1.w * 2, h: 76 });
+    expect(h2.handle).toEqual({ left: h1.left * 2, w: h1.w * 2, h: 20 });
     const l = scaledLayout({ ...input, mode: 'list' }, { handle: 2, panel: 1 });
     expect(l.w).toBe(SIZES.listW);
     expect(l.left + l.w / 2).toBeCloseTo(1920, 0);

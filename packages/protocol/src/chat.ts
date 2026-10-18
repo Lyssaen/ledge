@@ -24,10 +24,20 @@ export const ChatRelaySchema = z.object({
 });
 export type ChatRelay = z.infer<typeof ChatRelaySchema>;
 
+/** A project the chat proposes (lot 11, task 5): its repositories are paths the daemon found on its machine, each with the LLM's reason;
+ *  `addTo` names an existing project to complete. Nothing is created until the editor's button. */
+export const ChatProjectProposalSchema = z.object({
+  name: z.string().min(1).max(80), description: z.string().max(500).optional(),
+  repos: z.array(z.object({ path: z.string().min(1).max(4096), why: z.string().min(1).max(200) })).min(1).max(50),
+  addTo: z.string().min(1).max(80).optional()
+});
+export type ChatProjectProposal = z.infer<typeof ChatProjectProposalSchema>;
+
 /** One question to Ledge and its answer; `error` set when it could not answer, both absent while it is still reading. */
 export const ChatTurnSchema = z.object({
   machineId: z.string().optional(), machineName: z.string().optional(), choices: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
   qid: z.string().min(1), question: z.string(), askedAt: z.string().datetime(),
-  steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), relay: ChatRelaySchema.optional()
+  steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), relay: ChatRelaySchema.optional(),
+  projectProposal: ChatProjectProposalSchema.optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;

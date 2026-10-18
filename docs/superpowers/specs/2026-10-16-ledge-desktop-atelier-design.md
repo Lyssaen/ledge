@@ -13,8 +13,8 @@ Page de documentation avec captures (organisation) : https://claude.ai/artifact/
 HTML générées s'ouvrent directement dans un navigateur ; après une modification des sources, relancer le `build.mjs`
 correspondant (il réutilise les composants de `apps/overlay`, donc `pnpm install` doit avoir été fait).
 
-Ce document décrit ce que la maquette fixe. Il ne tranche pas encore son articulation avec l'app `apps/desktop` déjà
-construite sur `origin/feat/desktop` (spec du 2026-10-14, vues Équipe et Réunion) : c'est la prochaine décision.
+Ce document décrit ce que la maquette fixe. Son articulation avec l'app `apps/desktop` de `feat/desktop` est tranchée
+dans `2026-10-16-ledge-desktop-atelier-build-design.md`.
 
 ## 1. Intention
 
@@ -245,6 +245,7 @@ J / K parcourir · Entrée ouvrir · F filtrer la liste · R répondre · Y / N 
 
 ## 10. Prochaines étapes
 
-1. Décider l'articulation avec `apps/desktop` (feat/desktop) : l'Atelier remplace-t-il les vues Équipe / Réunion ?
-2. Trancher la question ouverte de l'île (§ 8).
-3. Écrire le plan d'implémentation par lots.
+1. ~~Décider l'articulation avec `apps/desktop` (feat/desktop)~~ : tranché, l'Atelier remplace Équipe et Réunion, voir
+   `2026-10-16-ledge-desktop-atelier-build-design.md`.
+2. Trancher la question ouverte de l'île (§ 8) : avec le plan de l'île sobre.
+3. Écrire le plan d'implémentation par lots : en cours, un plan par lot.

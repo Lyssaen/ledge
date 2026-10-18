@@ -318,54 +318,11 @@ fn restore_foreground(raw: isize) -> bool {
 #[cfg(not(windows))]
 fn restore_foreground(_raw: isize) -> bool { false }
 
-/// True when a window title should be brought forward for `wanted`.
-pub fn title_matches(title: &str, wanted: &str) -> bool {
-    let t = title.to_lowercase();
-    t.contains(&wanted.to_lowercase()) || t.contains("windows terminal")
-}
-
-#[cfg(windows)]
 #[tauri::command]
-fn focus_terminal(title: String) -> Result<bool, String> {
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowTextW, IsWindowVisible, SetForegroundWindow};
-    struct Search { wanted: String, exact: Option<HWND>, any: Option<HWND> }
-    unsafe extern "system" fn cb(hwnd: HWND, lp: LPARAM) -> BOOL {
-        let s = &mut *(lp.0 as *mut Search);
-        if !IsWindowVisible(hwnd).as_bool() { return BOOL(1); }
-        let mut buf = [0u16; 512];
-        let n = GetWindowTextW(hwnd, &mut buf) as usize;
-        let t = String::from_utf16_lossy(&buf[..n]);
-        if t.to_lowercase().contains(&s.wanted.to_lowercase()) { s.exact = Some(hwnd); return BOOL(0); }
-        if s.any.is_none() && t.to_lowercase().contains("windows terminal") { s.any = Some(hwnd); }
-        BOOL(1)
-    }
-    let mut search = Search { wanted: title, exact: None, any: None };
-    unsafe { let _ = EnumWindows(Some(cb), LPARAM(&mut search as *mut Search as isize)); }
-    match search.exact.or(search.any) { Some(h) => unsafe { Ok(SetForegroundWindow(h).as_bool()) }, None => Ok(false) }
-}
+fn focus_terminal(title: String) -> Result<bool, String> { Ok(ledge_native::terminal::focus(&title)) }
 
-#[cfg(not(windows))]
 #[tauri::command]
-fn focus_terminal(_title: String) -> Result<bool, String> { Ok(false) }
-
-/// Windows Terminal's top-level window class (Cascadia). Its tab titles vary; the class does not.
-#[cfg(windows)]
-#[tauri::command]
-fn foreground_is_terminal() -> bool {
-    use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, GetForegroundWindow};
-    unsafe {
-        let hwnd = GetForegroundWindow();
-        if hwnd.0.is_null() { return false; }
-        let mut buf = [0u16; 128];
-        let n = GetClassNameW(hwnd, &mut buf) as usize;
-        String::from_utf16_lossy(&buf[..n]) == "CASCADIA_HOSTING_WINDOW_CLASS"
-    }
-}
-
-#[cfg(not(windows))]
-#[tauri::command]
-fn foreground_is_terminal() -> bool { false }
+fn foreground_is_terminal() -> bool { ledge_native::terminal::foreground_is_terminal() }
 
 /// The shell's desktop windows: a click on the wallpaper or Win+D brings one of them to the foreground, and its
 /// rectangle spans the monitor (every monitor for `Progman`) without covering anything.
@@ -406,42 +363,13 @@ fn foreground_covers(area: Area, own: Option<isize>) -> bool {
 #[cfg(not(windows))]
 fn foreground_covers(_area: Area, _own: Option<isize>) -> bool { false }
 
-/// The `wt.exe` arguments that open a tab titled `title` in the current Windows Terminal window (a new one when none
-/// is open) running `command` inside the default WSL distribution. `command` is the daemon's launcher command plus
-/// `attach <id>`, passed verbatim: Windows Terminal hands everything after `wsl.exe --` to WSL untouched.
-pub fn terminal_args(title: &str, command: &[String]) -> Vec<String> {
-    let mut args: Vec<String> = ["-w", "0", "new-tab", "--title", title, "wsl.exe", "--"].iter().map(|s| s.to_string()).collect();
-    args.extend(command.iter().cloned());
-    args
-}
-
 /// Opens a Windows Terminal tab attached to a session the overlay launched itself (`focus_terminal` finds nothing for
 /// it: no tab exists yet). True once `wt.exe` was spawned; the tab's own life is not tracked.
-#[cfg(windows)]
 #[tauri::command]
-fn open_terminal(title: String, command: Vec<String>) -> Result<bool, String> {
-    if command.is_empty() { return Err("empty command".into()); }
-    match std::process::Command::new("wt.exe").args(terminal_args(&title, &command)).spawn() {
-        Ok(_) => Ok(true),
-        Err(e) => Err(format!("wt.exe: {e}")),
-    }
-}
+fn open_terminal(title: String, command: Vec<String>) -> Result<bool, String> { ledge_native::terminal::open(&title, &command) }
 
-#[cfg(not(windows))]
 #[tauri::command]
-fn open_terminal(_title: String, _command: Vec<String>) -> Result<bool, String> { Ok(false) }
-
-/// Opens a web URL in the default browser through the shell (`rundll32 url.dll,FileProtocolHandler`, which takes `&`
-/// and `?` as they are, unlike `cmd /C start`): the overlay's webview must never navigate away. Only http(s) is accepted.
-#[tauri::command]
-fn open_url(url: String) -> Result<(), String> {
-    if !(url.starts_with("http://") || url.starts_with("https://")) { return Err("not a web url".into()); }
-    #[cfg(windows)]
-    let spawned = std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", &url]).spawn();
-    #[cfg(not(windows))]
-    let spawned = std::process::Command::new("xdg-open").arg(&url).spawn();
-    spawned.map(|_| ()).map_err(|e| format!("open url: {e}"))
-}
+fn open_url(url: String) -> Result<(), String> { ledge_native::browser::open_url(&url) }
 
 /// Launch at login is only offered by an installed (release) build: a `tauri dev` one would register a debug binary
 /// under `target\` that a `cargo clean` removes. `None` there, so the Settings view hides the switch.
@@ -460,20 +388,11 @@ fn set_autostart(app: AppHandle, on: bool) -> Result<Option<bool>, String> {
     Ok(launcher.is_enabled().ok())
 }
 
-/// The marker left once launch at login was switched on by default, so a later "off" in Settings sticks across restarts
-/// and upgrades. It lives in the app's config dir (`%APPDATA%\be.paradow.ledge`).
-const AUTOSTART_MARKER: &str = "autostart-default";
-
-/// Whether this start should switch launch at login on: the first start of an installed build only.
-pub fn autostart_by_default(debug: bool, marker_exists: bool) -> bool {
-    !debug && !marker_exists
-}
-
 /// The first start of an installed Ledge switches launch at login on, once; after that only the user's choice counts.
 fn default_autostart(app: &tauri::App) {
     let Ok(dir) = app.path().app_config_dir() else { return };
-    let marker = dir.join(AUTOSTART_MARKER);
-    if !autostart_by_default(cfg!(debug_assertions), marker.exists()) { return; }
+    let marker = dir.join(ledge_native::autostart::MARKER);
+    if !ledge_native::autostart::by_default(cfg!(debug_assertions), marker.exists()) { return; }
     if app.autolaunch().enable().is_ok() {
         let _ = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&marker, b""));
     }
@@ -626,7 +545,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{autostart_by_default, choose, covers, cursor_near, desktop_class, frame_rect, inside_rect, poll_interval, press_outside, terminal_args, title_matches, tray_title, window_rect_of, Area, CURSOR_POLL, NEAR_POLL};
+    use super::{choose, covers, cursor_near, desktop_class, frame_rect, inside_rect, poll_interval, press_outside, tray_title, window_rect_of, Area, CURSOR_POLL, NEAR_POLL};
 
     #[test] fn the_window_takes_the_mouse_inside_the_drawn_rectangle_only() {
         let rect = (100, 0, 200, 60);
@@ -657,20 +576,9 @@ mod tests {
         assert!(!desktop_class(""));
     }
 
-    #[test] fn a_terminal_tab_runs_the_launcher_command_in_wsl() {
-        let cmd: Vec<String> = ["/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"].iter().map(|s| s.to_string()).collect();
-        assert_eq!(terminal_args("Juno · api-gateway", &cmd), ["-w", "0", "new-tab", "--title", "Juno · api-gateway", "wsl.exe", "--", "/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"]);
-    }
-
     #[test] fn the_tray_tells_a_dev_build_from_an_installed_one() {
         assert_eq!(tray_title("0.1.0", false), "Ledge 0.1.0");
         assert_eq!(tray_title("0.1.0", true), "Ledge 0.1.0 (dev)");
-    }
-
-    #[test] fn launch_at_login_is_switched_on_once_by_an_installed_build() {
-        assert!(autostart_by_default(false, false)); // first start once installed
-        assert!(!autostart_by_default(false, true)); // later starts: the user's choice stands
-        assert!(!autostart_by_default(true, false)); // never from `tauri dev`
     }
 
     #[test] fn the_chosen_monitor_is_used_while_plugged_in_else_the_primary() {
@@ -679,12 +587,6 @@ mod tests {
         assert_eq!(choose(Some("\\\\.\\DISPLAY2"), &ids, 0), 1);
         assert_eq!(choose(Some("\\\\.\\DISPLAY3"), &ids, 0), 0); // unplugged: back to the primary
         assert_eq!(choose(Some("#1"), &["#0".to_string(), "#1".to_string()], 0), 1); // unnamed monitors go by index
-    }
-
-    #[test] fn matches_bot_title_or_terminal() {
-        assert!(title_matches("Otto · harness-assistant - Windows Terminal", "Otto · harness-assistant"));
-        assert!(title_matches("PowerShell - Windows Terminal", "Pim · speos-api"));
-        assert!(!title_matches("Visual Studio Code", "Pim · speos-api"));
     }
 
     const AREA: Area = Area { x: 0, y: 0, w: 2880, h: 1548, scale: 1.5 };

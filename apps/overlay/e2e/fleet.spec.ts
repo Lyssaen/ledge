@@ -1,9 +1,9 @@
 import type { WebSocketRoute } from '@playwright/test';
 import type { ClientMessage } from '@ledge/protocol';
-import { islandWidth } from '../src/surface/geometry';
-import { test, expect, layer, ready, received, surface } from './fixtures';
+import { filetWidth } from '../src/surface/geometry';
+import { test, expect, layer, ready, received, surface, expectMode } from './fixtures';
 import { fakeDaemon, session } from './daemon';
-import { openList, restInside } from './scenarios';
+import { openChat } from './scenarios';
 
 test('one project, common chat clarification, remote confirmation and disconnection', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('ledge.machines', JSON.stringify([
@@ -18,10 +18,8 @@ test('one project, common chat clarification, remote confirmation and disconnect
     ws.send(JSON.stringify({ type: 'snapshot', sshAlias: 'dev-server', sessions: [session('same', { name: 'Nova', repo: 'ledge', repoId: 'github.com/org/ledge' })] }));
     ws.onMessage(m => remote.push(JSON.parse(String(m))));
   });
-  await ready(page, 2); await openList(page); await restInside(page);
-  await expect(layer(page, 'list').locator('[data-row-id="server:same"]')).toContainText('dev-server');
-  await expect(layer(page, 'list')).toContainText('2 machines');
-  await layer(page, 'list').getByRole('textbox', { name: 'Ask Ledge' }).fill('Launch a session in ledge');
+  await ready(page, 2); await openChat(page);
+  await layer(page, 'chat').getByRole('textbox', { name: 'Ask Ledge' }).fill('Launch a session in ledge');
   await page.keyboard.press('Enter');
   const route = await received(local.received, 'chat.route');
   local.emit({ type: 'chat.routed', qid: route.qid, result: { machineId: null, text: 'Which machine?', choices: ['local', 'server'] } });
@@ -40,11 +38,13 @@ test('one project, common chat clarification, remote confirmation and disconnect
   await remoteSocket!.close();
   await expect(card.getByRole('button', { name: /Start the session/ })).toBeDisabled();
   await page.keyboard.press('Escape');
-  await expect(layer(page, 'list').locator('[data-row-id="server:same"]')).toHaveCount(0);
-  await expect(layer(page, 'list').locator('[data-row-id="local:same"]')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expectMode(page, 'handle');
+  await expect(layer(page, 'handle').getByRole('button', { name: /^Nova/ })).toHaveCount(0);
+  await expect(layer(page, 'handle').getByRole('button', { name: /^Otto/ })).toBeVisible();
 });
 
-test('the folded island groups the companions by machine with a pipe between the machines', async ({ page }) => {
+test('the folded notch puts a hairline before each machine', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('ledge.machines', JSON.stringify([
     { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' },
     { id: 'server', label: 'dev-server', url: 'ws://127.0.0.1:47832', ssh: 'dev-server' }
@@ -55,35 +55,16 @@ test('the folded island groups the companions by machine with a pipe between the
   });
   await ready(page, 3);
   const handle = layer(page, 'handle');
-  await expect(surface(page)).toHaveCSS('width', `${islandWidth(3, false, 1)}px`);
-  await expect.poll(() => handle.evaluate(el => [...el.children].flatMap(c => c.hasAttribute('data-machine-separator') ? (getComputedStyle(c).opacity === '1' ? ['|'] : []) : c.hasAttribute('data-resident') ? ['ledge'] : c.tagName === 'BUTTON' ? [c.getAttribute('aria-label')!.split(' ')[0]!] : []))).toEqual(['ledge', 'Ida', 'Kai', '|', 'Nova']);
-});
-
-test('Machines tab: test an SSH alias, see the failure in plain words, then add the server', async ({ page }) => {
-  await fakeDaemon(page, [session('here')], { daemon: { version: '0.4.0', install: 'npm', systemd: true, routing: true } });
-  await page.routeWebSocket(/127\.0\.0\.1:47831\/ssh\/build-box/, ws => {
-    ws.send(JSON.stringify({ type: 'snapshot', sshAlias: 'build-box', sessions: [session('a'), session('b')], daemon: { version: '0.4.0', install: 'npm', systemd: true, routing: true } }));
-  });
-  await page.routeWebSocket(/127\.0\.0\.1:47831\/ssh\/typo-box/, ws => {
-    ws.send(JSON.stringify({ type: 'error', message: 'SSH connection closed (255). ssh: Could not resolve hostname typo-box: Name or service not known' }));
-    void ws.close();
-  });
-  await ready(page, 1); await openList(page);
-  await layer(page, 'list').getByRole('button', { name: 'Settings' }).click();
-  const settings = layer(page, 'settings');
-  await settings.getByRole('tab', { name: 'Machines' }).click();
-  await expect(settings.getByText('This machine')).toBeVisible();
-  await settings.getByRole('button', { name: 'Add a machine' }).click();
-  await settings.getByLabel('Name').fill('Build');
-  await settings.getByLabel('SSH alias').fill('typo-box');
-  await settings.getByRole('button', { name: 'Test the connection' }).click();
-  await expect(settings.getByRole('status')).toContainText('Alias not found');
-  await settings.getByLabel('SSH alias').fill('build-box');
-  await settings.getByRole('button', { name: 'Test the connection' }).click();
-  await expect(settings.getByRole('status')).toContainText('Ledge 0.4.0 answers · 2 sessions');
-  await settings.getByRole('button', { name: 'Save' }).click();
-  await expect(settings.getByText('SSH · build-box · Ledge 0.4.0 · 2 sessions')).toBeVisible();
-  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('ledge.machines') ?? '[]'))).toEqual([
-    expect.objectContaining({ id: 'local' }), expect.objectContaining({ label: 'Build', ssh: 'build-box' })
-  ]);
+  await expect(surface(page)).toHaveCSS('width', `${filetWidth([2, 1])}px`);
+  await expect.poll(() => handle.evaluate(el => {
+    const out: string[] = [];
+    const walk = (node: Element) => {
+      if (node.hasAttribute('data-machine-separator')) { out.push('|'); return; }
+      if (node.hasAttribute('data-resident')) { out.push('ledge'); return; }
+      if (node.tagName === 'BUTTON' && !node.querySelector('[data-update-pip]')) { out.push(node.getAttribute('aria-label')!.split(' ')[0]!); return; }
+      for (const child of node.children) walk(child);
+    };
+    for (const child of el.children) walk(child);
+    return out;
+  })).toEqual(['ledge', '|', 'Ida', 'Kai', '|', 'Nova']);
 });

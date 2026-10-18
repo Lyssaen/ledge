@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED } from '../src/index.js';
 
 const T0 = '2026-10-09T18:02:00.000Z';
 
@@ -28,6 +28,12 @@ describe('protocol', () => {
     expect(() => parseServerMessage({ type: 'document.error', requestId: 'r1', path: 'x', code: 'unknown' })).toThrow();
   });
   it('exposes the port', () => { expect(PROTOCOL_PORT).toBe(47831); });
+
+  it('accepts and keeps the optional offline flag', () => {
+    const s = SessionSchema.parse({ ...session, offline: true });
+    expect(s.offline).toBe(true);
+    expect(SessionSchema.parse(session).offline).toBeUndefined();
+  });
 
   it('accepts a full session', () => {
     expect(SessionSchema.parse(session)).toEqual(session);
@@ -155,6 +161,15 @@ describe('protocol: browsing folders from the launch form', () => {
     expect(parseClientMessage({ type: 'folder.list', path: '~/Workspace' })).toEqual({ type: 'folder.list', path: '~/Workspace' });
     expect(parseClientMessage({ type: 'folder.create', parent: '/w', name: 'new-project' })).toEqual({ type: 'folder.create', parent: '/w', name: 'new-project' });
     expect(() => parseClientMessage({ type: 'folder.create', parent: '/w', name: '' })).toThrow();
+    const asked = { type: 'folder.list', path: '/w', machineId: 'nas', requestId: 'r1' };
+    expect(parseClientMessage(asked)).toEqual(asked);
+    expect(() => parseClientMessage({ type: 'folder.list', requestId: '' })).toThrow();
+    expect(() => parseClientMessage({ type: 'folder.list', requestId: 'x'.repeat(101) })).toThrow();
+  });
+  it('folder.listing carries requestId and the repositories with their branch', () => {
+    const l = { type: 'folder.listing', requestId: 'r1', path: '/w', parent: '/', entries: ['a'], repos: [{ name: 'a', branch: 'main' }] };
+    expect(ServerMessageSchema.parse(l)).toEqual(l);
+    expect(() => ServerMessageSchema.parse({ ...l, repos: [{ name: 'a' }] })).toThrow();
   });
   it('parses folder.listing, with a parent, at the root, and carrying an error', () => {
     const listing = { type: 'folder.listing', path: '/w', parent: '/', entries: ['api', 'web'] };
@@ -162,6 +177,37 @@ describe('protocol: browsing folders from the launch form', () => {
     expect(ServerMessageSchema.parse({ ...listing, path: '/', parent: null })).toEqual({ ...listing, path: '/', parent: null });
     const failed = { ...listing, entries: [], error: 'no such folder: /w' };
     expect(ServerMessageSchema.parse(failed)).toEqual(failed);
+  });
+});
+
+describe('protocol: launching with several folders and inspecting repos', () => {
+  it('session.launch takes dirs and a machineId', () => {
+    const m = { type: 'session.launch', tool: 'claude', cwd: '/w/a', dirs: ['/w/b'], machineId: 'm1' };
+    expect(parseClientMessage(m)).toEqual(m);
+    expect(parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w/a' })).not.toHaveProperty('dirs');
+    expect(() => parseClientMessage({ ...m, dirs: [''] })).toThrow();
+    expect(() => parseClientMessage({ ...m, dirs: Array.from({ length: 21 }, () => '/x') })).toThrow();
+  });
+  it('parses repos.inspect and repos.info', () => {
+    const q = { type: 'repos.inspect', requestId: 'r1', paths: ['/w/a', '~/b'], machineId: 'm1' };
+    expect(parseClientMessage(q)).toEqual(q);
+    expect(() => parseClientMessage({ ...q, paths: [] })).toThrow();
+    expect(() => parseClientMessage({ ...q, requestId: '' })).toThrow();
+    const info = { type: 'repos.info', requestId: 'r1', repos: [{ path: '/w/a', exists: true, branch: 'main' }, { path: '/w/b', exists: true, branch: null }] };
+    expect(parseServerMessage(info)).toEqual(info);
+    expect(() => parseServerMessage({ ...info, repos: [{ path: '/w', exists: true }] })).toThrow();
+  });
+  it('parses repos.scan and repos.found (lot 11): a machineId to route, a bounded list, truncated and an optional error', () => {
+    const q = { type: 'repos.scan', requestId: 's1', machineId: 'm1' };
+    expect(parseClientMessage(q)).toEqual(q);
+    expect(parseClientMessage({ type: 'repos.scan', requestId: 's1' })).not.toHaveProperty('machineId');
+    expect(() => parseClientMessage({ ...q, requestId: '' })).toThrow();
+    expect(() => parseClientMessage({ ...q, requestId: 'x'.repeat(101) })).toThrow();
+    const found = { type: 'repos.found', requestId: 's1', repos: [{ path: '/w/ledge', branch: 'main', remote: 'github.com/paradow/ledge' }, { path: '/w/empty', branch: null }], truncated: false };
+    expect(parseServerMessage(found)).toEqual(found);
+    expect(parseServerMessage({ ...found, repos: [], error: 'offline' })).toEqual({ ...found, repos: [], error: 'offline' });
+    expect(() => parseServerMessage({ ...found, truncated: undefined })).toThrow();
+    expect(() => parseServerMessage({ ...found, repos: Array.from({ length: 501 }, (_, i) => ({ path: `/w/${i}`, branch: null })) })).toThrow();
   });
 });
 
@@ -181,6 +227,21 @@ describe('relay from the chat (spec 2026-10-12 relay §5)', () => {
     expect(parseClientMessage({ type: 'session.relay', qid: 'q1' })).toEqual({ type: 'session.relay', qid: 'q1' });
     expect(parseClientMessage({ type: 'session.relay.cancel', qid: 'q1' })).toEqual({ type: 'session.relay.cancel', qid: 'q1' });
     expect(() => parseClientMessage({ type: 'session.relay', qid: '' })).toThrow();
+  });
+});
+
+describe('project proposal from the chat (lot 11 task 5)', () => {
+  const projectProposal = { name: 'Paper', description: 'Les polices', repos: [{ path: '/w/paper-fonts', why: 'Nommé paper-*' }], addTo: 'Ledge' };
+  it('a turn and chat.done carry a project proposal; old messages still parse', () => {
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', projectProposal })).toMatchObject({ projectProposal });
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z' })).not.toHaveProperty('projectProposal');
+    const turn = { qid: 'q1', question: 'crée un projet', askedAt: '2026-10-12T10:00:00.000Z', steps: [], projectProposal };
+    expect(parseServerMessage({ type: 'chat.history', turns: [turn] })).toEqual({ type: 'chat.history', turns: [turn] });
+  });
+  it('rejects a proposal without repositories, or with a path over 4096 characters', () => {
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', projectProposal: { ...projectProposal, repos: [] } })).toThrow();
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', projectProposal: { ...projectProposal, repos: [{ path: '/' + 'x'.repeat(4096), why: 'x' }] } })).toThrow();
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: '2026-10-12T10:00:00.000Z', projectProposal: { ...projectProposal, repos: [{ path: '/' + 'x'.repeat(4095), why: 'x' }] } })).toHaveProperty('projectProposal');
   });
 });
 
@@ -227,5 +288,35 @@ describe('native session tracking (spec 2026-10-13 §3, §5)', () => {
     const item = { kind: 'message', id: 'm1', at, turn: 1, text: 'Je regarde le reducer.' };
     expect(parseServerMessage({ type: 'session.thread', id: 's', items: [item] })).toMatchObject({ type: 'session.thread', items: [item] });
     expect(parseServerMessage({ type: 'session.thread.item', id: 's', item })).toMatchObject({ type: 'session.thread.item', item });
+  });
+});
+
+describe('decisions beyond accept and deny (lot 6a)', () => {
+  it('session.decide takes always and a trimmed note; an empty or oversized note is refused', () => {
+    expect(parseClientMessage({ type: 'session.decide', id: 'a', decision: 'always' })).toEqual({ type: 'session.decide', id: 'a', decision: 'always' });
+    expect(parseClientMessage({ type: 'session.decide', id: 'a', decision: 'deny', note: '  Use pnpm ' })).toMatchObject({ note: 'Use pnpm' });
+    expect(() => parseClientMessage({ type: 'session.decide', id: 'a', decision: 'deny', note: '   ' })).toThrow();
+    expect(() => parseClientMessage({ type: 'session.decide', id: 'a', decision: 'deny', note: 'x'.repeat(4001) })).toThrow();
+    expect(parseServerMessage({ type: 'error', id: 'a', message: 'no', request: 'session.reply' })).toEqual({ type: 'error', id: 'a', message: 'no', request: 'session.reply' });
+  });
+  it('an error may carry a code: a deny whose note could not be typed', () => {
+    const m = { type: 'error', id: 'a', message: 'denied, but the note could not be typed', request: 'session.decide', code: NOTE_NOT_TYPED };
+    expect(parseServerMessage(m)).toEqual(m);
+    expect(NOTE_NOT_TYPED).toBe('note_not_typed');
+  });
+  it('session.decide carries the request the user saw, optional (the island sends none)', () => {
+    const expected = { kind: 'permission', text: 'npm test' } as const;
+    expect(parseClientMessage({ type: 'session.decide', id: 'a', decision: 'accept', expect: expected })).toEqual({ type: 'session.decide', id: 'a', decision: 'accept', expect: expected });
+    expect(parseClientMessage({ type: 'session.decide', id: 'a', decision: 'accept' })).not.toHaveProperty('expect');
+    expect(() => parseClientMessage({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'maybe', text: 'x' } })).toThrow();
+    expect(() => parseClientMessage({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'plan' } })).toThrow();
+  });
+  it('what each harness offers', () => {
+    expect([offers('claude', 'plan', 'always'), offers('codex', 'plan', 'always'), offers('codex', 'diff', 'always'), offers('cursor', 'permission', 'always'),
+      offers('cursor', 'plan', 'note'), offers('claude', 'question', 'note'), offers('claude', 'question', 'always')]).toEqual([true, false, true, false, true, false, false]);
+  });
+  it('always reaches the thread and the Decided event', () => {
+    expect(SessionEventSchema.parse({ name: 'Decided', at: T0, source: 'daemon', decision: 'always' }).decision).toBe('always');
+    expect(ThreadItemSchema.parse({ kind: 'permission', id: 'p', at: T0, turn: 0, tool: 'Bash', text: 'ls', decision: 'always' })).toMatchObject({ decision: 'always' });
   });
 });

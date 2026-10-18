@@ -1,5 +1,5 @@
 import type { Pending } from '@ledge/protocol';
-import type { Adapter, KeyPlan, PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch, type ShownCommand } from './types.js';
 
 const rtrim = (l: string) => l.replace(/\s+$/, '');
 const isBlank = (l: string) => l.trim() === '';
@@ -34,7 +34,8 @@ const RULE = /^─{10,}$/;
 /** How far above the footer the rule can be: a long command wraps over many lines. */
 const DIALOG_MAX = 40;
 
-type Dialog = { question: string; subject: string };
+/** `drawn`: the subject's pane lines, as drawn. */
+type Dialog = { question: string; subject: string; drawn: string[] };
 
 function parseDialog(lines: string[]): Dialog | null {
   const end = lastNonBlank(lines);
@@ -47,14 +48,26 @@ function parseDialog(lines: string[]): Dialog | null {
   const q = body.findIndex(l => l.endsWith('?') && !/\((y|tab|shift\+tab)\)$/.test(l));
   if (q < 0) return null;
   const subject = body.slice(0, q).filter(Boolean).join(' ');
-  return { question: body[q]!, subject };
+  return { question: body[q]!, subject, drawn: lines.slice(rule + 1, rule + 1 + q) };
 }
 
 /** `$  npm test in .` is a shell command and the folder it runs in: Ledge shows the command. */
+const SHELL_SUBJECT = /^\$\s+(.+?)\s+in\s+\S+$/;
 function dialogText(d: Dialog): string {
-  const cmd = d.subject.match(/^\$\s+(.+?)\s+in\s+\S+$/);
+  const cmd = d.subject.match(SHELL_SUBJECT);
   if (cmd) return cmd[1]!;
   return d.subject ? `${d.question} ${d.subject}` : d.question;
+}
+/** The shell command a dialog shows, its lines without the `$` and the folder it runs in, or undefined. */
+function dialogCommand(d: Dialog): ShownCommand | undefined {
+  if (!SHELL_SUBJECT.test(d.subject)) return undefined;
+  const command = shownCommand(d.drawn);
+  const { lines, ends } = command;
+  lines[0] = lines[0]!.replace(/^\$\s+/, '');
+  // The folder may wrap to a line of its own.
+  if (/^in\s+\S+$/.test(lines.at(-1)!)) { lines.pop(); ends.pop(); }
+  else lines[lines.length - 1] = lines.at(-1)!.replace(/\s+in\s+\S+$/, '');
+  return command;
 }
 
 // The workspace trust dialog, shown before anything else in a folder Cursor Agent has not seen. Its box
@@ -204,7 +217,16 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   const plan = parsePlan(lines);
   if (plan) return { kind: 'plan', text: plan.title, options: plan.options, ...(plan.body ? { body: plan.body } : {}) };
   const d = parseDialog(lines);
-  return d ? { kind: 'permission', text: dialogText(d) } : null;
+  const command = d && dialogCommand(d);
+  return d ? { kind: 'permission', text: dialogText(d), ...(command ? { command } : {}) } : null;
+}
+
+/** The kind of request the dialog on screen answers, read in keysFor's order (the skip field is still the approval's), or null. */
+function shownKind(lines: string[]): 'permission' | 'question' | 'plan' | null {
+  if (parseTrust(lines)) return 'permission';
+  if (parseQuestion(lines)) return 'question';
+  if (parsePlan(lines)) return 'plan';
+  return lines.some(l => TELL_INSTEAD.test(l)) || parseDialog(lines) ? 'permission' : null;
 }
 
 /** Any dialog Ledge reads (approval, trust, question, plan) ends the pane. */
@@ -282,6 +304,19 @@ function atRest(pane: string): boolean {
   return i >= 0 && !TELL_INSTEAD.test(lines[i]!) && !lines.slice(i).some(l => BUSY.test(l));
 }
 
+/**
+ * Deny with a note: n opens the skip field and p the plan's revision field; the note goes in once the field is on
+ * screen, Enter once the field holds it (sent with the text, Enter is lost in the paste).
+ */
+function notePlan(lines: string[], note: string): KeyPlan {
+  if (parseTrust(lines) || parseQuestion(lines)) throw new Error(NO_NOTE);
+  const text = flatten(note);
+  const typeIt: KeyPlan = [{ text }, { until: typed(text) }, { keys: ['Enter'] }];
+  if (lines.some(l => TELL_INSTEAD.test(l))) return typeIt; // already in the skip field
+  if (parsePlan(lines)) return [{ text: 'p' }, { until: p => REVISE.test(p) }, ...typeIt];
+  return [{ text: 'n' }, { until: inSkipField }, ...typeIt];
+}
+
 export const cursorAdapter: Adapter = {
   tool: 'cursor',
   detectPrompt,
@@ -289,8 +324,12 @@ export const cursorAdapter: Adapter = {
   previewLines,
   atRest,
   promptGone,
-  keysFor(decision, _pending, pane) {
+  keysFor(decision, pending, pane, note) {
     const lines = pane ? toLines(pane) : [];
+    if (pane) assertDialogIs(pending, shownKind(lines));
+    // « Add … to allowlist » is permanent and « Run Everything » opens everything: no « for this session » here.
+    if (decision === 'always') throw new Error(NO_ALWAYS);
+    if (decision === 'deny' && note) return notePlan(lines, note);
     if (parseTrust(lines)) return [{ text: decision === 'accept' ? 'a' : 'q' }];
     const q = parseQuestion(lines);
     if (q) return decision === 'accept' ? answerPlan(q, 1) : [{ keys: ['Escape'] }];
@@ -307,9 +346,9 @@ export const cursorAdapter: Adapter = {
   replyPlan(text: string, pending?: Pending, pane?: string): KeyPlan {
     const q = pending?.kind === 'question' && /^[1-9]$/.test(text.trim()) && pane ? parseQuestion(toLines(pane)) : null;
     if (q) return answerPlan(q, Number(text.trim()));
-    // Tmux.sendText rejects newlines: flatten here, Enter is a separate key step. An Enter that comes with the
-    // text in one read is taken as part of a paste and lost: it waits for the text to be in the input line.
-    const flat = text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+    // An Enter that comes with the text in one read is taken as part of a paste and lost: it waits for the text to be
+    // in the input line.
+    const flat = flatten(text);
     return [{ text: flat }, { until: typed(flat) }, { keys: ['Enter'] }];
   },
   // Ctrl-C aborts a running turn; at rest it only clears the input line, it never quits.
