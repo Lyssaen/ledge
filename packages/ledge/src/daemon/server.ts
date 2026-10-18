@@ -32,6 +32,15 @@ import { MAX_FRAME } from '../transport/frames.js';
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
 
+/** How each agent continues one conversation by its own id (Claude Code and Cursor Agent `--resume <id>`, Codex `resume <id>`). */
+export const RESUME_ARGS: Record<Tool, (id: string) => string[]> = { claude: id => ['--resume', id], codex: id => ['resume', id], cursor: id => ['--resume', id] };
+
+/** The agent's own conversation id: the one its hooks gave, else, for Claude Code, the name of its transcript file. */
+export function resumeKey(s: Session): string | undefined {
+  if (s.agentSessionId) return s.agentSessionId;
+  return s.tool === 'claude' && s.transcriptPath ? basename(s.transcriptPath, '.jsonl') : undefined;
+}
+
 /** The harnesses that take extra folders, and how. Claude only (verified: `claude --add-dir a b -- "prompt"`). */
 export const MULTI_DIR_ARGS: Partial<Record<Tool, (dirs: string[]) => string[]>> = { claude: dirs => ['--add-dir', ...dirs] };
 
@@ -460,6 +469,23 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.restore': {
         if (!store.get(msg.id)) return refuse('unknown session', msg.id);
         store.unarchive(msg.id);
+        return;
+      }
+      case 'session.resume': {
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        if (s.state !== 'exited') return refuse('the session is still running', msg.id);
+        const key = resumeKey(s); if (!key) return refuse('no conversation to resume', msg.id);
+        // Marked live before the first await: a second resume arriving while this one spawns is then refused above.
+        const { archivedAt: _a, exitedAt: _e, exitCode: _c, ...rest } = s;
+        store.upsert({ ...rest, state: 'starting', source: 'launcher', agentSessionId: key });
+        try {
+          const cwd = await resolveFolder(s.cwd, opts.home);
+          const env = await agentEnv();
+          const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, args: RESUME_ARGS[s.tool](key), cwd, tmux, now, env, taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
+          const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project, transcriptPath } = s;
+          store.upsert({ ...spawned, agentSessionId: key, ...(transcriptPath ? { transcriptPath } : {}), ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
+          log(`resumed ${spawned.name} (${spawned.tool}) in ${spawned.cwd} as ${spawned.id}`);
+        } catch (e) { store.upsert(s); return refuse((e as Error).message, msg.id); }
         return;
       }
       case 'session.delete': {

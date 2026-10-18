@@ -941,6 +941,66 @@ describe('server', () => {
     });
   });
 
+  describe('resume', () => {
+    const cwd = () => tmpdir();
+    const ended = (id: string, extra: Partial<Session> = {}) => mk(id, { cwd: cwd(), project: 'p', state: 'exited', exitCode: 0, exitedAt: T0, archivedAt: T0, tmuxSession: null, topic: 'Fix the bug', topicSource: 'pane', ...extra });
+    const resume = async (id: string) => { const c = await connect({ port: srv.port }); await c.next('snapshot'); c.send({ type: 'session.resume', id }); return c; };
+    it('resumes an archived Claude session under the same id and name', async () => {
+      store.upsert(ended('ab12', { agentSessionId: 'u-1', source: 'hook_only' }));
+      const c = await resume('ab12');
+      await until(() => !!store.get('ab12')?.tmuxSession);
+      const m = { session: store.get('ab12')! };
+      expect(tmux.created).toHaveLength(1);
+      expect(tmux.created[0]!.name).toBe('ledge-ab12');
+      expect(tmux.created[0]!.command.slice(-2)).toEqual(['--resume', 'u-1']);
+      expect(tmux.created[0]!.command).not.toContain('--session-id');
+      expect(m.session).toMatchObject({ id: 'ab12', name: 'Otto', state: 'starting', source: 'launcher', topic: 'Fix the bug' });
+      expect(m.session.archivedAt).toBeUndefined(); expect(m.session.exitedAt).toBeUndefined(); expect(m.session.exitCode).toBeUndefined();
+      c.close();
+    });
+    it('resumes Codex with resume <id> and Cursor with --resume <id>', async () => {
+      store.upsert(ended('c1', { tool: 'codex', agentSessionId: 'cx-1' })); store.upsert(ended('c2', { tool: 'cursor', name: 'Mia', agentSessionId: 'cu-1' }));
+      const c = await resume('c1'); await until(() => tmux.created.length === 1); c.send({ type: 'session.resume', id: 'c2' }); await until(() => tmux.created.length === 2);
+      expect(tmux.created[0]!.command.slice(-2)).toEqual(['resume', 'cx-1']);
+      expect(tmux.created[1]!.command.slice(-2)).toEqual(['--resume', 'cu-1']);
+      c.close();
+    });
+    it('falls back to the transcript name for Claude', async () => {
+      store.upsert(ended('t1', { transcriptPath: '/h/.claude/projects/x/u-9.jsonl' }));
+      const c = await resume('t1'); await until(() => tmux.created.length === 1);
+      expect(tmux.created[0]!.command.slice(-2)).toEqual(['--resume', 'u-9']);
+      c.close();
+    });
+    it('refuses a live session and one without a conversation id', async () => {
+      store.upsert(mk('live', { cwd: cwd(), agentSessionId: 'u-1' })); store.upsert(ended('none')); store.upsert(ended('cx', { tool: 'codex', transcriptPath: '/h/u-9.jsonl' }));
+      const c = await resume('live');
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'live', message: 'the session is still running', request: 'session.resume' });
+      c.send({ type: 'session.resume', id: 'none' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'none', message: 'no conversation to resume', request: 'session.resume' });
+      c.send({ type: 'session.resume', id: 'cx' });
+      expect(await c.next('error')).toMatchObject({ id: 'cx', message: 'no conversation to resume' });
+      c.send({ type: 'session.resume', id: 'nope' });
+      expect(await c.next('error')).toMatchObject({ id: 'nope', message: 'unknown session' });
+      expect(tmux.created).toEqual([]);
+      c.close();
+    });
+    it('a second resume right after the first is refused', async () => {
+      store.upsert(ended('ab12', { agentSessionId: 'u-1' }));
+      const c = await resume('ab12'); c.send({ type: 'session.resume', id: 'ab12' });
+      expect(await c.next('error')).toMatchObject({ id: 'ab12', message: 'the session is still running' });
+      expect(tmux.created).toHaveLength(1);
+      c.close();
+    });
+    it('puts the session back and refuses with the reason when the launch fails', async () => {
+      const before = ended('ab12', { agentSessionId: 'u-1' }); store.upsert(before);
+      tmux.newSession = async () => { throw new Error('tmux is gone'); };
+      const c = await resume('ab12');
+      expect(await c.next('error')).toMatchObject({ id: 'ab12', message: 'tmux is gone', request: 'session.resume' });
+      expect(store.get('ab12')).toEqual(before);
+      c.close();
+    });
+  });
+
   describe('launch from a chat card', () => {
     const home = () => process.env.LEDGE_HOME!;
     /** A chat holding one proposal for `q1`; the marks are recorded and broadcast as a history, like the real one. */

@@ -52,6 +52,8 @@ export interface SpawnOptions {
   /** Wrap the agent so its exit code lands in `exitFile(id)` (the launcher reads it after `tmux attach` returns). */
   recordExit?: boolean;
   name?: string; cwd: string; tmux: Tmux;
+  /** Reuses this Ledge id (a resumed session keeps its own) instead of drawing a free one. */
+  id?: string;
   /** Names and ids already in use, so the new session gets free ones. */
   taken: { names: Iterable<string>; ids: Iterable<string> };
   now?: () => string; env?: NodeJS.ProcessEnv;
@@ -65,7 +67,7 @@ export interface SpawnOptions {
 export async function spawnSession(opts: SpawnOptions): Promise<Session> {
   const now = opts.now ?? (() => new Date().toISOString());
   const takenIds = new Set(opts.taken.ids);
-  let id: string; do id = randomBytes(2).toString('hex'); while (takenIds.has(id));
+  let id = opts.id; if (id === undefined) do id = randomBytes(2).toString('hex'); while (takenIds.has(id));
   const name = pickName(opts.taken.names, opts.name);
   const project = basename(opts.cwd) || opts.cwd;
   const tmuxSession = `ledge-${id}`;
