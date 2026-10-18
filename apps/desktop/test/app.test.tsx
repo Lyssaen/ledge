@@ -22,7 +22,11 @@ describe('the shell on the real fleet', () => {
     render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
     expect(within(screen.getByRole('banner')).getByText('Atelier')).toBeVisible();
     const side = within(screen.getByRole('complementary', { name: 'Sidebar' }));
-    await waitFor(() => expect(side.getByRole('button', { name: /^Local/ }).querySelector('small')).toHaveTextContent('2'));
+    await waitFor(() => {
+      const local = side.getByRole('button', { name: /^Local/ });
+      expect(local.querySelector('small')).toHaveTextContent('2');
+      expect(local).toHaveAttribute('title', 'Local · 2 agents');
+    });
     expect(side.getByRole('button', { name: /^Local/ }).closest('.st-foot')).not.toBeNull();
   });
 

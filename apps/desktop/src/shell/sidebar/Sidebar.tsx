@@ -127,6 +127,7 @@ export function Sidebar(p: {
             }}
             onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} />
+          {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>
         <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives}
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}

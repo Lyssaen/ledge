@@ -209,6 +209,7 @@ describe('putting an agent away', () => {
     const row = side.getByRole('button', { name: /^Payment Service/ }).closest('[role="treeitem"]')!;
     const dt = transfer();
     fireEvent.dragStart(document.querySelector('.unassigned-card')!, { dataTransfer: dt });
+    expect(screen.getByText('Drop on a project to file Kit.')).toBeVisible();
     fireEvent.dragOver(row, { dataTransfer: dt });
     expect(row).toHaveClass('drop-over');
     const none = side.getByRole('button', { name: /^No project/ }).closest('[role="treeitem"]')!;
@@ -216,6 +217,7 @@ describe('putting an agent away', () => {
     expect(none).not.toHaveClass('drop-over');
     fireEvent.drop(row, { dataTransfer: dt });
     expect(row).not.toHaveClass('drop-over');
+    expect(screen.queryByText('Drop on a project to file Kit.')).toBeNull();
     await waitFor(() => expect(within(screen.getByRole('region', { name: /^Payment Service.* table$/ })).getByRole('button', { name: /^Kit,/ })).toBeVisible());
   });
 
@@ -239,7 +241,7 @@ describe('putting an agent away', () => {
     d.remove('kit');
     await waitFor(() => expect(document.querySelector('.application')).not.toHaveClass('is-dragging'));
     expect(screen.queryByText('Drop here')).toBeNull();
-    expect(screen.queryByText('Drop on a project to move Kit there.')).toBeNull();
+    expect(screen.queryByText('Drop on a project to file Kit.')).toBeNull();
     const table = screen.getByRole('region', { name: 'Ledge table' });
     fireEvent.dragOver(table, { dataTransfer: dt });
     expect(table).not.toHaveClass('drop-over');
