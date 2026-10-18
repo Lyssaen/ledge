@@ -15,33 +15,63 @@ const RING_MS = 1600;
 
 type Sent = NonNullable<Session['lastMessage']>;
 
-/** How far the message is from the clock. A date ahead of it (clock skew) counts by its distance too, never as a negative age:
- *  a bubble shows at most while the clock is within 5 s of its date, a tag within 10 min. */
-const ageOf = (m: Sent, now: number) => Math.abs(now - Date.parse(m.at));
 /** The receiver's fleet id: `peer` is a raw daemon id, on the sender's machine. */
 export const peerIdOf = (s: Session): string | undefined =>
   s.lastMessage?.peer === undefined ? undefined : qualify(splitId(s.id)?.machine ?? 'local', s.lastMessage.peer);
 
-/** The atelier's clock for the messages: re-read when the sessions change, and at the next moment a bubble or a tag ends
- *  (a timeout to that moment, none while nothing is due). */
-export function useMessageClock(sessions: readonly Session[]): number {
+/** The atelier's clock for the messages. A message's time is the earlier of its date and the moment the atelier first saw
+ *  it: a date ahead of the clock (another machine's skew) counts from its arrival, so it shows at once and for 5 s; a message
+ *  first seen already old keeps its own date. */
+export interface MessageClock {
+  now: number;
+  /** The session's last message's time (ms), or null without one. */
+  timeOf(s: Session): number | null;
+}
+const seenKey = (s: Session) => `${s.id}\n${s.lastMessage!.id}`;
+/** The age of the session's last message on `clock` (never negative), or null without one. */
+const ageOf = (s: Session, clock: MessageClock): number | null => {
+  const at = clock.timeOf(s);
+  return at === null ? null : Math.max(0, clock.now - at);
+};
+const isRecent = (s: Session, clock: MessageClock, ms: number) => { const age = ageOf(s, clock); return age !== null && age < ms; };
+
+/** Re-read when the sessions change, and at the next moment a bubble or a tag ends (a timeout to that moment, none while
+ *  nothing is due). */
+export function useMessageClock(sessions: readonly Session[]): MessageClock {
   const [now, setNow] = useState(() => Date.now());
   const [tick, setTick] = useState(0);
+  // When each last message (by session and id) was first seen; dropped once no session carries it.
+  const seen = useRef(new Map<string, number>());
+  const timeOf = useMemo(() => {
+    const n = Date.now(), live = new Set<string>();
+    for (const s of sessions) {
+      if (!s.lastMessage) continue;
+      const k = seenKey(s);
+      live.add(k);
+      if (!seen.current.has(k)) seen.current.set(k, n);
+    }
+    for (const k of [...seen.current.keys()]) if (!live.has(k)) seen.current.delete(k);
+    return (s: Session): number | null => {
+      if (!s.lastMessage) return null;
+      const at = Date.parse(s.lastMessage.at);
+      return Math.min(at, seen.current.get(seenKey(s)) ?? at);
+    };
+  }, [sessions]);
   useEffect(() => {
     const n = Date.now();
     let next = Infinity;
     for (const s of sessions) {
-      if (!s.lastMessage) continue;
-      const at = Date.parse(s.lastMessage.at);
-      for (const edge of [at - TAG_MS, at - BUBBLE_MS, at + BUBBLE_MS, at + TAG_MS]) if (edge > n && edge < next) next = edge;
+      const at = timeOf(s);
+      if (at === null) continue;
+      for (const end of [at + BUBBLE_MS, at + TAG_MS]) if (end > n && end < next) next = end;
     }
     // Always: the render must judge the ages with the clock the deadline was chosen with (an idle atelier's clock is stale).
     setNow(n);
     if (next === Infinity) return;
     const t = setTimeout(() => setTick(k => k + 1), next - n);
     return () => clearTimeout(t);
-  }, [sessions, tick]);
-  return now;
+  }, [sessions, timeOf, tick]);
+  return useMemo(() => ({ now, timeOf }), [now, timeOf]);
 }
 
 /** A seat of the atelier, by its agent's id (compared as data, never built into a selector). */
@@ -121,14 +151,14 @@ function Bubble({ sender, message, peerId, receiver, still, layer, dispatch }: {
 }
 
 export interface MessageLayerProps {
-  sessions: readonly Session[]; now: number; paused: boolean; reduced: boolean; dispatch: (a: NavAction) => void;
+  sessions: readonly Session[]; clock: MessageClock; paused: boolean; reduced: boolean; dispatch: (a: NavAction) => void;
 }
 
 /** A layer over the atelier, the shell's first child: one bubble per session whose last message is less than 5 s old. */
-export function MessageLayer({ sessions, now, paused, reduced, dispatch }: MessageLayerProps): JSX.Element {
+export function MessageLayer({ sessions, clock, paused, reduced, dispatch }: MessageLayerProps): JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
   const byId = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions]);
-  const shown = sessions.filter(s => s.lastMessage && ageOf(s.lastMessage, now) < BUBBLE_MS);
+  const shown = sessions.filter(s => isRecent(s, clock, BUBBLE_MS));
   return (
     <div ref={layer} className="exchange-layer" aria-live="polite">
       {shown.map(s => {
@@ -143,18 +173,18 @@ export function MessageLayer({ sessions, now, paused, reduced, dispatch }: Messa
 
 /** The seat's tag (top-left: the « … » holds the top-right corner): the agents it wrote to or heard from less than 10 min
  *  ago, the latest first, « ✉ Name » or « ✉ Name +N ». */
-export function PeerTag({ session, sessions, now }: { session: Session; sessions: readonly Session[]; now: number }): JSX.Element | null {
+export function PeerTag({ session, sessions, clock }: { session: Session; sessions: readonly Session[]; clock: MessageClock }): JSX.Element | null {
   const { t } = useI18n();
   const recent: { key: string; name: string; at: number }[] = [];
   const own = session.lastMessage;
-  if (own && ageOf(own, now) < TAG_MS) {
+  if (own && isRecent(session, clock, TAG_MS)) {
     const peerId = peerIdOf(session);
     const peer = peerId !== undefined ? sessions.find(s => s.id === peerId) : undefined;
-    recent.push({ key: peer?.id ?? `to:${own.to}`, name: peer?.name ?? own.to, at: Date.parse(own.at) });
+    recent.push({ key: peer?.id ?? `to:${own.to}`, name: peer?.name ?? own.to, at: clock.timeOf(session)! });
   }
   for (const s of sessions) {
-    if (s.id === session.id || !s.lastMessage || ageOf(s.lastMessage, now) >= TAG_MS || peerIdOf(s) !== session.id) continue;
-    recent.push({ key: s.id, name: s.name, at: Date.parse(s.lastMessage.at) });
+    if (s.id === session.id || !isRecent(s, clock, TAG_MS) || peerIdOf(s) !== session.id) continue;
+    recent.push({ key: s.id, name: s.name, at: clock.timeOf(s)! });
   }
   if (recent.length === 0) return null;
   recent.sort((a, b) => b.at - a.at);

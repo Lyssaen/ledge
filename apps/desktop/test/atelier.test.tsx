@@ -240,13 +240,22 @@ describe('the atelier', () => {
       expect(bubble()).toBeNull();
       expect(document.querySelector('.peer-tag')).toBeNull();
     });
-    it('a date ahead of the clock counts by its distance: 20 min ahead shows nothing', async () => {
-      const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
-      d.upsert(ottoWrote(-20 * 60_000));
-      await act(async () => { await new Promise(r => setTimeout(r, 200)); });
-      expect(bubble()).toBeNull();
-      expect(document.querySelector('.peer-tag')).toBeNull();
-    });
+    for (const [ahead, label] of [[90_000, '90 s'], [20 * 60_000, '20 min']] as const) {
+      it(`a message dated ${label} ahead of the clock shows on arrival, its bubble for 5 s, its tag for 10 min from then`, async () => {
+        const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
+        fake();
+        d.upsert(ottoWrote(-ahead));
+        await waitFor(() => expect(bubble()).not.toBeNull());
+        expect(within(seat('Otto')).getByTitle('Recent conversation with Rio')).toBeVisible();
+        act(() => { vi.advanceTimersByTime(5000); });
+        expect(bubble()).toBeNull();
+        act(() => { vi.advanceTimersByTime(9 * 60_000); });
+        expect(within(seat('Otto')).queryByTitle('Recent conversation with Rio')).not.toBeNull();
+        act(() => { vi.advanceTimersByTime(55_000); });
+        expect(within(seat('Otto')).queryByTitle(/^Recent conversation/)).toBeNull();
+        expect(bubble()).toBeNull();
+      });
+    }
     it('reduced motion: the bubble shows without the travelling dot', async () => {
       const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });         // the suite forces reduced motion
       expect(document.querySelector('.office-shell')).toHaveClass('office-reduced');
