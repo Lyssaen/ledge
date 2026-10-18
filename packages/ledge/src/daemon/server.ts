@@ -138,7 +138,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); };
   const history = opts.history;
   const unsubscribeHistory = history ? [
-    history.onItem((id, item) => broadcast({ type: 'session.thread.item', id, item })),
+    history.onItem((id, item) => {
+      broadcast({ type: 'session.thread.item', id, item });
+      if (item.kind === 'sent' && item.status === 'sending') {
+        store.patch(id, { lastMessage: { id: item.id, to: item.to, ...(item.peer ? { peer: item.peer } : {}), summary: item.summary ?? item.text.split('\n')[0]!.slice(0, 120), at: item.at } });
+      }
+    }),
     store.onEvent((id, ev) => history.record(id, ev)),
     store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })
   ] : [];

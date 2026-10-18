@@ -620,6 +620,10 @@ describe('topics', () => {
     s = reduce(s, { name: 'UserPromptSubmit', at, source: 'hook', text: 'Autre chose' });
     expect(s.topic).toBe('Ajoute un README');
   });
+  it('a message from another agent is not the session\'s topic', () => {
+    const s = reduce(mk('a'), { name: 'UserPromptSubmit', at, source: 'hook', text: '<cross-session-message from="x" from-name="a-2d">\nHello' });
+    expect(s.topic).toBeUndefined(); expect(s.state).toBe('working');
+  });
   it('a pane title replaces a prompt topic, not a user one', () => {
     let s = reduce(mk('a'), { name: 'UserPromptSubmit', at, source: 'hook', text: 'premier prompt' });
     s = reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'add-readme-file' });

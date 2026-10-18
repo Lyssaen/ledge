@@ -8,6 +8,7 @@ import { ensureLedgeDir, paths } from '../paths.js';
 import { log } from '../log.js';
 import { daemonInfo } from '../update/self.js';
 import { createDaemonUpdater, realUpdaterDeps } from '../update/run-update.js';
+import { peerFor, readPeers } from './peers.js';
 
 export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string } = {}): Promise<{ stop(): Promise<void>; port: number }> {
   await ensureLedgeDir();
@@ -22,7 +23,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   }
   const daemon = await daemonInfo();
   const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save() }));
-  const history = new History();
+  const history = new History({ peerOf: t => peerFor(t, readPeers(), store.all())?.id });
   try { await history.load(); } catch (e) { log(`history not loaded: ${(e as Error).message}`); }
   // Threads of sessions the store no longer holds (deleted, or past the archive cap) go now; only when the journal was
   // read whole: a session it lost is not a deleted one, and its thread must stay.

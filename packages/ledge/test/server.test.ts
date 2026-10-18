@@ -418,6 +418,20 @@ describe('server', () => {
     expect(tmux.sent).toEqual([['text', 'ledge-a', '2']]);
     c.close();
   });
+  it('a sent message becomes the session\'s last message, once, when it lands', async () => {
+    await srv.close();
+    const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+    store.upsert(mk('a'));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    store.apply('a', { name: 'PreToolUse', at: T0, source: 'hook', tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'a-bf', summary: 'OK for Nova', message: 'Long text' } });
+    const lastOf = async () => { for (;;) { const m = await c.next('session.updated', 3000); if (m.session.lastMessage) return m.session.lastMessage; } };
+    expect(await lastOf()).toMatchObject({ id: 'toolu_1', to: 'a-bf', summary: 'OK for Nova', at: T0 });
+    store.apply('a', { name: 'PostToolUse', at: '2026-10-09T18:00:05.000Z', source: 'hook', tool: 'SendMessage', toolUseId: 'toolu_1' });
+    expect(store.get('a')!.lastMessage!.at).toBe(T0);
+    store.apply('a', { name: 'PreToolUse', at: '2026-10-09T18:00:09.000Z', source: 'hook', tool: 'SendMessage', toolUseId: 'toolu_2', toolInput: { to: 'a-bf', message: 'Première ligne\nSuite' } });
+    expect(store.get('a')!.lastMessage).toMatchObject({ id: 'toolu_2', summary: 'Première ligne' });
+    c.close();
+  });
   it('a decision from Ledge settles only its own permission, never an older one answered in the terminal', async () => {
     const pane = fx('claude2-permission-bash');
     tmux = fakeTmux({ 'ledge-a': [pane, pane, 'Running…'] }); await srv.close();

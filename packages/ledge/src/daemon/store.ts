@@ -83,7 +83,7 @@ export class Store {
   }
 
   /** Facts no event carries (the session's repository): the changed fields only, nothing emitted when they are equal. */
-  patch(id: string, fields: Partial<Pick<Session, 'repo' | 'repoPath' | 'branch' | 'worktree' | 'repoId'>>): void {
+  patch(id: string, fields: Partial<Pick<Session, 'repo' | 'repoPath' | 'branch' | 'worktree' | 'repoId' | 'lastMessage'>>): void {
     const cur = this.sessions.get(id); if (!cur) return;
     if ((Object.keys(fields) as Array<keyof typeof fields>).every(k => cur[k] === fields[k])) return;
     this.upsert({ ...cur, ...fields });
@@ -116,9 +116,11 @@ export class Store {
   }
 
   apply(id: string, event: SessionEvent): Session | undefined {
+    if (!this.sessions.has(id)) return undefined;
+    for (const l of this.eventListeners) { try { l(id, event); } catch (e) { log(`event listener failed: ${(e as Error).message}`); } }
+    // A listener may have patched the session (a sent message's last message): reduce what it left, not what it found.
     const cur = this.sessions.get(id);
     if (!cur) return undefined;
-    for (const l of this.eventListeners) { try { l(id, event); } catch (e) { log(`event listener failed: ${(e as Error).message}`); } }
     const next = reduce(cur, event);
     if (next === cur) return cur;
     this.sessions.set(id, next);
