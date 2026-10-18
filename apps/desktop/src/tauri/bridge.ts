@@ -9,11 +9,13 @@
  *   set_tray_labels { open, newSession, dnd, quit }   tray entries in the app's language
  *   plugin notification                Windows toasts (spec §10)
  *   event `ledge://tray` { action }    tray menu action
+ *   take_open_target / event `ledge://open`   what the island asked to open (`--open`), taken once
  */
 import { listen } from '@tauri-apps/api/event';
 
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 export const TRAY_EVENT = 'ledge://tray';
+export const OPEN_EVENT = 'ledge://open';
 export type TrayAction = 'open' | 'new' | 'dnd';
 
 let core: Promise<typeof import('@tauri-apps/api/core')> | null = null;
@@ -87,4 +89,15 @@ export async function showToast(title: string, body: string): Promise<boolean> {
     n.sendNotification({ title, body });
     return true;
   } catch { return false; }
+}
+
+/** What the island asks to open (« Open in Ledge »), as its raw JSON: the one waiting at start, then each one the shell
+ *  receives. Never fires outside Tauri. */
+export function onOpenTarget(fn: (raw: string) => void): () => void {
+  if (!isTauri()) return () => {};
+  let off = () => {}; let disposed = false;
+  const take = () => { void invoke<string | null>('take_open_target').then(raw => { if (raw && !disposed) fn(raw); }, () => {}); };
+  void listen(OPEN_EVENT, take).then(un => { if (disposed) un(); else off = un; });
+  take();
+  return () => { disposed = true; off(); };
 }

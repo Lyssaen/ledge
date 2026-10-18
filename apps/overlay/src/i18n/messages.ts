@@ -159,7 +159,8 @@ const fr = {
     launch: 'Ouverture d’une nouvelle session dans Ledge Desktop',
     update: 'Ouverture des mises à jour dans Ledge Desktop',
     machines: 'Ouverture des machines dans Ledge Desktop',
-    noted: 'Noté pour Ledge Desktop. L’intégration l’ouvrira.'
+    missing: 'Ledge Desktop n’est pas installé : installez-le pour ouvrir ceci.',
+    failed: 'Ledge Desktop n’a pas pu démarrer.'
   },
   menu: {
     label: 'Menu de Ledge', gear: 'Menu de Ledge',
@@ -420,7 +421,8 @@ const en: Messages = {
     launch: 'Opening a new session in Ledge Desktop',
     update: 'Opening updates in Ledge Desktop',
     machines: 'Opening machines in Ledge Desktop',
-    noted: 'Noted for Ledge Desktop. Integration will open it.'
+    missing: 'Ledge Desktop is not installed: install it to open this.',
+    failed: 'Ledge Desktop could not start.'
   },
   menu: {
     label: 'Ledge menu', gear: 'Ledge menu',

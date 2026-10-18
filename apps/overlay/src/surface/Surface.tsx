@@ -289,13 +289,14 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   }, [machines, dnd, sessions, dispatch]);
   const [handoff, setHandoff] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  useEffect(() => subscribeOpenInLedge(target => {
+  useEffect(() => subscribeOpenInLedge((target, outcome) => {
+    if (outcome !== 'opening') { setHandoff(t.handoff[outcome]); return; }
     const name = (id: string) => sessions.find(s => s.id === id)?.name ?? id;
     const line = target.kind === 'session' ? t.handoff.session(name(target.id))
       : target.kind === 'terminal' ? t.handoff.terminal(name(target.id))
       : target.kind === 'document' ? t.handoff.document(target.path)
       : t.handoff[target.kind];
-    setHandoff(`${line}. ${t.handoff.noted}`);
+    setHandoff(`${line}…`);
   }), [sessions, t]);
 
   // A hidden document holds the bubble clock.

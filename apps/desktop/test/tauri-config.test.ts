@@ -35,10 +35,11 @@ describe('Desktop Tauri config', () => {
     // setting the property replaces wry's defaults: they must be repeated
     expect(args).toContain('--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection');
   });
-  it('runs a single instance: a second launch shows the first one, the plugin registered first', () => {
+  it('runs a single instance: a second launch shows the first one and hands it the island\'s --open target, the plugin registered first', () => {
     const builder = main.slice(main.indexOf('tauri::Builder::default()'));
     expect(builder.indexOf('.plugin(')).toBe(builder.indexOf('.plugin(tauri_plugin_single_instance::init('));
-    expect(builder).toMatch(/tauri_plugin_single_instance::init\(\|app, _args, _cwd\| show_main\(app\)\)/);
+    expect(builder).toMatch(/tauri_plugin_single_instance::init\(\|app, args, _cwd\| \{\s*show_main\(app\);\s*if let Some\(target\) = ledge_native::desktop::open_target\(args\) \{ deliver_open\(app, target\); \}/);
+    expect(builder).toMatch(/take_open_target\]/);
     expect(readFileSync(resolve(root, 'src-tauri/Cargo.toml'), 'utf8')).toMatch(/^tauri-plugin-single-instance = "2"$/m);
   });
   it('shares the island CSP and the updater key, with its own manifest', () => {

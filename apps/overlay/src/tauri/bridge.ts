@@ -159,6 +159,13 @@ export function openUrl(url: string): void {
   window.open(url, '_blank', 'noopener');
 }
 
+/** Starts Ledge Desktop on `target` (the island's JSON), or hands it to the running one. 'missing': Ledge Desktop is not
+ *  installed; 'browser': outside Tauri, nothing to start. */
+export async function openDesktop(target: string): Promise<'ok' | 'missing' | 'failed' | 'browser'> {
+  if (!inTauri()) return 'browser';
+  return invoke('open_in_ledge', { target }).then(() => 'ok' as const, e => (String(e).includes('not installed') ? 'missing' as const : 'failed' as const));
+}
+
 /** Relabels the tray menu in the overlay's language (the shell starts in French). */
 export async function setTrayLabels(labels: { open: string; newSession: string; dnd: string; quit: string }): Promise<void> {
   if (!inTauri()) return;

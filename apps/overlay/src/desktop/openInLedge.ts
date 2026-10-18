@@ -1,4 +1,6 @@
-/** What the island asks Ledge Desktop to open. Replacing `openInLedge` is the whole integration. */
+import { openDesktop } from '../tauri/bridge';
+
+/** What the island asks Ledge Desktop to open. */
 export type LedgeTarget =
   | { kind: 'session'; id: string }
   | { kind: 'terminal'; id: string }
@@ -8,12 +10,17 @@ export type LedgeTarget =
   | { kind: 'update' }
   | { kind: 'machines' };
 
-type Listener = (target: LedgeTarget) => void;
+/** 'opening' at once; then 'missing' when Ledge Desktop is not installed, 'failed' when it could not be started. */
+export type OpenOutcome = 'opening' | 'missing' | 'failed';
+type Listener = (target: LedgeTarget, outcome: OpenOutcome) => void;
 const listeners = new Set<Listener>();
+const tell = (target: LedgeTarget, outcome: OpenOutcome) => { for (const listener of listeners) listener(target, outcome); };
 
-/** Records the opening and tells the subscribers. It does not start Desktop, and it does not touch the daemon. */
+/** Starts Ledge Desktop on the target (`ledge-desktop.exe --open <json>`; a running one gets it through its single
+ *  instance) and tells the subscribers how it went. */
 export function openInLedge(target: LedgeTarget): void {
-  for (const listener of listeners) listener(target);
+  tell(target, 'opening');
+  void openDesktop(JSON.stringify(target)).then(r => { if (r === 'missing' || r === 'failed') tell(target, r); });
 }
 
 /** Subscribe to openings. The returned function removes the subscription. */

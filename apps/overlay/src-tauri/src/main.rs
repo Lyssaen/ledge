@@ -371,6 +371,10 @@ fn open_terminal(title: String, command: Vec<String>) -> Result<bool, String> { 
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> { ledge_native::browser::open_url(&url) }
 
+/// « Open in Ledge »: starts Ledge Desktop on the island's target, or hands it to the running one.
+#[tauri::command]
+fn open_in_ledge(target: String) -> Result<(), String> { ledge_native::desktop::open(&target) }
+
 /// Launch at login is only offered by an installed (release) build: a `tauri dev` one would register a debug binary
 /// under `target\` that a `cargo clean` removes. `None` there, so the Settings view hides the switch.
 #[tauri::command]
@@ -527,7 +531,7 @@ fn main() {
         .manage(OutsideWatch::default())
         .manage(PrevForeground::default())
         .manage(Screen::default())
-        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zone, set_outside_watch, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, list_monitors, set_monitor, set_tray_labels, get_autostart, set_autostart])
+        .invoke_handler(tauri::generate_handler![set_frame, set_hot_zone, set_outside_watch, focus_overlay, release_focus, focus_terminal, foreground_is_terminal, open_terminal, open_url, open_in_ledge, list_monitors, set_monitor, set_tray_labels, get_autostart, set_autostart])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_always_on_top(true);

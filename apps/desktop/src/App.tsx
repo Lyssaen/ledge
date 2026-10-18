@@ -11,7 +11,8 @@ import { getDnd, setDnd, useDnd } from './notify/prefs';
 import { MarkdownLinks } from '@ledge/ui/documents/links';
 // The reader's styles stay in the first bundle, before app.css (as when the reader itself was there): session.css overrides them.
 import '@ledge/ui/documents/markdown.css';
-import { onTrayAction, openUrl, setTrayLabels } from './tauri/bridge';
+import { onOpenTarget, onTrayAction, openUrl, setTrayLabels } from './tauri/bridge';
+import { parseTarget, targetAction } from './open/target';
 import { useAppearance } from './shell/theme';
 import { initialNav, navReducer, reconcile, type NavAction, type NavState } from './nav/state';
 import { loadOverview, saveOverview } from './nav/overview';
@@ -68,6 +69,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     if (action === 'dnd') setDnd(!getDnd());
     else if (action === 'new') dispatch({ type: 'modal', modal: { kind: 'launch' } });
   }), []);
+  // « Open in Ledge » from the island: the shell has already brought the window forward; this shows what was asked.
+  useEffect(() => onOpenTarget(raw => { const target = parseTarget(raw); if (target) dispatch(targetAction(target)); }), []);
   // The tray speaks the app's language and names the way back from do not disturb.
   const [dnd] = useDnd();
   useEffect(() => {

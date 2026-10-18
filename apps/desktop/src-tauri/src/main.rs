@@ -17,6 +17,21 @@ const MINIMIZED: &str = "--minimized";
 #[derive(Clone, Serialize)]
 struct TrayPayload { action: String }
 
+/// What the island asked to open (`--open <target>`), kept until the page takes it: a first launch delivers it
+/// before the page listens.
+#[derive(Default)]
+struct PendingOpen(std::sync::Mutex<Option<String>>);
+
+/// Keeps the island's target and tells the page (`ledge://open`), which then takes it.
+fn deliver_open(app: &AppHandle, target: String) {
+    if let Some(p) = app.try_state::<PendingOpen>() { *p.0.lock().unwrap() = Some(target); }
+    let _ = app.emit("ledge://open", ());
+}
+
+/// The island's target waiting for the page, once.
+#[tauri::command]
+fn take_open_target(pending: tauri::State<PendingOpen>) -> Option<String> { pending.0.lock().unwrap().take() }
+
 /// What the tray tooltip says; a dev build says so.
 pub fn tray_title(version: &str, debug: bool) -> String {
     if debug { format!("Ledge Desktop {version} (dev)") } else { format!("Ledge Desktop {version}") }
@@ -110,20 +125,26 @@ fn default_autostart(app: &tauri::App) {
 fn main() {
     tauri::Builder::default()
         // First, so a second launch exits before anything else starts; it brings this one forward instead.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
+        // A second launch from the island carries its target: this window shows it.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            show_main(app);
+            if let Some(target) = ledge_native::desktop::open_target(args) { deliver_open(app, target); }
+        }))
+        .manage(PendingOpen::default())
         // Visibility is the launch's choice (setup below), never the restored state's.
         .plugin(tauri_plugin_window_state::Builder::new().with_state_flags(StateFlags::all() & !StateFlags::VISIBLE).build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![MINIMIZED])))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![focus_terminal, foreground_is_terminal, open_terminal, open_url, get_autostart, set_autostart, set_tray_labels])
+        .invoke_handler(tauri::generate_handler![focus_terminal, foreground_is_terminal, open_terminal, open_url, get_autostart, set_autostart, set_tray_labels, take_open_target])
         .setup(|app| {
             build_tray(app)?;
             default_autostart(app);
             // The window is created hidden and the window-state plugin has already put it back in place: show it now,
             // without a flash at the default size, unless the login item launched us into the tray.
             if !launched_minimized(std::env::args()) { show_main(app.handle()); }
+            if let Some(target) = ledge_native::desktop::open_target(std::env::args()) { deliver_open(app.handle(), target); }
             Ok(())
         })
         // Close hides to the tray (spec 4.4).
