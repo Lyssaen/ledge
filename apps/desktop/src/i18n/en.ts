@@ -500,7 +500,8 @@ export const en: Messages = {
       nothing: 'Every repository found already belongs to a project. Add one by hand.',
       unscanned: 'No machine could be scanned.', again: 'Run again',
       why: 'Ledge · ', keep: (n, m) => `Keep ${n} (${m})`, addTo: (n) => `Add to ${n}`,
-      gone: 'This proposal no longer exists.'
+      gone: 'This proposal no longer exists.',
+      already: (n) => `Everything is already in ${n}.`
     },
     picker: {
       machines: 'Machine to browse', offline: 'offline',

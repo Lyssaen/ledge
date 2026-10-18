@@ -402,6 +402,28 @@ describe('a project proposed in the chat (lot 11 task 5)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('addTo: a folder the target already files (its remembered-folder rule) is proposed checked under « Add to Ledge »; another project\'s folder stays out', async () => {
+    const env = await openChat();
+    await ask(env, 'Add /w/ledge to Ledge', 'I would add it to **Ledge**.', { projectProposal: { name: 'Ledge', addTo: 'Ledge', repos: [
+      { path: '/w/ledge', why: 'Ledge files this folder already' }, { path: '/w/pay', why: 'Payment has it' }] } });
+    await env.user.click(panel().getByRole('button', { name: 'Review the proposal' }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal for Ledge' }));
+    const ledge = prop.getByRole('checkbox', { name: 'Keep ledge (Local)' });
+    expect(ledge).toBeChecked();
+    expect(ledge.closest('li')!.querySelector('.pe-why')).toHaveTextContent('Ledge · Ledge files this folder already');
+    expect(prop.queryByRole('checkbox', { name: 'Keep pay (Local)' })).toBeNull();
+    expect(prop.getByRole('button', { name: /^Add to Ledge/ })).toBeVisible();
+  });
+
+  it('addTo: every folder already among the target\'s repositories opens nothing and says so', async () => {
+    const env = await openChat();
+    await ask(env, 'Add app and docs to Ledge', 'They are in **Ledge**.', { projectProposal: { name: 'Ledge', addTo: 'ledge', repos: [{ path: '/w/ledge/app', why: 'x' }, { path: '/w/ledge/docs/', why: 'y' }] } });
+    await env.user.click(panel().getByRole('button', { name: 'Review the proposal' }));
+    await waitFor(() => expect(toasts).toContain('Everything is already in Ledge.'));
+    expect(toasts).not.toContain('This proposal no longer exists.');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('a turn erased by chat.reset after the card was drawn: nothing opens, the notice says so', () => {
     const turn: ChatTurn = { qid: 'q-1', question: 'Create', askedAt: '2026-10-17T10:00:00.000Z', steps: [], answer: 'ok', answeredAt: '2026-10-17T10:00:01.000Z', projectProposal: PAPER };
     const notify = vi.fn(); const onProposal = vi.fn();

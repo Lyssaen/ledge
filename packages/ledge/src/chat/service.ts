@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { extractProposal, parseProjectBlock, parseProposalBlock, parseRelayBlock, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { resolveFolder } from '../daemon/folders.js';
@@ -48,6 +49,8 @@ const HISTORY_MAX = 50;
 /** The lines of a terminal Ledge gets to read. */
 const PANE_LINES = 40;
 
+/** A home folder (`/root`, `/home/<user>`, `/Users/<user>`): never a project's repository (the fleet's proposals.ts rule). */
+const HOME = /^\/(?:root|home\/[^/]+|Users\/[^/]+)$/;
 const sameStep = (a: ChatTurn['steps'][number], b: ChatTurn['steps'][number]) => a.kind === b.kind && a.id === b.id && a.path === b.path;
 
 /** One conversation with Ledge per day, run by the chosen harness (spec 2026-10-11 §5). */
@@ -111,7 +114,8 @@ export function createChat(deps: ChatDeps): Chat {
     return { id: s!.id, name: s!.name, tool: s!.tool, text: block.text };
   }
   /** A project block as a card (lot 11, task 5): only the paths that are folders on this machine now stay (resolved, `~` included,
-   *  once each); the others are dropped with a log line, and with none left there is no card. Nothing is created here. */
+   *  once each), never `/` nor a home (it would swallow every repository, as the Settings proposer knows); the others are dropped with
+   *  a log line, and with none left there is no card. Nothing is created here. */
   async function projectFrom(raw: string, qid: string): Promise<ChatProjectProposal | undefined> {
     const block = parseProjectBlock(raw);
     if (!block) { log(`chat ${qid}: project ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
@@ -119,6 +123,7 @@ export function createChat(deps: ChatDeps): Chat {
     for (const r of block.repos) {
       try {
         const path = await resolveFolder(r.path, deps.userHome);
+        if (path === '/' || HOME.test(path) || path === resolve(deps.userHome ?? homedir())) { log(`chat ${qid}: project path dropped: a root or home folder: ${path}`); continue; }
         if (!repos.some(x => x.path === path)) repos.push({ path, why: r.why });
       } catch (e) { log(`chat ${qid}: project path dropped: ${(e as Error).message}`); }
     }

@@ -273,6 +273,19 @@ describe('chat service', () => {
         expect(chat.history()[0]).not.toHaveProperty('projectProposal');
       }
     });
+    it('drops / and a home (the user\'s, ~ included), as the Settings proposer does, and keeps the rest', async () => {
+      const userHome = mkdtempSync(join(tmpdir(), 'home-')); mkdirSync(join(userHome, 'paper'));
+      const block = JSON.stringify({ name: 'Paper', repos: [{ path: '/', why: 'root' }, { path: '~', why: 'home' }, { path: userHome + '/', why: 'home again' }, { path: '~/paper', why: 'kept' }] });
+      const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(block) }) });
+      await chat.ask('q1', 'x', () => {});
+      expect(chat.history()[0]!.projectProposal).toEqual({ name: 'Paper', repos: [{ path: join(userHome, 'paper'), why: 'kept' }] });
+    });
+    it('only / and homes: no proposal', async () => {
+      const userHome = mkdtempSync(join(tmpdir(), 'home-'));
+      const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(JSON.stringify({ name: 'P', repos: [{ path: '/', why: 'x' }, { path: '~', why: 'y' }] })) }) });
+      await chat.ask('q1', 'x', () => {});
+      expect(chat.history()[0]).not.toHaveProperty('projectProposal');
+    });
     it('a blank description or addTo is left out', async () => {
       const dir = mkdtempSync(join(tmpdir(), 'proj-'));
       const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(JSON.stringify({ name: 'Paper', description: '  ', addTo: ' ', repos: [{ path: dir, why: 'x' }] })) }) });

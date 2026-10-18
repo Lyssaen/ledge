@@ -525,7 +525,8 @@ export const fr = {
       nothing: 'Tous les dépôts trouvés appartiennent déjà à un projet. Ajoutez-en un à la main.',
       unscanned: 'Aucune machine n’a pu être parcourue.', again: 'Relancer',
       why: 'Ledge · ', keep: (n: string, m: string) => `Garder ${n} (${m})`, addTo: (n: string) => `Ajouter à ${n}`,
-      gone: 'Cette proposition n’existe plus.'
+      gone: 'Cette proposition n’existe plus.',
+      already: (n: string) => `Tout est déjà dans ${n}.`
     },
     picker: {
       machines: 'Machine à parcourir', offline: 'hors ligne',
