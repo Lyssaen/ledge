@@ -15,7 +15,9 @@ const RING_MS = 1600;
 
 type Sent = NonNullable<Session['lastMessage']>;
 
-const ageOf = (m: Sent, now: number) => now - Date.parse(m.at);
+/** How far the message is from the clock. A date ahead of it (clock skew) counts by its distance too, never as a negative age:
+ *  a bubble shows at most while the clock is within 5 s of its date, a tag within 10 min. */
+const ageOf = (m: Sent, now: number) => Math.abs(now - Date.parse(m.at));
 /** The receiver's fleet id: `peer` is a raw daemon id, on the sender's machine. */
 export const peerIdOf = (s: Session): string | undefined =>
   s.lastMessage?.peer === undefined ? undefined : qualify(splitId(s.id)?.machine ?? 'local', s.lastMessage.peer);
@@ -25,18 +27,16 @@ export const peerIdOf = (s: Session): string | undefined =>
 export function useMessageClock(sessions: readonly Session[]): number {
   const [now, setNow] = useState(() => Date.now());
   const [tick, setTick] = useState(0);
-  // Something was due at the last reading: the sessions' other changes re-render nothing while no message is recent.
-  const due = useRef(false);
   useEffect(() => {
     const n = Date.now();
     let next = Infinity;
     for (const s of sessions) {
       if (!s.lastMessage) continue;
       const at = Date.parse(s.lastMessage.at);
-      for (const end of [at + BUBBLE_MS, at + TAG_MS]) if (end > n && end < next) next = end;
+      for (const edge of [at - TAG_MS, at - BUBBLE_MS, at + BUBBLE_MS, at + TAG_MS]) if (edge > n && edge < next) next = edge;
     }
-    if (next !== Infinity || due.current) setNow(n);
-    due.current = next !== Infinity;
+    // Always: the render must judge the ages with the clock the deadline was chosen with (an idle atelier's clock is stale).
+    setNow(n);
     if (next === Infinity) return;
     const t = setTimeout(() => setTick(k => k + 1), next - n);
     return () => clearTimeout(t);

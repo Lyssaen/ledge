@@ -231,6 +231,22 @@ describe('the atelier', () => {
       expect(within(seat('Otto')).getByTitle('Recent conversation with Bix, Rio')).toHaveTextContent(/^Bix \+1$/);
       expect(declarations('atelier.css', '.peer-tag')).toContain('left:2px');       // top-left: the top-right corner is the menu's
     });
+    it('an idle atelier: a message arriving 11 min old shows no bubble and no tag', async () => {
+      const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
+      fake();
+      act(() => { vi.advanceTimersByTime(12 * 60_000); });                       // nothing changes for 12 min
+      d.upsert(ottoWrote(11 * 60_000));
+      await act(async () => { await new Promise(r => setTimeout(r, 200)); });     // the update lands
+      expect(bubble()).toBeNull();
+      expect(document.querySelector('.peer-tag')).toBeNull();
+    });
+    it('a date ahead of the clock counts by its distance: 20 min ahead shows nothing', async () => {
+      const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
+      d.upsert(ottoWrote(-20 * 60_000));
+      await act(async () => { await new Promise(r => setTimeout(r, 200)); });
+      expect(bubble()).toBeNull();
+      expect(document.querySelector('.peer-tag')).toBeNull();
+    });
     it('reduced motion: the bubble shows without the travelling dot', async () => {
       const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });         // the suite forces reduced motion
       expect(document.querySelector('.office-shell')).toHaveClass('office-reduced');
