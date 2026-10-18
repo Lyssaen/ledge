@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/notch.mjs build && node scripts/copy-notch.mjs",
+    "dev:notch": "node scripts/notch.mjs dev",
+    "dev:all": "pnpm --parallel --filter desktop run \"/^dev(:notch)?$/\"",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",

@@ -5,7 +5,12 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   clearScreen: false,
-  server: { port: 1421, strictPort: true },  // the daemon allows this origin (spec §5.4),
+  server: {
+    port: 1421,
+    strictPort: true,  // the daemon allows this origin (spec §5.4)
+    // The notch's page lives under /notch/ in the build; in dev the overlay's server (built with that base) answers for it.
+    proxy: { '/notch/': { target: 'http://localhost:1420', ws: true } }
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./test/setup.ts'],
