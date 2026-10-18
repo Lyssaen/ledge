@@ -156,7 +156,7 @@ const fr = {
     launch: 'Ouverture d’une nouvelle session dans Ledge Desktop',
     update: 'Ouverture des mises à jour dans Ledge Desktop',
     machines: 'Ouverture des machines dans Ledge Desktop',
-    failed: 'Ledge Desktop n’a pas pu démarrer.'
+    failed: 'Ledge Desktop n’a pas pu s’ouvrir.'
   },
   menu: {
     label: 'Menu de Ledge', gear: 'Menu de Ledge',
@@ -165,7 +165,7 @@ const fr = {
     quit: 'Quitter Ledge'
   },
   settings: {
-    title: 'Votre Ledge', tabs: 'Sections des réglages', tabDisplay: 'Affichage', tabNotifications: 'Notifications', tabSounds: 'Sons', tabAbout: 'À propos', islandSize: 'Taille de l’encoche', islandSizeHint: 'L’encoche et ses compagnons en haut de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
+    title: 'Votre Ledge', tabs: 'Sections des réglages', tabDisplay: 'Affichage', tabNotifications: 'Notifications', tabSounds: 'Sons', islandSize: 'Taille de l’encoche', islandSizeHint: 'L’encoche et ses compagnons en haut de l’écran.', windowSize: 'Taille des fenêtres', windowSizeHint: 'Bulle, liste, session, réglages et aide.', auto: (p: string) => `Auto (${p})`,
     screen: 'Écran', screenHint: (w: number, h: number) => `L’encoche se pose en haut de cet écran (${w}\u00a0×\u00a0${h}).`, screenHintNone: 'L’encoche se pose en haut de l’écran principal.',
     islandPosition: 'Position de l’encoche', islandPositionHint: 'Au centre du bord supérieur, ou décalée au quart de l’écran pour laisser libres les titres et les onglets.', islandPositions: { center: 'Centre', left: 'À gauche', right: 'À droite' },
     discreet: 'Mode discret sous une fenêtre', discreetHint: 'Un simple trait quand une fenêtre maximisée occupe l’écran ; un survol la redéploie.',
@@ -173,11 +173,6 @@ const fr = {
     defaultTool: 'Harnais par défaut', defaultToolHint: 'Les nouvelles sessions et le chat Ledge. À changer si un quota est saturé.',
     dnd: 'Ne pas déranger', dndHint: 'Les demandes restent dans l’encoche.',
     reduced: 'Mouvements réduits', reducedHint: 'Les états restent lisibles sans animation.',
-    versions: 'Versions', versionsHint: 'Les deux moitiés de Ledge doivent avoir la même version.',
-    versionsMismatch: 'Les deux moitiés n’ont pas la même version.', versionApp: 'Application Windows', versionDaemon: 'Daemon WSL', versionLatest: 'Dernière version',
-    installKind: { npm: 'npm', git: 'clone git', unknown: 'inconnu' }, unknownVersion: '—',
-    autoUpdate: 'Rechercher les mises à jour', autoUpdateHint: 'Au démarrage, puis toutes les 6 heures. Ledge ne met jamais à jour sans votre clic.',
-    checked: (ago: string) => `Vérifié il y a ${ago}`, neverChecked: 'Jamais vérifié', checkedHint: 'Sur les releases GitHub de Lyssaen/ledge.', checkNow: 'Vérifier',
     osReduced: 'Votre système demande des mouvements réduits ; Ledge continue de le respecter.',
     finished: 'Quand un bot ou Ledge a terminé', finishedHint: 'Une bulle de 6 s, un son, les deux, ou seulement l’encoche.',
     finishedBoth: 'Bulle et son', finishedBubble: 'Bulle', finishedSound: 'Son', finishedNone: 'Encoche seule',
@@ -393,7 +388,7 @@ const en: Messages = {
     launch: 'Opening a new session in Ledge Desktop',
     update: 'Opening updates in Ledge Desktop',
     machines: 'Opening machines in Ledge Desktop',
-    failed: 'Ledge Desktop could not start.'
+    failed: 'Ledge Desktop could not open.'
   },
   menu: {
     label: 'Ledge menu', gear: 'Ledge menu',
@@ -402,7 +397,7 @@ const en: Messages = {
     quit: 'Quit Ledge'
   },
   settings: {
-    title: 'Your Ledge', tabs: 'Settings sections', tabDisplay: 'Display', tabNotifications: 'Notifications', tabSounds: 'Sounds', tabAbout: 'About', islandSize: 'Notch size', islandSizeHint: 'The notch and its companions at the top of the screen.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
+    title: 'Your Ledge', tabs: 'Settings sections', tabDisplay: 'Display', tabNotifications: 'Notifications', tabSounds: 'Sounds', islandSize: 'Notch size', islandSizeHint: 'The notch and its companions at the top of the screen.', windowSize: 'Window size', windowSizeHint: 'Bubble, list, session, settings and help.', auto: (p: string) => `Auto (${p})`,
     screen: 'Screen', screenHint: (w: number, h: number) => `The notch sits at the top of this screen (${w}\u00a0×\u00a0${h}).`, screenHintNone: 'The notch sits at the top of the primary screen.',
     islandPosition: 'Notch position', islandPositionHint: 'Centred on the top edge, or a quarter of the way in to keep window titles and tabs clear.', islandPositions: { center: 'Centre', left: 'Left', right: 'Right' },
     discreet: 'Discreet under a window', discreetHint: 'A thin strip while a maximised window fills the screen; hovering brings the notch back.',
@@ -410,11 +405,6 @@ const en: Messages = {
     defaultTool: 'Default harness', defaultToolHint: 'New sessions and the Ledge chat. Change it when a quota runs out.',
     dnd: 'Do not disturb', dndHint: 'New asks stay in the notch.',
     reduced: 'Reduced motion', reducedHint: 'States stay readable without animation.',
-    versions: 'Versions', versionsHint: 'Both halves of Ledge must run the same version.',
-    versionsMismatch: 'The two halves are not on the same version.', versionApp: 'Windows app', versionDaemon: 'WSL daemon', versionLatest: 'Latest version',
-    installKind: { npm: 'npm', git: 'clone', unknown: 'unknown' }, unknownVersion: '—',
-    autoUpdate: 'Check for updates', autoUpdateHint: 'At startup, then every 6 hours. Ledge never updates without your click.',
-    checked: (ago: string) => `Checked ${ago} ago`, neverChecked: 'Never checked', checkedHint: 'On the GitHub releases of Lyssaen/ledge.', checkNow: 'Check',
     osReduced: 'Your system asks for reduced motion; Ledge keeps respecting it.',
     finished: 'When a bot or Ledge finishes', finishedHint: 'A 6 s bubble, a sound, both, or the notch only.',
     finishedBoth: 'Bubble and sound', finishedBubble: 'Bubble', finishedSound: 'Sound', finishedNone: 'Notch only',

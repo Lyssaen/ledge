@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 const root = resolve(__dirname, '..');
 const conf = JSON.parse(readFileSync(resolve(root, 'src-tauri/tauri.conf.json'), 'utf8'));
 const caps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/default.json'), 'utf8'));
+const notchCaps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/notch.json'), 'utf8'));
 const version = (pkg: string) => JSON.parse(readFileSync(resolve(root, pkg, 'package.json'), 'utf8')).version;
 const main = readFileSync(resolve(root, 'src-tauri/src/main.rs'), 'utf8');
 /** The commands in `generate_handler![…]`, whatever its line breaks (`notch::set_frame` reads `set_frame`). */
@@ -55,6 +56,15 @@ describe('Desktop Tauri config', () => {
     expect(conf.bundle.windows.nsis.installMode).toBe('currentUser');
     expect(caps.permissions).toContain('updater:default'); expect(caps.permissions).toContain('process:allow-restart');
     expect(main).toContain('tauri_plugin_updater::Builder::new().build()'); expect(main).toContain('tauri_plugin_process::init()');
+  });
+  it('declares the notch window: borderless, transparent, on top, off the taskbar, never focused', () => {
+    const w = conf.app.windows.find((x: { label: string }) => x.label === 'notch');
+    expect(w).toMatchObject({ url: 'notch/index.html', transparent: true, decorations: false, alwaysOnTop: true, skipTaskbar: true, resizable: false, focus: false, shadow: false });
+  });
+  it('gives the notch its own capability: shortcut, exit, monitor and events, and no updater', () => {
+    expect(notchCaps.windows).toEqual(['notch']);
+    for (const p of ['global-shortcut:allow-register', 'global-shortcut:allow-unregister', 'process:allow-exit', 'core:window:allow-primary-monitor', 'core:event:allow-listen']) expect(notchCaps.permissions).toContain(p);
+    expect(notchCaps.permissions).not.toContain('updater:default');
   });
   it('registers the notch\'s commands beside its own', () => {
     for (const c of ['set_frame', 'set_hot_zone', 'set_outside_watch', 'focus_overlay', 'release_focus', 'list_monitors', 'set_monitor', 'open_in_ledge']) expect(commands).toContain(c);

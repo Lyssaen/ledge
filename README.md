@@ -395,7 +395,7 @@ Run the installer. It installs for your user only, under `%LOCALAPPDATA%\Ledge D
 - the notch appears at the top centre of your primary screen, a 38 px pill cut into the edge with the Ledge mascot on its left;
 - Ledge Desktop now starts with Windows, in the background (the notch, not the window). Réglages > Général > `Lancer au démarrage de Windows` turns that off.
 
-If the island says the daemon is unreachable, go back to step 1 and check the service in WSL.
+If the notch says the daemon is unreachable, go back to step 1 and check the service in WSL.
 
 ### 4. Start your first session
 
@@ -405,9 +405,9 @@ In any WSL terminal, start your agent through Ledge:
 ledge claude          # or: ledge codex, ledge cursor
 ```
 
-The Windows Terminal tab takes the bot's name and a new mascot joins the island. You can also start a session from the overlay itself: open the list with `Ctrl+Alt+L` and press `+`, or press `Ctrl+Alt+N`. The [tour](docs/tour.md) shows every screen.
+The Windows Terminal tab takes the bot's name and a new mascot joins the notch. You can also start a session from the notch itself: open the list with `Ctrl+Alt+L` and press `+`, or press `Ctrl+Alt+N`. The [tour](docs/tour.md) shows every screen.
 
-The overlay speaks French by default. Settings > Langue switches it to English.
+The notch speaks French by default and follows Ledge Desktop's language: Réglages › Général switches both to English.
 
 ### Update
 

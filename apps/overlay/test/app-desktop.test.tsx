@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, act } from '@testing-library/react';
+import { render, act, fireEvent, screen } from '@testing-library/react';
 import { App } from '../src/App';
 import { setFallbackLang } from '../src/i18n/lang';
 
@@ -29,6 +29,18 @@ describe('App follows what Desktop decides', () => {
     expect(quiet()).toBe(false);
     desktopSets('desktop.dnd', '1');
     expect(quiet()).toBe(true);
+  });
+
+  it('writes the notch’s own do-not-disturb toggle to Desktop’s key, ‘1’ then ‘0’', () => {
+    render(<App />);
+    expect(localStorage.getItem('desktop.dnd')).toBe('0');
+    act(() => { fireEvent.keyDown(window, { key: 'l', ctrlKey: true, altKey: true }); });
+    expect(document.querySelector('[data-surface]')).toHaveAttribute('data-mode', 'chat');
+    fireEvent.click(screen.getByRole('button', { name: 'Ledge menu' }));
+    fireEvent.click(screen.getByRole('switch', { name: /Do not disturb/ }));
+    expect(localStorage.getItem('desktop.dnd')).toBe('1');
+    fireEvent.click(screen.getByRole('switch', { name: /Do not disturb/ }));
+    expect(localStorage.getItem('desktop.dnd')).toBe('0');
   });
 
   it('speaks Desktop’s language, and follows it; anything else is ignored', () => {
