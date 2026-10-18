@@ -201,8 +201,8 @@ export function proposeProjects(input: Input): Proposal[] {
 
 /** « Laisser Ledge faire » depuis l'éditeur : avec un nom tapé, les dépôts libres dont le nom contient un de ses mots (> 2 lettres) ;
  *  sinon la proposition qui contient les sessions à ranger du brouillon ; sinon la première ; null s'il n'y a rien de libre.
- *  Avec `draft.id` (un projet existant) : d'abord la proposition qui vise déjà ce projet ; il est la cible de ce qui est rendu et
- *  garde son nom. Un nouveau brouillon garde le nom tapé : une proposition « Ajouter à » retenue devient alors un nouveau projet. */
+ *  Avec `draft.id` (un projet existant) : d'abord la proposition qui vise déjà ce projet ; une proposition qui vise un autre projet
+ *  n'est jamais reprise (seules celles d'un nouveau projet, sinon null) ; il est la cible de ce qui est rendu et garde son nom. Un nouveau brouillon garde le nom tapé : une proposition « Ajouter à » retenue devient alors un nouveau projet. */
 export function proposeFor(draft: { id?: string; name: string; file: readonly string[] }, all: readonly Proposal[], input: Input): Proposal | null {
   const s = survey(input);
   const projects = input.projects.projects;
@@ -221,7 +221,9 @@ export function proposeFor(draft: { id?: string; name: string; file: readonly st
     });
     if (repos.length) return finish({ name, ...(target ? { targetId: target.id } : {}), repos, file: [...draft.file] }, projects, firstFree, s, input.sessions);
   }
-  const pick = (draft.file.length ? all.find(p => p.file.some(id => draft.file.includes(id))) : undefined) ?? all[0];
+  // From a project's editor, a proposal aimed at another project is not this one's: only new projects' proposals remain.
+  const pool = target ? all.filter(p => p.targetId === undefined) : all;
+  const pick = (draft.file.length ? pool.find(p => p.file.some(id => draft.file.includes(id))) : undefined) ?? pool[0];
   if (!pick) return null;
   const file = unique([...pick.file, ...draft.file]);
   const targetId = target ? target.id : name ? undefined : pick.targetId;

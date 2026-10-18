@@ -240,10 +240,21 @@ describe('proposeFor', () => {
     expect(proposeFor({ id: 'ledge', name: 'Paper', file: [] }, all, input)).toMatchObject({ targetId: 'ledge', name: 'Ledge' });
   });
 
-  it("from a project's editor without a proposal for it, the others go to that project", () => {
+  it("from a project's editor without a proposal for it, a new project's proposal goes to that project", () => {
+    expect(all[0]!.targetId).toBeUndefined();
     const p = proposeFor({ id: 'commerce', name: 'Payment Service', file: [] }, all, input)!;
     expect(p).toMatchObject({ targetId: 'commerce', name: 'Payment Service', color: 'green', summary: { target: 'Payment Service' } });
     expect(p.repos.map(r => r.path)).toEqual(all[0]!.repos.map(r => r.path));
+  });
+
+  it("from a project's editor, a proposal that targets another project is skipped; none but those: null", () => {
+    const rest = all.slice(1); // the Ledge « add to » first
+    expect(rest[0]!.targetId).toBe('ledge');
+    const fresh = rest.find(x => x.targetId === undefined)!;
+    const p = proposeFor({ id: 'commerce', name: 'Payment Service', file: [] }, rest, input)!;
+    expect(p.targetId).toBe('commerce');
+    expect(p.repos.map(r => r.path)).toEqual(fresh.repos.map(r => r.path));
+    expect(proposeFor({ id: 'commerce', name: 'Payment Service', file: [] }, rest.filter(x => x.targetId !== undefined), input)).toBeNull();
   });
 
   it('a new draft keeps its typed name, even when the proposal picked is an « add to »', () => {
