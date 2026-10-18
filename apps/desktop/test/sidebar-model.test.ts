@@ -1,0 +1,75 @@
+import { describe, expect, it } from 'vitest';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import { projectOf } from '@ledge/fleet';
+import { TWO_PROJECTS } from './helpers';
+import { attentionOf, branchOf, filterArchived, isFinished, treeModel } from '../src/shell/sidebar/model';
+
+const idOf = (s: ReturnType<typeof fakeSession>) => projectOf(s, TWO_PROJECTS);
+
+describe('treeModel', () => {
+  it('folds a single branch into the project and names it repo · branch', () => {
+    const otto = fakeSession('otto', { cwd: '/w/ledge', branch: 'desktop', repo: 'harness-assistant' });
+    const [g] = treeModel([otto], TWO_PROJECTS, idOf);
+    expect(g).toMatchObject({ id: 'ledge', name: 'Ledge', repo: 'harness-assistant', flatten: true });
+    expect(g!.branches).toEqual([expect.objectContaining({ branch: 'desktop', worktree: false, sessions: [otto] })]);
+  });
+
+  it('splits two branches and marks a linked worktree', () => {
+    const a = fakeSession('a', { cwd: '/w/ledge', branch: 'desktop', repo: 'harness-assistant' });
+    const b = fakeSession('b', { cwd: '/w/ledge', branch: 'release-0.6', worktree: true, repo: 'harness-assistant' });
+    const [g] = treeModel([a, b], TWO_PROJECTS, idOf);
+    expect(g!.flatten).toBe(false);
+    expect(g!.branches.map(x => [x.branch, x.worktree, x.sessions.map(s => s.id)])).toEqual([
+      ['desktop', false, [a.id]],
+      ['release-0.6', true, [b.id]]
+    ]);
+  });
+
+  it('treats a missing branch as main and keeps Sans projet flat', () => {
+    const kit = fakeSession('kit', { cwd: '/tmp' });
+    const [none] = treeModel([kit], TWO_PROJECTS, idOf).filter(g => g.id === null);
+    expect(none).toMatchObject({ flatten: true });
+    expect(none!.branches[0]!.branch).toBe('main');
+    expect(none!.branches[0]!.sessions).toEqual([kit]);
+  });
+
+  it('keeps an empty project so the sidebar can still launch into it', () => {
+    const ids = treeModel([], TWO_PROJECTS, idOf).map(g => g.id);
+    expect(ids).toEqual(['ledge', 'pay']);
+  });
+});
+
+describe('attentionOf', () => {
+  it('oldest wait first, a helper-routed request is the helper', () => {
+    const otto = fakeSession('otto', {
+      state: 'waiting_permission', lastActivityAt: '2026-10-18T10:00:00.000Z',
+      pending: { kind: 'permission', text: 'npm test', source: 'hook', helperId: 'h1' },
+      helpers: [{ id: 'h1', kind: 'Explore', task: 'Lire', state: 'waiting_permission' }]
+    });
+    const kit = fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input', lastActivityAt: '2026-10-18T10:12:00.000Z', pending: { kind: 'question', text: 'Quel port ?', source: 'hook' } });
+    const nova = fakeSession('nova', { state: 'working' });
+    const items = attentionOf([nova, kit, otto], new Map([[otto.id, { since: '2026-10-18T09:48:00.000Z' }]]));
+    expect(items.map(i => [i.session.name, i.helper?.kind, i.kind])).toEqual([
+      ['Otto', 'Explore', 'approval'],
+      ['Kit', undefined, 'question']
+    ]);
+    expect(items[0]!.since).toBe('2026-10-18T09:48:00.000Z');
+  });
+});
+
+describe('filterArchived / helpers', () => {
+  it('branchOf and isFinished', () => {
+    expect(branchOf({})).toBe('main');
+    expect(branchOf({ branch: '  desktop ' })).toBe('desktop');
+    expect(isFinished(fakeSession('a', { state: 'exited' }))).toBe(true);
+    expect(isFinished(fakeSession('a', { state: 'idle' }))).toBe(true);
+    expect(isFinished(fakeSession('a', { state: 'exited', offline: true }))).toBe(false);
+    expect(isFinished(fakeSession('a', { state: 'working' }))).toBe(false);
+  });
+  it('filterArchived matches name, task and project', () => {
+    const old = fakeSession('old', { name: 'Nova', topic: 'Migration', archivedAt: '2026-10-18T10:00:00.000Z' });
+    expect(filterArchived([old], 'migr', () => 'Payment').map(s => s.id)).toEqual([old.id]);
+    expect(filterArchived([old], 'zzz', () => 'Payment')).toEqual([]);
+    expect(filterArchived([old], '', () => 'Payment')).toEqual([old]);
+  });
+});
