@@ -170,6 +170,15 @@ export const fr = {
       forget: 'Oublier', forgetLabel: (path: string) => `Oublier ${path}`,
       empty: 'Aucun dossier mémorisé. Ranger un agent en ajoute un.',
       repointed: (path: string, project: string) => `${path} → ${project}`, forgotten: (path: string) => `${path} oublié`,
+      suggest: {
+        title: 'Laisser Ledge organiser',
+        hint: 'Ledge regarde les dossiers des agents sans projet et les dépôts que vous n’avez rangés nulle part, puis propose des projets.',
+        ask: 'Ledge, propose-moi des projets',
+        card: (n: string) => `Proposition ${n}`, complete: (n: string) => `Compléter ${n}`,
+        reviewCreate: 'Vérifier et créer…', reviewAdd: 'Vérifier et ajouter…', ignore: 'Ignorer',
+        empty: 'Tout est déjà rangé : aucun dépôt libre ni agent sans projet à regrouper.',
+        allIgnored: 'Toutes les propositions sont ignorées. « Relancer » les remet.'
+      },
       refused: {
         offline: 'Le daemon local est hors ligne : rien n’a changé.', outdated: 'Le daemon local est trop ancien pour les projets : mettez-le à jour.',
         invalid: 'Le daemon a refusé ce changement. Rien n’a changé.', timeout: 'Le daemon n’a pas confirmé ce changement.'

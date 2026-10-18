@@ -156,6 +156,15 @@ export const en: Messages = {
       forget: 'Forget', forgetLabel: (path) => `Forget ${path}`,
       empty: 'No remembered folder. Filing an agent adds one.',
       repointed: (path, project) => `${path} → ${project}`, forgotten: (path) => `${path} forgotten`,
+      suggest: {
+        title: 'Let Ledge organise',
+        hint: 'Ledge looks at the folders of agents without a project and the repositories you have not filed anywhere, then proposes projects.',
+        ask: 'Ledge, suggest projects',
+        card: (n) => `Proposal ${n}`, complete: (n) => `Complete ${n}`,
+        reviewCreate: 'Review and create…', reviewAdd: 'Review and add…', ignore: 'Ignore',
+        empty: 'Everything is already filed: no free repository or agent without a project to group.',
+        allIgnored: 'Every proposal is ignored. “Run again” brings them back.'
+      },
       refused: {
         offline: 'The local daemon is offline: nothing changed.', outdated: 'The local daemon is too old for projects: update it.',
         invalid: 'The daemon refused this change. Nothing changed.', timeout: 'The daemon did not confirm this change.'

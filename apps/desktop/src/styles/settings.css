@@ -188,3 +188,20 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 }
 @media(max-width:600px){.event-grid thead th:not(:first-child){font-size:10px}.theme-picks{grid-template-columns:1fr 1fr}.accent-swatches{flex-wrap:wrap}}
 
+/* Settings › Projects: Ledge's proposals (lot 11) */
+.ledge-suggest{padding:14px 18px}
+.ledge-suggest-head{display:flex;align-items:center;gap:14px}
+.ledge-suggest-head>div{flex:1;min-width:0}
+.ledge-suggest-head h2{margin:0 0 2px;font-size:13px;font-weight:600}
+.ledge-suggest-head p{margin:0}
+.ledge-suggest-scan{display:flex;align-items:flex-start;gap:8px;margin:12px 0 0;font-size:12px;color:var(--muted-foreground)}
+.ledge-suggest-scan .ledge-spin{display:inline-flex;margin-top:1px}
+.ledge-suggest-step{display:block;font-size:11px}
+.ledge-suggest-list{display:flex;flex-direction:column;margin-top:12px;border-top:1px solid var(--border)}
+.ledge-suggest-list>p{margin:10px 0 0}
+.suggest-card{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.suggest-card .side-swatch{margin-top:5px}
+.suggest-card>div:nth-child(2){flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.suggest-card strong{font-size:13px;font-weight:600}
+.suggest-actions{display:flex;flex-direction:column;align-items:stretch;gap:4px;flex-shrink:0}
+@media(max-width:700px){.suggest-card{flex-wrap:wrap}.suggest-actions{flex-direction:row}}

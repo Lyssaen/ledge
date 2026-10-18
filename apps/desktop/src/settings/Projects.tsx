@@ -10,6 +10,7 @@ import { ProjectSwatch } from '../projects/ProjectSwatch';
 import { useProjectSave } from '../projects/useProjectSave';
 import { Card } from './controls';
 import type { SettingsContext } from './SettingsPage';
+import { Suggestions } from './Suggestions';
 
 const NO_STATE: ProjectsState = { projects: [], rules: [] };
 const keyOf = (r: { machine: string; path: string }) => `${r.machine}\n${r.path}`;
@@ -25,7 +26,7 @@ function Inspect({ client, machine, paths, onInfos }: { client: DaemonClient; ma
   return null;
 }
 
-/** Settings › Projects (settings.tsx, `projects`, without Ledge's proposals, lot 11): the projects, then the remembered folders. */
+/** Settings › Projects (settings.tsx, `projects`, with Ledge's proposals on top, lot 11): the projects, then the remembered folders. */
 export function Projects({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
   const c = t.settings.projects;
@@ -52,6 +53,7 @@ export function Projects({ ctx }: { ctx: SettingsContext }): JSX.Element {
   return (
     <>
       {groups.map(([machine, paths]) => <Inspect key={machine} client={ctx.client} machine={machine} paths={paths} onInfos={onInfos} />)}
+      <Suggestions ctx={ctx} />
       <Card title={c.title} hint={c.note}>
         {state.projects.map(p => {
           const agents = sessions.filter(s => projectIdOf(s) === p.id).length;
