@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import type { MachineState } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
@@ -12,13 +12,15 @@ import type { SessionActions } from '../../manage/useSessionActions';
 import { useMotionPreferences } from '../../motionPreferences';
 import { activeCount } from '../../nav/agents';
 import type { NavAction, NavState } from '../../nav/state';
-import { ProjectSwatch } from '../../projects/ProjectSwatch';
+import { useStored } from '../../state/useStored';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
 import { useTheme } from '../theme';
+import { treeModel } from './model';
+import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
+import { Tree } from './Tree';
 
-/** The explorer shell: Session, Ask Ledge, Atelier, then the foot. Attention, the tree and Archives are empty sections until their own tasks;
- *  the tree still names each project so the app's boot can find the row. */
+/** The explorer shell: Session, Ask Ledge, Atelier, the project tree, then the foot. Attention and Archives stay empty until their own tasks. */
 export function Sidebar(p: {
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; archived: readonly Session[];
@@ -35,7 +37,11 @@ export function Sidebar(p: {
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
   const [ask, setAsk] = useState('');
+  const [prefs, setPrefs] = useStored(loadSidebarPrefs, saveSidebarPrefs);
   const { place } = p.nav;
+  const base = place.kind === 'settings' ? place.back : place;
+  const current = base.kind === 'session' ? base.id : null;
+  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
   const atelierOn = place.kind === 'overview' && place.view === 'atelier';
   const inSettings = place.kind === 'settings';
   const active = activeCount(p.sessions);
@@ -45,7 +51,7 @@ export function Sidebar(p: {
     if (q) { p.onAsk(q); setAsk(''); }
   };
   return (
-    <aside className="sidebar st" aria-label={t.side.label}>
+    <aside className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}>
       <div className="st-brand">
         <span className="st-fill" />
         <button type="button" className="st-new" onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'launch' } })}>
@@ -67,12 +73,18 @@ export function Sidebar(p: {
       </nav>
       <div className="st-scroll">
         <section aria-label={t.side.yours} />
-        <section aria-label={t.side.tree}>
-          {(p.projects?.projects ?? []).map(project => (
-            <button key={project.id} type="button" onClick={() => p.dispatch({ type: 'home', project: project.id })}>
-              <ProjectSwatch project={project} /><span>{project.name}</span>
-            </button>
-          ))}
+        <section aria-label={t.side.projects}>
+          <Tree groups={groups} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
+            hideDone={prefs.hideDone} dense={prefs.dense} filing={p.filing} revealCurrent={p.revealCurrent} paused={p.nav.paused}
+            onHome={project => p.dispatch({ type: 'home', ...(project !== undefined ? { project } : {}) })}
+            onOpen={(id, helper) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}) })}
+            onLaunch={project => p.dispatch({ type: 'modal', modal: { kind: 'launch', ...(project !== undefined ? { project } : {}) } })}
+            onMenu={(id, e) => {
+              const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
+              p.menu.open(id, { x: e.clientX, y: e.clientY }, host?.querySelector<HTMLElement>('[data-tree-key]') ?? host);
+            }}
+            onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
+            onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} />
         </section>
         <section aria-label={t.side.archives} />
       </div>

@@ -12,7 +12,7 @@ describe('the sidebar shell', () => {
   it('has New session, Ask Ledge and Atelier, and neither brand nor search', async () => {
     const sessions = listSessions();
     const { side } = await boot({ projects: TWO_PROJECTS, sessions });
-    expect(side.getByRole('button', { name: /New session/ })).toBeVisible();
+    expect(side.getByRole('button', { name: /^New session N/ })).toBeVisible();
     expect(side.getByRole('textbox', { name: 'Ask Ledge' })).toBeVisible();
     expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(sessions)));
     expect(document.querySelector('.sidebar [data-brand]')).toBeNull();
