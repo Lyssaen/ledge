@@ -150,3 +150,23 @@ describe('an install clicked during a recheck (round 2)', () => {
     expect(d.relaunch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('the notch learns of a waiting update', () => {
+  it('holds the version in desktop.update.available while available or installing, and drops it otherwise', async () => {
+    const r = release('0.7.1');
+    const { d } = deps(async () => r.u);
+    const up = createUpdater(d);
+    await up.check();
+    expect(localStorage.getItem('desktop.update.available')).toBe('0.7.1');
+    const installing = up.install();
+    expect(up.get().phase.kind).toBe('installing');
+    expect(localStorage.getItem('desktop.update.available')).toBe('0.7.1');
+    r.fail(new Error('network')); await installing;
+    expect(up.get().phase.kind).toBe('failed');
+    expect(localStorage.getItem('desktop.update.available')).toBeNull();
+    const none = createUpdater(deps(async () => null).d);
+    localStorage.setItem('desktop.update.available', '0.7.1');
+    await none.check();
+    expect(localStorage.getItem('desktop.update.available')).toBeNull();
+  });
+});

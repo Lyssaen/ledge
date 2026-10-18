@@ -17,6 +17,8 @@ export interface Updater {
   get(): UpdateSnapshot; subscribe(fn: () => void): () => void;
   start(): Promise<void>; check(): Promise<void>; install(): Promise<void>; setAuto(on: boolean): void; stop(): void;
 }
+/** The version waiting for the user while the phase is `available` or `installing`, absent otherwise: the notch reads it. */
+export const UPDATE_AVAILABLE_KEY = 'desktop.update.available';
 export const UPDATE_EVERY_MS = 6 * 60 * 60 * 1000;
 
 const get = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -36,7 +38,12 @@ export function createUpdater(deps: UpdaterDeps = {}): Updater {
   let started = false;
   let stopTimer = () => {};
   const listeners = new Set<() => void>();
-  const put = (patch: Partial<UpdateSnapshot>) => { snap = { ...snap, ...patch }; for (const fn of [...listeners]) fn(); };
+  const put = (patch: Partial<UpdateSnapshot>) => {
+    snap = { ...snap, ...patch };
+    const p = snap.phase;
+    set(UPDATE_AVAILABLE_KEY, p.kind === 'available' || p.kind === 'installing' ? p.version : null);
+    for (const fn of [...listeners]) fn();
+  };
 
   const installBusy = () => snap.phase.kind === 'installing' || (snap.phase.kind === 'failed' && snap.phase.during === 'install');
 

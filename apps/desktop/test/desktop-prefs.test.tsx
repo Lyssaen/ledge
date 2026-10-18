@@ -73,3 +73,20 @@ describe('interface scale (WebView zoom)', () => {
     expect(await applyUiScale(2, { setZoom: async () => { throw new Error('denied'); }, screenHeight: async () => 1080 })).toBeNull();
   });
 });
+
+describe('do not disturb switched in the notch', () => {
+  it('follows a storage event for desktop.dnd and tells its subscribers', () => {
+    function Probe() { const [dnd] = useDnd(); return <p>{dnd ? 'dnd on' : 'dnd off'}</p>; }
+    render(<Probe />);
+    expect(screen.getByText('dnd off')).toBeTruthy();
+    act(() => { window.dispatchEvent(new StorageEvent('storage', { key: 'desktop.dnd', newValue: '1' })); });
+    expect(getDnd()).toBe(true);
+    expect(screen.getByText('dnd on')).toBeTruthy();
+    act(() => { window.dispatchEvent(new StorageEvent('storage', { key: 'desktop.dnd', newValue: '0' })); });
+    expect(getDnd()).toBe(false);
+  });
+  it('ignores the other keys', () => {
+    window.dispatchEvent(new StorageEvent('storage', { key: 'ledge.dnd', newValue: '1' }));
+    expect(getDnd()).toBe(false);
+  });
+});

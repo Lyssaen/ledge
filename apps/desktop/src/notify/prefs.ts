@@ -28,5 +28,13 @@ export function setDnd(on: boolean): void {
 export function useDnd(): [boolean, (on: boolean) => void] {
   return [useSyncExternalStore(subscribe, getDnd, getDnd), setDnd];
 }
+/** The notch is another window on the same storage: its switch only reaches this one as a `storage` event. */
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', e => {
+    if (e.key !== DND_KEY) return;
+    dnd = e.newValue === '1';
+    emit();
+  });
+}
 /** Test hook: the next read reloads from storage. */
 export function resetDndForTests(): void { dnd = loadDnd(); emit(); }
