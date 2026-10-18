@@ -483,6 +483,12 @@ export const en: Messages = {
       frozenEnd: (s) => `No news since the connection was lost · ${s}`, ended: (s) => `Session ended · ${s}`,
       loading: 'Loading the thread…', empty: 'Nothing in the thread yet.', notLoaded: 'The thread was not loaded before the connection was lost.'
     },
+    message: {
+      sent: 'Message sent', received: 'Message received',
+      readBy: (n) => `Read by ${n}`, delivered: 'Delivered, not read yet', sending: 'Sending…', failed: 'Not delivered',
+      conversation: (n, k) => `Conversation with ${n} · ${k} messages`, fold: 'Fold', unfold: 'Unfold',
+      readAll: 'Read the whole message', showLess: 'Show less', seeIn: (n) => `See it in ${n}'s thread`
+    },
     plan: {
       kicker: 'Proposed plan', fallback: 'Plan',
       statuses: { proposed: 'Awaiting your approval', open: 'Proposed', approved: 'Approved', revised: 'Revised afterwards' },

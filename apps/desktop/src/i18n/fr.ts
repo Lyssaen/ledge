@@ -505,6 +505,12 @@ export const fr = {
       frozenEnd: (s: string) => `Plus aucune nouvelle depuis la perte de connexion · ${s}`, ended: (s: string) => `Session terminée · ${s}`,
       loading: 'Chargement du fil…', empty: 'Rien dans le fil pour l’instant.', notLoaded: 'Le fil n’a pas été chargé avant la perte de connexion.'
     },
+    message: {
+      sent: 'Message envoyé', received: 'Message reçu',
+      readBy: (n: string) => `Lu par ${n}`, delivered: 'Remis, pas encore lu', sending: 'Envoi…', failed: 'Non remis',
+      conversation: (n: string, k: number) => `Échange avec ${n} · ${k} messages`, fold: 'Replier', unfold: 'Déplier',
+      readAll: 'Lire tout le message', showLess: 'Réduire', seeIn: (n: string) => `Voir dans le fil de ${n}`
+    },
     plan: {
       kicker: 'Plan proposé', fallback: 'Plan',
       statuses: { proposed: 'En attente de votre accord', open: 'Proposé', approved: 'Approuvé', revised: 'Révisé ensuite' } as Record<PlanStatus, string>,

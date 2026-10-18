@@ -1,5 +1,6 @@
-import { Fragment, memo, useCallback, useMemo, type JSX, type ReactNode } from 'react';
-import type { Helper, HelperItem, Session, ThreadItem } from '@ledge/protocol';
+import { Fragment, memo, useCallback, useMemo, useRef, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
+import { daemonStore, qualify, splitId } from '@ledge/fleet';
+import type { Helper, HelperItem, ReceivedItem, SentItem, Session, ThreadItem } from '@ledge/protocol';
 import { ThreadMarkdown } from '@ledge/ui/documents/markdown';
 import type { DocumentReference } from '@ledge/ui/documents/references';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -10,9 +11,10 @@ import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import { ActionGroup } from './ActionGroup';
+import { MessageCard } from './MessageCard';
 import { nameOf } from './changedFiles';
 import { PlanCard } from './PlanCard';
-import { docRefs, helperOf, planTitle, timeMark, type Exchange, type Segment } from './exchanges';
+import { docRefs, helperOf, peerKey, planTitle, timeMark, type Exchange, type Segment } from './exchanges';
 
 const CHIP_MARK = { accept: '✓', always: '✓', deny: '✕', unknown: '·' } as const;
 /** A decided plan (ExitPlanMode): approved, or sent back to planning. */
@@ -70,11 +72,15 @@ interface TurnProps {
   flash: string | null; onChange(path: string): void; onDocument(path: string): void;
   /** The open plan when it is in this exchange, else null. */
   planOpen: string | null; onPlan(key: string): void;
+  /** Messages between agents: the peers' sessions Ledge knows (by `peer`), each conversation's message ids in the thread's
+   *  order (by peerKey), the folded conversations and the fold's toggle (stable). */
+  peers: ReadonlyMap<string, Session>; convs: ReadonlyMap<string, readonly string[]>;
+  folded: ReadonlySet<string>; onFold(key: string): void;
 }
 
 /** One exchange: its time, the prompt as a bubble, the agent named once, then what it said, decided and did. Rendered again
  *  only when what it shows changes: the clock's tick reaches the exchange whose action runs, not the ones before it. */
-const Turn = memo(function Turn({ session, helper, items, x, at, running, last, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan }: TurnProps): JSX.Element {
+const Turn = memo(function Turn({ session, helper, items, x, at, running, last, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, peers, convs, folded, onFold }: TurnProps): JSX.Element {
   const { t } = useI18n();
   const th = t.session.thread;
   const tpl = t.session.plan;
@@ -101,6 +107,16 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
     );
   };
 
+  const message = (item: SentItem | ReceivedItem): ReactNode => {
+    const key = peerKey(item);
+    const conv = convs.get(key) ?? [];
+    const peer = item.peer !== undefined ? peers.get(item.peer) ?? null : null;
+    return <MessageCard item={item} self={session} peer={peer} header={conv[0] === item.id && conv.length > 1 ? { count: conv.length } : null}
+      folded={folded.has(key)} onFold={() => onFold(key)} onOpenPeer={() => peer && dispatch({ type: 'open', id: peer.id })} />;
+  };
+  // The marker opens the exchange above its time: on its prompt, else on the first message received that opens it.
+  const opener = x.prompt?.id ?? x.received[0]?.id;
+
   const segment = (s: Segment): ReactNode => {
     if (s.kind === 'tools') {
       const first = s.tools.find(x => x.id === unread);
@@ -116,14 +132,14 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
         ? <div className={`decision-chip plan ${d}`}><span className="chip-mark">{PLAN_MARK[d]}</span><span>{planDecided[d]}</span><strong>{planTitle(s.item.text)}</strong></div>
         : <div className={`decision-chip ${d}`}><span className="chip-mark">{CHIP_MARK[d]}</span><span>{th.decided[d]}</span><code>{s.item.text}</code></div>;
     } else if (s.kind === 'plan') node = <PlanCard plan={s.plan} open={planOpen === s.plan.key} onOpen={onPlan} />;
-    else if (s.kind === 'sent') return null; // drawn by the message card (next task)
+    else if (s.kind === 'sent') node = message(s.item);
     else node = helperCard(s.item);
     return <Fragment key={item.id}>{marker(item.id)}{node}</Fragment>;
   };
 
   return (
     <section className={cls('turn open', last && 'current')} aria-label={th.exchange(at)}>
-      {x.prompt && marker(x.prompt.id)}
+      {opener !== undefined && marker(opener)}
       <div className="turn-time" aria-hidden="true"><span className="mono">{at}</span>{running && <span className="turn-live"><i />{th.live}</span>}</div>
       {x.prompt && (
         <div className={cls('prompt-block', x.prompt.from === 'parent' && 'from-agent')}>
@@ -131,6 +147,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
           <p>{x.prompt.text}</p>
         </div>
       )}
+      {x.received.map(r => <Fragment key={r.id}>{r.id !== opener && marker(r.id)}{message(r)}</Fragment>)}
       {x.segments.length > 0 && <div className="turn-author">{author}</div>}
       {x.segments.map(segment)}
       {last && offline && <div className="frozen-end"><Icon d={SHELL_ICONS.offline} size={13} />{th.frozenEnd(since)}</div>}
@@ -144,17 +161,60 @@ const ticks = (x: Exchange) => x.segments.some(s => s.kind === 'tools' && s.tool
 const holds = (x: Exchange, id: string) => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.id === id));
 const holdsPlan = (x: Exchange, key: string) => x.segments.some(s => s.kind === 'plan' && s.plan.key === key);
 
+const NONE: ReadonlySet<string> = new Set();
+
+/** The messages between agents of an exchange, in the order shown: the received ones that open it, then the sent ones. */
+const messagesOf = (x: Exchange): (SentItem | ReceivedItem)[] => [...x.received, ...x.segments.flatMap(s => (s.kind === 'sent' ? [s.item] : []))];
+
+/** Each conversation's message ids in the thread's order, by peerKey: its first one carries the header. */
+function conversations(xs: readonly Exchange[]): ReadonlyMap<string, readonly string[]> {
+  const out = new Map<string, string[]>();
+  for (const m of xs.flatMap(messagesOf)) {
+    const ids = out.get(peerKey(m));
+    if (ids) ids.push(m.id); else out.set(peerKey(m), [m.id]);
+  }
+  return out;
+}
+
+/** The sessions of the thread's peers that Ledge knows, by `peer` (a raw daemon id, on this session's machine). The same
+ *  map while none of them changes, so the store's other changes leave the exchanges alone. */
+function usePeers(session: Session, xs: readonly Exchange[]): ReadonlyMap<string, Session> {
+  const ids = useMemo(() => [...new Set(xs.flatMap(messagesOf).flatMap(m => (m.peer !== undefined ? [m.peer] : [])))], [xs]);
+  const machine = splitId(session.id)?.machine ?? 'local';
+  const last = useRef<ReadonlyMap<string, Session>>(new Map());
+  const select = useCallback(() => {
+    const byId = daemonStore.getState().byId;
+    const next = new Map<string, Session>();
+    for (const p of ids) { const s = byId.get(qualify(machine, p)); if (s) next.set(p, s); }
+    const prev = last.current;
+    if (prev.size === next.size && [...next].every(([k, v]) => prev.get(k) === v)) return prev;
+    return (last.current = next);
+  }, [ids, machine]);
+  return useSyncExternalStore(daemonStore.subscribe, select, select);
+}
+
 /** The flat thread (session.tsx renderTurn / renderItem): one section per exchange, the frozen or ended note after the last
  *  one. Memoised: the store's changes elsewhere (another session's preview, the chat, an error) leave it alone, its props
  *  being the session, its items and their exchanges, the clock and the page's stable callbacks. */
 export const Thread = memo(function Thread({ session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan }: ThreadProps): JSX.Element {
   const { lang } = useI18n();
   const offline = session.offline === true;
+  const convs = useMemo(() => conversations(xs), [xs]);
+  const peers = usePeers(session, xs);
+  // The folded conversations (peerKeys), this session's only: another session starts with all of them open.
+  const [fold, setFold] = useState<{ id: string; keys: ReadonlySet<string> }>(() => ({ id: session.id, keys: new Set() }));
+  const folded = fold.id === session.id ? fold.keys : NONE;
+  const onFold = useCallback((key: string) => setFold(f => {
+    const keys = new Set(f.id === session.id ? f.keys : []);
+    if (!keys.delete(key)) keys.add(key);
+    return { id: session.id, keys };
+  }), [session.id]);
   return <>{xs.map((x, i) => (
     <Turn key={x.key} session={session} helper={helper} items={items} x={x} at={timeMark(x.at, now, lang)} last={i === xs.length - 1}
       running={!offline && x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running'))}
       now={ticks(x) ? now : 0} unread={unread} since={since} dispatch={dispatch}
       flash={flash !== null && holds(x, flash) ? flash : null} onChange={onChange} onDocument={onDocument}
-      planOpen={planOpen !== null && holdsPlan(x, planOpen) ? planOpen : null} onPlan={onPlan} />
+      planOpen={planOpen !== null && holdsPlan(x, planOpen) ? planOpen : null} onPlan={onPlan}
+      peers={peers} convs={convs} folded={folded} onFold={onFold} />
   ))}</>;
 });
