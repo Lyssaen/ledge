@@ -1,5 +1,5 @@
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Machines, Projects, Recent, Session, ThreadItem } from '@ledge/protocol';
+import type { ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, Machines, Projects, Recent, Session, ThreadItem } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -14,7 +14,10 @@ export function session(id: string, extra: Partial<Session> = {}): Session {
 export interface Folder { parent: string | null; entries: string[]; repos?: { name: string; branch: string }[] }
 
 /** Ledge's scripted answer to every `chat.ask`: what it read, its text, the session it proposes to start. */
-export interface ChatReply { steps?: ChatStep[]; text: string; proposal?: ChatProposal }
+export interface ChatReply { steps?: ChatStep[]; text: string; proposal?: ChatProposal; projectProposal?: ChatProjectProposal }
+
+/** A machine's answer to `repos.scan`: its repositories, or the fleet's `error` for a machine it cannot ask. */
+export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'outdated';
 
 /** Simulates the local ledge daemon inside the page: a snapshot, then the machines list, and a `push` for later updates.
  *  Like the daemon (spec §5.3) it keeps the machines list: `machines.set` replaces it and is broadcast back as `machines`,
@@ -26,8 +29,9 @@ export interface ChatReply { steps?: ChatStep[]; text: string; proposal?: ChatPr
  *  A `chat.ask` is answered from `extras.chat` as the daemon streams it: each `chat.step`, the text as one `chat.delta`, then `chat.done` with the
  *  proposal. A card's `session.launch { qid }` seats its agent as above, then broadcasts the `chat.history` where that turn's proposal has its
  *  `launchedId`; that agent stays `starting` (the test may `upsert` it), so what the launch lit is never raced by the settle.
+ *  A `repos.scan` is answered by its `machineId` (default `local`) from `extras.found` with `repos.found` (after `scanDelayMs`, to hold the scan view): no entry, an empty list.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -68,14 +72,19 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
           ? { type: 'folder.listing', ...id, path, parent: f.parent, entries: f.entries, repos: f.repos ?? [] }
           : { type: 'folder.listing', ...id, path, parent: null, entries: [], error: 'not found' }));
       }
+      if (msg.type === 'repos.scan') {
+        const f = extras.found?.[msg.machineId ?? 'local'] ?? { repos: [] };
+        const answer = { type: 'repos.found', requestId: msg.requestId, repos: typeof f === 'string' ? [] : f.repos, truncated: typeof f === 'string' ? false : f.truncated ?? false, ...(typeof f === 'string' ? { error: f } : {}) };
+        setTimeout(() => { try { ws.send(JSON.stringify(answer)); } catch { /* the page is gone */ } }, extras.scanDelayMs ?? 0);
+      }
       if (msg.type === 'chat.ask') {
         const reply = extras.chat ?? { text: 'Nothing to report.' };
         const steps = reply.steps ?? [];
         const at = new Date().toISOString();
-        turns.set(msg.qid, { qid: msg.qid, question: msg.text, askedAt: at, steps, answer: reply.text, answeredAt: at, ...(reply.proposal ? { proposal: reply.proposal } : {}) });
+        turns.set(msg.qid, { qid: msg.qid, question: msg.text, askedAt: at, steps, answer: reply.text, answeredAt: at, ...(reply.proposal ? { proposal: reply.proposal } : {}), ...(reply.projectProposal ? { projectProposal: reply.projectProposal } : {}) });
         for (const step of steps) ws.send(JSON.stringify({ type: 'chat.step', qid: msg.qid, step }));
         ws.send(JSON.stringify({ type: 'chat.delta', qid: msg.qid, text: reply.text }));
-        ws.send(JSON.stringify({ type: 'chat.done', qid: msg.qid, text: reply.text, at, ...(reply.proposal ? { proposal: reply.proposal } : {}) }));
+        ws.send(JSON.stringify({ type: 'chat.done', qid: msg.qid, text: reply.text, at, ...(reply.proposal ? { proposal: reply.proposal } : {}), ...(reply.projectProposal ? { projectProposal: reply.projectProposal } : {}) }));
       }
       if (msg.type === 'session.launch' && extras.launches !== 'manual') {
         const id = `launched-${++launches}`;
