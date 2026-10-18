@@ -26,6 +26,59 @@ let store: Store; let panes: Record<string, string>; let previews: string[][];
 beforeEach(() => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-')); store = new Store(); panes = {}; previews = []; clock = T0; for (const k of Object.keys(failing)) delete failing[k]; for (const k of Object.keys(throwing)) delete throwing[k]; });
 
 describe('poller', () => {
+  it.each(['resume', 'permission', 'delete'] as const)('keeps a concurrent helper %s while an earlier session is polled', async action => {
+    store.upsert(mk('first', { tmuxSession: null }));
+    store.upsert(mk('later', { tmuxSession: null, helpers: [{ id: 'h', kind: 'Explore', task: '', state: 'exited' }] }));
+    let unblock!: () => void;
+    const gate = new Promise<void>(resolve => { unblock = resolve; });
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 1_000_000, now,
+      gitInfo: async () => { await gate; return null; } });
+    try {
+      clock += 300000;
+      const tick = p.tick();
+      if (action === 'delete') store.remove('later');
+      else store.apply('later', { name: action === 'resume' ? 'SubagentStart' : 'PermissionRequest', helperId: 'h', at: now(), source: 'hook' });
+      const latest = store.get('later');
+      unblock(); await tick;
+      expect(store.get('later')).toBe(latest);
+    } finally { unblock(); p.stop(); }
+  });
+  it('removes finished helpers after five minutes, retaining active helpers and the parent', async () => {
+    store.upsert(mk('a', { tmuxSession: null }));
+    store.apply('a', { name: 'SubagentStart', helperId: 'done', at: now(), source: 'hook' });
+    store.apply('a', { name: 'SubagentStart', helperId: 'busy', at: now(), source: 'hook' });
+    store.apply('a', { name: 'SubagentStop', helperId: 'done', at: now(), source: 'hook' });
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 1_000_000, now });
+    try {
+      clock += 299999; await p.tick();
+      expect(store.get('a')!.helpers.map(h => h.id)).toEqual(['done', 'busy']);
+      clock++; await p.tick();
+      expect(store.get('a')!.helpers.map(h => h.id)).toEqual(['busy']);
+      expect(store.get('a')!.state).toBe('working');
+    } finally { p.stop(); }
+  });
+  it('keeps the helper expiry across a journal reload, including archived parents', async () => {
+    store.upsert(mk('a', { state: 'exited', exitedAt: now(), archivedAt: now(), tmuxSession: null }));
+    // A journal written before helper finish dates existed.
+    store.upsert({ ...store.get('a')!, helpers: [{ id: 'done', kind: 'Explore', task: 'Review', state: 'exited' }] });
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 1_000_000, now });
+    try { clock += 120000; await p.tick(); } finally { p.stop(); }
+    await store.save();
+    const restored = new Store(); await restored.load();
+    const q = startPoller({ store: restored, tmux: fakeTmux(panes), intervalMs: 1_000_000, now });
+    try {
+      clock = T0 + 299999; await q.tick(); expect(restored.get('a')!.helpers).toHaveLength(1);
+      clock++; await q.tick(); expect(restored.get('a')!.helpers).toEqual([]);
+      expect(restored.get('a')!.archivedAt).toBe(new Date(T0).toISOString());
+    } finally { q.stop(); }
+  });
+  it('never removes a helper whose request still needs an answer', async () => {
+    store.upsert(mk('a', { tmuxSession: null, helpers: [{ id: 'h', kind: 'Explore', task: '', state: 'exited' }],
+      pending: { helperId: 'h', kind: 'permission', text: 'Allow?', source: 'hook' } }));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 1_000_000, now });
+    try { clock += 300000; await p.tick(); expect(store.get('a')!.helpers).toHaveLength(1); }
+    finally { p.stop(); }
+  });
   it('seeds the hash on first sighting, then bumps lastActivityAt only on change and broadcasts the preview', async () => {
     panes['ledge-a'] = 'line one'; store.upsert(mk('a'));
     const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, lines) => previews.push(lines) });

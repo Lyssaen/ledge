@@ -159,9 +159,10 @@ fn main() {
             if let Some(target) = ledge_native::desktop::open_target(args) { deliver_open(app, target); }
         }))
         .manage(PendingOpen::default())
-        // Visibility is the launch's choice (setup below), never the restored state's.
+        // Visibility is the launch's choice (setup below); decorations come from tauri.conf.json.
+        // Restoring old native decorations would bring back Windows' title bar over our own.
         // The notch places itself on the chosen monitor's work area: no saved state for it.
-        .plugin(tauri_plugin_window_state::Builder::new().with_state_flags(StateFlags::all() & !StateFlags::VISIBLE).with_denylist(&[notch::NOTCH]).build())
+        .plugin(tauri_plugin_window_state::Builder::new().with_state_flags(StateFlags::all() & !(StateFlags::VISIBLE | StateFlags::DECORATIONS)).with_denylist(&[notch::NOTCH]).build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![MINIMIZED])))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())

@@ -33,7 +33,7 @@ describe('Desktop Tauri config', () => {
     expect(main).toContain('tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![MINIMIZED]))');
     expect(main.slice(main.indexOf('.setup('))).toMatch(/if !launched_minimized\(std::env::args\(\)\) \{ show_main\(app\.handle\(\)\); \}/);
     // the restored state must not show the window itself: the launch decides
-    expect(main).toContain('with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)');
+    expect(main).toContain('with_state_flags(StateFlags::all() & !(StateFlags::VISIBLE | StateFlags::DECORATIONS))');
   });
   it('lets sound cues play before any click, in both windows (WebView2 defaults kept)', () => {
     const args: string = conf.app.windows[0].additionalBrowserArgs;

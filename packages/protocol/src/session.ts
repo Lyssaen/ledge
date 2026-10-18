@@ -36,7 +36,9 @@ export const HelperSchema = z.object({
   id: z.string(),
   kind: z.string(),
   task: z.string(),
-  state: SessionStateSchema
+  state: SessionStateSchema,
+  /** When this helper finished; retained across daemon restarts until its five-minute expiry. */
+  finishedAt: z.string().datetime().optional()
 });
 export type Helper = z.infer<typeof HelperSchema>;
 

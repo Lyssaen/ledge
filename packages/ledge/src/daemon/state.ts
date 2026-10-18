@@ -194,6 +194,24 @@ function withTopic(s: Session, text: string, source: TopicSource | undefined): S
 }
 
 export function reduce(s: Session, ev: SessionEvent): Session {
+  const next = reduceEvent(s, ev);
+  if (next === s) return s;
+  let changed = false;
+  const helpers = next.helpers.map(h => {
+    if (h.state === 'exited' || next.state === 'exited') {
+      if (h.state === 'exited' && h.finishedAt) return h;
+      changed = true;
+      return { ...h, state: 'exited' as const, finishedAt: h.finishedAt ?? next.exitedAt ?? ev.at };
+    }
+    if (!h.finishedAt) return h;
+    changed = true;
+    const { finishedAt: _gone, ...active } = h;
+    return active;
+  });
+  return changed ? { ...next, helpers } : next;
+}
+
+function reduceEvent(s: Session, ev: SessionEvent): Session {
   // The agent's own conversation id follows its hooks, even a late one after the exit.
   if (ev.agentSessionId && !ev.helperId && ev.agentSessionId !== s.agentSessionId) s = { ...s, agentSessionId: ev.agentSessionId };
   if (s.state === 'exited') return s;

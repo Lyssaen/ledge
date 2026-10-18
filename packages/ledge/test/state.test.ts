@@ -18,6 +18,21 @@ const ev = (name: SessionEvent['name'], extra: Partial<SessionEvent> = {}): Sess
 const states: SessionState[] = ['starting', 'working', 'waiting_input', 'waiting_permission', 'idle', 'exited', 'error'];
 
 describe('reduce: transition table', () => {
+  it('dates a finished helper once and clears its finish date when it resumes', () => {
+    const started = reduce(session('working'), ev('SubagentStart', { helperId: 'h' }));
+    const stopped = reduce(started, ev('SubagentStop', { helperId: 'h', at: later(9000) }));
+    expect(stopped.helpers[0]).toHaveProperty('finishedAt', later(9000));
+    const repeated = reduce(stopped, ev('SubagentStop', { helperId: 'h', at: later(10000) }));
+    expect(repeated.helpers[0]).toHaveProperty('finishedAt', later(9000));
+    const resumed = reduce(repeated, ev('SubagentStart', { helperId: 'h', at: later(12000) }));
+    expect(resumed.helpers[0]).not.toHaveProperty('finishedAt');
+  });
+  it('dates helpers when Cursor moves on or their parent exits', () => {
+    for (const [tool, name] of [['cursor', 'Stop'], ['claude', 'SessionEnd'], ['codex', 'PaneGone']] as const) {
+      const started = reduce(session('working', { tool }), ev('SubagentStart', { helperId: 'h' }));
+      expect(reduce(started, ev(name, { at: later(9000) })).helpers[0]).toMatchObject({ state: 'exited', finishedAt: later(9000) });
+    }
+  });
   // [event, from-state] -> expected next state ('=' keeps the state)
   const table: Array<[SessionEvent, SessionState, SessionState | '=']> = [];
   for (const s of states) {
@@ -392,7 +407,7 @@ describe('reduce: helpers (subagents)', () => {
   });
   it('SubagentStop for an unknown helper records it as exited (not Claude Code: see below)', () => {
     const next = reduce(session('working', { tool: 'codex' }), ev('SubagentStop', { helperId: 'zz', tool: 'Explore' }));
-    expect(next.helpers).toEqual([{ id: 'zz', kind: 'Explore', task: '', state: 'exited' }]);
+    expect(next.helpers).toEqual([{ id: 'zz', kind: 'Explore', task: '', state: 'exited', finishedAt: later(5000) }]);
   });
   it('a helper event without helperId is ignored', () => {
     const s = session('working');

@@ -12,6 +12,8 @@ export { PREVIEW_LINES } from '../adapters/index.js';
 export const DETECT_LINES = 60;
 /** How long the pane must stay at rest before the session is called idle: a turn starting has time to show itself. */
 export const REST_MS = 2000;
+/** Finished helpers leave the live session after five minutes; their thread stays in history. */
+export const HELPER_RETENTION_MS = 5 * 60 * 1000;
 
 export function startPoller(opts: {
   store: Store; tmux: Tmux; adapterFor?: typeof defaultAdapterFor;
@@ -46,7 +48,11 @@ export function startPoller(opts: {
       const deadCheck = t - lastDeadCheck >= deadCheckMs;
       if (deadCheck) lastDeadCheck = t;
       for (const id of previews.keys()) if (!store.get(id)) previews.delete(id);
-      for (const s of store.all()) {
+      for (const snapshot of store.all()) {
+        // Earlier sessions yield while reading Git/the terminal. Hooks and removals may have
+        // changed this one meanwhile: never clean up or republish the stale snapshot.
+        const s = store.get(snapshot.id);
+        if (!s) continue;
         try { await pollOne(s, t, deadCheck); }
         catch (e) { log(`poll failed for ${s.id}: ${(e as Error).message}`); }
       }
@@ -54,6 +60,18 @@ export function startPoller(opts: {
   }
 
   async function pollOne(s: Session, t: number, deadCheck: boolean): Promise<void> {
+    // Also clean up archived and hook-only sessions. Old journals have no helper finish date: the
+    // parent's last recorded activity is a conservative fallback, persisted on this first pass.
+    const helpers = s.helpers.flatMap(h => {
+      if (s.pending?.helperId === h.id || (h.state !== 'exited' && s.state !== 'exited')) return [h];
+      const finishedAt = h.finishedAt ?? s.exitedAt ?? s.lastActivityAt;
+      if (t - Date.parse(finishedAt) >= HELPER_RETENTION_MS) return [];
+      return h.finishedAt && h.state === 'exited' ? [h] : [{ ...h, state: 'exited' as const, finishedAt }];
+    });
+    if (helpers.length !== s.helpers.length || helpers.some((h, i) => h !== s.helpers[i])) {
+      s = { ...s, helpers };
+      store.upsert(s);
+    }
     if (s.state === 'exited') {
       forget(s.id);
       // A restore restarts the clock: the later of the exit and the restore counts.
