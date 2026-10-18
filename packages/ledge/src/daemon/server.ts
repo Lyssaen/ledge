@@ -154,7 +154,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true } } : {}) });
+    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true } } : {}) });
     send(ws, machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     send(ws, projectsMsg()); // then the shared projects (build spec §5)
     send(ws, islandMsg()); // then the island's settings
@@ -394,6 +394,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           try { history.sync(msg.id, ev.transcriptPath, { helperId: helperEnd ? ev.helperId : undefined, force: ev.name === 'Stop' || helperEnd }); }
           catch (e) { log(`transcript not read for ${msg.id}: ${(e as Error).message}`); }
         }
+        if (store.get(msg.id)?.archivedAt) store.unarchive(msg.id); // a hook from an archived session: it is alive again
         const before = store.get(msg.id);
         if (!before) {
           const taken = store.all().map(s => s.name);

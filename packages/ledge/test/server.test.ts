@@ -285,6 +285,15 @@ describe('server', () => {
     c.close();
   });
 
+  it('a hook from an archived hook_only session brings it back', async () => {
+    store.upsert(mk('h', { source: 'hook_only', tmuxSession: null, archivedAt: T0 }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'h', event: { name: 'UserPromptSubmit', at: T0, source: 'hook', text: 'encore' } });
+    await c.next('session.updated');
+    expect(store.get('h')!.archivedAt).toBeUndefined();
+    c.close();
+  });
+
   it('register upgrades a hook_only session created by an early hook', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.event', id: 'b', event: { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'npm test' } });
@@ -1360,6 +1369,16 @@ describe('chat', () => {
   });
 });
 
+describe('snapshot capability', () => {
+  it('the snapshot announces archive: true', async () => {
+    await srv.close();
+    srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env }), daemon: { version: '0.2.2', install: 'npm', systemd: true } });
+    const c = await connect({ port: srv.port });
+    expect((await c.next('snapshot')).daemon?.archive).toBe(true);
+    c.close();
+  });
+});
+
 describe('update.daemon', () => {
   it('sends the daemon info in the snapshot and routes update.daemon to the updater', async () => {
     await srv.close();
@@ -1368,7 +1387,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); } } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);

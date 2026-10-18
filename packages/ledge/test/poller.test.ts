@@ -100,14 +100,35 @@ describe('poller', () => {
     expect(previews.at(-1)!.at(-1)).toBe(' Esc to cancel · Tab to amend');
     p.stop();
   });
-  it('marks a dead pane as exited on the dead check and retires it after retireMs', async () => {
+  it('marks a dead pane as exited on the dead check and archives it after retireMs', async () => {
     panes['ledge-a'] = 'x'; store.upsert(mk('a'));
     const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, deadCheckMs: 0, retireMs: 600000, now });
     delete panes['ledge-a']; clock += 1000; await p.tick();
     expect(store.get('a')!.state).toBe('exited');
     expect(store.get('a')!.exitCode).toBeNull();
     clock += 600001; await p.tick();
-    expect(store.get('a')).toBeUndefined();
+    expect(store.get('a')!.archivedAt).toBeDefined();
+    p.stop();
+  });
+  it('archives an exited session after retireMs instead of removing it', async () => {
+    const changes: string[] = [];
+    store.upsert(mk('a', { state: 'exited', exitCode: 0, exitedAt: now() }));
+    store.onChange(c => changes.push(c.type));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, deadCheckMs: 0, retireMs: 600000, now });
+    clock += 600001; await p.tick();
+    expect(store.get('a')!.archivedAt).toBe(now());
+    expect(changes).not.toContain('removed');
+    p.stop();
+  });
+  it('leaves an archived session alone', async () => {
+    const at = new Date(T0).toISOString();
+    store.upsert(mk('a', { state: 'exited', exitCode: 0, exitedAt: at, archivedAt: at }));
+    const changes: string[] = [];
+    store.onChange(c => changes.push(c.type));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, deadCheckMs: 0, retireMs: 600000, now });
+    clock += 3_600_000; await p.tick();
+    expect(store.get('a')!.archivedAt).toBe(at);
+    expect(changes).toEqual([]);
     p.stop();
   });
   it('ignores sessions without a terminal', async () => {

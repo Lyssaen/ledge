@@ -56,7 +56,7 @@ export function startPoller(opts: {
   async function pollOne(s: Session, t: number, deadCheck: boolean): Promise<void> {
     if (s.state === 'exited') {
       forget(s.id);
-      if (s.exitedAt && t - Date.parse(s.exitedAt) > retireMs) store.remove(s.id);
+      if (!s.archivedAt && s.exitedAt && t - Date.parse(s.exitedAt) > retireMs) store.archive(s.id, now());
       return;
     }
     // The repository can change under the agent (checkout, new worktree): first sight, then every dead check.

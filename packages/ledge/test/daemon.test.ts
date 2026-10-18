@@ -17,7 +17,7 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
 });
 
 describe('startDaemon', () => {
-  it('restores live sessions, drops dead ones, keeps hook-only ones and serves a snapshot', async () => {
+  it('restores live sessions, marks dead ones exited, keeps hook-only ones and serves a snapshot', async () => {
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
     const socket = `ledge-test-${process.pid}-${Date.now()}`;
     const tmux = realTmux(socket, { scope: async () => false });
@@ -35,12 +35,32 @@ describe('startDaemon', () => {
         const c = await connect({ port: d2.port });
         const snap = (await c.next('snapshot')).sessions;
         c.close();
-        expect(snap.map(s => s.id).sort()).toEqual(['hook', 'live']);
+        expect(snap.map(s => s.id).sort()).toEqual(['dead', 'hook', 'live']);
+        expect(snap.find(s => s.id === 'dead')).toMatchObject({ state: 'exited' });
       } finally { await d2.stop(); }
     } finally { await killTestServer(socket); }
   });
 
-  it('removes the history journals of the sessions it prunes at startup, and keeps the others', async () => {
+  it('a session whose tmux died while the daemon was down becomes exited and keeps its thread', async () => {
+    process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
+    await ensureLedgeDir();
+    const seed = new Store();
+    seed.upsert(mk('dead')); await seed.save();
+    const dir = paths().history; mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'dead.jsonl'), JSON.stringify({ kind: 'prompt', id: 'prompt-1', at: T0, turn: 1, text: 'x' }) + '\n');
+    const tmux: Tmux = {
+      async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return ''; },
+      async hasSession() { return false; }, async listSessions() { return []; },
+      async killSession() {}, async setOption() {}, attachArgs: n => ['attach', n]
+    };
+    const d = await startDaemon({ port: 0, tmux });
+    await d.stop();
+    const after = new Store(); await after.load();
+    expect(after.get('dead')).toMatchObject({ state: 'exited' });
+    expect(existsSync(join(dir, 'dead.jsonl'))).toBe(true);
+  });
+
+  it('removes the history journals of the orphans at startup, and keeps those of the sessions in the store', async () => {
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
     await ensureLedgeDir();
     const seed = new Store();
@@ -56,6 +76,6 @@ describe('startDaemon', () => {
     };
     const d = await startDaemon({ port: 0, tmux });
     await d.stop(); // flushes the history writes
-    expect(['live', 'dead', 'orphan'].filter(id => existsSync(join(dir, `${id}.jsonl`)))).toEqual(['live']);
+    expect(['live', 'dead', 'orphan'].filter(id => existsSync(join(dir, `${id}.jsonl`)))).toEqual(['live', 'dead']);
   });
 });

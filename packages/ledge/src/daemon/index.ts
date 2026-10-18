@@ -18,13 +18,13 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   try { live = new Set(await tmux.listSessions()); }
   catch (e) { log(`startup prune skipped, tmux unavailable: ${(e as Error).message}`); }
   if (live) for (const s of store.all()) {
-    if (s.tmuxSession && !live.has(s.tmuxSession)) store.remove(s.id);
+    if (s.tmuxSession && !live.has(s.tmuxSession)) store.apply(s.id, { name: 'PaneGone', at: new Date().toISOString(), source: 'daemon' });
   }
   const daemon = await daemonInfo();
   const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save() }));
   const history = new History();
   try { await history.load(); } catch (e) { log(`history not loaded: ${(e as Error).message}`); }
-  // The startup prune above ran before the history existed: the journals of the sessions it dropped go now.
+  // Threads of sessions the store no longer holds (deleted, or past the archive cap) go now.
   for (const id of history.ids()) if (!store.get(id)) history.forget(id);
   const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history });
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
