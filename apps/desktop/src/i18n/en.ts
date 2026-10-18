@@ -17,18 +17,18 @@ export const en: Messages = {
     search: 'Search a session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
     terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)'
   },
-  foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts', islandOn: 'Island active', islandOff: 'Island hidden', islandTitle: 'Island settings' },
-  sections: { general: 'General', appearance: 'Appearance', island: 'Island', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
+  foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
+  sections: { general: 'General', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
   settings: {
     nav: 'Settings sections', back: 'Back to the atelier',
     saved: (what) => `Setting saved · ${what}`,
     hints: {
       general: 'Language, start-up, default agent and updates.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
-      island: 'The island at the top of the screen: where it sits and what it signals.',
+      island: 'The notch at the top of the screen: where it sits and what it signals.',
       notifications: 'Who lets you know, and when to leave you alone.',
       sounds: 'Your team’s sound cues.',
-      machines: 'This machine and your SSH servers. One list for the island and Ledge Desktop.',
+      machines: 'This machine and your SSH servers. One list for the notch and Ledge Desktop.',
       projects: 'Projects, repositories and remembered folders.',
       shortcuts: 'In the app, and anywhere in Windows.',
       about: 'Versions and updates.'
@@ -78,7 +78,7 @@ export const en: Messages = {
       reducedOff: 'Animations'
     },
     notifications: {
-      dnd: 'Do not disturb', dndHint: 'Holds the bubbles, the Windows notifications and the sounds. Requests stay visible in the island and in the sessions.',
+      dnd: 'Do not disturb', dndHint: 'Holds the bubbles, the Windows notifications and the sounds. Requests stay visible in the notch and in the sessions.',
       dndSaved: (on) => (on ? 'Do not disturb on' : 'Do not disturb off'),
       finished: 'When an agent is done', finishedHint: 'How Ledge Desktop tells you when a task comes to an end.',
       modes: { both: 'Bubble and sound', bubble: 'Bubble', sound: 'Sound', none: 'Session state only' },
@@ -98,11 +98,11 @@ export const en: Messages = {
       categorySaved: (label, on) => `${label}: ${on ? 'on' : 'off'}`,
       behind: 'Only when the terminal is behind', behindHint: 'If Windows Terminal is the front window, you are already looking: no sound, the bubble still shows.',
       behindSaved: (on) => (on ? 'Sounds only when the terminal is behind' : 'Sounds even when the terminal is in front'),
-      note: 'One sound at a time, for the island and Ledge Desktop together: a burst of requests plays once. Opening, closing and hovering stay silent.'
+      note: 'One sound at a time, for the notch and Ledge Desktop together: a burst of requests plays once. Opening, closing and hovering stay silent.'
     },
     machines: {
       title: 'Your machines',
-      noteLead: 'Ledge reaches your servers over SSH, from WSL. ', noteShared: 'Shared list', noteRest: ': the local daemon keeps it, the island and Ledge Desktop show the same machines.',
+      noteLead: 'Ledge reaches your servers over SSH, from WSL. ', noteShared: 'Shared list', noteRest: ': the local daemon keeps it, the notch and Ledge Desktop show the same machines.',
       status: { online: 'Connected', connecting: 'Connecting…', offline: 'Offline' },
       local: 'This machine', localKind: 'Local · WSL',
       ssh: (alias) => `SSH · ${alias}`,
@@ -113,7 +113,7 @@ export const en: Messages = {
       count: (n, max) => `${n} ${pluralEn(n, 'machine', 'machines')} · ${max} at most`,
       addTitle: 'Add a machine',
       editTitle: (label) => `Edit ${label}`,
-      label: 'Name', labelAria: 'Machine name', labelHint: 'As it shows in the atelier and the island.', labelPlaceholder: 'Dev server',
+      label: 'Name', labelAria: 'Machine name', labelHint: 'As it shows in the atelier and the notch.', labelPlaceholder: 'Dev server',
       alias: 'SSH alias', aliasHint: 'Name of a Host block in ~/.ssh/config in WSL.', aliasPlaceholder: 'gpu-box',
       aliasInvalid: 'Letters, digits, dot, dash or underscore, no spaces.',
       before: 'Before adding a server',
@@ -143,7 +143,7 @@ export const en: Messages = {
       added: (label) => `${label} added`,
       edited: (label) => `${label} edited`,
       removed: (label) => `${label} removed`,
-      confirm: { before: 'Remove ', after: '? Its sessions leave the list, in the island as here. Nothing is stopped or deleted on the server.' }
+      confirm: { before: 'Remove ', after: '? Its sessions leave the list, in the notch as here. Nothing is stopped or deleted on the server.' }
     },
     projects: {
       title: 'Projects',
@@ -172,50 +172,50 @@ export const en: Messages = {
       }
     },
     island: {
-      bannerTitle: 'The island has no settings of its own any more.',
-      bannerBody: 'The menu of its Ledge chat opens this page, « Settings in Ledge Desktop ». The island keeps the essentials: letting you know, allowing or answering in one gesture, opening a session, talking to Ledge.',
-      outdated: 'The local daemon is too old for the island’s settings: update it.',
-      show: 'Show the island', showHint: 'The small island at the top of the screen. Hidden, Ledge Desktop still lets you know.', shown: 'Island shown', hidden: 'Island hidden',
-      preview: 'Island preview', bubble: 'Otto needs your approval',
+      bannerTitle: 'The notch has no settings of its own any more.',
+      bannerBody: 'The menu of its Ledge chat opens this page, « Settings in Ledge Desktop ». The notch keeps the essentials: letting you know, allowing or answering in one gesture, opening a session, talking to Ledge.',
+      outdated: 'The local daemon is too old for the notch’s settings: update it.',
+      show: 'Show the notch', showHint: 'The small notch at the top of the screen. Hidden, Ledge Desktop still lets you know.', shown: 'Notch shown', hidden: 'Notch hidden',
+      preview: 'Notch preview', bubble: 'Otto needs your approval',
       caption: {
-        dnd: 'Do not disturb: requests stay in the island, without a bubble.',
+        dnd: 'Do not disturb: requests stay in the notch, without a bubble.',
         strip: 'Discreet mode: a simple line under the maximised window.',
-        whole: 'Discreet mode off: the island stays whole above the window.',
-        rest: 'The island at rest, three agents living in it.',
-        hidden: 'The island is hidden. Ledge Desktop still lets you know.'
+        whole: 'Discreet mode off: the notch stays whole above the window.',
+        rest: 'The notch at rest, three agents living in it.',
+        hidden: 'The notch is hidden. Ledge Desktop still lets you know.'
       },
       cover: 'Simulate a maximised window', uncover: 'Remove the window',
       screen: 'Screen', screens: { primary: 'Main', second: 'Screen 2' },
-      screenHint: (size) => (size ? `The island sits at the top of this screen (${size}).` : 'The island sits at the top of this screen.'),
+      screenHint: (size) => (size ? `The notch sits at the top of this screen (${size}).` : 'The notch sits at the top of this screen.'),
       screenSaved: { primary: 'Main screen', second: 'Screen 2' },
-      position: 'Island position', positionHint: 'At the centre of the top edge, or a quarter of the way along to keep titles and tabs clear.',
+      position: 'Notch position', positionHint: 'At the centre of the top edge, or a quarter of the way along to keep titles and tabs clear.',
       positions: { left: 'Left', center: 'Centre', right: 'Right' }, positionSaved: (p) => `Position: ${p}`,
-      discreet: 'Discreet under a window', discreetHint: 'A simple line when a maximised window fills the screen; hovering unfolds it.', discreetOn: 'Discreet mode', discreetOff: 'Island always whole',
-      islandScale: 'Island size', islandScaleHint: 'The island and its companions at the top of the screen.', islandScaleSaved: (label) => `Island size ${label}`,
-      panelScale: 'Island windows size', panelScaleHint: 'Bubble, list, session and chat that open from the island.', panelScaleSaved: (label) => `Windows size ${label}`,
-      does: 'What the island does', doesNote: 'Approval requests and questions always show in the island. The rest is up to you.',
-      quick: 'Allow and answer from the island', quickHint: 'Allow, deny (Y / N) or answer in a line without opening Ledge Desktop.', quickOn: 'Quick answers in the island', quickOff: 'Answers in Ledge Desktop only',
-      finished: 'Bubble when an agent is done', finishedHint: 'A 6 s bubble under the island.', finishedOn: 'Task finished bubble', finishedOff: 'No task finished bubble',
+      discreet: 'Discreet under a window', discreetHint: 'A simple line when a maximised window fills the screen; hovering unfolds it.', discreetOn: 'Discreet mode', discreetOff: 'Notch always whole',
+      islandScale: 'Notch size', islandScaleHint: 'The notch and its companions at the top of the screen.', islandScaleSaved: (label) => `Notch size ${label}`,
+      panelScale: 'Notch windows size', panelScaleHint: 'Bubble, list, session and chat that open from the notch.', panelScaleSaved: (label) => `Windows size ${label}`,
+      does: 'What the notch does', doesNote: 'Approval requests and questions always show in the notch. The rest is up to you.',
+      quick: 'Allow and answer from the notch', quickHint: 'Allow, deny (Y / N) or answer in a line without opening Ledge Desktop.', quickOn: 'Quick answers in the notch', quickOff: 'Answers in Ledge Desktop only',
+      finished: 'Bubble when an agent is done', finishedHint: 'A 6 s bubble under the notch.', finishedOn: 'Task finished bubble', finishedOff: 'No task finished bubble',
       say: 'Agents’ words', sayHint: 'A sentence from an agent, in a bubble that fades after 5 s.', sayOn: 'Agents’ words', sayOff: 'Words hidden',
-      helpers: 'Subagents in the island', helpersHint: 'The small bots on their main agent’s shoulder.', helpersOn: 'Subagents shown', helpersOff: 'Subagents hidden',
-      shortcut: 'Shortcut to open the island', shortcutHint: 'Opens the island’s session list, anywhere in Windows.', recordingHint: 'Press the combination you want. Esc to cancel.',
-      recorder: (keys) => `Shortcut to open the island: ${keys}. Edit`, press: 'Press…', edit: 'Edit', cancel: 'Cancel',
-      needsModifier: 'Add Ctrl, Alt or ⊞: the shortcut has to work anywhere in Windows.', shortcutSaved: (keys) => `Open the island: ${keys}`,
+      helpers: 'Subagents in the notch', helpersHint: 'The small bots on their main agent’s shoulder.', helpersOn: 'Subagents shown', helpersOff: 'Subagents hidden',
+      shortcut: 'Shortcut to open the notch', shortcutHint: 'Opens the notch’s session list, anywhere in Windows.', recordingHint: 'Press the combination you want. Esc to cancel.',
+      recorder: (keys) => `Shortcut to open the notch: ${keys}. Edit`, press: 'Press…', edit: 'Edit', cancel: 'Cancel',
+      needsModifier: 'Add Ctrl, Alt or ⊞: the shortcut has to work anywhere in Windows.', shortcutSaved: (keys) => `Open the notch: ${keys}`,
       keyNames: { Win: '⊞' },
       refused: {
-        offline: 'The local daemon is offline: nothing changed.', outdated: 'The local daemon is too old for the island’s settings: update it.',
+        offline: 'The local daemon is offline: nothing changed.', outdated: 'The local daemon is too old for the notch’s settings: update it.',
         invalid: 'The daemon refused this change. Nothing changed.', timeout: 'The daemon did not confirm this change.'
       }
     },
     shortcuts: {
       global: 'Anywhere in Windows', globalNote: 'These shortcuts work even when Ledge Desktop is closed to the notification area.',
-      globalRows: { island: 'Open the island’s list', newSession: 'New session', theme: 'Switch the theme', dnd: 'Do not disturb, from the island' },
-      edit: 'Edit', editLabel: 'Edit the island’s shortcut',
+      globalRows: { island: 'Open the notch’s list', newSession: 'New session', theme: 'Switch the theme', dnd: 'Do not disturb, from the notch' },
+      edit: 'Edit', editLabel: 'Edit the notch’s shortcut',
       title: 'In Ledge Desktop',
       note: 'Y and N act only on the pinned request of the open session, never while typing.'
     },
     about: {
-      tagline: 'A new way of working with your agents. The island and Ledge Desktop, one application.',
+      tagline: 'A new way of working with your agents. The notch and Ledge Desktop, one application.',
       versions: 'Versions', app: 'Ledge Desktop', daemon: (label) => `Daemon · ${label}`,
       install: { npm: 'npm', git: 'git clone', unknown: 'unknown install' },
       unknown: 'Unknown version', behindTag: 'Update needed', latest: 'Latest version', latestUnknown: 'Not checked yet',

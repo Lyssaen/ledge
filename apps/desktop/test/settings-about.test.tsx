@@ -41,7 +41,7 @@ async function open(daemon?: DaemonInfo) {
 describe('Settings › About', () => {
   it('shows Ledge, Desktop’s version and each machine’s daemon, « Update needed » on a daemon behind, then the latest version; a dot on About', async () => {
     await open(NPM_BEHIND);
-    expect(screen.getByText('A new way of working with your agents. The island and Ledge Desktop, one application.')).toBeVisible();
+    expect(screen.getByText('A new way of working with your agents. The notch and Ledge Desktop, one application.')).toBeVisible();
     await waitFor(() => expect(versions()).toEqual([
       ['Ledge Desktop', '0.6.0'],
       ['Daemon · Local', '0.5.0· npmUpdate needed'],

@@ -22,7 +22,7 @@ describe('the Settings page', () => {
     expect(tab('General')).toHaveAttribute('aria-current', 'page');
     expect(nav().getAllByRole('button', { current: 'page' })).toHaveLength(1);
     expect(nav().getAllByRole('button').map(b => b.textContent)).toEqual([
-      'Back to the atelierEsc', 'General', 'Appearance', 'Island', 'Notifications', 'Sounds', 'Machines', 'Projects', 'Keyboard shortcuts', 'About'
+      'Back to the atelierEsc', 'General', 'Appearance', 'Notch', 'Notifications', 'Sounds', 'Machines', 'Projects', 'Keyboard shortcuts', 'About'
     ]);
   });
 
@@ -97,23 +97,23 @@ describe('the Settings page', () => {
     expect(within(tab('Machines')).getByRole('img', { name: 'A machine is offline' })).toBeVisible();
   });
 
-  it('Keyboard shortcuts: « Anywhere in Windows » first, the island’s own as the daemon holds it with « Edit » to Settings › Island, then the app’s table under « In Ledge Desktop », Ctrl , first', async () => {
+  it('Keyboard shortcuts: « Anywhere in Windows » first, the notch’s own as the daemon holds it with « Edit » to Settings › Notch, then the app’s table under « In Ledge Desktop », Ctrl , first', async () => {
     const { d, user } = await boot({ projects: TWO_PROJECTS });
     d.push({ type: 'island', prefs: { ...DEFAULT_ISLAND_PREFS, shortcut: 'Ctrl Shift K' } });
     await user.keyboard('{Control>},{/Control}');
     await user.click(tab('Keyboard shortcuts'));
     expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['Anywhere in Windows', 'In Ledge Desktop']);
     const rowsOf = (name: string) => [...screen.getByRole('region', { name }).querySelectorAll('.set-row')].map(r => [r.querySelector('.set-label')!.textContent, r.querySelector('kbd')!.textContent]);
-    await waitFor(() => expect(rowsOf('Anywhere in Windows')[0]).toEqual(['Open the island’s list', 'Ctrl Shift K']));
-    expect(rowsOf('Anywhere in Windows').slice(1)).toEqual([['New session', 'Ctrl Alt N'], ['Switch the theme', 'Ctrl Alt T'], ['Do not disturb, from the island', 'D']]);
+    await waitFor(() => expect(rowsOf('Anywhere in Windows')[0]).toEqual(['Open the notch’s list', 'Ctrl Shift K']));
+    expect(rowsOf('Anywhere in Windows').slice(1)).toEqual([['New session', 'Ctrl Alt N'], ['Switch the theme', 'Ctrl Alt T'], ['Do not disturb, from the notch', 'D']]);
     const rows = rowsOf('In Ledge Desktop');
     expect(rows[0]).toEqual(['Open the settings', 'Ctrl ,']);
     expect(rows[1]).toEqual(['Search and open a session', 'Ctrl / ⌘ K']);
     expect(rows).toHaveLength(20);
     expect(within(screen.getByRole('region', { name: 'In Ledge Desktop' })).getByText('Show these shortcuts')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Edit the island’s shortcut' }));
-    expect(title()).toHaveTextContent('Island');
-    expect(tab('Island')).toHaveAttribute('aria-current', 'page');
+    await user.click(screen.getByRole('button', { name: 'Edit the notch’s shortcut' }));
+    expect(title()).toHaveTextContent('Notch');
+    expect(tab('Notch')).toHaveAttribute('aria-current', 'page');
   });
 
   it('the sidebar’s footer is styled once, by sidebar.css: the Settings sheet does not repeat it', () => {

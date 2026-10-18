@@ -30,18 +30,18 @@ export const fr = {
     search: 'Rechercher une session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
     terminalShow: 'Afficher le terminal', terminalHide: 'Masquer le terminal', terminalShowTitle: 'Afficher le terminal (O)', terminalHideTitle: 'Masquer le terminal (O)'
   },
-  foot: { sessions: 'Sessions locales et SSH', search: 'Une session', chat: 'Chat Ledge', shortcuts: 'Raccourcis', islandOn: 'Île active', islandOff: 'Île masquée', islandTitle: 'Réglages de l’île' },
-  sections: { general: 'Général', appearance: 'Apparence', island: 'Île', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', projects: 'Projets', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
+  foot: { sessions: 'Sessions locales et SSH', search: 'Une session', chat: 'Chat Ledge', shortcuts: 'Raccourcis', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
+  sections: { general: 'Général', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', projects: 'Projets', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
   settings: {
     nav: 'Sections des réglages', back: 'Retour à l’atelier',
     saved: (what: string) => `Réglage enregistré · ${what}`,
     hints: {
       general: 'Langue, démarrage, agent par défaut et mises à jour.',
       appearance: 'Thème, couleur de Ledge, échelle et mouvements.',
-      island: 'L’île en haut de l’écran : où elle se pose et ce qu’elle signale.',
+      island: 'L’encoche en haut de l’écran : où elle se pose et ce qu’elle signale.',
       notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
       sounds: 'Les signaux sonores de votre équipe.',
-      machines: 'Cette machine et vos serveurs SSH. Une seule liste pour l’île et Ledge Desktop.',
+      machines: 'Cette machine et vos serveurs SSH. Une seule liste pour l’encoche et Ledge Desktop.',
       projects: 'Projets, dépôts et dossiers mémorisés.',
       shortcuts: 'Dans l’application, et partout dans Windows.',
       about: 'Versions et mises à jour.'
@@ -92,7 +92,7 @@ export const fr = {
       reducedOff: 'Animations'
     },
     notifications: {
-      dnd: 'Ne pas déranger', dndHint: 'Suspend les bulles, les notifications Windows et les sons. Les demandes restent visibles dans l’île et dans les sessions.',
+      dnd: 'Ne pas déranger', dndHint: 'Suspend les bulles, les notifications Windows et les sons. Les demandes restent visibles dans l’encoche et dans les sessions.',
       dndSaved: (on: boolean): string => (on ? 'Ne pas déranger activé' : 'Ne pas déranger désactivé'),
       finished: 'Quand un agent a terminé', finishedHint: 'Comment Ledge Desktop vous prévient quand une tâche arrive au bout.',
       modes: { both: 'Bulle et son', bubble: 'Bulle', sound: 'Son', none: 'État de session seul' } as Record<FinishedNotify, string>,
@@ -112,11 +112,11 @@ export const fr = {
       categorySaved: (label: string, on: boolean): string => `${label} : ${on ? 'activé' : 'désactivé'}`,
       behind: 'Seulement quand le terminal est derrière', behindHint: 'Si Windows Terminal est la fenêtre au premier plan, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
       behindSaved: (on: boolean): string => (on ? 'Sons seulement terminal derrière' : 'Sons toujours'),
-      note: 'Un seul son à la fois, pour l’île et Ledge Desktop ensemble : une rafale de demandes ne joue qu’une fois. Ouvrir, fermer et survoler restent silencieux.'
+      note: 'Un seul son à la fois, pour l’encoche et Ledge Desktop ensemble : une rafale de demandes ne joue qu’une fois. Ouvrir, fermer et survoler restent silencieux.'
     },
     machines: {
       title: 'Vos machines',
-      noteLead: 'Ledge rejoint vos serveurs par SSH, depuis WSL. ', noteShared: 'Liste partagée', noteRest: ' : le daemon local la garde, l’île et Ledge Desktop affichent les mêmes machines.',
+      noteLead: 'Ledge rejoint vos serveurs par SSH, depuis WSL. ', noteShared: 'Liste partagée', noteRest: ' : le daemon local la garde, l’encoche et Ledge Desktop affichent les mêmes machines.',
       status: { online: 'Connectée', connecting: 'Connexion…', offline: 'Hors ligne' } as Record<'online' | 'connecting' | 'offline', string>,
       local: 'Cette machine', localKind: 'Local · WSL',
       ssh: (alias: string) => `SSH · ${alias}`,
@@ -127,7 +127,7 @@ export const fr = {
       count: (n: number, max: number) => `${n} ${plural(n, 'machine', 'machines')} · ${max} au plus`,
       addTitle: 'Ajouter une machine',
       editTitle: (label: string) => `Modifier ${label}`,
-      label: 'Nom', labelAria: 'Nom de la machine', labelHint: 'Comme il apparaît dans l’atelier et l’île.', labelPlaceholder: 'Serveur de dev',
+      label: 'Nom', labelAria: 'Nom de la machine', labelHint: 'Comme il apparaît dans l’atelier et l’encoche.', labelPlaceholder: 'Serveur de dev',
       alias: 'Alias SSH', aliasHint: 'Nom d’un bloc Host de ~/.ssh/config dans WSL.', aliasPlaceholder: 'gpu-box',
       aliasInvalid: 'Lettres, chiffres, point, tiret ou souligné, sans espace.',
       before: 'Avant d’ajouter un serveur',
@@ -157,7 +157,7 @@ export const fr = {
       added: (label: string) => `${label} ajoutée`,
       edited: (label: string) => `${label} modifiée`,
       removed: (label: string) => `${label} retirée`,
-      confirm: { before: 'Retirer ', after: ' ? Ses sessions disparaissent de la liste, dans l’île comme ici. Rien n’est arrêté ni supprimé sur le serveur.' }
+      confirm: { before: 'Retirer ', after: ' ? Ses sessions disparaissent de la liste, dans l’encoche comme ici. Rien n’est arrêté ni supprimé sur le serveur.' }
     },
     projects: {
       title: 'Projets',
@@ -186,51 +186,51 @@ export const fr = {
       } as Record<'offline' | 'outdated' | 'invalid' | 'timeout', string>
     },
     island: {
-      bannerTitle: 'L’île n’a plus de réglages à elle.',
-      bannerBody: 'Le menu de son chat Ledge ouvre cette page, « Réglages dans Ledge Desktop ». L’île garde l’essentiel : vous prévenir, autoriser ou répondre d’un geste, ouvrir une session, parler à Ledge.',
-      outdated: 'Le daemon local est trop ancien pour les réglages de l’île : mettez-le à jour.',
-      show: 'Afficher l’île', showHint: 'La petite île en haut de l’écran. Masquée, Ledge Desktop continue de vous prévenir.', shown: 'Île affichée', hidden: 'Île masquée',
-      preview: 'Aperçu de l’île', bubble: 'Otto attend votre accord',
+      bannerTitle: 'L’encoche n’a plus de réglages à elle.',
+      bannerBody: 'Le menu de son chat Ledge ouvre cette page, « Réglages dans Ledge Desktop ». L’encoche garde l’essentiel : vous prévenir, autoriser ou répondre d’un geste, ouvrir une session, parler à Ledge.',
+      outdated: 'Le daemon local est trop ancien pour les réglages de l’encoche : mettez-le à jour.',
+      show: 'Afficher l’encoche', showHint: 'La petite encoche en haut de l’écran. Masquée, Ledge Desktop continue de vous prévenir.', shown: 'Encoche affichée', hidden: 'Encoche masquée',
+      preview: 'Aperçu de l’encoche', bubble: 'Otto attend votre accord',
       caption: {
-        dnd: 'Ne pas déranger : les demandes restent dans l’île, sans bulle.',
+        dnd: 'Ne pas déranger : les demandes restent dans l’encoche, sans bulle.',
         strip: 'Mode discret : un simple trait sous la fenêtre maximisée.',
-        whole: 'Mode discret désactivé : l’île reste entière au-dessus de la fenêtre.',
-        rest: 'L’île au repos, trois agents qui l’habitent.',
-        hidden: 'L’île est masquée. Ledge Desktop continue de vous prévenir.'
+        whole: 'Mode discret désactivé : l’encoche reste entière au-dessus de la fenêtre.',
+        rest: 'L’encoche au repos, trois agents qui l’habitent.',
+        hidden: 'L’encoche est masquée. Ledge Desktop continue de vous prévenir.'
       },
       cover: 'Simuler une fenêtre maximisée', uncover: 'Retirer la fenêtre',
       screen: 'Écran', screens: { primary: 'Principal', second: 'Écran 2' } as Record<'primary' | 'second', string>,
-      screenHint: (size: string | null) => (size ? `L’île se pose en haut de cet écran (${size}).` : 'L’île se pose en haut de cet écran.'),
+      screenHint: (size: string | null) => (size ? `L’encoche se pose en haut de cet écran (${size}).` : 'L’encoche se pose en haut de cet écran.'),
       screenSaved: { primary: 'Écran principal', second: 'Écran 2' } as Record<'primary' | 'second', string>,
-      position: 'Position de l’île', positionHint: 'Au centre du bord supérieur, ou décalée au quart de l’écran pour laisser libres les titres et les onglets.',
+      position: 'Position de l’encoche', positionHint: 'Au centre du bord supérieur, ou décalée au quart de l’écran pour laisser libres les titres et les onglets.',
       positions: { left: 'À gauche', center: 'Centre', right: 'À droite' } as Record<'left' | 'center' | 'right', string>, positionSaved: (p: string) => `Position : ${p}`,
-      discreet: 'Mode discret sous une fenêtre', discreetHint: 'Un simple trait quand une fenêtre maximisée occupe l’écran ; un survol la redéploie.', discreetOn: 'Mode discret', discreetOff: 'Île toujours entière',
-      islandScale: 'Taille de l’île', islandScaleHint: 'L’île et ses compagnons en haut de l’écran.', islandScaleSaved: (label: string) => `Taille de l’île ${label}`,
-      panelScale: 'Taille des fenêtres de l’île', panelScaleHint: 'Bulle, liste, session et chat qui s’ouvrent depuis l’île.', panelScaleSaved: (label: string) => `Taille des fenêtres ${label}`,
-      does: 'Ce que fait l’île', doesNote: 'Les demandes d’accord et les questions s’affichent toujours dans l’île. Le reste est à votre choix.',
-      quick: 'Autoriser et répondre depuis l’île', quickHint: 'Autoriser, refuser (Y / N) ou répondre en une ligne sans ouvrir Ledge Desktop.', quickOn: 'Réponses rapides dans l’île', quickOff: 'Réponses dans Ledge Desktop seulement',
-      finished: 'Bulle quand un agent a terminé', finishedHint: 'Une bulle de 6 s sous l’île.', finishedOn: 'Bulle de fin de tâche', finishedOff: 'Pas de bulle de fin de tâche',
+      discreet: 'Mode discret sous une fenêtre', discreetHint: 'Un simple trait quand une fenêtre maximisée occupe l’écran ; un survol la redéploie.', discreetOn: 'Mode discret', discreetOff: 'Encoche toujours entière',
+      islandScale: 'Taille de l’encoche', islandScaleHint: 'L’encoche et ses compagnons en haut de l’écran.', islandScaleSaved: (label: string) => `Taille de l’encoche ${label}`,
+      panelScale: 'Taille des fenêtres de l’encoche', panelScaleHint: 'Bulle, liste, session et chat qui s’ouvrent depuis l’encoche.', panelScaleSaved: (label: string) => `Taille des fenêtres ${label}`,
+      does: 'Ce que fait l’encoche', doesNote: 'Les demandes d’accord et les questions s’affichent toujours dans l’encoche. Le reste est à votre choix.',
+      quick: 'Autoriser et répondre depuis l’encoche', quickHint: 'Autoriser, refuser (Y / N) ou répondre en une ligne sans ouvrir Ledge Desktop.', quickOn: 'Réponses rapides dans l’encoche', quickOff: 'Réponses dans Ledge Desktop seulement',
+      finished: 'Bulle quand un agent a terminé', finishedHint: 'Une bulle de 6 s sous l’encoche.', finishedOn: 'Bulle de fin de tâche', finishedOff: 'Pas de bulle de fin de tâche',
       say: 'Paroles des agents', sayHint: 'Une phrase d’un agent, en bulle, qui s’efface après 5 s.', sayOn: 'Paroles des agents', sayOff: 'Paroles masquées',
-      helpers: 'Sous-agents dans l’île', helpersHint: 'Les petits bots sur l’épaule de leur agent principal.', helpersOn: 'Sous-agents affichés', helpersOff: 'Sous-agents masqués',
-      shortcut: 'Raccourci pour ouvrir l’île', shortcutHint: 'Ouvre la liste des sessions de l’île, partout dans Windows.', recordingHint: 'Appuyez sur la combinaison voulue. Échap pour annuler.',
-      recorder: (keys: string) => `Raccourci pour ouvrir l’île : ${keys}. Modifier`, press: 'Appuyez…', edit: 'Modifier', cancel: 'Annuler',
-      needsModifier: 'Ajoutez Ctrl, Alt ou ⊞ : le raccourci doit marcher partout dans Windows.', shortcutSaved: (keys: string) => `Ouvrir l’île : ${keys}`,
+      helpers: 'Sous-agents dans l’encoche', helpersHint: 'Les petits bots sur l’épaule de leur agent principal.', helpersOn: 'Sous-agents affichés', helpersOff: 'Sous-agents masqués',
+      shortcut: 'Raccourci pour ouvrir l’encoche', shortcutHint: 'Ouvre la liste des sessions de l’encoche, partout dans Windows.', recordingHint: 'Appuyez sur la combinaison voulue. Échap pour annuler.',
+      recorder: (keys: string) => `Raccourci pour ouvrir l’encoche : ${keys}. Modifier`, press: 'Appuyez…', edit: 'Modifier', cancel: 'Annuler',
+      needsModifier: 'Ajoutez Ctrl, Alt ou ⊞ : le raccourci doit marcher partout dans Windows.', shortcutSaved: (keys: string) => `Ouvrir l’encoche : ${keys}`,
       /** How a stored key name (`Ctrl Alt Shift Win L`) is shown. */
       keyNames: { Shift: 'Maj', Win: '⊞' } as Record<string, string>,
       refused: {
-        offline: 'Le daemon local est hors ligne : rien n’a changé.', outdated: 'Le daemon local est trop ancien pour les réglages de l’île : mettez-le à jour.',
+        offline: 'Le daemon local est hors ligne : rien n’a changé.', outdated: 'Le daemon local est trop ancien pour les réglages de l’encoche : mettez-le à jour.',
         invalid: 'Le daemon a refusé ce changement. Rien n’a changé.', timeout: 'Le daemon n’a pas confirmé ce changement.'
       } as Record<'offline' | 'outdated' | 'invalid' | 'timeout', string>
     },
     shortcuts: {
       global: 'Partout dans Windows', globalNote: 'Ces raccourcis marchent même quand Ledge Desktop est fermé dans la zone de notification.',
-      globalRows: { island: 'Ouvrir la liste de l’île', newSession: 'Nouvelle session', theme: 'Changer le thème', dnd: 'Ne pas déranger, depuis l’île' },
-      edit: 'Modifier', editLabel: 'Modifier le raccourci de l’île',
+      globalRows: { island: 'Ouvrir la liste de l’encoche', newSession: 'Nouvelle session', theme: 'Changer le thème', dnd: 'Ne pas déranger, depuis l’encoche' },
+      edit: 'Modifier', editLabel: 'Modifier le raccourci de l’encoche',
       title: 'Dans Ledge Desktop',
       note: 'Y et N n’agissent que sur la demande épinglée de la session ouverte, jamais pendant la saisie.'
     },
     about: {
-      tagline: 'Une nouvelle façon de travailler avec vos agents. L’île et Ledge Desktop, une seule application.',
+      tagline: 'Une nouvelle façon de travailler avec vos agents. L’encoche et Ledge Desktop, une seule application.',
       versions: 'Versions', app: 'Ledge Desktop', daemon: (label: string) => `Daemon · ${label}`,
       install: { npm: 'npm', git: 'clone git', unknown: 'installation inconnue' } as Record<DaemonInfo['install'], string>,
       unknown: 'Version inconnue', behindTag: 'À mettre à jour', latest: 'Dernière version', latestUnknown: 'Pas encore vérifiée',
@@ -584,7 +584,7 @@ export const fr = {
       timeout: 'Le dossier n’a pas répondu.', retry: 'Réessayer'
     }
   },
-  /** The Ledge chat (shared ChatView): the island's `chat`, `machines` (those its cards read) and `time` copy, word for word. */
+  /** The Ledge chat (shared ChatView): the notch's `chat`, `machines` (those its cards read) and `time` copy, word for word. */
   chat: {
     title: 'Ledge', subtitle: (n: number, repos: number) => `Voit ${n} ${plural(n, 'session', 'sessions')} · ${repos} ${plural(repos, 'dépôt', 'dépôts')} · lecture seule`,
     ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…', open: 'Ouvrir la conversation avec Ledge', send: 'Envoyer', stop: 'Arrêter', reset: 'Nouvelle conversation', back: 'Retour aux sessions', close: 'Fermer',

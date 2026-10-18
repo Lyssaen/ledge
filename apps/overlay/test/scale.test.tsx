@@ -10,7 +10,7 @@ describe('UI scales', () => {
   it('Settings shows the two sizes as radio groups; Auto shows the value it resolves to; each changes on its own', () => {
     const onScale = vi.fn();
     render(<SettingsView visible theme="dark" dnd={false} reduced={false} osReduced={false} onToggleDnd={() => {}} onReduced={() => {}} onBack={() => {}} onClose={() => {}} {...soundProps} scales={{ handle: 'auto', panel: 'auto' }} autoScales={{ handle: 2, panel: 1 }} onScale={onScale} />);
-    const handle = screen.getByRole('group', { name: 'Island size' }); const win = screen.getByRole('group', { name: 'Window size' });
+    const handle = screen.getByRole('group', { name: 'Notch size' }); const win = screen.getByRole('group', { name: 'Window size' });
     expect(within(handle).getByRole('radio', { name: 'Auto (200%)' })).toBeChecked();
     expect(within(win).getByRole('radio', { name: 'Auto (100%)' })).toBeChecked();
     for (const n of ['100%', '125%', '150%', '200%']) expect(within(handle).getByRole('radio', { name: n })).not.toBeChecked();
@@ -22,7 +22,7 @@ describe('UI scales', () => {
 
   it('the French labels', () => {
     render(<LangProvider lang="fr"><SettingsView visible theme="dark" dnd={false} reduced={false} osReduced={false} onToggleDnd={() => {}} onReduced={() => {}} onBack={() => {}} onClose={() => {}} {...soundProps} scales={{ handle: 'auto', panel: 2 }} autoScales={{ handle: 2, panel: 1 }} onScale={() => {}} /></LangProvider>);
-    expect(within(screen.getByRole('group', { name: 'Taille de l’île' })).getByRole('radio', { name: 'Auto (200%)' })).toBeChecked();
+    expect(within(screen.getByRole('group', { name: 'Taille de l’encoche' })).getByRole('radio', { name: 'Auto (200%)' })).toBeChecked();
     expect(within(screen.getByRole('group', { name: 'Taille des fenêtres' })).getByRole('radio', { name: '200%' })).toBeChecked();
   });
 });

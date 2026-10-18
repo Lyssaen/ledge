@@ -22,7 +22,7 @@ describe('<SettingsView> tabs', () => {
     expect(panel).toHaveAttribute('id', 'ledge-settings-panel-display');
     expect(screen.getByRole('group', { name: 'Default harness' })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Language' })).toBeNull();
-    expect(screen.getByRole('group', { name: 'Island size' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Notch size' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /theme/ })).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Reduced motion' })).toBeInTheDocument();
     expect(screen.queryByRole('switch', { name: 'Do not disturb' })).toBeNull();
@@ -30,16 +30,16 @@ describe('<SettingsView> tabs', () => {
     tab('Notifications');
     expect(screen.getByRole('switch', { name: 'Do not disturb' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'When a bot or Ledge finishes' })).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Island size' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Notch size' })).toBeNull();
     tab('Sounds');
     expect(screen.getByRole('switch', { name: 'Sounds' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Test' })).toBeInTheDocument();
     expect(screen.queryByRole('switch', { name: 'Do not disturb' })).toBeNull();
   });
-  it('offers the island position and the discreet switch, applied live', () => {
+  it('offers the notch position and the discreet switch, applied live', () => {
     const onIslandPosition = vi.fn(), onDiscreet = vi.fn();
     view({ islandPosition: 'center', onIslandPosition, discreet: true, onDiscreet });
-    const group = screen.getByRole('group', { name: 'Island position' });
+    const group = screen.getByRole('group', { name: 'Notch position' });
     expect(within(group).getByRole('radio', { name: 'Centre' })).toBeChecked();
     fireEvent.click(within(group).getByRole('radio', { name: 'Left' }));
     expect(onIslandPosition).toHaveBeenCalledWith('left');
@@ -115,7 +115,7 @@ describe('<SettingsView> notifications and sounds', () => {
     const { onFinished } = view();
     tab('Notifications');
     expect(screen.getByRole('radio', { name: 'Bubble and sound' })).toBeChecked();
-    fireEvent.click(screen.getByRole('radio', { name: 'Island only' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Notch only' }));
     expect(onFinished).toHaveBeenCalledWith('none');
   });
   it('the Sounds switch, the volume, the categories and the terminal rule each send one patch', () => {
@@ -151,7 +151,7 @@ describe('<SettingsView> About tab', () => {
     localStorage.setItem('ledge.settings.tab', 'about');
     view();
     expect(screen.getByRole('tab', { name: 'Display' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('group', { name: 'Island size' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Notch size' })).toBeInTheDocument();
   });
   it('shows both versions, flags a mismatch and checks on demand', () => {
     localStorage.setItem('ledge.settings.tab', 'about');

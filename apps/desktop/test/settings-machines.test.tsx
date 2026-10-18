@@ -166,7 +166,7 @@ describe('Settings › Machines', () => {
     const { d, user } = await open(THREE);
     await user.click(entry('NAS').getByRole('button', { name: 'Remove' }));
     const confirm = within(entry('NAS').getByRole('alert'));
-    expect(entry('NAS').getByRole('alert')).toHaveTextContent('Remove NAS? Its sessions leave the list, in the island as here. Nothing is stopped or deleted on the server.');
+    expect(entry('NAS').getByRole('alert')).toHaveTextContent('Remove NAS? Its sessions leave the list, in the notch as here. Nothing is stopped or deleted on the server.');
     await user.click(confirm.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(sets(d)).toHaveLength(1));
     expect(sets(d)[0]!.machines).toEqual(THREE.slice(0, 2));
