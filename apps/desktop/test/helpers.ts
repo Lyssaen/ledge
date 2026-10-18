@@ -144,6 +144,15 @@ export async function openLaunch(opts: { repoInfo?: Map<string, RepoInfo>; list?
   return { ...env, form: within(await screen.findByRole('dialog', { name: 'New session' })) };
 }
 
+/** Opens the New project dialog. The explorer sidebar has no « New project » row; Settings › Projects still does, and the dialog is the same one. */
+export async function openProjectEditor(user: UserEvent): Promise<void> {
+  await user.keyboard('{Control>},{/Control}');
+  await screen.findByRole('heading', { level: 1, name: 'General' });
+  await user.click(within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('button', { name: /^Projects/ }));
+  const section = screen.getByRole('heading', { level: 2, name: 'Projects' }).closest('section')!;
+  await user.click(within(section).getByRole('button', { name: 'New project' }));
+}
+
 /** Starts counting the app's notices (call it in `beforeEach`): the list is every notice said since, « Setting saved » included. */
 export { recordToastsForTests as recordToasts } from '../src/shell/Toast';
 /** The « Setting saved » notices said since `recordToasts()`, in either language (the DOM shows only the last one). */

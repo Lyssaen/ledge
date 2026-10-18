@@ -25,10 +25,10 @@ const asks = (d: MockDaemon) => d.received.filter((m): m is Extract<ClientMessag
 const launches = (d: MockDaemon) => d.received.filter(m => m.type === 'session.launch');
 const filterButton = () => within(screen.getByRole('banner')).queryByRole('button', { name: 'Remove the filter: show every project' });
 
-/** The app on one local machine and LAUNCH_PROJECTS (Otto at the Ledge table, Nova at Payment's, Kit without a project), the chat opened with `/`. */
+/** The app on one local machine and LAUNCH_PROJECTS (Otto at the Ledge table, Nova at Payment's, Kit without a project), the chat opened from the sidebar mascot. */
 async function openChat(opts: { list?: boolean; sessions?: Session[] } = {}) {
   const env = await boot({ machines: LOCAL, projects: LAUNCH_PROJECTS, ...opts });
-  await env.user.keyboard('/');
+  await env.user.click(within(screen.getByRole('complementary', { name: /sidebar/i })).getByRole('button', { name: 'Open the conversation with Ledge' }));
   await screen.findByRole('complementary', { name: 'Chat Ledge' });
   await waitFor(() => expect(field()).toHaveFocus());
   return env;
@@ -52,7 +52,7 @@ async function ask(env: Awaited<ReturnType<typeof openChat>>, question: string, 
 }
 
 describe('the Ledge chat docked on the right', () => {
-  it('/ opens it with the focus in the field; typing there triggers no shortcut; Escape closes it', async () => {
+  it('the mascot opens it with the focus in the field; typing there triggers no shortcut; Escape closes it', async () => {
     const { user } = await openChat();
     expect(panel().getByText('Ask me how things are going.')).toBeVisible();
     await user.keyboard('n');
@@ -60,8 +60,8 @@ describe('the Ledge chat docked on the right', () => {
     expect(screen.queryByRole('dialog', { name: 'New session' })).toBeNull();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
-    // The sidebar's entry opens it again, with the focus in the field.
-    await user.click(within(screen.getByRole('complementary', { name: /sidebar/i })).getByRole('button', { name: /^Chat Ledge/ }));
+    // The sidebar's mascot opens it again, with the focus in the field.
+    await user.click(within(screen.getByRole('complementary', { name: /sidebar/i })).getByRole('button', { name: 'Open the conversation with Ledge' }));
     await waitFor(() => expect(field()).toHaveFocus());
     // Escape from outside the field closes it first too.
     field().blur();
@@ -69,13 +69,16 @@ describe('the Ledge chat docked on the right', () => {
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
   });
 
-  it('/ and the top bar’s chat button bring the focus back to the field of a chat already open', async () => {
+  it('/ focuses Ask Ledge; the title bar’s chat button brings the focus back to the field of a chat already open', async () => {
     const { user } = await openChat();
     act(() => field().blur());
     expect(document.activeElement).toBe(document.body);
     await user.keyboard('/');
-    await waitFor(() => expect(field()).toHaveFocus());
+    const ask = within(screen.getByRole('complementary', { name: /sidebar/i })).getByRole('textbox', { name: 'Ask Ledge' });
+    expect(ask).toHaveFocus();
+    expect(field()).not.toHaveFocus();
     expect(field()).toHaveValue('');
+    act(() => field().focus());
     await user.keyboard('/');                                            // in the field, / is typed
     expect(field()).toHaveValue('/');
     act(() => field().blur());
@@ -170,7 +173,7 @@ describe('the Ledge chat docked on the right', () => {
     // On a session page too: Escape from the chat's Close button closes the chat, the page stays.
     await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
     await waitFor(() => expect(document.querySelector('[aria-current=page][data-agent]')).toHaveAttribute('data-agent', 'local:otto'));
-    await env.user.keyboard('/');
+    await env.user.click(within(screen.getByRole('group', { name: 'Window bar' })).getByRole('button', { name: 'Chat Ledge' }));
     act(() => panel().getByRole('button', { name: 'Close' }).focus());
     await env.user.keyboard('{Escape}');
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();

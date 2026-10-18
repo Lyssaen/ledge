@@ -42,7 +42,8 @@ describe('filing from Sans projet in the List', () => {
   it('with the local daemon down, a drop says so in plain words and Kit stays in Sans projet', async () => {
     const { d, side } = await boot({ sessions: listSessions(), list: true });
     await d.close();
-    await waitFor(() => expect(side.getByRole('button', { name: /Local/ })).toHaveTextContent('offline'));
+    await waitFor(() => expect(side.getByRole('button', { name: /^Local/ }).getAttribute('title')).toMatch(/offline/));
+    expect(side.getByRole('button', { name: /^Local/ }).querySelector('.machine-dot')).toHaveClass('off');
     const dt = transfer();
     fireEvent.dragStart(row('Kit'), { dataTransfer: dt });
     fireEvent.dragOver(group('Ledge'), { dataTransfer: dt });

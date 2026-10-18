@@ -193,7 +193,7 @@ describe('Settings › General: the default agent', () => {
     await user.click(within(group).getByRole('radio', { name: 'Codex' }));
     expect(localStorage.getItem('desktop.tool')).toBe('"codex"');
     expect(saved()).toEqual(['Setting saved · Default agent: Codex']);
-    await user.click(within(screen.getByRole('complementary', { name: 'Sidebar' })).getByRole('button', { name: /^Chat Ledge/ }));
+    await user.click(within(screen.getByRole('complementary', { name: 'Sidebar' })).getByRole('button', { name: 'Open the conversation with Ledge' }));
     const field = () => within(screen.getByRole('complementary', { name: 'Chat Ledge' })).getByRole('textbox', { name: 'Ask Ledge' });
     await user.type(field(), 'Who reviews?{Enter}');
     await waitFor(() => expect(asks(d)).toHaveLength(1));

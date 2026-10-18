@@ -40,7 +40,7 @@ describe('the atelier', () => {
     await user.click(within(document.querySelector<HTMLElement>('.empty-project')!).getByRole('button', { name: 'New session' }));
     expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible();
     await user.keyboard('{Escape}');
-    await user.click(side.getByRole('button', { name: /No project/ }));
+    await user.click(side.getByRole('button', { name: /^No project/ }));
     expect(screen.queryAllByRole('region', { name: / table$/ })).toHaveLength(0);
     expect(screen.getByRole('region', { name: 'No project' })).toBeVisible();
   });

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { App } from '../src/App';
-import { boot, closeDaemons, declarations, TWO_PROJECTS } from './helpers';
+import { boot, closeDaemons, declarations, openProjectEditor, TWO_PROJECTS } from './helpers';
 import { LangProvider } from '../src/i18n/lang';
 import { initialNav } from '../src/nav/state';
 import { TopBar } from '../src/shell/TopBar';
@@ -13,15 +13,23 @@ beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
 describe('the Atelier shell', () => {
-  it('sidebar: views, projects with their dots, Sans projet, machines, settings', async () => {
+  it('sidebar: views, projects with their tallies, Sans projet, machines, settings', async () => {
     const { side } = await boot({ projects: TWO_PROJECTS });
     expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent('3');          // active main agents
-    const ledge = side.getByRole('button', { name: /^Ledge/ });
-    expect(ledge.querySelectorAll('.side-dots i.dot-approval')).toHaveLength(1);
-    expect(side.getByRole('button', { name: /Payment Service Platform/ }).querySelector('span')).toHaveAttribute('title', 'Payment Service Platform Migration Europe');
-    expect(side.getByRole('button', { name: /No project/ })).toHaveTextContent('1');
-    expect(side.getByRole('button', { name: /No project/ }).querySelector('.side-alert')).not.toBeNull();   // Kit has a question
-    expect(side.getByRole('button', { name: /Local/ })).toHaveTextContent('3 agents');
+    const ledge = side.getByRole('button', { name: /^Ledge/ }).closest('[role="treeitem"]')!;
+    expect(ledge.querySelectorAll('.st-tally .t-need')).toHaveLength(1);
+    expect(ledge.querySelector('.st-tally .t-need')).toHaveAttribute('title', '1 to decide');
+    expect(side.getByRole('button', { name: /^Otto/ }).closest('[role="treeitem"]')!.querySelector('.st-time')).toHaveClass('t-approval');
+    const pay = side.getByRole('button', { name: /^Payment Service Platform Migration Europe/ });
+    expect(pay).toHaveTextContent('Payment Service Platform Migration Europe');
+    expect(pay).toHaveAttribute('title', 'Show only Payment Service Platform Migration Europe in the atelier');
+    const none = side.getByRole('button', { name: /^No project/ }).closest('[role="treeitem"]')!;
+    expect(none.querySelector('.st-tally .t-need')).toHaveTextContent('1');
+    expect(side.getByRole('button', { name: /^Kit/ }).closest('[role="treeitem"]')!.querySelector('.st-time')).toHaveClass('t-question');
+    const local = side.getByRole('button', { name: /^Local/ });
+    expect(local.closest('.st-foot')).not.toBeNull();
+    expect(local.querySelector('small')).toHaveTextContent('3');
+    expect(local).toHaveAttribute('title', 'Local · 3 agents');
     expect(side.getByRole('button', { name: /Settings/ })).toBeVisible();
   });
 
@@ -87,20 +95,20 @@ describe('the Atelier shell', () => {
 
   it('New session and the project + open their dialogs; Close and the backdrop close them', async () => {
     const { side, user } = await boot({ projects: TWO_PROJECTS });
-    await user.click(side.getByRole('button', { name: /New session/ }));
+    await user.click(side.getByRole('button', { name: /^New session N/ }));
     const dialog = screen.getByRole('dialog', { name: 'New session' });
     expect(within(dialog).getByRole('textbox', { name: 'Instruction' })).toBeVisible();
     await user.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).toBeNull();
-    await user.click(side.getByRole('button', { name: 'New project' }));
+    await openProjectEditor(user);
     expect(screen.getByRole('dialog', { name: 'New project' })).toBeVisible();
     await user.click(document.querySelector('.modal-backdrop')!);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('Chat Ledge opens a side panel that closes', async () => {
+  it('Ask Ledge opens a side panel that closes', async () => {
     const { side, user } = await boot({ projects: TWO_PROJECTS });
-    await user.click(side.getByRole('button', { name: /Chat Ledge/ }));
+    await user.click(side.getByRole('button', { name: 'Open the conversation with Ledge' }));
     const chat = screen.getByRole('complementary', { name: 'Chat Ledge' });
     await user.click(within(chat).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
@@ -113,10 +121,13 @@ describe('the Atelier shell', () => {
     expect(screen.getByRole('button', { name: 'Exit full screen' })).toBeVisible();
   });
 
-  it('an agent in error has its own dot in its project row', async () => {
+  it('an agent in error has its own mark in its project row', async () => {
     const { d, side } = await boot({ projects: TWO_PROJECTS });
     d.upsert(fakeSession('rio', { name: 'Rio', cwd: '/w/pay', state: 'error' }));
-    await waitFor(() => expect(side.getByRole('button', { name: /Payment Service Platform/ }).querySelectorAll('.side-dots i.dot-error')).toHaveLength(1));
+    await waitFor(() => expect(side.getByRole('button', { name: /^Rio/ }).closest('[role="treeitem"]')!.querySelector('.st-time')).toHaveClass('t-error'));
+    const pay = side.getByRole('treeitem', { name: /Payment Service Platform Migration Europe/ });
+    expect(pay.querySelectorAll('.st-tally .t-need')).toHaveLength(1);
+    expect(pay.querySelector('.st-tally .t-need')).toHaveAttribute('title', '1 to decide');
   });
 
   it('an error session’s time is danger-text, without the approval halo', () => {

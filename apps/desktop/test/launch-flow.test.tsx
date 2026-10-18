@@ -207,7 +207,7 @@ describe('launching', () => {
     await user.click(launchButton(form));
     await waitFor(() => expect(dialog()).toBeNull());
     expect(banner.queryByRole('button', { name: 'Remove the filter: show every project' })).toBeNull();
-    expect(side.getByRole('button', { name: /^Payment Service/ })).not.toHaveClass('active');
+    expect(side.getByRole('button', { name: /^Payment Service/ }).closest('[role="treeitem"]')).not.toHaveClass('sel');
     expect(document.querySelector('.agent-seat')).toBeNull();                  // still the List
     const name = launches(d)[0]!.name!;
     expect(await screen.findByRole('listitem', { name: new RegExp(`^${name},`) })).toBeVisible();
@@ -224,7 +224,7 @@ describe('launching', () => {
     d.options.autoLaunch = true;
     await user.click(launchButton(form));
     await waitFor(() => expect(dialog()).toBeNull());
-    expect(side.getByRole('button', { name: /^Ledge/ })).toHaveClass('active');
+    expect(side.getByRole('button', { name: /^Ledge/ }).closest('[role="treeitem"]')).toHaveClass('sel');
   });
 });
 

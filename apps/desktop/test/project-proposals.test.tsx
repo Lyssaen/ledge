@@ -3,7 +3,7 @@ import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@te
 import type { ClientMessage, FoundRepo, Machines, ServerMessage } from '@ledge/protocol';
 import type { DaemonClient, Proposal } from '@ledge/fleet';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { boot, closeDaemons, PROJECTS, type MockDaemon } from './helpers';
+import { boot, closeDaemons, openProjectEditor, PROJECTS, type MockDaemon } from './helpers';
 import { machine } from './fleet-helpers';
 import { LangProvider } from '../src/i18n/lang';
 import { MESSAGES } from '../src/i18n/messages';
@@ -43,11 +43,11 @@ const LEDGE_CLONE: FoundRepo[] = [
 // Otto works in Ledge's repository: no agent without a project, so no agents' folder is proposed.
 const OTTO = [fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' })];
 
-/** The app on the mock daemon (Local answers the scan with `found`, Dev is offline), then the projects « + ». */
+/** The app on the mock daemon (Local answers the scan with `found`, Dev is offline), then New project from Settings › Projects. */
 async function openNew(found: FoundRepo[]) {
   const env = await boot({ sessions: OTTO, machines: MACHINES });
   env.d.found.push(...found);
-  await env.user.click(env.side.getByRole('button', { name: 'New project' }));
+  await openProjectEditor(env.user);
   const dialog = within(screen.getByRole('dialog', { name: 'New project' }));
   return { ...env, dialog };
 }

@@ -3,7 +3,7 @@ import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@te
 import type { UserEvent } from '@testing-library/user-event';
 import type { ClientMessage, Projects, RepoInfo } from '@ledge/protocol';
 import type { DaemonClient } from '@ledge/fleet';
-import { boot, closeDaemons, PROJECTS, type MockDaemon } from './helpers';
+import { boot, closeDaemons, openProjectEditor, PROJECTS, type MockDaemon } from './helpers';
 import { LangProvider } from '../src/i18n/lang';
 import { MESSAGES } from '../src/i18n/messages';
 import { ProjectDialog } from '../src/projects/ProjectDialog';
@@ -23,12 +23,12 @@ const ctrlEnter = (user: UserEvent) => user.keyboard('{Control>}{Enter}{/Control
 const named = (name: string) => Object.assign(new Error(name), { name });
 const tick = () => new Promise(r => setTimeout(r, 50));
 
-/** The app on the mock daemon, Local's home /home/me holding the Git repository paper (main) and the folder notes; then the projects « + ». */
+/** The app on the mock daemon, Local's home /home/me holding the Git repository paper (main) and the folder notes; then New project from Settings › Projects. */
 async function openNew(opts: Parameters<typeof boot>[0] = {}) {
   const env = await boot(opts);
   env.d.options.home = '/home/me';
   env.d.folders.set('/home/me', { entries: ['paper', 'notes'], repos: [{ name: 'paper', branch: 'main' }] });
-  await env.user.click(env.side.getByRole('button', { name: 'New project' }));
+  await openProjectEditor(env.user);
   const dialog = within(screen.getByRole('dialog', { name: 'New project' }));
   return { ...env, dialog, name: dialog.getByRole('textbox', { name: 'Name' }) };
 }
@@ -179,8 +179,9 @@ describe('the project editor: a new project from the sidebar', () => {
     const { d, side, user, client } = await boot();
     const setProjects = vi.spyOn(client.fleet!, 'setProjects');
     await d.close();
-    await waitFor(() => expect(side.getByRole('button', { name: /Local/ })).toHaveTextContent('offline'));
-    await user.click(side.getByRole('button', { name: 'New project' }));
+    await waitFor(() => expect(side.getByRole('button', { name: /^Local/ }).getAttribute('title')).toMatch(/offline/));
+    expect(side.getByRole('button', { name: /^Local/ }).querySelector('.machine-dot')).toHaveClass('off');
+    await openProjectEditor(user);
     const dialog = within(screen.getByRole('dialog', { name: 'New project' }));
     await user.type(dialog.getByRole('textbox', { name: 'Name' }), 'Paper Rendering');
     await user.click(dialog.getByRole('button', { name: /^Create the project/ }));
@@ -396,9 +397,9 @@ describe('ProjectSwatch', () => {
 
   it('in the app: the sidebar\'s project swatch, and the top bar\'s « No project » filter', async () => {
     const { side, user } = await boot();
-    const swatch = side.getByRole('button', { name: /^Ledge/ }).querySelector('.side-swatch') as HTMLElement;
+    const swatch = side.getByRole('button', { name: /^Ledge/ }).closest('[role="treeitem"]')!.querySelector('.side-swatch') as HTMLElement;
     expect(swatch.style.background).toBe('rgb(59, 130, 246)');
-    await user.click(side.getByRole('button', { name: /No project/ }));
+    await user.click(side.getByRole('button', { name: /^No project/ }));
     expect(within(screen.getByRole('banner')).getByText('No project').closest('.project-filter')!.querySelector('i.filter-none')).not.toBeNull();
   });
 });

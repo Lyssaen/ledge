@@ -206,16 +206,16 @@ describe('putting an agent away', () => {
 
   it('a project of the sidebar is a target too, and says so while dragging', async () => {
     const { side } = await boot();
-    const row = side.getByRole('button', { name: /^Payment Service/ });
+    const row = side.getByRole('button', { name: /^Payment Service/ }).closest('[role="treeitem"]')!;
     const dt = transfer();
     fireEvent.dragStart(document.querySelector('.unassigned-card')!, { dataTransfer: dt });
-    expect(screen.getByText('Drop on a project to move Kit there.')).toBeVisible();
     fireEvent.dragOver(row, { dataTransfer: dt });
     expect(row).toHaveClass('drop-over');
-    fireEvent.dragOver(side.getByRole('button', { name: /No project/ }), { dataTransfer: dt });
-    expect(side.getByRole('button', { name: /No project/ })).not.toHaveClass('drop-over');
+    const none = side.getByRole('button', { name: /^No project/ }).closest('[role="treeitem"]')!;
+    fireEvent.dragOver(none, { dataTransfer: dt });
+    expect(none).not.toHaveClass('drop-over');
     fireEvent.drop(row, { dataTransfer: dt });
-    expect(screen.queryByText('Drop on a project to move Kit there.')).toBeNull();
+    expect(row).not.toHaveClass('drop-over');
     await waitFor(() => expect(within(screen.getByRole('region', { name: /^Payment Service.* table$/ })).getByRole('button', { name: /^Kit,/ })).toBeVisible());
   });
 
@@ -282,7 +282,7 @@ describe('putting an agent away', () => {
 
   it('Move to… files Kit; New project… opens the project dialog; Escape closes only the menu', async () => {
     const { side, user } = await boot();
-    await user.click(side.getByRole('button', { name: /No project/ }));            // filter « Sans projet »
+    await user.click(side.getByRole('button', { name: /^No project/ }));            // filter « Sans projet »
     const zone = within(screen.getByRole('region', { name: 'No project' }));
     await user.click(zone.getByRole('button', { name: 'Move to…' }));
     expect(screen.getByRole('menuitem', { name: /^Ledge/ })).toHaveTextContent('ledge');
@@ -311,7 +311,8 @@ describe('putting an agent away', () => {
   it('with the local daemon down, Move to… says so in plain words and Kit stays', async () => {
     const { d, side, user } = await boot();
     await d.close();
-    await waitFor(() => expect(side.getByRole('button', { name: /Local/ })).toHaveTextContent('offline'));
+    await waitFor(() => expect(side.getByRole('button', { name: /^Local/ }).getAttribute('title')).toMatch(/offline/));
+    expect(side.getByRole('button', { name: /^Local/ }).querySelector('.machine-dot')).toHaveClass('off');
     const zone = within(screen.getByRole('region', { name: 'No project' }));
     await user.click(zone.getByRole('button', { name: 'Move to…' }));
     await user.click(screen.getByRole('menuitem', { name: /^Ledge/ }));

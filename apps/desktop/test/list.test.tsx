@@ -137,7 +137,7 @@ describe('the List', () => {
     expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible();
     await user.keyboard('{Escape}');
     await user.click(screen.getByRole('radio', { name: 'Machine' }));
-    expect(screen.queryAllByRole('button', { name: /^New session in/ })).toHaveLength(0);
+    expect(within(screen.getByRole('tabpanel', { name: 'List' })).queryAllByRole('button', { name: /^New session in/ })).toHaveLength(0);
   });
   it('grouping and density are remembered; the filter and the chip are not', async () => {
     const { view, client, user } = await boot({ sessions: listSessions(), list: true });
