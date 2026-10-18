@@ -45,7 +45,7 @@ import { UpdateCard } from '../update/UpdateCard';
 import { targetOf } from '../update/machine';
 import type { UpdateController } from '../update/useUpdate';
 import { frameOf, type Box } from './frame';
-import { Shoulders, shoulderR } from './Shoulders';
+import { Shoulders, SHOULDER_R, shoulderR } from './Shoulders';
 import { useKeyboard, isYesNo } from '../keyboard/useKeyboard';
 import { useDocumentReader } from '../documents/useDocumentReader';
 import type { DocumentReference } from '../documents/references';
@@ -695,8 +695,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   if (unreachable) extras.push({ left: statusLeft, top: statusTop, w: statusW, h: statusH });
   if (coachShown) extras.push({ left: coachLeft, top: coachTop, w: 300 * ps, h: COACHMARK_H * ps });
   // The fillets either side of the surface, where it leaves the top edge.
-  const sr = shoulderR(geo.w, st.mode === 'handle');
-  if (sr > 0) extras.push({ left: geo.left - sr, top: 0, w: geo.w + 2 * sr, h: sr });
+  // Each fillet's box keeps the largest fillet's width (Shoulders), whatever the notch; the window holds the fillet drawn.
+  const sr = shoulderR(geo.w, st.mode === 'handle' && !awake);
+  if (sr > 0) extras.push({ left: geo.left - SHOULDER_R, top: 0, w: geo.w + 2 * SHOULDER_R, h: sr });
   const frame = frameOf(geo, extras, { w: screenW, h: screenH });
   useNativeFrame(visible ? frame : HIDDEN_FRAME, parseFloat(ms(SETTLE_MS)));
   useEffect(() => { setOutsideWatch(panel && visible); }, [panel, visible]);
@@ -735,8 +736,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // The entering view follows the shape once it has nearly settled: later on a shrink (back from a session) than on a grow.
   const enter = enterDelay(growing);
 
-  const radius = st.mode === 'handle' ? 5 : 22;
-  const surfaceTransition = ['left', 'width', 'height'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out`;
+  const radius = st.mode === 'handle' ? (awake ? 19 : 5) : 22;
+  const surfaceTransition = ['left', 'width', 'height', 'border-radius'].map(p => `${p} ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`).join(', ') + `, opacity ${ms(150)} ease-out`;
   const content = (
     <>
       <div ref={surfaceRef} data-surface data-mode={st.mode} data-strip={strip || undefined} data-awake={awake || undefined}
@@ -820,7 +821,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       </div>
 
       {/* Drawn after the surface: each overlaps its edge by a pixel, so no seam shows where they meet. */}
-      <Shoulders left={geo.left} w={geo.w} strip={st.mode === 'handle' && !awake} opacity={unreachable ? 0.6 : 1} transition={surfaceTransition} />
+      <Shoulders left={geo.left} w={geo.w} strip={st.mode === 'handle' && !awake} opacity={unreachable ? 0.6 : 1} transition={surfaceTransition} pathTransition={`d ${ms(motion.ms)} ${motion.ease} ${ms(delay)}`} />
 
       {/* Zoomed extras: a zoomed element's own offsets are zoomed too, so their real-px positions are divided back. */}
       <div data-zoom="coachmark" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>

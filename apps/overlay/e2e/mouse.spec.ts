@@ -85,3 +85,33 @@ test('hovering the filet grows it into the compact island with its robots; leavi
   await expect(surface(page)).toHaveCSS('width', `${filetWidth([3])}px`);
   await expect(handle.locator('svg.bot')).toHaveCount(0);
 });
+
+test('resting again, the fillets stay joined to the notch through the whole shrink: no gap on the top rows', async ({ page }) => {
+  await fakeDaemon(page, [session('a'), session('b', { name: 'Pim', project: 'speos-api' }), session('c', { name: 'Ada' })]);
+  await ready(page, 3);
+  await wake(page);
+  await page.waitForTimeout(600);
+  await page.mouse.move(200, 400);
+  // Every row of the top 3 px (above the filet's coloured dashes), over the notch's span, is one dark run with no light pixel inside it.
+  const gaps: string[] = [];
+  for (let i = 0; i < 14; i++) {
+    const shot = await page.screenshot({ clip: { x: 760, y: 0, width: 400, height: 3 } });
+    const holes = await page.evaluate(async (b64: string) => {
+      const img = new Image(); img.src = `data:image/png;base64,${b64}`; await img.decode();
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const g = c.getContext('2d')!; g.drawImage(img, 0, 0);
+      const out: number[] = [];
+      for (let y = 0; y < img.height; y++) {
+        const row = g.getImageData(0, y, img.width, 1).data;
+        const dark = (x: number) => row[x * 4]! + row[x * 4 + 1]! + row[x * 4 + 2]! < 300;
+        let first = -1, last = -1;
+        for (let x = 0; x < img.width; x++) if (dark(x)) { if (first < 0) first = x; last = x; }
+        for (let x = first; x >= 0 && x <= last; x++) if (!dark(x)) { out.push(y); break; }
+      }
+      return out;
+    }, shot.toString('base64'));
+    if (holes.length) gaps.push(`frame ${i}: rows ${holes.join(',')}`);
+    await page.waitForTimeout(25);
+  }
+  expect(gaps).toEqual([]);
+});

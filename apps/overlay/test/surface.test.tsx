@@ -457,9 +457,9 @@ describe('<Surface> island', () => {
     expect(surface()).toHaveStyle({ top: '0px', height: '10px', width: `${filetWidth([2])}px`, left: `${Math.round(window.innerWidth / 2 - filetWidth([2]) / 2)}px` });
     expect(surface().style.borderRadius).toBe('0px 0px 5px 5px');
     // The resting fillets are the strip's 6 px: the 12 px ones hang below a 10 px bar.
-    const fillet = document.querySelector('[data-shoulder="left"]') as HTMLElement;
-    expect(fillet).toHaveStyle({ height: `${STRIP_SHOULDER_R}px` });
-    expect(parseFloat(fillet.style.top) + parseFloat(fillet.style.height)).toBeLessThanOrEqual(parseFloat(surface().style.height));
+    const fillet = document.querySelector('[data-shoulder="left"] path')!.getAttribute('d')!;
+    expect(fillet).toContain(`V${STRIP_SHOULDER_R} `);
+    expect(STRIP_SHOULDER_R).toBeLessThanOrEqual(parseFloat(surface().style.height));
     fireEvent.mouseEnter(surface());
     await act(async () => { vi.advanceTimersByTime(200); });
     expect(surface()).toHaveAttribute('data-mode', 'handle');

@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from './mockDaemon';
 import { frameOf, unionFrame, FRAME_PAD } from '../src/surface/frame';
-import { SHOULDER_R, STRIP_SHOULDER_R } from '../src/surface/Shoulders';
+import { SHOULDER_R } from '../src/surface/Shoulders';
 // The native side, stubbed: `invoke` records commands, `listen` keeps the handler so a test can emit a shell event,
 // the global shortcut plugin keeps each handler by its accelerator (`shortcut` is Ctrl+Alt+L's).
 const native = vi.hoisted(() => ({
@@ -299,7 +299,7 @@ describe('<Surface> under Tauri', () => {
     await mount({ tauri: true });
     // Two quiet sessions plus Ledge on a 1024 px wide jsdom viewport: the 40 px filet at x 492, 10 px high.
     expect(surface()).toHaveStyle({ left: '492px', top: '0px', width: '40px', height: '10px' });
-    await waitFor(() => expect(lastFrame()).toEqual({ left: 492 - STRIP_SHOULDER_R - FRAME_PAD.left, top: 0, width: 40 + 2 * STRIP_SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 10 + FRAME_PAD.bottom }));
+    await waitFor(() => expect(lastFrame()).toEqual({ left: 492 - SHOULDER_R - FRAME_PAD.left, top: 0, width: 40 + 2 * SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 10 + FRAME_PAD.bottom }));
     // The window covers the work area and only its region follows the frame: the page needs no offset wrapper.
     expect(content()).toBeNull();
   });
@@ -314,7 +314,7 @@ describe('<Surface> under Tauri', () => {
       return new Promise<undefined>(r => pending.push(() => r(undefined)));
     });
     await mount({ tauri: true });
-    const handleLeft = 492 - STRIP_SHOULDER_R - FRAME_PAD.left;
+    const handleLeft = 492 - SHOULDER_R - FRAME_PAD.left;
     await waitFor(() => expect(seen.at(-1)).toBe(handleLeft));
     await answer();
     // Handle to list: the list is wider, so its frame starts further left and holds the island's; it goes out at once.
@@ -337,8 +337,8 @@ describe('<Surface> under Tauri', () => {
     expect(surface()).toHaveStyle({ left: '472px', top: '0px', width: '80px', height: '20px' });
     expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('2');
     expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1');
-    const left = 472 - STRIP_SHOULDER_R - FRAME_PAD.left;
-    await waitFor(() => expect(lastFrame()).toEqual({ left, top: 0, width: 80 + 2 * STRIP_SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 20 + FRAME_PAD.bottom }));
+    const left = 472 - SHOULDER_R - FRAME_PAD.left;
+    await waitFor(() => expect(lastFrame()).toEqual({ left, top: 0, width: 80 + 2 * SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 20 + FRAME_PAD.bottom }));
     // The windows keep their own scale: the chat opens at its base 480 px, centred on the real screen.
     await waitFor(() => expect(native.shortcut).not.toBeNull());
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
