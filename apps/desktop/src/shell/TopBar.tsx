@@ -19,12 +19,14 @@ const VIEWS: readonly View[] = ['atelier', 'list'];
 /** The mockup's top bar: the breadcrumb on the left (no page title; on a subagent's page, its parent before it); on the right,
  *  icons only, in groups: view and display (overview only), or the open agent's state, the terminal toggle and the session menu; then
  *  shortcuts and full screen (search and chat are in the title bar). */
-export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal, manage }: {
+export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal, manage, onRevealArchives }: {
   nav: NavState; dispatch: (a: NavAction) => void; session: Session | null; projects: Projects | null; projectIdOf: (s: Session) => string | null;
   /** The subagent whose page is open (session is then its parent). */
   helper: Helper | null; terminal: boolean; onTerminal(): void;
   /** The session menu from the header « … » (a principal session that is not archived): whether it is open, and opening it at a point under the button. */
   manage?: { open: boolean; onOpen(at: { x: number; y: number }, opener: HTMLElement): void };
+  /** The Archived pill: ask the sidebar to unfold Archives and bring the open archive into view. */
+  onRevealArchives?: () => void;
 }) {
   const { t } = useI18n();
   const tabs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
@@ -103,7 +105,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
       {place.kind === 'session' && session && (
         <div className="header-view header-session">
           {isArchived(session)
-            ? <span className="archived-pill"><Icon d={SHELL_ICONS.archive} size={12} />{t.manage.archivedBanner.pill}</span>
+            ? <button type="button" className="archived-pill" onClick={() => onRevealArchives?.()}><Icon d={SHELL_ICONS.archive} size={12} />{t.manage.archivedBanner.pill}</button>
             : <StateBadge state={helper ? helperState(helper) : botState(session)} offline={!!session.offline} />}
           <span className="view-actions-sep" />
           <Button variant="ghost" size="icon" aria-pressed={terminal} aria-label={terminal ? t.top.terminalHide : t.top.terminalShow} title={terminal ? t.top.terminalHideTitle : t.top.terminalShowTitle} onClick={onTerminal}>

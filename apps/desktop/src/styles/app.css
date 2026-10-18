@@ -22,6 +22,8 @@ button, input, select, textarea { font: inherit; }
 button { color: inherit; cursor: pointer; text-align: left; }
 button:disabled { cursor: not-allowed; }
 button:not(.ledge-btn) { border: 0; background: none; }
+/* The Archived pill is a button (it unfolds Archives). The reset above would drop the border session.css gives it. */
+button.archived-pill { border: 1px solid var(--border); background: none; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 a { color: inherit; text-decoration: none; }

@@ -1,6 +1,6 @@
 import { useMemo, useState, type JSX } from 'react';
 import type { MachineState } from '@ledge/fleet';
-import type { Projects, Session } from '@ledge/protocol';
+import type { Project, Projects, Session } from '@ledge/protocol';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -16,11 +16,12 @@ import { useStored } from '../../state/useStored';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
 import { useTheme } from '../theme';
+import { Archives } from './Archives';
 import { treeModel } from './model';
 import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { Tree } from './Tree';
 
-/** The explorer shell: Session, Ask Ledge, Atelier, the project tree, then the foot. Attention and Archives stay empty until their own tasks. */
+/** The explorer shell: Session, Ask Ledge, Atelier, the project tree, Archives, then the foot. Attention stays empty until its task. */
 export function Sidebar(p: {
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; archived: readonly Session[];
@@ -42,6 +43,15 @@ export function Sidebar(p: {
   const base = place.kind === 'settings' ? place.back : place;
   const current = base.kind === 'session' ? base.id : null;
   const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
+  const projectName = (s: Session) => {
+    const id = p.projectIdOf(s);
+    return (id && p.projects?.projects.find(x => x.id === id)?.name) || t.side.unassigned;
+  };
+  const projectSwatch = (s: Session): Pick<Project, 'color'> | null => {
+    const id = p.projectIdOf(s);
+    const found = id ? p.projects?.projects.find(x => x.id === id) : undefined;
+    return found ? { color: found.color } : null;
+  };
   const atelierOn = place.kind === 'overview' && place.view === 'atelier';
   const inSettings = place.kind === 'settings';
   const active = activeCount(p.sessions);
@@ -86,7 +96,9 @@ export function Sidebar(p: {
             onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} />
         </section>
-        <section aria-label={t.side.archives} />
+        <Archives archived={p.archived} current={current} projectName={projectName} project={projectSwatch} reveal={p.revealArchives}
+          onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
+          onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused} />
       </div>
       <div className="st-foot">
         {p.machines.map(m => {
