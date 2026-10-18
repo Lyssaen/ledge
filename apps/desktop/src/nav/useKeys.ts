@@ -8,19 +8,21 @@ const typing = (el: Element | null): boolean => {
   return el.matches('input, textarea, select') || el.isContentEditable || el.getAttribute('contenteditable') === 'true';
 };
 
-/** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work (Escape after the dialog and the chat, offered to the screen before navigation);
+/** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work (Ctrl/⌘ Z too, outside a field) (Escape after the dialog and the chat, offered to the screen before navigation);
  *  the single keys stay out of the way of dialogs, fields and the chat. */
-export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys }): void {
+export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys; undo(): boolean }): void {
   const latest = useRef({ dispatch, ctx });
   latest.current = { dispatch, ctx };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.isComposing) return;
-      const { dispatch, ctx: { state, order, screen } } = latest.current;
+      const { dispatch, ctx: { state, order, screen, undo } } = latest.current;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
       if (mod && !e.altKey && key === 'k') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'search' } }); return; }
       // Ctrl , opens Settings on General; inside Settings it keeps the section open (it only closes the dialog or the chat).
+      // Ctrl Z takes back what the toast offers (« Annuler »); in a field it stays the field's own undo.
+      if (mod && !e.altKey && !e.shiftKey && key === 'z' && !typing(document.activeElement)) { if (undo()) e.preventDefault(); return; }
       if (mod && !e.altKey && e.key === ',') { e.preventDefault(); dispatch(state.place.kind === 'settings' ? { type: 'settings', section: state.place.section } : { type: 'settings' }); return; }
       if (e.key === 'Escape') {
         // A dialog, then the chat, close first; then the screen may take it (even while typing: it decides); else navigation.

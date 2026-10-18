@@ -93,14 +93,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const waits = useWaits(sessions);
   const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
   // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
-  const { notice, notify } = useToast();
+  const { notice, action: noticeAction, notify, undo } = useToast();
   const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
   // Allow / Deny from the List (and, lot 6, the session): one send per request; a refusal or a silence is said in the toast.
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
-  useKeys(dispatch, { state: nav, order, screen: screenKeys });
+  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo });
   // The window may leave full screen by itself (Escape in a browser, the OS): the layout follows.
   useEffect(() => onFullscreenLeft(() => dispatch({ type: 'fullscreen', on: false })), []);
   // The window follows the full screen state (not at mount: nothing was asked yet).
@@ -219,7 +219,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}
           notify={notify} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}
-      <Toast notice={notice} />
+      <Toast notice={notice} action={noticeAction} onAction={undo} />
     </ScreenKeysContext.Provider>
   );
 }

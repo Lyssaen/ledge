@@ -64,4 +64,17 @@ describe('Menu', () => {
     expect(screen.queryByRole('menu')).toBeNull();
     expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus();
   });
+  it('opens at a point, kept inside the window', async () => {
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 160, bottom: 90, width: 160, height: 90, toJSON() {} });
+    try {
+      render(<Menu open onOpenChange={() => {}} label="Session" className="ctx" menuClassName="ctx-menu" at={{ x: window.innerWidth - 5, y: window.innerHeight - 5 }} trigger={() => null}>
+        <MenuItem onSelect={() => {}}>Archive</MenuItem><MenuItem onSelect={() => {}}>Delete</MenuItem>
+      </Menu>);
+      const menu = screen.getByRole('menu', { name: 'Session' });
+      expect(menu.style.position).toBe('fixed');
+      expect(parseFloat(menu.style.left)).toBeLessThanOrEqual(window.innerWidth - 160);
+      expect(parseFloat(menu.style.top)).toBeLessThanOrEqual(window.innerHeight - 90);
+      expect(screen.getByRole('menuitem', { name: 'Archive' })).toHaveFocus();
+    } finally { rect.mockRestore(); }
+  });
 });

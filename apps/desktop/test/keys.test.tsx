@@ -1,4 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { useToast } from '../src/shell/Toast';
+import { useKeys } from '../src/nav/useKeys';
+import { initialNav } from '../src/nav/state';
+import type { Overview } from '../src/nav/overview';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -143,5 +148,27 @@ describe('the fleet corrects the place', () => {
     const side = within(await screen.findByRole('complementary', { name: /sidebar/i }));
     await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent('1'));
     expect(banner().getByText('Atelier')).toBeVisible();
+  });
+});
+
+describe('Ctrl Z', () => {
+  function Undoer({ run }: { run: () => void }) {
+    const { notify, undo } = useToast();
+    useKeys(() => {}, { state: initialNav({ view: 'atelier', helpers: false, paused: false } as Overview), order: [], screen: { current: null }, undo });
+    return <><button onClick={() => notify('Archivé.', { label: 'Annuler', run })}>archive</button><input aria-label="field" /></>;
+  }
+  it('Ctrl Z runs the visible toast action, and does nothing in a text field', async () => {
+    const run = vi.fn();
+    const user = userEvent.setup();
+    render(<Undoer run={run} />);
+    await user.click(screen.getByRole('button', { name: 'archive' }));
+    await user.click(screen.getByLabelText('field'));
+    await user.keyboard('{Control>}z{/Control}');
+    expect(run).not.toHaveBeenCalled();
+    screen.getByLabelText('field').blur();
+    await user.keyboard('{Control>}z{/Control}');
+    expect(run).toHaveBeenCalledTimes(1);
+    await user.keyboard('{Control>}z{/Control}');
+    expect(run).toHaveBeenCalledTimes(1);
   });
 });
