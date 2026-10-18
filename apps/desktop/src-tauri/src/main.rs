@@ -183,6 +183,11 @@ fn main() {
             // The window is created hidden and the window-state plugin has already put it back in place: show it now,
             // without a flash at the default size, unless the login item launched us into the tray.
             if !launched_minimized(std::env::args()) { show_main(app.handle()); }
+            else if let Some(w) = app.get_webview_window(MAIN) {
+                // Restoring a maximized window can show it even without StateFlags::VISIBLE.
+                // The login item's tray-only launch wins over that restored visibility.
+                let _ = w.hide();
+            }
             if let Some(target) = ledge_native::desktop::open_target(std::env::args()) { deliver_open(app.handle(), target); }
             Ok(())
         })
