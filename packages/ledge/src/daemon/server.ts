@@ -32,6 +32,15 @@ import { MAX_FRAME } from '../transport/frames.js';
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
 export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
 
+/** How each agent continues one conversation by its own id (Claude Code and Cursor Agent `--resume <id>`, Codex `resume <id>`). */
+export const RESUME_ARGS: Record<Tool, (id: string) => string[]> = { claude: id => ['--resume', id], codex: id => ['resume', id], cursor: id => ['--resume', id] };
+
+/** The agent's own conversation id: the one its hooks gave, else, for Claude Code, the name of its transcript file. */
+export function resumeKey(s: Session): string | undefined {
+  if (s.agentSessionId) return s.agentSessionId;
+  return s.tool === 'claude' && s.transcriptPath ? basename(s.transcriptPath, '.jsonl') : undefined;
+}
+
 /** The harnesses that take extra folders, and how. Claude only (verified: `claude --add-dir a b -- "prompt"`). */
 export const MULTI_DIR_ARGS: Partial<Record<Tool, (dirs: string[]) => string[]>> = { claude: dirs => ['--add-dir', ...dirs] };
 
@@ -52,6 +61,9 @@ class NoteNotTyped extends Error { constructor() { super('denied, but the note c
  * Origins allowed to open a WebSocket: the Tauri overlay (packaged and dev server). A browser always
  * sends Origin, so any web page is refused; Node clients (hook, launcher, status) send none and pass.
  */
+/** How long the hooks of a deleted session are ignored: its late SessionEnd or last Stop must not bring it back. */
+export const DELETED_TTL_MS = 5 * 60 * 1000;
+
 export const ALLOWED_ORIGINS: readonly string[] = [
   'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420',
   // Desktop's Vite dev server (spec 2026-10-14 §5.4)
@@ -126,7 +138,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); };
   const history = opts.history;
   const unsubscribeHistory = history ? [
-    history.onItem((id, item) => broadcast({ type: 'session.thread.item', id, item })),
+    history.onItem((id, item) => {
+      broadcast({ type: 'session.thread.item', id, item });
+      // A late result of an older parallel call (same `at` as its call) never takes the last message back; a failed send never flies.
+      const cur = store.get(id)?.lastMessage;
+      if (item.kind === 'sent' && item.status !== 'read' && item.status !== 'failed' && cur?.id !== item.id && (!cur || item.at >= cur.at)) {
+        store.patch(id, { lastMessage: { id: item.id, to: item.to, ...(item.peer ? { peer: item.peer } : {}), summary: item.summary ?? item.text.split('\n')[0]!.slice(0, 120), at: item.at } });
+      }
+    }),
     store.onEvent((id, ev) => history.record(id, ev)),
     store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })
   ] : [];
@@ -145,7 +164,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true } } : {}) });
+    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true } } : {}) });
     send(ws, machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     send(ws, projectsMsg()); // then the shared projects (build spec §5)
     send(ws, islandMsg()); // then the island's settings
@@ -254,6 +273,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
   const NOT_OFFERED = 'this answer is not offered for this request, answer in the terminal';
 
+  /** A live session Ledge launched is stopped (its tmux killed, a failure only logged) and marked exited; any other is left as it is. */
+  async function endSession(s: Session): Promise<void> {
+    if (s.source !== 'launcher' || s.state === 'exited') return;
+    if (s.tmuxSession) await tmux.killSession(s.tmuxSession).catch(e => log(`kill of ${s.tmuxSession} failed: ${(e as Error).message}`));
+    store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' });
+  }
+
   /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
   async function replyTo(id: string, text: string): Promise<string | null> {
     const s = store.get(id); if (!s) return 'unknown session';
@@ -268,6 +294,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
     await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending);
     return null;
+  }
+
+  /** Sessions deleted in the last DELETED_TTL_MS, by id: their late hooks are ignored. */
+  const deleted = new Map<string, number>();
+  function markDeleted(id: string): void {
+    const t = Date.now();
+    for (const [k, at] of deleted) if (t - at > DELETED_TTL_MS) deleted.delete(k);
+    deleted.set(id, t);
+  }
+  function recentlyDeleted(id: string): boolean {
+    const at = deleted.get(id); if (at === undefined) return false;
+    if (Date.now() - at <= DELETED_TTL_MS) return true;
+    deleted.delete(id); return false;
   }
 
   /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
@@ -371,6 +410,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.event': {
         const ev = msg.event;
+        // Late hooks of a session deleted moments ago (its SessionEnd, a last Stop) bring back neither it nor its thread.
+        if (recentlyDeleted(msg.id)) return;
         // The agent's text precedes the action it announces: sync the parent's transcript before the row lands.
         const ownTurn = !ev.helperId && (ev.name === 'PreToolUse' || ev.name === 'PermissionRequest' || ev.name === 'Stop');
         const helperEnd = ev.name === 'SubagentStop' && !!ev.helperId;
@@ -378,7 +419,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           try { history.sync(msg.id, ev.transcriptPath, { helperId: helperEnd ? ev.helperId : undefined, force: ev.name === 'Stop' || helperEnd }); }
           catch (e) { log(`transcript not read for ${msg.id}: ${(e as Error).message}`); }
         }
+        const terminal = ev.name === 'SessionEnd' || ev.name === 'PaneGone';
+        const stored = store.get(msg.id);
+        // A hook from an archived session still running (hook_only): it is alive again. An exited one stays archived,
+        // and so does one whose hook says it ends.
+        if (stored?.archivedAt && stored.state !== 'exited' && !terminal) store.unarchive(msg.id);
         const before = store.get(msg.id);
+        if (!before && terminal) return; // never a new session from its end
         if (!before) {
           const taken = store.all().map(s => s.name);
           const cwd = msg.cwd ?? '';
@@ -441,6 +488,54 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // Removal broadcasts session.removed, drops the remembered preview and is saved to the journal.
         // A dismissed hook_only session that is in fact still alive comes back on its next hook (the
         // hook-before-register path in session.event recreates it): acceptable, it is still running.
+        store.remove(msg.id);
+        return;
+      }
+      case 'session.archive': {
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        await endSession(s);
+        store.archive(msg.id, now());
+        return;
+      }
+      case 'session.restore': {
+        if (!store.get(msg.id)) return refuse('unknown session', msg.id);
+        store.unarchive(msg.id, now());
+        return;
+      }
+      case 'session.resume': {
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        if (s.state !== 'exited') return refuse('the session is still running', msg.id);
+        const key = resumeKey(s); if (!key) return refuse('no conversation to resume', msg.id);
+        // Marked live before the first await: a second resume arriving while this one spawns is then refused above.
+        const { archivedAt: _a, exitedAt: _e, exitCode: _c, ...rest } = s;
+        store.upsert({ ...rest, state: 'starting', source: 'launcher', agentSessionId: key });
+        try {
+          const cwd = await resolveFolder(s.cwd, opts.home);
+          const env = await agentEnv();
+          const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, args: RESUME_ARGS[s.tool](key), cwd, tmux, now, env, taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
+          // Deleted or archived while it spawned: that request wins, the agent just started is stopped and not recorded.
+          const cur = store.get(s.id);
+          if (!cur || cur.archivedAt !== undefined) {
+            if (spawned.tmuxSession) await tmux.killSession(spawned.tmuxSession).catch(e => log(`kill of ${spawned.tmuxSession} failed: ${(e as Error).message}`));
+            log(`resume of ${s.id} dropped: the session was ${cur ? 'archived' : 'deleted'} meanwhile`);
+            return;
+          }
+          const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project, transcriptPath } = s;
+          store.upsert({ ...spawned, agentSessionId: key, ...(transcriptPath ? { transcriptPath } : {}), ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
+          log(`resumed ${spawned.name} (${spawned.tool}) in ${spawned.cwd} as ${spawned.id}`);
+        } catch (e) {
+          // Put the old record back only over the interim one: a delete or an archive since then stands.
+          const cur = store.get(s.id);
+          if (cur && cur.archivedAt === undefined && cur.state === 'starting') store.upsert(s);
+          return refuse((e as Error).message, msg.id);
+        }
+        return;
+      }
+      case 'session.delete': {
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        // A running hook_only session is not stopped by Ledge: like a dismissed one, its next hook brings it back.
+        if (s.source === 'launcher' || s.state === 'exited') markDeleted(msg.id);
+        await endSession(s);
         store.remove(msg.id);
         return;
       }

@@ -20,14 +20,19 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('fr', { type: 'co
 /** Desktop's copy in French: the source of truth, whose shape is `Messages` (see messages.ts, which loads it on demand). */
 export const fr = {
   side: {
-    label: 'Barre latérale', newSession: 'Nouvelle session', search: 'Rechercher', searchLabel: 'Rechercher une session',
+    label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
     machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', settings: 'Réglages'
+  },
+  titlebar: {
+    label: 'Barre de fenêtre', search: 'Aller à une session, un projet, un réglage…',
+    waiting: (n: number) => plural(n, `${n} session attend : ouvrir la première`, `${n} sessions attendent : ouvrir la première`),
+    dnd: 'Ne pas déranger', dndOn: 'Ne pas déranger : activé', minimize: 'Réduire', maximize: 'Agrandir', restore: 'Restaurer', close: 'Fermer'
   },
   crumb: { atelier: 'Atelier', list: 'Liste', settings: 'Réglages', clearFilter: 'Retirer le filtre : voir tous les projets', clearFilterTitle: 'Tous les projets (Échap)', escape: 'Échap', openParent: (n: string) => `Ouvrir la conversation de ${n}` },
   top: {
     viewTabs: 'Vue des agents', helpersHide: 'Masquer les sous-agents', helpersShow: 'Afficher les sous-agents', pause: 'Figer les animations', play: 'Animer',
-    search: 'Rechercher une session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
+    chat: 'Chat Ledge (/)', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
     terminalShow: 'Afficher le terminal', terminalHide: 'Masquer le terminal', terminalShowTitle: 'Afficher le terminal (O)', terminalHideTitle: 'Masquer le terminal (O)'
   },
   foot: { sessions: 'Sessions locales et SSH', search: 'Une session', chat: 'Chat Ledge', shortcuts: 'Raccourcis', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
@@ -289,6 +294,9 @@ export const fr = {
     seat: (name: string, task: string, machine: string) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind: string, parent: string, task: string) => `${kind}, sous-agent de ${parent} : ${task}`,
     offline: 'Hors ligne',
+    messageTo: (n: string) => `à ${n}`,
+    messageLabel: (sender: string, n: string, summary: string) => `${sender} écrit à ${n} : ${summary}. Ouvrir l’échange`,
+    peerTag: (names: string) => `Échange récent avec ${names}`,
     desk: 'Parler à Ledge',
     watching: (n: number) => plural(n, `Je veille sur ${n} agent.`, `Je veille sur ${n} agents.`),
     listening: 'Je vous écoute.',
@@ -364,6 +372,45 @@ export const fr = {
     replyFailed: (name: string, message: string) => `Réponse non transmise à ${name} : ${message}`,
     replyUnconfirmed: (name: string) => `Ledge n’a pas vu la réponse à ${name} aboutir. Vérifiez le fil.`,
     noteNotTyped: 'Refusé, mais la note n’a pas pu être tapée.'
+  },
+  manage: {
+    menu: {
+      label: (name: string): string => `Gérer la session ${name}`, more: 'Gérer la session (clic droit)',
+      open: 'Ouvrir la session', terminal: 'Terminal', rename: 'Renommer…', moveTo: 'Ranger dans…', end: 'Terminer la session', resume: 'Reprendre la session',
+      archive: 'Archiver', endAndArchive: 'Terminer et archiver…', delete: 'Supprimer…',
+      kids: (n: number, name: string): string => `${n} ${plural(n, 'sous-agent part', 'sous-agents partent')} avec ${name}.`,
+      offline: (machine: string): string => `${machine} est injoignable.`,
+      cannotEnd: (machine: string): string => `${machine} est injoignable : Ledge ne peut pas l’arrêter.`,
+      outsideLedge: 'Lancée hors de Ledge : Ledge ne peut pas l’arrêter.',
+      deleteKey: 'Suppr', archiveFinished: 'Archiver les terminées'
+    },
+    rename: { title: (name: string): string => `Renommer ${name}`, label: 'Nom de la session', save: 'Renommer', cancel: 'Annuler' },
+    archivedBanner: {
+      pill: 'Archivée', title: 'Session archivée',
+      body: (ago: string): string => `${ago} · l’agent est arrêté, la conversation est en lecture seule.`,
+      restore: 'Remettre à la table', delete: 'Supprimer…', resume: 'Reprendre'
+    },
+    outdated: (machine: string): string => `Mettez Ledge à jour sur ${machine}`,
+    undo: 'Annuler',
+    archived: (name: string, kids: number): string => `${name} est archivé${kids > 0 ? ` avec ${kids} ${plural(kids, 'sous-agent', 'sous-agents')}` : ''}.`,
+    archivedMany: (n: number): string => `${n} sessions archivées.`,
+    refused: (name: string, message: string): string => `${name} : ${message}`,
+    confirm: {
+      title: {
+        end: (names: readonly string[]): string => `Terminer ${names.length === 1 ? names[0] : `ces ${names.length} sessions`} ?`,
+        archive: (names: readonly string[]): string => `Terminer et archiver ${names.length === 1 ? names[0] : `ces ${names.length} sessions`} ?`,
+        delete: (names: readonly string[]): string => `Supprimer ${names.length === 1 ? names[0] : `ces ${names.length} sessions`} ?`
+      },
+      body: {
+        end: (names: readonly string[]): string => `L’agent s’arrête maintenant, même au milieu d’une tâche. Sa conversation reste lisible et ${names.length > 1 ? 'les sessions restent à leur table, marquées' : 'il reste à sa table, marqué'} « Terminée ».`,
+        archive: (names: readonly string[], live: number): string => `${live === 1 && names.length === 1 ? `${names[0]} travaille encore : Ledge l’arrête, puis le range dans les Archives.` : `${live} ${plural(live, 'session travaille', 'sessions travaillent')} encore : Ledge les arrête, puis les range dans les Archives.`} Vous pourrez relire la conversation ou la reprendre plus tard.`,
+        delete: (names: readonly string[], live: number, archived: boolean): string => `${names.length > 1 ? `Ces ${names.length} sessions disparaissent` : `${names[0]} disparaît`} de Ledge${archived ? ', archives comprises' : ''} : fil, documents et position à la table. ${live > 0 ? `${live > 1 ? `${live} sessions travaillent` : 'La session travaille'} encore : Ledge ${live > 1 ? 'les' : 'l’'}arrête d’abord. ` : ''}L’historique gardé par l’outil de l’agent sur la machine n’est pas touché.`
+      },
+      ok: { end: 'Terminer', archive: 'Terminer et archiver', delete: 'Supprimer définitivement' },
+      kids: (kind: 'end' | 'archive' | 'delete', kids: number, names: readonly string[]): string => `${kids} ${plural(kids, 'sous-agent', 'sous-agents')} ${kind === 'delete' ? (kids > 1 ? 'sont supprimés' : 'est supprimé') : kind === 'end' ? (kids > 1 ? 's’arrêtent' : 's’arrête') : (kids > 1 ? 'partent' : 'part')} avec ${names.length > 1 ? 'eux' : names[0]}.`,
+      offline: (kind: 'end' | 'archive' | 'delete', names: readonly string[]): string => `${names.join(', ')} : machine injoignable. Ledge ${kind === 'delete' ? 'l’oublie' : 'le range'} sans pouvoir l’arrêter ; l’agent s’arrêtera de lui-même ou au retour de la machine.`,
+      cancel: 'Annuler'
+    }
   },
   session: {
     meta: 'Machine et dépôts',
@@ -460,6 +507,12 @@ export const fr = {
       lostBody: 'Le fil est figé : ce qui suit est le dernier état connu, l’activité actuelle n’est pas connue.',
       frozenEnd: (s: string) => `Plus aucune nouvelle depuis la perte de connexion · ${s}`, ended: (s: string) => `Session terminée · ${s}`,
       loading: 'Chargement du fil…', empty: 'Rien dans le fil pour l’instant.', notLoaded: 'Le fil n’a pas été chargé avant la perte de connexion.'
+    },
+    message: {
+      sent: 'Message envoyé', received: 'Message reçu',
+      readBy: (n: string) => `Lu par ${n}`, delivered: 'Remis, pas encore lu', sending: 'Envoi…', failed: 'Non remis',
+      conversation: (n: string, k: number) => `Échange avec ${n} · ${k} messages`, fold: 'Replier', unfold: 'Déplier',
+      readAll: 'Lire tout le message', showLess: 'Réduire', seeIn: (n: string) => `Voir dans le fil de ${n}`
     },
     plan: {
       kicker: 'Plan proposé', fallback: 'Plan',

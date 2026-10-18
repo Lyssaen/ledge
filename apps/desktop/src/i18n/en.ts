@@ -7,14 +7,19 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('en', { type: 'co
 /** Desktop's copy in English, shaped by the French (see messages.ts, which loads it on demand). */
 export const en: Messages = {
   side: {
-    label: 'Sidebar', newSession: 'New session', search: 'Search', searchLabel: 'Search a session',
+    label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', settings: 'Settings'
+  },
+  titlebar: {
+    label: 'Window bar', search: 'Go to a session, a project, a setting…',
+    waiting: (n) => pluralEn(n, `${n} session waiting: open the first`, `${n} sessions waiting: open the first`),
+    dnd: 'Do not disturb', dndOn: 'Do not disturb: on', minimize: 'Minimize', maximize: 'Maximize', restore: 'Restore', close: 'Close'
   },
   crumb: { atelier: 'Atelier', list: 'List', settings: 'Settings', clearFilter: 'Remove the filter: show every project', clearFilterTitle: 'Every project (Esc)', escape: 'Esc', openParent: (n) => `Open ${n}’s conversation` },
   top: {
     viewTabs: 'Agents view', helpersHide: 'Hide subagents', helpersShow: 'Show subagents', pause: 'Freeze animations', play: 'Animate',
-    search: 'Search a session (Ctrl K)', chat: 'Chat Ledge (/)', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
+    chat: 'Chat Ledge (/)', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
     terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)'
   },
   foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
@@ -274,6 +279,9 @@ export const en: Messages = {
     seat: (name, task, machine) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind, parent, task) => `${kind}, subagent of ${parent}: ${task}`,
     offline: 'Offline',
+    messageTo: (n) => `to ${n}`,
+    messageLabel: (sender, n, summary) => `${sender} writes to ${n}: ${summary}. Open the conversation`,
+    peerTag: (names) => `Recent conversation with ${names}`,
     desk: 'Talk to Ledge',
     watching: (n) => pluralEn(n, `I'm watching over ${n} agent.`, `I'm watching over ${n} agents.`),
     listening: "I'm listening.",
@@ -345,6 +353,45 @@ export const en: Messages = {
     replyFailed: (name, message) => `Could not send the reply to ${name}: ${message}`,
     replyUnconfirmed: (name) => `Ledge did not see the reply to ${name} land. Check the thread.`,
     noteNotTyped: 'Refused, but the note could not be typed.'
+  },
+  manage: {
+    menu: {
+      label: (name) => `Manage ${name}`, more: 'Manage the session (right click)',
+      open: 'Open session', terminal: 'Terminal', rename: 'Rename…', moveTo: 'Move to…', end: 'End session', resume: 'Resume session',
+      archive: 'Archive', endAndArchive: 'End and archive…', delete: 'Delete…',
+      kids: (n, name) => `${n} ${pluralEn(n, 'subagent leaves', 'subagents leave')} with ${name}.`,
+      offline: (machine) => `${machine} is unreachable.`,
+      cannotEnd: (machine) => `${machine} is unreachable: Ledge cannot stop it.`,
+      outsideLedge: 'Launched outside Ledge: Ledge cannot stop it.',
+      deleteKey: 'Del', archiveFinished: 'Archive finished'
+    },
+    rename: { title: (name) => `Rename ${name}`, label: 'Session name', save: 'Rename', cancel: 'Cancel' },
+    archivedBanner: {
+      pill: 'Archived', title: 'Archived session',
+      body: (ago) => `${ago} · the agent is stopped, the conversation is read-only.`,
+      restore: 'Put back at the table', delete: 'Delete…', resume: 'Resume'
+    },
+    outdated: (machine) => `Update Ledge on ${machine}`,
+    undo: 'Undo',
+    archived: (name, kids) => `${name} is archived${kids > 0 ? ` with ${kids} ${pluralEn(kids, 'subagent', 'subagents')}` : ''}.`,
+    archivedMany: (n) => `${n} sessions archived.`,
+    refused: (name, message) => `${name}: ${message}`,
+    confirm: {
+      title: {
+        end: (names) => `End ${names.length === 1 ? names[0] : `these ${names.length} sessions`}?`,
+        archive: (names) => `End and archive ${names.length === 1 ? names[0] : `these ${names.length} sessions`}?`,
+        delete: (names) => `Delete ${names.length === 1 ? names[0] : `these ${names.length} sessions`}?`
+      },
+      body: {
+        end: (names) => `The agent stops now, even in the middle of a task. Its conversation stays readable and ${names.length > 1 ? 'the sessions stay at their table, marked' : 'it stays at its table, marked'} “Finished”.`,
+        archive: (names, live) => `${live === 1 && names.length === 1 ? `${names[0]} is still working: Ledge stops it, then files it in the Archives.` : `${live} ${pluralEn(live, 'session is', 'sessions are')} still working: Ledge stops them, then files them in the Archives.`} You can read the conversation or resume it later.`,
+        delete: (names, live, archived) => `${names.length > 1 ? `These ${names.length} sessions disappear` : `${names[0]} disappears`} from Ledge${archived ? ', archives included' : ''}: thread, documents and place at the table. ${live > 0 ? `${live > 1 ? `${live} sessions are` : 'The session is'} still working: Ledge stops ${live > 1 ? 'them' : 'it'} first. ` : ''}The history the agent's tool keeps on the machine is not touched.`
+      },
+      ok: { end: 'End', archive: 'End and archive', delete: 'Delete for good' },
+      kids: (kind, kids, names) => `${kids} ${pluralEn(kids, 'subagent', 'subagents')} ${kind === 'delete' ? (kids > 1 ? 'are deleted' : 'is deleted') : kind === 'end' ? (kids > 1 ? 'stop' : 'stops') : (kids > 1 ? 'leave' : 'leaves')} with ${names.length > 1 ? 'them' : names[0]}.`,
+      offline: (kind, names) => `${names.join(', ')}: machine unreachable. Ledge ${kind === 'delete' ? 'forgets it' : 'files it'} without being able to stop it; the agent stops by itself or when the machine returns.`,
+      cancel: 'Cancel'
+    }
   },
   session: {
     meta: 'Machine and repositories',
@@ -438,6 +485,12 @@ export const en: Messages = {
       lostBody: 'The thread is frozen: what follows is the last known state; what the agent is doing now is not known.',
       frozenEnd: (s) => `No news since the connection was lost · ${s}`, ended: (s) => `Session ended · ${s}`,
       loading: 'Loading the thread…', empty: 'Nothing in the thread yet.', notLoaded: 'The thread was not loaded before the connection was lost.'
+    },
+    message: {
+      sent: 'Message sent', received: 'Message received',
+      readBy: (n) => `Read by ${n}`, delivered: 'Delivered, not read yet', sending: 'Sending…', failed: 'Not delivered',
+      conversation: (n, k) => `Conversation with ${n} · ${k} messages`, fold: 'Fold', unfold: 'Unfold',
+      readAll: 'Read the whole message', showLess: 'Show less', seeIn: (n) => `See it in ${n}'s thread`
     },
     plan: {
       kicker: 'Proposed plan', fallback: 'Plan',

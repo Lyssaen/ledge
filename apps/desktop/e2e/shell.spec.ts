@@ -46,3 +46,16 @@ test('at 1000 px the top bar stays on one line with a long project name', async 
   expect(box!.height).toBeLessThanOrEqual(57);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test('the Commande bar is 44 px over the sidebar, its search field opens the palette under it', async ({ page }) => {
+  await fakeDaemon(page, eight, { projects: twoProjects });
+  await page.goto('/');
+  const bar = page.getByRole('group', { name: 'Window bar' });
+  await expect(page.locator('aside.sidebar').getByText('8 agents')).toBeVisible();
+  const box = (await bar.boundingBox())!, side = (await page.locator('aside.sidebar').boundingBox())!;
+  expect(box.height).toBe(44);
+  expect(side.y).toBeGreaterThanOrEqual(box.y + box.height - 1);
+  await bar.getByRole('button', { name: 'Go to a session, a project, a setting…' }).click();
+  await expect(page.getByRole('combobox')).toBeFocused();
+  expect((await page.locator('.modal-backdrop').boundingBox())!.y).toBeGreaterThanOrEqual(44);
+});

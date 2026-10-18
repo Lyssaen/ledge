@@ -19,8 +19,14 @@ export const ThreadItemSchema = z.discriminatedUnion('kind', [
   /** `unknown`: answered in the terminal, the daemon only saw the prompt go away; `always`: allowed and not asked again. */
   z.object({ kind: z.literal('permission'), ...base, tool: z.string(), text: z.string(), decision: z.enum(['accept', 'deny', 'always', 'unknown']).optional() }),
   z.object({ kind: z.literal('reply'), ...base, text: z.string() }),
-  z.object({ kind: z.literal('helper'), ...base, task: z.string(), agentType: z.string().optional(), state: z.enum(['working', 'exited']) })
+  z.object({ kind: z.literal('helper'), ...base, task: z.string(), agentType: z.string().optional(), state: z.enum(['working', 'exited']) }),
+  /** A message this session sent to another agent; `id` is the tool_use_id, `to` the address it used, `peer` the Ledge session id, `received` the paired item's id in the peer's thread. */
+  z.object({ kind: z.literal('sent'), ...base, to: z.string(), peer: z.string().optional(), summary: z.string().optional(), text: z.string(), status: z.enum(['sending', 'delivered', 'read', 'failed']), received: z.string().optional() }),
+  /** A message another agent sent to this session; `from` is its from-name (else its address), `sent` the paired item's id in the peer's thread. */
+  z.object({ kind: z.literal('received'), ...base, from: z.string(), peer: z.string().optional(), text: z.string(), sent: z.string().optional() })
 ]);
 export type ThreadItem = z.infer<typeof ThreadItemSchema>;
 export type ToolItem = Extract<ThreadItem, { kind: 'tool' }>;
 export type HelperItem = Extract<ThreadItem, { kind: 'helper' }>;
+export type SentItem = Extract<ThreadItem, { kind: 'sent' }>;
+export type ReceivedItem = Extract<ThreadItem, { kind: 'received' }>;

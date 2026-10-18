@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, chmodSync } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionEvent } from '@ledge/protocol';
-import { History, MAX_ITEMS, SYNC_MS, handBack } from '../src/daemon/history.js';
+import { History, MAX_ITEMS, SYNC_MS, handBack, crossSession } from '../src/daemon/history.js';
 import { paths } from '../src/paths.js';
 
 const T0 = '2026-10-13T10:00:00.000Z';
@@ -267,5 +267,93 @@ describe('History', () => {
     expect(mine.map(i => i.id)).toEqual(['msg-a1', 'msg-a2']); // from the helper's start on
     expect(mine.every(i => i.kind === 'message' && i.helperId === 'h1')).toBe(true);
     expect(mine[1]).toMatchObject({ text: 'Trois appels.', turn: 1 });
+  });
+});
+
+describe('messages between agents', () => {
+  const tag = (name: string, body: string, close = true) => `<cross-session-message from="uds:/run/user/1000/cc-socks/1.sock" from-name="${name}" from-mode="prompting">\n${body}\n${close ? '</cross-session-message>' : ''}`;
+  const peers: Record<string, string> = { 'a-bf': 'bc8e', 'a-2d': 'fce8' };
+  const peerOf = (t: string) => peers[t];
+
+  it('parses one and two cross-session messages, with or without the transcript\'s first line', () => {
+    expect(crossSession(tag('a-bf', 'Réponse à ta coordination', false))).toEqual([{ from: 'uds:/run/user/1000/cc-socks/1.sock', name: 'a-bf', text: 'Réponse à ta coordination' }]);
+    expect(crossSession(`Another Claude session sent a message:\n${tag('a-bf', 'Un')}\n${tag('a-2d', 'Deux')}`)).toEqual([
+      { from: 'uds:/run/user/1000/cc-socks/1.sock', name: 'a-bf', text: 'Un' },
+      { from: 'uds:/run/user/1000/cc-socks/1.sock', name: 'a-2d', text: 'Deux' }
+    ]);
+    expect(crossSession('<cross-session-message from-mode="prompting" from="uds:x">\nSans nom</cross-session-message>')).toEqual([{ from: 'uds:x', text: 'Sans nom' }]);
+    expect(crossSession(tag('a-bf', 'Je cite <cross-session-message from="x"> dans ma phrase'))).toEqual([{ from: 'uds:/run/user/1000/cc-socks/1.sock', name: 'a-bf', text: 'Je cite <cross-session-message from="x"> dans ma phrase' }]);
+    expect(crossSession('Lance les tests')).toBeUndefined();
+    expect(crossSession('<agent-message from="a">\nrapport')).toBeUndefined();
+  });
+
+  it('syncs the agent messages into a turn opened by a received message', () => {
+    const p = join(dir, 'r.jsonl');
+    writeFileSync(p, JSON.stringify({ uuid: 'r1', timestamp: later(2), type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Bien reçu.' }] } }) + '\n');
+    const h = new History();
+    h.record('s', ev('UserPromptSubmit', { text: '<cross-session-message from="uds:x" from-name="a-bf">\nSalut\n</cross-session-message>' }));
+    expect(h.items('s')[0]).toMatchObject({ kind: 'received' });
+    expect(h.sync('s', p, { now: 2000 }).map(i => i.id)).toEqual(['msg-r1']);
+  });
+
+  it('a SendMessage is a sent message: sending, delivered, never a tool row', () => {
+    const h = new History({ peerOf: t => (t === 'a-bf' ? 'bc8e' : undefined) });
+    h.record('fce8', ev('UserPromptSubmit', { text: 'Préviens Nova' }));
+    h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', text: 'OK for Nova', toolUseId: 'toolu_1', toolInput: { to: 'a-bf', summary: 'OK for Nova', message: "C'est d'accord" } }, 1));
+    expect(h.items('fce8').map(i => i.kind)).toEqual(['prompt', 'sent']);
+    expect(h.items('fce8')[1]).toMatchObject({ kind: 'sent', id: 'toolu_1', turn: 1, to: 'a-bf', peer: 'bc8e', summary: 'OK for Nova', text: "C'est d'accord", status: 'sending' });
+    h.record('fce8', ev('PostToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', output: 'sent' }, 2));
+    expect(h.items('fce8').map(i => i.kind)).toEqual(['prompt', 'sent']);
+    expect(h.items('fce8')[1]).toMatchObject({ kind: 'sent', status: 'delivered' });
+    h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_2', toolInput: { to: 'ailleurs', message: 'Perdu' } }, 3));
+    h.record('fce8', ev('PostToolUseFailure', { tool: 'SendMessage', toolUseId: 'toolu_2', error: 'no such peer' }, 4));
+    expect(h.items('fce8')[2]).toMatchObject({ kind: 'sent', to: 'ailleurs', status: 'failed' });
+    expect(h.items('fce8')[2]).not.toHaveProperty('peer');
+    h.record('fce8', ev('Stop', {}, 5));
+    expect(h.items('fce8').map(i => i.kind)).toEqual(['prompt', 'sent', 'sent']); // the settle leaves it alone
+  });
+
+  it('a SendMessage whose result comes first is a sent card all the same, its call keeps it', () => {
+    const h = new History({ peerOf });
+    h.record('fce8', ev('PostToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'a-bf', message: 'Vite' } }));
+    h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'a-bf', message: 'Vite' } }, 1));
+    expect(h.items('fce8')).toEqual([{ kind: 'sent', id: 'toolu_1', at: later(0), turn: 0, to: 'a-bf', peer: 'bc8e', text: 'Vite', status: 'delivered' }]);
+  });
+
+  it('a cross-session prompt opens a turn of received messages, paired with the sender\'s sent one', () => {
+    const h = new History({ peerOf });
+    h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'a-bf', message: "C'est d'accord pour Nova" } }));
+    h.record('fce8', ev('PostToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1' }, 1));
+    h.record('bc8e', ev('UserPromptSubmit', { text: tag('a-2d', "C'est d'accord pour Nova") }, 2));
+    expect(h.items('bc8e')).toEqual([{ kind: 'received', id: 'recv-1-0', at: later(2), turn: 1, from: 'a-2d', peer: 'fce8', text: "C'est d'accord pour Nova", sent: 'toolu_1' }]);
+    expect(h.items('fce8')[0]).toMatchObject({ kind: 'sent', status: 'read', received: 'recv-1-0' });
+    h.record('bc8e', ev('PreToolUse', { tool: 'Bash', toolUseId: 'toolu_b', toolInput: { command: 'ls' } }, 3));
+    expect(h.items('bc8e')[1]).toMatchObject({ kind: 'tool', turn: 1 });
+  });
+
+  it('two queued messages make two received cards in one turn', () => {
+    const h = new History({ peerOf });
+    h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'a-bf', message: 'Un' } }));
+    h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_2', toolInput: { to: 'a-bf', message: 'Deux' } }, 1));
+    h.record('bc8e', ev('UserPromptSubmit', { text: 'Lance les tests' }, 2));
+    h.record('bc8e', ev('UserPromptSubmit', { text: `${tag('a-2d', 'Un')}\n${tag('a-2d', 'Deux')}` }, 3));
+    const recv = h.items('bc8e').filter(i => i.kind === 'received');
+    expect(recv.map(i => [i.id, i.turn, i.kind === 'received' && i.sent])).toEqual([['recv-2-0', 2, 'toolu_1'], ['recv-2-1', 2, 'toolu_2']]);
+    expect(h.items('fce8').map(i => i.kind === 'sent' && i.received)).toEqual(['recv-2-0', 'recv-2-1']);
+  });
+
+  it('a sender outside Ledge: a received card with its name, no peer, no pairing', () => {
+    const h = new History({ peerOf });
+    h.record('bc8e', ev('UserPromptSubmit', { text: tag('inconnu', 'Bonjour') }));
+    expect(h.items('bc8e')).toEqual([{ kind: 'received', id: 'recv-1-0', at: later(0), turn: 1, from: 'inconnu', text: 'Bonjour' }]);
+  });
+
+  it('read stays read when the sender\'s result comes after the receiver\'s prompt', () => {
+    const h = new History({ peerOf });
+    h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'a-bf', message: 'Vite' } }));
+    h.record('bc8e', ev('UserPromptSubmit', { text: tag('a-2d', 'Vite') }, 1));
+    h.record('fce8', ev('PostToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1' }, 2));
+    expect(h.items('fce8')).toHaveLength(1);
+    expect(h.items('fce8')[0]).toMatchObject({ kind: 'sent', status: 'read', received: 'recv-1-0' });
   });
 });

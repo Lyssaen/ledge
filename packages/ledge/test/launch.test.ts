@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSession } from '../src/spawn.js';
 import { parseLaunchArgs, ensureDaemon, attachEnv, agentEnv, launch } from '../src/cli/launch.js';
 import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
@@ -222,5 +223,14 @@ describe('launch', () => {
     const code = await launch('claude', [], { port, tmuxSocket: socket, cwd: '/tmp', command: ['node', agent, 'exit', '0'], attach: ptyAttach, spawnDaemon: () => {}, retryDelayMs: 20 });
     expect(code).toBe(0);
     expect(err).toHaveBeenCalledWith('ledge: daemon not running, session not tracked');
+  });
+});
+
+describe('spawnSession', () => {
+  it('keeps a given id', async () => {
+    const created: { name: string }[] = [];
+    const tmux = { async newSession(o: { name: string }) { created.push(o); } } as unknown as Tmux;
+    const s = await spawnSession({ tool: 'claude', id: 'ab12', args: ['--resume', 'u-1'], cwd: '/tmp', tmux, taken: { names: [], ids: ['ab12'] } });
+    expect(s.id).toBe('ab12'); expect(created[0]!.name).toBe('ledge-ab12');
   });
 });

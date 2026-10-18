@@ -12,14 +12,16 @@ const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
 /** The longest first prompt sent as a topic candidate; the reducer cuts it to one line of TOPIC_MAX. */
 const PROMPT_MAX = 500;
-/** Claude Code hands a backgrounded helper's report back as a prompt: that text is the report, capped like a tool input. */
-const handBack = (t: string) => t.startsWith('<agent-message from="');
-const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, handBack(t) ? INPUT_MAX : PROMPT_MAX) } : {}; };
+/** Claude Code hands a backgrounded helper's report back, or another session's message, as a prompt: that text is the
+ *  report or message, capped like a tool input. */
+const fromAgent = (t: string) => t.startsWith('<agent-message from="') || t.startsWith('<cross-session-message ');
+const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, fromAgent(t) ? INPUT_MAX : PROMPT_MAX) } : {}; };
 
 function describeTool(tool: string | undefined, input: unknown): string {
   const i = (input && typeof input === 'object' ? input : {}) as Payload;
   if (tool === 'Bash') return str(i.command) ?? '';
   if (tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit' || tool === 'Read') return str(i.file_path) ?? '';
+  if (tool === 'SendMessage') return str(i.summary) || `→ ${str(i.to) ?? ''}`;
   if (tool === 'ExitPlanMode') return str(i.plan)?.split('\n')[0] ?? 'plan';
   // Codex: the patch names its files on `*** Update File: <path>` (Add, Delete) lines.
   if (tool === 'apply_patch') {
@@ -116,7 +118,9 @@ export function mapHook(agent: Tool, eventName: string, payload: unknown, at: st
   const event = mapEvent(eventName, p, at, launched);
   if (!event) return null;
   const task = agent === 'claude' && event.helperId ? helperDescription(str(p.transcript_path), event.helperId) : undefined;
-  return { id, event: task ? { ...event, task } : event, agent, ...(cwd ? { cwd } : {}) };
+  // The agent's own conversation id, which `--resume` takes; a subagent's hooks share the session's, so they add none.
+  const agentSessionId = !event.helperId ? str(p.session_id) : undefined;
+  return { id, event: { ...event, ...(task ? { task } : {}), ...(agentSessionId ? { agentSessionId } : {}) }, agent, ...(cwd ? { cwd } : {}) };
 }
 
 /**
@@ -285,7 +289,8 @@ export function mapCursorHook(eventName: string, payload: unknown, at: string, e
   const roots = Array.isArray(p.workspace_roots) ? p.workspace_roots : [];
   const cwd = str(roots[0]) || undefined;
   const event = helper ? mapCursorHelperEvent(eventName, p, at, sessionId) : mapCursorEvent(eventName, p, at, !!env.LEDGE_SESSION, transcript);
-  return event ? { id, event, agent: 'cursor', ...(cwd ? { cwd } : {}) } : null;
+  // The conversation id (what `--resume` takes) rides on the session's own events, never on a subagent's.
+  return event ? { id, event: helper || event.helperId ? event : { ...event, agentSessionId: sessionId }, agent: 'cursor', ...(cwd ? { cwd } : {}) } : null;
 }
 
 function mapCursorHelperEvent(eventName: string, p: Payload, at: string, helperId: string): SessionEvent | null {

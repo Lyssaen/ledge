@@ -8,8 +8,8 @@ export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 
 export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'projects', 'shortcuts', 'about'];
 export type Place =
   | { kind: 'overview'; view: View; project: ProjectFilter }
-  /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre » de la Liste). */
-  | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; view: View; project: ProjectFilter }
+  /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre » de la Liste) ; item : le message (id du fil) que la page met en vue et allume (« Voir dans le fil de X »). */
+  | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; item?: string; view: View; project: ProjectFilter }
   | { kind: 'settings'; section: SectionId; back: Exclude<Place, { kind: 'settings' }> };
 export type Modal =
   | { kind: 'search' } | { kind: 'shortcuts' }
@@ -25,7 +25,7 @@ export type NavAction =
   | { type: 'view'; view: View }
   /** Sets the current place's project filter without going anywhere (a session page stays open; in Settings, the place behind). */
   | { type: 'filter'; project: ProjectFilter }
-  | { type: 'open'; id: string; helper?: string; focus?: 'reply' }
+  | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string }
   | { type: 'settings'; section?: SectionId }
   | { type: 'modal'; modal: Modal }
   | { type: 'chat'; open?: boolean }
@@ -57,7 +57,7 @@ export function navReducer(s: NavState, a: NavAction): NavState {
     }
     case 'open': {
       const b = baseOf(place);
-      return { ...s, place: { kind: 'session', id: a.id, ...(a.helper !== undefined && { helper: a.helper }), ...(a.focus !== undefined && { focus: a.focus }), view: b.view, project: b.project }, modal: null, chat: false };
+      return { ...s, place: { kind: 'session', id: a.id, ...(a.helper !== undefined && { helper: a.helper }), ...(a.focus !== undefined && { focus: a.focus }), ...(a.item !== undefined && { item: a.item }), view: b.view, project: b.project }, modal: null, chat: false };
     }
     case 'settings':
       return { ...s, place: { kind: 'settings', section: a.section ?? 'general', back: baseOf(place) }, modal: null, chat: false };

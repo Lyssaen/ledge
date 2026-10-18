@@ -1,4 +1,4 @@
-import { ChatTurnSchema, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type ChatTurn, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
+import { ChatTurnSchema, isArchived, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type ChatTurn, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
 
@@ -83,7 +83,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** keepStale: a fallen peer, the local one included, keeps its last snapshot, flagged offline (spec §6). */
   const stale = (p: Peer | undefined): boolean => !!opts.keepStale && !!p && !available(p) && !!p.snapshot;
   const session = (p: Peer, s: Session): Session => ({ ...s, id: qualify(p.config.id, s.id), machineId: p.config.id, machineName: p.config.label, ...(stale(p) ? { offline: true } : {}) });
-  const stateSessions = (p: Peer): Session[] => stale(p) ? p.snapshot!.sessions.map(s => ({ ...s, offline: true })) : p.snapshot?.sessions ?? [];
+  const stateSessions = (p: Peer): Session[] => (stale(p) ? p.snapshot!.sessions.map(s => ({ ...s, offline: true })) : p.snapshot?.sessions ?? []).filter(s => !isArchived(s));
   /** The fleet's own inventory and status follow every change. Only `publish` tells the overlay the whole picture again:
    *  a (re)connection, a host joining or leaving, another host selected. A session's own update is relayed as itself
    *  (see `receive`): to the overlay a snapshot is a reconnection, which empties the threads and rebuilds the open view. */

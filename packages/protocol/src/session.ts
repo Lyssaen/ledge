@@ -68,6 +68,8 @@ export const SessionSchema =z.object({
   pending: PendingSchema.optional(),
   helpers: z.array(HelperSchema).default([]),
   lastReply: ReplySchema.optional(),
+  /** The last message this session sent to another agent: its tool_use_id, the address, the peer's Ledge session id, a one-line summary. */
+  lastMessage: z.object({ id: z.string(), to: z.string(), peer: z.string().optional(), summary: z.string(), at: z.string().datetime() }).optional(),
   startedAt: z.string().datetime(),
   lastActivityAt: z.string().datetime(),
   lastHookAt: z.string().datetime().optional(),
@@ -78,6 +80,15 @@ export const SessionSchema =z.object({
   exitCode: z.number().int().nullable().optional(),
   exitedAt: z.string().datetime().optional(),
   lastError: z.string().optional(),
-  source: z.enum(['launcher', 'hook_only'])
+  source: z.enum(['launcher', 'hook_only']),
+  /** When the session was put in the archive (session management): set, it leaves the live list and waits to be restored, resumed or deleted. */
+  archivedAt: z.string().datetime().optional(),
+  /** When the session was last taken out of the archive: the poller's retirement clock restarts from it, not from `exitedAt`. */
+  restoredAt: z.string().datetime().optional()
 });
 export type Session = z.infer<typeof SessionSchema>;
+
+/** Whether the session sits in the archive. */
+export function isArchived(s: Pick<Session, 'archivedAt'>): boolean {
+  return s.archivedAt !== undefined;
+}

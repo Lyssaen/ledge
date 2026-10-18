@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { ChatTurn, DaemonInfo, Recent, ServerMessage, Session, ThreadItem } from '@ledge/protocol';
+import { isArchived, type ChatTurn, type DaemonInfo, type Recent, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 
 /** A daemon `error` reply; `seq` tells two identical messages apart. */
@@ -9,7 +9,10 @@ export const ERRORS_KEPT = 20;
 /** The daemon's last `session.launched` answer (to this client's `session.launch`); `seq` tells two apart. */
 export interface Launched { id: string; seq: number }
 export interface DaemonState {
-  sessions: Session[]; byId: Map<string, Session>; status: DaemonStatus; previews: Map<string, string[]>; lastError: DaemonError | null;
+  /** The live sessions (archived ones excluded). */
+  sessions: Session[];
+  /** The archived sessions, most recently archived first. */
+  archived: Session[]; byId: Map<string, Session>; status: DaemonStatus; previews: Map<string, string[]>; lastError: DaemonError | null;
   /** Les ERRORS_KEPT derniers `error`, du plus ancien au plus récent; `lastError` est le dernier. */
   errors: readonly DaemonError[];
   /** Native tracking: the threads received so far, by session (asked for when a session opens). */
@@ -31,11 +34,12 @@ export interface DaemonState {
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
 export type FolderListing = Omit<Extract<ServerMessage, { type: 'folder.listing' }>, 'type'> & { seq: number };
-const empty = (): DaemonState => ({ sessions: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, lastUpdate: null });
+const empty = (): DaemonState => ({ sessions: [], archived: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, lastUpdate: null });
+const archivedOf = (m: Map<string, Session>) => [...m.values()].filter(isArchived).sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? '') || a.id.localeCompare(b.id));
 let state: DaemonState = empty();
 const subs = new Set<() => void>();
 const emit = () => subs.forEach(f => f());
-const sorted = (m: Map<string, Session>) => [...m.values()].sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id));
+const sorted = (m: Map<string, Session>) => [...m.values()].filter(s => !isArchived(s)).sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id));
 
 export const daemonStore = {
   getState: () => state,
@@ -85,7 +89,7 @@ export const daemonStore = {
         break;
       }
     }
-    state = { ...state, byId, previews, threads, sessions: sorted(byId), recents, launcher, daemon, snapshotSeq }; emit();
+    state = { ...state, byId, previews, threads, sessions: sorted(byId), archived: archivedOf(byId), recents, launcher, daemon, snapshotSeq }; emit();
   }
 };
 

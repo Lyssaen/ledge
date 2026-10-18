@@ -11,6 +11,9 @@ export interface MenuProps {
   menuClassName: string;
   /** On opening, the menu opens upward (class `up`) when the button's bottom is past 55 % of the window's height. */
   flip?: boolean;
+  /** Opens at this point of the window (a right click): the menu is `position: fixed` there, brought back inside the window. The trigger is still
+   *  rendered (and still anchors the focus on close): a context menu's caller renders nothing visible for it. */
+  at?: { x: number; y: number };
   trigger(t: MenuTrigger): ReactNode;
   /** MenuItems. */
   children: ReactNode;
@@ -21,7 +24,7 @@ const CloseMenu = createContext<() => void>(() => {});
 
 /** One menu for every « … » and « Ranger dans… »: a mousedown outside or the focus leaving closes it, Escape closes it and goes no further
  *  (captured on the window, so the global keys never see it), the arrows, Home and End move between its items. */
-export function Menu({ open, onOpenChange, label, className, menuClassName, flip, trigger, children }: MenuProps): JSX.Element {
+export function Menu({ open, onOpenChange, label, className, menuClassName, flip, at, trigger, children }: MenuProps): JSX.Element {
   const wrap = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -32,6 +35,15 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
   const changeRef = useRef(onOpenChange);
   changeRef.current = onOpenChange;
 
+  const [placed, setPlaced] = useState<{ left: number; top: number } | null>(null);
+  const atX = at?.x, atY = at?.y;
+  useLayoutEffect(() => {
+    if (!open || atX === undefined || atY === undefined) { setPlaced(null); return; }
+    const r = menu.current?.getBoundingClientRect();
+    const w = r?.width ?? 0, h = r?.height ?? 0;
+    setPlaced({ left: Math.max(0, Math.min(atX, window.innerWidth - w)), top: Math.max(0, Math.min(atY, window.innerHeight - h)) });
+  }, [open, atX, atY]);
+
   useLayoutEffect(() => {
     if (!open || !flip) { setUp(false); return; }
     const r = button.current?.getBoundingClientRect();
@@ -39,7 +51,7 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
   }, [open, flip]);
 
   useEffect(() => {
-    if (open) menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    if (open) menu.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus();
   }, [open]);
 
   useEffect(() => {
@@ -52,7 +64,7 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
   }, [open]);
 
   const onKeyDown = (e: ReactKeyboardEvent) => {
-    const items = [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const items = [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? [])];
     if (items.length === 0) return;
     const at = items.indexOf(document.activeElement as HTMLElement);
     let to: number;
@@ -71,7 +83,7 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
       {trigger({ ref: button, 'aria-haspopup': 'menu', 'aria-expanded': open, onClick: () => onOpenChange(!open) })}
       {open && (
         <CloseMenu.Provider value={() => closeRef.current()}>
-          <div ref={menu} className={`${menuClassName}${up ? ' up' : ''}`} role="menu" aria-label={label} onKeyDown={onKeyDown}>{children}</div>
+          <div ref={menu} className={`${menuClassName}${up ? ' up' : ''}`} style={at ? { position: 'fixed', left: placed?.left ?? at.x, top: placed?.top ?? at.y, right: 'auto', bottom: 'auto', margin: 0 } : undefined} role="menu" aria-label={label} onKeyDown={onKeyDown}>{children}</div>
         </CloseMenu.Provider>
       )}
     </span>

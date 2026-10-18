@@ -394,3 +394,52 @@
 
 /* Not in the mockup (its thread is always there): the loading and empty-thread notes sit in the reading column. */
 .session-thread>.thread-note{max-width:var(--col);margin-inline:auto}
+
+/* An archived session: the banner over the page, the pill in the header (the mockup's manage.css). */
+.archived-banner{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--secondary) 70%,transparent);font-size:12px}
+.archived-banner>svg{color:var(--muted-foreground)}
+.archived-banner .ledge-btn{height:28px!important;font-size:12px!important;padding:0 10px!important;white-space:nowrap}
+.archived-banner .danger-outline{color:var(--danger-text)!important}
+.archived-pill{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--muted-foreground)}
+/* Messages between agents (MessageCard, the mockup's exchange.css « Thread »): neutral on purpose, the state colours stay
+   for what the agents need from you. A received one opens its exchange like a prompt; a sent one sits under the agent. */
+.message-head{display:flex;align-items:center;gap:6px;margin:14px 0 6px;font-size:11px;color:var(--muted-foreground)}
+.message-head strong{color:var(--foreground);font-weight:500}
+.message-fold{display:inline-flex;align-items:center;gap:3px;height:22px;padding:0 7px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--muted-foreground);font:inherit;cursor:pointer}
+.message-fold:hover{color:var(--foreground);background:var(--accent)}
+.message-fold[aria-expanded=false] svg{transform:rotate(-90deg)}
+
+.message-card{position:relative;margin:10px 0;padding:10px 12px 8px 14px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);transition:box-shadow .3s,border-color .3s}
+/* The edge tells the direction at a glance: a solid edge for what this agent sent, a dashed one for what came in. */
+.message-card:before{content:'';position:absolute;left:-1px;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--foreground);opacity:.55}
+.message-card.received{background:transparent;border-style:dashed;border-color:var(--input)}
+.message-card.received:before{background:repeating-linear-gradient(var(--muted-foreground) 0 4px,transparent 4px 7px);opacity:.8}
+.message-card.lit{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 28%,transparent)}
+.message-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:22px}
+.message-card-head .spacer,.message-foot .spacer,.message-head .spacer{flex:1}
+.message-kicker{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-foreground)}
+.message-route{display:inline-flex;align-items:center;gap:5px;font-size:12px}
+.message-route strong{font-weight:500}
+.message-route>svg{color:var(--muted-foreground)}
+.message-summary{margin:6px 0 0;font-size:13px;font-weight:500;line-height:19px}
+.message-body{margin-top:4px;font-size:13px;line-height:20px;color:var(--foreground)}
+.message-body>*:first-child{margin-top:0}.message-body>*:last-child{margin-bottom:0}
+.message-body.clamped{max-height:62px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 60%,transparent);mask-image:linear-gradient(#000 60%,transparent)}
+.message-foot{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px}
+.message-foot:empty{display:none}
+.message-link{display:inline-flex;align-items:center;gap:3px;padding:2px 0;border:0;background:none;color:var(--muted-foreground);font:inherit;cursor:pointer}
+.message-link:hover{color:var(--foreground);text-decoration:underline;text-underline-offset:3px}
+.message-read{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted-foreground);white-space:nowrap}
+.message-read i{font-style:normal;font-size:10px;letter-spacing:-2px;padding-right:2px}
+.message-read.is-read i{color:var(--foreground)}
+
+/* Folded: one line per message, still in its place in the thread. */
+.message-line{display:flex;align-items:center;gap:8px;width:100%;margin:4px 0;padding:5px 10px;border:1px solid var(--border)!important;border-radius:var(--radius-md);background:transparent;color:var(--foreground);font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.message-line.received{border-style:dashed!important}
+.message-line .message-route{flex:none;gap:3px;font-size:11px;color:var(--muted-foreground)}
+.message-line .message-route strong{color:var(--foreground)}
+.message-line:hover{background:var(--accent)}
+.message-line-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* What this agent sent sits in its column, under its name, as the rest of what it did. */
+.session-thread .message-head.sent,.session-thread .message-card.sent,.session-thread .message-line.sent{margin-left:var(--gutter)}
+.session-thread .message-line.sent{width:calc(100% - var(--gutter))}

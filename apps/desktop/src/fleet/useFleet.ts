@@ -20,7 +20,7 @@ let singleton: DaemonClient | null = null;
 const defaultClient = (): DaemonClient => (singleton ??= createDesktopFleet());
 
 export interface FleetView {
-  sessions: Session[]; machines: MachineState[]; status: DaemonStatus; fleet: Fleet; client: DaemonClient; localDown: boolean;
+  sessions: Session[]; /** The archived sessions, most recently archived first. */ archived: Session[]; machines: MachineState[]; status: DaemonStatus; fleet: Fleet; client: DaemonClient; localDown: boolean;
   /** The daemon's last `error` reply (a refused decision, a machine offline at send), its session id qualified. */
   lastError: DaemonError | null;
   /** The last errors (a refused send, a machine offline at send), oldest first, the session ids qualified. */
@@ -44,5 +44,5 @@ export function useFleet(client: DaemonClient = defaultClient()): FleetView {
   const machines = useMachines(client);
   // Only a settled failure counts: the first machine starts as 'connecting', which must not flash the notice at boot.
   const localDown = machines[0]?.status === 'unreachable';
-  return { sessions: daemon.sessions, machines, status: daemon.status, fleet: client.fleet!, client, localDown, lastError: daemon.lastError, errors: daemon.errors, lastLaunched: daemon.lastLaunched };
+  return { sessions: daemon.sessions, archived: daemon.archived, machines, status: daemon.status, fleet: client.fleet!, client, localDown, lastError: daemon.lastError, errors: daemon.errors, lastLaunched: daemon.lastLaunched };
 }

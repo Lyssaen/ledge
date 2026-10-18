@@ -18,12 +18,23 @@ export const SHELL_ICONS = {
   help: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18', 'M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6', 'M12 17h.01'],
   collapse: ['M9 4v5H4', 'M15 4v5h5', 'M9 20v-5H4', 'M15 20v-5h5'],
   gear: ICONS.gear.d,
+  // session-management manage.tsx: the session menu.
+  archive: ['M3 4h18v4H3z', 'M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8', 'M10 12h4'],
+  trash: ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12', 'M9 7V4h6v3'],
+  stop: ['M6 6h12v12H6z'],
+  // The « … » of a seat and of the session page's header (observatory.tsx's dotsIcon, drawn as fills).
+  dots: ['M5 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M12 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M19 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z'],
+  restore: ['M9 14 4 9l5-5', 'M4 9h11a5 5 0 0 1 0 10h-3'],
+  resume: ['M4 12a8 8 0 1 0 2.3-5.6', 'M4 4v4h4', 'M10 9l5 3-5 3z'],
   // session.tsx: the thread's action kinds, the fold's chevron, « Aller au dernier message », the frozen thread.
   file: ['M14 3H6v18h12V8z', 'M14 3v5h4', 'M9 13h6', 'M9 17h6'],
   terminal: ['m4 6 5 6-5 6', 'M12 18h8'],
   pencil: ['M4 20h4L19 9l-4-4L4 16z', 'M13.5 6.5l4 4'],
   chevronDown: ['m6 9 6 6 6-6'],
   arrowDown: ['M12 5v14', 'm19 12-7 7-7-7'],
+  // A message between agents (MessageCard): its envelope, the arrow from its sender to its addressee.
+  mail: ['M3 6h18v12H3z', 'm3 7 9 6 9-6'],
+  arrowRight: ['M5 12h14', 'm13 6 6 6-6 6'],
   // session.tsx: the view switch (threadIcon, diffIcon), « Copier le chemin », a folded diff's unfold.
   thread: ['M4 6h16', 'M4 12h10', 'M4 18h13'],
   diff: ['M12 3v8', 'M8 7h8', 'M8 17h8', 'M5 21h14'],

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Store } from '../src/daemon/store.js';
+import { Store, ARCHIVE_MAX } from '../src/daemon/store.js';
 import type { Session } from '@ledge/protocol';
 
 const T0 = '2026-10-09T18:00:00.000Z';
@@ -53,16 +53,28 @@ describe('Store', () => {
   });
   it('starts empty on a corrupt journal and logs once', async () => {
     writeFileSync(join(dir, 'sessions.json'), '{"sessions": [ {"id": "a", ');
-    const s = new Store(); await expect(s.load()).resolves.toBeUndefined();
+    const s = new Store(); await expect(s.load()).resolves.toMatchObject({ clean: false });
     expect(s.all()).toEqual([]);
     const lines = readFileSync(join(dir, 'daemon.log'), 'utf8').trim().split('\n');
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/journal unreadable/);
+    // Kept aside, since the next save overwrites the journal.
+    expect(readFileSync(join(dir, 'sessions.json.incomplete'), 'utf8')).toBe('{"sessions": [ {"id": "a", ');
   });
   it('drops journal entries that fail the schema instead of crashing', async () => {
     writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ sessions: [mk('ok'), { id: 'bad', state: 'sleeping' }] }));
-    const s = new Store(); await s.load();
+    const s = new Store(); expect(await s.load()).toMatchObject({ clean: false });
     expect(s.all().map(x => x.id)).toEqual(['ok']);
+  });
+  it('load says whether it loaded cleanly: a whole journal is, a missing one is not', async () => {
+    expect(await new Store().load()).toMatchObject({ clean: false });
+    writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ sessions: [mk('ok')] }));
+    expect(await new Store().load()).toEqual({ clean: true });
+  });
+  it('a journal saved after an incomplete load still reads as incomplete on the next load', async () => {
+    writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ sessions: [mk('ok'), { id: 'bad', state: 'sleeping' }] }));
+    const s = new Store(); await s.load(); await s.save();
+    expect(await new Store().load()).toMatchObject({ clean: false });
   });
 });
 
@@ -104,5 +116,28 @@ describe('Store save serialization', () => {
     expect(store.get('a')).toMatchObject({ repo: 'r', branch: 'main' }); expect(seen).toEqual(['updated']);
     store.patch('a', { repo: 'r', repoPath: '/r', branch: 'main', worktree: false }); expect(seen).toEqual(['updated']);
     store.patch('zz', { branch: 'x' }); expect(seen).toEqual(['updated']);
+  });
+});
+
+describe('Store archive', () => {
+  it('archive is idempotent and survives a reload', async () => {
+    const s = new Store(); s.upsert(mk('a', 'exited'));
+    s.archive('a', T0); s.archive('a', '2026-10-10T00:00:00.000Z');
+    expect(s.get('a')?.archivedAt).toBe(T0);
+    await s.save();
+    const again = new Store(); await again.load();
+    expect(again.get('a')?.archivedAt).toBe(T0);
+    expect(again.unarchive('a')?.archivedAt).toBeUndefined();
+  });
+  it('keeps at most ARCHIVE_MAX archives, dropping the oldest', () => {
+    const s = new Store(); const removed: string[] = [];
+    s.onChange(c => { if (c.type === 'removed') removed.push(c.id); });
+    for (let i = 0; i <= ARCHIVE_MAX; i++) {
+      s.upsert(mk(`s${i}`, 'exited'));
+      s.archive(`s${i}`, new Date(Date.parse(T0) + i * 1000).toISOString());
+    }
+    expect(removed).toEqual(['s0']);
+    expect(s.get('s0')).toBeUndefined();
+    expect(s.all().length).toBe(ARCHIVE_MAX);
   });
 });

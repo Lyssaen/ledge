@@ -6,7 +6,7 @@ import { ScreenKeysContext, useScreenKeys, type ScreenKeys } from '../src/nav/sc
 
 const base = initialNav({ view: 'atelier', helpers: true, paused: false });
 function Harness({ state, keys, dispatch }: { state: NavState; keys: ScreenKeys; dispatch: (a: NavAction) => void }) {
-  useKeys(dispatch, { state, order: [], screen: keys });
+  useKeys(dispatch, { state, order: [], screen: keys, undo: () => false });
   return <input aria-label="field" />;
 }
 

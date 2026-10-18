@@ -1,4 +1,4 @@
-import { Fragment, useState, type CSSProperties, type JSX } from 'react';
+import { Fragment, useState, type CSSProperties, type JSX, type MouseEvent } from 'react';
 import { PROJECT_COLORS, type Project, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -6,9 +6,12 @@ import { useI18n } from '../i18n/lang';
 import { machineOf, taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
 import { cls } from '../shell/cls';
+import type { SessionActions } from '../manage/useSessionActions';
 import { Menu, MenuItem } from '../shell/Menu';
+import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import type { Filing } from './filing';
+import { PeerTag, type MessageClock } from './MessageLayer';
 import { Plants } from './Plants';
 import { RUG_SIDE, helperState, layoutTable, noteX, sheetState, tableBranch, type Side } from './layout';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
@@ -30,10 +33,18 @@ export interface ProjectTableProps {
   dispatch: (a: NavAction) => void;
   /** The table is a drop target for the agents of « Sans projet ». */
   filing: Filing;
+  /** End, archive, resume and delete: « Archiver les terminées » of the table's menu. */
+  actions: SessionActions;
+  /** The session whose menu is open (its « … » shows as pressed). */
+  menuId: string | null;
+  /** A right click on a seat, or its « … »: the session menu. */
+  onMenu(s: Session, e: MouseEvent<HTMLElement>): void;
+  /** Every session, and the atelier's clock: the seats' tag of a recent message between agents. */
+  sessions: readonly Session[];
+  clock: MessageClock;
 }
 
 /** The mockup's « … » glyph (observatory.tsx, room-heading). */
-const DOTS = ['M5 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M12 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z', 'M19 10.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z'];
 const PENCIL = ['M4 20h4L19 9l-4-4L4 16z', 'M13.5 6.5l4 4'];
 
 type SheetMark = ReturnType<typeof sheetState>;
@@ -67,7 +78,7 @@ function TableTop({ sheets, length }: { sheets: Sheet[]; length: number }): JSX.
 
 /** One project's table in the atelier (observatory.tsx, `project-room` in atelier mode): the rug with its label and
  *  « +N », the plants, the chairs, the table with its sheets and post-its, the seats and the sub-agents at the ends. */
-export function ProjectTable({ project, mains, order, helpers, paused, isolated, focusedId, seated, dispatch, filing }: ProjectTableProps): JSX.Element {
+export function ProjectTable({ project, mains, order, helpers, paused, isolated, focusedId, seated, dispatch, filing, sessions, clock, actions, menuId, onMenu }: ProjectTableProps): JSX.Element {
   const { t } = useI18n();
   const { id, name } = project;
   const color = PROJECT_COLORS[project.color];
@@ -78,6 +89,8 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
 
   const [menu, setMenu] = useState(false);
   const choose = dispatch;
+  // The principal agents whose session is over and whose machine answers: « Archiver les terminées » puts them all away.
+  const finished = mains.filter(s => s.state === 'exited' && !s.offline);
   const toList = () => dispatch({ type: 'home', project: id, view: 'list' });
 
   const bot = (s: Session, size: number) => <SessionBot session={s} size={size} paused={paused} />;
@@ -95,7 +108,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
       <Menu open={menu} onOpenChange={setMenu} label={t.atelier.actions(name)} className="room-menu-wrap" menuClassName="assign-menu room-menu"
         trigger={tr => (
           <button className="icon-action" aria-label={t.atelier.actions(name)} title={t.atelier.actionsTitle} {...tr}>
-            <Icon d={[]} fill={DOTS} size={14} />
+            <Icon d={[]} fill={SHELL_ICONS.dots} size={14} />
           </button>
         )}>
         <MenuItem onSelect={() => choose({ type: 'modal', modal: { kind: 'project', edit: id } })}>
@@ -106,6 +119,9 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
         </MenuItem>
         <MenuItem aria-label={isolated ? t.atelier.showAll : t.atelier.isolate(name)} onSelect={() => choose(isolated ? { type: 'home' } : { type: 'home', project: id })}>
           <span><Icon d={ICONS.expand.d} size={13} />{isolated ? t.atelier.showAll : t.atelier.isolateLabel}</span>
+        </MenuItem>
+        <MenuItem disabled={!finished.some(s => actions.allowed(s.id))} onSelect={() => actions.request('archive', finished.map(s => s.id))}>
+          <span><Icon d={SHELL_ICONS.archive} size={13} />{t.manage.menu.archiveFinished}</span>
         </MenuItem>
       </Menu>
     </div>
@@ -141,13 +157,20 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
           const n = order.findIndex(o => o.id === s.id) + 1;
           const state = botState(s);
           return (
-            <button key={s.id} style={{ left: at(x - 56) }} data-agent={s.id} aria-label={t.atelier.seat(s.name, taskOf(s), machineOf(s))} onClick={() => dispatch({ type: 'open', id: s.id })}
+            <Fragment key={s.id}>
+            <button style={{ left: at(x - 56) }} data-agent={s.id} aria-label={t.atelier.seat(s.name, taskOf(s), machineOf(s))} onClick={() => dispatch({ type: 'open', id: s.id })} onContextMenu={e => onMenu(s, e)}
               className={cls('agent-seat', `place-${side}`, seated === s.id && 'just-seated', focusedId === s.id && 'keyboard-selected', s.offline ? 'seat-offline' : state === 'working' && 'seat-working')}>
+              <PeerTag session={s} sessions={sessions} clock={clock} />
               {bot(s, 64)}
               <strong><span className="seat-name" title={s.name}>{s.name}</span>{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>
               <span className="seat-machine" title={machineOf(s)}>{machineOf(s)}</span>
               <StateBadge state={state} offline={!!s.offline} />
             </button>
+            <button type="button" className={cls('seat-more', `place-${side}`)} style={{ left: at(x + 56 - 30) }} aria-label={t.manage.menu.label(s.name)} title={t.manage.menu.more}
+              aria-haspopup="menu" aria-expanded={menuId === s.id} onClick={e => onMenu(s, e)}>
+              <Icon d={[]} fill={SHELL_ICONS.dots} size={13} />
+            </button>
+            </Fragment>
           );
         })}
         {ends.map(({ helper: h, parent, end, slot, count }) => (

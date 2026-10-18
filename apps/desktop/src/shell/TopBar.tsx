@@ -7,19 +7,24 @@ import { helperState } from '../atelier/layout';
 import { useI18n } from '../i18n/lang';
 import { taskOf } from '../nav/agents';
 import type { NavAction, NavState, ProjectFilter, View } from '../nav/state';
+import { isArchived } from '@ledge/protocol';
 import { SHELL_ICONS } from './icons';
 import { HelperBot, SessionBot, StateBadge } from './SessionBot';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 
+/** The session menu opens under its button, its right edge on the button's (Menu keeps it inside the window). */
+const MENU_WIDTH = 260;
 const VIEWS: readonly View[] = ['atelier', 'list'];
 
 /** The mockup's top bar: the breadcrumb on the left (no page title; on a subagent's page, its parent before it); on the right,
- *  icons only, in groups: view and display (overview only), or the open agent's state and the terminal toggle; then search,
- *  chat, shortcuts, and full screen. */
-export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal }: {
+ *  icons only, in groups: view and display (overview only), or the open agent's state, the terminal toggle and the session menu; then
+ *  shortcuts and full screen (search and chat are in the title bar). */
+export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal, manage }: {
   nav: NavState; dispatch: (a: NavAction) => void; session: Session | null; projects: Projects | null; projectIdOf: (s: Session) => string | null;
   /** The subagent whose page is open (session is then its parent). */
   helper: Helper | null; terminal: boolean; onTerminal(): void;
+  /** The session menu from the header « … » (a principal session that is not archived): whether it is open, and opening it at a point under the button. */
+  manage?: { open: boolean; onOpen(at: { x: number; y: number }, opener: HTMLElement): void };
 }) {
   const { t } = useI18n();
   const tabs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
@@ -97,11 +102,19 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
       <div className="breadcrumb"><Icon d={crumbIcon} />{crumbs()}</div>
       {place.kind === 'session' && session && (
         <div className="header-view header-session">
-          <StateBadge state={helper ? helperState(helper) : botState(session)} offline={!!session.offline} />
+          {isArchived(session)
+            ? <span className="archived-pill"><Icon d={SHELL_ICONS.archive} size={12} />{t.manage.archivedBanner.pill}</span>
+            : <StateBadge state={helper ? helperState(helper) : botState(session)} offline={!!session.offline} />}
           <span className="view-actions-sep" />
           <Button variant="ghost" size="icon" aria-pressed={terminal} aria-label={terminal ? t.top.terminalHide : t.top.terminalShow} title={terminal ? t.top.terminalHideTitle : t.top.terminalShowTitle} onClick={onTerminal}>
             <Icon d={SHELL_ICONS.terminal} size={16} />
           </Button>
+          {manage && !helper && !isArchived(session) && (
+            <Button variant="ghost" size="icon" aria-label={t.manage.menu.label(session.name)} title={t.manage.menu.more} aria-haspopup="menu" aria-expanded={manage.open}
+              onClick={e => { const r = e.currentTarget.getBoundingClientRect(); manage.onOpen({ x: r.right - MENU_WIDTH, y: r.bottom + 6 }, e.currentTarget); }}>
+              <Icon d={[]} fill={SHELL_ICONS.dots} size={16} />
+            </Button>
+          )}
         </div>
       )}
       {overview && (
@@ -118,8 +131,6 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
       )}
       <div className="header-actions">
         {overview && <span className="view-actions-sep" />}
-        <Button variant="ghost" size="icon" aria-label={t.side.searchLabel} title={t.top.search} onClick={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}><Icon d={SHELL_ICONS.search} /></Button>
-        <Button variant="ghost" size="icon" aria-label={t.side.chat} title={t.top.chat} onClick={() => dispatch({ type: 'chat', open: true })}><Icon d={SHELL_ICONS.chat} /></Button>
         <Button variant="ghost" size="icon" aria-label={t.top.shortcuts} title={t.top.shortcuts} onClick={() => dispatch({ type: 'modal', modal: { kind: 'shortcuts' } })}><Icon d={SHELL_ICONS.help} /></Button>
         <span className="view-actions-sep" />
         <Button variant="ghost" size="icon" aria-label={nav.fullscreen ? t.top.fullscreenExit : t.top.fullscreen} title={nav.fullscreen ? t.top.fullscreenExit : t.top.fullscreen} onClick={() => dispatch({ type: 'fullscreen', on: !nav.fullscreen })}>

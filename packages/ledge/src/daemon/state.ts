@@ -1,5 +1,7 @@
 import { cleanTopic, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
+import { crossSession } from './crossSession.js';
+
 export const HOOK_PRIORITY_MS = 2000;
 
 /**
@@ -192,6 +194,8 @@ function withTopic(s: Session, text: string, source: TopicSource | undefined): S
 }
 
 export function reduce(s: Session, ev: SessionEvent): Session {
+  // The agent's own conversation id follows its hooks, even a late one after the exit.
+  if (ev.agentSessionId && !ev.helperId && ev.agentSessionId !== s.agentSessionId) s = { ...s, agentSessionId: ev.agentSessionId };
   if (s.state === 'exited') return s;
   s = endCursorHelpers(s, ev);
   const at = ev.at;
@@ -266,7 +270,7 @@ export function reduce(s: Session, ev: SessionEvent): Session {
     case 'PreToolUse':
     case 'PermissionRequest':
     case 'Notification': {
-      if (ev.name === 'UserPromptSubmit' && ev.text && !s.topic) s = withTopic(s, ev.text, 'prompt');
+      if (ev.name === 'UserPromptSubmit' && ev.text && !s.topic && !crossSession(ev.text)) s = withTopic(s, ev.text, 'prompt');
       const incoming = pendingFor(ev);
       if (incoming) {
         // A Notification never overwrites an existing hook pending: only the hook timestamp moves.

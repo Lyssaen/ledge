@@ -1,0 +1,412 @@
+<title>Ledge Desktop Title Bar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one Ledge Desktop window per proposal, switched by tabs; notes under the window say what moves and what it costs.
+   Colours are Ledge's tokens (packages/ui/src/styles/tokens.css), light on :root, dark redefined below. */
+:root {
+  --background: oklch(1 0 0); --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0); --popover: oklch(1 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0); --input: oklch(0.922 0 0); --ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.985 0 0); --sidebar-primary: oklch(0.577 0.245 27.325); --sidebar-accent: oklch(0.97 0 0); --sidebar-border: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.971 0.013 17.38);
+  --notch: #000; --notch-fg: #f5f5f5; --notch-muted: #a3a3a3;
+  --success: #059669; --warning: #b45309; --info: #2563eb;
+  --close-hover: #c42b1c; --close-fg: #fff;
+  --desk: oklch(0.93 0.004 286); --desk-line: oklch(0.89 0.004 286);
+  --win-native: #f3f3f3; --win-native-fg: #1a1a1a;
+  --shadow: 0 24px 60px -18px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.08);
+  --drag: color-mix(in srgb, var(--info) 22%, transparent);
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px;
+  --sans: 'Geist', 'Segoe UI', system-ui, sans-serif; --mono: 'Geist Mono', ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --background: oklch(0.145 0 0); --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0); --popover: oklch(0.205 0 0);
+  --secondary: oklch(0.274 0.006 286.033);
+  --muted: oklch(0.269 0 0); --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: #ffffff1a; --input: #ffffff26; --ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.205 0 0); --sidebar-primary: oklch(0.637 0.237 25.331); --sidebar-accent: oklch(0.269 0 0); --sidebar-border: #ffffff1a;
+  --notch: #000; --notch-fg: #f5f5f5; --notch-muted: #a3a3a3;
+  --success: #34d399; --warning: #fbbf24; --info: #60a5fa;
+  --desk: oklch(0.1 0.004 286); --desk-line: oklch(0.17 0.004 286);
+  --win-native: #202020; --win-native-fg: #f0f0f0;
+  --shadow: 0 24px 60px -18px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.08);
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --background: oklch(0.145 0 0); --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0); --popover: oklch(0.205 0 0);
+  --secondary: oklch(0.274 0.006 286.033);
+  --muted: oklch(0.269 0 0); --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: #ffffff1a; --input: #ffffff26; --ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.205 0 0); --sidebar-primary: oklch(0.637 0.237 25.331); --sidebar-accent: oklch(0.269 0 0); --sidebar-border: #ffffff1a;
+  --notch: #000; --notch-fg: #f5f5f5; --notch-muted: #a3a3a3;
+  --success: #34d399; --warning: #fbbf24; --info: #60a5fa;
+  --desk: oklch(0.1 0.004 286); --desk-line: oklch(0.17 0.004 286);
+  --win-native: #202020; --win-native-fg: #f0f0f0;
+  --shadow: 0 24px 60px -18px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.08);
+  color-scheme: dark;
+}
+:root[data-theme="dark"] .notch-pill { box-shadow: 0 0 0 1px #ffffff1f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .notch-pill { box-shadow: 0 0 0 1px #ffffff1f; } }
+
+* { box-sizing: border-box; }
+html, body { background: var(--desk); }
+body { margin: 0; font: 14px/20px var(--sans); color: var(--foreground); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 48px; }
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
+button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.page { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+/* Page head: what this is, and the controls of the mockup itself. */
+.intro { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; }
+.intro h1 { margin: 0; font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -.02em; text-wrap: balance; }
+.intro h1 .dot { color: var(--sidebar-primary); }
+.intro p { margin: 4px 0 0; color: var(--muted-foreground); font-size: 13px; max-width: 62ch; }
+.toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--input); background: var(--background); font-size: 12px; color: var(--muted-foreground); }
+.chip:hover { color: var(--foreground); }
+.chip[aria-pressed="true"] { color: var(--foreground); border-color: var(--foreground); }
+.chip i { width: 8px; height: 8px; border-radius: 2px; background: var(--drag); outline: 1px dashed var(--info); }
+
+.tabs { display: flex; gap: 4px; padding: 3px; border-radius: var(--radius-md); background: var(--background); border: 1px solid var(--input); overflow-x: auto; }
+.tabs button { flex: 1 0 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 12px; border-radius: calc(var(--radius-md) - 2px); color: var(--muted-foreground); }
+.tabs button strong { font-size: 13px; font-weight: 500; color: inherit; }
+.tabs button small { font-size: 11px; line-height: 14px; }
+.tabs button:hover { color: var(--foreground); }
+.tabs button[aria-selected="true"] { background: var(--muted); color: var(--foreground); }
+.tabs button[aria-selected="true"] strong:before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--sidebar-primary); margin: 0 7px 1px 0; }
+
+/* The desktop and the window. */
+.desk { border-radius: var(--radius-xl); background: repeating-linear-gradient(0deg, transparent 0 31px, var(--desk-line) 31px 32px), repeating-linear-gradient(90deg, transparent 0 31px, var(--desk-line) 31px 32px), var(--desk); padding: 28px; overflow: hidden; }
+.desk.max { padding: 0; }
+.win { height: 600px; display: flex; flex-direction: column; background: var(--background); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; }
+.desk.max .win { border-radius: 0; box-shadow: none; }
+
+/* Caption buttons, Windows 11 metrics: 46 × 32, hairline glyphs, close turns red. */
+.caps { display: flex; align-self: stretch; flex-shrink: 0; }
+.caps button { width: 46px; display: grid; place-items: center; color: var(--foreground); }
+.caps button:hover { background: color-mix(in srgb, var(--foreground) 8%, transparent); }
+.caps button:active { background: color-mix(in srgb, var(--foreground) 5%, transparent); }
+.caps button.close:hover { background: var(--close-hover); color: var(--close-fg); }
+.caps svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 1; shape-rendering: crispEdges; }
+.desk.max .caps .max-ico, .desk:not(.max) .caps .restore-ico { display: none; }
+/* Rounded ghost variant, for a bar as tall as the app's header. */
+.caps.soft { align-self: center; gap: 2px; }
+.caps.soft button { width: 34px; height: 34px; border-radius: var(--radius-md); }
+
+/* Drag regions, hatched on demand. */
+.drag { position: relative; }
+.show-drag .drag::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(135deg, var(--drag) 0 6px, transparent 6px 12px); outline: 1px dashed var(--info); outline-offset: -1px; }
+
+/* The native Windows bar (today). */
+.native { height: 32px; display: flex; align-items: center; background: var(--win-native); color: var(--win-native-fg); font: 12px 'Segoe UI', system-ui, sans-serif; flex-shrink: 0; }
+.native .ttl { flex: 1; align-self: stretch; display: flex; align-items: center; gap: 10px; padding-left: 12px; }
+.native .caps button { color: var(--win-native-fg); }
+
+/* The app under the bar: sidebar, header, overview. A trimmed copy of apps/desktop's shell. */
+.app { flex: 1; min-height: 0; display: flex; }
+.side { width: 216px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--sidebar); border-right: 1px solid var(--sidebar-border); }
+.brand { height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--sidebar-border); }
+.mark { font-size: 18px; line-height: 22px; font-weight: 650; letter-spacing: -.02em; white-space: nowrap; }
+.mark .dot, .mark-sm .dot { color: var(--sidebar-primary); }
+.mark-sm { font-size: 13px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+.side-in { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 16px; padding: 14px 12px; }
+.new { height: 34px; border-radius: var(--radius-md); background: var(--sidebar-primary); color: var(--primary-foreground); display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; font-weight: 500; }
+.search { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 9px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 12px; color: var(--muted-foreground); background: var(--background); }
+.search span { flex: 1; }
+kbd { font: 10px var(--mono); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--input); background: var(--muted); color: var(--muted-foreground); white-space: nowrap; }
+.grp { display: flex; flex-direction: column; gap: 2px; }
+.lbl { font-size: 11px; color: var(--muted-foreground); padding: 0 10px; height: 22px; display: flex; align-items: center; }
+.row { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: var(--radius-sm); font-size: 13px; color: var(--muted-foreground); }
+.row.on { background: var(--sidebar-accent); color: var(--foreground); }
+.row span { flex: 1; }
+.sw { width: 9px; height: 9px; border-radius: 3px; margin: 0 3px; }
+.count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; display: grid; place-items: center; font: 600 10px var(--mono); background: var(--sidebar-primary); color: var(--primary-foreground); }
+.mdot { width: 7px; height: 7px; border-radius: 50%; margin: 0 4px 0 2px; background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent); }
+.ico { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+.work { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.head { height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 0 0 24px; border-bottom: 1px solid var(--border); }
+.crumb { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; }
+.crumb strong { color: var(--foreground); font-weight: 500; }
+.acts { display: flex; align-items: center; gap: 2px; padding-right: 24px; }
+.ib { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--muted-foreground); }
+.ib:hover { background: var(--accent); color: var(--foreground); }
+.sep { width: 1px; height: 20px; background: var(--border); margin: 0 6px; flex-shrink: 0; }
+.head.tight .acts { padding-right: 8px; }
+
+.over { flex: 1; min-height: 0; overflow: hidden; padding: 18px 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); align-content: start; gap: 12px; }
+.card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.card-top { display: flex; align-items: center; gap: 9px; }
+.bot { width: 26px; height: 26px; border-radius: 8px 8px 7px 7px; background: linear-gradient(var(--secondary), var(--muted)); border: 1px solid var(--input); display: grid; place-items: center; flex-shrink: 0; }
+.bot i { width: 14px; height: 5px; border-radius: 3px; background: currentColor; }
+.card strong { font-size: 13px; font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card p { margin: 0; font-size: 12px; line-height: 17px; color: var(--muted-foreground); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card small { font: 10px var(--mono); color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }
+.state { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+.s-ap { color: var(--sidebar-primary); background: color-mix(in srgb, var(--sidebar-primary) 13%, transparent); }
+.s-q { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+.s-w { color: var(--info); background: color-mix(in srgb, var(--info) 13%, transparent); }
+.s-d { color: var(--muted-foreground); background: var(--muted); }
+.foot { height: 30px; flex-shrink: 0; border-top: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; gap: 14px; font-size: 10px; color: var(--muted-foreground); }
+.foot i { width: 5px; height: 5px; border-radius: 50%; background: var(--success); display: inline-block; margin-right: 6px; }
+
+/* Proposal bars. */
+.bar { display: flex; align-items: stretch; flex-shrink: 0; background: var(--sidebar); border-bottom: 1px solid var(--sidebar-border); }
+.bar .left { display: flex; align-items: center; gap: 10px; padding-left: 14px; }
+.bar .mid { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.place { font-size: 12px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.place b { color: var(--foreground); font-weight: 500; }
+.wait { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 500; color: var(--sidebar-primary); background: color-mix(in srgb, var(--sidebar-primary) 12%, transparent); white-space: nowrap; }
+.wait:hover { background: color-mix(in srgb, var(--sidebar-primary) 20%, transparent); }
+.wait i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.cmd { width: min(440px, 100%); height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--muted-foreground); font-size: 12px; }
+.cmd span { flex: 1; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cmd:hover { border-color: var(--ring); color: var(--foreground); }
+.bar-ib { width: 32px; height: 28px; align-self: center; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--muted-foreground); }
+.bar-ib:hover { background: var(--accent); color: var(--foreground); }
+
+/* D: the island, in the bar. */
+.notch-pill { display: inline-flex; align-items: center; gap: 9px; height: 25px; padding: 0 12px 0 8px; border-radius: 0 0 12px 12px; background: var(--notch); color: var(--notch-fg); font-size: 11px; align-self: flex-start; white-space: nowrap; }
+.notch-pill .bots { display: flex; }
+.notch-pill .bots i { width: 14px; height: 14px; border-radius: 4px; border: 2px solid var(--notch); margin-left: -4px; }
+.notch-pill .bots i:first-child { margin-left: 0; }
+.notch-pill em { font-style: normal; color: var(--notch-muted); }
+.notch-pill b { font-weight: 500; }
+
+/* Notes under the window. */
+.notes { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.note { background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; min-width: 0; }
+.note h2 { margin: 0 0 8px; font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); }
+.note p { margin: 0; font-size: 13px; line-height: 20px; }
+.note ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font-size: 13px; line-height: 19px; }
+.note li::marker { color: var(--muted-foreground); }
+.metric { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.metric b { font: 600 22px/1 var(--mono); }
+.metric span { font-size: 12px; color: var(--muted-foreground); }
+.plus { color: var(--success); }
+.minus { color: var(--sidebar-primary); }
+
+.shared { background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; }
+.shared h2 { margin: 0 0 8px; font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); }
+.shared ul { margin: 0; padding-left: 18px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 28px; font-size: 13px; line-height: 19px; }
+
+@media (max-width: 980px) {
+  .notes { grid-template-columns: 1fr; }
+  .shared ul { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .side { display: none; }
+  .desk { padding: 12px; }
+  .win { height: 520px; }
+  .acts .opt, .bar .mid .place, .head .crumb .muted-step { display: none; }
+  .cmd kbd { display: none; }
+}
+@media (max-width: 480px) {
+  .head { padding-left: 12px; }
+  .acts { padding-right: 8px; }
+  .caps button { width: 38px; }
+  .over { padding: 12px; }
+  .notch-pill em { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .caps button, .ib, .chip, .tabs button, .wait, .cmd { transition: background-color .12s, color .12s, border-color .12s; }
+}
+</style>
+
+<div class="page">
+  <header class="intro">
+    <div>
+      <h1>Barre de fenêtre de Ledge Desktop<span class="dot">.</span></h1>
+      <p>Quatre façons de remplacer la barre de titre de Windows. Passe la souris sur les boutons de la fenêtre, et affiche les zones qui servent à la déplacer.</p>
+    </div>
+    <div class="toggles">
+      <button class="chip" id="t-drag" aria-pressed="false"><i></i>Zones de déplacement</button>
+      <button class="chip" id="t-max" aria-pressed="false">Fenêtre agrandie</button>
+      <button class="chip" id="t-theme" aria-pressed="false">Thème : système</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Propositions" id="tabs"></nav>
+
+  <div class="desk" id="desk"><div class="win" id="win"></div></div>
+
+  <section class="notes" id="notes" aria-live="polite"></section>
+
+  <section class="shared">
+    <h2>Pour toutes les propositions</h2>
+    <ul>
+      <li>Boutons aux mesures de Windows 11 (46 × 32), fermeture rouge au survol, icône « restaurer » quand la fenêtre est agrandie.</li>
+      <li>Double-clic sur une zone de déplacement : agrandir ou restaurer. Clic droit : le menu système de Windows.</li>
+      <li>La fenêtre garde son ombre, ses coins arrondis et ses bords redimensionnables. À vérifier sur Windows avec <code>decorations: false</code>.</li>
+      <li>Le survol du bouton Agrandir n’ouvre plus les dispositions Snap de Windows 11 sans travail natif en plus. Win + Z et le glisser vers le haut de l’écran marchent toujours.</li>
+      <li>Le plein écran (F11) cache la barre entière ; les boutons réapparaissent quand la souris touche le haut de l’écran.</li>
+      <li>Une seule barre pour les deux thèmes : elle suit le thème de Ledge, plus celui de Windows.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(() => {
+  const I = {
+    min: '<svg class="min-ico" viewBox="0 0 10 10"><path d="M0 5.5h10"/></svg>',
+    max: '<svg class="max-ico" viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" rx="1"/></svg><svg class="restore-ico" viewBox="0 0 10 10"><rect x=".5" y="2.5" width="7" height="7" rx="1"/><path d="M2.5 2.5V1.5a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-1"/></svg>',
+    close: '<svg viewBox="0 0 10 10"><path d="M.5.5l9 9M9.5.5l-9 9"/></svg>',
+    grid: '<svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+    list: '<svg class="ico" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+    search: '<svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+    chat: '<svg class="ico" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+    help: '<svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg>',
+    expand: '<svg class="ico" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
+    pause: '<svg class="ico" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>',
+    bell: '<svg class="ico" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+    plus: '<svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+    gear: '<svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+    logo: '<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="4" fill="var(--sidebar-primary)"/><rect x="4" y="6" width="8" height="3" rx="1.5" fill="var(--primary-foreground)"/></svg>',
+  };
+  const caps = (soft) => `<div class="caps${soft ? ' soft' : ''}"><button aria-label="Réduire" title="Réduire">${I.min}</button><button aria-label="Agrandir" title="Agrandir">${I.max}</button><button class="close" aria-label="Fermer" title="Fermer">${I.close}</button></div>`;
+  const mark = (cls = 'mark') => `<span class="${cls}">Ledge<span class="dot">.</span></span>`;
+
+  const SESSIONS = [
+    ['ledge', 's-ap', 'Approbation', 'Veut lancer pnpm test --filter desktop', '#e5484d', 'opus · 14 min'],
+    ['synapse-api', 's-q', 'Question', 'Garder la pagination par curseur ou passer à l’offset ?', '#2563eb', 'codex · 3 min'],
+    ['ledge', 's-w', 'Travaille', 'Réécrit TopBar.tsx pour la barre de fenêtre', '#e5484d', 'opus · 41 min'],
+    ['mobile-ui', 's-w', 'Travaille', 'Branche le relais Railway sur le fil de session', '#d97706', 'sonnet · 8 min'],
+    ['streamplatform', 's-d', 'Terminé', 'Migration knex des factures Peppol, 12 tests verts', '#7c3aed', 'cursor · 1 h'],
+    ['ledge', 's-d', 'Terminé', 'Toast de classement : texte et durée revus', '#e5484d', 'opus · 2 h'],
+  ];
+  const overview = () => `<div class="over">${SESSIONS.map(([p, cls, st, task, col, meta]) => `
+    <article class="card"><div class="card-top"><span class="bot" style="color:${col}"><i></i></span><strong>${p}</strong><span class="state ${cls}">${st}</span></div>
+    <p>${task}</p><small>${meta}</small></article>`).join('')}</div>`;
+
+  const sidebar = (brand) => `<aside class="side">
+    ${brand ? `<div class="brand drag">${mark()}</div>` : ''}
+    <div class="side-in">
+      <div class="grp" style="gap:8px"><div class="new">${I.plus}Nouvelle session</div><div class="search">${I.search}<span>Rechercher</span><kbd>Ctrl K</kbd></div></div>
+      <div class="grp"><div class="lbl">Vues</div><div class="row on">${I.grid}<span>Atelier</span><span class="count">2</span></div><div class="row">${I.list}<span>Liste</span></div></div>
+      <div class="grp"><div class="lbl">Projets</div>
+        <div class="row"><i class="sw" style="background:#e5484d"></i><span>ledge</span></div>
+        <div class="row"><i class="sw" style="background:#2563eb"></i><span>synapse-api</span></div>
+        <div class="row"><i class="sw" style="background:#d97706"></i><span>mobile-ui</span></div>
+        <div class="row"><i class="sw" style="background:#7c3aed"></i><span>streamplatform</span></div></div>
+      <div class="grp"><div class="lbl">Machines</div><div class="row"><i class="mdot"></i><span>desantoine-wsl</span></div></div>
+    </div>
+    <div class="side-in" style="flex:0;border-top:1px solid var(--sidebar-border);padding:8px 12px 12px"><div class="row">${I.gear}<span>Réglages</span></div></div>
+  </aside>`;
+
+  // The header's right side: view controls, then search, chat, shortcuts and full screen, as in TopBar.tsx.
+  const head = ({ drop = [], extra = '', tight = false } = {}) => {
+    const b = (k, d, opt) => drop.includes(k) ? '' : `<button class="ib${opt ? ' opt' : ''}" aria-label="${k}" title="${k}">${d}</button>`;
+    return `<header class="head${tight ? ' tight' : ''}">
+      <div class="crumb drag" style="align-self:stretch">${I.grid}<strong>Atelier</strong><span class="muted-step">/</span><span class="muted-step">tous les projets</span></div>
+      <div class="acts">
+        ${b('Vue atelier', I.grid, true)}${b('Vue liste', I.list, true)}${b('Pause', I.pause, true)}<span class="sep opt"></span>
+        ${b('Rechercher', I.search)}${b('Chat', I.chat)}${b('Raccourcis', I.help, true)}<span class="sep"></span>${b('Plein écran', I.expand)}${extra}
+      </div></header>`;
+  };
+  const foot = `<footer class="foot"><span><i></i>Démon connecté</span><span>Île visible</span><span style="margin-left:auto">6 sessions · 2 attendent</span></footer>`;
+  const app = (opts = {}) => `<div class="app">${sidebar(opts.brand !== false)}<div class="work">${head(opts.head)}${overview()}${foot}</div></div>`;
+
+  const P = [
+    {
+      id: 'actuel', name: 'Actuelle', sub: 'La barre de Windows',
+      render: () => `<div class="native drag"><div class="ttl">${I.logo}Ledge Desktop</div>${caps()}</div>${app()}`,
+      gain: ['32', 'px'],
+      idea: 'La barre que Windows dessine. Elle ne connaît ni le thème de Ledge ni sa couleur, et redit « Ledge Desktop » au-dessus du logo de la barre latérale.',
+      plus: ['Rien à construire, tout le comportement de Windows est là (Snap, menu, ombre).'],
+      minus: ['32 px qui ne montrent rien.', 'Gris de Windows au-dessus du noir ou du blanc de Ledge : deux tons qui se touchent.', 'Le nom de l’app apparaît deux fois.'],
+    },
+    {
+      id: 'fondue', name: 'A · Fondue', sub: 'Les boutons dans l’en-tête',
+      render: () => app({ head: { tight: true, extra: `<span class="sep"></span>${caps(true)}` } }),
+      gain: ['0', 'px'],
+      idea: 'Plus de barre du tout. L’en-tête de 56 px devient la barre : on déplace la fenêtre par le fil d’Ariane et par le logo, et les trois boutons de fenêtre viennent après le plein écran, en boutons arrondis comme les autres icônes.',
+      plus: ['La fenêtre entière est l’app, comme Linear, Arc ou Notion.', 'Aucune nouvelle zone à concevoir, l’en-tête existe déjà.', 'Le plein écran et « agrandir » sont côte à côte, la différence se lit.'],
+      minus: ['La zone de déplacement rétrécit quand le fil d’Ariane est long (une session et sa tâche).', 'Boutons arrondis : moins « Windows » que les rectangles natifs.', 'Sur une page de session, l’en-tête porte déjà l’état et le terminal : il devient chargé.'],
+    },
+    {
+      id: 'bande', name: 'B · Bande', sub: 'Une bande fine, aux couleurs de Ledge',
+      render: () => `<div class="bar drag" style="height:32px">
+          <div class="left">${mark('mark-sm')}</div>
+          <div class="mid"><span class="place">Atelier · <b>tous les projets</b></span></div>
+          <div class="left" style="padding:0 6px 0 0"><button class="wait" title="Ouvrir la première session qui attend"><i></i>2 attendent</button></div>
+          ${caps()}</div>${app({ brand: false })}`,
+      gain: ['32', 'px'],
+      idea: 'Une bande de 32 px de la couleur de la barre latérale. Le mot « Ledge. » y monte, la barre latérale perd sa ligne de logo et commence directement par « Nouvelle session ». Au centre, l’endroit où on est ; à droite, combien de sessions attendent.',
+      plus: ['Proche de ce que Windows fait, donc rien de surprenant : boutons rectangulaires, zone de déplacement large et stable.', 'Le compteur « 2 attendent » reste visible sur toutes les pages, même en mode lecture d’une session.', 'La barre latérale gagne sa ligne de logo (56 px).'],
+      minus: ['Le lieu s’affiche deux fois (bande et fil d’Ariane) : à supprimer d’un côté.', 'Une bande de plus au-dessus de l’en-tête : deux lignes horizontales en haut.'],
+    },
+    {
+      id: 'commande', name: 'C · Commande', sub: 'La recherche au centre',
+      render: () => `<div class="bar drag" style="height:44px">
+          <div class="left">${mark('mark-sm')}</div>
+          <div class="mid" style="padding:0 16px"><button class="cmd">${I.search}<span>Aller à une session, un projet, un réglage…</span><kbd>Ctrl K</kbd></button></div>
+          <div class="left" style="padding:0 8px 0 0;gap:2px"><button class="wait" style="margin-right:6px"><i></i>2</button><button class="bar-ib" title="Ne pas déranger">${I.bell}</button><button class="bar-ib" title="Chat">${I.chat}</button></div>
+          ${caps()}</div>${app({ brand: false, head: { drop: ['Rechercher', 'Chat'] } })}`,
+      gain: ['44', 'px'],
+      idea: 'Comme le centre de commande de VS Code : un champ de recherche au milieu de la barre ouvre la palette existante (Ctrl K). La recherche et le chat quittent l’en-tête, « Ne pas déranger » sort de la zone de notification pour arriver ici.',
+      plus: ['La recherche est l’action la plus fréquente : elle a la meilleure place.', 'L’en-tête ne garde que ce qui concerne la page.', '« Ne pas déranger » devient visible sans passer par la zone de notification.'],
+      minus: ['La barre est la plus haute (44 px) et la zone de déplacement se partage avec le champ.', 'Le champ de recherche de la barre latérale fait doublon : à retirer.', 'Plus de travail : la palette doit s’ouvrir sous la barre.'],
+    },
+    {
+      id: 'ile', name: 'D · Île', sub: 'L’île de Ledge, posée en haut',
+      render: () => `<div class="bar drag" style="height:32px">
+          <div class="left">${mark('mark-sm')}</div>
+          <div class="mid"><button class="notch-pill" title="Ouvrir la session qui attend"><span class="bots"><i style="background:#e5484d"></i><i style="background:#2563eb"></i><i style="background:#d97706"></i></span><b>ledge</b><em>veut lancer pnpm test</em><span style="color:var(--sidebar-primary)">+1</span></button></div>
+          ${caps()}</div>${app({ brand: false })}`,
+      gain: ['32', 'px'],
+      idea: 'La même forme que l’île affichée en haut de l’écran, noire, attachée au bord haut de la fenêtre. Elle montre ce qui demande une réponse, sinon le nombre de sessions qui tournent. Un clic ouvre la session.',
+      plus: ['Le lien visuel le plus fort entre l’île et l’app : on reconnaît Ledge au premier coup d’œil.', 'Ce qui compte (une session qui attend) est au centre, là où l’œil va.'],
+      minus: ['Redondant quand l’île est visible juste au-dessus, sur l’écran principal.', 'Une pastille noire sur fond clair est forte : elle doit rester petite.', 'Il faut décider quoi y montrer quand rien n’attend.'],
+    },
+  ];
+
+  const tabs = document.getElementById('tabs'), win = document.getElementById('win'), notes = document.getElementById('notes'), desk = document.getElementById('desk');
+  let current = 'fondue';
+  try { current = localStorage.getItem('ledge-titlebar-tab') || current; } catch {}
+  if (!P.some(p => p.id === current)) current = 'fondue';
+
+  tabs.innerHTML = P.map(p => `<button role="tab" id="tab-${p.id}" aria-selected="false" data-id="${p.id}"><strong>${p.name}</strong><small>${p.sub}</small></button>`).join('');
+  const show = (id) => {
+    current = id;
+    const p = P.find(x => x.id === id);
+    tabs.querySelectorAll('button').forEach(b => { const on = b.dataset.id === id; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
+    win.innerHTML = p.render();
+    const h = +p.gain[0], cls = h < 32 ? 'plus' : h > 32 ? 'minus' : '';
+    notes.innerHTML = `
+      <div class="note"><h2>L’idée</h2><div class="metric"><b class="${cls}">${p.gain[0]}</b><span>${p.gain[1]} de barre au-dessus de l’app (aujourd’hui 32)</span></div><p>${p.idea}</p></div>
+      <div class="note"><h2>Pour</h2><ul>${p.plus.map(x => `<li>${x}</li>`).join('')}</ul></div>
+      <div class="note"><h2>Contre</h2><ul>${p.minus.map(x => `<li>${x}</li>`).join('')}</ul></div>`;
+    try { localStorage.setItem('ledge-titlebar-tab', id); } catch {}
+  };
+  tabs.addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b) show(b.dataset.id); });
+  tabs.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const i = P.findIndex(p => p.id === current), n = P[(i + (e.key === 'ArrowRight' ? 1 : P.length - 1)) % P.length].id;
+    show(n); document.getElementById('tab-' + n).focus();
+  });
+  show(current);
+
+  const toggle = (id, fn) => { const b = document.getElementById(id); b.addEventListener('click', () => { const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', on); fn(on, b); }); };
+  toggle('t-drag', on => document.body.classList.toggle('show-drag', on));
+  toggle('t-max', on => desk.classList.toggle('max', on));
+  const themes = ['système', 'clair', 'sombre'];
+  let ti = 0;
+  document.getElementById('t-theme').addEventListener('click', e => {
+    ti = (ti + 1) % 3;
+    const r = document.documentElement;
+    if (ti === 0) r.removeAttribute('data-theme'); else r.setAttribute('data-theme', ti === 1 ? 'light' : 'dark');
+    e.currentTarget.textContent = 'Thème : ' + themes[ti];
+    e.currentTarget.setAttribute('aria-pressed', ti !== 0);
+  });
+})();
+</script>

@@ -10,6 +10,7 @@
  *   plugin notification                Windows toasts (spec §10)
  *   event `ledge://tray` { action }    tray menu action
  *   take_open_target / event `ledge://open`   what the island asked to open (`--open`), taken once
+ *   window minimize / toggleMaximize / close / isMaximized / onResized   the title bar's buttons (decorations are off)
  */
 import { listen } from '@tauri-apps/api/event';
 
@@ -99,5 +100,24 @@ export function onOpenTarget(fn: (raw: string) => void): () => void {
   const take = () => { void invoke<string | null>('take_open_target').then(raw => { if (raw && !disposed) fn(raw); }, () => {}); };
   void listen(OPEN_EVENT, take).then(un => { if (disposed) un(); else off = un; });
   take();
+  return () => { disposed = true; off(); };
+}
+
+/** The title bar's window buttons (the native bar is off: `decorations: false`). Without Tauri they do nothing. */
+async function appWindow() { return (await import('@tauri-apps/api/window')).getCurrentWindow(); }
+export function minimizeWindow(): void { if (isTauri()) void appWindow().then(w => w.minimize()).catch(() => {}); }
+export function toggleMaximizeWindow(): void { if (isTauri()) void appWindow().then(w => w.toggleMaximize()).catch(() => {}); }
+export function closeWindow(): void { if (isTauri()) void appWindow().then(w => w.close()).catch(() => {}); }
+/** Whether the window is maximised; false outside Tauri or when the shell cannot tell. */
+export async function isWindowMaximized(): Promise<boolean> {
+  if (!isTauri()) return false;
+  try { return await (await appWindow()).isMaximized(); } catch { return false; }
+}
+/** Calls back after each resize of the window (maximising and restoring resize it). Never fires outside Tauri; the
+ *  unsubscription is safe before the subscription completes. */
+export function onWindowResized(fn: () => void): () => void {
+  if (!isTauri()) return () => {};
+  let off = () => {}; let disposed = false;
+  void appWindow().then(w => w.onResized(() => { if (!disposed) fn(); })).then(un => { if (disposed) un(); else off = un; }).catch(() => {});
   return () => { disposed = true; off(); };
 }

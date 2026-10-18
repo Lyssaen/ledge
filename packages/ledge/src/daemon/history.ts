@@ -1,11 +1,13 @@
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { SessionEvent, ThreadItem, ToolItem } from '@ledge/protocol';
+import type { ReceivedItem, SentItem, SessionEvent, ThreadItem, ToolItem } from '@ledge/protocol';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
 import { filesOf } from './files.js';
 import { agentMessages } from './transcript.js';
 import { QUESTION_TOOLS } from './state.js';
+import { crossSession } from './crossSession.js';
+export { crossSession } from './crossSession.js';
 
 /** Native tracking (spec 2026-10-13 §3–4): one thread per session, reduced from the events the store applies. */
 export const MAX_ITEMS = 400;
@@ -43,7 +45,11 @@ export class History {
   private listeners = new Set<Listener>();
   private writes: Promise<void> = Promise.resolve();
   private readonly dir: string;
-  constructor(opts: { dir?: string } = {}) { this.dir = opts.dir ?? paths().history; }
+  /** The Ledge session a SendMessage address or a sender's name is, when it is one (peers.ts). */
+  private readonly peerOf: (target: string) => string | undefined;
+  constructor(opts: { dir?: string; peerOf?: (target: string) => string | undefined } = {}) {
+    this.dir = opts.dir ?? paths().history; this.peerOf = opts.peerOf ?? (() => undefined);
+  }
 
   items(id: string): ThreadItem[] { return this.threads.get(id) ?? []; }
   onItem(l: Listener): () => void { this.listeners.add(l); return () => this.listeners.delete(l); }
@@ -101,6 +107,13 @@ export class History {
           if (helper?.kind === 'helper') this.settle(id, i => i.helperId === back.helperId);
           return back.report ? this.put(id, { kind: 'reply', id: `report-${back.helperId}`, at: ev.at, turn: helper?.turn ?? turn, helperId: back.helperId, text: back.report }) : undefined;
         }
+        const messages = crossSession(ev.text);
+        if (messages) { // another agent's messages: a turn of their own, a card each, no prompt
+          this.turns.set(id, turn + 1);
+          let last: ThreadItem | undefined;
+          messages.forEach((m, i) => { last = this.receive(id, { kind: 'received', id: `recv-${turn + 1}-${i}`, at: ev.at, turn: turn + 1, from: m.name ?? m.from, text: m.text }, m); });
+          return last;
+        }
         this.turns.set(id, turn + 1);
         return this.put(id, { kind: 'prompt', id: `prompt-${turn + 1}`, at: ev.at, turn: turn + 1, text: ev.text });
       }
@@ -108,6 +121,7 @@ export class History {
         if (!ev.tool) return undefined;
         const existing = ev.toolUseId && this.items(id).find(i => i.id === ev.toolUseId);
         if (existing) return existing; // the result came first (parallel hooks): keep what it said
+        if (ev.tool === 'SendMessage') return this.put(id, this.sentOf(ev, common, 'sending')); // a message to another agent: its card, not an action row
         const input = inputText(ev.toolInput);
         return this.put(id, { kind: 'tool', id: ev.toolUseId ?? `tool-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, label: ev.text ?? ev.tool, ...(input ? { input } : {}), status: 'running', files: filesOf(ev.tool, ev.toolInput) });
       }
@@ -115,6 +129,11 @@ export class History {
       case 'PostToolUseFailure': {
         if (!ev.tool) return undefined;
         const failed = ev.name === 'PostToolUseFailure';
+        if (ev.tool === 'SendMessage') { // its card says delivered or not; read (the receiver's prompt came first) stays
+          const sent = this.items(id).find((i): i is SentItem => i.kind === 'sent' && i.id === ev.toolUseId);
+          if (sent?.status === 'read') return sent;
+          return this.put(id, sent ? { ...sent, status: failed ? 'failed' : 'delivered' } : this.sentOf(ev, common, failed ? 'failed' : 'delivered')); // the result came first: the card from its input
+        }
         const row = this.callFor(id, ev);
         const base: ToolItem = row ?? { kind: 'tool', id: ev.toolUseId ?? `tool-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, label: ev.text ?? ev.tool, status: 'running', files: filesOf(ev.tool, ev.toolInput) };
         const error = failed ? ev.error ?? (ev.interrupt ? 'interrupted' : 'failed') : undefined;
@@ -168,7 +187,7 @@ export class History {
     if (!opts.force && now - (this.synced.get(key) ?? 0) < SYNC_MS) return [];
     this.synced.set(key, now);
     const items = this.items(id);
-    const since = opts.helperId ? items.find(i => i.id === opts.helperId)?.at : [...items].reverse().find(i => i.kind === 'prompt')?.at;
+    const since = opts.helperId ? items.find(i => i.id === opts.helperId)?.at : [...items].reverse().find(i => i.kind === 'prompt' || i.kind === 'received')?.at;
     if (!since) return []; // a daemon that joined mid-turn: the old tail would flood the thread
     const have = new Set(items.map(i => i.id));
     const turn = this.turns.get(id) ?? 0;
@@ -178,6 +197,25 @@ export class History {
       added.push(this.put(id, { kind: 'message', id: `msg-${m.id}`, at: m.at, turn, text: m.text, ...(opts.helperId ? { helperId: opts.helperId } : {}) }));
     }
     return added;
+  }
+
+  /** A SendMessage's card, from its input: `to` the address used, `peer` the Ledge session that address is. */
+  private sentOf(ev: SessionEvent, common: { at: string; turn: number; helperId?: string }, status: SentItem['status']): SentItem {
+    const input = ev.toolInput ?? {}; const to = typeof input.to === 'string' ? input.to : ''; const peer = to ? this.peerOf(to) : undefined;
+    return { kind: 'sent', id: ev.toolUseId ?? `sent-${ev.at}`, ...common, to, ...(peer ? { peer } : {}), ...(typeof input.summary === 'string' && input.summary ? { summary: input.summary } : {}), text: typeof input.message === 'string' ? input.message : '', status };
+  }
+
+  /** Puts a received card, paired with the sender's sent one when the sender is a Ledge session: the last of its
+   *  messages to this session not read yet, the one whose text starts like the body if any (the hook may have cut
+   *  either). That sent one becomes read, in the sender's thread. */
+  private receive(id: string, recv: ReceivedItem, m: { from: string; name?: string }): ThreadItem {
+    const peer = this.peerOf(m.from) ?? (m.name ? this.peerOf(m.name) : undefined);
+    if (!peer) return this.put(id, recv);
+    const head = (t: string) => t.trim().slice(0, 200);
+    const open = this.items(peer).filter((i): i is SentItem => i.kind === 'sent' && i.peer === id && i.status !== 'read');
+    const sent = [...open].reverse().find(i => head(i.text) === head(recv.text)) ?? open.at(-1);
+    if (sent) this.put(peer, { ...sent, status: 'read', received: recv.id });
+    return this.put(id, { ...recv, peer, ...(sent ? { sent: sent.id } : {}) });
   }
 
   /** The turn (or the helper) is over: an action still running will not get its result from this side. It shows as

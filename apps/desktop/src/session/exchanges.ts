@@ -1,4 +1,4 @@
-import type { FileChange, Helper, HelperItem, Pending, Session, ThreadItem, ToolItem } from '@ledge/protocol';
+import type { FileChange, Helper, HelperItem, Pending, ReceivedItem, SentItem, Session, ThreadItem, ToolItem } from '@ledge/protocol';
 import { helperThread, turns } from '@ledge/ui/thread/turns';
 import { elapsedMs, liveTool } from '@ledge/ui/thread/tools';
 import { findDocumentReferences } from '@ledge/ui/documents/references';
@@ -28,12 +28,20 @@ export type Segment =
   | { kind: 'say'; item: Say }
   | { kind: 'decision'; item: Permission }
   | { kind: 'helper'; item: HelperItem }
+  | { kind: 'sent'; item: SentItem }
   | { kind: 'plan'; item: ToolItem; plan: PlanDoc };
 export interface Exchange {
   key: string;
   at: string;
   prompt: { id: string; text: string; from: 'you' | 'parent' } | null;
+  /** The turn's received messages, in order: they open it like a prompt, so they are no segment. */
+  received: ReceivedItem[];
   segments: Segment[];
+}
+
+/** Le correspondant d'un message : son nom de pair, sinon celui de l'autre session. */
+export function peerKey(item: SentItem | ReceivedItem): string {
+  return item.peer ?? ('to' in item ? item.to : item.from);
 }
 
 /** Les éléments à plat en segments : les actions consécutives se replient, une action ExitPlanMode en sort (son plan),
@@ -51,6 +59,7 @@ function segmentsOf(items: readonly ThreadItem[]): Segment[] {
     } else if (it.kind === 'message' || it.kind === 'reply') out.push({ kind: 'say', item: it });
     else if (it.kind === 'permission') { if (it.decision) out.push({ kind: 'decision', item: it }); }
     else if (it.kind === 'helper') out.push({ kind: 'helper', item: it });
+    else if (it.kind === 'sent') out.push({ kind: 'sent', item: it });
   }
   return out;
 }
@@ -116,7 +125,7 @@ function exchangesOf(items: readonly ThreadItem[], helperId?: string): Exchange[
     return [{
       key: helper?.id ?? `helper-${helperId}`, at: helper?.at ?? rest[0]!.at,
       prompt: helper ? { id: helper.id, text: helper.task, from: 'parent' } : null,
-      segments: segmentsOf(rest)
+      received: [], segments: segmentsOf(rest)
     }];
   }
   return turns([...items]).map(t => {
@@ -124,14 +133,14 @@ function exchangesOf(items: readonly ThreadItem[], helperId?: string): Exchange[
     return {
       key: t.prompt?.id ?? `turn-${t.n}`, at: t.prompt?.at ?? t.items[0]!.at,
       prompt: t.prompt ? { id: t.prompt.id, text: t.prompt.text, from: 'you' as const } : null,
-      segments: segmentsOf(rest)
+      received: t.items.filter((i): i is ReceivedItem => i.kind === 'received'), segments: segmentsOf(rest)
     };
   });
 }
 
-/** Les ids dans l'ordre affiché : consigne, puis chaque segment (chaque action d'un repli ; ses mises à jour de liste n'y sont pas). */
+/** Les ids dans l'ordre affiché : consigne, puis les messages reçus, puis chaque segment (chaque action d'un repli ; ses mises à jour de liste n'y sont pas). */
 export function displayIds(xs: readonly Exchange[]): string[] {
-  return xs.flatMap(x => [...(x.prompt ? [x.prompt.id] : []), ...x.segments.flatMap(s => s.kind === 'tools' ? s.tools.map(t => t.id) : [s.item.id])]);
+  return xs.flatMap(x => [...(x.prompt ? [x.prompt.id] : []), ...x.received.map(m => m.id), ...x.segments.flatMap(s => s.kind === 'tools' ? s.tools.map(t => t.id) : [s.item.id])]);
 }
 
 export interface Summary {

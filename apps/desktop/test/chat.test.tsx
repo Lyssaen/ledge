@@ -79,7 +79,7 @@ describe('the Ledge chat docked on the right', () => {
     await user.keyboard('/');                                            // in the field, / is typed
     expect(field()).toHaveValue('/');
     act(() => field().blur());
-    await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Chat Ledge' }));
+    await user.click(within(screen.getByRole('group', { name: 'Window bar' })).getByRole('button', { name: 'Chat Ledge' }));
     await waitFor(() => expect(field()).toHaveFocus());
     expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
   });

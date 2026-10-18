@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, parseProjectBlock, parseProposalBlock, parseRelayBlock, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { extractProposal, isArchived, parseProjectBlock, parseProposalBlock, parseRelayBlock, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -154,7 +154,7 @@ export function createChat(deps: ChatDeps): Chat {
   }
 
   async function run(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
-    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), projects: deps.projects?.(), now: now(), capture, git: cwd => gitSummary(cwd) });
+    const ctx = await writeContext(contextDir, { sessions: deps.store.all().filter(s => !isArchived(s)), recents: deps.store.recents(), projects: deps.projects?.(), now: now(), capture, git: cwd => gitSummary(cwd) });
     if (mine.cancelled) return CANCELLED;
     const { sessionId, resume } = await daySession(fresh, tool);
     const label = TOOL_LABEL[tool];

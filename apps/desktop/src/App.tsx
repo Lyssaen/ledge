@@ -20,6 +20,7 @@ import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { mainOrder } from './nav/agents';
 import { useKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
+import { TitleBar } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { LaunchPlace } from './launch/lazy';
@@ -38,6 +39,10 @@ import { onFullscreenLeft, setWindowFullscreen } from './shell/fullscreen';
 import { Toast, useToast } from './shell/Toast';
 import { preloadPlaces } from './shell/preload';
 import { useFiling } from './atelier/filing';
+import { useSessionActions } from './manage/useSessionActions';
+import { useSessionMenu } from './manage/useSessionMenu';
+import { SessionMenuHost } from './manage/SessionMenu';
+import { ConfirmDialog } from './manage/ConfirmDialog';
 import { SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
@@ -83,7 +88,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useEffect(() => { saveOverview({ view, helpers: nav.helpers, paused: nav.paused }); }, [view, nav.helpers, nav.paused]);
   // A session or a project that went away takes the place back to what still exists (only a fleet change can make it
   // stale, hence the dependencies); reconcile returns the same state when nothing changes, and then nothing is dispatched.
-  useEffect(() => { if (reconcile(nav, sessions, projects) !== nav) dispatch({ type: 'reconcile', sessions, projects }); }, [sessions, projects]);
+  // An archived session keeps its page (it reads, read-only): only a session the daemon no longer lists at all takes the place away.
+  const known = useMemo(() => [...sessions, ...fleetView.archived], [sessions, fleetView.archived]);
+  useEffect(() => { if (reconcile(nav, known, projects) !== nav) dispatch({ type: 'reconcile', sessions: known, projects }); }, [known, projects]);
 
   const projectIdOf = useCallback((s: Session) => (projects ? projectOf(s, projects) : null), [projects]);
   const projectName = useCallback((s: Session) => {
@@ -93,14 +100,18 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const waits = useWaits(sessions);
   const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
   // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
-  const { notice, notify } = useToast();
+  const { notice, action: noticeAction, notify, undo } = useToast();
   const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
   // Allow / Deny from the List (and, lot 6, the session): one send per request; a refusal or a silence is said in the toast.
+  // End, archive, resume, restore, delete (lot 8): the confirmation below; the atelier, the List and the session page hand it their menus.
+  const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
+  // The session menu, from the atelier's seats and the session page's header « … » (one at a time).
+  const sessionMenu = useSessionMenu({ client: fleetClient, sessions, notify });
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
-  useKeys(dispatch, { state: nav, order, screen: screenKeys });
+  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null });
   // The window may leave full screen by itself (Escape in a browser, the OS): the layout follows.
   useEffect(() => onFullscreenLeft(() => dispatch({ type: 'fullscreen', on: false })), []);
   // The window follows the full screen state (not at mount: nothing was asked yet).
@@ -110,7 +121,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     fullscreenSeen.current = nav.fullscreen;
     void setWindowFullscreen(nav.fullscreen);
   }, [nav.fullscreen]);
-  const session = place.kind === 'session' ? sessions.find(s => s.id === place.id) ?? null : null;
+  const session = place.kind === 'session' ? known.find(s => s.id === place.id) ?? null : null;
   // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
   const { threads } = useDaemon();
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
@@ -185,16 +196,21 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     lang, setLang, paused: nav.paused
   };
 
+  // A dialog over the application (a modal, a confirmation, the rename dialog): what lies behind it, the title bar's controls
+  // included, takes neither clicks nor the focus.
+  const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null;
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
-      <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={nav.modal !== null}>
+      {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
+      <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
         <section className="workspace">
-          <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal} />
+          <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
+            manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
-            : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify}
+            : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} order={order} projects={projects} projectIdOf={projectIdOf} />
-            : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} />
+            : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu} />
             : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} decisions={decisions} filing={filing} waits={waits} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>
@@ -219,7 +235,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}
           notify={notify} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}
-      <Toast notice={notice} />
+      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} />
+      {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
+      <Toast notice={notice} action={noticeAction} onAction={undo} />
     </ScreenKeysContext.Provider>
   );
 }

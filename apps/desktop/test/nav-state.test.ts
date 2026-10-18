@@ -30,6 +30,11 @@ describe('nav state', () => {
     expect(s.place).toEqual({ kind: 'session', id: 'local:otto', view: 'list', project: 'ledge' });
     expect(navReducer(s, { type: 'escape' }).place).toEqual({ kind: 'overview', view: 'list', project: 'ledge' });
   });
+  it('open with an item keeps it on the place; the next open forgets it', () => {
+    const r = navReducer(s0, { type: 'open', id: 'local:nova', item: 'recv-1-0' });
+    expect(r.place).toEqual({ kind: 'session', id: 'local:nova', item: 'recv-1-0', view: 'atelier', project: 'all' });
+    expect(navReducer(r, { type: 'open', id: 'local:nova' }).place).toEqual({ kind: 'session', id: 'local:nova', view: 'atelier', project: 'all' });
+  });
   it('open may name a subagent and ask for the reply; the next open forgets both', () => {
     const base = s0;
     const s = navReducer(base, { type: 'open', id: 'local:otto', helper: 'h1' });
