@@ -7,7 +7,8 @@ import type { Decision, Pending, Tool } from '@ledge/protocol';
  * it already refused (a deny with a note waiting for the input box), so a wait that fails leaves a refusal without its note.
  */
 export type KeyPlan = Array<{ text: string } | { keys: string[] } | { waitMs: number } | { until: (lastLines: string) => boolean; denied?: true }>;
-export type PanePromptMatch = { kind: 'permission' | 'question' | 'plan'; text: string; options?: string[]; optionDetails?: string[]; body?: string };
+/** `command`: the shell command an approval dialog shows as such, when it shows one (to check the request it answers). */
+export type PanePromptMatch = { kind: 'permission' | 'question' | 'plan'; text: string; options?: string[]; optionDetails?: string[]; body?: string; command?: string };
 
 export interface Adapter {
   tool: Tool;
@@ -60,6 +61,28 @@ export function assertDialogIs(pending: Pending, shown: PanePromptMatch['kind'] 
   if (shown === null) return;
   const want = pending.kind === 'diff' ? 'permission' : pending.kind;
   if (shown !== want) throw new Error(STALE);
+}
+/** The tools whose request text is the shell command the dialog shows (Claude Code and Codex hooks, Cursor Agent). */
+const COMMAND_TOOLS: ReadonlySet<string> = new Set(['Bash', 'shell', 'Shell']);
+/** Whitespace aside: the pane wraps a long command or question at its width, mid-word too. */
+const compact = (t: string) => t.replace(/\s+/g, '');
+/**
+ * False when the dialog read on screen (`shown`, from the capture right before the keys) asks something else than the
+ * request answered, though the daemon still holds that request (its hook is late): no key then (STALE). Compared where
+ * the screen shows what the request says: a request read from the pane, a question (its long text cut on screen, so one
+ * starting as the other is the same) and a shell command the dialog shows as such (`…` where the pane cuts it). A plan
+ * or a file approval, whose hook text the dialog does not show, and a dialog of another kind (assertDialogIs) are left
+ * to the other checks.
+ */
+export function dialogShows(shown: PanePromptMatch | null, pending: Pending): boolean {
+  if (!shown || shown.kind !== (pending.kind === 'diff' ? 'permission' : pending.kind)) return true;
+  const screen = compact(shown.text), asked = compact(pending.text);
+  if (!asked) return true;
+  if (pending.kind === 'question') return screen === asked || (!!screen && (asked.startsWith(screen) || screen.startsWith(asked)));
+  const same = (shownText: string) => shownText === asked || (shownText.endsWith('…') && asked.startsWith(shownText.slice(0, -1)));
+  if (pending.source === 'pane') return same(screen);
+  if (pending.tool !== undefined && COMMAND_TOOLS.has(pending.tool) && shown.command) return same(compact(shown.command));
+  return true;
 }
 /** Tmux.sendText rejects newlines: a reply or a note is flattened to one line, Enter is a separate key step. */
 export const flatten = (text: string) => text.replace(/\s*[\r\n]+\s*/g, ' ').trim();

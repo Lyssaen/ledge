@@ -166,7 +166,7 @@ function withoutReply(s: Session): Session {
 }
 
 function samePending(a: Pending, b: Pending): boolean {
-  return a.kind === b.kind && a.text === b.text && a.tool === b.tool && a.source === b.source
+  return a.kind === b.kind && a.text === b.text && a.body === b.body && a.tool === b.tool && a.source === b.source
     && JSON.stringify(a.options) === JSON.stringify(b.options) && JSON.stringify(a.optionDetails) === JSON.stringify(b.optionDetails);
 }
 

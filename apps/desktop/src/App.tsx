@@ -21,9 +21,9 @@ import { useKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
-import { LaunchPlace, loadComposer } from './launch/lazy';
-import { ChatPlace, loadChat } from './chat/lazy';
-import { loadSettings, SettingsPlace } from './settings/lazy';
+import { LaunchPlace } from './launch/lazy';
+import { ChatPlace } from './chat/lazy';
+import { SettingsPlace } from './settings/lazy';
 import type { SettingsContext } from './settings/SettingsPage';
 import { daemonTarget, useDaemonUpdate } from './update/daemon';
 import { useUpdate } from './update/store';
@@ -35,13 +35,13 @@ import { SearchPalette } from './shell/SearchPalette';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
 import { onFullscreenLeft, setWindowFullscreen } from './shell/fullscreen';
 import { Toast, useToast } from './shell/Toast';
+import { preloadPlaces } from './shell/preload';
 import { useFiling } from './atelier/filing';
-import { loadWorkspace, SessionPlace } from './session/lazy';
+import { SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
 import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
-import { loadEditor } from './projects/lazy';
 import { ProjectDialog } from './projects/ProjectDialog';
 
 const NO_PROJECTS: readonly Project[] = [];
@@ -113,8 +113,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
   // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
   const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
-  // The session page's, the New session form's, the project editor's, the chat's and the settings' chunks are fetched once the shell is up, so a first opening rarely waits for them.
-  useEffect(() => { void loadWorkspace(); void loadComposer(); void loadEditor(); void loadChat(); void loadSettings(); }, []);
+  useEffect(preloadPlaces, []);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);

@@ -9,13 +9,22 @@ pub fn title_matches(title: &str, wanted: &str) -> bool {
 /// left as is would run `calc.exe` as a second `wt` command.
 fn wt_arg(s: &str) -> String { s.replace(';', "\\;") }
 
+/// True when `s` reaches the Linux program as one argument, unchanged: Windows Terminal rebuilds the command line after
+/// `wsl.exe` by wrapping each argument holding a space in double quotes, escaping nothing, and `wsl.exe` splits it again
+/// by the Windows rules. A `"`, a control character (a tab splits too) or a final backslash (it would escape the closing
+/// quote) cannot make that trip. Spaces, accents, `$`, quotes `'` and `\` elsewhere can: no shell reads them.
+pub fn wsl_arg_ok(s: &str) -> bool {
+    !s.is_empty() && !s.chars().any(|c| c == '"' || c.is_control()) && !s.ends_with('\\')
+}
+
 /// The `wt.exe` arguments that open a tab titled `title` in the current Windows Terminal window (a new one when none
 /// is open) running `command` inside the default WSL distribution. `command` is the daemon's launcher command plus
-/// `attach <id>`; Windows Terminal hands everything after `wsl.exe --` to WSL, once its `;` escapes are undone.
+/// `attach <id>`; Windows Terminal hands everything after `wsl.exe --exec` to WSL, once its `;` escapes are undone, and
+/// WSL runs it as is, without the user's shell (which would read `$(…)` or `;` in a path or a remote id).
 pub fn terminal_args(title: &str, command: &[String]) -> Vec<String> {
     let mut args: Vec<String> = ["-w", "0", "new-tab", "--title"].iter().map(|s| s.to_string()).collect();
     args.push(wt_arg(title));
-    args.extend(["wsl.exe", "--"].iter().map(|s| s.to_string()));
+    args.extend(["wsl.exe", "--exec"].iter().map(|s| s.to_string()));
     args.extend(command.iter().map(|a| wt_arg(a)));
     args
 }
@@ -63,6 +72,7 @@ pub fn foreground_is_terminal() -> bool { false }
 /// Opens a Windows Terminal tab running `command` in WSL; true once `wt.exe` was spawned.
 pub fn open(title: &str, command: &[String]) -> Result<bool, String> {
     if command.is_empty() { return Err("empty command".into()); }
+    if !command.iter().all(|a| wsl_arg_ok(a)) { return Err("an argument WSL cannot receive as is".into()); }
     #[cfg(windows)]
     { return std::process::Command::new("wt.exe").args(terminal_args(title, command)).spawn().map(|_| true).map_err(|e| format!("wt.exe: {e}")); }
     #[cfg(not(windows))]
@@ -74,11 +84,17 @@ mod tests {
     use super::*;
     #[test] fn a_terminal_tab_runs_the_launcher_command_in_wsl() {
         let cmd: Vec<String> = ["/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"].iter().map(|s| s.to_string()).collect();
-        assert_eq!(terminal_args("Juno · api-gateway", &cmd), ["-w", "0", "new-tab", "--title", "Juno · api-gateway", "wsl.exe", "--", "/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"]);
+        assert_eq!(terminal_args("Juno · api-gateway", &cmd), ["-w", "0", "new-tab", "--title", "Juno · api-gateway", "wsl.exe", "--exec", "/usr/bin/node", "/opt/ledge/cli.js", "attach", "n1"]);
+    }
+    #[test] fn a_path_with_a_space_or_an_accent_goes_through_a_quote_or_a_control_character_does_not() {
+        for ok in ["/opt/My Tools/cli.js", "/home/élise/cli.js", "a$(reboot)b", "'it'\\''s'", "a\\b"] { assert!(wsl_arg_ok(ok), "{ok}"); }
+        for bad in ["", "a\"b", "a\tb", "a\nb", "/opt/x\\"] { assert!(!wsl_arg_ok(bad), "{bad:?}"); }
+        let cmd: Vec<String> = ["/usr/bin/node", "/opt/x\"y/cli.js", "attach", "n1"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(open("x", &cmd), Err("an argument WSL cannot receive as is".into()));
     }
     #[test] fn a_semicolon_in_the_title_or_the_command_never_starts_another_wt_command() {
         let cmd: Vec<String> = ["ssh", "-t", "--", "box", "'node' 'cli.js' 'attach' 'a;b'"].iter().map(|s| s.to_string()).collect();
-        assert_eq!(terminal_args("demo;calc.exe;", &cmd), ["-w", "0", "new-tab", "--title", "demo\\;calc.exe\\;", "wsl.exe", "--", "ssh", "-t", "--", "box", "'node' 'cli.js' 'attach' 'a\\;b'"]);
+        assert_eq!(terminal_args("demo;calc.exe;", &cmd), ["-w", "0", "new-tab", "--title", "demo\\;calc.exe\\;", "wsl.exe", "--exec", "ssh", "-t", "--", "box", "'node' 'cli.js' 'attach' 'a\\;b'"]);
         // A backslash already before a `;` is kept: wt reads `\\;` back as `\;`.
         assert_eq!(wt_arg("a\\;b"), "a\\\\;b");
     }

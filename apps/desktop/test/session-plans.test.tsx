@@ -30,7 +30,7 @@ it('the plan card in the thread, read beside; the pinned plan sums it up and app
   expect(side.getByText('Plan proposed by Pia')).toBeVisible();
   expect(plan.getByRole('button', { name: /Open beside/ })).toBeVisible();
   await user.keyboard('y');
-  await waitFor(() => expect(d.received.filter(m => m.type === 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'accept', expect: { kind: 'plan', text: '# Plan : version 0.6.0' } }]));
+  await waitFor(() => expect(d.received.filter(m => m.type === 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'accept', expect: { kind: 'plan', text: '# Plan : version 0.6.0', key: expect.any(String) } }]));
 });
 it('keep planning with a note: the old card is revised, the new one and the pinned request follow it', async () => {
   const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'hook' } });
@@ -38,7 +38,7 @@ it('keep planning with a note: the old card is revised, the new one and the pinn
   d.thread('pia', [exit('p1', 'running')]);
   await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
   await user.type(await screen.findByRole('textbox', { name: 'Reply to the agent' }), 'Sans la publication{Enter}');
-  await waitFor(() => expect(d.received.filter(m => m.type === 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny', note: 'Sans la publication', expect: { kind: 'plan', text: '# Plan : version 0.6.0' } }]));
+  await waitFor(() => expect(d.received.filter(m => m.type === 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny', note: 'Sans la publication', expect: { kind: 'plan', text: '# Plan : version 0.6.0', key: expect.any(String) } }]));
   const v2 = md.replace('# Plan : version 0.6.0', '# Plan : version 0.6.0 (révisé)').replace('\n4. Publier', '');
   d.threadItem('pia', { ...exit('p1', 'failed') });
   d.threadItem('pia', { ...exit('p2', 'running'), input: JSON.stringify({ plan: v2 }) });

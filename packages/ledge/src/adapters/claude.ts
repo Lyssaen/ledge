@@ -123,19 +123,26 @@ function parseDialog(pane: string): Dialog | null {
   };
 }
 
+/** The lines between the dialog's dashed rules (a command, a diff), or ''. */
+function dashedBody(header: string[]): string {
+  const d1 = header.findIndex(l => DASHED.test(l.trim()));
+  const d2 = d1 < 0 ? -1 : header.findIndex((l, i) => i > d1 && DASHED.test(l.trim()));
+  return d2 > d1 + 1 ? header.slice(d1 + 1, d2).map(l => l.trim()).filter(Boolean).join('\n') : '';
+}
+
 /** A permission's subject: the dashed-rule body (the command), or the title and the line after it. */
 function permissionText(header: string[], question: string): string {
   const nonBlank = header.filter(l => !isBlank(l));
   const titleAndNext = nonBlank.slice(0, 2).filter(l => !DASHED.test(l.trim())).map(l => l.trim()).join(' ');
   // File dialogs ("Create file", "Edit file") put the diff between the dashed rules: name the file instead.
   if (/\bfile$/i.test(nonBlank[0]?.trim() ?? '')) return titleAndNext || question;
-  const d1 = header.findIndex(l => DASHED.test(l.trim()));
-  const d2 = d1 < 0 ? -1 : header.findIndex((l, i) => i > d1 && DASHED.test(l.trim()));
-  if (d2 > d1 + 1) {
-    const body = header.slice(d1 + 1, d2).map(l => l.trim()).filter(Boolean).join('\n');
-    if (body) return body;
-  }
-  return titleAndNext || question;
+  return dashedBody(header) || titleAndNext || question;
+}
+
+/** The command a « Bash command » dialog shows between its dashed rules, or undefined. */
+function bashCommand(header: string[]): string | undefined {
+  if (!/^Bash command$/i.test(header.find(l => !isBlank(l))?.trim() ?? '')) return undefined;
+  return dashedBody(header) || undefined;
 }
 
 // The workspace trust dialog, shown before anything else in a folder Claude Code has not seen. Its options carry no
@@ -180,7 +187,8 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   // Only a question's lines under an option are its description; elsewhere they wrap a long option.
   if (d.kind === 'question') return { kind: 'question', text: d.question, options: d.options, ...(d.details.some(Boolean) ? { optionDetails: d.details } : {}) };
   if (d.kind === 'plan') return { kind: 'plan', text: d.question, options: d.options };
-  return { kind: 'permission', text: permissionText(d.title, d.question), options: d.options };
+  const command = bashCommand(d.title);
+  return { kind: 'permission', text: permissionText(d.title, d.question), options: d.options, ...(command ? { command } : {}) };
 }
 
 /** Works on the server's short capture: the bottom of a dialog is its last options and the footer. */

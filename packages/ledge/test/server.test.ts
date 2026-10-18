@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
 import type { ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
-import { DEFAULT_ISLAND_PREFS } from '@ledge/protocol';
+import { DEFAULT_ISLAND_PREFS, pendingKey } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
@@ -466,6 +466,44 @@ describe('server', () => {
     expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the request changed, look again', request: 'session.decide' });
     expect(tmux.sent).toEqual([]);
     expect(store.get('a')).toMatchObject({ state: 'waiting_permission', pending: { text: 'rm -rf dist' } });
+    c.close();
+  });
+  it('a plan whose content changes under the same label gets no key, at the click or while the terminal is read', async () => {
+    const plan = fx('claude2-plan');
+    tmux = fakeTmux({ 'ledge-a': [plan, plan, 'Running…'] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0 });
+    const seen = { kind: 'plan' as const, text: 'Implement this plan?', body: '1. Add tests', source: 'hook' as const };
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { ...seen, body: '1. Delete the tests' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    // Same label, another plan: the key the front computed on the plan it showed tells them apart.
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'plan', text: seen.text, key: pendingKey(seen) } });
+    expect((await c.next('error', 3000)).message).toBe('the request changed, look again');
+    expect(tmux.sent).toEqual([]);
+    // The plan the user saw is pending; it is rewritten while the terminal is read.
+    store.upsert(mk('a', { state: 'waiting_permission', pending: seen }));
+    const realCapture = tmux.capture;
+    tmux.capture = async (n, l) => {
+      store.upsert(mk('a', { state: 'waiting_permission', pending: { ...seen, body: '1. Delete the tests' } }));
+      tmux.capture = realCapture;
+      return realCapture(n, l);
+    };
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'plan', text: seen.text, key: pendingKey(seen) } });
+    expect((await c.next('error', 3000)).message).toBe('the request changed, look again');
+    expect(tmux.sent).toEqual([]);
+    c.close();
+  });
+  it('another command already on screen, its hook not come yet, gets no key though the request is the one seen', async () => {
+    const pane = fx('claude2-permission-bash');
+    tmux = fakeTmux({ 'ledge-a': [pane, pane, 'Running…'] }); await srv.close();
+    srv = await startServer({ store, tmux, port: 0 });
+    const seen = { kind: 'permission' as const, text: 'pnpm test', tool: 'Bash', source: 'hook' as const };
+    store.upsert(mk('a', { state: 'waiting_permission', pending: seen }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    // The terminal asks for `mkdir zz-ledge-probe`; the daemon still holds `pnpm test`, the request the user approves.
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: 'pnpm test', key: pendingKey(seen) } });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the request changed, look again', request: 'session.decide' });
+    expect(tmux.sent).toEqual([]);
+    expect(store.get('a')).toMatchObject({ state: 'waiting_permission', pending: { text: 'pnpm test' } });
     c.close();
   });
   it('a note on a question is refused for every harness, and a reply refusal names session.reply', async () => {

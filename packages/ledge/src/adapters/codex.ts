@@ -121,7 +121,8 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   if (d.kind === 'question') return { kind: 'question', text: questionText(d.header), options: d.options, ...(d.details.some(Boolean) ? { optionDetails: d.details } : {}) };
   if (d.kind === 'plan') return { kind: 'plan', text: 'Implement this plan?', options: d.options };
   if (d.kind === 'confirm') return { kind: 'permission', text: confirmText(d.header), options: d.options };
-  return { kind: 'permission', text: approvalText(d.header), options: d.options };
+  const cmd = d.header.findIndex(l => /^\s*\$\s/.test(l));
+  return { kind: 'permission', text: approvalText(d.header), options: d.options, ...(cmd >= 0 ? { command: run(d.header, cmd).join(' ').replace(/^\$\s+/, '') } : {}) };
 }
 
 /** Works on the server's short capture: the footer is the last line of every dialog. */

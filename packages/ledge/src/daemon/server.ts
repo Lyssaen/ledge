@@ -2,12 +2,12 @@ import type { IncomingMessage } from 'node:http';
 import { homedir } from 'node:os';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, type ClientMessage, type DaemonInfo, type Decision, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type Decision, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
-import { STALE } from '../adapters/types.js';
+import { STALE, dialogShows } from '../adapters/types.js';
 import { verifyGone } from '../adapters/verify.js';
 import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
@@ -201,7 +201,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const decided = s.pending;
       const stillTheSame = () => {
         const cur = store.get(id)?.pending;
-        return cur === decided || (!!cur && !!decided && cur.kind === decided.kind && cur.text === decided.text);
+        return cur === decided || (!!cur && !!decided && pendingKey(cur) === pendingKey(decided));
       };
       let before: string | null = null;
       if (requirePrompt) {
@@ -209,6 +209,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (before === null || !adapter.promptStillVisible(before.split('\n').slice(-5).join('\n'))) throw new Error(NO_PROMPT);
         // The request checked before the capture may have been replaced while it ran: no key for one the user did not see.
         if (!stillTheSame()) throw new Error(STALE);
+        // Nor for another dialog already on screen whose hook has not come yet: the daemon still holds the old request.
+        if (decided && !dialogShows(adapter.detectPrompt(before), decided)) throw new Error(STALE);
       }
       const plan = typeof planFor === 'function' ? planFor(before ?? '') : planFor;
       // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.
@@ -394,7 +396,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
         if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
         // A decision is for the request the user saw: another one (or none) since is refused before any key.
-        if (msg.expect && (s.pending?.kind !== msg.expect.kind || s.pending.text !== msg.expect.text)) return refuse(STALE, msg.id);
+        if (msg.expect && (s.pending?.kind !== msg.expect.kind || s.pending.text !== msg.expect.text
+          || (msg.expect.key !== undefined && pendingKey(s.pending) !== msg.expect.key))) return refuse(STALE, msg.id);
         if (!s.pending) return refuse('nothing to decide', msg.id);
         const pending = s.pending; const adapter = adapterFor(s.tool);
         // What the harness cannot do is refused before any key (a question never takes `always` or a note).

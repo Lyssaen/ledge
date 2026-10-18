@@ -51,8 +51,9 @@ function parseDialog(lines: string[]): Dialog | null {
 }
 
 /** `$  npm test in .` is a shell command and the folder it runs in: Ledge shows the command. */
+const SHELL_SUBJECT = /^\$\s+(.+?)\s+in\s+\S+$/;
 function dialogText(d: Dialog): string {
-  const cmd = d.subject.match(/^\$\s+(.+?)\s+in\s+\S+$/);
+  const cmd = d.subject.match(SHELL_SUBJECT);
   if (cmd) return cmd[1]!;
   return d.subject ? `${d.question} ${d.subject}` : d.question;
 }
@@ -204,7 +205,8 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   const plan = parsePlan(lines);
   if (plan) return { kind: 'plan', text: plan.title, options: plan.options, ...(plan.body ? { body: plan.body } : {}) };
   const d = parseDialog(lines);
-  return d ? { kind: 'permission', text: dialogText(d) } : null;
+  const command = d?.subject.match(SHELL_SUBJECT)?.[1];
+  return d ? { kind: 'permission', text: dialogText(d), ...(command ? { command } : {}) } : null;
 }
 
 /** The kind of request the dialog on screen answers, read in keysFor's order (the skip field is still the approval's), or null. */

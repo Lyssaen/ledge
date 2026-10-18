@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import { pendingKey } from '@ledge/protocol';
 import { boot, closeDaemons, listSessions, type MockDaemon } from './helpers';
 
 afterEach(async () => { cleanup(); localStorage.clear(); await closeDaemons(); });
@@ -18,7 +19,7 @@ describe('the List quick actions', () => {
     const { d, user } = await boot({ sessions: listSessions(), list: true });
     const allow = within(row('Otto')).getByRole('button', { name: 'Allow' });
     await user.dblClick(allow);
-    await waitFor(() => expect(decides(d)).toEqual([{ type: 'session.decide', id: 'otto', decision: 'accept', expect: { kind: 'permission', text: 'npm test' } }]));
+    await waitFor(() => expect(decides(d)).toEqual([{ type: 'session.decide', id: 'otto', decision: 'accept', expect: { kind: 'permission', text: 'npm test', key: pendingKey(listSessions()[0]!.pending!) } }]));
     expect(allow).toBeDisabled();
     expect(within(row('Otto')).getByRole('button', { name: 'Deny' })).toBeDisabled();
     d.upsert({ ...listSessions()[0]!, state: 'working', pending: undefined });

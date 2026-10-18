@@ -132,8 +132,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** `always` and `note` only where the harness offers them (`offers`); a note goes with `deny`, for the agent to read. */
   z.object({
     type: z.literal('session.decide'), id: z.string(), decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
-    /** The request the user saw when deciding: refused (the request changed) unless it is still the pending one. Left out by older fronts and the island. */
-    expect: PendingSchema.pick({ kind: true, text: true }).optional()
+    /** The request the user saw when deciding: refused (the request changed) unless it is still the pending one. Left out by older fronts and the island.
+     *  `key` (pendingKey) covers its whole content; older fronts send kind and text only. */
+    expect: PendingSchema.pick({ kind: true, text: true }).extend({ key: z.string().max(64).optional() }).optional()
   }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),
   z.object({ type: z.literal('session.kill'), id: z.string() }),

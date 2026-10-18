@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import type React from 'react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import { pendingKey } from '@ledge/protocol';
 import { UNCONFIRMED_MS, useDecisions } from '../src/fleet/decisions';
 import { LangProvider } from '../src/i18n/lang';
 
@@ -23,7 +24,7 @@ describe('useDecisions', () => {
     act(() => { expect(result.current.decide(otto, 'deny')).toBe(false); });
     expect(props.client.send).toHaveBeenCalledTimes(1);
     // The request the user saw goes with it: the daemon refuses it if another one is pending by then.
-    expect(props.client.send).toHaveBeenCalledWith({ type: 'session.decide', id: 'local:otto', decision: 'accept', expect: { kind: 'permission', text: 'npm test' } });
+    expect(props.client.send).toHaveBeenCalledWith({ type: 'session.decide', id: 'local:otto', decision: 'accept', expect: { kind: 'permission', text: 'npm test', key: pendingKey(otto.pending!) } });
     expect(result.current.busy('local:otto')).toBe(true);
     rerender({ ...props, sessions: [{ ...otto, state: 'working', pending: undefined }] });
     expect(result.current.busy('local:otto')).toBe(false);
@@ -145,7 +146,7 @@ describe('useDecisions', () => {
     act(() => { expect(result.current.decide(otto, 'accept', 'why')).toBe(false); });
     act(() => { expect(result.current.decide({ ...otto, tool: 'cursor' }, 'always')).toBe(false); });
     act(() => { expect(result.current.decide(otto, 'deny', 'Use pnpm')).toBe(true); });
-    expect(props.client.send).toHaveBeenCalledWith({ type: 'session.decide', id: 'local:otto', decision: 'deny', note: 'Use pnpm', expect: { kind: 'permission', text: 'npm test' } });
+    expect(props.client.send).toHaveBeenCalledWith({ type: 'session.decide', id: 'local:otto', decision: 'deny', note: 'Use pnpm', expect: { kind: 'permission', text: 'npm test', key: pendingKey(otto.pending!) } });
     expect(props.client.send).toHaveBeenCalledTimes(1);
   });
   it('a reply lands when the session moves; refused, its text comes back', () => {

@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
-import { afterEach } from 'vitest';
+import { afterAll, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { preloaded } from '../src/shell/preload';
 import { setFallbackLang } from '../src/i18n/lang';
 import { loadMessages } from '../src/i18n/messages';
 import '../src/motionPreferences';
@@ -14,6 +15,8 @@ setFallbackLang('en');
 await Promise.all([loadMessages('fr'), loadMessages('en')]);
 
 afterEach(cleanup);
+// The app fetches its places' chunks once mounted (shell/preload): those imports finish before the file's environment goes.
+afterAll(preloaded);
 
 // Node 25+ defines its own `localStorage` / `sessionStorage` globals (undefined without `--localstorage-file`), and
 // the jsdom environment leaves a global that already exists alone, so the app finds no storage. A jsdom window of

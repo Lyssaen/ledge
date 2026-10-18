@@ -10,7 +10,7 @@ const tail = (pane: string, n = 5) => pane.replace(/\s+$/g, '').split('\n').slic
 describe('claude adapter: detection (Claude Code 2.x captures)', () => {
   it('detects a Bash permission with the command between the dashed rules', () => {
     expect(claudeAdapter.detectPrompt(fx('claude2-permission-bash'))).toEqual({
-      kind: 'permission', text: 'mkdir zz-ledge-probe',
+      kind: 'permission', text: 'mkdir zz-ledge-probe', command: 'mkdir zz-ledge-probe',
       options: ['Yes', 'Yes, and always allow access to', 'Yes, and switch to auto mode · auto mode handles these prompts for you', 'No']
     });
   });

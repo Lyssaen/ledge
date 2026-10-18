@@ -33,7 +33,7 @@ describe('the pinned request and the reply', () => {
     expect(req.getByText('for 12 min')).toHaveClass('pending-since');
     expect(req.getByRole('button', { name: /^Always allow in this project/ })).toBeVisible();
     await user.keyboard('y'); await user.keyboard('y');
-    await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'otto', decision: 'accept', expect: { kind: 'permission', text: 'npm test' } }]));
+    await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'otto', decision: 'accept', expect: { kind: 'permission', text: 'npm test', key: expect.any(String) } }]));
     expect(req.getByRole('button', { name: /^Allow/ })).toBeDisabled();
   });
 
@@ -51,7 +51,7 @@ describe('the pinned request and the reply', () => {
     expect(screen.getByText('Enter denies with this message')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Deny with this message' })).toBeEnabled();
     await user.keyboard('{Enter}');
-    await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'otto', decision: 'deny', note: 'Use pnpm', expect: { kind: 'permission', text: 'npm test' } }]));
+    await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'otto', decision: 'deny', note: 'Use pnpm', expect: { kind: 'permission', text: 'npm test', key: expect.any(String) } }]));
     expect(field()).toHaveValue('');
   });
 
@@ -115,7 +115,7 @@ describe('the pinned request and the reply', () => {
     expect(field()).toHaveFocus();
     expect(screen.getByRole('status')).toHaveTextContent('Write what to revise, then Enter: the plan goes back to planning.');
     await user.keyboard('Garde la v1{Enter}');
-    await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny', note: 'Garde la v1', expect: { kind: 'plan', text: '# Plan: add README.md' } }]));
+    await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny', note: 'Garde la v1', expect: { kind: 'plan', text: '# Plan: add README.md', key: expect.any(String) } }]));
     cleanup(); await closeDaemons();
     await open('Pia', [...listSessions(), { ...pia, tool: 'codex' }]);
     expect(card('Plan to approve').queryByRole('button', { name: 'Approve in auto mode' })).toBeNull();
@@ -201,12 +201,12 @@ describe('the reply, beyond the brief (carried items)', () => {
     const { d, user } = await open('Pia', [...listSessions(), pia]);
     expect(field()).toBeDisabled();
     await user.keyboard('n');
-    await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny', expect: { kind: 'plan', text: '# Plan: x' } }]));
+    await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny', expect: { kind: 'plan', text: '# Plan: x', key: expect.any(String) } }]));
     expect(screen.getByRole('status')).not.toHaveTextContent('Write what to revise');
     cleanup(); await closeDaemons();
     const env = await open('Pia', [...listSessions(), pia]);
     await env.user.click(card('Plan to approve').getByRole('button', { name: /^Keep planning/ }));
-    await waitFor(() => expect(sent(env.d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny', expect: { kind: 'plan', text: '# Plan: x' } }]));
+    await waitFor(() => expect(sent(env.d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny', expect: { kind: 'plan', text: '# Plan: x', key: expect.any(String) } }]));
   });
 
   it('a reply that seems to land at once (a working session moves) still gives its text back when refused', async () => {
@@ -263,7 +263,7 @@ describe('the reply, beyond the brief (carried items)', () => {
     expect(field()).toBeDisabled();
     expect(screen.getByText('This agent takes no message with a refusal: deny with N.')).toHaveClass('reply-hint');
     await user.keyboard('n');
-    await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'otto', decision: 'deny', expect: { kind: 'diff', text: 'src/a.ts' } }]));
+    await waitFor(() => expect(sent(d, 'session.decide')).toEqual([{ type: 'session.decide', id: 'otto', decision: 'deny', expect: { kind: 'diff', text: 'src/a.ts', key: expect.any(String) } }]));
   });
 
   it("keys do nothing on a subagent's page; its parent's own request is not shown there", async () => {

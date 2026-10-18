@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DaemonClient, DaemonError } from '@ledge/fleet';
-import { NOTE_MAX, NOTE_NOT_TYPED, offers, type Decision, type Session } from '@ledge/protocol';
+import { NOTE_MAX, NOTE_NOT_TYPED, offers, pendingKey, type Decision, type Session } from '@ledge/protocol';
 import { useI18n } from '../i18n/lang';
 
 /** What a pending request is, whatever refreshes around it: its kind, its text and the helper it comes from; null without a request. */
@@ -148,7 +148,7 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
         if (decision !== 'deny' || note.length > NOTE_MAX || !offers(s.tool, p.kind, 'note')) return false;
       }
       // The request the user saw goes with it: the daemon refuses the decision if another one is pending by then.
-      const payload = { type: 'session.decide' as const, id: s.id, decision, ...(note ? { note } : {}), expect: { kind: p.kind, text: p.text } };
+      const payload = { type: 'session.decide' as const, id: s.id, decision, ...(note ? { note } : {}), expect: { kind: p.kind, text: p.text, key: pendingKey(p) } };
       return send(s, 'session.decide', payload, note ? { text: note, onRefused } : {});
     },
     reply(s, text, onRefused) {

@@ -145,7 +145,7 @@ export async function focusTerminal(title: string): Promise<boolean> {
 }
 
 /** Opens a new Windows Terminal tab titled `title` running `command` inside WSL (`wt.exe -w 0 new-tab --title <title>
- *  wsl.exe -- <command>`): the tab of a session the overlay launched itself. True once the tab was spawned. */
+ *  wsl.exe --exec <command>`): the tab of a session the overlay launched itself. True once the tab was spawned. */
 export async function openTerminal(title: string, command: string[]): Promise<boolean> {
   if (!inTauri()) return false;
   return invoke<boolean>('open_terminal', { title, command }).catch(() => false);

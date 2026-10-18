@@ -90,15 +90,16 @@ export function splitId(id: string): { machine: string; id: string } | null {
   try { return { machine: id.slice(0, at), id: decodeURIComponent(id.slice(at + 1)) }; } catch { return null; }
 }
 const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
-/** A word every shell reads as itself, quoted or not: `wsl.exe --` hands the terminal's command to the user's WSL shell, after
- *  Windows Terminal wrapped each argument holding a space in double quotes, so `$(…)`, a quote or a `;` there would run locally. */
-const SHELL_WORD = /^[\w@%+=:,./-]+$/;
+/** An argument `wsl.exe --exec` hands to the program as is (no shell reads it, so `$(…)` or a space is only text), after
+ *  Windows Terminal wrapped each one holding a space in double quotes, escaping nothing: a `"`, a control character or a
+ *  final backslash would split it or run into the next one (ledge-native's `wsl_arg_ok`). */
+const wslArg = (s: string) => s !== '' && !/["\u0000-\u001f\u007f-\u009f]/.test(s) && !s.endsWith('\\');
 export function terminalCommand(machine: MachineState, rawId: string): string[] | null {
-  if (!machine.launcher) return null;
-  // The launcher and the id come from the machine's daemon: a remote one must not run anything on this one.
-  if (![...machine.launcher, rawId, ...(machine.ssh ? [machine.ssh] : [])].every(w => SHELL_WORD.test(w))) return null;
+  if (!machine.launcher || !rawId) return null;
   const command = [...machine.launcher, 'attach', rawId];
-  return machine.ssh ? ['ssh', '-t', '--', machine.ssh, command.map(quote).join(' ')] : command;
+  // The launcher and the id come from the machine's daemon: through ssh, the remote shell reads them quoted.
+  const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, command.map(quote).join(' ')] : command;
+  return argv.every(wslArg) ? argv : null;
 }
 const EMPTY: MachineState[] = [];
 const noopSubscribe = () => () => {};

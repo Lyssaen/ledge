@@ -10,13 +10,14 @@ const perm = { kind: 'permission' as const, text: 'echo ledge-perm-probe', sourc
 describe('cursor adapter: permission (Cursor Agent 2026.10 capture)', () => {
   it('detects Run this command? at the bottom and extracts the shell command', () => {
     expect(cursorAdapter.detectPrompt(fx('cursor-permission'))).toEqual({
-      kind: 'permission', text: 'echo ledge-perm-probe'
+      kind: 'permission', text: 'echo ledge-perm-probe', command: 'echo ledge-perm-probe'
     });
   });
   it('joins a command wrapped over several lines (a subagent\'s find)', () => {
     expect(cursorAdapter.detectPrompt(fx('cursor-permission-wrapped'))).toEqual({
       kind: 'permission',
-      text: `find "/tmp/ledge-cursor-sub/proj" \\( -path '*/.git/objects' -o -path '*/.git/objects/*' \\) -prune -o -print 2>/dev/null | sort`
+      text: `find "/tmp/ledge-cursor-sub/proj" \\( -path '*/.git/objects' -o -path '*/.git/objects/*' \\) -prune -o -print 2>/dev/null | sort`,
+      command: `find "/tmp/ledge-cursor-sub/proj" \\( -path '*/.git/objects' -o -path '*/.git/objects/*' \\) -prune -o -print 2>/dev/null | sort`
     });
   });
   it('ignores a quoted dialog, the working chrome, the idle input and an answered trust box', () => {

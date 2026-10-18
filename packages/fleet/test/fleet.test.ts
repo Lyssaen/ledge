@@ -90,17 +90,26 @@ describe('multi-machine connections', () => {
     client.send({ type: 'document.read', requestId: 'unknown', path: '/w/a.md' });
     expect(local.sent).toEqual([]); expect(server.sent).toHaveLength(1);
   });
-  it('opens no terminal for an id or a launcher the WSL shell would read as more than words', () => {
+  it('opens a terminal whatever the path or the id holds, as plain arguments; none for one WSL cannot receive as is', () => {
     const at = (ssh: string | undefined, launcher: string[]) => ({ ...LOCAL_MACHINE, ssh, launcher, status: 'open', ready: true, recents: [], sessions: [] }) as MachineState;
     const node = ['/usr/bin/node', '/opt/ledge/cli.js'];
     expect(terminalCommand(at(undefined, node), '3f2a')).toEqual(['/usr/bin/node', '/opt/ledge/cli.js', 'attach', '3f2a']);
     expect(terminalCommand(at('dev-server', node), '9b1c-e2')).toEqual(['ssh', '-t', '--', 'dev-server', "'/usr/bin/node' '/opt/ledge/cli.js' 'attach' '9b1c-e2'"]);
-    // `wsl.exe --` hands the command to the user's shell, and wt only wraps an argument holding a space in double quotes.
-    for (const id of ['$(touch /tmp/x)', 'a;b', '`id`', 'a b', "a'b", 'a"b', 'a|b', 'a&b', 'a>b', '']) {
+    // `wsl.exe --exec` runs no shell: a space, an accent or `$(…)` stays text in the one argument it is.
+    expect(terminalCommand(at(undefined, ['/usr/bin/node', '/opt/My Tools/cli.js']), '3f2a')).toEqual(['/usr/bin/node', '/opt/My Tools/cli.js', 'attach', '3f2a']);
+    expect(terminalCommand(at(undefined, ['/usr/bin/node', '/home/élise/cli.js']), '3f2a')).toEqual(['/usr/bin/node', '/home/élise/cli.js', 'attach', '3f2a']);
+    expect(terminalCommand(at(undefined, node), '$(touch /tmp/x)')).toEqual(['/usr/bin/node', '/opt/ledge/cli.js', 'attach', '$(touch /tmp/x)']);
+    // Through ssh the remote shell reads the command: each word goes single-quoted.
+    expect(terminalCommand(at('dev-server', ['/usr/bin/node', "/home/élise/My Tools/cli.js"]), "a'b;$(id)")).toEqual(['ssh', '-t', '--', 'dev-server', "'/usr/bin/node' '/home/élise/My Tools/cli.js' 'attach' 'a'\\''b;$(id)'"]);
+    // Windows Terminal wraps an argument holding a space in double quotes and escapes nothing: these would not arrive whole.
+    for (const id of ['a"b', 'a\tb', 'a\nb', '']) {
       expect(terminalCommand(at('dev-server', node), id)).toBeNull();
       expect(terminalCommand(at(undefined, node), id)).toBeNull();
     }
-    expect(terminalCommand(at('dev-server', ['/usr/bin/node', '/opt/$(reboot)/cli.js']), '3f2a')).toBeNull();
+    // A final backslash would escape wt's closing quote; through ssh the word ends with its own quote instead.
+    expect(terminalCommand(at(undefined, node), 'a\\')).toBeNull();
+    expect(terminalCommand(at('dev-server', node), 'a\\')).toEqual(['ssh', '-t', '--', 'dev-server', "'/usr/bin/node' '/opt/ledge/cli.js' 'attach' 'a\\'"]);
+    expect(terminalCommand(at(undefined, ['/usr/bin/node', '/opt/"x"/cli.js']), '3f2a')).toBeNull();
   });
   it('sends a launch to the machine it names, without machineId, and qualifies session.launched', () => {
     const { client, local, server, got } = setup();
