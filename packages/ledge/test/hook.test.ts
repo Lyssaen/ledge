@@ -22,7 +22,7 @@ describe('mapClaudeHook', () => {
   });
   it('maps PermissionRequest for Bash to a permission event with the command', () => {
     const m = mapClaudeHook('PermissionRequest', { session_id: 's', tool_name: 'Bash', tool_input: { command: 'npm test', description: 'Run tests' } }, at);
-    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', tool: 'Bash', text: 'npm test', toolInput: { command: 'npm test', description: 'Run tests' } });
+    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', agentSessionId: 's', tool: 'Bash', text: 'npm test', toolInput: { command: 'npm test', description: 'Run tests' } });
   });
   it('keeps a long plan whole for review: ExitPlanMode is capped like a reply, not like a tool input', () => {
     const plan = `# Plan\n${'step\n'.repeat(INPUT_MAX / 4)}`;
@@ -37,18 +37,18 @@ describe('mapClaudeHook', () => {
   it('maps PreToolUse AskUserQuestion with its options', () => {
     const payload = { session_id: 's', tool_name: 'AskUserQuestion', tool_input: { questions: [{ question: 'Which?', options: [{ label: 'A' }, { label: 'B' }] }] } };
     const m = mapClaudeHook('PreToolUse', payload, at);
-    expect(m?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'AskUserQuestion', text: 'Which?', options: ['A', 'B'], toolInput: payload.tool_input });
+    expect(m?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', agentSessionId: 's', tool: 'AskUserQuestion', text: 'Which?', options: ['A', 'B'], toolInput: payload.tool_input });
   });
   it('maps PreToolUse AskUserQuestion option descriptions, by index', () => {
     const payload = { session_id: 's', tool_name: 'AskUserQuestion', tool_input: { questions: [{ question: 'Which?', options: [{ label: 'A', description: ' Keeps it simple. ' }, { label: 'B' }] }] } };
-    expect(mapClaudeHook('PreToolUse', payload, at)?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'AskUserQuestion', text: 'Which?', options: ['A', 'B'], optionDetails: ['Keeps it simple.', ''], toolInput: payload.tool_input });
+    expect(mapClaudeHook('PreToolUse', payload, at)?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', agentSessionId: 's', tool: 'AskUserQuestion', text: 'Which?', options: ['A', 'B'], optionDetails: ['Keeps it simple.', ''], toolInput: payload.tool_input });
   });
   it('maps Notification permission_prompt to kind permission', () => {
     const m = mapClaudeHook('Notification', { session_id: 's', notification_type: 'permission_prompt', message: 'Claude needs your permission' }, at);
     expect(m?.event.kind).toBe('permission');
   });
   it('maps SessionEnd with no code', () => {
-    expect(mapClaudeHook('SessionEnd', { session_id: 's' }, at)?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', exitCode: null });
+    expect(mapClaudeHook('SessionEnd', { session_id: 's' }, at)?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', agentSessionId: 's', exitCode: null });
   });
   describe('SessionEnd per reason', () => {
     const reasons = ['clear', 'resume', 'logout', 'prompt_input_exit', 'other'];
@@ -60,14 +60,14 @@ describe('mapClaudeHook', () => {
       expect(mapClaudeHook('SessionEnd', { session_id: 's', reason }, at)).toBeNull();
     });
     it.each(['logout', 'prompt_input_exit', 'other'])('hook only, reason %s stays terminal', reason => {
-      expect(mapClaudeHook('SessionEnd', { session_id: 's', reason }, at)?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', exitCode: null });
+      expect(mapClaudeHook('SessionEnd', { session_id: 's', reason }, at)?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', agentSessionId: 's', exitCode: null });
     });
   });
   // Payload shapes from Claude Code 2.1.296 (field names read from the installed binary's hook input schemas).
   const common = { session_id: 's', transcript_path: '/h/.claude/projects/p/s.jsonl', cwd: '/w', permission_mode: 'default' };
   it('maps PostToolUse with its id, input, output and duration', () => {
     const payload = { ...common, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'npm test' }, tool_response: { stdout: 'ok', stderr: '' }, tool_use_id: 'toolu_1', duration_ms: 812 };
-    expect(mapClaudeHook('PostToolUse', payload, at)?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', tool: 'Bash', toolUseId: 'toolu_1', toolInput: { command: 'npm test' }, output: 'ok', durationMs: 812 });
+    expect(mapClaudeHook('PostToolUse', payload, at)?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', agentSessionId: 's', tool: 'Bash', toolUseId: 'toolu_1', toolInput: { command: 'npm test' }, output: 'ok', durationMs: 812 });
   });
   it('turns any tool_response into text or nothing, never throws', () => {
     expect(toolOutput('plain')).toBe('plain');
@@ -85,7 +85,7 @@ describe('mapClaudeHook', () => {
   });
   it('maps PostToolUseFailure with its error and PreToolUse with its id and transcript', () => {
     const fail = { ...common, hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command: 'x' }, tool_use_id: 'toolu_2', error: 'exit 1', duration_ms: 40 };
-    expect(mapClaudeHook('PostToolUseFailure', fail, at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', tool: 'Bash', toolUseId: 'toolu_2', toolInput: { command: 'x' }, error: 'exit 1', durationMs: 40 });
+    expect(mapClaudeHook('PostToolUseFailure', fail, at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', agentSessionId: 's', tool: 'Bash', toolUseId: 'toolu_2', toolInput: { command: 'x' }, error: 'exit 1', durationMs: 40 });
     const pre = { ...common, transcript_path: '/t/s.jsonl', hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: { file_path: '/w/a.ts', old_string: 'a', new_string: 'b' }, tool_use_id: 'toolu_3' };
     expect(mapClaudeHook('PreToolUse', pre, at)?.event).toMatchObject({ name: 'PreToolUse', tool: 'Edit', toolUseId: 'toolu_3', toolInput: pre.tool_input, transcriptPath: '/t/s.jsonl' });
   });
@@ -95,15 +95,15 @@ describe('mapClaudeHook', () => {
   });
   it('maps an interrupted PostToolUseFailure (Esc) with interrupt set', () => {
     const payload = { ...common, hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command: 'sleep 60' }, tool_use_id: 'toolu_3', error: 'Interrupted by user', is_interrupt: true };
-    expect(mapClaudeHook('PostToolUseFailure', payload, at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', tool: 'Bash', toolUseId: 'toolu_3', toolInput: { command: 'sleep 60' }, error: 'Interrupted by user', interrupt: true });
+    expect(mapClaudeHook('PostToolUseFailure', payload, at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', agentSessionId: 's', tool: 'Bash', toolUseId: 'toolu_3', toolInput: { command: 'sleep 60' }, error: 'Interrupted by user', interrupt: true });
   });
   it('maps Stop with the last assistant message as the reply text', () => {
     const payload = { ...common, hook_event_name: 'Stop', stop_hook_active: false, last_assistant_message: '  ## Done\n\nAll green.  ' };
-    expect(mapClaudeHook('Stop', payload, at)?.event).toEqual({ name: 'Stop', at, source: 'hook', text: '## Done\n\nAll green.', transcriptPath: common.transcript_path });
+    expect(mapClaudeHook('Stop', payload, at)?.event).toEqual({ name: 'Stop', at, source: 'hook', agentSessionId: 's', text: '## Done\n\nAll green.', transcriptPath: common.transcript_path });
   });
   it('maps Stop without a message (older Claude Code) or with a blank one to a bare Stop', () => {
-    expect(mapClaudeHook('Stop', { ...common, hook_event_name: 'Stop', stop_hook_active: false }, at)?.event).toEqual({ name: 'Stop', at, source: 'hook', transcriptPath: common.transcript_path });
-    expect(mapClaudeHook('Stop', { ...common, last_assistant_message: '   ' }, at)?.event).toEqual({ name: 'Stop', at, source: 'hook', transcriptPath: common.transcript_path });
+    expect(mapClaudeHook('Stop', { ...common, hook_event_name: 'Stop', stop_hook_active: false }, at)?.event).toEqual({ name: 'Stop', at, source: 'hook', agentSessionId: 's', transcriptPath: common.transcript_path });
+    expect(mapClaudeHook('Stop', { ...common, last_assistant_message: '   ' }, at)?.event).toEqual({ name: 'Stop', at, source: 'hook', agentSessionId: 's', transcriptPath: common.transcript_path });
   });
   it('caps a very long reply and marks the cut', () => {
     const text = mapClaudeHook('Stop', { ...common, last_assistant_message: 'x'.repeat(REPLY_MAX + 500) }, at)?.event.text!;
@@ -112,7 +112,7 @@ describe('mapClaudeHook', () => {
   });
   it('maps StopFailure with its error and details', () => {
     const payload = { ...common, hook_event_name: 'StopFailure', error: 'rate_limit', error_details: '429 Too Many Requests', last_assistant_message: 'Working on it' };
-    expect(mapClaudeHook('StopFailure', payload, at)?.event).toEqual({ name: 'StopFailure', at, source: 'hook', text: 'rate_limit: 429 Too Many Requests' });
+    expect(mapClaudeHook('StopFailure', payload, at)?.event).toEqual({ name: 'StopFailure', at, source: 'hook', agentSessionId: 's', text: 'rate_limit: 429 Too Many Requests' });
   });
   it('maps StopFailure with only an error code, or nothing', () => {
     expect(mapClaudeHook('StopFailure', { ...common, error: 'overloaded' }, at)?.event.text).toBe('overloaded');
@@ -191,32 +191,32 @@ describe('mapHook codex', () => {
   });
   it('maps a Bash PermissionRequest to the command', () => {
     const m = mapHook('codex', 'PermissionRequest', codex({ tool_name: 'Bash', tool_input: { command: "printf '%s\\n' hi > hello.txt", description: 'Allow the requested shell command?' } }), at);
-    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', tool: 'Bash', text: "printf '%s\\n' hi > hello.txt", toolInput: { command: "printf '%s\\n' hi > hello.txt", description: 'Allow the requested shell command?' } });
+    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', agentSessionId: '01a12b05-ecd8', tool: 'Bash', text: "printf '%s\\n' hi > hello.txt", toolInput: { command: "printf '%s\\n' hi > hello.txt", description: 'Allow the requested shell command?' } });
   });
   it('maps an apply_patch PermissionRequest to the files it touches', () => {
     const command = '*** Begin Patch\n*** Update File: /home/dev/demo/README.md\n@@\n # demo\n+bye\n*** Add File: /home/dev/demo/b.txt\n+b\n*** End Patch';
     const m = mapHook('codex', 'PermissionRequest', codex({ tool_name: 'apply_patch', tool_input: { command } }), at);
-    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', tool: 'apply_patch', text: '/home/dev/demo/README.md, /home/dev/demo/b.txt', toolInput: { command } });
+    expect(m?.event).toEqual({ name: 'PermissionRequest', at, source: 'hook', agentSessionId: '01a12b05-ecd8', tool: 'apply_patch', text: '/home/dev/demo/README.md, /home/dev/demo/b.txt', toolInput: { command } });
   });
   it('maps request_user_input to a question with its options and their descriptions', () => {
     const tool_input = { questions: [{ header: 'Banner color', id: 'banner_color', question: 'Which color should the banner be?', options: [{ label: 'Blue (Recommended)', description: 'calm' }, { label: 'Red', description: 'bold' }] }] };
     const m = mapHook('codex', 'PreToolUse', codex({ tool_name: 'request_user_input', tool_input }), at);
-    expect(m?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'request_user_input', text: 'Which color should the banner be?', options: ['Blue (Recommended)', 'Red'], optionDetails: ['calm', 'bold'], toolInput: tool_input });
+    expect(m?.event).toEqual({ name: 'PreToolUse', at, source: 'hook', agentSessionId: '01a12b05-ecd8', tool: 'request_user_input', text: 'Which color should the banner be?', options: ['Blue (Recommended)', 'Red'], optionDetails: ['calm', 'bold'], toolInput: tool_input });
   });
   it('maps Stop with its last message, and a null one to a bare Stop', () => {
-    expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: 'Created `hello.txt`.' }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook', text: 'Created `hello.txt`.' });
-    expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: null }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook' });
+    expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: 'Created `hello.txt`.' }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook', agentSessionId: '01a12b05-ecd8', text: 'Created `hello.txt`.' });
+    expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: null }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook', agentSessionId: '01a12b05-ecd8' });
   });
   it('maps the Stop of a Plan mode turn, whose last message is null, to the plan the rollout holds for that turn', () => {
     const rollout = join(home, 'rollout.jsonl');
     writeFileSync(rollout, JSON.stringify({ timestamp: at, type: 'event_msg', payload: { type: 'item_completed', turn_id: 't1', item: { type: 'Plan', id: 't1-plan', text: '# Add a README\n\n- one file\n' } } }) + '\n');
-    expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: null, transcript_path: rollout }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook', kind: 'plan', text: '# Add a README\n\n- one file', transcriptPath: rollout });
+    expect(mapHook('codex', 'Stop', codex({ stop_hook_active: false, last_assistant_message: null, transcript_path: rollout }), at)?.event).toEqual({ name: 'Stop', at, source: 'hook', agentSessionId: '01a12b05-ecd8', kind: 'plan', text: '# Add a README\n\n- one file', transcriptPath: rollout });
   });
   it('maps Interrupt (Esc on a turn or on an approval) to an interrupted tool run: Codex waits, no Stop follows', () => {
-    expect(mapHook('codex', 'Interrupt', codex({}), at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', interrupt: true });
+    expect(mapHook('codex', 'Interrupt', codex({}), at)?.event).toEqual({ name: 'PostToolUseFailure', at, source: 'hook', agentSessionId: '01a12b05-ecd8', interrupt: true });
   });
   it('SessionEnd ends a session Ledge did not launch; under Ledge the pane and the exit code tell', () => {
-    expect(mapHook('codex', 'SessionEnd', codex({}), at)?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', exitCode: null });
+    expect(mapHook('codex', 'SessionEnd', codex({}), at)?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', agentSessionId: '01a12b05-ecd8', exitCode: null });
     process.env.LEDGE_CODEX_HOOK_SESSION = 'bbbb';
     expect(mapHook('codex', 'SessionEnd', codex({}), at)).toBeNull();
   });
@@ -282,7 +282,7 @@ const cursor = (name: string, extra: Record<string, unknown> = {}, ids = MAIN) =
 
 describe('mapCursorHook', () => {
   it('uses LEDGE_SESSION when set, else session_id; names the agent and the first workspace root', () => {
-    expect(cursor('beforeSubmitPrompt', { prompt: 'hi' })).toEqual({ id: 'b617', event: { name: 'UserPromptSubmit', at, source: 'hook', text: 'hi' }, agent: 'cursor' });
+    expect(cursor('beforeSubmitPrompt', { prompt: 'hi' })).toEqual({ id: 'b617', event: { name: 'UserPromptSubmit', at, source: 'hook', agentSessionId: 'b617', text: 'hi' }, agent: 'cursor' });
     expect(cursor('beforeSubmitPrompt', { workspace_roots: ['/w/demo'] })?.cwd).toBe('/w/demo');
     process.env.LEDGE_SESSION = '7f3a';
     expect(cursor('beforeSubmitPrompt')?.id).toBe('7f3a');
@@ -292,16 +292,16 @@ describe('mapCursorHook', () => {
   });
   it('maps preToolUse Shell to the command and Write to the file', () => {
     expect(cursor('preToolUse', { tool_name: 'Shell', tool_input: { command: 'touch probe-file', cwd: '', timeout: 30000 } })?.event)
-      .toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'Shell', text: 'touch probe-file' });
+      .toEqual({ name: 'PreToolUse', at, source: 'hook', agentSessionId: 'b617', tool: 'Shell', text: 'touch probe-file' });
     expect(cursor('preToolUse', { tool_name: 'Write', tool_input: { file_path: '/w/a.txt', content: '' } })?.event.text).toBe('/w/a.txt');
   });
   it('maps postToolUse and postToolUseFailure, with the interrupt flag', () => {
-    expect(cursor('postToolUse', { tool_name: 'Shell' })?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', tool: 'Shell' });
-    expect(cursor('postToolUse', { tool_name: 'Shell', tool_input: { command: 'ls' } })?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', tool: 'Shell', toolInput: { command: 'ls' } });
+    expect(cursor('postToolUse', { tool_name: 'Shell' })?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', agentSessionId: 'b617', tool: 'Shell' });
+    expect(cursor('postToolUse', { tool_name: 'Shell', tool_input: { command: 'ls' } })?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', agentSessionId: 'b617', tool: 'Shell', toolInput: { command: 'ls' } });
     expect(cursor('postToolUseFailure', { tool_name: 'Shell', tool_input: { command: 'x' } })?.event.toolInput).toEqual({ command: 'x' });
     // A CallDynamicTool is its inner tool: the name and the input are the unwrapped ones.
     const dynamic = { tool_name: 'CallDynamicTool', tool_input: { namespace: 'cursor', toolName: 'Read', arguments: { file_path: '/w/a.ts' } } };
-    expect(cursor('postToolUse', dynamic)?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', tool: 'Read', toolInput: { file_path: '/w/a.ts' } });
+    expect(cursor('postToolUse', dynamic)?.event).toEqual({ name: 'PostToolUse', at, source: 'hook', agentSessionId: 'b617', tool: 'Read', toolInput: { file_path: '/w/a.ts' } });
     expect(cursor('postToolUseFailure', dynamic)?.event).toMatchObject({ tool: 'Read', toolInput: { file_path: '/w/a.ts' } });
     expect(cursor('postToolUseFailure', { tool_name: 'Read', failure_type: 'error', is_interrupt: false })?.event.interrupt).toBeUndefined();
     expect(cursor('postToolUseFailure', { tool_name: 'Shell', is_interrupt: true })?.event.interrupt).toBe(true);
@@ -312,12 +312,12 @@ describe('mapCursorHook', () => {
     expect(cursor('stop', { status: 'error' })?.event.name).toBe('StopFailure');
   });
   it('maps afterAgentResponse to a Stop that carries the reply, capped', () => {
-    expect(cursor('afterAgentResponse', { text: '  done  ' })?.event).toEqual({ name: 'Stop', at, source: 'hook', text: 'done' });
-    expect(cursor('afterAgentResponse', { text: '' })?.event).toEqual({ name: 'Stop', at, source: 'hook' });
+    expect(cursor('afterAgentResponse', { text: '  done  ' })?.event).toEqual({ name: 'Stop', at, source: 'hook', agentSessionId: 'b617', text: 'done' });
+    expect(cursor('afterAgentResponse', { text: '' })?.event).toEqual({ name: 'Stop', at, source: 'hook', agentSessionId: 'b617' });
     expect(cursor('afterAgentResponse', { text: 'x'.repeat(REPLY_MAX + 10) })?.event.text?.endsWith('[…]')).toBe(true);
   });
   it('maps sessionEnd only for an untracked session: under the launcher the exit is the launcher\'s', () => {
-    expect(cursor('sessionEnd', { reason: 'completed', final_status: 'completed' })?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', exitCode: null });
+    expect(cursor('sessionEnd', { reason: 'completed', final_status: 'completed' })?.event).toEqual({ name: 'SessionEnd', at, source: 'hook', agentSessionId: 'b617', exitCode: null });
     process.env.LEDGE_SESSION = '7f3a';
     expect(cursor('sessionEnd', { reason: 'completed' })).toBeNull();
   });
@@ -350,7 +350,7 @@ describe('mapCursorHook', () => {
     });
     it('the main thread, whose session is its transcript\'s, stays the main thread', () => {
       expect(mapCursorHook('preToolUse', { ...MAIN, conversation_id: 'b617', session_id: 'b617', tool_name: 'Shell', tool_input: { command: 'ls' } }, at, env())?.event)
-        .toEqual({ name: 'PreToolUse', at, source: 'hook', tool: 'Shell', text: 'ls' });
+        .toEqual({ name: 'PreToolUse', at, source: 'hook', agentSessionId: 'b617', tool: 'Shell', text: 'ls' });
     });
     it('with no transcript path: a subagent by its generation id; dropped untracked, a helper tracked', () => {
       expect(mapCursorHook('preToolUse', { ...SUB, tool_name: 'Shell' }, at, {})).toBeNull();
@@ -452,5 +452,19 @@ describe('prompts and the chat marker', () => {
   it('Cursor beforeSubmitPrompt carries the prompt too', () => {
     const m = mapCursorHook('beforeSubmitPrompt', { session_id: 's', prompt: 'Corrige le test' }, at, {});
     expect(m?.event).toMatchObject({ name: 'UserPromptSubmit', text: 'Corrige le test' });
+  });
+});
+
+describe('the agent conversation id', () => {
+  it('a Claude or Codex hook carries the agent session id', () => {
+    for (const agent of ['claude', 'codex'] as const)
+      expect(mapHook(agent, 'Stop', { session_id: 'c-1', cwd: '/w' }, at)!.event.agentSessionId).toBe('c-1');
+  });
+
+  it('a Cursor hook carries its conversation id, a helper hook none', () => {
+    expect(mapCursorHook('stop', { conversation_id: 'k-1' }, at, { LEDGE_SESSION: 'ab12' })!.event.agentSessionId).toBe('k-1');
+    const helper = mapCursorHook('postToolUse', { session_id: 'b335', tool_name: 'Read' }, at, { LEDGE_SESSION: 'ab12', CURSOR_TRANSCRIPT_PATH: '/t/b617.jsonl' })!;
+    expect(helper.event.helperId).toBe('b335');
+    expect(helper.event.agentSessionId).toBeUndefined();
   });
 });

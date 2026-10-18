@@ -192,6 +192,8 @@ function withTopic(s: Session, text: string, source: TopicSource | undefined): S
 }
 
 export function reduce(s: Session, ev: SessionEvent): Session {
+  // The agent's own conversation id follows its hooks, even a late one after the exit.
+  if (ev.agentSessionId && !ev.helperId && ev.agentSessionId !== s.agentSessionId) s = { ...s, agentSessionId: ev.agentSessionId };
   if (s.state === 'exited') return s;
   s = endCursorHelpers(s, ev);
   const at = ev.at;

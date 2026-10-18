@@ -116,7 +116,9 @@ export function mapHook(agent: Tool, eventName: string, payload: unknown, at: st
   const event = mapEvent(eventName, p, at, launched);
   if (!event) return null;
   const task = agent === 'claude' && event.helperId ? helperDescription(str(p.transcript_path), event.helperId) : undefined;
-  return { id, event: task ? { ...event, task } : event, agent, ...(cwd ? { cwd } : {}) };
+  // The agent's own conversation id, which `--resume` takes; a subagent's hooks share the session's, so they add none.
+  const agentSessionId = !event.helperId ? str(p.session_id) : undefined;
+  return { id, event: { ...event, ...(task ? { task } : {}), ...(agentSessionId ? { agentSessionId } : {}) }, agent, ...(cwd ? { cwd } : {}) };
 }
 
 /**
@@ -285,7 +287,8 @@ export function mapCursorHook(eventName: string, payload: unknown, at: string, e
   const roots = Array.isArray(p.workspace_roots) ? p.workspace_roots : [];
   const cwd = str(roots[0]) || undefined;
   const event = helper ? mapCursorHelperEvent(eventName, p, at, sessionId) : mapCursorEvent(eventName, p, at, !!env.LEDGE_SESSION, transcript);
-  return event ? { id, event, agent: 'cursor', ...(cwd ? { cwd } : {}) } : null;
+  // The conversation id (what `--resume` takes) rides on the session's own events, never on a subagent's.
+  return event ? { id, event: helper || event.helperId ? event : { ...event, agentSessionId: sessionId }, agent: 'cursor', ...(cwd ? { cwd } : {}) } : null;
 }
 
 function mapCursorHelperEvent(eventName: string, p: Payload, at: string, helperId: string): SessionEvent | null {

@@ -642,3 +642,14 @@ describe('topics', () => {
     expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'x' })).toBe(s);
   });
 });
+
+describe('the agent conversation id', () => {
+  it('the latest agent session id wins, a helper event changes nothing', () => {
+    let s = reduce(session('working'), ev('Stop', { agentSessionId: 'a' }));
+    expect(s.agentSessionId).toBe('a');
+    s = reduce(s, ev('Stop', { agentSessionId: 'b' }));
+    expect(s.agentSessionId).toBe('b');
+    s = reduce(s, ev('PostToolUse', { helperId: 'h1', agentSessionId: 'x' }));
+    expect(s.agentSessionId).toBe('b');
+  });
+});
