@@ -6,6 +6,8 @@ import { useSyncExternalStore } from 'react';
 /** The url exists for `local` only: set by the fleet, never persisted nor sent. */
 export type MachineConfig = Machine & { url?: string };
 export interface MachineState extends MachineConfig { status: DaemonStatus; ready: boolean; recents: Recent[]; sessions: Session[]; launcher: string[] | null; version?: string; daemon?: DaemonInfo; error?: string }
+/** Whether the machine's daemon can archive, restore, resume and delete sessions. */
+export const canManage = (machine: { daemon?: DaemonInfo }): boolean => machine.daemon?.archive === true;
 /** A one-off connection test: the remote Ledge answered with its snapshot, or the raw error SSH or the daemon gave. */
 export type ProbeResult = { ok: true; version?: string; sessions: number } | { ok: false; error: string };
 export interface Fleet {

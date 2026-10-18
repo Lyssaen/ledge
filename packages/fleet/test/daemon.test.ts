@@ -29,6 +29,22 @@ describe('daemon client + store', () => {
     detach(); client.close();
   });
 
+  it('an archived session leaves sessions for archived, and comes back on restore', async () => {
+    mock.sessions.set('a', fakeSession('a')); mock.sessions.set('b', fakeSession('b', { archivedAt: '2026-10-09T19:00:00.000Z' })); mock.sessions.set('c', fakeSession('c', { archivedAt: '2026-10-09T20:00:00.000Z' }));
+    const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never });
+    const detach = attachClient(client); client.connect(); await sleep(100);
+    expect(daemonStore.getState().sessions.map(s => s.id)).toEqual(['a']);
+    expect(daemonStore.getState().archived.map(s => s.id)).toEqual(['c', 'b']);
+    expect(daemonStore.getState().byId.size).toBe(3);
+    mock.upsert(fakeSession('a', { archivedAt: '2026-10-09T21:00:00.000Z' })); await sleep(50);
+    expect(daemonStore.getState().sessions).toEqual([]);
+    expect(daemonStore.getState().archived.map(s => s.id)).toEqual(['a', 'c', 'b']);
+    mock.upsert(fakeSession('a')); await sleep(50);
+    expect(daemonStore.getState().sessions.map(s => s.id)).toEqual(['a']);
+    expect(daemonStore.getState().archived.map(s => s.id)).toEqual(['c', 'b']);
+    detach(); client.close();
+  });
+
   it('reports unreachable, reconnects with backoff and reloads the snapshot', async () => {
     const client = createDaemonClient({ url: mock.url, WebSocketImpl: WebSocket as never, minBackoffMs: 50, maxBackoffMs: 100 });
     const statuses: string[] = []; client.onStatus(s => statuses.push(s));

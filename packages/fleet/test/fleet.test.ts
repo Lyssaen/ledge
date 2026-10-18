@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
+import { daemonStore, attachClient } from '../src/store';
 import type { DaemonClient, DaemonStatus } from '../src/client';
-import { LOCAL_MACHINE, parseMachines, probeMachine, sshProblem, terminalCommand, type MachineState } from '../src/machines';
+import { LOCAL_MACHINE, canManage, parseMachines, probeMachine, sshProblem, terminalCommand, type MachineState } from '../src/machines';
 import { fakeSession } from './mockDaemon';
 
 const remote = { id: 'server', label: 'dev-server', url: 'ws://127.0.0.1:47832', ssh: 'dev-server' };
@@ -467,5 +468,27 @@ describe('updating a remote daemon', () => {
     server.set('connecting'); server.set('open'); server.emit({ ...snapshot, sshAlias: remote.ssh });
     server.emit({ type: 'error', message: 'later failure' });
     expect(got.filter(m => m.type === 'error').map(m => (m as { message: string }).message)).toEqual(['dev-server: later failure']);
+  });
+});
+
+describe('archived sessions', () => {
+  const archivedAt = '2026-10-09T19:00:00.000Z';
+  it('a remote archived session is qualified like any other', () => {
+    const { client, server, snapshot } = setup();
+    daemonStore.reset(); const detach = attachClient(client);
+    server.emit({ ...snapshot, sessions: [fakeSession('old', { archivedAt }), fakeSession('live')], sshAlias: remote.ssh });
+    expect(daemonStore.getState().archived.map(s => s.id)).toEqual(['server:old']);
+    expect(daemonStore.getState().sessions.map(s => s.id)).not.toContain('server:old');
+    detach();
+  });
+  it('a machine counts only its live sessions', () => {
+    const { client, server, snapshot } = setup();
+    server.emit({ ...snapshot, sessions: [fakeSession('old', { archivedAt }), fakeSession('live')], sshAlias: remote.ssh });
+    expect(client.fleet!.machines().find(m => m.id === 'server')!.sessions.map(s => s.id)).toEqual(['live']);
+  });
+  it('canManage follows daemon.archive', () => {
+    expect(canManage({ daemon: { version: '1', install: 'npm', systemd: true, archive: true } })).toBe(true);
+    expect(canManage({ daemon: { version: '1', install: 'npm', systemd: true } })).toBe(false);
+    expect(canManage({})).toBe(false);
   });
 });
