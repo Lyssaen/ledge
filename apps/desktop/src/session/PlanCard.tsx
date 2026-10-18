@@ -4,7 +4,7 @@ import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { SHELL_ICONS } from '../shell/icons';
-import type { PlanDoc } from './thread';
+import type { PlanDoc } from './exchanges';
 
 /** The card shows this many steps, then « … et n autres étapes ». */
 const SHOWN_STEPS = 3;

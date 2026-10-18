@@ -11,8 +11,8 @@ vi.mock('../src/session/ActionGroup', async importOriginal => {
   const real = await importOriginal<typeof import('../src/session/ActionGroup')>();
   return { ...real, ActionGroup: (p: Parameters<typeof real.ActionGroup>[0]) => { const id = p.tools[0]!.id; groups.set(id, (groups.get(id) ?? 0) + 1); return real.ActionGroup(p); } };
 });
-vi.mock('../src/session/thread', async importOriginal => {
-  const real = await importOriginal<typeof import('../src/session/thread')>();
+vi.mock('../src/session/exchanges', async importOriginal => {
+  const real = await importOriginal<typeof import('../src/session/exchanges')>();
   return { ...real, timeMark: (...a: Parameters<typeof real.timeMark>) => { marks.n++; return real.timeMark(...a); } };
 });
 

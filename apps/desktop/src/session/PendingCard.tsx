@@ -4,7 +4,7 @@ import { Badge } from '@ledge/ui/ui/Badge';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../i18n/lang';
-import { planTitle, stepsOf } from './thread';
+import { planTitle, stepsOf } from './exchanges';
 
 /** The mockup's three sorts of request: a permission or a diff is an « approval ». */
 export type Sort = 'approval' | 'plan' | 'question';

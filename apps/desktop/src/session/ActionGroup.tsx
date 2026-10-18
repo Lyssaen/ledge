@@ -8,7 +8,7 @@ import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { parseDiff } from './diff';
 import { Delta } from './DiffView';
-import { fmtDur, kindOf, summarize, verbOf, type Summary as Sum, type ToolKind } from './thread';
+import { fmtDur, kindOf, summarize, verbOf, type Summary as Sum, type ToolKind } from './exchanges';
 import { doneCount, todosOf } from './todos';
 
 const KINDS: readonly ToolKind[] = ['read', 'search', 'command', 'edit'];

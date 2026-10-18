@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FileChange, ThreadItem, ToolItem } from '@ledge/protocol';
 import { T0 } from '@ledge/fleet/test/mockDaemon';
 import { diffRows, parseDiff, type ParsedDiff } from '../src/session/diff';
-import { byFolder, changedFiles, relativeTo } from '../src/session/changes';
+import { byFolder, changedFiles, relativeTo } from '../src/session/changedFiles';
 import { MESSAGES } from '../src/i18n/messages';
 
 const lines = (d: ParsedDiff) => d.hunks.flatMap(h => h.lines.map(l => `${l.t}:${l.o ?? ''}:${l.n ?? ''}:${l.text}`));

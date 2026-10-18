@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState, type JSX } from 'react';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { SHELL_ICONS } from '../shell/icons';
-import type { ChangedFile } from './changes';
+import type { ChangedFile } from './changedFiles';
 import { diffRows, type DiffLine, type ParsedDiff } from './diff';
 
 /** Lines added and removed (session.tsx Delta). */

@@ -9,10 +9,10 @@ import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
-import { findFile, nameOf, relativeTo, type ChangedFile } from './changes';
+import { findFile, nameOf, relativeTo, type ChangedFile } from './changedFiles';
 import { Delta, FileDiffs } from './DiffView';
 import { clampSplit } from './prefs';
-import type { PlanDoc } from './thread';
+import type { PlanDoc } from './exchanges';
 import { useDocument } from './useDocument';
 
 export type PaneTab = { kind: 'doc'; path: string } | { kind: 'diff'; path: string } | { kind: 'plan'; key: string };

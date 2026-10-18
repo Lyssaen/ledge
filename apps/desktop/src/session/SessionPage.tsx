@@ -11,7 +11,7 @@ import type { NavAction, NavState } from '../nav/state';
 import { useScreenKeys, type ScreenKeyHandler } from '../nav/screenKeys';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
-import { changedFiles, findFile } from './changes';
+import { changedFiles, findFile } from './changedFiles';
 import { Changes } from './Changes';
 import { memoKey, type SessionMemory } from './memory';
 import { clampSplit } from './prefs';
@@ -20,7 +20,7 @@ import { SidePane, tabId, type PanePlan, type PaneTab } from './SidePane';
 import { Thread } from './Thread';
 import { TodoBar } from './TodoBar';
 import { latestTodos } from './todos';
-import { atEnd, displayIds, exchanges, helperOf, pendingPlan, unreadFrom, type PlanDoc, type Segment } from './thread';
+import { atEnd, displayIds, exchanges, helperOf, pendingPlan, unreadFrom, type PlanDoc, type Segment } from './exchanges';
 
 export interface SessionPageProps {
   /** The parent on a subagent's page. */

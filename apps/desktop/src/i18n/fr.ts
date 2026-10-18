@@ -2,13 +2,13 @@ import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
 import type { DaemonInfo, ProjectColor, ToolStatus, UpdateFailure } from '@ledge/protocol';
-import type { PlanDoc, ToolKind, Verb } from '../session/thread';
-import type { Change } from '../session/changes';
+import type { PlanDoc, ToolKind, Verb } from '../session/exchanges';
+import type { Change } from '../session/changedFiles';
 import type { TodoStatus } from '../session/todos';
 import type { FinishedNotify, SoundCategory, SoundVolume } from '@ledge/ui/sounds/preferences';
 import type { SshProblem, Summary, Why } from '@ledge/fleet';
 import type { ScanStep } from '../projects/useLedgeScan';
-import type { DraftProblem } from '../settings/machines';
+import type { DraftProblem } from '../settings/machineDrafts';
 import type { SaveOutcome } from '../settings/useMachineEditor';
 
 type PlanStatus = PlanDoc['status'];

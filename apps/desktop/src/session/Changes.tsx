@@ -5,7 +5,7 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
-import { byFolder, nameOf, type ChangedFile } from './changes';
+import { byFolder, nameOf, type ChangedFile } from './changedFiles';
 import { Delta, FileDiffs } from './DiffView';
 
 export interface ChangesProps {

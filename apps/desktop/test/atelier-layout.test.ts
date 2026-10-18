@@ -6,7 +6,7 @@ import type { BotState } from '@ledge/ui/bots/poseFor';
 import { mainOrder } from '../src/nav/agents';
 import { layoutTable, tableLength, roomWidth, noteX, tableBranch, sheetState, helperState, sceneOf, walkOrder, type AtelierScene } from '../src/atelier/layout';
 import { widestRow, fitCeiling, clampZoom, stepZoom, wheelZoom, zoomAround, frameZoom, centreOf, centreOn } from '../src/atelier/zoom';
-import { plantsFor } from '../src/atelier/plants';
+import { plantsFor } from '../src/atelier/plantSpots';
 
 describe('atelier geometry', () => {
 const main = (id: string, extra: Partial<Session> = {}) => fakeSession(id, { id: `local:${id}`, name: id, machineId: 'local', cwd: '/w/ledge', ...extra });

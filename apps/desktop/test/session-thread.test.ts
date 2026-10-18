@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ThreadItem, ToolItem } from '@ledge/protocol';
 import { fakeSession, T0 } from '@ledge/fleet/test/mockDaemon';
-import { atEnd, displayIds, exchanges, fmtDur, helperOf, kindOf, pendingPlan, planOf, stepsOf, subagentOf, summarize, timeMark, unreadFrom, verbOf, type Exchange } from '../src/session/thread';
+import { atEnd, displayIds, exchanges, fmtDur, helperOf, kindOf, pendingPlan, planOf, stepsOf, subagentOf, summarize, timeMark, unreadFrom, verbOf, type Exchange } from '../src/session/exchanges';
 
 const at = (s: number) => new Date(Date.parse(T0) + s * 1000).toISOString();
 const tool = (id: string, s: number, name: string, label: string, extra: Partial<ToolItem> = {}): ToolItem =>

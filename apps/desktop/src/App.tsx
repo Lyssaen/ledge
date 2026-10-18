@@ -39,7 +39,7 @@ import { useFiling } from './atelier/filing';
 import { loadWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
-import { subagentOf } from './session/thread';
+import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
 import { loadEditor } from './projects/lazy';
 import { ProjectDialog } from './projects/ProjectDialog';

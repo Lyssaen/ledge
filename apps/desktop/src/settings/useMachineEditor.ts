@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Fleet, MachineConfig, MachineState, ProbeResult } from '@ledge/fleet';
-import { sameMachines } from './machines';
+import { sameMachines } from './machineDrafts';
 
 export type MachineFleet = Pick<Fleet, 'configure' | 'probe' | 'retry' | 'onMachineMessage'>;
 export type SaveOutcome = 'saved' | 'offline' | 'timeout' | 'refused';

@@ -4,7 +4,7 @@ import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { Card } from './controls';
-import { ALIAS, checkDraft, configsOf, MAX_MACHINES, sameMachines, shownOf, without, withDraft, type MachineDraft } from './machines';
+import { ALIAS, checkDraft, configsOf, MAX_MACHINES, sameMachines, shownOf, without, withDraft, type MachineDraft } from './machineDrafts';
 import { useMachineEditor, type SaveOutcome } from './useMachineEditor';
 import { useEscapeLayer } from './escape';
 import type { SettingsContext } from './SettingsPage';

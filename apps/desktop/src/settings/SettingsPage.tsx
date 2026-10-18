@@ -18,7 +18,7 @@ import { Machines } from './Machines';
 import { Projects } from './Projects';
 import { Shortcuts } from './Shortcuts';
 import { About } from './About';
-import { shownOf } from './machines';
+import { shownOf } from './machineDrafts';
 import { EscapeLayersContext, escapeLayers, type EscapeLayers } from './escape';
 
 /** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { MachineConfig, MachineState } from '@ledge/fleet';
-import { ALIAS, checkDraft, configsOf, MAX_MACHINES, newMachineId, sameMachines, withDraft, without } from '../src/settings/machines';
+import { ALIAS, checkDraft, configsOf, MAX_MACHINES, newMachineId, sameMachines, withDraft, without } from '../src/settings/machineDrafts';
 import { SAVE_TIMEOUT_MS, useMachineEditor, type SaveOutcome } from '../src/settings/useMachineEditor';
 import { fakeMachineFleet, machine, statesOf, type FakeMachineFleet } from './fleet-helpers';
 

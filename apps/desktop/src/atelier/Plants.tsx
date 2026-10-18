@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { plantsFor, type Species, type Spot } from './plants';
+import { plantsFor, type Species, type Spot } from './plantSpots';
 
 /** The mockup's plant drawings (decor.tsx), unchanged: purely decorative, aria-hidden, never interactive. */
 const SPECIES: Record<Species, () => JSX.Element> = {

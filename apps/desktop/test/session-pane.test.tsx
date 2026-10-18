@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, renderHook, screen, within } from '@testing-li
 import type { DaemonClient, DaemonStatus } from '@ledge/fleet';
 import type { ClientMessage, ServerMessage, ThreadItem } from '@ledge/protocol';
 import { DOCUMENT_TIMEOUT_MS, useDocument } from '../src/session/useDocument';
-import { docRefs } from '../src/session/thread';
+import { docRefs } from '../src/session/exchanges';
 import { besideDoc } from '../src/session/SidePane';
 import { boot, closeDaemons, listSessions, ottoThread } from './helpers';
 

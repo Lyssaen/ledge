@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import type { ToolItem } from '@ledge/protocol';
 import { T0 } from '@ledge/fleet/test/mockDaemon';
-import { exchanges, summarize } from '../src/session/thread';
+import { exchanges, summarize } from '../src/session/exchanges';
 import { latestTodos, todosOf } from '../src/session/todos';
 
 const todo = (id: string, todos: unknown, tool = 'TodoWrite'): ToolItem => ({ kind: 'tool', id, at: T0, turn: 1, tool, label: tool, input: JSON.stringify(todos, null, 2), status: 'success', files: [] });

@@ -10,9 +10,9 @@ import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import { ActionGroup } from './ActionGroup';
-import { nameOf } from './changes';
+import { nameOf } from './changedFiles';
 import { PlanCard } from './PlanCard';
-import { docRefs, helperOf, planTitle, timeMark, type Exchange, type Segment } from './thread';
+import { docRefs, helperOf, planTitle, timeMark, type Exchange, type Segment } from './exchanges';
 
 const CHIP_MARK = { accept: '✓', always: '✓', deny: '✕', unknown: '·' } as const;
 /** A decided plan (ExitPlanMode): approved, or sent back to planning. */

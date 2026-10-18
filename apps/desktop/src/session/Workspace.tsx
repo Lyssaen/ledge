@@ -6,7 +6,7 @@ import type { SessionPrefs } from './prefs';
 import { memoKey } from './memory';
 import { SessionPage, type SessionPageProps } from './SessionPage';
 import { TerminalPane } from './TerminalPane';
-import { subagentOf } from './thread';
+import { subagentOf } from './exchanges';
 import { useThread } from './useThread';
 
 export interface WorkspaceProps extends Omit<SessionPageProps, 'items' | 'helper' | 'onShowKids' | 'onTerminal' | 'split' | 'onSplit'> {
