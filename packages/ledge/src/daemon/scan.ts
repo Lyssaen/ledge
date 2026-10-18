@@ -6,9 +6,10 @@ import { repositoryId } from './git.js';
 
 /** How deep under each root, how many folders read, how long, how many repositories: past any of them the list is partial (`truncated`). */
 export const SCAN_DEPTH = 4, SCAN_DIRS = 5000, SCAN_MS = 4000, SCAN_REPOS = 500;
-/** Folders read at once: a slow disk (a Windows drive under WSL) is not read one folder at a time, yet the scan never holds more
- *  than libuv's default pool (4 threads), so the daemon's other file operations are not queued behind a slow mount. */
-const BATCH = 4;
+/** Folders read at once: a slow disk (a Windows drive under WSL) is not read one folder at a time, yet the scan holds at most half
+ *  of libuv's default pool (4 threads): reads stalled on a mount that never answers leave two threads for the daemon's other file
+ *  operations (a stalled read keeps its thread even past the scan's deadline, which only stops waiting for it). */
+const BATCH = 2;
 
 /** Folders never entered: dependencies, build output, caches, system folders of a home. Every hidden folder is skipped too. */
 export const SKIP: ReadonlySet<string> = new Set(['node_modules', '.git', '.cache', 'dist', 'build', 'target', 'vendor', '__pycache__', 'venv', '.venv', 'Library', 'AppData']);

@@ -37,6 +37,15 @@ describe('scanRepos', () => {
     expect(s.read.some(p => p.startsWith(join(home, 'node_modules')) || p.startsWith(join(home, '.hidden')))).toBe(false);
   });
 
+  it('reads at most two folders at once: a stalled mount never holds libuv\'s whole pool (4 threads)', async () => {
+    const home = tmp();
+    for (const n of ['a', 'b', 'c', 'd', 'e', 'f']) mkdirSync(join(home, n, 'x'), { recursive: true });
+    let now = 0, most = 0;
+    const out = await scanRepos({ home, readdir: async p => { now++; most = Math.max(most, now); try { await new Promise(r => setTimeout(r, 5)); return await readdir(p, { withFileTypes: true }); } finally { now--; } } });
+    expect(out.truncated).toBe(false);
+    expect(most).toBe(2);
+  });
+
   it('skips the usual heavy and system folders, and every hidden one', () => {
     for (const n of ['node_modules', '.git', '.cache', 'dist', 'build', 'target', 'vendor', '__pycache__', 'venv', '.venv', 'Library', 'AppData']) expect(SKIP.has(n)).toBe(true);
     expect([SCAN_DEPTH, SCAN_DIRS, SCAN_MS, SCAN_REPOS]).toEqual([4, 5000, 4000, 500]);
