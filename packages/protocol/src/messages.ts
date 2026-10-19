@@ -178,7 +178,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** Replaces the island's settings as a whole; refused unless valid. */
   z.object({ type: z.literal('island.set'), prefs: IslandPrefsSchema }),
   /** One session writing to another by Ledge name (`to` may end in ` [ref]`); `intercept` (the Claude hook): answer `native` unless `to` is a live non-Claude session. */
-  z.object({ type: z.literal('session.message'), rid: z.string().min(1), from: z.string().min(1), to: z.string().min(1), text: z.string().min(1), summary: z.string().optional(), intercept: z.boolean().optional() })
+  z.object({ type: z.literal('session.message'), rid: z.string().min(1), from: z.string().min(1), to: z.string().min(1), text: z.string().min(1).max(20000), summary: z.string().max(500).optional(), intercept: z.boolean().optional() })
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 

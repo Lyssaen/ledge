@@ -379,6 +379,11 @@ describe('session.message and message.ack', () => {
     expect(parseClientMessage(message)).toEqual(message);
     expect(() => parseClientMessage({ ...message, text: '' })).toThrow();
   });
+  it('caps a session.message: 20000 characters of text, 500 of summary', () => {
+    expect(parseClientMessage({ ...message, text: 'x'.repeat(20000), summary: 's'.repeat(500) })).toBeTruthy();
+    expect(() => parseClientMessage({ ...message, text: 'x'.repeat(20001) })).toThrow();
+    expect(() => parseClientMessage({ ...message, summary: 's'.repeat(501) })).toThrow();
+  });
   it('parses a message.ack and refuses an unknown outcome', () => {
     const ack = { type: 'message.ack', rid: 'r1', outcome: 'refused', reason: 'x' };
     expect(parseServerMessage(ack)).toEqual(ack);
