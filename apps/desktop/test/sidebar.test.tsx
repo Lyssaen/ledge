@@ -9,10 +9,11 @@ afterEach(async () => { cleanup(); await closeDaemons(); });
 const banner = () => within(screen.getByRole('banner'));
 
 describe('the sidebar shell', () => {
-  it('has New session, Ask Ledge and Atelier, and neither brand nor search', async () => {
+  it('has Ask Ledge and Atelier, and neither New session button, brand nor search', async () => {
     const sessions = listSessions();
     const { side } = await boot({ projects: TWO_PROJECTS, sessions });
-    expect(side.getByRole('button', { name: /^New session N/ })).toBeVisible();
+    expect(side.queryByRole('button', { name: /^New session N/ })).toBeNull();
+    expect(document.querySelector('.st-brand')).toBeNull();
     expect(side.getByRole('textbox', { name: 'Ask Ledge' })).toBeVisible();
     expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(sessions)));
     expect(document.querySelector('.sidebar [data-brand]')).toBeNull();
@@ -48,6 +49,19 @@ describe('the sidebar shell', () => {
     expect(hint).toHaveTextContent(/E/);
     expect(hint).toHaveTextContent(/H/);
     expect(hint).toHaveTextContent(/Ctrl ⇧ E/);
+  });
+
+  it('the hint starts with N new session in the overview, and drops it inside a session', async () => {
+    const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
+    const hint = () => document.querySelector('.st-hint')!;
+    expect(hint().textContent).toMatch(/^Nnew session · /);
+    await user.keyboard('n');
+    expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible();
+    await user.keyboard('{Escape}');
+    await user.click(side.getByRole('button', { name: /^Nova/ }));
+    expect(banner().getByText('Nova')).toBeVisible();
+    expect(hint().textContent).not.toMatch(/new session/);
+    expect(hint()).toHaveTextContent(/move/);
   });
 
   it('the machine chips open Settings › Machines; the gear opens Settings', async () => {
