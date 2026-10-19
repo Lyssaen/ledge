@@ -89,7 +89,6 @@
 .st-more{min-height:26px;font-size:12px}
 .st .st-more button{color:var(--muted-foreground)}
 .st .st-more button:hover{color:var(--sidebar-foreground)}
-.st .st-link{display:flex;align-items:center;gap:4px;font-size:11px}
 /* Archives, at the foot of the tree: folded, filterable, each session read, put back, resumed or deleted from its row. */
 .st-archives{border-top:1px solid var(--sidebar-border);padding-top:6px}
 .st .st-arch-toggle{display:flex;align-items:center;gap:6px;height:24px;font-size:11px;color:var(--muted-foreground)}

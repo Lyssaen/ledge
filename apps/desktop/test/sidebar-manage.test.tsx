@@ -63,14 +63,18 @@ describe('archive and delete from the sidebar tree', () => {
     await waitFor(() => expect(sent(d)).toContainEqual({ type: 'session.focus', id: 'otto' }));
   });
 
-  it('Archiver next to +N finished archives every finished principal of that group', async () => {
+  it('the +N finished row only shows the finished sessions: no group Archive button', async () => {
     const { d, side, user } = await boot({ projects: PROJECTS, sessions: listSessions(), daemon: CAN });
     const tree = treeOf(side);
     const more = tree.getByRole('button', { name: '+1 finished' }).closest('.st-more');
     expect(more).not.toBeNull();
-    await user.click(within(more as HTMLElement).getByRole('button', { name: /^Archive$/ }));
-    await waitFor(() => expect(archives(d)).toEqual([{ type: 'session.archive', id: 'bix' }]));
-    expect(screen.getByRole('status')).toHaveTextContent('Bix is archived.');
+    expect(within(more as HTMLElement).queryByRole('button', { name: /Archive/ })).toBeNull();
+    await user.click(tree.getByRole('button', { name: '+1 finished' }));
+    expect(tree.getByRole('button', { name: /^Bix/ })).toBeVisible();
+    // Once shown, the row has nothing left to offer: it goes, and nothing was archived on the way.
+    expect(tree.queryByRole('button', { name: '+1 finished' })).toBeNull();
+    expect(side.getByRole('tree').querySelector('.st-more')).toBeNull();
+    expect(archives(d)).toEqual([]);
   });
 
   it('a machine without daemon.archive sends nothing', async () => {

@@ -41,7 +41,6 @@ export const fr = {
     newOn: (branch: string) => `Nouvelle session sur ${branch}`,
     filterProject: (name: string) => `N’afficher que ${name} dans l’atelier`,
     moreDone: (n: number) => `+${n} ${plural(n, 'terminée', 'terminées')}`,
-    archiveDone: 'Archiver les sessions terminées de cette branche',
     archiveOne: (name: string) => `Archiver ${name}`,
     manageOne: (name: string) => `Gérer la session ${name}`,
     terminalOne: (name: string) => `Ouvrir le terminal de ${name}`,
