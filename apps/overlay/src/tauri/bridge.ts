@@ -89,7 +89,7 @@ let tokenSource: TokenSource | undefined;
 export function daemonTokenSource(): TokenSource | undefined {
   if (tokenSource) return tokenSource;
   if (isTauri()) return (tokenSource = createTokenSource(() => invoke<TokenRead>('daemon_token')));
-  const fixed = import.meta.env.VITE_LEDGE_TOKEN as string | undefined;
+  const fixed = (import.meta.env.DEV ? import.meta.env.VITE_LEDGE_TOKEN : undefined) as string | undefined; // dev only: a release build never inlines a token
   if (fixed) return (tokenSource = createTokenSource(async () => ({ kind: 'token', token: fixed })));
   return undefined;
 }
