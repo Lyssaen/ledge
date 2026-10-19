@@ -112,6 +112,13 @@ outside Codex it falls back to `LEDGE_SESSION`. The sender's name is looked up i
 `LEDGE_NAME` (it follows renames). It sends the request and prints the daemon's answer on one line: accepted (delivered
 now, or queued until `<name>` is free) or refused with the reason.
 
+Inside Codex, a shell command cannot reach the daemon (§4), so Codex's `PreToolUse` hook, which runs outside the
+sandbox, does the work: when the shell command is exactly one `ledge send …` or `ledge who` (no pipe, chaining,
+substitution or redirection), the hook runs it against the daemon with the session's own id and answers `deny` with the
+command's output as the reason. Codex shows it to the model as « Command blocked by PreToolUse hook: <output> »; the
+identity line says that this is the result, not an error. If the hook cannot reach the daemon in time, it prints
+nothing and the command runs in the sandbox as usual (and fails there). Anything else is left alone.
+
 The identity context (`identityContext`) tells a Codex session: « Pour écrire à une autre session Ledge, lance
 `ledge send <nom> "<message>"` ». A Claude session's line is extended so it knows that `SendMessage` with the Ledge
 name works for every session listed by `ledge who`, Codex included.
@@ -149,11 +156,10 @@ prompts, with delivered/read status. Extend it so that:
 
 ## 4. Constraints
 
-- Codex runs in a sandbox. `ledge send` talks to the local daemon (WebSocket on localhost). Whether Codex's default
-  sandbox lets a shell command reach it, or raises an approval prompt each time, must be checked first on Codex CLI
-  0.162; the same applies to `ledge who`, which is already advertised to Codex. If it is blocked, the builder finds
-  the narrowest fix (an allowed command, a socket path, a Codex config passed at launch like `agentIdArgs`) and says
-  which.
+- Codex runs in a sandbox, and on Codex CLI 0.162 its default `workspace-write` sandbox forbids a shell command to open
+  an INET socket: `ledge who` run by Codex prints `daemon not running` (checked 2026-10-19). No narrow opening exists: a
+  permissions profile can allow loopback through Codex's proxy, but its allowlist ignores the port, so every local
+  service would open. The user chose the hook route (§3.3): Codex's sandbox stays untouched.
 - Delivery depends on reliable idle detection for both tools (`daemon/state.ts`). Typing while the agent is actually
   working is the failure to avoid; `injectAndVerify` must confirm the prompt was taken.
 - Test with fakes as the existing tests do (`test/server.test.ts`, `test/hook.test.ts`, `test/chat-codex.test.ts`).

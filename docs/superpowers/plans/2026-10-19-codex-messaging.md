@@ -20,6 +20,7 @@
 - A hook never blocks the agent: on any daemon failure or timeout the `SendMessage` hook prints nothing (native path).
 - Sender id for `ledge send`: `codexLedgeId()` (reads `LEDGE_CODEX_HOOK_SESSION`), else `LEDGE_SESSION`; the sender's name comes from the daemon, never `LEDGE_NAME`.
 - Agent-facing copy is French, like `identityContext`. Thread statuses reuse `SentItem['status']`: queued = `sending`, dropped/refused = `failed`.
+- Codex's hook runs only a lone `ledge send …` or `ledge who` (Task 9); any other shell command, compound or with substitution, is left to Codex's sandbox.
 - Out of scope: remote machines, `hook_only` targets (refused), Cursor, `notify_when_idle`, a persistent queue.
 
 ## Review Focus
@@ -32,13 +33,9 @@
 
 ---
 
-### Task 1: Gate: can a Codex shell reach the daemon?
+### Task 1: Gate: can a Codex shell reach the daemon? — DONE, outcome (c)
 
-No code. The whole feature depends on Codex's sandbox letting a shell command talk to the daemon (WebSocket on `127.0.0.1:PROTOCOL_PORT`).
-
-- [ ] **Step 1:** In a scratch folder, `ledge codex --name Probe`, then ask the Codex to run `ledge who` (it is already advertised in its identity context).
-- [ ] **Step 2:** Record the outcome on Codex CLI 0.162: (a) the table prints without an approval prompt; (b) an approval prompt appears; (c) it fails with `daemon not running` or a connect error.
-- [ ] **Step 3:** If (a), go on. If (b) or (c), find the narrowest launch-time fix passed like `agentIdArgs` in `src/spawn.ts` (e.g. a `-c` override that allows this one command or loopback only), verify it with Step 1, and write it as a Task 1b with its own test in `test/spawn.test.ts` or `test/launch.test.ts`. If no narrow fix exists (only `network_access=true` for the whole sandbox), **stop and ask the user** before going on.
+Checked 2026-10-19 on Codex CLI 0.162.1 (`codex exec --sandbox workspace-write`): `ledge who` prints `daemon not running`; the sandbox's seccomp forbids INET sockets. AF_UNIX sockets are forbidden too. A permissions profile (`[permissions.<name>.network]`, `domains = {"127.0.0.1"="allow"}`) reaches the daemon through Codex's proxy but cannot pin the port: every loopback service opens. The user chose the hook route: Codex's `PreToolUse` hook runs `ledge send` / `ledge who` outside the sandbox (Task 9). No launch-time change in `src/spawn.ts`.
 
 ### Task 2: The typed message and its parser
 
@@ -205,7 +202,7 @@ Reasons (exact copy): `accepted` → `Message transmis par Ledge à ${to} (${too
   - a Claude `PreToolUse` `SendMessage` `{ to: 'Pim', message: 'Salut' }` with `tool_use_id: 'tu1'` from a launched session (`LEDGE_SESSION=a`) and Pim a free Codex → the deny JSON with the `accepted` reason; the daemon got `session.message` `{ rid: 'tu1', from: 'a', to: 'Pim', text: 'Salut', intercept: true }` after the `session.event`.
   - to a Claude target → `undefined`.
   - no daemon listening → `undefined`, within 2 s.
-  - a Codex `PreToolUse` is never intercepted (only `agent === 'claude'`).
+  - a Codex `PreToolUse` `SendMessage` is never intercepted (only `agent === 'claude'`).
 - [ ] **Step 2: Run** `pnpm --filter ./packages/ledge exec vitest run test/hook.test.ts` — Expected: FAIL.
 - [ ] **Step 3: Implement** in `runHook`: for `agent === 'claude'`, `eventName === 'PreToolUse'`, `tool_name === 'SendMessage'`, a string `to` and `message`, and `mapped.id`: timeout 1500 ms instead of 100; after the `session.event`, read the `snapshot`, send `session.message`, await `message.ack` within the shared deadline; map it as above. Any throw → `undefined`.
 - [ ] **Step 4: Run** the same command — Expected: PASS.
@@ -220,7 +217,7 @@ Reasons (exact copy): `accepted` → `Message transmis par Ledge à ${to} (${too
 
 **Interfaces:**
 - Consumes: `session.message`, `message.ack` (Task 3), `codexLedgeId` (`src/cli/hook.ts`).
-- Produces: `sendMessage(args: string[], opts?: { port?: number; env?: NodeJS.ProcessEnv }): Promise<{ line: string; code: number }>`; usage line `ledge send <nom> "<message>" [--summary <texte>]   write to another Ledge session`.
+- Produces: `sendMessage(args: string[], opts?: { port?: number; env?: NodeJS.ProcessEnv; from?: string }): Promise<{ line: string; code: number }>` (`from`, when given, is the sender id and skips the env lookup; Task 9 passes the hook's session id); usage line `ledge send <nom> "<message>" [--summary <texte>]   write to another Ledge session`.
 
 Lines printed (exact copy): `accepted` → `remis à ${to}`; `queued` → `${to} est occupé : il le recevra dès qu'il sera libre`; `refused` → `refusé : ${reason}` (exit 1); no sender id → `ledge send ne marche que dans une session lancée par Ledge` (exit 1); daemon down → `daemon not running` as `printWho` says it (exit 1); bad usage → the usage line (exit 1). Never sends `intercept`; `rid` is `randomUUID()`.
 
@@ -232,10 +229,41 @@ Identity lines in `identityContext`: Codex gets `Pour écrire à une autre sessi
 - [ ] **Step 4: Run** the same command, then the whole suite `pnpm --filter ./packages/ledge exec vitest run` and `pnpm typecheck` — Expected: PASS, no type errors.
 - [ ] **Step 5: Commit** `feat(cli): ledge send, and every session is told how to write`
 
-### Task 9: End to end, by hand
+### Task 9: Codex runs `ledge send` and `ledge who` through its hook
+
+Codex's sandbox forbids the shell to reach the daemon (Task 1), so Codex's `PreToolUse` hook, which runs outside it, executes these two commands and returns their output as a `deny` reason; Codex shows the model « Command blocked by PreToolUse hook: <output> ».
+
+**Files:**
+- Modify: `src/cli/send.ts` (the parser), `src/cli/hook.ts` (`runHook`, Codex identity line)
+- Test: `test/send.test.ts`, `test/hook.test.ts`
+
+**Interfaces:**
+- Consumes: `sendMessage(args, { port, from })` (Task 8), `printWho({ port, self })` (`src/cli/who.ts`).
+- Produces: `parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'send'; args: string[] } | undefined`, exported from `src/cli/send.ts`.
+
+Parser rules: words split on unquoted spaces, tabs and newlines; `'…'` is literal; inside `"…"` only `\"`, `\\`, `\$` and `` \` `` are escapes, and an unescaped `$` or `` ` `` makes the command unparsable; an unquoted `;`, `&`, `|`, `<`, `>`, `(`, `)`, `$`, `` ` `` or a word starting with `#` makes it unparsable; an unclosed quote too. The first word must be `ledge`; `who` with nothing after → `{ cmd: 'who' }`; `send` → `{ cmd: 'send', args: <the remaining words> }`; anything else → `undefined`.
+
+- [ ] **Step 1: Write the failing tests.** In `send.test.ts`, `parseLedgeCommand`:
+  - `ledge who` → `{ cmd: 'who' }`; `ledge who --all` → `undefined`
+  - `ledge send Otto "Tests verts` + newline + `je pousse"` → `{ cmd: 'send', args: ['Otto', 'Tests verts\nje pousse'] }`
+  - `ledge send Otto 'coût: $5'` → args `['Otto', 'coût: $5']`; `ledge send Otto "dit \"oui\""` → args `['Otto', 'dit "oui"']`
+  - `ledge send Otto "a" && rm -rf x`, `ledge send Otto "$(cat f)"`, `ledge send Otto "x" > f`, `ledge send Otto "x`, `ls`, `FOO=1 ledge who` → `undefined`
+
+  In `hook.test.ts` (the file's daemon fixture), a Codex `PreToolUse` with `tool_name: 'Bash'` from session `b`:
+  - `tool_input.command` `ledge send Otto 'Salut'`, Otto a live session → the daemon got `session.message` `{ from: 'b', to: 'Otto', text: 'Salut' }` (no `intercept`) after the `session.event`; `runHook` returns `{ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'remis à Otto' } }` as JSON (or the `queued` line when Otto is busy).
+  - `ledge who` → the deny JSON whose reason is `formatWho(<the snapshot's sessions>, 'b')`.
+  - `ls -la` → `undefined`.
+  - no daemon listening → `undefined`, within 2 s.
+  - the Codex identity line (exact copy): `Pour écrire à une autre session Ledge, lance \`ledge send <nom> "<message>"\` (seul, sans && ni |). Ledge exécute lui-même \`ledge send\` et \`ledge who\` : leur résultat t'arrive comme « Command blocked by PreToolUse hook: … », c'est la réponse, pas une erreur.` — it replaces Task 8's Codex line.
+- [ ] **Step 2: Run** `pnpm --filter ./packages/ledge exec vitest run test/send.test.ts test/hook.test.ts` — Expected: FAIL.
+- [ ] **Step 3: Implement** `parseLedgeCommand` in `send.ts`, then in `runHook`: for `agent === 'codex'`, `eventName === 'PreToolUse'`, `tool_name === 'Bash'`, a string `tool_input.command` that parses, and `mapped.id`: timeout 1500 ms as in Task 7; after the `session.event`, run `printWho({ port, self: mapped.id })` or `sendMessage(args, { port, from: mapped.id })` within the shared deadline; return the deny JSON with the printed line(s) as the reason, whatever the exit code. `daemon not running`, a timeout or any throw → `undefined`.
+- [ ] **Step 4: Run** the same command, then the whole suite `pnpm --filter ./packages/ledge exec vitest run` and `pnpm typecheck` — Expected: PASS, no type errors.
+- [ ] **Step 5: Commit** `feat(hook): a Codex writes and lists sessions through its hook, outside the sandbox`
+
+### Task 10: End to end, by hand
 
 - [ ] **Step 1:** Rebuild/link Ledge as the project does (`ledge setup` if the hook settings changed), launch `ledge claude --name Otto` and `ledge codex --name Pim` in one repo.
 - [ ] **Step 2:** Ask Otto to write to Pim with `SendMessage`: Otto shows the Ledge receipt, Pim gets the `<ledge-message>` prompt and works on it.
-- [ ] **Step 3:** Ask Pim to answer Otto: it runs `ledge send Otto "…"`, Otto receives it at its next free moment.
+- [ ] **Step 3:** Ask Pim to answer Otto: it runs `ledge send Otto "…"`, its hook answers `remis à Otto` (shown as « Command blocked by PreToolUse hook »), Otto receives it at its next free moment. Ask Pim to run `ledge who`: the table comes back the same way.
 - [ ] **Step 4:** In Desktop, both threads show the cards: Otto's `sent` → `read`, Pim's `received`, and the reverse.
 - [ ] **Step 5:** Message Pim while it is mid-turn: delivered after its turn, not before. Note any wording or timing issue for the user.
