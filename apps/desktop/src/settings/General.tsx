@@ -9,6 +9,7 @@ import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
 import { getAutostart, setAutostart } from '../tauri/bridge';
 import { updater, useUpdate, type UpdatePhase } from '../update/store';
+import { notesBeforeInstall, openWhatsNew } from '../update/whatsNew';
 import { Card, Row, Segmented, SwitchRow } from './controls';
 import type { SettingsContext } from './SettingsPage';
 import { TOOLS, useDefaultTool } from './tool';
@@ -78,7 +79,8 @@ const phaseHint = (p: UpdatePhase, c: ReturnType<typeof useI18n>['t']['settings'
   : c.phase[p.kind];
 
 /** The app's updates (`useUpdate`): the version line says where the updater is; the automatic check is a switch; « Check » asks
- *  now; « Install » shows only while a version waits (or its install failed), and nothing installs without that click.
+ *  now; « Install » shows only while a version waits (or its install failed), and nothing installs without that click. A release
+ *  with notes shows them first, with Update and Later (#26).
  *  Settings › About shows the same card. */
 export function UpdatesCard({ saved }: { saved(what: string): void }): JSX.Element {
   const { t } = useI18n();
@@ -99,7 +101,7 @@ export function UpdatesCard({ saved }: { saved(what: string): void }): JSX.Eleme
       <Row label={c.version(app)} hint={phaseHint(phase, c)}>
         {phase.kind === 'current' && <span className="set-tag ok"><Icon d={ICONS.check.d} size={12} />{c.upToDate}</span>}
         {installing && <span className="set-tag">{c.installingTag(phase.percent)}</span>}
-        {installable && <Button size="sm" variant="primary" onClick={() => void updater.install()}>{phase.kind === 'failed' ? c.retry : c.install}</Button>}
+        {installable && <Button size="sm" variant="primary" onClick={() => { const notes = notesBeforeInstall(phase); if (notes) openWhatsNew(notes); else void updater.install(); }}>{phase.kind === 'failed' ? c.retry : c.install}</Button>}
       </Row>
       <SwitchRow label={c.auto} hint={c.autoHint} checked={auto} onChange={on => { updater.setAuto(on); saved(on ? c.autoOn : c.autoOff); }} />
       <Row label={checkedLabel} hint={c.source}>

@@ -29,6 +29,9 @@ import { SettingsPlace } from './settings/lazy';
 import type { SettingsContext } from './settings/SettingsPage';
 import { daemonTarget, useDaemonUpdate } from './update/daemon';
 import { useUpdate } from './update/store';
+import { takeWhatsNew } from './update/notes';
+import { openWhatsNew, useWhatsNew } from './update/whatsNew';
+import { WhatsNew } from './update/WhatsNew';
 import { useLaunch } from './launch/useLaunch';
 import { Atelier } from './atelier/Atelier';
 import { Modal } from './shell/Modal';
@@ -70,7 +73,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The session page's « N sous-agents » bumps this; the tree unfolds that session and scrolls to it (0 never counts).
   const [revealCurrent, setRevealCurrent] = useState(0);
   // The local daemon's update, started from Settings › About; while it runs, the daemon's restart is expected and silent.
-  const daemonUpdate = useDaemonUpdate(fleet, machines, daemonTarget(useUpdate()));
+  const update = useUpdate();
+  const daemonUpdate = useDaemonUpdate(fleet, machines, daemonTarget(update));
+  // The first launch on a new version shows its notes, once (#26).
+  useEffect(() => { const w = takeWhatsNew(update.app); if (w) openWhatsNew({ mode: 'updated', ...w }); }, [update.app]);
+  const whatsNew = useWhatsNew() !== null;
   // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
   const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdate.running });
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
@@ -210,7 +217,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
 
   // A dialog over the application (a modal, a confirmation, the rename dialog): what lies behind it, the title bar's controls
   // included, takes neither clicks nor the focus.
-  const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null;
+  const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew;
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
@@ -250,6 +257,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           notify={notify} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}
       <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} />
+      <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <Toast notice={notice} action={noticeAction} onAction={undo} />
     </ScreenKeysContext.Provider>

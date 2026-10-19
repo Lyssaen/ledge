@@ -700,6 +700,12 @@ export const fr = {
     },
   },
   machines: { clarification: 'Vous pouvez aussi répondre dans le chat.', destination: 'Destination', choose: (name: string) => `Sur ${name}.`, local: 'Cette machine', offline: 'Hors ligne' },
+  whatsNew: {
+    title: (v: string) => `Nouveautés de Ledge ${v}`, updated: (v: string) => `Ledge a été mis à jour en ${v}`,
+    none: 'Les notes de cette version ne sont pas sur cette machine. Elles sont sur sa release GitHub.',
+    skipped: (from: string) => `Vous veniez de Ledge ${from} : les notes des versions intermédiaires sont sur les releases GitHub.`,
+    release: 'Release GitHub', all: 'Toutes les releases', later: 'Plus tard', update: 'Mettre à jour', open: 'Nouveautés'
+  },
   time: { seconds: (n: number) => `${n} s`, minutes: (n: number) => `${n} min`, hours: (n: number) => `${n} h`, locale: 'fr-FR' },
   /** Why the chat cannot send while the local daemon is away. */
   offline: 'Le daemon local est hors ligne.',

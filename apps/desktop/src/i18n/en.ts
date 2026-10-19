@@ -672,6 +672,12 @@ export const en: Messages = {
     },
   },
   machines: { clarification: 'You can also answer in the chat.', destination: 'Destination', choose: (name: string) => `On ${name}.`, local: 'This machine', offline: 'Offline' },
+  whatsNew: {
+    title: (v: string) => `What’s new in Ledge ${v}`, updated: (v: string) => `Ledge was updated to ${v}`,
+    none: 'This version’s notes are not on this machine. They are on its GitHub release.',
+    skipped: (from: string) => `You came from Ledge ${from}: the notes of the versions in between are on the GitHub releases.`,
+    release: 'GitHub release', all: 'All releases', later: 'Later', update: 'Update', open: 'What’s new'
+  },
   time: { seconds: (n: number) => `${n}s`, minutes: (n: number) => `${n}m`, hours: (n: number) => `${n}h`, locale: 'en-US' },
   offline: 'The local daemon is offline.',
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },

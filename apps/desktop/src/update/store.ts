@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { appVersion, checkForUpdate, relaunchApp, type AvailableUpdate } from './bridge';
+import { keepNotes } from './notes';
 
 export type UpdatePhase =
   | { kind: 'idle' }
@@ -75,6 +76,7 @@ export function createUpdater(deps: UpdaterDeps = {}): Updater {
     put({ phase: { kind: 'installing', version: u.version, percent: null } });
     try {
       if (snap.app) set('desktop.update.from', snap.app);
+      keepNotes(u.version, u.notes);
       await u.downloadAndInstall((done, total) => put({ phase: { kind: 'installing', version: u.version, percent: total ? Math.min(100, Math.round((done / total) * 100)) : null } }));
       await (deps.relaunch ?? relaunchApp)();
     } catch {

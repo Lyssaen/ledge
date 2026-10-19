@@ -189,3 +189,8 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .confirm-content .confirm-extra { margin-top: 10px; font-size: 12px; line-height: 18px; color: var(--muted-foreground); }
 .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .ledge-btn.danger-btn { background: var(--destructive) !important; border-color: var(--destructive) !important; color: var(--destructive-foreground) !important; }
+
+/* « What's new » (#26): the release notes scroll inside the dialog; the GitHub links sit under them. */
+.whats-new { width: 520px; }
+.whats-new-notes { max-height: min(55vh, 460px); overflow-y: auto; }
+.whats-new-links { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 12px; }
