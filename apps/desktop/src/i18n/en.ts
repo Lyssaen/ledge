@@ -600,13 +600,14 @@ export const en: Messages = {
     why: (w) => w.kind === 'remote' ? `Same remote ${w.remote}${w.machines.length > 1 ? `, on ${andList(w.machines)}` : ''}`
       : w.kind === 'agent' ? `Folder opened by ${andList(w.names)}`
       : w.kind === 'naming' ? `Named ${w.stem}-*`
-      : w.kind === 'name' ? `Name close to “${w.word}”`
+      : w.kind === 'name' ? (w.in === 'remote' ? `Remote ${w.value} close to “${w.word}”` : w.in === 'manifest' ? `Manifest “${w.value}” close to “${w.word}”` : `Name close to “${w.word}”`)
       : w.kind === 'folder' ? `Kept in ${w.parent}`
       : w.text,
     ledge: {
       offerTitle: 'Rather not look for the repositories yourself?',
       offerBody: 'Ledge scans your machines, groups the repositories that go together and proposes a project for you to check.',
       offer: 'Let Ledge do it', ask: 'Ask Ledge',
+      searchFor: (name) => `Search the repositories of “${name}”`, browse: 'Browse the folders',
       scanning: (ms) => `Ledge is scanning ${ms.length ? andList(ms) : 'your machines'}…`,
       step: (s) => s.state === 'waiting' ? `Scanning ${s.label}…`
         : s.state === 'done' ? `${s.label} · ${s.repos} ${pluralEn(s.repos, 'repository', 'repositories')} found${s.truncated ? ' · scan limited' : ''}`

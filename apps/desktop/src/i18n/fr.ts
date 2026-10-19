@@ -625,7 +625,7 @@ export const fr = {
     why: (w: Why): string => w.kind === 'remote' ? `Même remote ${w.remote}${w.machines.length > 1 ? `, sur ${andList(w.machines)}` : ''}`
       : w.kind === 'agent' ? `Dossier ouvert par ${andList(w.names)}`
       : w.kind === 'naming' ? `Nommé ${w.stem}-*`
-      : w.kind === 'name' ? `Nom proche de « ${w.word} »`
+      : w.kind === 'name' ? (w.in === 'remote' ? `Remote ${w.value} proche de « ${w.word} »` : w.in === 'manifest' ? `Manifeste « ${w.value} » proche de « ${w.word} »` : `Nom proche de « ${w.word} »`)
       : w.kind === 'folder' ? `Rangé dans ${w.parent}`
       : w.text,
     /** « Laisser Ledge faire » (lot 11): the offer, the scan's steps, the proposal. */
@@ -633,6 +633,8 @@ export const fr = {
       offerTitle: 'Pas envie de chercher les dépôts vous-même ?',
       offerBody: 'Ledge parcourt vos machines, regroupe les dépôts qui vont ensemble et vous propose un projet à vérifier.',
       offer: 'Laisser Ledge faire', ask: 'Demander à Ledge',
+      /** The offer once a name is typed (#22); `browse` opens the folder browser after a scan cut short. */
+      searchFor: (name: string) => `Chercher les dépôts de « ${name} »`, browse: 'Parcourir les dossiers',
       scanning: (ms: readonly string[]) => `Ledge parcourt ${ms.length ? andList(ms) : 'vos machines'}…`,
       step: (s: ScanStep): string => s.state === 'waiting' ? `Parcourt ${s.label}…`
         : s.state === 'done' ? `${s.label} · ${s.repos} dépôt${plural(s.repos, '', 's')} trouvé${plural(s.repos, '', 's')}${s.truncated ? ' · parcours limité' : ''}`

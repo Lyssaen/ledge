@@ -3,12 +3,12 @@ import { normalizePath, PROJECT_COLORS, projectOf, type FoundRepo, type Project,
 /** One machine's answer to `repos.scan`, as the app gathers them; only `ok` machines are proposed. `label`: the machine's name, for the texts. */
 export interface ScanOf { machine: string; label: string; status: 'ok' | 'offline' | 'outdated'; repos: FoundRepo[]; truncated: boolean }
 /** Why a folder is proposed. `machines` are labels. `naming`: a group sharing the prefix `stem` before « - »; `name`: a word typed in
- *  the editor found in the folder's name (proposeFor). `chat`: the LLM's own reason (lot 11, task 5); `proposeProjects` never gives it. */
+ *  the editor found in the folder's name, else (`in`) in a group or the name of its remote, else in its manifest's name, `value` (proposeFor). `chat`: the LLM's own reason (lot 11, task 5); `proposeProjects` never gives it. */
 export type Why =
   | { kind: 'remote'; remote: string; machines: string[] }
   | { kind: 'agent'; names: string[] }
   | { kind: 'naming'; stem: string }
-  | { kind: 'name'; word: string }
+  | { kind: 'name'; word: string; in?: 'remote' | 'manifest'; value?: string }
   | { kind: 'folder'; parent: string }
   | { kind: 'chat'; text: string };
 export interface ProposedRepo { machine: string; path: string; why: Why }
@@ -18,7 +18,7 @@ export type Summary = { repos: number; machines: string[]; target?: string; agen
 export interface Proposal { pid: string; name: string; color: ProjectColor; description: string; repos: ProposedRepo[]; file: string[]; targetId?: string; summary: Summary }
 
 type Input = { projects: Projects; scans: readonly ScanOf[]; sessions: readonly Session[] };
-interface Free { machine: string; path: string; remote?: string }
+interface Free { machine: string; path: string; remote?: string; manifest?: string }
 interface Group { name: string; targetId?: string; repos: ProposedRepo[]; file: string[] }
 
 const COLORS = Object.keys(PROJECT_COLORS) as ProjectColor[];
@@ -65,7 +65,7 @@ function survey(input: Input) {
     const path = normalizePath(r.path);
     if (seen.has(at(s.machine, path))) continue;
     seen.add(at(s.machine, path));
-    scanned.push({ machine: s.machine, path, ...(r.remote ? { remote: r.remote } : {}) });
+    scanned.push({ machine: s.machine, path, ...(r.remote ? { remote: r.remote } : {}), ...(r.manifest ? { manifest: r.manifest } : {}) });
   }
   scanned.sort(byPlace);
   const ownerOf = (r: { machine: string; path: string }) => projectOf({ machineId: r.machine, cwd: r.path }, input.projects);
@@ -199,7 +199,8 @@ export function proposeProjects(input: Input): Proposal[] {
   });
 }
 
-/** « Laisser Ledge faire » depuis l'éditeur : avec un nom tapé, les dépôts libres dont le nom contient un de ses mots (> 2 lettres) ;
+/** « Laisser Ledge faire » depuis l'éditeur : avec un nom tapé, les dépôts libres dont le nom contient un de ses mots (> 2 lettres),
+ *  puis ceux dont le remote (groupes, nom, jamais l'hôte), puis le manifeste (package.json, pom.xml) en contient un (#22) ;
  *  sinon la proposition qui contient les sessions à ranger du brouillon ; sinon la première ; null s'il n'y a rien de libre.
  *  Avec `draft.id` (un projet existant) : d'abord la proposition qui vise déjà ce projet ; une proposition qui vise un autre projet
  *  n'est jamais reprise (seules celles d'un nouveau projet, sinon null) ; il est la cible de ce qui est rendu et garde son nom. Un nouveau brouillon garde le nom tapé : une proposition « Ajouter à » retenue devient alors un nouveau projet. */
@@ -215,10 +216,19 @@ export function proposeFor(draft: { id?: string; name: string; file: readonly st
   }
   const words = key(name).split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2);
   if (words.length) {
-    const repos = s.free.flatMap(r => {
-      const word = words.find(w => key(basename(r.path)).includes(w));
-      return word === undefined ? [] : [{ machine: r.machine, path: r.path, why: { kind: 'name', word } as Why }];
-    });
+    // The folder's name first, then the remote's groups and name (never its host), then the manifest's name: the first that holds a word.
+    const has = (text: string) => words.find(w => key(text).includes(w));
+    const match = (r: Free): { rank: number; why: Why } | null => {
+      const word = has(basename(r.path));
+      if (word !== undefined) return { rank: 0, why: { kind: 'name', word } };
+      const viaRemote = r.remote ? has(r.remote.split('/').slice(1).join('/')) : undefined;
+      if (viaRemote !== undefined) return { rank: 1, why: { kind: 'name', word: viaRemote, in: 'remote', value: r.remote! } };
+      const viaManifest = r.manifest ? has(r.manifest) : undefined;
+      return viaManifest === undefined ? null : { rank: 2, why: { kind: 'name', word: viaManifest, in: 'manifest', value: r.manifest! } };
+    };
+    // Sorted by rank, the free repositories' order kept within one (Array.prototype.sort is stable).
+    const repos = s.free.flatMap(r => { const m = match(r); return m ? [{ rank: m.rank, repo: { machine: r.machine, path: r.path, why: m.why } }] : []; })
+      .sort((a, b) => a.rank - b.rank).map(x => x.repo);
     if (repos.length) return finish({ name, ...(target ? { targetId: target.id } : {}), repos, file: [...draft.file] }, projects, firstFree, s, input.sessions);
   }
   // From a project's editor, a proposal aimed at another project is not this one's: only new projects' proposals remain.

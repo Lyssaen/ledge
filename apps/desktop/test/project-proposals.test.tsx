@@ -152,14 +152,17 @@ describe('« Let Ledge do it » in the project editor', () => {
     expect(setsOf(d)[0]!.projects.projects[3]!.repos).toEqual([{ machine: 'local', path: '/home/me/dev/paper-templates' }]);
   });
 
-  it('« Ask Ledge » appears once a name is typed and keeps it; « Cancel » during the scan goes back to the form as it was, writing nothing', async () => {
+  it('the offer stays once a name is typed, as « Search the repositories of “name” », and keeps it; « Cancel » during the scan goes back to the form as it was, writing nothing (#22)', async () => {
     const { d, user, dialog, client } = await openNew(PAPER);
     // Local stays silent: the scan waits.
     const send = client.send.bind(client);
     vi.spyOn(client, 'send').mockImplementation(m => { if (m.type !== 'repos.scan') send(m); });
     await user.type(dialog.getByRole('textbox', { name: 'Name' }), 'Fonts lab');
-    expect(document.querySelector('.pe-ledge')).toBeNull();
-    await user.click(dialog.getByRole('button', { name: 'Ask Ledge' }));
+    // Where it was, under its new name; the repositories' « Ask Ledge » would only say it twice.
+    expect(document.querySelector('.pe-ledge')).not.toBeNull();
+    expect(dialog.queryByRole('button', { name: 'Ask Ledge' })).toBeNull();
+    expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveFocus();
+    await user.click(dialog.getByRole('button', { name: 'Search the repositories of “Fonts lab”' }));
     const scan = within(await screen.findByRole('dialog', { name: 'Ledge is preparing a project' }));
     expect(scan.getByText('Scanning Local…')).toBeVisible();
     expect(scan.getByRole('button', { name: 'Cancel' })).toHaveFocus();
@@ -167,13 +170,13 @@ describe('« Let Ledge do it » in the project editor', () => {
     const back = within(screen.getByRole('dialog', { name: 'New project' }));
     expect(back.getByRole('textbox', { name: 'Name' })).toHaveValue('Fonts lab');
     expect(document.querySelector('.pe-proposal')).toBeNull();
-    expect(back.getByRole('button', { name: 'Ask Ledge' })).toBeVisible();
+    expect(back.getByRole('button', { name: 'Search the repositories of “Fonts lab”' })).toBeVisible();
     await tick();
     expect(setsOf(d)).toEqual([]);
 
     // Now Local answers: the typed name is kept and the repositories whose name holds one of its words are proposed.
     vi.mocked(client.send).mockRestore();
-    await user.click(back.getByRole('button', { name: 'Ask Ledge' }));
+    await user.click(back.getByRole('button', { name: 'Search the repositories of “Fonts lab”' }));
     const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
     expect(prop.getByRole('textbox', { name: 'Name' })).toHaveValue('Fonts lab');
     expect(prop.getByRole('checkbox', { name: 'Keep paper-fonts (Local)' }).closest('li')!.querySelector('.pe-why')).toHaveTextContent('Ledge · Name close to “fonts”');
@@ -211,6 +214,24 @@ describe('a scan cut short', () => {
     await user.click(dialog.getByRole('button', { name: 'Let Ledge do it' }));
     await screen.findByRole('dialog', { name: 'Ledge proposal' }, { timeout: 3000 });
     expect(document.querySelector('.pe-proposal')).toHaveTextContent('Ledge proposes2 repositories on Local. Uncheck what does not fit, then confirm: nothing is created before. · scan limited on Local');
+    // A deeper repository may be missing: the folder browser adds it by hand (#22).
+    await user.click(screen.getByRole('button', { name: 'Browse the folders' }));
+    expect(screen.queryByRole('button', { name: 'Add a repository' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Browse the folders' })).toBeNull();
+  });
+
+  it('a name found in a remote or a manifest, not in a folder: proposed with that reason (#22)', async () => {
+    const { user, dialog } = await openNew([
+      { path: '/home/me/src/es-front', branch: 'main', remote: 'gitlab.example.com/communication-platform/es-front' },
+      { path: '/home/me/src/es-back', branch: 'main', manifest: '@speos/communication-api' }
+    ]);
+    await user.type(dialog.getByRole('textbox', { name: 'Name' }), 'Communication');
+    await user.click(dialog.getByRole('button', { name: 'Search the repositories of “Communication”' }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
+    expect(prop.getByRole('checkbox', { name: 'Keep es-front (Local)' }).closest('li')!.querySelector('.pe-why'))
+      .toHaveTextContent('Ledge · Remote gitlab.example.com/communication-platform/es-front close to “communication”');
+    expect(prop.getByRole('checkbox', { name: 'Keep es-back (Local)' }).closest('li')!.querySelector('.pe-why'))
+      .toHaveTextContent('Ledge · Manifest “@speos/communication-api” close to “communication”');
   });
 
   it('« nothing free » after a limited scan does not claim completeness', async () => {

@@ -336,10 +336,14 @@ export function ProjectEditor(p: {
     );
   }
 
-  // The offer: a new project with neither name nor proposal. « Demander à Ledge »: once there is a name or a repository, the offer
-  // gone, no proposal under way, and not next to the « nothing » note (which has its own « Relancer »).
-  const fresh = mode === 'new' && !proposal && d.name === '';
+  // The offer: a new project without proposal, while it has no name or no repository yet; a typed name stays in it, which then
+  // searches for that name (#22). « Demander à Ledge »: once there is a name or a repository, the offer gone, no proposal under
+  // way, and not next to the « nothing » note (which has its own « Relancer »).
+  const fresh = mode === 'new' && !proposal && (d.name === '' || d.repos.length === 0);
+  const typed = d.name.trim();
   const limitedNote = limited.length > 0 ? c.ledge.limited(limited) : '';
+  // A scan cut short may have missed a deeper repository: the folder browser adds it by hand (#22).
+  const browse = limited.length > 0 && !adding ? <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>{c.ledge.browse}</Button> : null;
   const canAsk = !proposal && !fresh && !nothing && (d.name.trim() !== '' || d.repos.length > 0);
   return (
     <form className="pe" onSubmit={e => { e.preventDefault(); save(); }} onKeyDown={onKeyDown}>
@@ -349,13 +353,14 @@ export function ProjectEditor(p: {
           <div className="pe-ledge">
             <ResidentMascot size={44} theme={theme} paused={p.paused} reducedMotion={reduced} />
             <div><strong>{c.ledge.offerTitle}</strong><span>{c.ledge.offerBody}</span></div>
-            <Button variant="primary" size="sm" onClick={runLedge}>{c.ledge.offer}</Button>
+            <Button variant="primary" size="sm" onClick={runLedge}>{typed ? c.ledge.searchFor(typed) : c.ledge.offer}</Button>
           </div>
         )}
         {nothing && (
           <div className="pe-proposal" role="status">
             <ResidentMascot size={28} theme={theme} paused={p.paused} reducedMotion={reduced} />
             <div><span>{nothing === 'taken' ? c.ledge.nothing : c.ledge.unscanned}{limitedNote}</span></div>
+            {browse}
             <Button variant="ghost" size="sm" onClick={runLedge}>{c.ledge.again}</Button>
           </div>
         )}
@@ -363,6 +368,7 @@ export function ProjectEditor(p: {
           <div className="pe-proposal">
             <ResidentMascot size={28} theme={theme} paused={p.paused} reducedMotion={reduced} />
             <div><strong>{c.ledge.proposes}</strong><span>{c.ledge.summary(proposal.summary)} {c.ledge.check}{limitedNote}</span></div>
+            {browse}
           </div>
         )}
         <div className="pe-identity">
