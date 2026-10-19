@@ -129,7 +129,7 @@ describe('the Ledge chat docked on the right', () => {
     await ask(env, 'Who reviews?', '**Otto** relit la PR.');
     await env.user.click(panel().getByRole('link', { name: 'Otto' }));
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
-    await waitFor(() => expect(document.querySelector('[aria-current=page][data-agent]')).toHaveAttribute('data-agent', 'local:otto'));
+    await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:otto'));
   });
 
   it('hovering or focusing a name lights its seat at the table; leaving puts it out; a name not on screen lights nothing', async () => {
@@ -172,12 +172,12 @@ describe('the Ledge chat docked on the right', () => {
     expect(filterButton()).toBeVisible();
     // On a session page too: Escape from the chat's Close button closes the chat, the page stays.
     await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
-    await waitFor(() => expect(document.querySelector('[aria-current=page][data-agent]')).toHaveAttribute('data-agent', 'local:otto'));
+    await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:otto'));
     await env.user.click(within(screen.getByRole('group', { name: 'Window bar' })).getByRole('button', { name: 'Chat Ledge' }));
     act(() => panel().getByRole('button', { name: 'Close' }).focus());
     await env.user.keyboard('{Escape}');
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
-    expect(document.querySelector('[aria-current=page][data-agent]')).toHaveAttribute('data-agent', 'local:otto');
+    expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:otto');
   });
 
   it('an exited agent: lit while its seat is shown; once it is gone, its name lights nothing and nothing breaks', async () => {

@@ -160,7 +160,7 @@ describe('deleting a project', () => {
     await env.user.click(env.side.getByRole('button', { name: /^Ledge/ }));
     await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
     await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:otto'));
-    await env.user.click(screen.getByRole('button', { name: /New session here/ }));
+    await env.user.click(env.side.getByRole('button', { name: 'New session in Ledge' }));
     const form = within(await screen.findByRole('dialog', { name: 'New session' }));
     await env.user.click(form.getByRole('button', { name: 'Edit the project' }));
     await env.user.click(within(screen.getByRole('dialog', { name: 'Edit Ledge' })).getByRole('button', { name: 'Delete the project' }));

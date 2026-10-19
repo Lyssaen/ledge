@@ -35,7 +35,7 @@ export interface SessionPageProps {
   /** An archived session's banner: Reprendre, Remettre à la table, Supprimer…. */
   actions: SessionActions;
   memory: SessionMemory; notify(text: string): void;
-  /** « N sous-agents »: show this agent's subagents in the rail. */
+  /** « N sous-agents »: show this agent's subagents in the sidebar tree. */
   onShowKids(): void;
   /** O: show or hide the terminal. */
   onTerminal(): void;

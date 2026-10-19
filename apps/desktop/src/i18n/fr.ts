@@ -451,10 +451,7 @@ export const fr = {
   session: {
     meta: 'Machine et dépôts',
     subagent: 'Sous-agent',
-    rail: {
-      label: (p: string) => `Agents du projet ${p}`, kids: (n: number) => `Sous-agents · ${n}`, kidsOf: (n: string) => `Sous-agents de ${n}`, newHere: 'Nouvelle session ici'
-    },
-    kidsPill: (n: number) => plural(n, `${n} sous-agent`, `${n} sous-agents`), kidsPillTitle: 'Voir les sous-agents dans la colonne',
+    kidsPill: (n: number) => plural(n, `${n} sous-agent`, `${n} sous-agents`), kidsPillTitle: 'Voir les sous-agents dans la barre latérale',
     views: { label: 'Vue de la session', thread: 'Fil', changes: 'Modifications' },
     changes: {
       files: 'Fichiers modifiés', count: (n: number) => plural(n, `${n} fichier`, `${n} fichiers`), toggle: (n: number) => `Fichiers · ${n}`,

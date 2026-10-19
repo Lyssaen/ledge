@@ -69,7 +69,7 @@ test('the terminal on O follows from agent to agent and survives a reload', asyn
   daemon.preview('otto', ['$ npm test']); daemon.preview('nova', ['$ git status']);
   await page.keyboard.press('o');
   await expect(page.getByRole('region', { name: 'Terminal' }).getByText('$ npm test')).toBeVisible();
-  await page.getByRole('navigation', { name: /^Agents of the project/ }).getByRole('button', { name: /^Nova/ }).click();
+  await page.getByRole('tree', { name: 'Projects, branches and sessions' }).getByRole('button', { name: /^Nova/ }).click();
   // Agents run in project order, oldest first then by id: bix, echo, nova, otto, pim.
   const terminal = page.getByRole('region', { name: 'Terminal' });
   await expect(terminal.getByText('$ git status')).toBeVisible();
@@ -84,12 +84,12 @@ test('the terminal on O follows from agent to agent and survives a reload', asyn
   await open(page, 'Otto');
   await expect(page.getByRole('region', { name: 'Terminal' })).toBeVisible();
 });
-test('under 1000 px the rail steps aside; the reading column stays centred at 760 px at most', async ({ page }) => {
+test('under 1000 px the reading column stays centred at 760 px at most, beside no rail of agents', async ({ page }) => {
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: ottoThread } });
   await page.setViewportSize({ width: 960, height: 800 });
   await page.goto('/');
   await open(page, 'Otto');
-  await expect(page.locator('.project-rail')).toBeHidden();
+  await expect(page.locator('.project-rail')).toHaveCount(0);
   const turn = (await thread(page).locator('.turn').first().boundingBox())!;
   expect(turn.width).toBeLessThanOrEqual(760);
   expect(await page.locator('.session-page').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);

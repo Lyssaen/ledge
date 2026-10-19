@@ -432,10 +432,7 @@ export const en: Messages = {
   session: {
     meta: 'Machine and repositories',
     subagent: 'Subagent',
-    rail: {
-      label: (p) => `Agents of the project ${p}`, kids: (n) => `Subagents · ${n}`, kidsOf: (n) => `Subagents of ${n}`, newHere: 'New session here'
-    },
-    kidsPill: (n) => pluralEn(n, '1 subagent', `${n} subagents`), kidsPillTitle: 'Show the subagents in the rail',
+    kidsPill: (n) => pluralEn(n, '1 subagent', `${n} subagents`), kidsPillTitle: 'Show the subagents in the sidebar',
     views: { label: 'Session view', thread: 'Thread', changes: 'Changes' },
     changes: {
       files: 'Changed files', count: (n) => pluralEn(n, '1 file', `${n} files`), toggle: (n) => `Files · ${n}`,

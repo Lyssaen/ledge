@@ -158,7 +158,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     const own = ownId ? projects?.projects.find(p => p.id === ownId) : undefined;
     const table = own ? { id: own.id, name: own.name } : s ? { id: 'none', name: null } : preview ? { id: preview.projectId, name: preview.project } : null;
     dispatch({ type: 'modal', modal: null });
-    // Only the overview's filter follows; a session page (its rail's « New session here ») stays where it is.
+    // Only the overview's filter follows; a session page (the sidebar's « New session in … ») stays where it is.
     if (place.kind === 'overview' && place.project !== 'all' && place.project !== table?.id) dispatch({ type: 'home', project: 'all' });
     filing.markSeated(id);
     const name = s?.name ?? preview?.name ?? '';
@@ -224,7 +224,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
-                prefs={sessionPrefs} setPrefs={setSessionPrefs} order={order} projects={projects} projectIdOf={projectIdOf} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
+                prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>

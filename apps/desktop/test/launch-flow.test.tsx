@@ -176,8 +176,8 @@ describe('launching', () => {
     await user.keyboard('{Escape}');
     await user.click(side.getByRole('button', { name: /^Payment Service/ }));
     await user.click(screen.getByRole('button', { name: /^Nova,/ }));
-    const rail = within(await screen.findByRole('navigation', { name: 'Agents of the project Payment Service Platform Migration Europe' }));
-    await user.click(rail.getByRole('button', { name: 'New session here' }));
+    await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Nova')).toBeVisible());
+    await user.click(side.getByRole('button', { name: 'New session in Payment Service Platform Migration Europe' }));
     const form = within(await screen.findByRole('dialog', { name: 'New session' }));
     await user.click(form.getByRole('radio', { name: 'Ledge' }));
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
@@ -186,7 +186,6 @@ describe('launching', () => {
     await user.click(launchButton(form));
     await waitFor(() => expect(dialog()).toBeNull());
     expect(screen.getByText(/ is starting at the Ledge table\.$/)).toBeVisible();
-    expect(screen.getByRole('navigation', { name: 'Agents of the project Payment Service Platform Migration Europe' })).toBeVisible();
     expect(within(screen.getByRole('banner')).getByText('Nova')).toBeVisible();
     expect(screen.queryByRole('button', { name: /^Otto,/ })).toBeNull();       // the session page stays open
   });
