@@ -14,6 +14,7 @@ import { helperState } from '../atelier/layout';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
+import { UserAvatar } from '../shell/UserAvatar';
 import { ActionGroup, KIND_ICON, Spin } from './ActionGroup';
 import { firstLine, MessageCard } from './MessageCard';
 import { NoticeLine } from './NoticeLine';
@@ -367,7 +368,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, last, folded, o
           <li className={cls('r prompt-row prompt-block', x.prompt.from === 'parent' && 'from-agent')}>
             {x.prompt.from === 'parent'
               ? <span className="n botn" aria-hidden="true"><SessionBot session={session} size={26} /></span>
-              : <span className="n av" aria-hidden="true"><Icon d={SHELL_ICONS.user} size={15} /></span>}
+              : <UserAvatar className="n av" size={15} />}
             <div className="prompt-col">
               <span className="who prompt-author">
                 {x.prompt.from === 'parent' ? th.fromParent(session.name) : th.you}

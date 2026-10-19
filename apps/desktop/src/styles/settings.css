@@ -86,6 +86,11 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 .theme-pick strong{font-size:13px;font-weight:500}
 .theme-pick small{font-size:11px;color:var(--muted-foreground)}
 .accent-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+/* The profile photo (#50): its round preview, a drop target for an image file along with its buttons. */
+.avatar-drop{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:4px;margin:-4px;border-radius:var(--radius-lg);outline:1px dashed transparent}
+.avatar-drop.over{outline-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,transparent)}
+.avatar-preview{width:56px;height:56px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:var(--foreground);color:var(--background)}
+.avatar-preview img{width:100%;height:100%;object-fit:cover;display:block}
 .accent-swatches{display:flex;gap:6px;margin-right:4px}
 .accent-swatches label{position:relative;width:24px;height:24px;border-radius:50%;background:var(--c);cursor:pointer;box-shadow:inset 0 0 0 1px rgb(0 0 0/.15)}
 .accent-swatches label.on{box-shadow:0 0 0 2px var(--sidebar),0 0 0 4px var(--c)}
