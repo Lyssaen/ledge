@@ -20,6 +20,7 @@ import { authHeaders, until } from './helpers.js';
 import { paths } from '../src/paths.js';
 import { writeMachines } from '../src/daemon/machines.js';
 import { writeProjects } from '../src/daemon/projects.js';
+import { createMobileService } from '../src/mobile/service.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
@@ -1943,5 +1944,54 @@ describe('island settings', () => {
     expect(gotB.filter(m => m.type === 'island')).toHaveLength(1);
     expect(existsSync(paths().island)).toBe(false);
     a.close(); b.close(); await s.close();
+  });
+});
+
+describe('mobile access', () => {
+  const withMobile = async () => {
+    const mobile = await createMobileService();
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, mobile, daemon: { version: '0.2.2', install: 'npm', systemd: true } });
+    return { s, mobile, close: async () => { await s.close(); await mobile.stop(); } };
+  };
+  it('a local client gets the mobile state right after the island, and the daemon info says mobile: true', async () => {
+    const m = await withMobile();
+    const ws = await open(m.s.port); const got = collect(ws);
+    await until(() => got.some(x => x.type === 'mobile'));
+    expect(got.map(x => x.type).slice(0, 5)).toEqual(['snapshot', 'machines', 'projects', 'island', 'mobile']);
+    expect(got.find(x => x.type === 'mobile')).toMatchObject({ type: 'mobile', state: { enabled: false, account: null, link: { state: 'off' }, devices: [], pairings: [] } });
+    const snap = got.find(x => x.type === 'snapshot');
+    expect(snap?.type === 'snapshot' && snap.daemon?.mobile).toBe(true);
+    ws.close(); await m.close();
+  });
+  it('mobile.pairing.approve on an unknown id is refused with request: mobile.pairing.approve', async () => {
+    const m = await withMobile();
+    const ws = await open(m.s.port); const got = collect(ws);
+    await until(() => got.some(x => x.type === 'mobile'));
+    ws.send(JSON.stringify({ type: 'mobile.pairing.approve', id: 'nope' }));
+    await until(() => got.some(x => x.type === 'error'));
+    expect(got.find(x => x.type === 'error')).toMatchObject({ type: 'error', request: 'mobile.pairing.approve' });
+    ws.close(); await m.close();
+  });
+  it('a change is broadcast to local clients, never to a /ssh/ client', async () => {
+    const mobile = await createMobileService();
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, mobile, ssh: async () => {} });
+    const r = await open(s.port, '/ssh/dev-server'); const gotR = collect(r);
+    const a = await open(s.port); const gotA = collect(a);
+    await until(() => gotA.some(x => x.type === 'mobile'));
+    a.send(JSON.stringify({ type: 'mobile.set', enabled: false, relayUrl: 'http://localhost:1' }));
+    await until(() => gotA.filter(x => x.type === 'mobile').length >= 2);
+    expect(gotA.filter(x => x.type === 'mobile').at(-1)).toMatchObject({ state: { relayUrl: 'http://localhost:1' } });
+    await new Promise(res => setTimeout(res, 100));
+    expect(gotR.some(x => x.type === 'mobile')).toBe(false);
+    r.close(); a.close(); await s.close(); await mobile.stop();
+  });
+  it('without the service, mobile messages are refused as not available', async () => {
+    const ws = await open(srv.port); const got = collect(ws);
+    await until(() => got.some(x => x.type === 'island'));
+    ws.send(JSON.stringify({ type: 'mobile.signin' }));
+    await until(() => got.some(x => x.type === 'error'));
+    expect(got.find(x => x.type === 'error')).toMatchObject({ message: 'mobile access is not available', request: 'mobile.signin' });
+    expect(got.some(x => x.type === 'mobile')).toBe(false);
+    ws.close();
   });
 });

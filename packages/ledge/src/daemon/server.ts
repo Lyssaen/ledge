@@ -32,6 +32,7 @@ import { createRelay } from './relay.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
+import type { MobileService } from '../mobile/service.js';
 import { MAX_FRAME } from '../transport/frames.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
@@ -128,7 +129,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; mobile?: MobileService }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -174,6 +175,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The island's settings, set from Desktop (atelier spec §7); never sent to a remote peer. */
   let island = readIsland(islandFile);
   const islandMsg = (): ServerMessage => ({ type: 'island', prefs: island });
+  const mobile = opts.mobile;
   const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
   // Remote peers must never receive local snapshots, sessions, previews or chat broadcasts.
   const localClients = new Set<WebSocket>();
@@ -192,6 +194,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     store.onEvent((id, ev) => history.record(id, ev)),
     store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })
   ] : [];
+  // Mobile access: local fronts only, never a remote peer.
+  const unsubscribeMobile = mobile?.onChange(() => broadcast({ type: 'mobile', state: mobile.state() }));
   const relay = createRelay({ chat, store, replyTo, broadcast, now });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
@@ -207,10 +211,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true } } : {}) });
+    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, ...(mobile ? { mobile: true } : {}) } } : {}) });
     send(ws, machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     send(ws, projectsMsg()); // then the shared projects (build spec §5)
     send(ws, islandMsg()); // then the island's settings
+    if (mobile) send(ws, { type: 'mobile', state: mobile.state() }); // then mobile access
     for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
     send(ws, { type: 'chat.history', turns: chat.history() });
   };
@@ -642,6 +647,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'chat.reset': return chat.reset(broadcast);
       case 'session.focus':
         return; // handled by the overlay plan via wt.exe; the daemon only acknowledges
+      // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
+      case 'mobile.set': case 'mobile.signin': case 'mobile.signin.cancel': case 'mobile.signout': case 'mobile.retry':
+      case 'mobile.pairing.approve': case 'mobile.pairing.deny': case 'mobile.device.revoke':
+        if (!mobile) return refuse('mobile access is not available');
+        return mobile.handle(msg);
     }
   }
 
@@ -683,6 +693,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port,
     broadcast,
     preview,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); relay.close(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); relay.close(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

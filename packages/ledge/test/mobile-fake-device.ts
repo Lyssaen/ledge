@@ -36,6 +36,8 @@ export interface FakeDevice {
   seal(text: string): Promise<SealedFrame>;
   /** How many of the PC's sealed messages failed to open on this device. */
   readonly openFailures: number;
+  /** Every state of the device's own relay link, in order (`signed_out` `other_pc` is a 4001 close). */
+  linkStates: LinkState[];
   /** Raw escape hatch: sends any frame to the PC, for spoofing and replay tests. */
   sendFrame(frame: SealedFrame): void;
   close(): void;
@@ -62,10 +64,11 @@ export async function fakeDevice(opts: {
   const waiters: Waiter[] = [];
 
   let onOnline: ((s: LinkState) => void) | null = null;
+  const linkStates: LinkState[] = [];
   const link = createRelayLink({
     relayUrl: opts.relayUrl,
     token: opts.token,
-    onState: (s) => onOnline?.(s),
+    onState: (s) => { linkStates.push(s); onOnline?.(s); },
     onMessage(m) {
       if (m.type !== 'deliver' || m.from !== 'pc') return;
       let raw: unknown;
@@ -131,6 +134,7 @@ export async function fakeDevice(opts: {
     peer: opts.peer,
     received,
     frames,
+    linkStates,
     waitFor,
     sendFrame,
     get openFailures() { return openFailures; },

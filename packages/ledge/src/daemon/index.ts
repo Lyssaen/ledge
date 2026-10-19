@@ -9,6 +9,7 @@ import { log } from '../log.js';
 import { daemonInfo } from '../update/self.js';
 import { createDaemonUpdater, realUpdaterDeps } from '../update/run-update.js';
 import { peerFor, readPeers } from './peers.js';
+import { createMobileService, type MobileService } from '../mobile/service.js';
 
 export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string } = {}): Promise<{ stop(): Promise<void>; port: number }> {
   await ensureLedgeDir();
@@ -29,14 +30,18 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   // read whole: a session it lost is not a deleted one, and its thread must stay.
   if (loaded.clean) { for (const id of history.ids()) if (!store.get(id)) history.forget(id); }
   else log(`history cleanup skipped: ${loaded.reason}`);
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history });
+  // Mobile access is optional: a failure here (the PC's key unreadable and not writable) leaves the rest of the daemon up.
+  let mobile: MobileService | undefined;
+  try { mobile = await createMobileService(); }
+  catch (e) { log(`mobile access not available: ${(e as Error).message}`); }
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile });
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
   await writeFile(paths().pid, String(process.pid));
   log(`daemon started on ${server.port} with ${store.all().length} sessions`);
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {
     process.off('SIGTERM', onSignal); process.off('SIGINT', onSignal);
-    poller.stop(); await server.close(); await store.save(); await history.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
+    poller.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
   })();
   const onSignal = () => { stop().finally(() => process.exit(0)); };
   process.once('SIGTERM', onSignal);
