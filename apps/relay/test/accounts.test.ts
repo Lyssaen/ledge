@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import {
   DevicePollResponseSchema,
+  DeviceRevokeResponseSchema,
   DeviceStartResponseSchema,
   MeResponseSchema,
   parseRelayServerMessage,
@@ -268,6 +269,80 @@ describe('accounts', { timeout: 30_000 }, () => {
     expect(set).not.toContain('Secure');
     expect(await gone).toBe(4001);
     expect((await fetch(`${m.base}/auth/me`, { headers: { cookie } })).status).toBe(401);
+  });
+
+  describe('POST /auth/devices/revoke', () => {
+    async function addDevice(account: typeof ALICE) {
+      const token = newSessionToken();
+      const peer = newDevicePeer();
+      await store.upsertAccount(account.id, account.login);
+      await store.createSession(hashToken(token), { accountId: account.id, login: account.login, peer, kind: 'device' });
+      return { token, peer };
+    }
+
+    it('revokes the device sessions and closes its socket in 4001', async () => {
+      const m = await mount();
+      const pc = await signInPc(m);
+      const dev = await addDevice(ALICE);
+      const wsDev = new WebSocket(m.ws, bearer(dev.token));
+      await welcome(wsDev);
+      const gone = closed(wsDev);
+      const res = await post(`${m.base}/auth/devices/revoke`, { peer: dev.peer }, bearer(pc).headers);
+      expect(res.status).toBe(200);
+      expect(DeviceRevokeResponseSchema.parse(await res.json())).toEqual({ revoked: 1 });
+      expect(await gone).toBe(4001);
+      expect((await fetch(`${m.base}/auth/me`, bearer(dev.token))).status).toBe(401);
+      expect(m.events).toContainEqual({ ev: 'device_revoked', account: '1', peer: dev.peer, count: 1 });
+      const again = await post(`${m.base}/auth/devices/revoke`, { peer: dev.peer }, bearer(pc).headers);
+      expect(await again.json()).toEqual({ revoked: 0 });
+    });
+
+    it('accepts the PC token as a subprotocol', async () => {
+      const m = await mount();
+      const pc = await signInPc(m);
+      const dev = await addDevice(ALICE);
+      const res = await post(`${m.base}/auth/devices/revoke`, { peer: dev.peer }, { 'sec-websocket-protocol': `${RELAY_PROTOCOL_PREFIX}${pc}` });
+      expect(res.status).toBe(200);
+    });
+
+    it('refuses a device token and a cookie with 401', async () => {
+      const m = await mount();
+      const pc = await signInPc(m);
+      const dev = await addDevice(ALICE);
+      const body = { peer: dev.peer };
+      expect((await post(`${m.base}/auth/devices/revoke`, body, bearer(dev.token).headers)).status).toBe(401);
+      const cookie = `${RELAY_SESSION_COOKIE}=${pc}`;
+      expect((await post(`${m.base}/auth/devices/revoke`, body, { cookie, origin: m.base })).status).toBe(401);
+      expect((await post(`${m.base}/auth/devices/revoke`, body)).status).toBe(401);
+      expect((await fetch(`${m.base}/auth/me`, bearer(dev.token))).status).toBe(200);
+    });
+
+    it('answers 400 for peer pc or a malformed body', async () => {
+      const m = await mount();
+      const pc = await signInPc(m);
+      const h = bearer(pc).headers;
+      expect((await post(`${m.base}/auth/devices/revoke`, { peer: 'pc' }, h)).status).toBe(400);
+      expect((await post(`${m.base}/auth/devices/revoke`, { peer: 'nope' }, h)).status).toBe(400);
+      expect((await post(`${m.base}/auth/devices/revoke`, '{', h)).status).toBe(400);
+      expect((await fetch(`${m.base}/auth/me`, bearer(pc))).status).toBe(200);
+    });
+
+    it("leaves another account's device alone", async () => {
+      const m = await mount();
+      const pc = await signInPc(m);
+      const bobDev = await addDevice(BOB);
+      const ws = new WebSocket(m.ws, bearer(bobDev.token));
+      await welcome(ws);
+      let closedEarly = false;
+      ws.once('close', () => { closedEarly = true; });
+      const res = await post(`${m.base}/auth/devices/revoke`, { peer: bobDev.peer }, bearer(pc).headers);
+      expect(await res.json()).toEqual({ revoked: 0 });
+      await new Promise((r) => setTimeout(r, 100));
+      expect(closedEarly).toBe(false);
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+      expect((await fetch(`${m.base}/auth/me`, bearer(bobDev.token))).status).toBe(200);
+      ws.close();
+    });
   });
 
   it('never logs a session token, a device code, a GitHub token or the login', async () => {

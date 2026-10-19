@@ -2,9 +2,11 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 import {
+  RelayPeerSchema,
   RELAY_CLOSE_SIGNED_OUT,
   RELAY_SESSION_COOKIE,
   type DevicePollResponse,
+  type DeviceRevokeResponse,
   type DeviceStartResponse,
   type MeResponse
 } from '@ledge/protocol';
@@ -75,6 +77,10 @@ async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>): Promise<
   if (!r.success) throw new Answer(400, 'bad_request');
   return r.data;
 }
+
+const RevokeBodySchema = z.object({
+  peer: RelayPeerSchema.refine((p) => p !== 'pc')
+});
 
 const PollBodySchema = z.object({ deviceCode: z.string().min(1).max(1024) });
 
@@ -233,6 +239,19 @@ export function authRoutes(
     res.end();
   }
 
+  /** The PC revokes a device's sessions and closes its socket. Bearer or subprotocol of a PC session only. */
+  async function revokeDevice(req: IncomingMessage, res: ServerResponse, kick: Parameters<HttpHandler>[2]['kick']): Promise<void> {
+    const found = await sessionOf(req, deps, { checkOrigin: true });
+    if (!found || found.viaCookie || found.session.kind !== 'pc') throw new Answer(401, 'unauthorized');
+    const { peer } = await readJson(req, RevokeBodySchema);
+    const { accountId } = found.session;
+    const count = await deps.store.revokePeerSessions(accountId, peer);
+    kick(accountId, peer, RELAY_CLOSE_SIGNED_OUT, 'signed_out');
+    deps.log({ ev: 'device_revoked', account: accountId, peer, count });
+    const body: DeviceRevokeResponse = { revoked: count };
+    json(res, 200, body);
+  }
+
   const handler: HttpHandler = async (req, res, relay) => {
     let path: string;
     try { path = new URL(req.url ?? '/', 'http://relay').pathname; } catch { return false; }
@@ -246,6 +265,7 @@ export function authRoutes(
       case 'GET /auth/github/start': run = () => githubStart(res); break;
       case 'GET /auth/github/callback': run = () => githubCallback(req, res, kick); break;
       case 'GET /auth/me': run = () => me(req, res); break;
+      case 'POST /auth/devices/revoke': run = () => revokeDevice(req, res, kick); break;
       case 'POST /auth/logout': run = () => logout(req, res, kick); break;
     }
     if (!run) return false;

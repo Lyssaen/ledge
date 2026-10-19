@@ -116,4 +116,13 @@ export class Store {
     );
     return rows.length;
   }
+
+  /** Revokes the live sessions of one peer in one account; returns how many. */
+  async revokePeerSessions(accountId: string, peer: RelayPeer): Promise<number> {
+    const { rows } = await this.db.query(
+      `UPDATE sessions SET revoked_at = $3 WHERE account_id = $1 AND peer = $2 AND revoked_at IS NULL RETURNING 1`,
+      [accountId, peer, new Date(this.now())]
+    );
+    return rows.length;
+  }
 }

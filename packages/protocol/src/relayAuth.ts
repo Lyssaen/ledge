@@ -27,6 +27,9 @@ export const DevicePollResponseSchema = z.discriminatedUnion('status', [
 ]);
 export type DevicePollResponse = z.infer<typeof DevicePollResponseSchema>;
 
+export const DeviceRevokeResponseSchema = z.object({ revoked: z.number().int().min(0) });
+export type DeviceRevokeResponse = z.infer<typeof DeviceRevokeResponseSchema>;
+
 export const MeResponseSchema = z.object({
   accountId: z.string().min(1),
   login: z.string().min(1),

@@ -8,6 +8,7 @@ export type RelayLogEvent =
   | { ev: 'http_error' }
   | { ev: 'sign_in'; account: string; peer: string; kind: 'pc' | 'device' }
   | { ev: 'sign_out'; account: string; peer: string }
+  | { ev: 'device_revoked'; account: string; peer: string; count: number }
   | { ev: 'sign_in_refused'; reason: 'not_allowed' | 'denied' | 'expired' | 'bad_state' | 'github'; count: number }
   | { ev: 'frame_error'; account: string; peer: string; code: Extract<RelayServerMessage, { type: 'error' }>['code'] };
 

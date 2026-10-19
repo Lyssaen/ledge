@@ -112,6 +112,23 @@ function suite(name: string, backend: Backend, skip: boolean) {
       expect(await store.revokeSessions('1', 'pc')).toBe(0);
     });
 
+    it('revokePeerSessions revokes only that peer in that account', async () => {
+      const store = await make();
+      await store.upsertAccount('1', 'a');
+      await store.upsertAccount('2', 'b');
+      const other = 'd_' + 'B'.repeat(22);
+      await store.createSession('d1', { accountId: '1', login: 'a', peer: DEVICE, kind: 'device' });
+      await store.createSession('d2', { accountId: '1', login: 'a', peer: DEVICE, kind: 'device' });
+      await store.createSession('o1', { accountId: '1', login: 'a', peer: other, kind: 'device' });
+      await store.createSession('x1', { accountId: '2', login: 'b', peer: DEVICE, kind: 'device' });
+      expect(await store.revokePeerSessions('1', DEVICE)).toBe(2);
+      expect(await store.findSession('d1')).toBeNull();
+      expect(await store.findSession('d2')).toBeNull();
+      expect(await store.findSession('o1')).not.toBeNull();
+      expect(await store.findSession('x1')).not.toBeNull();
+      expect(await store.revokePeerSessions('1', DEVICE)).toBe(0);
+    });
+
     it('returns null for an unknown hash', async () => {
       const store = await make();
       expect(await store.findSession('nope')).toBeNull();
