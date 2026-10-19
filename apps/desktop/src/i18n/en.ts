@@ -104,6 +104,10 @@ export const en: Messages = {
       source: 'From the GitHub releases of Lyssaen/ledge.', check: 'Check'
     },
     appearance: {
+      profile: 'Profile', avatar: 'Profile photo', avatarHint: 'Beside « You » in a session’s thread. Choose an image or drop it on the disc. It stays on this PC.',
+      avatarFile: 'Profile photo file', avatarChoose: 'Choose an image…', avatarRemove: 'Remove the photo',
+      avatarSaved: 'Profile photo', avatarRemoved: 'Profile photo removed',
+      avatarRefused: { notImage: 'This file is not an image.', tooLarge: 'This image is too large: 8 MB at most.', unreadable: 'This image could not be read.' },
       theme: 'Theme', themeHint: 'Also changes the mascots’ material.',
       themes: { light: ['Light', 'Pebble'], dark: ['Dark', 'Signal'] },
       themeSaved: { light: 'Light theme · Pebble', dark: 'Dark theme · Signal' },

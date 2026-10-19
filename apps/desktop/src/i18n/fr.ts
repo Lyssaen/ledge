@@ -120,6 +120,10 @@ export const fr = {
       source: 'Sur les releases GitHub de Lyssaen/ledge.', check: 'Vérifier'
     },
     appearance: {
+      profile: 'Profil', avatar: 'Photo de profil', avatarHint: 'À côté de « Vous » dans le fil d’une session. Choisissez une image ou déposez-la sur le rond. Elle reste sur ce PC.',
+      avatarFile: 'Fichier de la photo de profil', avatarChoose: 'Choisir une image…', avatarRemove: 'Retirer la photo',
+      avatarSaved: 'Photo de profil', avatarRemoved: 'Photo de profil retirée',
+      avatarRefused: { notImage: 'Ce fichier n’est pas une image.', tooLarge: 'Image trop lourde : 8 Mo au plus.', unreadable: 'Cette image n’a pas pu être lue.' },
       theme: 'Thème', themeHint: 'Change aussi la matière des mascottes.',
       themes: { light: ['Clair', 'Galet'], dark: ['Sombre', 'Signal'] } as Record<'light' | 'dark', readonly [string, string]>,
       themeSaved: { light: 'Thème clair · Galet', dark: 'Thème sombre · Signal' } as Record<'light' | 'dark', string>,
