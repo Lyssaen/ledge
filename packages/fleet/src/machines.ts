@@ -56,12 +56,12 @@ export function machineUrl(machine: MachineConfig, local: MachineConfig): string
 export function loadMachines(prefix = 'ledge'): MachineConfig[] {
   try { return parseMachines(JSON.parse(localStorage.getItem(`${prefix}.machines`) ?? 'null')); } catch { return [LOCAL_MACHINE]; }
 }
-type ProbeSocket = { close(): void; onclose: null | (() => void); onerror: null | (() => void); onmessage: null | ((ev: { data: unknown }) => void) };
+type ProbeSocket = { close(): void; onopen?: null | (() => void); onclose: null | (() => void); onerror: null | (() => void); onmessage: null | ((ev: { data: unknown }) => void) };
 /** Opens `/ssh/<alias>` on the local daemon once and settles on the first snapshot, error or close. With `token`, the socket offers it, and none opens without one. */
 export function probeMachine(url: string, ssh: string, opts: { token?: TokenSource; WebSocketImpl?: new (url: string, protocols?: string[]) => ProbeSocket; timeoutMs?: number } = {}): Promise<ProbeResult> {
   const Ws = opts.WebSocketImpl ?? (globalThis as unknown as { WebSocket: new (url: string, protocols?: string[]) => ProbeSocket }).WebSocket;
   return new Promise(resolve => {
-    let sock: ProbeSocket | undefined, error = '', done = false;
+    let sock: ProbeSocket | undefined, error = '', done = false, opened = false;
     const finish = (r: ProbeResult) => { if (done) return; done = true; clearTimeout(timer); if (sock) { sock.onclose = sock.onmessage = sock.onerror = null; sock.close(); } resolve(r); };
     // The daemon gives up on a silent remote after 60 s; this only guards against a daemon that never answers.
     const timer = setTimeout(() => finish({ ok: false, error: 'SSH: no Ledge snapshot received.' }), opts.timeoutMs ?? 75_000);
@@ -74,8 +74,10 @@ export function probeMachine(url: string, ssh: string, opts: { token?: TokenSour
         if (m.type === 'error') error = m.message;
         else if (m.type === 'snapshot') finish(m.sshAlias === ssh ? { ok: true, version: m.daemon?.version, sessions: m.sessions.length } : { ok: false, error: 'Update the local Ledge daemon: SSH transport is unavailable' });
       };
+      sock.onopen = () => { opened = true; };
       sock.onerror = () => { /* onclose follows */ };
-      sock.onclose = () => finish({ ok: false, error: error || 'The local Ledge daemon closed the connection.' });
+      // Never opened (refused, perhaps a stale cached token): the next probe reads the token again, as the client does.
+      sock.onclose = () => { if (!opened) void opts.token?.get(true); finish({ ok: false, error: error || 'The local Ledge daemon closed the connection.' }); };
     };
     if (!opts.token) { start(); return; }
     void opts.token.get(false).then(r => {
@@ -87,7 +89,7 @@ export function probeMachine(url: string, ssh: string, opts: { token?: TokenSour
 export type SshProblem = 'alias' | 'key' | 'hostKey' | 'unreachable' | 'ledge' | 'stopped' | 'local' | 'other';
 /** The usual cause behind a raw SSH or remote Ledge error, to explain it in plain words. */
 export function sshProblem(raw: string): SshProblem {
-  if (/Update the local Ledge daemon/i.test(raw)) return 'local';
+  if (/Update the local Ledge daemon|local Ledge daemon token is missing/i.test(raw)) return 'local';
   if (/Could not resolve hostname|Name or service not known|nodename nor servname/i.test(raw)) return 'alias';
   if (/Host key verification failed|HOST IDENTIFICATION HAS CHANGED|No (?:ED25519|RSA|ECDSA)? ?host key is known/i.test(raw)) return 'hostKey';
   if (/Permission denied|Too many authentication failures/i.test(raw)) return 'key';

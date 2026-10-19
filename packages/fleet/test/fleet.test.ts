@@ -5,7 +5,7 @@ import { daemonStore, attachClient } from '../src/store';
 import type { DaemonClient, DaemonStatus } from '../src/client';
 import { LOCAL_MACHINE, canManage, parseMachines, probeMachine, sshProblem, terminalCommand, type MachineState } from '../src/machines';
 import { fakeSession } from './mockDaemon';
-import { createTokenSource } from '../src/token';
+import { createTokenSource, type TokenRead } from '../src/token';
 
 const remote = { id: 'server', label: 'dev-server', url: 'ws://127.0.0.1:47832', ssh: 'dev-server' };
 function peer() {
@@ -368,7 +368,7 @@ describe('common chat routing', () => {
 
 class FakeProbe {
   static last: FakeProbe; url: string; protocols?: string[]; closed = false;
-  onmessage: ((ev: { data: unknown }) => void) | null = null; onclose: (() => void) | null = null; onerror: (() => void) | null = null;
+  onmessage: ((ev: { data: unknown }) => void) | null = null; onclose: (() => void) | null = null; onerror: (() => void) | null = null; onopen: (() => void) | null = null;
   constructor(url: string, protocols?: string[]) { this.url = url; this.protocols = protocols; FakeProbe.last = this; }
   close() { this.closed = true; }
   emit(m: ServerMessage) { this.onmessage?.({ data: JSON.stringify(m) }); }
@@ -395,6 +395,22 @@ describe('connection test', () => {
     const unavailable = probeMachine('ws://127.0.0.1:47831', 'box', { WebSocketImpl: FakeProbe, token: createTokenSource(async () => ({ kind: 'unavailable' })) });
     await expect(unavailable).resolves.toEqual({ ok: false, error: expect.stringContaining('token') });
     expect(FakeProbe.last).toBe(before);
+  });
+  it('a probe that never opened re-reads the token next time; one that opened does not', async () => {
+    const read = vi.fn(async (): Promise<TokenRead> => ({ kind: 'token', token: 'a'.repeat(64) }));
+    const token = createTokenSource(read);
+    const before = FakeProbe.last;
+    const refused = probeMachine('ws://127.0.0.1:47831', 'box', { WebSocketImpl: FakeProbe, token });
+    await vi.waitFor(() => expect(FakeProbe.last).not.toBe(before));
+    FakeProbe.last.onclose?.();
+    await refused;
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    const second = FakeProbe.last;
+    const opened = probeMachine('ws://127.0.0.1:47831', 'box', { WebSocketImpl: FakeProbe, token });
+    await vi.waitFor(() => expect(FakeProbe.last).not.toBe(second));
+    FakeProbe.last.onopen?.(); FakeProbe.last.onclose?.();
+    await opened;
+    expect(read).toHaveBeenCalledTimes(2);
   });
   it('opens the SSH route of the local daemon and answers with the remote version and sessions', async () => {
     const done = probeMachine('ws://127.0.0.1:47831', 'dev-server', { WebSocketImpl: FakeProbe });
@@ -434,6 +450,7 @@ describe('connection test', () => {
     ['bash: line 1: ledge: command not found', 'ledge'],
     ['connect ECONNREFUSED 127.0.0.1:47831', 'stopped'],
     ['Update the local Ledge daemon: SSH transport is unavailable', 'local'],
+    ['The local Ledge daemon token is missing: start or update the daemon.', 'local'],
     ['something odd', 'other'],
   ] as const)('explains %s as %s', (raw, kind) => { expect(sshProblem(raw)).toBe(kind); });
 });
