@@ -20,6 +20,11 @@ export interface Mailbox { submit(m: Extract<ClientMessage, { type: 'session.mes
 interface Queued { rid: string; from: string; sender: { name: string; tool: Tool }; target: string; text: string }
 /** How many rids are remembered for the dedupe: past it the oldest are forgotten. */
 const MAX_SEEN = 1000;
+/** `replyTo`'s refusals that pass (server.ts, adapters/types.ts): a decision being typed, or a prompt that came up
+ *  meanwhile. The message waits for the next free moment; any other refusal (no session, read only, no terminal, the
+ *  text not taken) fails it. */
+const PASSING = [/^a decision is already in progress$/, /^an? \w+ prompt takes accept or deny, not a reply$/, /^no prompt visible in the terminal\b/,
+  /^free-text answers are not supported yet\b/, /^the request changed, look again$/];
 
 /**
  * Messages between sessions: acknowledged at once, typed into the target at its next free moment, one per free moment, oldest first.
@@ -38,6 +43,9 @@ export function createMailbox(d: MailboxDeps): Mailbox {
     try {
       let refused: string | null;
       try { refused = await d.replyTo(m.target, formatLedgeMessage({ from: m.sender.name, tool: m.sender.tool, text: m.text, to: s.tool })); } catch (e) { refused = (e as Error).message; }
+      // First in line again; the store change that ends the decision or the prompt is the next try. A target gone meanwhile fails it.
+      const live = d.store.get(m.target);
+      if (refused && PASSING.some(re => re.test(refused!)) && live && live.state !== 'exited') { log(`message ${m.rid} to ${m.target} waits: ${refused}`); queue.unshift(m); return; }
       if (refused) log(`message ${m.rid} to ${m.target} failed: ${refused}`);
       d.sent.mark(m.from, m.rid, refused ? 'failed' : 'delivered');
       // A refusal leaves the session's state unchanged, so a queued relay card waits for the next store change; only the mailbox retries at once.

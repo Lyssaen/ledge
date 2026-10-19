@@ -100,6 +100,31 @@ describe('createMailbox', () => {
     expect(sentCalls).toContainEqual(['mark', 's1', 'r2', 'delivered']);
   });
 
+  it('a passing refusal (a decision being typed, a prompt meanwhile) keeps the message first in line for the next free moment', async () => {
+    const passing = ['a decision is already in progress', 'a permission prompt takes accept or deny, not a reply', 'no prompt visible in the terminal, open the tab',
+      'free-text answers are not supported yet, answer in the terminal', 'the request changed, look again'];
+    for (const reason of passing) {
+      typed = []; sentCalls = []; let calls = 0;
+      answer = async () => { if (calls++ === 0) throw new Error(reason); return null; };
+      store.upsert(pim({ state: 'working' }));
+      box.submit(msg({ rid: `${reason}-1`, text: 'un' })); box.submit(msg({ rid: `${reason}-2`, text: 'deux' }));
+      setState('s2', 'idle'); await flush(); await flush();
+      expect(typed).toHaveLength(1);
+      expect(sentCalls.filter(c => c[0] === 'mark')).toEqual([]);
+      setState('s2', 'working'); setState('s2', 'idle'); await flush();
+      expect(typed).toHaveLength(2); expect(typed[1]![1]).toContain('un');
+      expect(sentCalls).toEqual([expect.anything(), expect.anything(), ['mark', 's1', `${reason}-1`, 'delivered']]);
+      setState('s2', 'idle'); await flush();
+      expect(typed[2]![1]).toContain('deux');
+    }
+  });
+
+  it('a passing refusal from a target removed meanwhile fails the message', async () => {
+    answer = async () => { store.remove('s2'); throw new Error('a decision is already in progress'); };
+    box.submit(msg()); await flush(); await flush();
+    expect(sentCalls).toContainEqual(['mark', 's1', 'r1', 'failed']);
+  });
+
   it('the target exits before delivery', async () => {
     store.upsert(pim({ state: 'working' }));
     box.submit(msg());
