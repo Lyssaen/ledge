@@ -37,6 +37,10 @@ describe('ledge send', () => {
     const d = await fakeDaemon({ outcome: 'refused' });
     try { expect(await sendMessage(['Pim', 'Salut'], { port: d.port, env: { LEDGE_SESSION: 'a' } })).toEqual({ line: 'refusé : raison inconnue', code: 1 }); } finally { d.close(); }
   });
+  it('a text over the cap is refused before it is sent, with its length', async () => {
+    const d = await fakeDaemon({ outcome: 'accepted' });
+    try { expect(await sendMessage(['Pim', 'x'.repeat(20001)], { port: d.port, env: { LEDGE_SESSION: 'a' } })).toEqual({ line: 'refusé : message trop long (20001 caractères, 20000 au plus)', code: 1 }); } finally { d.close(); }
+  });
   it('no ack after the send: not a refusal, within timeoutMs', async () => {
     const d = await fakeDaemon(null);
     try {

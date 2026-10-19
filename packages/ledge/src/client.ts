@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import { readDaemonToken } from './auth.js';
-import { PROTOCOL_PORT, parseServerMessage, type ClientMessage, type ServerMessage } from '@ledge/protocol';
+import { MESSAGE_MAX, PROTOCOL_PORT, SUMMARY_MAX, parseServerMessage, type ClientMessage, type MessageAck, type ServerMessage } from '@ledge/protocol';
 
 export interface Client {
   send(msg: ClientMessage): void;
@@ -10,8 +10,10 @@ export interface Client {
 }
 
 /** Sends a `session.message` and awaits its `message.ack`, within `timeoutMs`; rejects if the ack does not come in time. */
-export function sendMessageAndAwaitAck(client: Client, msg: Extract<ClientMessage, { type: 'session.message' }>, timeoutMs: number) {
-  client.send(msg);
+export async function sendMessageAndAwaitAck(client: Client, msg: Extract<ClientMessage, { type: 'session.message' }>, timeoutMs: number): Promise<MessageAck> {
+  // The daemon answers a message its schema refuses (too long) with a bare `error`, no ack: refuse it here, with the reason.
+  if (msg.text.length > MESSAGE_MAX) return { type: 'message.ack', rid: msg.rid, outcome: 'refused', reason: `message trop long (${msg.text.length} caractères, ${MESSAGE_MAX} au plus)` };
+  client.send(msg.summary && msg.summary.length > SUMMARY_MAX ? { ...msg, summary: msg.summary.slice(0, SUMMARY_MAX) } : msg);
   return client.next('message.ack', timeoutMs);
 }
 
