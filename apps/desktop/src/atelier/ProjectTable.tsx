@@ -11,7 +11,6 @@ import { Menu, MenuItem } from '../shell/Menu';
 import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import type { Filing } from './filing';
-import { PeerTag, type MessageClock } from './MessageLayer';
 import { Plants } from './Plants';
 import { RUG_SIDE, helperState, layoutTable, noteX, sheetState, tableBranch, type Side } from './layout';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
@@ -39,9 +38,6 @@ export interface ProjectTableProps {
   menuId: string | null;
   /** A right click on a seat, or its « … »: the session menu. */
   onMenu(s: Session, e: MouseEvent<HTMLElement>): void;
-  /** Every session, and the atelier's clock: the seats' tag of a recent message between agents. */
-  sessions: readonly Session[];
-  clock: MessageClock;
 }
 
 /** The mockup's « … » glyph (observatory.tsx, room-heading). */
@@ -78,7 +74,7 @@ function TableTop({ sheets, length }: { sheets: Sheet[]; length: number }): JSX.
 
 /** One project's table in the atelier (observatory.tsx, `project-room` in atelier mode): the rug with its label and
  *  « +N », the plants, the chairs, the table with its sheets and post-its, the seats and the sub-agents at the ends. */
-export function ProjectTable({ project, mains, order, helpers, paused, isolated, focusedId, seated, dispatch, filing, sessions, clock, actions, menuId, onMenu }: ProjectTableProps): JSX.Element {
+export function ProjectTable({ project, mains, order, helpers, paused, isolated, focusedId, seated, dispatch, filing, actions, menuId, onMenu }: ProjectTableProps): JSX.Element {
   const { t } = useI18n();
   const { id, name } = project;
   const color = PROJECT_COLORS[project.color];
@@ -161,7 +157,6 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
             <Fragment key={s.id}>
             <button style={{ left: at(x - 56) }} data-agent={s.id} aria-label={t.atelier.seat(s.name, taskOf(s), machineOf(s))} onClick={() => dispatch({ type: 'open', id: s.id })} onContextMenu={e => onMenu(s, e)}
               className={cls('agent-seat', `place-${side}`, seated === s.id && 'just-seated', focusedId === s.id && 'keyboard-selected', s.offline ? 'seat-offline' : state === 'working' && 'seat-working')}>
-              <PeerTag session={s} sessions={sessions} clock={clock} />
               {bot(s, 64)}
               <strong><span className="seat-name" title={s.name}>{s.name}</span>{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>
               <span className="seat-machine" title={machineOf(s)}>{machineOf(s)}</span>

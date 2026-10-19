@@ -317,7 +317,6 @@ export const en: Messages = {
     offline: 'Offline',
     messageTo: (n) => `to ${n}`,
     messageLabel: (sender, n, summary) => `${sender} writes to ${n}: ${summary}. Open the conversation`,
-    peerTag: (names) => `Recent conversation with ${names}`,
     desk: 'Talk to Ledge',
     watching: (n) => pluralEn(n, `I'm watching over ${n} agent.`, `I'm watching over ${n} agents.`),
     listening: "I'm listening.",

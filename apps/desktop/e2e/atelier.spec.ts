@@ -127,3 +127,29 @@ test('a long project name on the rug is cut with an ellipsis and stays inside th
   const label = (await table.locator('.room-heading').boundingBox())!, rug = (await table.locator('.office-rug').boundingBox())!;
   expect(label.x + label.width).toBeLessThanOrEqual(rug.x + rug.width);
 });
+
+test('a message between agents: the bubble over Otto, an upright envelope flying to Nova\'s seat, which rings; no tag on the seats; reduced motion, no envelope (#27)', async ({ page }) => {
+  const daemon = await fakeDaemon(page, eight, { projects: twoProjects });
+  await page.goto('/');
+  await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
+  const otto = eight.find(s => s.id === 'otto')!;
+  daemon.upsert({ ...otto, lastMessage: { id: 'sent-1', to: 'Nova', peer: 'nova', summary: 'The tests pass', at: new Date().toISOString() } });
+  await expect(page.getByRole('button', { name: 'Otto writes to Nova: The tests pass. Open the conversation' })).toBeVisible();
+  const envelope = page.locator('.exchange-layer .exchange-envelope');
+  await expect(envelope).toHaveCount(1);
+  await expect(envelope).toHaveAttribute('aria-hidden', 'true');
+  expect(await envelope.evaluate(el => { const s = getComputedStyle(el); return [s.offsetRotate, s.animationName]; })).toEqual(['0deg', 'envelope-fly, envelope-out']);
+  // It lands on Nova's seat, which rings; then it fades out.
+  const nova = page.locator('.agent-seat[data-agent="local:nova"]');
+  await expect(nova).toHaveClass(/exchange-arrived/);
+  const landed = await envelope.boundingBox(), seat = await nova.boundingBox();
+  expect(Math.abs(landed!.x + landed!.width / 2 - (seat!.x + seat!.width / 2)), 'the envelope sits over the receiver').toBeLessThan(20);
+  await expect.poll(() => envelope.evaluate(el => getComputedStyle(el).opacity)).toBe('0');
+  await expect(page.locator('.peer-tag')).toHaveCount(0);
+  // Reduced motion: the bubble and the wire, no envelope.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  daemon.upsert({ ...otto, lastMessage: { id: 'sent-2', to: 'Nova', peer: 'nova', summary: 'Merged', at: new Date().toISOString() } });
+  await expect(page.getByRole('button', { name: /^Otto writes to Nova: Merged/ })).toBeVisible();
+  await expect(page.locator('.exchange-wire path')).toHaveCount(1);
+  await expect(envelope).toHaveCount(0);
+});

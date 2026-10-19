@@ -201,51 +201,37 @@ describe('the atelier', () => {
       await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:otto'));
       await waitFor(() => expect(document.querySelector('.message-card.lit[data-message="sent-1"]')).not.toBeNull());
     });
-    it('both seats carry the tag for 10 min', async () => {
+    it('no seat carries a tag, whatever the message\'s age (#27)', async () => {
       const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
       fake();
-      d.upsert(ottoWrote(60_000));
-      await waitFor(() => expect(within(seat('Otto')).queryByTitle('Recent conversation with Rio')).not.toBeNull());
-      expect(within(seat('Otto')).getByTitle('Recent conversation with Rio')).toHaveTextContent(/^Rio$/);
-      expect(within(seat('Rio')).getByTitle('Recent conversation with Otto')).toHaveTextContent(/^Otto$/);
-      expect(within(seat('Nova')).queryByTitle(/^Recent conversation/)).toBeNull();
-      expect(bubble()).toBeNull();                                                  // a minute old: no bubble any more
-      act(() => { vi.advanceTimersByTime(8 * 60_000); });
-      expect(within(seat('Otto')).queryByTitle('Recent conversation with Rio')).not.toBeNull();
-      act(() => { vi.advanceTimersByTime(60_000 + 1); });
+      d.upsert(ottoWrote(2000));
+      await waitFor(() => expect(bubble()).not.toBeNull());
+      expect(document.querySelector('.peer-tag')).toBeNull();
       expect(within(seat('Otto')).queryByTitle(/^Recent conversation/)).toBeNull();
+      act(() => { vi.advanceTimersByTime(60_000); });
+      expect(bubble()).toBeNull();
+      expect(document.querySelector('.peer-tag')).toBeNull();
       expect(within(seat('Rio')).queryByTitle(/^Recent conversation/)).toBeNull();
+      expect(declarations('atelier.css', '.peer-tag')).toBe('');
     });
-    it('the tag counts the other peers: Name +N', async () => {
-      const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
-      d.upsert(ottoWrote(30_000));
-      d.upsert(fakeSession('bix', { name: 'Bix', cwd: '/w/ledge', lastMessage: { id: 'sent-9', to: 'Otto', peer: 'otto', summary: 'Done', at: new Date(Date.now() - 10_000).toISOString() } }));
-      await waitFor(() => expect(within(seat('Otto')).queryByTitle('Recent conversation with Bix, Rio')).not.toBeNull());
-      expect(within(seat('Otto')).getByTitle('Recent conversation with Bix, Rio')).toHaveTextContent(/^Bix \+1$/);
-      expect(declarations('atelier.css', '.peer-tag')).toContain('left:2px');       // top-left: the top-right corner is the menu's
-    });
-    it('an idle atelier: a message arriving 11 min old shows no bubble and no tag', async () => {
+    it('an idle atelier: a message arriving 11 min old shows no bubble', async () => {
       const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
       fake();
       act(() => { vi.advanceTimersByTime(12 * 60_000); });                       // nothing changes for 12 min
       d.upsert(ottoWrote(11 * 60_000));
       await act(async () => { await new Promise(r => setTimeout(r, 200)); });     // the update lands
       expect(bubble()).toBeNull();
-      expect(document.querySelector('.peer-tag')).toBeNull();
+      expect(document.querySelector('.exchange-wire')).toBeNull();
     });
     for (const [ahead, label] of [[90_000, '90 s'], [20 * 60_000, '20 min']] as const) {
-      it(`a message dated ${label} ahead of the clock shows on arrival, its bubble for 5 s, its tag for 10 min from then`, async () => {
+      it(`a message dated ${label} ahead of the clock shows on arrival, its bubble for 5 s`, async () => {
         const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
         fake();
         d.upsert(ottoWrote(-ahead));
         await waitFor(() => expect(bubble()).not.toBeNull());
-        expect(within(seat('Otto')).getByTitle('Recent conversation with Rio')).toBeVisible();
-        act(() => { vi.advanceTimersByTime(5000); });
-        expect(bubble()).toBeNull();
-        act(() => { vi.advanceTimersByTime(9 * 60_000); });
-        expect(within(seat('Otto')).queryByTitle('Recent conversation with Rio')).not.toBeNull();
-        act(() => { vi.advanceTimersByTime(55_000); });
-        expect(within(seat('Otto')).queryByTitle(/^Recent conversation/)).toBeNull();
+        act(() => { vi.advanceTimersByTime(4900); });
+        expect(bubble()).not.toBeNull();
+        act(() => { vi.advanceTimersByTime(100); });
         expect(bubble()).toBeNull();
       });
     }
@@ -256,18 +242,42 @@ describe('the atelier', () => {
       await waitFor(() => expect(bubble()).not.toBeNull());
       expect(document.querySelector('.exchange-wire path')).not.toBeNull();
       expect(document.querySelector('.exchange-wire circle')).toBeNull();
+      expect(document.querySelector('.exchange-envelope')).toBeNull();
       for (const sel of ['.office-reduced .exchange-bubble', '.office-paused .exchange-bubble']) expect(declarations('atelier.css', sel)).toContain('animation:none');
+      for (const sel of ['.office-reduced .exchange-envelope', '.office-paused .exchange-envelope']) expect(declarations('atelier.css', sel)).toContain('display:none');
     });
-    it('with motion, a dot travels along the line', async () => {
+    it('with motion, an envelope travels upright along the line from Otto\'s seat to Rio\'s, hidden from assistive technology (#27)', async () => {
       vi.stubEnv('VITE_LEDGE_MOTION', '1');
       const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
       d.upsert(ottoWrote(500));
-      await waitFor(() => expect(document.querySelector('.exchange-wire circle')).not.toBeNull());
+      await waitFor(() => expect(document.querySelector('.exchange-envelope')).not.toBeNull());
+      const envelope = document.querySelector<HTMLElement>('.exchange-envelope')!;
+      expect(envelope).toHaveAttribute('aria-hidden', 'true');
+      expect(envelope.style.offsetPath).toBe(`path('${document.querySelector('.exchange-wire path')!.getAttribute('d')}')`);
+      expect(envelope.querySelector('svg .exchange-envelope-body')).not.toBeNull();
+      expect(envelope.querySelector('svg .exchange-envelope-flap')).not.toBeNull();
+      expect(document.querySelector('.exchange-wire circle')).toBeNull();          // the dot is gone
+      const css = declarations('atelier.css', '.exchange-envelope');
+      expect(css).toContain('offset-rotate:0deg');
+      expect(css).toContain('width:26px');
+      expect(css).toContain('1.3s');
+      expect(declarations('atelier.css', '.exchange-envelope-body')).toContain('fill:var(--popover)');
+      expect(declarations('atelier.css', '.exchange-envelope-body')).toContain('stroke:var(--foreground)');
+    });
+    it('paused, with motion: the bubble and the line stay, no envelope travels', async () => {
+      vi.stubEnv('VITE_LEDGE_MOTION', '1');
+      const { d, user } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
+      await user.click(screen.getByRole('button', { name: 'Freeze animations' }));
+      expect(document.querySelector('.office-shell')).toHaveClass('office-paused');
+      d.upsert(ottoWrote(500));
+      await waitFor(() => expect(bubble()).not.toBeNull());
+      expect(document.querySelector('.exchange-wire path')).not.toBeNull();
+      expect(document.querySelector('.exchange-envelope')).toBeNull();
     });
     it('French copy', () => {
       expect(fr.atelier.messageTo('Rio')).toBe('à Rio');
       expect(fr.atelier.messageLabel('Otto', 'Rio', 'Les tests passent')).toBe('Otto écrit à Rio : Les tests passent. Ouvrir l’échange');
-      expect(fr.atelier.peerTag('Otto, Bix')).toBe('Échange récent avec Otto, Bix');
+      expect('peerTag' in fr.atelier).toBe(false);
     });
   });
 });

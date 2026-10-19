@@ -332,7 +332,6 @@ export const fr = {
     offline: 'Hors ligne',
     messageTo: (n: string) => `à ${n}`,
     messageLabel: (sender: string, n: string, summary: string) => `${sender} écrit à ${n} : ${summary}. Ouvrir l’échange`,
-    peerTag: (names: string) => `Échange récent avec ${names}`,
     desk: 'Parler à Ledge',
     watching: (n: number) => plural(n, `Je veille sur ${n} agent.`, `Je veille sur ${n} agents.`),
     listening: 'Je vous écoute.',

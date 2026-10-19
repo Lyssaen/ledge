@@ -6,10 +6,9 @@ import { useI18n } from '../i18n/lang';
 import type { NavAction } from '../nav/state';
 import { SHELL_ICONS } from '../shell/icons';
 
-/** Messages between agents in the atelier (exchange.tsx, AtelierExchanges and PeerTag): the sender's bubble for 5 s, a
- *  dotted line to the receiver's seat with a letter travelling along it, and a tag on both seats while the exchange is recent. */
+/** Messages between agents in the atelier (exchange.tsx, AtelierExchanges): the sender's bubble for 5 s and a dotted line to the
+ *  receiver's seat with an envelope travelling along it (#27: no tag on the seats afterwards, the session's thread says it better). */
 export const BUBBLE_MS = 5000;
-export const TAG_MS = 10 * 60_000;
 const TRAVEL_MS = 1300;
 const RING_MS = 1600;
 
@@ -35,8 +34,7 @@ const ageOf = (s: Session, clock: MessageClock): number | null => {
 };
 const isRecent = (s: Session, clock: MessageClock, ms: number) => { const age = ageOf(s, clock); return age !== null && age < ms; };
 
-/** Re-read when the sessions change, and at the next moment a bubble or a tag ends (a timeout to that moment, none while
- *  nothing is due). */
+/** Re-read when the sessions change, and at the next moment a bubble ends (a timeout to that moment, none while nothing is due). */
 export function useMessageClock(sessions: readonly Session[]): MessageClock {
   const [now, setNow] = useState(() => Date.now());
   const [tick, setTick] = useState(0);
@@ -63,7 +61,8 @@ export function useMessageClock(sessions: readonly Session[]): MessageClock {
     for (const s of sessions) {
       const at = timeOf(s);
       if (at === null) continue;
-      for (const end of [at + BUBBLE_MS, at + TAG_MS]) if (end > n && end < next) next = end;
+      const end = at + BUBBLE_MS;
+      if (end > n && end < next) next = end;
     }
     // Always: the render must judge the ages with the clock the deadline was chosen with (an idle atelier's clock is stale).
     setNow(n);
@@ -115,7 +114,7 @@ function Bubble({ sender, message, peerId, receiver, still, layer, dispatch }: {
     const shell = layer.current?.parentElement;
     for (const id of [sender.id, peerId]) seatOf(shell, id)?.classList.toggle('exchange-lit', on);
   };
-  // The receiver's seat rings when the letter lands (not with the animations frozen or reduced).
+  // The receiver's seat rings when the envelope lands (not with the animations frozen or reduced).
   useEffect(() => {
     if (still) return;
     const shell = layer.current?.parentElement;
@@ -137,8 +136,12 @@ function Bubble({ sender, message, peerId, receiver, still, layer, dispatch }: {
     {geo.b && (
       <svg className="exchange-wire" aria-hidden="true">
         <path d={geo.path} />
-        {!still && <circle r="3.5" style={{ offsetPath: `path('${geo.path}')` } as CSSProperties} />}
       </svg>
+    )}
+    {geo.b && !still && (
+      <span className="exchange-envelope" aria-hidden="true" style={{ offsetPath: `path('${geo.path}')` } as CSSProperties}>
+        <svg viewBox="0 0 26 19"><rect className="exchange-envelope-body" x="1" y="1" width="24" height="17" rx="2.5" /><path className="exchange-envelope-flap" d="M1.8 2.4 13 10.6 24.2 2.4" /></svg>
+      </span>
     )}
     <button type="button" className="exchange-bubble" style={{ left: geo.a.x, top: geo.a.y - 12 }}
       onMouseEnter={() => light(true)} onMouseLeave={() => light(false)} onFocus={() => light(true)} onBlur={() => light(false)}
@@ -168,31 +171,5 @@ export function MessageLayer({ sessions, clock, paused, reduced, dispatch }: Mes
         return <Bubble key={`${s.id}\n${m.id}`} sender={s} message={m} peerId={peerId} receiver={receiver} still={paused || reduced} layer={layer} dispatch={dispatch} />;
       })}
     </div>
-  );
-}
-
-/** The seat's tag (top-left: the « … » holds the top-right corner): the agents it wrote to or heard from less than 10 min
- *  ago, the latest first, « ✉ Name » or « ✉ Name +N ». */
-export function PeerTag({ session, sessions, clock }: { session: Session; sessions: readonly Session[]; clock: MessageClock }): JSX.Element | null {
-  const { t } = useI18n();
-  const recent: { key: string; name: string; at: number }[] = [];
-  const own = session.lastMessage;
-  if (own && isRecent(session, clock, TAG_MS)) {
-    const peerId = peerIdOf(session);
-    const peer = peerId !== undefined ? sessions.find(s => s.id === peerId) : undefined;
-    recent.push({ key: peer?.id ?? `to:${own.to}`, name: peer?.name ?? own.to, at: clock.timeOf(session)! });
-  }
-  for (const s of sessions) {
-    if (s.id === session.id || !isRecent(s, clock, TAG_MS) || peerIdOf(s) !== session.id) continue;
-    recent.push({ key: s.id, name: s.name, at: clock.timeOf(s)! });
-  }
-  if (recent.length === 0) return null;
-  recent.sort((a, b) => b.at - a.at);
-  const names = [...new Map(recent.map(r => [r.key, r.name])).values()];
-  const label = t.atelier.peerTag(names.join(', '));
-  return (
-    <span className="peer-tag" title={label}>
-      <Icon d={SHELL_ICONS.mail} size={10} />{names[0]}{names.length > 1 ? ` +${names.length - 1}` : ''}
-    </span>
   );
 }

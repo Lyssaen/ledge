@@ -130,7 +130,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
           {scene.tables.map(({ project, mains }) => (
             <ProjectTable key={project.id} project={project} mains={mains} order={order} helpers={nav.helpers} paused={nav.paused}
               isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
-              sessions={sessions} clock={clock} actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt} />
+              actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt} />
           ))}
         </div>
         {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
