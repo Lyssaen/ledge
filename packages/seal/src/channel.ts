@@ -1,3 +1,4 @@
+import { concat } from './bytes.js';
 import { b64u, fromB64u } from './encoding.js';
 import { SealError } from './errors.js';
 import { importPublicKey, type Identity } from './identity.js';
@@ -21,16 +22,6 @@ export interface Handshake {
   /** Ephemeral public key (65 bytes, base64url) to send to the peer. */
   hello: string;
   finish(peerHello: string): Promise<Channel>;
-}
-
-function concat(...parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let o = 0;
-  for (const p of parts) {
-    out.set(p, o);
-    o += p.length;
-  }
-  return out;
 }
 
 function seqBytes(seq: number): Uint8Array<ArrayBuffer> {

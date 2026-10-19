@@ -8,6 +8,7 @@
  * Each side fixes its share before seeing the other's, so a relay cannot
  * grind offline for keys whose code matches on both sides.
  */
+import { concat } from './bytes.js';
 import { b64u, fromB64u } from './encoding.js';
 
 const subtle = globalThis.crypto.subtle;
@@ -20,13 +21,7 @@ export function randomNonce(): string {
 }
 
 async function sha256(...parts: Uint8Array[]): Promise<Uint8Array> {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let o = 0;
-  for (const p of parts) {
-    out.set(p, o);
-    o += p.length;
-  }
-  return new Uint8Array(await subtle.digest('SHA-256', out));
+  return new Uint8Array(await subtle.digest('SHA-256', concat(...parts)));
 }
 
 export async function commit(devicePublicKey: string, deviceNonce: string): Promise<string> {
@@ -38,6 +33,7 @@ export async function checkCommitment(commitment: string, devicePublicKey: strin
   let expected: Uint8Array;
   try {
     given = fromB64u(commitment);
+    if (fromB64u(deviceNonce).length !== 32) return false;
     expected = fromB64u(await commit(devicePublicKey, deviceNonce));
   } catch {
     return false;
