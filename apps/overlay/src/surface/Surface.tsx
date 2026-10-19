@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
-import { DEFAULT_ISLAND_PREFS, type ChatProposal, type IslandPrefs, type Session, type Tool } from '@ledge/protocol';
+import { DEFAULT_ISLAND_PREFS, proposalRows, type IslandPrefs, type Session, type Tool } from '@ledge/protocol';
 import { loadDefaultTool, saveDefaultTool } from '../defaultTool';
 import { useDaemon, daemonStore } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
@@ -513,27 +513,32 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     setLaunching(null); setLaunchFailure(lastError.message);
   }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && launching) { setLaunching(null); setLaunchFailure(t.lost); } }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
-  const launchProposal = (qid: string) => {
+  const launchProposal = (qid: string, asked?: number[]) => {
     if (client.fleet && !client.fleet.turnMachine(qid)?.ready) return;
-    const p = chat.find(x => x.qid === qid)?.proposal;
-    if (!p || p.launchedId || launching || chatLaunching || relaying || status === 'unreachable') return;
-    launchedFrom.current = p; setChatLaunching(qid);
-    send({ type: 'session.launch', tool: p.tool, cwd: p.cwd, ...(p.prompt ? { prompt: p.prompt } : {}), qid });
+    const all = proposalRows(chat.find(x => x.qid === qid));
+    const rows = (asked ?? [0]).filter(r => all[r] && !all[r]!.launchedId);
+    const p = all[rows[0] ?? -1];
+    if (!p || launching || chatLaunching || relaying || status === 'unreachable') return;
+    launchedFrom.current = rows.map(r => ({ row: r, error: all[r]!.error })); setChatLaunching(qid);
+    send({ type: 'session.launch', tool: p.tool, cwd: p.cwd, ...(p.prompt ? { prompt: p.prompt } : {}), qid, ...(asked ? { rows } : {}) });
   };
   useEffect(() => {
     if (!lastLaunched || !chatLaunching) return;
-    setChatLaunching(null);
+    // A card launching several rows (#24) waits for its marks; each session still gets its tab.
+    if (launchedFrom.current.length <= 1) setChatLaunching(null);
     if (loadOpenTab()) openTab(lastLaunched.id);
   }, [lastLaunched?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   // The card's own outcome frees it: the daemon marks the turn (launchedId, or error) in a chat.history, then answers. Any other history frame
   // or id-less error must not, or the later session.launched finds no launch and the tab stays closed. A retry failing with the same message
   // leaves the history unchanged: its error, matching the turn's, frees it.
-  const launchedFrom = useRef<ChatProposal | undefined>(undefined);
-  const launchingProposal = chatLaunching ? chat.find(x => x.qid === chatLaunching)?.proposal : undefined;
+  // The rows sent and the error each had then (#24: a grouped card sends several); the card is freed once every row is launched or failed anew.
+  const launchedFrom = useRef<Array<{ row: number; error: string | undefined }>>([]);
+  const launchingRowsNow = chatLaunching ? proposalRows(chat.find(x => x.qid === chatLaunching)) : [];
+  const launchSettled = launchedFrom.current.every(({ row, error }) => !launchingRowsNow[row] || launchingRowsNow[row]!.launchedId || launchingRowsNow[row]!.error !== error);
   useEffect(() => {
-    if (chatLaunching && (!launchingProposal || launchingProposal.launchedId || launchingProposal.error !== launchedFrom.current?.error)) setChatLaunching(null);
-  }, [chatLaunching, launchingProposal?.launchedId, launchingProposal?.error, !launchingProposal]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (chatLaunching && lastError && !lastError.id && lastError.message === launchingProposal?.error) setChatLaunching(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (chatLaunching && (launchingRowsNow.length === 0 || launchSettled)) setChatLaunching(null);
+  }, [chatLaunching, launchSettled, launchingRowsNow.length === 0]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (chatLaunching && lastError && !lastError.id && launchedFrom.current.some(({ row }) => lastError.message === launchingRowsNow[row]?.error)) setChatLaunching(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && chatLaunching) setChatLaunching(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (chatLaunching && client.fleet && !client.fleet.turnMachine(chatLaunching)?.ready) setChatLaunching(null); }, [machines, chatLaunching, client]);
   const sayCandidates: SayCandidate[] = [];
@@ -757,7 +762,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               headerExtra={<IslandMenu open={menuOpen && st.mode === 'chat'} dnd={dnd} onToggle={() => setMenuOpen(o => !o)} onClose={() => setMenuOpen(false)} onSettings={() => { setMenuOpen(false); openInLedge({ kind: 'settings' }); }} onDnd={onToggleDnd} onQuit={() => { setMenuOpen(false); void quitApp(); }} />}
               turnAvailable={qid => !client.fleet || !!client.fleet.turnMachine(qid)?.ready}
               onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onClose={() => { setMenuOpen(false); dispatch({ type: 'close' }); }} onOpenSession={id => openInLedge({ kind: 'session', id })}
-              launchingQid={chatLaunching} onLaunchProposal={launchProposal} onTerminal={id => openInLedge({ kind: 'terminal', id })}
+              launchingQid={chatLaunching} launchingRows={chatLaunching ? launchedFrom.current.map(x => x.row) : null} onLaunchProposal={launchProposal} onTerminal={id => openInLedge({ kind: 'terminal', id })}
               relayingQid={relaying} onRelay={qid => relayCard('session.relay', qid)} onRelayCancel={qid => relayCard('session.relay.cancel', qid)}
               theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openInLedge({ kind: 'document', path: ref.path })} />
           </div>

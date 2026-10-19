@@ -74,7 +74,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
           <ChatView docked visible turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
             onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={onClose} onClose={onClose}
             onOpenSession={open} onTerminal={open} turnAvailable={turnReady}
-            launchingQid={cards.launchingQid} onLaunchProposal={cards.launch}
+            launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}
             relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
             onProject={project.review} projectNamed={project.projectNamed}
             onAgentHover={setHovered} inputRef={inputRef}

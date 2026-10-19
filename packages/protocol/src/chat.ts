@@ -46,3 +46,6 @@ export const ChatTurnSchema = z.object({
   projectProposal: ChatProjectProposalSchema.optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
+
+/** A turn's session card rows (#24): `proposals`, or the lone `proposal` of a turn from a daemon before #24. */
+export const proposalRows = (t: Pick<ChatTurn, 'proposal' | 'proposals'> | undefined): ChatProposal[] => t?.proposals ?? (t?.proposal ? [t.proposal] : []);

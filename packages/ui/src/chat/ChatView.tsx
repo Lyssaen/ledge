@@ -8,6 +8,7 @@ import { MarkdownLinks } from '../documents/links';
 import { useChatCopy, type ChatCopy } from './copy';
 import { relativeTime } from './format';
 import { inline } from './inline';
+import { LaunchGroupCard } from './LaunchGroupCard';
 import { LaunchCard } from './LaunchCard';
 import { RelayCard } from './RelayCard';
 import { ProjectCard } from './ProjectCard';
@@ -29,7 +30,9 @@ export interface ChatViewProps {
   onDocument?: (ref: DocumentReference, qid?: string) => void;
   turnAvailable?: (qid: string) => boolean;
   /** The chat card being launched (its turn's qid) and the card's actions (spec 2026-10-12 §6). */
-  launchingQid?: string | null; onLaunchProposal?: (qid: string) => void; onTerminal?: (id: string) => void;
+  launchingQid?: string | null; onLaunchProposal?: (qid: string, rows?: number[]) => void; onTerminal?: (id: string) => void;
+  /** The rows of `launchingQid`'s card in flight (#24): the grouped card says « Launching » on those. */
+  launchingRows?: readonly number[] | null;
   /** The relay card's turn being sent (its qid) and its actions. */
   relayingQid?: string | null; onRelay?: (qid: string) => void; onRelayCancel?: (qid: string) => void;
   /** The project card's « Review the proposal » (lot 11): without it (the island) there is no card, the answer stands alone.
@@ -169,6 +172,10 @@ export function ChatView(p: ChatViewProps) {
                       <RelayCard relay={turn.relay} session={p.sessions.find(s => s.id === turn.relay!.id)} busy={p.relayingQid === turn.qid}
                         disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.relayingQid && p.relayingQid !== turn.qid) || !!p.launchingQid} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
                         onSend={() => p.onRelay?.(turn.qid)} onCancel={() => p.onRelayCancel?.(turn.qid)} onOpenSession={p.onOpenSession} />
+                    ) : turn.answeredAt !== undefined && (turn.proposals?.length ?? 0) > 1 ? (
+                      <LaunchGroupCard proposals={turn.proposals!} sessions={p.sessions} busy={p.launchingQid === turn.qid} busyRows={p.launchingQid === turn.qid ? p.launchingRows ?? [] : []}
+                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid}
+                        onLaunch={rows => p.onLaunchProposal?.(turn.qid, rows)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
                     ) : turn.answeredAt !== undefined && turn.proposal && (
                       <LaunchCard proposal={turn.proposal} session={p.sessions.find(s => s.id === turn.proposal!.launchedId)} busy={p.launchingQid === turn.qid}
                         disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid}

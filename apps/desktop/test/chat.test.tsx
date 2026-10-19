@@ -538,6 +538,23 @@ describe('useChatCards', () => {
     expect(result.current.launchingQid).toBeNull();
   });
 
+  it('a grouped card launches its rows in one message, announces each session, and waits for every row (#24)', () => {
+    const a = { ...PROPOSAL, cwd: '/w/a', project: 'a' }, b = { ...PROPOSAL, cwd: '/w/b', project: 'b' }, c = { ...PROPOSAL, cwd: '/w/c', project: 'c', launchedId: 'local:old' };
+    const chat = [turnWith({ proposal: a, proposals: [a, b, c] })];
+    const { send, onLaunched, result, rerender } = setup({ chat, lastLaunched: null, errors: [], ready: true });
+    act(() => { result.current.launch('q-1', [0, 1, 2]); result.current.launch('q-1', [1]); });
+    expect(send).toHaveBeenCalledExactlyOnceWith({ type: 'session.launch', tool: 'codex', cwd: '/w/a', prompt: 'Relis la PR', qid: 'q-1', rows: [0, 1] });
+    expect(result.current).toMatchObject({ launchingQid: 'q-1', launchingRows: [0, 1] });
+    const one = [turnWith({ proposal: { ...a, launchedId: 'local:n1' }, proposals: [{ ...a, launchedId: 'local:n1' }, b, c] })];
+    rerender({ chat: one, lastLaunched: null, errors: [], ready: true });
+    expect(onLaunched).toHaveBeenCalledExactlyOnceWith('local:n1');
+    expect(result.current.launchingQid).toBe('q-1');
+    const both = [turnWith({ proposal: one[0]!.proposal, proposals: [one[0]!.proposal!, { ...b, error: 'boom' }, c] })];
+    rerender({ chat: both, lastLaunched: null, errors: [], ready: true });
+    expect(result.current).toMatchObject({ launchingQid: null, launchingRows: null });
+    expect(onLaunched).toHaveBeenCalledTimes(1);
+  });
+
   it('a relay sends once, waits for its turn to change, and blocks launches meanwhile', () => {
     const relay = { id: 'local:otto', name: 'Otto', tool: 'claude' as const, text: 'Relis la PR' };
     const chat = [turnWith({ relay }), turnWith({ qid: 'q-2', proposal: PROPOSAL })];

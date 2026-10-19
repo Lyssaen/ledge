@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, isArchived, MAX_PROPOSALS, parseProjectBlock, parseProposalBlock, parseRelayBlock, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { extractProposal, isArchived, MAX_PROPOSALS, proposalRows, parseProjectBlock, parseProposalBlock, parseRelayBlock, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -147,11 +147,9 @@ export function createChat(deps: ChatDeps): Chat {
     return { name: block.name, ...(description ? { description } : {}), repos, ...(block.addTo ? { addTo: block.addTo } : {}) };
   }
   const turnOf = (qid: string) => turns.find(t => t.qid === qid);
-  /** A turn's card rows: `proposals`, or the lone `proposal` of a turn from before #24. */
-  const rowsOf = (t: ChatTurn | undefined): ChatProposal[] => t?.proposals ?? (t?.proposal ? [t.proposal] : []);
   /** Sets a row and keeps `proposal` the first row, for the clients from before #24. */
   function setRow(t: ChatTurn, row: number, next: ChatProposal) {
-    const rows = [...rowsOf(t)]; rows[row] = next; t.proposals = rows; t.proposal = rows[0];
+    const rows = [...proposalRows(t)]; rows[row] = next; t.proposals = rows; t.proposal = rows[0];
   }
 
   /** One run; the context folder (terminal tails, last replies) is removed once it ends, whatever the outcome. */
@@ -201,14 +199,14 @@ export function createChat(deps: ChatDeps): Chat {
 
   return {
     history: () => turns,
-    proposal: (qid, row = 0) => rowsOf(turnOf(qid))[row],
+    proposal: (qid, row = 0) => proposalRows(turnOf(qid))[row],
     markLaunched(qid, id, emit, row = 0) {
-      const t = turnOf(qid); const p = rowsOf(t)[row]; if (!t || !p) return;
+      const t = turnOf(qid); const p = proposalRows(t)[row]; if (!t || !p) return;
       const next = { ...p, launchedId: id }; delete next.error; setRow(t, row, next);
       emit({ type: 'chat.history', turns });
     },
     markFailed(qid, message, emit, row = 0) {
-      const t = turnOf(qid); const p = rowsOf(t)[row]; if (!t || !p) return;
+      const t = turnOf(qid); const p = proposalRows(t)[row]; if (!t || !p) return;
       setRow(t, row, { ...p, error: message });
       emit({ type: 'chat.history', turns });
     },
