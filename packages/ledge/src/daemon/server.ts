@@ -490,7 +490,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'folder.list': return send(ws, await listFolder(msg.path, opts.home, msg.requestId));
       case 'folder.create': {
-        const listing = await createFolder(msg.parent, msg.name, opts.home);
+        const listing = await createFolder(msg.parent, msg.name, opts.home, msg.requestId);
         if (!listing.error) log(`created folder ${listing.path}`);
         return send(ws, listing);
       }

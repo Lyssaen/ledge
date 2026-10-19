@@ -34,8 +34,9 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const documents = new Map<string, string>();
   /** `repos.inspect` requestId -> the machine asked, so only its `repos.info` answers it. */
   const inspections = new Map<string, string>();
-  /** `folder.list` requestId -> the machine asked and the path, so only its `folder.listing` answers it (and a drop or a refusal answers « offline » or « not found »). */
-  const listings = new Map<string, { machine: string; path: string }>();
+  /** `folder.list` / `folder.create` requestId -> the machine asked and the path (the parent of a creation), so only its `folder.listing` answers it
+   *  (and a drop or a refusal answers « offline » or « not found »). `created`: where a creation lands, which an older daemon's untagged answer is matched by. */
+  const listings = new Map<string, { machine: string; path: string; created?: string }>();
   /** `repos.scan` requestId -> the machine asked, so only its `repos.found` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const scans = new Map<string, string>();
   const operations = new Map<string, string>();
@@ -177,6 +178,9 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'session.launched') { operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'folder.listing') {
       if (m.requestId !== undefined && listings.has(m.requestId)) { if (listings.get(m.requestId)!.machine === machine) { listings.delete(m.requestId); emit(m); } return; }
+      // A daemon before 0.9.1 answers folder.create without its requestId: the listing of the new folder, or of the parent with the refusal.
+      const creation = m.requestId === undefined ? [...listings].find(([, l]) => l.machine === machine && l.created !== undefined && (m.error === undefined ? m.path === l.created : m.path === l.path)) : undefined;
+      if (creation) { listings.delete(creation[0]); emit({ ...m, requestId: creation[0] }); return; }
       if (m.requestId === undefined && machine === selected) emit(m);
       return;
     }
@@ -220,7 +224,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (m.request === 'repos.inspect') { answerUnfoundInspections(machine); return; }
       // Likewise for repos.scan (lot 11): the new daemon answers every scan with repos.found, so a refusal means an older daemon.
       if (m.request === 'repos.scan') { answerFailedScans(machine, 'outdated'); return; }
-      if (m.request === 'folder.list' && [...listings.values()].some(l => l.machine === machine)) { answerUnfoundListings(machine, m.message || 'not found'); return; }
+      if ((m.request === 'folder.list' || m.request === 'folder.create') && [...listings.values()].some(l => l.machine === machine)) { answerUnfoundListings(machine, m.message || 'not found'); return; }
       // Only the in-flight operation's own refusal ends it: another refused command leaves it waiting for its answer or the machine's drop.
       if (m.request !== undefined && OPERATIONS.has(m.request)) operations.delete(machine);
       emit({ ...m, ...(m.id ? { id: qualify(machine, m.id) } : {}), message: configs.length > 1 ? `${p.config.label}: ${m.message}` : m.message });
@@ -307,6 +311,15 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (msg.requestId !== undefined) {
           if (!available(peers.get(machine))) { emit({ type: 'folder.listing', requestId: msg.requestId, path: msg.path || '~', parent: null, entries: [], error: 'offline' }); return; }
           listings.set(msg.requestId, { machine, path: msg.path || '~' });
+        }
+      }
+      if (msg.type === 'folder.create') {
+        if (msg.machineId) machine = msg.machineId;
+        else if (msg.requestId !== undefined) machine = 'local';
+        const { machineId: _m, ...rest } = msg; outgoing = rest;
+        if (msg.requestId !== undefined) {
+          if (!available(peers.get(machine))) { emit({ type: 'folder.listing', requestId: msg.requestId, path: msg.parent, parent: null, entries: [], error: 'offline' }); return; }
+          listings.set(msg.requestId, { machine, path: msg.parent, created: `${msg.parent === '/' ? '' : msg.parent}/${msg.name.trim()}` });
         }
       }
       if (msg.type === 'update.daemon') machine = 'local';

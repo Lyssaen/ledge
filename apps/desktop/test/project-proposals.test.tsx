@@ -82,7 +82,7 @@ describe('« Let Ledge do it » in the project editor', () => {
     // The branch the scan found.
     expect(within(fontsRow).getByText('⎇ main')).toBeVisible();
     expect(document.querySelector('.pe-proposal')).toHaveTextContent('Ledge proposes2 repositories on Local. Uncheck what does not fit, then confirm: nothing is created before.');
-    expect(prop.getByText('Working repositories · 2')).toBeVisible();
+    expect(prop.getByText('Working folders and repositories · 2')).toBeVisible();
     // A proposal under way: no offer, no « Ask Ledge ».
     expect(document.querySelector('.pe-ledge')).toBeNull();
     expect(prop.queryByRole('button', { name: 'Ask Ledge' })).toBeNull();
@@ -93,7 +93,7 @@ describe('« Let Ledge do it » in the project editor', () => {
 
     await user.click(templates);
     expect(templates.closest('li')).toHaveClass('off');
-    expect(prop.getByText('Working repositories · 1')).toBeVisible();
+    expect(prop.getByText('Working folders and repositories · 1')).toBeVisible();
     expect(document.querySelector('.pe .composer-preview')!.textContent).toBe('Paper1 repository on Local · the table appears with the first session');
     await user.click(prop.getByRole('button', { name: /^Create the project/ }));
     await waitFor(() => expect(setsOf(d)).toHaveLength(1));
@@ -139,9 +139,9 @@ describe('« Let Ledge do it » in the project editor', () => {
     // A broadcast puts paper-fonts in Docs.
     const docs = PROJECTS.projects[2]!;
     act(() => d.projects({ ...PROJECTS, projects: [...PROJECTS.projects.slice(0, 2), { ...docs, repos: [...docs.repos, { machine: 'local', path: '/home/me/dev/paper-fonts' }] }] }));
-    await waitFor(() => expect(fonts.closest('li')).toHaveTextContent('This repository is already in Docs'));
+    await waitFor(() => expect(fonts.closest('li')).toHaveTextContent('This folder is already in Docs'));
     await user.click(prop.getByRole('button', { name: /^Create the project/ }));
-    expect(prop.getByRole('alert')).toHaveTextContent('This repository is already in Docs');
+    expect(prop.getByRole('alert')).toHaveTextContent('This folder is already in Docs');
     await tick();
     expect(setsOf(d)).toEqual([]);
 
@@ -216,7 +216,7 @@ describe('a scan cut short', () => {
     expect(document.querySelector('.pe-proposal')).toHaveTextContent('Ledge proposes2 repositories on Local. Uncheck what does not fit, then confirm: nothing is created before. · scan limited on Local');
     // A deeper repository may be missing: the folder browser adds it by hand (#22).
     await user.click(screen.getByRole('button', { name: 'Browse the folders' }));
-    expect(screen.queryByRole('button', { name: 'Add a repository' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add a folder or repository' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Browse the folders' })).toBeNull();
   });
 

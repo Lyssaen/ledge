@@ -199,6 +199,40 @@ describe('multi-machine connections', () => {
     expect(got.filter(m => m.type === 'repos.info')).toHaveLength(1);
     expect(got.filter(m => m.type === 'folder.listing')).toEqual([{ type: 'folder.listing', requestId: 'f1', path: '/w', parent: null, entries: [], error: 'boom' }]);
   });
+  it('routes a folder.create with machineId and requestId to that machine, and relays only its listing', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'folder.create', parent: '/w', name: 'new', machineId: 'server', requestId: 'c1' });
+    expect(server.sent).toEqual([{ type: 'folder.create', parent: '/w', name: 'new', requestId: 'c1' }]); expect(local.sent).toEqual([]);
+    const listing: ServerMessage = { type: 'folder.listing', requestId: 'c1', path: '/w/new', parent: '/w', entries: [] };
+    local.emit(listing); // not the machine asked
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([]);
+    server.emit(listing);
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([listing]);
+  });
+  it('answers a folder.create for an offline machine, one that drops, or refuses it, with an error that keeps the parent', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'folder.create', parent: '/w', name: 'a', machineId: 'server', requestId: 'c1' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'folder.create' });
+    expect(got.filter(m => m.type === 'folder.listing')).toEqual([{ type: 'folder.listing', requestId: 'c1', path: '/w', parent: null, entries: [], error: 'invalid message' }]);
+    client.send({ type: 'folder.create', parent: '/w', name: 'b', machineId: 'server', requestId: 'c2' });
+    server.set('unreachable');
+    expect(got.filter(m => m.type === 'folder.listing').at(-1)).toEqual({ type: 'folder.listing', requestId: 'c2', path: '/w', parent: null, entries: [], error: 'offline' });
+    client.send({ type: 'folder.create', parent: '/w', name: 'c', machineId: 'server', requestId: 'c3' });
+    expect(got.filter(m => m.type === 'folder.listing').at(-1)).toEqual({ type: 'folder.listing', requestId: 'c3', path: '/w', parent: null, entries: [], error: 'offline' });
+    expect(server.sent.filter(m => m.type === 'folder.create')).toHaveLength(2);
+  });
+  it('an older daemon answers folder.create without its requestId: the new folder, or the parent with the refusal, from that machine answers it', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'folder.create', parent: '/w', name: ' new ', machineId: 'server', requestId: 'c1' });
+    local.emit({ type: 'folder.listing', path: '/w/new', parent: '/w', entries: [] }); // not the machine asked
+    server.emit({ type: 'folder.listing', path: '/w/other', parent: '/w', entries: [] }); // not the folder asked
+    expect(got.filter(m => m.type === 'folder.listing' && m.requestId === 'c1')).toEqual([]);
+    server.emit({ type: 'folder.listing', path: '/w/new', parent: '/w', entries: [] });
+    expect(got.filter(m => m.type === 'folder.listing' && m.requestId === 'c1')).toEqual([{ type: 'folder.listing', requestId: 'c1', path: '/w/new', parent: '/w', entries: [] }]);
+    client.send({ type: 'folder.create', parent: '/', name: 'w', machineId: 'server', requestId: 'c2' });
+    server.emit({ type: 'folder.listing', path: '/', parent: null, entries: ['w'], error: 'already exists: w' });
+    expect(got.filter(m => m.type === 'folder.listing' && m.requestId === 'c2')).toEqual([{ type: 'folder.listing', requestId: 'c2', path: '/', parent: null, entries: ['w'], error: 'already exists: w' }]);
+  });
   it('a folder.list without requestId keeps the old behaviour: the selected machine, relayed only from it', () => {
     const { client, local, server, got } = setup();
     client.send({ type: 'folder.list', path: '/w' });

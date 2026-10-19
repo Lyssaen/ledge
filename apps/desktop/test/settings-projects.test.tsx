@@ -59,7 +59,7 @@ describe('Settings › Projects: the list', () => {
     expect(project('Ledge').getByText('2 agents')).toBeVisible();
     expect(project('Payment Service').getByText('1 agent')).toBeVisible();
     expect(project('Docs').getByText('0 agents')).toBeVisible();
-    expect(project('Docs').getByText('No repository')).toBeVisible();
+    expect(project('Docs').getByText('No folder or repository')).toBeVisible();
     expect(project('Ledge').getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual(['Edit Ledge', 'Delete Ledge']);
     expect(saved()).toEqual([]);
   });

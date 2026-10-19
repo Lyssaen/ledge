@@ -127,7 +127,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('folder.list'), path: z.string().optional(),
     /** Routing by the fleet, removed before the message reaches the daemon. */ machineId: z.string().optional(),
     /** Copied into the `folder.listing` that answers; the fleet relays only that listing, from the machine asked. */ requestId: z.string().min(1).max(100).optional() }),
-  z.object({ type: z.literal('folder.create'), parent: z.string().min(1), name: z.string().min(1) }),
+  z.object({ type: z.literal('folder.create'), parent: z.string().min(1), name: z.string().min(1),
+    /** As for `folder.list`: routing by the fleet, and the request its `folder.listing` answers. */ machineId: z.string().optional(), requestId: z.string().min(1).max(100).optional() }),
   z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1) }),
   /** The chat card's instruction (spec 2026-10-12 relay §4): sent now if the session is free, else queued until it is. */
   z.object({ type: z.literal('session.relay'), qid: z.string().min(1) }),

@@ -14,6 +14,36 @@ const folders: Record<string, Folder> = {
   '/home/me': { parent: '/home', entries: ['Documents', 'Workspace'] },
   '/home/me/Workspace': { parent: '/home/me', entries: ['drafts', 'paper-fonts'], repos: [{ name: 'paper-fonts', branch: 'main' }] }
 };
+test('« New folder » in the folder browser: the folder is made on Local, listed ready to add, and the project is created with it (#32)', async ({ page }) => {
+  const daemon = await fakeDaemon(page, eight, { projects: twoProjects, folders: structuredClone(folders) });
+  await page.goto('/');
+  await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
+  await openNewProject(page);
+  const editor = page.getByRole('dialog', { name: 'New project' });
+  await editor.getByLabel('Name', { exact: true }).fill('Atlas');
+  await editor.getByRole('list', { name: 'Contents of /home/me on Local' }).getByRole('button', { name: 'Workspace', exact: true }).click();
+  const workspace = editor.getByRole('list', { name: 'Contents of /home/me/Workspace on Local' });
+  await expect(workspace.getByRole('listitem').filter({ hasText: 'drafts' })).toBeVisible();
+  await editor.getByRole('button', { name: 'New folder' }).click();
+  const field = editor.getByRole('textbox', { name: 'Name of the new folder in /home/me/Workspace on Local' });
+  await expect(field).toBeFocused();
+  // A name already there is refused; the name stays to fix.
+  await field.fill('drafts');
+  await field.press('Enter');
+  await expect(editor.getByRole('alert')).toHaveText('drafts already exists here.');
+  await field.fill('atlas');
+  await field.press('Enter');
+  const add = workspace.getByRole('button', { name: 'Add atlas (Local)' });
+  await expect(add).toBeFocused();
+  await expect(workspace.getByRole('listitem').filter({ hasText: 'atlas' })).toContainText('no Git');
+  await expect(editor.getByText('Working folders and repositories · 0')).toBeVisible();
+  await add.click();
+  await expect(editor.getByText('Working folders and repositories · 1')).toBeVisible();
+  await editor.getByRole('button', { name: /Create the project/ }).click();
+  await expect(editor).toBeHidden();
+  expect(sets(daemon.received)[0]!.projects.projects).toContainEqual({ id: 'atlas', name: 'Atlas', color: 'amber', description: '', repos: [{ machine: 'local', path: '/home/me/Workspace/atlas' }] });
+});
+
 /** Kit works in a folder no project knows: « No project ». */
 const kit = session('kit', { name: 'Kit', cwd: '/tmp/scratch', project: 'scratch' });
 
@@ -37,7 +67,7 @@ test('+ Projects, a name, Workspace › paper-fonts on main from the folder brow
   await expect(workspace.getByRole('listitem').filter({ hasText: 'drafts' })).toContainText('no Git');
   await expect(editor.getByRole('navigation', { name: 'Current folder' }).getByRole('button', { name: 'Workspace' })).toHaveAttribute('aria-current', 'location');
   await row.getByRole('button', { name: 'Add paper-fonts (Local)' }).click();
-  await expect(editor.getByText('Working repositories · 1')).toBeVisible();
+  await expect(editor.getByText('Working folders and repositories · 1')).toBeVisible();
   await expect(row.getByRole('button', { name: 'paper-fonts already added' })).toBeDisabled();
   const repos = editor.locator('.pe-repo-list');
   await expect(repos.getByRole('listitem')).toHaveCount(1);
@@ -67,7 +97,7 @@ test('Move to… › New project… on an agent with no project: the project is 
   const repos = editor.locator('.pe-repo-list');
   await expect(repos).toContainText('/tmp/scratch');
   await expect(repos).toContainText('⎇ main');
-  await expect(editor.getByText('Working repositories · 1')).toBeVisible();
+  await expect(editor.getByText('Working folders and repositories · 1')).toBeVisible();
   await expect(editor.getByRole('checkbox', { name: 'Kit' })).toBeChecked();
   await editor.getByLabel('Name', { exact: true }).fill('Scratch');
   await editor.getByLabel('Name', { exact: true }).press('Control+Enter');

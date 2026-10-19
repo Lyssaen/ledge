@@ -203,7 +203,7 @@ export const fr = {
     projects: {
       title: 'Projets',
       note: 'Un projet regroupe des dépôts de travail, sur une ou plusieurs machines, et leurs conversations. Sa table apparaît dans l’atelier dès qu’un agent y travaille.',
-      noRepo: 'Aucun dépôt', edit: 'Modifier', editLabel: (n: string) => `Modifier ${n}`, delete: 'Supprimer', deleteLabel: (n: string) => `Supprimer ${n}`,
+      noRepo: 'Aucun dossier ni dépôt', edit: 'Modifier', editLabel: (n: string) => `Modifier ${n}`, delete: 'Supprimer', deleteLabel: (n: string) => `Supprimer ${n}`,
       add: 'Nouveau projet',
       rules: 'Dossiers mémorisés',
       rulesNote: 'Quand vous rangez un agent sans projet à une table, Ledge retient son dossier : les prochaines sessions qui y démarrent rejoignent le même projet.',
@@ -590,11 +590,11 @@ export const fr = {
     agent: 'Agent',
     tools: { claude: ['Claude Code', 'Conception, revue'], codex: ['Codex', 'Code et tests'], cursor: ['Cursor Agent', 'Dans l’éditeur'] } as Record<'claude' | 'codex' | 'cursor', readonly [string, string]>,
     project: 'Projet', machine: 'Machine', offline: 'hors ligne', offlineTitle: 'Hors ligne : reconnectez la machine dans les réglages',
-    repos: (m: string) => `Dépôts sur ${m}`, noGit: 'Dossier sans Git', notFound: 'introuvable', oneRepo: (t: string) => `Un seul dépôt pour ${t}`,
-    noRepos: (p: string, m: string) => `Aucun dépôt de ${p} sur ${m}.`, editProject: 'Modifier le projet',
+    repos: (m: string) => `Dossiers et dépôts sur ${m}`, noGit: 'Dossier sans Git', notFound: 'introuvable', oneRepo: (t: string) => `Un seul dossier ou dépôt pour ${t}`,
+    noRepos: (p: string, m: string) => `Aucun dossier ni dépôt de ${p} sur ${m}.`, editProject: 'Modifier le projet',
     noProjects: 'Aucun projet pour l’instant.', noProjectsBody: 'Créez un projet pour y lancer des agents.', newProject: 'Nouveau projet',
-    newAgent: 'Un nouvel agent', joins: (n: string, t: string) => `${n} rejoindra la table ${t}`, seat: (n: number, m: string, r: string) => `Place ${n} · ${m} · ${r}`, noRepo: 'aucun dépôt',
-    missing: { tool: 'Choisissez un agent', prompt: 'Écrivez la consigne', machine: 'Aucune machine en ligne', repos: 'Choisissez au moins un dépôt' } as Record<'tool' | 'prompt' | 'machine' | 'repos', string>,
+    newAgent: 'Un nouvel agent', joins: (n: string, t: string) => `${n} rejoindra la table ${t}`, seat: (n: number, m: string, r: string) => `Place ${n} · ${m} · ${r}`, noRepo: 'aucun dossier ni dépôt',
+    missing: { tool: 'Choisissez un agent', prompt: 'Écrivez la consigne', machine: 'Aucune machine en ligne', repos: 'Choisissez au moins un dossier ou un dépôt' } as Record<'tool' | 'prompt' | 'machine' | 'repos', string>,
     cancel: 'Annuler', launch: 'Lancer', launching: 'Lancement…',
     started: (n: string, t: string) => `${n} démarre à la table ${t}.`, startedNoTable: (n: string) => `${n} démarre, sans projet.`, refused: (m: string) => `Démarrage refusé : ${m}`,
     timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.'
@@ -607,12 +607,12 @@ export const fr = {
     name: 'Nom', namePlaceholder: 'Ex. Paper Rendering', color: 'Couleur',
     colors: { blue: 'Bleu', green: 'Vert', amber: 'Ambre', violet: 'Violet', teal: 'Sarcelle', pink: 'Rose', red: 'Rouge', slate: 'Ardoise' } as Record<ProjectColor, string>,
     description: 'Description', optional: 'facultatif', descriptionPlaceholder: 'Une phrase qui dit à quoi sert le projet',
-    repos: (n: number) => `Dépôts de travail · ${n}`, branchTitle: 'Branche par défaut détectée', noGit: 'Dossier sans Git',
-    notFound: 'introuvable', offline: 'hors ligne', remove: (n: string, m: string) => `Retirer ${n} (${m})`, addRepo: 'Ajouter un dépôt',
-    empty: 'Aucun dépôt pour l’instant. Le projet peut exister sans, mais Ledge ne saura pas y ranger les sessions.',
+    repos: (n: number) => `Dossiers et dépôts de travail · ${n}`, branchTitle: 'Branche par défaut détectée', noGit: 'Dossier sans Git',
+    notFound: 'introuvable', offline: 'hors ligne', remove: (n: string, m: string) => `Retirer ${n} (${m})`, addRepo: 'Ajouter un dossier ou un dépôt',
+    empty: 'Aucun dossier ni dépôt pour l’instant. Le projet peut exister sans, mais Ledge ne saura pas y ranger les sessions.',
     fileToo: 'Ranger aussi',
-    problems: { name_empty: 'Donnez un nom au projet', name_taken: 'Ce nom est déjà utilisé par un autre projet', repo_duplicate: 'Ce dépôt est en double', gone: 'Ce projet a été supprimé entre-temps',
-      repo_taken: (p: string) => `Ce dépôt est déjà dans ${p}` },
+    problems: { name_empty: 'Donnez un nom au projet', name_taken: 'Ce nom est déjà utilisé par un autre projet', repo_duplicate: 'Ce dossier est en double', gone: 'Ce projet a été supprimé entre-temps',
+      repo_taken: (p: string) => `Ce dossier est déjà dans ${p}` },
     refused: {
       offline: 'Le daemon local est hors ligne : rien n’a été enregistré.', outdated: 'Le daemon local est trop ancien pour les projets : mettez-le à jour.',
       invalid: 'Le daemon a refusé ce projet.', timeout: 'Le daemon n’a pas confirmé l’enregistrement.'
@@ -686,9 +686,15 @@ export const fr = {
       noGit: 'sans Git', add: 'Ajouter', added: 'Ajouté', addLabel: (n: string, m: string) => `Ajouter ${n} (${m})`, addedLabel: (n: string) => `${n} déjà ajouté`,
       typed: (m: string) => `Chemin sur ${m}`, typedPlaceholder: (m: string) => `Ou saisissez un chemin sur ${m}`,
       offlinePath: (m: string) => `${m} est hors ligne : impossible de vérifier ce chemin.`, notFound: (m: string) => `Dossier introuvable sur ${m}.`,
-      alreadyListed: 'Ce dépôt est déjà dans la liste.', absolute: 'Saisissez un chemin complet, qui commence par /.',
+      alreadyListed: 'Ce dossier est déjà dans la liste.', absolute: 'Saisissez un chemin complet, qui commence par /.',
       ownedBy: (p: string) => `Déjà dans ${p}`, ownedLabel: (n: string, p: string) => `${n} est déjà dans ${p}`,
-      timeout: 'Le dossier n’a pas répondu.', retry: 'Réessayer'
+      timeout: 'Le dossier n’a pas répondu.', retry: 'Réessayer',
+      /** « Nouveau dossier » (#32): made in the folder shown, on its machine. */
+      newFolder: 'Nouveau dossier', newFolderName: (d: string, m: string) => `Nom du nouveau dossier dans ${d} sur ${m}`,
+      create: 'Créer', creating: 'Création…', cancel: 'Annuler', created: (n: string, m: string) => `${n} créé sur ${m}.`,
+      nameEmpty: 'Saisissez un nom pour le dossier.', nameInvalid: 'Choisissez un nom sans /, autre que . et ..',
+      exists: (n: string) => `${n} existe déjà ici.`, createOffline: (m: string) => `${m} est hors ligne : le dossier n’a pas été créé.`,
+      createTimeout: (m: string) => `${m} n’a pas répondu : vérifiez le dossier avant de réessayer.`, createFailed: (why: string) => `Le dossier n’a pas été créé : ${why}`
     }
   },
   /** The Ledge chat (shared ChatView): the notch's `chat`, `machines` (those its cards read) and `time` copy, word for word. */

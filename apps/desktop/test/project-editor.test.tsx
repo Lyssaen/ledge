@@ -34,6 +34,22 @@ async function openNew(opts: Parameters<typeof boot>[0] = {}) {
 }
 
 describe('the project editor: a new project from the sidebar', () => {
+  it('« New folder » makes the folder on the machine, lists it ready to add, and the project takes it once added (#32)', async () => {
+    const { d, user, dialog, name } = await openNew();
+    const list = within(await dialog.findByRole('list', { name: 'Contents of /home/me on Local' }));
+    await user.type(name, 'Atlas');
+    await user.click(dialog.getByRole('button', { name: 'New folder' }));
+    await user.type(dialog.getByRole('textbox', { name: 'Name of the new folder in /home/me on Local' }), 'atlas{Enter}');
+    await waitFor(() => expect(list.getByRole('button', { name: 'Add atlas (Local)' })).toHaveFocus());
+    expect(dialog.getByText('Working folders and repositories · 0')).toBeVisible();
+    await user.keyboard('{Enter}');
+    expect(dialog.getByRole('button', { name: 'Remove atlas (Local)' })).toBeVisible();
+    expect(d.received.filter(m => m.type === 'folder.create')).toEqual([expect.objectContaining({ parent: '/home/me', name: 'atlas', requestId: expect.any(String) })]);
+    await user.click(dialog.getByRole('button', { name: /^Create the project/ }));
+    await waitFor(() => expect(setsOf(d)).toHaveLength(1));
+    expect(setsOf(d)[0]!.projects.projects.at(-1)).toMatchObject({ name: 'Atlas', repos: [{ machine: 'local', path: '/home/me/atlas' }] });
+  });
+
   it('« + »: the name has the focus and the folder browser is open; Ctrl ↵ without a name names the problem; Create sends the project and waits', async () => {
     const { d, user, dialog, name } = await openNew();
     expect(name).toHaveFocus();
@@ -41,10 +57,10 @@ describe('the project editor: a new project from the sidebar', () => {
     expect(name).toHaveAttribute('placeholder', 'E.g. Paper Rendering');
     expect(dialog.getByRole('textbox', { name: /^Description/ })).toHaveAttribute('maxLength', '120');
     const list = within(await dialog.findByRole('list', { name: 'Contents of /home/me on Local' }));
-    expect(dialog.getByText('Working repositories · 0')).toBeVisible();
-    // The browser is open: no « No repository yet », no « Add a repository ».
+    expect(dialog.getByText('Working folders and repositories · 0')).toBeVisible();
+    // The browser is open: no « No folder or repository yet », no « Add a folder or repository ».
     expect(document.querySelector('p.pe-empty')).toBeNull();
-    expect(dialog.queryByRole('button', { name: 'Add a repository' })).toBeNull();
+    expect(dialog.queryByRole('button', { name: 'Add a folder or repository' })).toBeNull();
     // The first colour no project uses (PROJECTS: blue, green, amber).
     expect(dialog.getAllByRole('radio').filter(r => r.getAttribute('name') === 'pe-color').map(r => r.getAttribute('aria-label')))
       .toEqual(['Blue', 'Green', 'Amber', 'Violet', 'Teal', 'Pink', 'Red', 'Slate']);
@@ -65,7 +81,7 @@ describe('the project editor: a new project from the sidebar', () => {
     expect(within(row).getByText('⎇ main')).toHaveAttribute('title', 'Default branch detected');
     expect(row.querySelector('code')).toHaveTextContent('/home/me/paper');
     expect(row.querySelector('.pe-machine')).toHaveTextContent('Local');
-    expect(dialog.getByText('Working repositories · 1')).toBeVisible();
+    expect(dialog.getByText('Working folders and repositories · 1')).toBeVisible();
     expect(document.querySelector('.pe .composer-preview')!.textContent).toBe('Paper Rendering1 repository on Local · the table appears with the first session');
 
     await user.click(dialog.getByRole('button', { name: /^Create the project/ }));
@@ -225,10 +241,10 @@ describe('the project editor: editing a project', () => {
     expect(name).toHaveFocus();
     expect(dialog.getByRole('textbox', { name: /^Description/ })).toHaveValue('Agents at work');
     expect(dialog.getByRole('radio', { name: 'Blue' })).toBeChecked();
-    expect(dialog.getByText('Working repositories · 4')).toBeVisible();
+    expect(dialog.getByText('Working folders and repositories · 4')).toBeVisible();
     // The browser stays closed for a project that has repositories.
     expect(dialog.queryByRole('radiogroup', { name: 'Machine to browse' })).toBeNull();
-    expect(dialog.getByRole('button', { name: 'Add a repository' })).toBeVisible();
+    expect(dialog.getByRole('button', { name: 'Add a folder or repository' })).toBeVisible();
     // The saved repositories' branches come from repos.inspect on their machine: the client asks Local only (Dev SSH is offline).
     expect(await within(rowOf(dialog, 'ledge', 'Local')).findByText('⎇ main')).toHaveAttribute('title', 'Default branch detected');
     expect(sent.mock.calls.map(c => c[0]).filter(m => m.type === 'repos.inspect')).toEqual([expect.objectContaining({ machineId: 'local', paths: ['/w/ledge', '/w/notes', '/w/gone'] })]);
@@ -258,13 +274,13 @@ describe('the project editor: editing a project', () => {
   it('« Remove » takes a repository out of the draft; saving sends the list without it', async () => {
     const { d, user, dialog } = await editLedge();
     await user.click(dialog.getByRole('button', { name: 'Remove gone (Local)' }));
-    expect(dialog.getByText('Working repositories · 3')).toBeVisible();
+    expect(dialog.getByText('Working folders and repositories · 3')).toBeVisible();
     await user.click(dialog.getByRole('button', { name: /^Save/ }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(setsOf(d)[0]!.projects.projects[0]!.repos).toEqual([{ machine: 'local', path: '/w/ledge' }, { machine: 'local', path: '/w/notes' }, { machine: 'dev', path: '/srv/ledge' }]);
   });
 
-  it('removing a repository moves the focus to the next row\'s « Remove », else the previous one\'s, else « Add a repository »', async () => {
+  it('removing a repository moves the focus to the next row\'s « Remove », else the previous one\'s, else « Add a folder or repository »', async () => {
     const { user, dialog } = await editLedge();
     await user.click(dialog.getByRole('button', { name: 'Remove notes (Local)' }));
     expect(dialog.getByRole('button', { name: 'Remove gone (Local)' })).toHaveFocus();
@@ -273,14 +289,14 @@ describe('the project editor: editing a project', () => {
     await user.keyboard('{Enter}');
     expect(dialog.getByRole('button', { name: 'Remove ledge (Local)' })).toHaveFocus();
     await user.keyboard('{Enter}');
-    expect(dialog.getByText('Working repositories · 0')).toBeVisible();
-    expect(dialog.getByRole('button', { name: 'Add a repository' })).toHaveFocus();
+    expect(dialog.getByText('Working folders and repositories · 0')).toBeVisible();
+    expect(dialog.getByRole('button', { name: 'Add a folder or repository' })).toHaveFocus();
   });
 
   it('a repository another project has: typed, it is refused; taken by it meanwhile, its row says so as an error, Save names the problem, nothing is sent, the values stay', async () => {
     const { d, user, dialog } = await editLedge();
     d.repoInfo.set('/w/extra', { path: '/w/extra', exists: true, branch: null });
-    await user.click(dialog.getByRole('button', { name: 'Add a repository' }));
+    await user.click(dialog.getByRole('button', { name: 'Add a folder or repository' }));
     const typed = dialog.getByRole('textbox', { name: 'Path on Local' });
     // The browser knows /w/docs is Docs's: refused before it is checked.
     await user.type(typed, '/w/docs{Enter}');
@@ -291,12 +307,12 @@ describe('the project editor: editing a project', () => {
     // Docs takes /w/extra too (elsewhere) while it is in the draft.
     const [ledge, docs] = EDITED.projects;
     d.projects({ ...EDITED, projects: [ledge!, { ...docs!, repos: [...docs!.repos, { machine: 'local', path: '/w/extra' }] }] });
-    await waitFor(() => expect(within(extra).getByText('This repository is already in Docs')).toHaveClass('set-error'));
+    await waitFor(() => expect(within(extra).getByText('This folder is already in Docs')).toHaveClass('set-error'));
     expect(within(extra).getByText('Folder without Git')).toBeVisible();
-    expect(dialog.getByText('Working repositories · 5')).toBeVisible();
+    expect(dialog.getByText('Working folders and repositories · 5')).toBeVisible();
     await user.click(dialog.getByRole('button', { name: /^Save/ }));
     const alert = dialog.getByRole('alert');
-    expect(alert).toHaveTextContent('This repository is already in Docs');
+    expect(alert).toHaveTextContent('This folder is already in Docs');
     expect(alert).toHaveClass('composer-missing');
     expect(dialog.getByRole('button', { name: 'Remove extra (Local)' })).toBeVisible();
     await tick();
@@ -317,9 +333,9 @@ describe('the project editor: editing a project', () => {
     expect(owned).toHaveTextContent('Already in Docs');
     await user.click(dialog.getByRole('button', { name: 'Add notes (Local)' }));
     d.projects(withDocs('/home/me/paper', '/home/me/notes'));
-    await waitFor(() => expect(within(dialog.getByRole('button', { name: 'Remove notes (Local)' }).closest('li')!).getByText('This repository is already in Docs')).toHaveClass('set-error'));
+    await waitFor(() => expect(within(dialog.getByRole('button', { name: 'Remove notes (Local)' }).closest('li')!).getByText('This folder is already in Docs')).toHaveClass('set-error'));
     await user.click(dialog.getByRole('button', { name: /^Create the project/ }));
-    expect(dialog.getByRole('alert')).toHaveTextContent('This repository is already in Docs');
+    expect(dialog.getByRole('alert')).toHaveTextContent('This folder is already in Docs');
     await tick();
     expect(setsOf(d)).toEqual([]);
   });
@@ -357,7 +373,7 @@ describe('the project editor: « Move to › New project… »', () => {
     const dialog = within(screen.getByRole('dialog', { name: 'New project' }));
     const row = dialog.getByRole('button', { name: 'Remove tmp (Local)' }).closest('li')!;
     expect(row.querySelector('code')).toHaveTextContent('/tmp');
-    expect(dialog.getByText('Working repositories · 1')).toBeVisible();
+    expect(dialog.getByText('Working folders and repositories · 1')).toBeVisible();
     expect(dialog.queryByRole('radiogroup', { name: 'Machine to browse' })).toBeNull();
     expect(dialog.getByText('Also file')).toBeVisible();
     const kit = dialog.getByRole('checkbox', { name: 'Kit' });

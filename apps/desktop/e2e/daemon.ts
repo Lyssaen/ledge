@@ -24,7 +24,8 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  and every new connection (reload, reconnect) gets the current list. A `document.read` is answered from `extras.documents` by its path
  *  (`document.content`), or `document.error` `not_found`. A `repos.inspect` is answered from `extras.repoInfo` by path (default: the folder exists, on
  *  `main`). A `folder.list` is answered from `extras.folders` by its path (`extras.home`, default `/home/me`, when it has none) with its
- *  `requestId` and the Git `repos` among the entries, or with the asked path and `error` `not found`. A `session.launch` is answered as the daemon does: a `starting` session (`launched-<n>`, the message's name, harness and folder) is listed,
+ *  `requestId` and the Git `repos` among the entries, or with the asked path and `error` `not found`. A `folder.create` adds the folder to its parent there
+ *  and answers with its listing; a name already there is refused (`already exists: <name>`), as the daemon does. A `session.launch` is answered as the daemon does: a `starting` session (`launched-<n>`, the message's name, harness and folder) is listed,
  *  then `session.launched`, and LAUNCH_SETTLE_MS later it is `working`; `launches: 'manual'` leaves the answer to the test (`launched`, `refuse`).
  *  A `chat.ask` is answered from `extras.chat` as the daemon streams it: each `chat.step`, the text as one `chat.delta`, then `chat.done` with the
  *  proposal. A card's `session.launch { qid }` seats its agent as above, then broadcasts the `chat.history` where that turn's proposal has its
@@ -76,6 +77,19 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
         ws.send(JSON.stringify(f
           ? { type: 'folder.listing', ...id, path, parent: f.parent, entries: f.entries, repos: f.repos ?? [] }
           : { type: 'folder.listing', ...id, path, parent: null, entries: [], error: 'not found' }));
+      }
+      if (msg.type === 'folder.create') {
+        const at = extras.folders?.[msg.parent];
+        const id = msg.requestId === undefined ? {} : { requestId: msg.requestId };
+        const name = msg.name.trim();
+        const path = `${msg.parent === '/' ? '' : msg.parent}/${name}`;
+        if (!at) ws.send(JSON.stringify({ type: 'folder.listing', ...id, path: msg.parent, parent: null, entries: [], error: 'not found' }));
+        else if (at.entries.includes(name)) ws.send(JSON.stringify({ type: 'folder.listing', ...id, path: msg.parent, parent: at.parent, entries: at.entries, repos: at.repos ?? [], error: `already exists: ${name}` }));
+        else {
+          at.entries = [...at.entries, name].sort();
+          extras.folders![path] = { parent: msg.parent, entries: [] };
+          ws.send(JSON.stringify({ type: 'folder.listing', ...id, path, parent: msg.parent, entries: [], repos: [] }));
+        }
       }
       if (msg.type === 'repos.scan') {
         const f = extras.found?.[msg.machineId ?? 'local'] ?? { repos: [] };

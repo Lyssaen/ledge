@@ -164,7 +164,7 @@ describe('FolderPicker', () => {
   it('a path already in the list (once normalized) is refused before any check, the text stays', async () => {
     const { d, onAdd, taken, user } = await setup({ taken: (m, p) => m === 'local' && p === '/home/me/ledge' });
     await user.type(typedField('Local'), '  /home/me//ledge/ {Enter}');
-    expect(screen.getByRole('alert')).toHaveTextContent('This repository is already in the list.');
+    expect(screen.getByRole('alert')).toHaveTextContent('This folder is already in the list.');
     expect(taken).toHaveBeenCalledWith('local', '/home/me/ledge');
     expect(typedField('Local')).toHaveValue('  /home/me//ledge/ ');
     expect(inspections(d)).toEqual([]);
@@ -205,6 +205,49 @@ describe('FolderPicker', () => {
     const again = d.received.slice(asked).filter((m): m is Extract<ClientMessage, { type: 'folder.list' }> => m.type === 'folder.list');
     expect(again).toHaveLength(1);
     expect(again[0]!.path).toBeUndefined();
+  });
+
+  it('« New folder » makes a folder in the current one on the machine, then lists it ready to add, its « Add » focused; nothing is added', async () => {
+    const { d, onAdd, user, list } = await setup();
+    await user.click(screen.getByRole('button', { name: 'New folder' }));
+    const name = screen.getByRole('textbox', { name: 'Name of the new folder in /home/me on Local' });
+    expect(name).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled();
+    await user.type(name, ' api {Enter}');
+    await waitFor(() => expect(list.getByRole('button', { name: 'Add api (Local)' })).toHaveFocus());
+    expect(d.received.filter(m => m.type === 'folder.create')).toEqual([expect.objectContaining({ parent: '/home/me', name: 'api', requestId: expect.any(String) })]);
+    expect(screen.queryByRole('textbox', { name: /^Name of the new folder/ })).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('api created on Local.');
+    expect(rowOf(list.getByRole('button', { name: 'api' })).querySelector('.picker-branch')!.textContent).toBe('no Git');
+    expect(onAdd).not.toHaveBeenCalled();
+    await user.click(list.getByRole('button', { name: 'Add api (Local)' }));
+    expect(onAdd).toHaveBeenCalledWith({ machine: 'local', path: '/home/me/api', branch: null });
+  });
+
+  it('a folder that already exists, or an invalid name, is said; the name stays to fix, nothing is created', async () => {
+    const { d, user } = await setup();
+    await user.click(screen.getByRole('button', { name: 'New folder' }));
+    const name = screen.getByRole('textbox', { name: 'Name of the new folder in /home/me on Local' });
+    await user.type(name, '{Enter}');
+    expect(screen.getByRole('alert')).toHaveTextContent('Type a name for the folder.');
+    for (const bad of ['a/b', '..', '.']) {
+      await user.clear(name); await user.type(name, `${bad}{Enter}`);
+      expect(screen.getByRole('alert')).toHaveTextContent('Choose a name without /, other than . and ..');
+      expect(name).toHaveAttribute('aria-invalid', 'true');
+    }
+    expect(d.received.filter(m => m.type === 'folder.create')).toEqual([]);
+    await user.clear(name); await user.type(name, 'notes{Enter}');
+    expect(await screen.findByRole('alert')).toHaveTextContent('notes already exists here.');
+    expect(name).toHaveValue('notes');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('textbox', { name: /^Name of the new folder/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'New folder' })).toBeVisible();
+  });
+
+  it('an offline machine offers no « New folder »', async () => {
+    const { user } = await setup();
+    await user.click(screen.getByRole('radio', { name: /^NAS/ }));
+    expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
   });
 
   it('the machine chips show keyboard focus (the chip rule of launch.css, loaded with the app)', () => {
@@ -305,6 +348,51 @@ describe('useFolderListing through FolderPicker', () => {
     expect(document.querySelector('p.picker-offline')!.firstChild!.textContent).toBe('EACCES: permission denied');
   });
 
+  const creates = (sent: ClientMessage[]) => sent.filter((m): m is Extract<ClientMessage, { type: 'folder.create' }> => m.type === 'folder.create');
+  /** The picker on /home/me (one folder, a), its new-folder field open with `name` typed and sent. */
+  function creating(name: string) {
+    const f = fakeClient();
+    const view = render(<FolderPicker client={f.client} machines={[local]} taken={() => false} onAdd={vi.fn()} />);
+    f.emit({ type: 'folder.listing', requestId: lists(f.sent)[0]!.requestId!, path: '/home/me', parent: '/home', entries: ['a'] });
+    fireEvent.click(screen.getByRole('button', { name: 'New folder' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name of the new folder in /home/me on Local' }), { target: { value: name } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    return { ...f, view };
+  }
+
+  it('a creation is sent to the machine shown with its own requestId; while it runs « Create » waits, and a silence is said after 10 s', () => {
+    vi.useFakeTimers();
+    const { sent } = creating('slow');
+    expect(creates(sent)).toEqual([{ type: 'folder.create', parent: '/home/me', name: 'slow', machineId: 'local', requestId: expect.any(String) }]);
+    expect(screen.getByRole('button', { name: 'Creating…' })).toBeDisabled();
+    act(() => { vi.advanceTimersByTime(10_000); });
+    expect(screen.getByRole('alert')).toHaveTextContent('Local did not answer: check the folder before trying again.');
+    expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled();
+  });
+
+  it('a machine offline or failing to create is said, the list unchanged', () => {
+    const { sent, emit } = creating('x');
+    emit({ type: 'folder.listing', requestId: creates(sent)[0]!.requestId!, path: '/home/me', parent: null, entries: [], error: 'offline' });
+    expect(screen.getByRole('alert')).toHaveTextContent('Local is offline: the folder was not created.');
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    emit({ type: 'folder.listing', requestId: creates(sent)[1]!.requestId!, path: '/home/me', parent: '/home', entries: ['a'], error: 'cannot create x: EACCES: permission denied' });
+    expect(screen.getByRole('alert')).toHaveTextContent('The folder was not created: cannot create x: EACCES: permission denied');
+    expect(screen.getByRole('button', { name: 'a' })).toBeVisible();
+    expect(lists(sent)).toHaveLength(1);
+  });
+
+  it('a created folder lists the current folder again; another request\'s answer is ignored', () => {
+    const { sent, emit } = creating('b');
+    emit({ type: 'folder.listing', requestId: 'someone-else', path: '/home/me/b', parent: '/home/me', entries: [] });
+    expect(lists(sent)).toHaveLength(1);
+    emit({ type: 'folder.listing', requestId: creates(sent)[0]!.requestId!, path: '/home/me/b', parent: '/home/me', entries: [] });
+    expect(lists(sent)).toHaveLength(2);
+    expect(lists(sent)[1]).toMatchObject({ machineId: 'local' });
+    expect(lists(sent)[1]!.path).toBeUndefined();
+    emit({ type: 'folder.listing', requestId: lists(sent)[1]!.requestId!, path: '/home/me', parent: '/home', entries: ['a', 'b'] });
+    expect(screen.getByRole('button', { name: 'Add b (Local)' })).toHaveFocus();
+  });
+
   it('a machine dropping during a typed check says it is offline, not that the path is missing; nothing is added', () => {
     const { client, sent, emit } = fakeClient();
     const onAdd = vi.fn();
@@ -334,7 +422,7 @@ describe('useFolderListing through FolderPicker', () => {
     const ask = sent.find((m): m is Extract<ClientMessage, { type: 'repos.inspect' }> => m.type === 'repos.inspect')!;
     fireEvent.click(screen.getByRole('button', { name: 'Add ledge (Local)' }));
     emit({ type: 'repos.info', requestId: ask.requestId, repos: [{ path: '/home/me/ledge', exists: true, branch: 'main' }] });
-    expect(screen.getByRole('alert')).toHaveTextContent('This repository is already in the list.');
+    expect(screen.getByRole('alert')).toHaveTextContent('This folder is already in the list.');
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith({ machine: 'local', path: '/home/me/ledge', branch: 'main' });
     expect(screen.getByRole('button', { name: 'ledge already added' })).toBeDisabled();

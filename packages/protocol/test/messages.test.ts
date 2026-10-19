@@ -182,6 +182,12 @@ describe('protocol: browsing folders from the launch form', () => {
     expect(() => parseClientMessage({ type: 'folder.list', requestId: '' })).toThrow();
     expect(() => parseClientMessage({ type: 'folder.list', requestId: 'x'.repeat(101) })).toThrow();
   });
+  it('folder.create carries machineId and requestId too, like folder.list', () => {
+    const asked = { type: 'folder.create', parent: '/w', name: 'new', machineId: 'nas', requestId: 'c1' };
+    expect(parseClientMessage(asked)).toEqual(asked);
+    expect(() => parseClientMessage({ type: 'folder.create', parent: '/w', name: 'new', requestId: '' })).toThrow();
+    expect(() => parseClientMessage({ type: 'folder.create', parent: '/w', name: 'new', requestId: 'x'.repeat(101) })).toThrow();
+  });
   it('folder.listing carries requestId and the repositories with their branch', () => {
     const l = { type: 'folder.listing', requestId: 'r1', path: '/w', parent: '/', entries: ['a'], repos: [{ name: 'a', branch: 'main' }] };
     expect(ServerMessageSchema.parse(l)).toEqual(l);

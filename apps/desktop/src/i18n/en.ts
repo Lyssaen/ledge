@@ -189,7 +189,7 @@ export const en: Messages = {
     projects: {
       title: 'Projects',
       note: 'A project groups working repositories, on one or more machines, and their conversations. Its table shows in the atelier as soon as an agent works there.',
-      noRepo: 'No repository', edit: 'Edit', editLabel: (n) => `Edit ${n}`, delete: 'Delete', deleteLabel: (n) => `Delete ${n}`,
+      noRepo: 'No folder or repository', edit: 'Edit', editLabel: (n) => `Edit ${n}`, delete: 'Delete', deleteLabel: (n) => `Delete ${n}`,
       add: 'New project',
       rules: 'Remembered folders',
       rulesNote: 'When you file an agent without a project at a table, Ledge remembers its folder: the next sessions that start there join the same project.',
@@ -567,11 +567,11 @@ export const en: Messages = {
     agent: 'Agent',
     tools: { claude: ['Claude Code', 'Design, review'], codex: ['Codex', 'Code and tests'], cursor: ['Cursor Agent', 'In the editor'] },
     project: 'Project', machine: 'Machine', offline: 'offline', offlineTitle: 'Offline: reconnect the machine in Settings',
-    repos: (m) => `Repositories on ${m}`, noGit: 'Folder without Git', notFound: 'not found', oneRepo: (t) => `One repository only for ${t}`,
-    noRepos: (p, m) => `No repository of ${p} on ${m}.`, editProject: 'Edit the project',
+    repos: (m) => `Folders and repositories on ${m}`, noGit: 'Folder without Git', notFound: 'not found', oneRepo: (t) => `One folder or repository only for ${t}`,
+    noRepos: (p, m) => `No folder or repository of ${p} on ${m}.`, editProject: 'Edit the project',
     noProjects: 'No project yet.', noProjectsBody: 'Create a project to launch agents in it.', newProject: 'New project',
-    newAgent: 'A new agent', joins: (n, t) => `${n} will join the ${t} table`, seat: (n, m, r) => `Seat ${n} · ${m} · ${r}`, noRepo: 'no repository',
-    missing: { tool: 'Choose an agent', prompt: 'Write the instruction', machine: 'No machine online', repos: 'Choose at least one repository' },
+    newAgent: 'A new agent', joins: (n, t) => `${n} will join the ${t} table`, seat: (n, m, r) => `Seat ${n} · ${m} · ${r}`, noRepo: 'no folder or repository',
+    missing: { tool: 'Choose an agent', prompt: 'Write the instruction', machine: 'No machine online', repos: 'Choose at least one folder or repository' },
     cancel: 'Cancel', launch: 'Launch', launching: 'Launching…',
     started: (n, t) => `${n} is starting at the ${t} table.`, startedNoTable: (n) => `${n} is starting, with no project.`, refused: (m) => `Launch refused: ${m}`,
     timeout: 'The launch did not answer. Check the machine, then try again.'
@@ -584,12 +584,12 @@ export const en: Messages = {
     name: 'Name', namePlaceholder: 'E.g. Paper Rendering', color: 'Colour',
     colors: { blue: 'Blue', green: 'Green', amber: 'Amber', violet: 'Violet', teal: 'Teal', pink: 'Pink', red: 'Red', slate: 'Slate' },
     description: 'Description', optional: 'optional', descriptionPlaceholder: 'One sentence on what the project is for',
-    repos: (n) => `Working repositories · ${n}`, branchTitle: 'Default branch detected', noGit: 'Folder without Git',
-    notFound: 'not found', offline: 'offline', remove: (n, m) => `Remove ${n} (${m})`, addRepo: 'Add a repository',
-    empty: 'No repository yet. The project can exist without one, but Ledge will not be able to file sessions in it.',
+    repos: (n) => `Working folders and repositories · ${n}`, branchTitle: 'Default branch detected', noGit: 'Folder without Git',
+    notFound: 'not found', offline: 'offline', remove: (n, m) => `Remove ${n} (${m})`, addRepo: 'Add a folder or repository',
+    empty: 'No folder or repository yet. The project can exist without one, but Ledge will not be able to file sessions in it.',
     fileToo: 'Also file',
-    problems: { name_empty: 'Give the project a name', name_taken: 'This name is already used by another project', repo_duplicate: 'This repository is listed twice', gone: 'This project was deleted meanwhile',
-      repo_taken: (p) => `This repository is already in ${p}` },
+    problems: { name_empty: 'Give the project a name', name_taken: 'This name is already used by another project', repo_duplicate: 'This folder is listed twice', gone: 'This project was deleted meanwhile',
+      repo_taken: (p) => `This folder is already in ${p}` },
     refused: {
       offline: 'The local daemon is offline: nothing was saved.', outdated: 'The local daemon is too old for projects: update it.',
       invalid: 'The daemon refused this project.', timeout: 'The daemon did not confirm the save.'
@@ -658,9 +658,14 @@ export const en: Messages = {
       noGit: 'no Git', add: 'Add', added: 'Added', addLabel: (n, m) => `Add ${n} (${m})`, addedLabel: (n) => `${n} already added`,
       typed: (m) => `Path on ${m}`, typedPlaceholder: (m) => `Or type a path on ${m}`,
       offlinePath: (m) => `${m} is offline: this path cannot be checked.`, notFound: (m) => `Folder not found on ${m}.`,
-      alreadyListed: 'This repository is already in the list.', absolute: 'Type a full path, starting with /.',
+      alreadyListed: 'This folder is already in the list.', absolute: 'Type a full path, starting with /.',
       ownedBy: (p) => `Already in ${p}`, ownedLabel: (n, p) => `${n} is already in ${p}`,
-      timeout: 'The folder did not answer.', retry: 'Try again'
+      timeout: 'The folder did not answer.', retry: 'Try again',
+      newFolder: 'New folder', newFolderName: (d, m) => `Name of the new folder in ${d} on ${m}`,
+      create: 'Create', creating: 'Creating…', cancel: 'Cancel', created: (n, m) => `${n} created on ${m}.`,
+      nameEmpty: 'Type a name for the folder.', nameInvalid: 'Choose a name without /, other than . and ..',
+      exists: (n) => `${n} already exists here.`, createOffline: (m) => `${m} is offline: the folder was not created.`,
+      createTimeout: (m) => `${m} did not answer: check the folder before trying again.`, createFailed: (why) => `The folder was not created: ${why}`
     }
   },
   chat: {

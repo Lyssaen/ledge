@@ -81,6 +81,13 @@
 .picker-machines input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
 .picker{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--well)}
 .picker-machines{display:flex;flex-wrap:wrap;gap:6px}
+.picker-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+/* Not in the mockup (#32): « New folder » beside the crumbs, and its field above the list. */
+.picker-bar .picker-new{flex-shrink:0;height:24px!important;padding:0 8px!important;font-size:12px!important;gap:5px!important}
+.picker-create{display:flex;align-items:center;gap:8px}
+.picker-create>svg{flex-shrink:0;color:var(--muted-foreground)}
+.picker-create input{flex:1;min-width:0;height:32px;padding:0 10px;font-size:12px;background:var(--card);color:var(--foreground);border:1px solid var(--input);border-radius:var(--radius-md)}
+.picker-create input[aria-invalid=true]{border-color:var(--destructive)}
 .picker-crumbs{display:flex;align-items:center;flex-wrap:wrap;gap:4px;font-size:11px;color:var(--muted-foreground)}
 .picker-crumbs button{padding:2px 5px;border-radius:4px;font:inherit;color:var(--muted-foreground)}
 .picker-crumbs button:hover{background:var(--accent);color:var(--foreground)}

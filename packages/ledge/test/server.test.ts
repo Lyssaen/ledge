@@ -1467,6 +1467,10 @@ describe('server', () => {
       expect(await c.next('folder.listing')).toEqual({ type: 'folder.listing', path: join(home(), 'new-project'), parent: home(), entries: [], repos: [] });
       c.send({ type: 'folder.create', parent: '~', name: 'new-project' });
       expect(await c.next('folder.listing')).toMatchObject({ path: home(), error: 'already exists: new-project' });
+      c.send({ type: 'folder.create', parent: '~', name: 'tagged', requestId: 'c-1' });
+      expect(await c.next('folder.listing')).toMatchObject({ requestId: 'c-1', path: join(home(), 'tagged'), parent: home() });
+      c.send({ type: 'folder.create', parent: '~', name: 'tagged', requestId: 'c-2' });
+      expect(await c.next('folder.listing')).toMatchObject({ requestId: 'c-2', path: home(), error: 'already exists: tagged' });
       await expect(other.next('folder.listing', 100)).rejects.toThrow(/timeout/);
       c.close(); other.close(); await srv2.close();
     });

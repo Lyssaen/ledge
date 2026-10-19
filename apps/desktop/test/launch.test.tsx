@@ -55,15 +55,15 @@ describe('New session', () => {
     await user.keyboard('Fix it');
     await user.click(form.getByRole('checkbox', { name: /^app/ }));      // no repository left
     await user.keyboard('{Meta>}{Enter}{/Meta}');
-    expect(form.getByRole('alert')).toHaveTextContent('Choose at least one repository');
-    expect(form.getByRole('group', { name: 'Repositories on Local' })).toHaveAttribute('aria-invalid', 'true');
+    expect(form.getByRole('alert')).toHaveTextContent('Choose at least one folder or repository');
+    expect(form.getByRole('group', { name: 'Folders and repositories on Local' })).toHaveAttribute('aria-invalid', 'true');
     expect(form.getByRole('button', { name: 'Cancel' })).toBeVisible();
     expect(form.getByRole('button', { name: /Launch/ })).toHaveTextContent('Ctrl ↵');
   });
 
   it('Claude takes several repositories, Codex one; the branch shows', async () => {
     const { user, form } = await openLaunch();
-    const repos = within(form.getByRole('group', { name: 'Repositories on Local' }));
+    const repos = within(form.getByRole('group', { name: 'Folders and repositories on Local' }));
     await user.click(form.getByRole('radio', { name: /Claude Code/ }));
     expect(repos.getAllByRole('checkbox')).toHaveLength(2);
     await waitFor(() => expect(chipOf(repos.getByRole('checkbox', { name: /^app/ }))).toHaveAttribute('title', 'desktop'));
@@ -71,12 +71,12 @@ describe('New session', () => {
     await user.click(repos.getByRole('checkbox', { name: /^docs/ }));
     expect(repos.getAllByRole('checkbox', { checked: true })).toHaveLength(2);
     expect(document.querySelector('.chip-note')!.textContent).toBe('⎇ desktop');
-    expect(repos.queryByText('One repository only for Claude Code')).toBeNull();
+    expect(repos.queryByText('One folder or repository only for Claude Code')).toBeNull();
     expect(document.querySelector('.composer-preview small')!.textContent).toBe('Seat 4 · Local · app, docs');
     await user.click(form.getByRole('radio', { name: /Codex/ }));
     expect(repos.queryAllByRole('checkbox')).toHaveLength(0);
     expect(repos.getAllByRole('radio', { checked: true }).map(r => r.closest('label')!.textContent)).toEqual(['app']);
-    expect(repos.getByText('One repository only for Codex')).toBeVisible();
+    expect(repos.getByText('One folder or repository only for Codex')).toBeVisible();
     await user.click(repos.getByRole('radio', { name: /^docs/ }));
     expect(repos.getByRole('radio', { name: /^app/ })).not.toBeChecked();
     expect(document.querySelector('.chip-note')!.textContent).toBe('⎇ main');
@@ -84,7 +84,7 @@ describe('New session', () => {
 
   it('a missing folder cannot be picked, a folder without Git says so, and the first usable repository is chosen', async () => {
     const { user, form, d } = await openLaunch({ repoInfo: new Map([['/w/ledge/app', { path: '/w/ledge/app', exists: false, branch: null }], ['/w/ledge/docs', { path: '/w/ledge/docs', exists: true, branch: null }]]) });
-    const repos = within(form.getByRole('group', { name: 'Repositories on Local' }));
+    const repos = within(form.getByRole('group', { name: 'Folders and repositories on Local' }));
     await waitFor(() => expect(repos.getByRole('checkbox', { name: /^app/ })).toBeDisabled());
     expect(chipOf(repos.getByRole('checkbox', { name: /^app/ }))).toHaveTextContent('not found');
     await waitFor(() => expect(repos.getByRole('checkbox', { name: /^docs/ })).toBeChecked());
@@ -116,7 +116,7 @@ describe('New session', () => {
   it('the machine reconnecting: asked again once its snapshot is there, its branches and chosen repository come back', async () => {
     const { d, form } = await openLaunch();
     const inspections = () => d.received.filter(m => m.type === 'repos.inspect');
-    const repos = () => within(form.getByRole('group', { name: 'Repositories on Local' }));
+    const repos = () => within(form.getByRole('group', { name: 'Folders and repositories on Local' }));
     await waitFor(() => expect(chipOf(repos().getByRole('checkbox', { name: /^app/ }))).toHaveAttribute('title', 'desktop'));
     expect(inspections()).toHaveLength(1);
     await d.dropClients();
@@ -133,9 +133,9 @@ describe('New session', () => {
   it('a project with no repository on the machine says so and offers to edit it', async () => {
     const { user, form } = await openLaunch();
     await user.click(form.getByRole('radio', { name: 'Docs' }));
-    expect(form.getByText('No repository of Docs on Local.')).toBeVisible();
+    expect(form.getByText('No folder or repository of Docs on Local.')).toBeVisible();
     expect(preview()).toBe('A new agent will join the Docs table');
-    expect(document.querySelector('.composer-preview small')!.textContent).toBe('Seat 1 · Local · no repository');
+    expect(document.querySelector('.composer-preview small')!.textContent).toBe('Seat 1 · Local · no folder or repository');
     await user.click(form.getByRole('button', { name: 'Edit the project' }));
     expect(screen.getByRole('dialog', { name: 'Edit Docs' })).toBeVisible();
     expect(screen.queryByRole('dialog', { name: 'New session' })).toBeNull();
@@ -192,12 +192,12 @@ describe('LaunchComposer and its machines', () => {
     const user = userEvent.setup();
     const view = render(<LaunchComposer {...props(client, [local, nas])} />);
     await user.click(screen.getByRole('radio', { name: 'Nas' }));
-    expect(screen.getByRole('group', { name: 'Repositories on Nas' })).toBeVisible();
+    expect(screen.getByRole('group', { name: 'Folders and repositories on Nas' })).toBeVisible();
     expect(sent.at(-1)).toMatchObject({ type: 'repos.inspect', paths: ['/srv/ledge'], machineId: 'nas' });
     view.rerender(<LaunchComposer {...props(client, [local, down(nas)])} />);
     expect(screen.getByRole('radio', { name: 'Local' })).toBeChecked();
     expect(screen.getByRole('radio', { name: /^Nas/ })).toBeDisabled();
-    expect(screen.getByRole('group', { name: 'Repositories on Local' })).toBeVisible();
+    expect(screen.getByRole('group', { name: 'Folders and repositories on Local' })).toBeVisible();
     view.rerender(<LaunchComposer {...props(client, [down(local), down(nas)])} />);
     await user.click(screen.getByRole('radio', { name: /Cursor Agent/ }));
     await user.type(screen.getByRole('textbox', { name: 'Instruction' }), 'Go');
