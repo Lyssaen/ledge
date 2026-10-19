@@ -15,12 +15,17 @@ describe('channel', () => {
     expect(await cdev.open(await cpc.seal('session.decide accept'))).toBe('session.decide accept');
     expect(await cpc.open(await cdev.seal('é ✓'))).toBe('é ✓');
   });
-  it('refuses a replayed or reordered frame', async () => {
+  it('refuses a replayed frame as replay', async () => {
     const { cpc, cdev } = await pair();
-    const a = await cpc.seal('a'), b = await cpc.seal('b');
-    await expect(cdev.open(b)).rejects.toMatchObject({ code: 'replay' });
+    const a = await cpc.seal('a');
     expect(await cdev.open(a)).toBe('a');
     await expect(cdev.open(a)).rejects.toMatchObject({ code: 'replay' });
+  });
+  it('refuses a frame past a missing one as gap', async () => {
+    const { cpc, cdev } = await pair();
+    const a = await cpc.seal('a'), b = await cpc.seal('b');
+    await expect(cdev.open(b)).rejects.toMatchObject({ code: 'gap' });
+    expect(await cdev.open(a)).toBe('a');
   });
   it('refuses a flipped bit', async () => {
     const { cpc, cdev } = await pair();

@@ -105,9 +105,10 @@ export async function startHandshake(self: Identity, role: Role, peerPublicKey: 
         const frame = fromB64u(sealed);
         if (frame.length < SEQ_BYTES + TAG_BYTES) throw new SealError('bad_seal', 'frame too short');
         const seq = frame.slice(0, SEQ_BYTES);
-        if (new DataView(seq.buffer).getBigUint64(0) !== BigInt(recvSeq)) {
-          throw new SealError('replay', 'unexpected sequence number');
-        }
+        const got = new DataView(seq.buffer).getBigUint64(0);
+        // A gap means a frame was lost (e.g. refused by the relay): the channel cannot resume, re-handshake.
+        if (got > BigInt(recvSeq)) throw new SealError('gap', 'a frame is missing before this one');
+        if (got < BigInt(recvSeq)) throw new SealError('replay', 'frame already seen');
         let plain: ArrayBuffer;
         try {
           plain = await subtle.decrypt(params(seq), recvKey, frame.slice(SEQ_BYTES));
