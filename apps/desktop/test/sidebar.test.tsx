@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, within } from '@testing-library/react';
 import { activeCount } from '../src/nav/agents';
 import { boot, closeDaemons, listSessions, TWO_PROJECTS } from './helpers';
+import { MESSAGES } from '../src/i18n/messages';
 
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
@@ -60,30 +61,32 @@ describe('the sidebar shell', () => {
     expect(css).toMatch(/\.st-keys:focus-within \.st-keys-tip/);
   });
 
-  it('shows the tree shortcuts at the foot of the sidebar', async () => {
-    const { side } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
-    const hint = side.getByText(/move/).closest('.st-hint');
-    expect(hint).toBeVisible();
-    expect(hint).toHaveTextContent(/↑/);
-    expect(hint).toHaveTextContent(/↓/);
-    expect(hint).toHaveTextContent(/←/);
-    expect(hint).toHaveTextContent(/→/);
-    expect(hint).toHaveTextContent(/E/);
-    expect(hint).toHaveTextContent(/H/);
-    expect(hint).toHaveTextContent(/Ctrl ⇧ E/);
-  });
-
-  it('the hint starts with N new session in the overview, and drops it inside a session', async () => {
+  it('no shortcut reminder at the foot of the sidebar, in the overview or in a session: the ? holds them (#51)', async () => {
     const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
-    const hint = () => document.querySelector('.st-hint')!;
-    expect(hint().textContent).toMatch(/^Nnew session · /);
-    await user.keyboard('n');
-    expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible();
-    await user.keyboard('{Escape}');
+    const reminder = () => {
+      expect(document.querySelector('.st-hint')).toBeNull();
+      for (const text of ['new session', 'move', 'fold', 'Ctrl ⇧ E']) expect(side.queryByText(text, { ignore: '.st-keys-tip *' })).toBeNull();
+    };
+    reminder();
     await user.click(side.getByRole('button', { name: /^Nova/ }));
     expect(banner().getByText('Nova')).toBeVisible();
-    expect(hint().textContent).not.toMatch(/new session/);
-    expect(hint()).toHaveTextContent(/move/);
+    reminder();
+    expect(readFileSync(resolve(__dirname, '../src/styles/sidebar.css'), 'utf8')).not.toMatch(/st-hint/);
+  });
+
+  it('the sidebar keys join the shortcuts list: in the ? tooltip and in its dialog, in English and in French (#51)', async () => {
+    const sidebarRows = { en: [['← / →', 'Fold / unfold a project (sidebar)'], ['E', 'Archive the selected session'], ['H', 'Show / hide the finished sessions'], ['Ctrl ⇧ E', 'Focus the sidebar']], fr: [['← / →', 'Plier / déplier un projet (barre latérale)'], ['E', 'Archiver la session sélectionnée'], ['H', 'Afficher / masquer les sessions terminées'], ['Ctrl ⇧ E', 'Aller à la barre latérale']] } as const;
+    for (const lang of ['en', 'fr'] as const) for (const row of sidebarRows[lang]) expect(MESSAGES[lang].shortcuts.rows).toContainEqual(row);
+    const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
+    const help = side.getByRole('button', { name: 'Keyboard shortcuts', exact: true });
+    const tip = document.getElementById(help.getAttribute('aria-describedby')!)!;
+    await user.click(help);
+    const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    // The tooltip's row holds its keys; the dialog's keys sit beside the action.
+    for (const [keys, action] of sidebarRows.en) {
+      expect(within(tip).getByText(action).querySelector('kbd')).toHaveTextContent(keys);
+      expect(within(dialog).getByText(action).parentElement!.querySelector('kbd')).toHaveTextContent(keys);
+    }
   });
 
   it('the machine chips open Settings › Machines; the gear opens Settings', async () => {
