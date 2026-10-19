@@ -372,3 +372,16 @@ describe('session management messages', () => {
     expect(isArchived({ archivedAt: '2026-10-18T10:00:00.000Z' })).toBe(true);
   });
 });
+
+describe('session.message and message.ack', () => {
+  const message = { type: 'session.message', rid: 'r1', from: 'ab12', to: 'Otto [fce8]', text: 'Vas-y', summary: 'OK', intercept: true };
+  it('parses a full session.message and refuses an empty text', () => {
+    expect(parseClientMessage(message)).toEqual(message);
+    expect(() => parseClientMessage({ ...message, text: '' })).toThrow();
+  });
+  it('parses a message.ack and refuses an unknown outcome', () => {
+    const ack = { type: 'message.ack', rid: 'r1', outcome: 'refused', reason: 'x' };
+    expect(parseServerMessage(ack)).toEqual(ack);
+    expect(() => parseServerMessage({ ...ack, outcome: 'sent' })).toThrow();
+  });
+});

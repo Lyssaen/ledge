@@ -104,10 +104,13 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('projects'), projects: ProjectsSchema }),
   /** The island's settings shared by the local fronts; null until a front sets them (the island then sends its own). Local clients only. */
   z.object({ type: z.literal('island'), prefs: IslandPrefsSchema.nullable() }),
+  /** The daemon's immediate answer to a `session.message`: delivered (`accepted`), held for later (`queued`), left to Claude's own SendMessage (`native`), or refused with a `reason`. */
+  z.object({ type: z.literal('message.ack'), rid: z.string(), outcome: z.enum(['accepted', 'queued', 'native', 'refused']), reason: z.string().optional() }),
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
     /** Ce que le front doit reconnaître au-delà du texte (NOTE_NOT_TYPED) ; une chaîne libre, qu'un front plus ancien ignore. */ code: z.string().optional() })
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
+export type MessageAck = Extract<ServerMessage, { type: 'message.ack' }>;
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.route'), qid: z.string().min(1).max(100), text: z.string().min(1).max(20000), tool: ToolSchema.optional(), context: RoutingContextSchema }),
@@ -173,7 +176,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** Replaces the local daemon's projects and rules as a whole; refused unless valid. */
   z.object({ type: z.literal('projects.set'), projects: ProjectsSchema }),
   /** Replaces the island's settings as a whole; refused unless valid. */
-  z.object({ type: z.literal('island.set'), prefs: IslandPrefsSchema })
+  z.object({ type: z.literal('island.set'), prefs: IslandPrefsSchema }),
+  /** One session writing to another by Ledge name (`to` may end in ` [ref]`); `intercept` (the Claude hook): answer `native` unless `to` is a live non-Claude session. */
+  z.object({ type: z.literal('session.message'), rid: z.string().min(1), from: z.string().min(1), to: z.string().min(1), text: z.string().min(1), summary: z.string().optional(), intercept: z.boolean().optional() })
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
