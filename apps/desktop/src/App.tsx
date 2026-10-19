@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { daemonStore, projectOf, useDaemon, useIsland, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { daemonStore, projectOf, useDaemon, useIsland, useMobile, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -69,6 +69,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
   const projects = useProjects(fleetClient);
   const island = useIsland(fleetClient);
+  const mobile = useMobile(fleetClient);
   const tokenMissing = useTokenMissing(daemonTokenSource());
   const { t, lang } = useI18n();
   const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
@@ -223,7 +224,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // What the Settings page's sections receive; « Setting saved · … » goes through the app's toast, once per accepted change
   // (in the language just chosen, for the language itself: the render that speaks it has not happened yet).
   const settings: SettingsContext = {
-    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, projectIdOf, sessions, dispatch, alerts, daemonUpdate,
+    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, mobile, projectIdOf, sessions, dispatch, alerts, daemonUpdate,
     lang, setLang, paused: nav.paused
   };
 

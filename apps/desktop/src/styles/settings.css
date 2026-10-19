@@ -239,3 +239,34 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 
 /* Settings › About: the installed version's notes and its GitHub release (#26). */
 .about-notes { display: flex; gap: 8px; margin-top: 12px; }
+
+/* Settings › Mobile access (docs/mockups/mobile-access/mobile-access.css): only the new pieces. */
+/* The section tab: a device asks for access (the brand colour, where Machines' offline dot is amber). */
+.side-alert.mob-ask{background:var(--sidebar-primary)}
+/* Card « Connexion ». */
+.relay-url{width:290px;max-width:100%;border:1px solid var(--input);border-radius:var(--radius-md);color:var(--foreground);font-family:'Geist Mono',ui-monospace,monospace}
+.set-fieldset:disabled .relay-url{cursor:not-allowed}
+.gh-account{display:inline-flex;align-items:center;gap:8px;margin-right:4px;font-size:13px}
+.gh-account strong{font-weight:500}
+.gh-avatar{width:22px;height:22px;display:grid;place-items:center;border-radius:50%;background:var(--accent);border:1px solid var(--input);font-size:11px;font-weight:600;color:var(--muted-foreground)}
+.set-row:not(.stack) .set-control:has(.gh-account){gap:4px}
+.device-flow{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:14px 16px;border-radius:var(--radius-lg);background:var(--well);border:1px solid var(--input)}
+.device-flow-lead{font-size:12px;color:var(--muted-foreground)}
+.user-code{font-family:'Geist Mono',ui-monospace,monospace;font-size:30px;line-height:38px;font-weight:500;letter-spacing:.14em;color:var(--foreground);user-select:all}
+.device-flow .set-actions{margin-top:0;gap:8px}
+.device-flow-wait{align-self:stretch;display:flex;align-items:center;gap:8px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--muted-foreground)}
+.device-flow-wait .ledge-spin{display:inline-flex}
+.relay-status{display:flex;align-items:center;gap:12px}
+.raw-error{display:block;width:max-content;max-width:100%;margin-top:6px}
+/* Card « Appareils ». */
+.set-rows>.devices-off{margin:10px 0 4px;color:var(--muted-foreground)}
+.devices-off>svg{color:var(--muted-foreground)}
+.devices-empty{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;padding:14px 0}
+.devices-empty p{margin:0;font-size:12px;line-height:18px;color:var(--muted-foreground)}
+.devices-empty strong{display:block;margin-bottom:2px;font-size:13px;font-weight:500;color:var(--foreground)}
+.devices-empty code{font:11px 'Geist Mono',monospace;color:var(--foreground);background:var(--well);border:1px solid var(--border);border-radius:4px;padding:0 4px}
+.pending-entry{margin:0 -18px;padding:14px 18px;background:color-mix(in srgb,var(--sidebar-primary) 7%,transparent)}
+.set-rows>.pending-entry:first-child{border-top:0}
+.pending-entry .machine-glyph{color:var(--sidebar-primary);border-color:color-mix(in srgb,var(--sidebar-primary) 40%,var(--input))}
+.pending-entry .machine-main>.set-actions{margin-left:0}
+.pending-what{font-size:13px;color:var(--muted-foreground)}
