@@ -26,9 +26,10 @@ export function crossSession(text: string): { from: string; name?: string; text:
 const LEDGE_CLOSE = '</ledge-message>';
 const LEDGE_BLOCK = /^<ledge-message\b([^>]*)>([\s\S]*?)(?:<\/ledge-message>(?![\s\S]*<\/ledge-message>)|$)/;
 export function formatLedgeMessage(m: { from: string; tool: Tool; text: string; to: Tool }): string {
-  const body = m.text.replaceAll(LEDGE_CLOSE, '<\\/ledge-message>').replace(/\r?\n/g, ' ⏎ ');
-  const reply = m.to === 'codex' ? `ledge send ${m.from} "…"` : `SendMessage vers ${m.from}`;
-  return `<ledge-message from="${m.from.replaceAll('"', '')}" tool="${m.tool}">${body}${LEDGE_CLOSE} (message de la session ${m.from}, pas de l'utilisateur ; pour répondre : ${reply})`;
+  const from = m.from.replace(/["<>\r\n]/g, '');
+  const body = m.text.replaceAll(LEDGE_CLOSE, '<\\/ledge-message>').replace(/\r\n|\r|\n/g, ' ⏎ ');
+  const reply = m.to === 'codex' ? `ledge send ${from} "…"` : `SendMessage vers ${from}`;
+  return `<ledge-message from="${from}" tool="${m.tool}">${body}${LEDGE_CLOSE} (message de la session ${from}, pas de l'utilisateur ; pour répondre : ${reply})`;
 }
 export function ledgeMessages(text: string): { from: string; tool?: string; text: string }[] | undefined {
   const m = LEDGE_BLOCK.exec(text.trimStart());

@@ -59,6 +59,13 @@ describe('ledge messages (spec 2026-10-19 codex messaging §3.2)', () => {
   it('round-trips, and tolerates a prompt cut before the closing tag', () => {
     expect(ledgeMessages('<ledge-message from="Pim" tool="codex">début du mes')).toEqual([{ from: 'Pim', tool: 'codex', text: 'début du mes' }]);
   });
+  it('keeps one clean sender name and folds any line break', () => {
+    const line = formatLedgeMessage({ from: 'Pi"m>', tool: 'codex', text: 'a\rb\r\nc', to: 'codex' });
+    expect(line).not.toMatch(/[\r\n]/);
+    expect(ledgeMessages(line)).toEqual([{ from: 'Pim', tool: 'codex', text: 'a ⏎ b ⏎ c' }]);
+    expect(line).toContain('session Pim,');
+    expect(line).toContain('ledge send Pim "…")');
+  });
   it('is undefined for any other prompt', () => {
     expect(ledgeMessages('Lance les tests')).toBeUndefined();
   });
