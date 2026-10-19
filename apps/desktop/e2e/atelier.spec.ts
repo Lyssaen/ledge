@@ -48,6 +48,34 @@ test('at fit nothing scrolls; Ctrl + wheel zooms under the pointer; + - 0', asyn
   await expect(level(page)).toHaveText(fitted!);
 });
 
+test('two fingers pinch the floor, not the window: the zoom follows them, the page stays at scale 1', async ({ page }) => {
+  await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
+  await page.goto('/');
+  const ledge = page.getByRole('region', { name: 'Ledge table' });
+  await expect(ledge).toBeVisible();
+  const fit = await pct(page);
+  const seat = ledge.locator('.agent-seat:not(.helper-seat)').first();
+  const s0 = center((await seat.boundingBox())!);
+  // A real touchscreen pinch, through the DevTools protocol: two fingers 80 px apart around the seat, spread to 240.
+  const cdp = await page.context().newCDPSession(page);
+  const fingers = (gap: number) => [{ x: s0.x - gap / 2, y: s0.y, id: 1 }, { x: s0.x + gap / 2, y: s0.y, id: 2 }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: fingers(80) });
+  for (let gap = 100; gap <= 240; gap += 20) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: fingers(gap) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect.poll(() => pct(page)).toBeGreaterThan(fit * 2);
+  expect(await page.evaluate(() => window.visualViewport?.scale ?? 1), 'the WebView did not zoom the whole page').toBe(1);
+  const s1 = center((await seat.boundingBox())!);
+  expect(Math.hypot(s1.x - s0.x, s1.y - s0.y), 'the seat stays between the fingers').toBeLessThan(60);
+  // One finger pans the zoomed floor.
+  const before = await scroller(page).evaluate(el => ({ left: el.scrollLeft, top: el.scrollTop }));
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 600, y: 400, id: 3 }] });
+  for (let i = 1; i <= 5; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 600 - i * 20, y: 400 - i * 10, id: 3 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  const after = await scroller(page).evaluate(el => ({ left: el.scrollLeft, top: el.scrollTop }));
+  expect(after.left - before.left).toBeCloseTo(100, -1);
+  expect(after.top - before.top).toBeCloseTo(50, -1);
+});
+
 test('double-click frames a table, the floor fits again; legend and zoom bar stay put; dragging the floor pans', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
   await page.goto('/');
