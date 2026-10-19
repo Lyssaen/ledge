@@ -50,3 +50,9 @@ if (typeof document !== 'undefined') {
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 }
+
+// jsdom has no canvas and logs « Not implemented » when asked for one, as xterm does once loaded (with the session page's
+// chunk): no context, as a browser without canvas answers. Tests that paint stub their own.
+if (typeof HTMLCanvasElement !== 'undefined') {
+  HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext;
+}

@@ -7,9 +7,15 @@
 /* The session place (observatory.css: .conversation-workspace, .conversation, .pane-heading, .messages, the terminal; office.css:
    the « N sous-agents » pill, .pane-meta). Departure: no rail of the project's agents on the left, the sidebar tree has them.
    First, so the session's own rules below win as in the mockup. The mockup's !important (office.css over observatory.css)
-   is not needed: the grid is declared once, here. Departure: the terminal shows the daemon's read-only preview, no prompt. */
+   is not needed: the grid is declared once, here. The terminal's column is --term-width of the place (Workspace), its handle
+   in a zero-wide track on the thread's border; enlarged, the column is alone. */
 .conversation-workspace{display:grid;grid-template-columns:minmax(0,1fr);flex:1;min-height:0}
-.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}
+.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1fr) 0 minmax(0,calc(var(--term-width) * 100%))}
+.conversation-workspace.term-maxed{grid-template-columns:minmax(0,1fr)}
+.term-maxed>.conversation{display:none}
+.term-handle{width:7px;margin-left:-4px;z-index:4;cursor:col-resize;position:relative;outline:none}
+.term-handle:after{content:'';position:absolute;inset:0 3px;transition:background .15s}
+.term-handle:hover:after,.term-handle:focus-visible:after,.term-handle:active:after{background:var(--ring)}
 .conversation,.terminal-pane{min-width:0;min-height:0;display:flex;flex-direction:column}
 .conversation{border-right:1px solid var(--border);background:var(--sidebar)}
 .pane-heading{height:43px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 20px;font-size:12px}
@@ -19,11 +25,9 @@
 .terminal-pane{background:var(--well)}
 .terminal-content{padding:18px 20px;flex:1;overflow:auto;font-size:11px;line-height:21px}
 .terminal-content>.muted:first-child{font-size:10px}
-.terminal-prompt{color:var(--success)}
 .terminal-output{white-space:pre-wrap;overflow-wrap:anywhere;margin:25px 0}
 .terminal-content>.terminal-output:first-child{margin-top:0}
 .terminal-footer{border-top:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted-foreground)}
-.terminal-footer .ledge-btn{height:26px!important;font-size:11px!important;padding:0 8px!important}
 /* The embedded terminal (the mockup's TermPane): tabs in the heading, a banner under it, the xterm in the body. */
 .pane-heading.term-heading{gap:4px;padding:0 8px 0 0}
 .term-title{display:flex;align-items:center;gap:8px;padding-left:20px}
@@ -49,7 +53,7 @@
 .kids-pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--muted-foreground)}
 .kids-pill:hover{color:var(--foreground);border-color:var(--input)}
 .kids-pill:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
-@media(max-width:1000px){.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:1000px){.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1fr)}.term-handle{display:none}}
 @media(max-width:850px){.conversation-workspace{grid-template-columns:1fr;overflow:auto;display:flex;flex-direction:column}.conversation{min-height:520px;flex-shrink:0}.terminal-pane{min-height:310px;flex-shrink:0;border-top:1px solid var(--border)}.messages{max-height:480px}}
 @media(max-width:540px){.messages{padding:18px}}
 

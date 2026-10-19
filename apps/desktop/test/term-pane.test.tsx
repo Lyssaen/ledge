@@ -11,6 +11,7 @@ import { TermStore, agentTabId, type TermDeps } from '../src/term/store';
 import { TermStoreContext } from '../src/term/useTerms';
 import { agentMode } from '../src/term/mode';
 import { TermPane } from '../src/session/TermPane';
+import { tildeHome } from '../src/term/home';
 
 const env = vi.hoisted(() => ({ backend: null as PtyBackend | null, opened: true }));
 vi.mock('../src/term/backend', () => ({ ptyBackend: () => env.backend }));
@@ -66,10 +67,11 @@ function makeStore(over: Partial<TermDeps> = {}) {
   });
 }
 
+const NO_MACHINES: readonly unknown[] = [];
 /** What Workspace does around the pane (Task 7): it shows the agent tab while the pane is open. */
-function Pane({ session, helper = null, maxed = false, on = {} }: { session: Session; helper?: { id: string; name: string } | null; maxed?: boolean; on?: Partial<Record<'notify' | 'onMax' | 'onClose' | 'onGoParent', () => void>> }): JSX.Element {
+function Pane({ session, helper = null, maxed = false, on = {}, machines = NO_MACHINES }: { session: Session; helper?: { id: string; name: string } | null; maxed?: boolean; on?: Partial<Record<'notify' | 'onMax' | 'onClose' | 'onGoParent', () => void>>; machines?: readonly unknown[] }): JSX.Element {
   useLayoutEffect(() => { store.showAgent(session.id, agentMode(session, helper, env.backend !== null)); }, [session, helper]);
-  const client = { send: () => {}, fleet: { retry } } as unknown as DaemonClient;
+  const client = { send: () => {}, fleet: { retry, machines: () => machines, subscribe: () => () => {} } } as unknown as DaemonClient;
   return (
     <LangProvider lang="fr">
       <TermStoreContext.Provider value={store}>
@@ -387,4 +389,34 @@ it('a shell that ended without a code says so plainly', async () => {
   expect(screen.getByText('Shell terminé')).toBeInTheDocument();
   expect(screen.queryByText(/code null/)).toBeNull();
   expect(screen.getByRole('button', { name: 'Rouvrir' })).toBeInTheDocument();
+});
+
+it('the home shortens to ~ on whole segments only, and a path is left as is without a known home', () => {
+  expect(tildeHome('/home/u/soft/ledge', '/home/u')).toBe('~/soft/ledge');
+  expect(tildeHome('/home/u', '/home/u/')).toBe('~');
+  expect(tildeHome('/home/u2/soft', '/home/u')).toBe('/home/u2/soft');
+  expect(tildeHome('/srv/app', '/home/u')).toBe('/srv/app');
+  expect(tildeHome('/home/u/soft', undefined)).toBe('/home/u/soft');
+  expect(tildeHome('/home/u/soft', '/')).toBe('/home/u/soft');
+});
+
+it("the shell's label and first line name the folder from the machine's home; the tab keeps the real folder", async () => {
+  makeStore({ shellPlace: () => ({ dir: '/home/u/soft/ledge', remote: false }) });
+  const machines = [{ id: 'local', daemon: { version: '1', install: 'npm', systemd: true, home: '/home/u' } }];
+  render(<Pane session={nova} machines={machines} />);
+  await tick();
+  fireEvent.click(screen.getByRole('tab', { name: 'Shell · ~/soft/ledge' }));
+  await tick();
+  expect(surfaceOf('nova#shell-1')!.written[0]).toBe('Shell ouvert dans le dossier de Nova : ~/soft/ledge\r\n');
+  expect(store.tabs('nova')[1]).toMatchObject({ dir: '/home/u/soft/ledge' });
+});
+
+it("an older daemon gives no home: the shell's label and first line show the raw folder", async () => {
+  makeStore({ shellPlace: () => ({ dir: '/home/u/soft/ledge', remote: false }) });
+  const machines = [{ id: 'local', daemon: { version: '1', install: 'npm', systemd: true } }];
+  render(<Pane session={nova} machines={machines} />);
+  await tick();
+  fireEvent.click(screen.getByRole('tab', { name: 'Shell · /home/u/soft/ledge' }));
+  await tick();
+  expect(surfaceOf('nova#shell-1')!.written[0]).toBe('Shell ouvert dans le dossier de Nova : /home/u/soft/ledge\r\n');
 });

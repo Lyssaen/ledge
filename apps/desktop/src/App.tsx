@@ -48,15 +48,53 @@ import { useSessionActions } from './manage/useSessionActions';
 import { useSessionMenu } from './manage/useSessionMenu';
 import { SessionMenuHost } from './manage/SessionMenu';
 import { ConfirmDialog } from './manage/ConfirmDialog';
-import { SessionPlace } from './session/lazy';
+import { loadedWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
 import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
+import { ptyBackend } from './term/backend';
+import { TermStore } from './term/store';
+import { termTheme } from './term/theme';
+import { TermStoreContext } from './term/useTerms';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { useDefaultTool } from './settings/tool';
 
 const NO_PROJECTS: readonly Project[] = [];
+
+/** Ledge's terminal colours as the root's tokens give them now. */
+const rootTermTheme = () => termTheme(getComputedStyle(document.documentElement));
+
+/** The app's one terminal store: its shells and the agent's screen live as long as the window, whatever the place. Its xterms
+ *  follow the theme once the root has taken it (`data-theme`, set by useAppearance after this component's own effects). */
+function useTermStore(client: DaemonClient): TermStore {
+  const [store] = useState(() => new TermStore({
+    backend: ptyBackend(),
+    // xterm comes with the session page's chunk (out of the first bundle): only its pane and Workspace make the store draw, so
+    // the chunk is there by then. The focus key's way back to the thread comes with the keyboard's wiring.
+    surface: () => {
+      const chunk = loadedWorkspace();
+      if (!chunk) throw new Error('a terminal is drawn only once the session page has loaded');
+      return chunk.createSurface({ theme: rootTermTheme(), onThread: () => {} });
+    },
+    agentArgv: (id, readOnly) => client.fleet?.terminal(id, { readOnly }) ?? null,
+    shellArgv: id => client.fleet?.shell(id) ?? null,
+    // Shell 1 opens where the session works (its worktree, else its folder), over ssh when its machine is reached that way.
+    shellPlace: id => {
+      const { sessions, archived } = daemonStore.getState();
+      const s = sessions.find(x => x.id === id) ?? archived.find(x => x.id === id);
+      const machine = client.fleet?.machines().find(m => m.id === s?.machineId);
+      return { dir: s ? s.workdir ?? s.cwd : '~', remote: !!machine?.ssh };
+    }
+  }));
+  useEffect(() => {
+    const root = document.documentElement;
+    const mo = new MutationObserver(() => store.setTheme(rootTermTheme()));
+    mo.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => mo.disconnect();
+  }, [store]);
+  return store;
+}
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
@@ -67,6 +105,7 @@ const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'rec
 function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): Promise<'ok' | 'failed'> }) {
   const fleetView = useFleet(client);
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
+  const termStore = useTermStore(fleetClient);
   const projects = useProjects(fleetClient);
   const island = useIsland(fleetClient);
   const tokenMissing = useTokenMissing(daemonTokenSource());
@@ -223,7 +262,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // included, takes neither clicks nor the focus.
   const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew;
   return (
-    <ScreenKeysContext.Provider value={screenKeys}>
+    <ScreenKeysContext.Provider value={screenKeys}><TermStoreContext.Provider value={termStore}>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
@@ -266,7 +305,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <Toast notice={notice} action={noticeAction} onAction={undo} />
-    </ScreenKeysContext.Provider>
+    </TermStoreContext.Provider></ScreenKeysContext.Provider>
   );
 }
 

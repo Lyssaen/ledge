@@ -1,5 +1,6 @@
 import type { PtyBackend, PtyHandle } from './backend';
 import type { TermSurface } from './surface';
+import type { TermTheme } from './theme';
 import { reconnectDelay, type AgentMode } from './mode';
 
 export type Tab = { kind: 'agent'; id: string }
@@ -109,6 +110,9 @@ export class TermStore {
     this.connect();
     this.emit();
   }
+
+  /** Every xterm still open takes Ledge's new colours; the next ones are made with them. */
+  setTheme(theme: TermTheme): void { for (const s of this.surfaces.values()) s.setTheme(theme); }
 
   link(sessionId: string): AgentLink { return this.entries.get(sessionId)?.link ?? OFF; }
 

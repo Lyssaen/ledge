@@ -488,7 +488,7 @@ export const fr = {
     },
     terminal: {
       title: 'Terminal', empty: 'Aucune sortie reçue pour l’instant.',
-      open: 'Ouvrir dans un terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`,
+      resize: 'Largeur du terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`,
       agentTab: (n: string) => `${n} · agent`, shellTab: (n: number, dir: string) => `${n === 1 ? 'Shell' : `Shell ${n}`} · ${dir}`,
       addShell: 'Nouveau shell', closeTab: (label: string) => `Fermer ${label}`,
       local: 'wsl', remote: (host: string) => `ssh · ${host}`,

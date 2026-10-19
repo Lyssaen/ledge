@@ -193,6 +193,19 @@ describe('TermStore tabs and shells', () => {
     expect(opened.closed).toBe(false);
   });
 
+  it('a new theme reaches every xterm still open', async () => {
+    const made: (FakeSurface & { themes: unknown[] })[] = [];
+    const st = store({ surface: () => { const s = Object.assign(fakeSurface(), { themes: [] as unknown[] }); s.setTheme = t => { s.themes.push(t); }; made.push(s); return s; } });
+    const [, one] = st.tabs('local:a');
+    st.select('local:a', one!.id);
+    const two = st.addShell('local:a', '/r', false); st.select('local:a', two);
+    st.showAgent('local:a', { kind: 'live' }); await tick();
+    st.close('local:a', two);
+    st.setTheme({ background: '#ffffff' });
+    expect(made).toHaveLength(3);
+    expect(made.map(s => s.themes)).toEqual([[{ background: '#ffffff' }], [], [{ background: '#ffffff' }]]);
+  });
+
   it('notifies subscribers on changes, until they unsubscribe', async () => {
     const st = store(); const fn = vi.fn();
     const off = st.subscribe(fn); const [, shell] = st.tabs('local:a');

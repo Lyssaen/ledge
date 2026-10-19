@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type FocusEvent, type JSX, type ReactNode } from 'react';
-import { useDaemon, type DaemonClient } from '@ledge/fleet';
+import { useDaemon, useMachines, type DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -8,6 +8,7 @@ import { machineOf } from '../nav/agents';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { ptyBackend } from '../term/backend';
+import { tildeHome } from '../term/home';
 import { backquoteLabel } from '../term/keys';
 import { agentMode } from '../term/mode';
 import { agentTabId, type Tab } from '../term/store';
@@ -41,6 +42,9 @@ export function TermPane(p: TermPaneProps): JSX.Element {
   const remote = !!session.machineId && session.machineId !== 'local';
   const host = remote ? machineOf(session) : tt.local;
   const tab = tabs.find(x => x.id === active) ?? tabs[0]!;
+  // Folders read from the session's machine's home (`~/…`) when its daemon gives it.
+  const home = useMachines(p.client).find(m => m.id === (session.machineId ?? 'local'))?.daemon?.home;
+  const folder = (dir: string) => tildeHome(dir, home);
   // live or parent with nothing attached (no argv for it): the preview, without the « hors de Ledge » banner.
   const screen = mode.kind === 'live' || mode.kind === 'parent' || mode.kind === 'offline' ? agentSurface : undefined;
   const shown: TermSurface | undefined = tab.kind === 'agent' ? screen : activeSurface;
@@ -66,7 +70,7 @@ export function TermPane(p: TermPaneProps): JSX.Element {
     return () => ro.disconnect();
   }, [shown]);
 
-  const label = (x: Tab) => (x.kind === 'agent' ? tt.agentTab(session.name) : tt.shellTab(x.n, x.dir));
+  const label = (x: Tab) => (x.kind === 'agent' ? tt.agentTab(session.name) : tt.shellTab(x.n, folder(x.dir)));
   /** Starts or restarts a shell through `act`, its first line saying where it runs, before the shell's own output. */
   const starting = (id: string, act: () => void) => {
     const before = store.surface(id);
@@ -74,7 +78,7 @@ export function TermPane(p: TermPaneProps): JSX.Element {
     act();
     const after = store.tabs(sid).find((x): x is ShellTab => x.id === id && x.kind === 'shell');
     if (!after || after.status !== 'running' || (was?.kind === 'shell' && was.status === 'running')) return;
-    const intro = after.remote ? tt.shellIntroSsh(host, session.name, after.dir) : tt.shellIntro(session.name, after.dir);
+    const intro = after.remote ? tt.shellIntroSsh(host, session.name, folder(after.dir)) : tt.shellIntro(session.name, folder(after.dir));
     store.surface(id)?.write(`${before ? '\r\n' : ''}${intro}\r\n`);
   };
   const select = (id: string) => starting(id, () => store.select(sid, id));
