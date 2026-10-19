@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { WebSocketServer } from 'ws';
-import { sendMessage } from '../src/cli/send.js';
+import { sendMessage, parseLedgeCommand } from '../src/cli/send.js';
 
 /** A daemon that answers every `session.message` with `ack`, and keeps what it received. */
 async function fakeDaemon(ack: { outcome: string; reason?: string } | null) {
@@ -72,5 +72,26 @@ describe('ledge send', () => {
   it('bad usage prints the usage line', async () => {
     const usage = 'ledge send <nom> "<message>" [--summary <texte>]   write to another Ledge session';
     for (const args of [[], ['Pim'], ['Pim', 'a', 'b'], ['Pim', 'a', '--summary']]) expect(await sendMessage(args, { port: 1, env: { LEDGE_SESSION: 'a' } })).toEqual({ line: usage, code: 1 });
+  });
+});
+
+describe('parseLedgeCommand', () => {
+  it('reads a lone `ledge who` and `ledge send`', () => {
+    expect(parseLedgeCommand('ledge who')).toEqual({ cmd: 'who' });
+    expect(parseLedgeCommand('  ledge who \n')).toEqual({ cmd: 'who' });
+    expect(parseLedgeCommand('ledge send Otto "Tests verts\nje pousse"')).toEqual({ cmd: 'send', args: ['Otto', 'Tests verts\nje pousse'] });
+    expect(parseLedgeCommand("ledge send Otto 'coût: $5'")).toEqual({ cmd: 'send', args: ['Otto', 'coût: $5'] });
+    expect(parseLedgeCommand('ledge send Otto "dit \\"oui\\""')).toEqual({ cmd: 'send', args: ['Otto', 'dit "oui"'] });
+    expect(parseLedgeCommand('ledge send Otto "a;b|c&d" --summary x#y')).toEqual({ cmd: 'send', args: ['Otto', 'a;b|c&d', '--summary', 'x#y'] });
+    expect(parseLedgeCommand('ledge send Otto ""')).toEqual({ cmd: 'send', args: ['Otto', ''] });
+  });
+  it('rejects anything else', () => {
+    for (const c of [
+      'ledge who --all', 'ledge', 'ledge sendx Otto hi', 'ls', 'FOO=1 ledge who', '/usr/bin/ledge who', '',
+      'ledge send Otto "a" && rm -rf x', 'ledge send Otto "a" ; ls', 'ledge send Otto "a" | cat', 'ledge send Otto "a" &',
+      'ledge send Otto "$(cat f)"', 'ledge send Otto "`id`"', 'ledge send Otto $HOME', 'ledge send Otto $(id)', 'ledge send Otto `id`',
+      'ledge send Otto "x" > f', 'ledge send Otto "x" < f', 'ledge who\nls', '(ledge who)', 'ledge send Otto hi # c', '#ledge who',
+      'ledge send Otto "x', "ledge send Otto 'x", 'ledge send Otto a\;ls', 'ledge send Otto a\\ b'
+    ]) expect(parseLedgeCommand(c), c).toBeUndefined();
   });
 });

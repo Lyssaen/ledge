@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
+import { formatWho } from '../src/cli/who.js';
 import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, identityContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
 import type { Session } from '@ledge/protocol';
 import { startServer } from '../src/daemon/server.js';
@@ -347,6 +348,70 @@ describe('runHook: Claude SendMessage to a Codex', () => {
     const store = new Store(); store.upsert(pim());
     const srv = await startServer({ store, tmux, port: 0 });
     try { expect(await runHook('PreToolUse', send(), { port: srv.port, tool: 'codex' })).toBeUndefined(); } finally { await srv.close(); }
+  });
+});
+
+describe('runHook: Codex runs `ledge send` and `ledge who` itself', () => {
+  const sess = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'codex', cwd: '/w/api', project: 'api', title: `${name} · api`, tmuxSession: `ledge-${id}`, state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...extra });
+  const bash = (command: unknown) => JSON.stringify({ session_id: 'thread-b', hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } });
+  const reason = (out: string | undefined) => (JSON.parse(out!) as { hookSpecificOutput: { hookEventName: string; permissionDecision: string; permissionDecisionReason: string } }).hookSpecificOutput;
+  const tmux = { async setOption() {}, async capture() { return ''; }, async sendText() {}, async sendKeys() {} } as never;
+  beforeEach(() => { process.env.LEDGE_CODEX_HOOK_SESSION = 'b'; });
+  const fake = async (ack?: string) => {
+    const got: Array<Record<string, unknown>> = [];
+    const { WebSocketServer } = await import('ws');
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' }); await new Promise(r => wss.once('listening', r));
+    wss.on('connection', ws => {
+      ws.send(JSON.stringify({ type: 'snapshot', sessions: [sess('a', 'Otto'), sess('b', 'Pim')] }));
+      ws.on('message', d => { const m = JSON.parse(String(d)); got.push(m); if (ack && m.type === 'session.message') ws.send(JSON.stringify({ type: 'message.ack', rid: m.rid, outcome: ack })); });
+    });
+    return { got, port: (wss.address() as { port: number }).port, close: () => wss.close() };
+  };
+
+  it('`ledge send` reaches the daemon after the session.event, and the output is the deny reason', async () => {
+    const d = await fake('accepted');
+    try {
+      expect(reason(await runHook('PreToolUse', bash("ledge send Otto 'Salut'"), { port: d.port, tool: 'codex' }))).toEqual({ hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'remis à Otto' });
+      expect(d.got.map(m => m.type)).toEqual(['session.event', 'session.message']);
+      expect(d.got[1]).toMatchObject({ type: 'session.message', from: 'b', to: 'Otto', text: 'Salut' });
+      expect(d.got[1]).not.toHaveProperty('intercept');
+    } finally { d.close(); }
+  });
+  it('a busy target says it is queued', async () => {
+    const d = await fake('queued');
+    try { expect(reason(await runHook('PreToolUse', bash('ledge send Otto Salut'), { port: d.port, tool: 'codex' })).permissionDecisionReason).toBe("Otto est occupé : il le recevra dès qu'il sera libre"); } finally { d.close(); }
+  });
+  it('a daemon that never acks reports it (the message may be gone), within 2 s', async () => {
+    const d = await fake();
+    const t0 = Date.now();
+    try {
+      expect(reason(await runHook('PreToolUse', bash('ledge send Otto Salut'), { port: d.port, tool: 'codex' })).permissionDecisionReason).toBe('pas de réponse de Ledge : le message est peut-être déjà parti');
+      expect(Date.now() - t0).toBeLessThan(2000);
+    } finally { d.close(); }
+  });
+  it('`ledge who` answers with the directory', async () => {
+    const store = new Store(); store.upsert(sess('a', 'Otto')); store.upsert(sess('b', 'Pim'));
+    const srv = await startServer({ store, tmux, port: 0 });
+    const spy = await connect({ port: srv.port }); const snap = await spy.next('snapshot');
+    try {
+      expect(reason(await runHook('PreToolUse', bash('ledge who'), { port: srv.port, tool: 'codex' })).permissionDecisionReason).toBe(formatWho(snap.sessions, 'b'));
+    } finally { await spy.close(); await srv.close(); }
+  });
+  it('anything else proceeds, and nothing but the event is sent', async () => {
+    const d = await fake('accepted');
+    try {
+      for (const c of ['ls -la', 'ledge who && ls', 'ledge send Otto "$(id)"', 42]) expect(await runHook('PreToolUse', bash(c), { port: d.port, tool: 'codex' })).toBeUndefined();
+      expect(d.got.map(m => m.type)).toEqual(['session.event', 'session.event', 'session.event', 'session.event']);
+    } finally { d.close(); }
+  });
+  it('Claude\'s Bash is never run by the hook', async () => {
+    const d = await fake('accepted');
+    try { expect(await runHook('PreToolUse', bash('ledge who'), { port: d.port })).toBeUndefined(); } finally { d.close(); }
+  });
+  it('with no daemon listening, it resolves undefined within 2 s', async () => {
+    const t0 = Date.now();
+    expect(await runHook('PreToolUse', bash('ledge who'), { port: 1, tool: 'codex' })).toBeUndefined();
+    expect(Date.now() - t0).toBeLessThan(2000);
   });
 });
 

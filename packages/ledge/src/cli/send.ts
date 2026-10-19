@@ -37,3 +37,34 @@ export async function sendMessage(args: string[], opts: { port?: number; env?: N
     return { line: sent ? 'pas de réponse de Ledge : le message est peut-être déjà parti' : `refusé : ${(e as Error).message}`, code: 1 };
   } finally { await client.close(); }
 }
+
+/**
+ * Reads a shell command as exactly one `ledge who` or `ledge send …`, nothing else: Codex's hook runs it itself, outside
+ * the sandbox, so anything a shell would do beyond a plain word list (chaining, pipes, redirections, substitution,
+ * comments, an unquoted backslash) makes it `undefined`, as does an unclosed quote.
+ */
+export function parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'send'; args: string[] } | undefined {
+  const words: string[] = [];
+  let word = ''; let inWord = false; let quote: '"' | "'" | undefined;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i]!;
+    if (quote === "'") { if (c === "'") quote = undefined; else word += c; continue; }
+    if (quote === '"') {
+      if (c === '"') quote = undefined;
+      else if (c === '$' || c === '`') return undefined;
+      else if (c === '\\' && '"\\$`'.includes(command[i + 1] ?? '')) word += command[++i];
+      else word += c;
+      continue;
+    }
+    if (c === ' ' || c === '\t' || c === '\n' || c === '\r') { if (inWord) words.push(word); word = ''; inWord = false; continue; }
+    if (';&|<>()$`\\'.includes(c) || (c === '#' && !inWord)) return undefined;
+    inWord = true;
+    if (c === '"' || c === "'") quote = c; else word += c;
+  }
+  if (quote) return undefined;
+  if (inWord) words.push(word);
+  if (words[0] !== 'ledge') return undefined;
+  if (words[1] === 'who' && words.length === 2) return { cmd: 'who' };
+  if (words[1] === 'send') return { cmd: 'send', args: words.slice(2) };
+  return undefined;
+}
