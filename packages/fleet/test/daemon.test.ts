@@ -335,6 +335,19 @@ describe('daemon token', () => {
     client.close();
   });
 
+  it('keeps the cached token after a connection that opened and then dropped', async () => {
+    await authed();
+    const read = vi.fn(async (): Promise<TokenRead> => ({ kind: 'token', token: T }));
+    const client = createDaemonClient({ url: mock.url, token: createTokenSource(read), WebSocketImpl: WebSocket as never, minBackoffMs: 50 });
+    client.connect();
+    await vi.waitFor(() => expect(client.status()).toBe('open'));
+    await mock.dropClients();
+    await vi.waitFor(() => expect(mock.handshakes).toHaveLength(2));
+    await vi.waitFor(() => expect(client.status()).toBe('open'));
+    expect(read).toHaveBeenCalledTimes(1);
+    client.close();
+  });
+
   it('reconnects on its own to a daemon restarted with a fresh token', async () => {
     await authed();
     let current = T;

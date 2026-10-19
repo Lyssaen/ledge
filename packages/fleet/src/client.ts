@@ -16,7 +16,7 @@ export function createDaemonClient(opts: { url: string; token?: TokenSource; Web
   const Ws = (opts.WebSocketImpl ?? (globalThis as unknown as { WebSocket: WsCtor }).WebSocket);
   const min = opts.minBackoffMs ?? 2000, max = opts.maxBackoffMs ?? 30000, token = opts.token;
   let ws: WsLike | null = null, status: DaemonStatus = 'connecting', backoff = min, timer: ReturnType<typeof setTimeout> | null = null, closed = false;
-  /** A drop or a failed read since the last snapshot: the cached token may be stale (a daemon restarted with a new one), so the next read is fresh. */
+  /** A connection that never opened, or a failed read, since the last snapshot: the cached token may be stale (a daemon restarted with a new one), so the next read is fresh. */
   let failed = false;
   /** Bumped by each open() and close(): a token read answers only the attempt that asked for it. */
   let attempt = 0;
@@ -37,10 +37,12 @@ export function createDaemonClient(opts: { url: string; token?: TokenSource; Web
   }
   function dial(sock: WsLike) {
     ws = sock;
-    sock.onopen = () => { if (ws !== sock) return; setStatus('open'); };
+    // Only a socket that never opened casts doubt on the cached token; a peer that opened and then dropped (remote offline) keeps it.
+    let opened = false;
+    sock.onopen = () => { if (ws !== sock) return; opened = true; setStatus('open'); };
     sock.onmessage = ev => { if (ws !== sock) return; try { const m = parseServerMessage(JSON.parse(String(ev.data))); if (m.type === 'snapshot') { backoff = min; failed = false; } msgFns.forEach(f => f(m)); } catch { /* ignore malformed */ } };
     sock.onerror = () => { /* onclose follows */ };
-    sock.onclose = () => { if (ws !== sock) return; ws = null; failed = true; setStatus('unreachable'); schedule(); };
+    sock.onclose = () => { if (ws !== sock) return; ws = null; if (!opened) failed = true; setStatus('unreachable'); schedule(); };
   }
   return {
     // An explicit connect (a « Reconnect ») says « connecting » at once, even after a drop: the automatic retries stay « unreachable ».
