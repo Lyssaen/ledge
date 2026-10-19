@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons } from './helpers';
 
@@ -7,6 +7,12 @@ beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); vi.unstubAllEnvs(); await closeDaemons(); });
 
 const bar = () => within(screen.getByRole('toolbar', { name: 'Atelier zoom' }));
+// jsdom has no PointerEvent: a MouseEvent carrying the pointer's id and type.
+const touch = (type: string, el: Element, pointerId: number, clientX: number, clientY: number) => act(() => {
+  const e = new MouseEvent(type, { clientX, clientY, bubbles: true, cancelable: true });
+  Object.defineProperties(e, { pointerId: { value: pointerId }, pointerType: { value: 'touch' } });
+  el.dispatchEvent(e);
+});
 
 describe('the atelier zoom', () => {
   it('the zoom bar: − and + step by 1.2, the percentage goes back to 100 %, Fit is pressed when fitted', async () => {
@@ -118,6 +124,46 @@ describe('the atelier zoom', () => {
     // Stepping down one notch at a time took 71 here (and froze a real window for about two seconds); bisecting takes 21.
     expect(layouts).toBeLessThanOrEqual(30);
   });
+  it('two fingers pinch the zoom around their midpoint and carry the view along; one finger pans, from anywhere', async () => {
+    const { user } = await boot();
+    const scroller = document.querySelector<HTMLElement>('.overview-scroll.atelier')!;
+    const shell = scroller.querySelector<HTMLElement>('.office-shell')!;
+    let zoom = 1, left = 0, top = 0;
+    const width = () => Math.max(800, Math.round(1000 * zoom)), height = () => Math.max(600, Math.round(750 * zoom));
+    const clamp = () => { left = Math.max(0, Math.min(left, width() - 800)); top = Math.max(0, Math.min(top, height() - 600)); };
+    const props: Record<string, PropertyDescriptor> = {
+      clientWidth: { get: () => 800 }, clientHeight: { get: () => 600 }, offsetWidth: { get: () => 800 }, offsetHeight: { get: () => 600 },
+      scrollWidth: { get: width }, scrollHeight: { get: height },
+      scrollLeft: { get: () => left, set: (v: number) => { left = v; clamp(); } },
+      scrollTop: { get: () => top, set: (v: number) => { top = v; clamp(); } }
+    };
+    for (const [k, p] of Object.entries(props)) Object.defineProperty(scroller, k, { configurable: true, ...p });
+    Object.defineProperty(shell.style, 'zoom', { configurable: true, get: () => String(zoom), set: (v: string) => { zoom = Number(v) || 1; clamp(); } });
+    const level = () => bar().getByRole('button', { name: 'Back to 100 %' });
+    const seat = screen.getAllByRole('button', { name: /,/ }).find(b => b.closest('.agent-seat'))!;
+    // Fingers 200 px apart, then 400: twice the zoom; the midpoint moves 100 px right and the floor follows it.
+    touch('pointerdown', shell, 1, 300, 300);
+    touch('pointerdown', seat, 2, 500, 300);
+    touch('pointermove', seat, 2, 700, 300);
+    expect(level()).toHaveTextContent('200 %');
+    expect(scroller).not.toHaveClass('fitted');
+    expect(scroller.scrollLeft).toBe(400 * 2 - 500);
+    expect(scroller.scrollTop).toBe(300 * 2 - 300);
+    touch('pointerup', seat, 2, 700, 300);
+    // The finger left behind pans from where it is, without a jump.
+    touch('pointermove', shell, 1, 300, 300);
+    expect(scroller.scrollLeft).toBe(300);
+    touch('pointerup', shell, 1, 300, 300);
+    // One finger, even on a seat, pans once it has moved past a tap.
+    touch('pointerdown', seat, 3, 400, 400);
+    touch('pointermove', seat, 3, 300, 350);
+    expect(scroller.scrollLeft).toBe(400);
+    expect(scroller.scrollTop).toBe(350);
+    touch('pointerup', seat, 3, 300, 350);
+    expect(level()).toHaveTextContent('200 %');
+    await user.keyboard('0');
+    expect(bar().getByRole('button', { name: /Fit/ })).toHaveAttribute('aria-pressed', 'true');
+  });
   it('a double-click on the floor refits; the zoom bar titles its buttons and shows its hint', async () => {
     const { user } = await boot();
     await user.keyboard('++');
@@ -125,6 +171,6 @@ describe('the atelier zoom', () => {
     fireEvent.doubleClick(scroller.querySelector('.office-shell')!);
     expect(bar().getByRole('button', { name: /Fit/ })).toHaveAttribute('aria-pressed', 'true');
     expect(bar().getByRole('button', { name: 'Zoom out' })).toHaveAttribute('title', 'Zoom out (−)');
-    expect(screen.getByRole('toolbar', { name: 'Atelier zoom' }).querySelector('.zoom-hint')).toHaveTextContent('Ctrl + wheel · drag the floor · double-click a table');
+    expect(screen.getByRole('toolbar', { name: 'Atelier zoom' }).querySelector('.zoom-hint')).toHaveTextContent('Ctrl + wheel or pinch · drag the floor · double-click a table');
   });
 });
