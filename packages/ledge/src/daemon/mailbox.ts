@@ -1,4 +1,4 @@
-import { isArchived, type ClientMessage, type MessageAck, type Session } from '@ledge/protocol';
+import { isArchived, type ClientMessage, type MessageAck, type Session, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import { formatLedgeMessage } from './crossSession.js';
 import { free } from './relay.js';
@@ -17,7 +17,7 @@ export interface MailboxDeps {
 }
 export interface Mailbox { submit(m: Extract<ClientMessage, { type: 'session.message' }>): MessageAck; kick(id: string): void; close(): void }
 
-interface Queued { rid: string; from: string; target: string; text: string }
+interface Queued { rid: string; from: string; sender: { name: string; tool: Tool }; target: string; text: string }
 /** How many rids are remembered for the dedupe: past it the oldest are forgotten. */
 const MAX_SEEN = 1000;
 
@@ -32,14 +32,15 @@ export function createMailbox(d: MailboxDeps): Mailbox {
   const ready = (id: string) => free(d.store.get(id)) && !d.typing.has(id) && !d.relayQueued(id);
 
   async function deliver(m: Queued): Promise<void> {
-    const s = d.store.get(m.target); const sender = d.store.get(m.from);
-    if (!s || !sender) { d.sent.mark(m.from, m.rid, 'failed'); return; }
+    const s = d.store.get(m.target);
+    if (!s) { d.sent.mark(m.from, m.rid, 'failed'); queueMicrotask(() => kick(m.target)); return; }
     d.typing.add(m.target);
     try {
       let refused: string | null;
-      try { refused = await d.replyTo(m.target, formatLedgeMessage({ from: sender.name, tool: sender.tool, text: m.text, to: s.tool })); } catch (e) { refused = (e as Error).message; }
+      try { refused = await d.replyTo(m.target, formatLedgeMessage({ from: m.sender.name, tool: m.sender.tool, text: m.text, to: s.tool })); } catch (e) { refused = (e as Error).message; }
       if (refused) log(`message ${m.rid} to ${m.target} failed: ${refused}`);
       d.sent.mark(m.from, m.rid, refused ? 'failed' : 'delivered');
+      // A refusal leaves the session's state unchanged, so a queued relay card waits for the next store change; only the mailbox retries at once.
       if (refused) queueMicrotask(() => kick(m.target));
     } finally { d.typing.delete(m.target); }
   }
@@ -80,11 +81,12 @@ export function createMailbox(d: MailboxDeps): Mailbox {
       if (m.intercept && (!t || t.tool === 'claude')) return remember(m.rid, { type: 'message.ack', rid: m.rid, outcome: 'native' });
       const refuse = (reason: string): MessageAck => ({ type: 'message.ack', rid: m.rid, outcome: 'refused', reason });
       if (!t) return refuse(`aucune session Ledge nommée ${m.to}`);
-      if (!d.store.get(m.from)) return refuse('session émettrice inconnue');
+      const sender = d.store.get(m.from);
+      if (!sender) return refuse('session émettrice inconnue');
       if (t.source === 'hook_only' || !t.tmuxSession) return refuse(`${t.name} n'a pas été lancée par Ledge : impossible de lui écrire`);
       d.sent.record(m.from, { rid: m.rid, at: now(), to: t.name, peer: t.id, text: m.text, ...(m.summary ? { summary: m.summary } : {}) });
       const outcome = ready(t.id) ? 'accepted' : 'queued';
-      queue.push({ rid: m.rid, from: m.from, target: t.id, text: m.text });
+      queue.push({ rid: m.rid, from: m.from, sender: { name: sender.name, tool: sender.tool }, target: t.id, text: m.text });
       const ack = remember(m.rid, { type: 'message.ack', rid: m.rid, outcome });
       if (outcome === 'accepted') kick(t.id);
       return ack;

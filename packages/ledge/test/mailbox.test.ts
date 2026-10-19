@@ -15,16 +15,16 @@ const msg = (extra: Partial<Extract<ClientMessage, { type: 'session.message' }>>
   ({ type: 'session.message', rid: 'r1', from: 's1', to: 'Pim', text: 'Salut', ...extra });
 
 let store: Store; let typed: Array<[string, string]>; let sentCalls: unknown[][]; let relayQueued: (id: string) => boolean;
-let answer: (id: string, text: string) => Promise<string | null>; let box: Mailbox;
+let typing: Set<string>; let answer: (id: string, text: string) => Promise<string | null>; let box: Mailbox;
 const setState = (id: string, state: Session['state']) => store.upsert({ ...store.get(id)!, state });
 const flush = () => new Promise(r => setTimeout(r, 0));
 const sent: MailboxDeps['sent'] = { record: (...a) => { sentCalls.push(['record', ...a]); }, mark: (...a) => { sentCalls.push(['mark', ...a]); } };
 
 beforeEach(() => {
   store = new Store({ journalPath: join(mkdtempSync(join(tmpdir(), 'mailbox-')), 'j.json') });
-  typed = []; sentCalls = []; relayQueued = () => false; answer = async () => null;
+  typing = new Set(); typed = []; sentCalls = []; relayQueued = () => false; answer = async () => null;
   store.upsert(mk('s1', { state: 'idle' })); store.upsert(pim());
-  box = createMailbox({ store, typing: new Set(), sent, now: () => T0, relayQueued: id => relayQueued(id),
+  box = createMailbox({ store, typing, sent, now: () => T0, relayQueued: id => relayQueued(id),
     replyTo: (id, text) => { typed.push([id, text]); return answer(id, text); } });
 });
 
@@ -48,6 +48,22 @@ describe('createMailbox', () => {
     store.upsert(pim({ pending: { kind: 'permission', text: 'Bash', source: 'hook' } }));
     expect(box.submit(msg())).toMatchObject({ outcome: 'queued' });
     await flush(); expect(typed).toEqual([]);
+    store.upsert(pim()); await flush();
+    expect(typed).toHaveLength(1);
+  });
+
+  it('a target already being typed into (the shared lock) is queued, nothing typed', async () => {
+    typing.add('s2');
+    expect(box.submit(msg())).toMatchObject({ outcome: 'queued' });
+    await flush(); expect(typed).toEqual([]);
+  });
+
+  it('a sender removed while the message waits does not fail it', async () => {
+    store.upsert(pim({ state: 'working' }));
+    box.submit(msg());
+    store.remove('s1'); setState('s2', 'idle'); await flush();
+    expect(typed[0]![1]).toContain('from="Otto"');
+    expect(sentCalls).toContainEqual(['mark', 's1', 'r1', 'delivered']);
   });
 
   it('a queued chat relay goes first', async () => {
@@ -58,7 +74,7 @@ describe('createMailbox', () => {
     expect(typed).toHaveLength(1);
   });
 
-  it('one per free moment, oldest first', async () => {
+  it('oldest first; the next waits for the target to be free again', async () => {
     store.upsert(pim({ state: 'working' }));
     answer = async id => { setState(id, 'working'); return null; };
     box.submit(msg({ rid: 'r1', text: 'un' })); box.submit(msg({ rid: 'r2', text: 'deux' }));

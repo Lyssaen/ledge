@@ -245,4 +245,14 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     expect(next).toEqual(['s1']);
     relay.close();
   });
+
+  it('a session already being typed into by someone else (shared lock) is not delivered to', async () => {
+    store.upsert(mk('s1', { state: 'idle' }));
+    const c = fakeChat({ q1: otto('a') });
+    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast, typing: new Set(['s1']) });
+    await relay.request('q1');
+    expect(c.map.get('q1')!.status).toBe('queued');
+    expect(typed).toEqual([]);
+    relay.close();
+  });
 });
