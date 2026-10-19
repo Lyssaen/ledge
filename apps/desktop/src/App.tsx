@@ -34,6 +34,8 @@ import { openWhatsNew, useWhatsNew } from './update/whatsNew';
 import { WhatsNew } from './update/WhatsNew';
 import { useLaunch } from './launch/useLaunch';
 import { Atelier } from './atelier/Atelier';
+import { AtelierAway } from './atelier/Away';
+import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
 import { Modal } from './shell/Modal';
 import { SearchPalette } from './shell/SearchPalette';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
@@ -87,6 +89,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   }), []);
   // « Open in Ledge » from the island: the shell has already brought the window forward; this shows what was asked.
   useEffect(() => onOpenTarget(raw => { const target = parseTarget(raw); if (target) dispatch(targetAction(target)); }), []);
+  // The Atelier in its own window (#21): what it opens shows here, this window brought forward; its closing gives it back.
+  const [detached, setDetached] = useState(false);
+  useEffect(() => {
+    void atelierOpen().then(open => { if (open) setDetached(true); });
+    return onAtelier({ action: a => { dispatch(a); showMainWindow(); }, closed: () => setDetached(false) });
+  }, []);
+  const detach = () => { void detachAtelier().then(ok => { if (ok) setDetached(true); }); };
+  const attach = () => { attachAtelier(); setDetached(false); };
   // The tray speaks the app's language and names the way back from do not disturb.
   const [dnd] = useDnd();
   useEffect(() => {
@@ -227,11 +237,12 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent} />
         <section className="workspace">
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
-            onRevealArchives={() => setRevealArchives(n => n + 1)}
+            onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
+            : detached ? <AtelierAway onShow={detach} onAttach={attach} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>

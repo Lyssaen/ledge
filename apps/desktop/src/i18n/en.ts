@@ -679,6 +679,11 @@ export const en: Messages = {
     skipped: (from: string) => `You came from Ledge ${from}: the notes of the versions in between are on the GitHub releases.`,
     release: 'GitHub release', all: 'All releases', later: 'Later', update: 'Update', open: 'What’s new'
   },
+  detached: {
+    detach: 'Detach the Atelier', detachTitle: 'Open the Atelier in its own window',
+    away: 'The Atelier is in its own window', awayBody: 'The sessions you open there show here.',
+    show: 'Show the Atelier', attach: 'Bring it back here', attachTitle: 'Put the Atelier back in the main window'
+  },
   time: { seconds: (n: number) => `${n}s`, minutes: (n: number) => `${n}m`, hours: (n: number) => `${n}h`, locale: 'en-US' },
   offline: 'The local daemon is offline.',
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },

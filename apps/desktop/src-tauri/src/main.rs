@@ -17,6 +17,8 @@ const TRAY_QUIT: &str = "quit";
 const MINIMIZED: &str = "--minimized";
 /// The Ledge Desktop window; the notch is the other one.
 const MAIN: &str = "main";
+/// The detached Atelier (#21), declared in tauri.conf.json but made only when asked.
+const ATELIER: &str = "atelier";
 
 #[derive(Clone, Serialize)]
 struct TrayPayload { action: String }
@@ -62,6 +64,23 @@ fn open_in_ledge(app: AppHandle, target: String) -> Result<(), String> {
     show_main(&app);
     deliver_open(&app, target);
     Ok(())
+}
+/// « Détacher l'Atelier »: makes its window from its declaration (the same WebView2 flags as the others, or it fails to open),
+/// or brings it forward when it is already there. An ordinary window: neither the notch's placement nor its focus.
+/// Async: making a window in a sync command deadlocks on Windows.
+#[tauri::command]
+async fn open_atelier(app: AppHandle) -> Result<(), String> {
+    let window = match app.get_webview_window(ATELIER) {
+        Some(w) => w,
+        None => {
+            let config = app.config().app.windows.iter().find(|w| w.label == ATELIER).cloned().ok_or("no atelier window")?;
+            tauri::WebviewWindowBuilder::from_config(&app, &config).map_err(|e| e.to_string())?.build().map_err(|e| e.to_string())?
+        }
+    };
+    // Created hidden: the window-state plugin has put it back where it was, show it now.
+    let _ = window.unminimize();
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())
 }
 #[tauri::command]
 fn get_autostart(app: AppHandle) -> Option<bool> {
@@ -174,7 +193,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             focus_terminal, foreground_is_terminal, open_terminal, open_url, get_autostart, set_autostart, set_tray_labels, take_open_target,
             open_in_ledge, notch::set_frame, notch::set_hot_zone, notch::set_outside_watch, notch::focus_overlay, notch::release_focus,
-            notch::list_monitors, notch::set_monitor,
+            notch::list_monitors, notch::set_monitor, open_atelier,
         ])
         .setup(|app| {
             build_tray(app)?;
@@ -231,6 +250,8 @@ mod tests {
         assert_eq!(on_close("main"), CloseAction::Hide);
         assert_eq!(on_close("notch"), CloseAction::Ignore);
         assert_eq!(on_close("other"), CloseAction::Close);
+        // the detached Atelier really closes: the main window takes the Atelier back
+        assert_eq!(on_close("atelier"), CloseAction::Close);
     }
 
     #[test]

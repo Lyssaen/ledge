@@ -9,6 +9,7 @@ import { loadLang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
 import { bootLanguages, BOOT_FAILURE } from './i18n/boot';
 import { recordToastsForTests } from './shell/Toast';
+import { isAtelierWindow } from './atelier/detach';
 
 purgeObsolete();
 
@@ -18,11 +19,14 @@ if (import.meta.env.VITE_LEDGE_E2E) (window as unknown as { __ledgeToasts?: stri
 
 // The chosen language's strings and French (the fallback) come first, each in its own chunk, read locally: the window
 // stays empty only for that instant. The other language loads when it is asked for. If no table loads, a bilingual line says so.
-void bootLanguages(loadMessages, loadLang()).then(boot => {
+// The detached Atelier's window (#21) loads the same page: it shows the Atelier alone, and leaves the updates to the main window.
+const atelier = isAtelierWindow();
+void Promise.all([bootLanguages(loadMessages, loadLang()), atelier]).then(async ([boot, alone]) => {
   const root = document.getElementById('root')!;
+  if (boot.ok && alone) { const { AtelierApp } = await import('./atelier/AtelierWindow'); createRoot(root).render(<AtelierApp lang={boot.lang} />); return; }
   if (boot.ok) { createRoot(root).render(<App lang={boot.lang} />); return; }
   root.setAttribute('role', 'alert');
   root.replaceChildren(...BOOT_FAILURE.map(line => Object.assign(document.createElement('p'), { textContent: line })));
 });
-void updater.start();
+void atelier.then(alone => { if (!alone) void updater.start(); });
 void applyUiScale(loadUiScale());

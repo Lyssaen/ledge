@@ -708,6 +708,12 @@ export const fr = {
     skipped: (from: string) => `Vous veniez de Ledge ${from} : les notes des versions intermédiaires sont sur les releases GitHub.`,
     release: 'Release GitHub', all: 'Toutes les releases', later: 'Plus tard', update: 'Mettre à jour', open: 'Nouveautés'
   },
+  /** The detached Atelier (#21): its own window, beside the session the main window keeps. */
+  detached: {
+    detach: 'Détacher l’Atelier', detachTitle: 'Ouvrir l’Atelier dans sa propre fenêtre',
+    away: 'L’Atelier est dans sa propre fenêtre', awayBody: 'Les sessions que vous y ouvrez s’affichent ici.',
+    show: 'Afficher l’Atelier', attach: 'Rattacher ici', attachTitle: 'Remettre l’Atelier dans la fenêtre principale'
+  },
   time: { seconds: (n: number) => `${n} s`, minutes: (n: number) => `${n} min`, hours: (n: number) => `${n} h`, locale: 'fr-FR' },
   /** Why the chat cannot send while the local daemon is away. */
   offline: 'Le daemon local est hors ligne.',

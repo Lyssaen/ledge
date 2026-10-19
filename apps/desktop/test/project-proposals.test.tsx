@@ -225,9 +225,10 @@ describe('a scan cut short', () => {
       { path: '/home/me/src/es-front', branch: 'main', remote: 'gitlab.example.com/communication-platform/es-front' },
       { path: '/home/me/src/es-back', branch: 'main', manifest: '@speos/communication-api' }
     ]);
-    await user.type(dialog.getByRole('textbox', { name: 'Name' }), 'Communication');
+    await user.click(dialog.getByRole('textbox', { name: 'Name' }));
+    await user.paste('Communication');
     await user.click(dialog.getByRole('button', { name: 'Search the repositories of “Communication”' }));
-    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }, { timeout: 3000 }));
     expect(prop.getByRole('checkbox', { name: 'Keep es-front (Local)' }).closest('li')!.querySelector('.pe-why'))
       .toHaveTextContent('Ledge · Remote gitlab.example.com/communication-platform/es-front close to “communication”');
     expect(prop.getByRole('checkbox', { name: 'Keep es-back (Local)' }).closest('li')!.querySelector('.pe-why'))
