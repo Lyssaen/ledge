@@ -11,7 +11,7 @@ import { parseLaunchArgs, ensureDaemon, attachEnv, agentEnv, launch } from '../s
 import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { killTestServer, until } from './helpers.js';
-import { realTmux, type Tmux } from '../src/tmux.js';
+import { realTmux, run, type Tmux } from '../src/tmux.js';
 
 const agent = fileURLToPath(new URL('./fake-agent.mjs', import.meta.url));
 const noop: Tmux = { async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return ''; }, async hasSession() { return false; }, async listSessions() { return []; }, async setOption() {}, async killSession() {}, attachArgs: () => [] };
@@ -115,6 +115,10 @@ describe('agentEnv', () => {
   it('keeps the launcher environment, drops TMUX and TMUX_*, and adds the Ledge variables last', () => {
     const env = agentEnv({ PATH: '/usr/bin', AWS_PROFILE: 'dev', TMUX: 'x', TMUX_PANE: '%1', TMUX_TMPDIR: '/t', LEDGE_SESSION: 'outer', GONE: undefined }, { LEDGE_SESSION: 'ab12', LEDGE_NAME: 'Otto' });
     expect(env).toEqual({ PATH: '/usr/bin', AWS_PROFILE: 'dev', LEDGE_SESSION: 'ab12', LEDGE_NAME: 'Otto' });
+  });
+  it('drops the variables a launching Claude Code session leaves behind, keeps the user\'s Claude settings', () => {
+    const env = agentEnv({ PATH: '/usr/bin', CLAUDECODE: '1', CLAUDE_CODE_CHILD_SESSION: '1', CLAUDE_CODE_SESSION_ID: 's', CLAUDE_CODE_ENTRYPOINT: 'cli', CLAUDE_CODE_MESSAGING_SOCKET: '/s', CLAUDE_PID: '42', CLAUDE_CONFIG_DIR: '/c', CLAUDE_CODE_ENABLE_TELEMETRY: '1' }, { LEDGE_NAME: 'Iris' });
+    expect(env).toEqual({ PATH: '/usr/bin', CLAUDE_CONFIG_DIR: '/c', CLAUDE_CODE_ENABLE_TELEMETRY: '1', LEDGE_NAME: 'Iris' });
   });
 });
 
@@ -244,5 +248,16 @@ describe('spawnSession', () => {
     const tmux = { async newSession(o: { name: string }) { created.push(o); } } as unknown as Tmux;
     const s = await spawnSession({ tool: 'claude', id: 'ab12', args: ['--resume', 'u-1'], cwd: '/tmp', tmux, taken: { names: [], ids: ['ab12'] } });
     expect(s.id).toBe('ab12'); expect(created[0]!.name).toBe('ledge-ab12');
+  });
+  it('starts the agent without a launching Claude Code session\'s variables, even from the tmux server\'s global environment', async () => {
+    const socket = `ledge-test-env-${process.pid}-${Date.now()}`;
+    const tmux = realTmux(socket, { scope: async () => false });
+    try {
+      await tmux.newSession({ name: 'warm', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
+      await run(['-L', socket, 'set-environment', '-g', 'CLAUDE_CODE_CHILD_SESSION', '1']);
+      const s = await spawnSession({ tool: 'claude', args: [], command: ['sh', '-c', 'echo "CHILD=${CLAUDE_CODE_CHILD_SESSION-unset} CC=${CLAUDECODE-unset}"; cat'], cwd: '/tmp', tmux, taken: { names: [], ids: [] }, env: { PATH: process.env.PATH!, CLAUDECODE: '1' } });
+      await until(async () => (await tmux.capture(s.tmuxSession!, 5) ?? '').includes('CHILD='));
+      expect(await tmux.capture(s.tmuxSession!, 5)).toContain('CHILD=unset CC=unset');
+    } finally { await killTestServer(socket); }
   });
 });
