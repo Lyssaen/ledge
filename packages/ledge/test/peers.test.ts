@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
-import { readPeers, peerFor } from '../src/daemon/peers.js';
+import { readPeers, peerFor, ledgePeer } from '../src/daemon/peers.js';
 
 const ID = 'de4ebbac-117e-4827-9eba-e0db4bb23687';
 const sock = '/run/user/1000/cc-socks/304399.sock';
@@ -51,5 +51,17 @@ describe('peers: which Ledge session a Claude peer is', () => {
     const s = fake({ agentSessionId: ID });
     expect(peerFor(`uds:${sock} [7e2ea7]`, readPeers(dir), [s])).toBe(s);
     expect(peerFor('uds:/x/abc.sock', [], [s], dir)).toBeUndefined();
+  });
+});
+
+describe('ledgePeer: a peer by its Ledge name', () => {
+  it('peerFor first, else the live session of that name, never an exited one', () => {
+    const viaPeer = fake({ id: 'p', agentSessionId: ID });
+    const peers = [{ pid: 1, sessionId: ID, name: 'Nova', address: 'uds:/x/1.sock' }];
+    expect(ledgePeer('Nova', peers, [viaPeer, fake({ id: 'n', name: 'Nova', state: 'idle' })])).toBe(viaPeer);
+    const codex = fake({ id: 'c', name: 'Pim', state: 'idle' });
+    expect(ledgePeer('Pim [ab12]', [], [codex])).toBe(codex);
+    expect(ledgePeer('Pim', [], [fake({ id: 'c', name: 'Pim', state: 'exited' })])).toBeUndefined();
+    expect(ledgePeer('Ghost', [], [codex])).toBeUndefined();
   });
 });

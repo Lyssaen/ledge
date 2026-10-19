@@ -38,3 +38,9 @@ export function peerFor(target: string, peers: readonly ClaudePeer[], sessions: 
   }
   return undefined;
 }
+
+/** The Ledge session a message to `target` goes to: Claude's peer when it is one, else the live session of that Ledge name. */
+export function ledgePeer(target: string, peers: readonly ClaudePeer[], sessions: readonly Session[]): Session | undefined {
+  const name = target.replace(/ \[[^\]]*\]$/, '');
+  return peerFor(target, peers, sessions) ?? sessions.find(s => s.name === name && s.state !== 'exited');
+}

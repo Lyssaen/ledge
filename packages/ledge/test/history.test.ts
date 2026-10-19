@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionEvent } from '@ledge/protocol';
 import { History, MAX_ITEMS, SYNC_MS, handBack, crossSession } from '../src/daemon/history.js';
+import { formatLedgeMessage } from '../src/daemon/crossSession.js';
 import { paths } from '../src/paths.js';
 
 const T0 = '2026-10-13T10:00:00.000Z';
@@ -370,5 +371,49 @@ describe('messages between agents', () => {
     h.record('fce8', ev('PostToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1' }, 2));
     expect(h.items('fce8')).toHaveLength(1);
     expect(h.items('fce8')[0]).toMatchObject({ kind: 'sent', status: 'read', received: 'recv-1-0' });
+  });
+});
+
+describe('messages through the Ledge mailbox', () => {
+  const peers: Record<string, string> = { Pim: 'c0de', Otto: 'fce8' };
+  const peerOf = (t: string) => peers[t];
+  const msg = { at: later(0), rid: 'rid-1', to: 'Pim', peer: 'c0de', text: 'Salut' };
+
+  it('recordSent puts a sending card; an existing card is kept, only its peer set', () => {
+    const h = new History({ peerOf });
+    h.recordSent('fce8', msg);
+    expect(h.items('fce8')).toEqual([{ kind: 'sent', id: 'rid-1', at: later(0), turn: 0, to: 'Pim', peer: 'c0de', text: 'Salut', status: 'sending' }]);
+    h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'Pim', message: 'Vite' } }, 1));
+    h.recordSent('fce8', { ...msg, rid: 'toolu_1', text: 'autre' });
+    expect(h.items('fce8')).toHaveLength(2);
+    expect(h.items('fce8')[1]).toMatchObject({ id: 'toolu_1', text: 'Vite', peer: 'c0de', status: 'sending' });
+  });
+
+  it('markSent delivers, and never downgrades a read card', () => {
+    const h = new History({ peerOf });
+    h.recordSent('fce8', msg);
+    h.markSent('fce8', 'rid-1', 'delivered');
+    expect(h.items('fce8')[0]).toMatchObject({ status: 'delivered' });
+    h.record('c0de', ev('UserPromptSubmit', { text: formatLedgeMessage({ from: 'Otto', tool: 'claude', text: 'Salut', to: 'codex' }) }, 1));
+    h.markSent('fce8', 'rid-1', 'delivered');
+    expect(h.items('fce8')[0]).toMatchObject({ status: 'read' });
+  });
+
+  it('the hook\'s deny does not turn a mailbox card failed', () => {
+    const h = new History({ peerOf });
+    h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'Pim', message: 'Vite' } }));
+    h.recordSent('fce8', { ...msg, rid: 'toolu_1' });
+    h.markSent('fce8', 'toolu_1', 'delivered');
+    h.record('fce8', ev('PostToolUseFailure', { tool: 'SendMessage', toolUseId: 'toolu_1', error: 'denied' }, 1));
+    expect(h.items('fce8')).toHaveLength(1);
+    expect(h.items('fce8')[0]).toMatchObject({ status: 'delivered' });
+  });
+
+  it('a typed Ledge message is a received card, paired with the sender\'s open card, now read', () => {
+    const h = new History({ peerOf });
+    h.recordSent('c0de', { ...msg, to: 'Otto', peer: 'fce8', text: 'Bonjour' });
+    h.record('fce8', ev('UserPromptSubmit', { text: formatLedgeMessage({ from: 'Pim', tool: 'codex', text: 'Bonjour', to: 'claude' }) }, 1));
+    expect(h.items('fce8')).toEqual([{ kind: 'received', id: 'recv-1-0', at: later(1), turn: 1, from: 'Pim', text: 'Bonjour', peer: 'c0de', sent: 'rid-1' }]);
+    expect(h.items('c0de')[0]).toMatchObject({ status: 'read', received: 'recv-1-0' });
   });
 });

@@ -6,7 +6,7 @@ import { log } from '../log.js';
 import { filesOf } from './files.js';
 import { agentMessages } from './transcript.js';
 import { QUESTION_TOOLS } from './state.js';
-import { crossSession, crossSessionNotices, type CrossSessionNotice } from './crossSession.js';
+import { crossSession, crossSessionNotices, ledgeMessages, type CrossSessionNotice } from './crossSession.js';
 export { crossSession } from './crossSession.js';
 
 /** Native tracking (spec 2026-10-13 §3–4): one thread per session, reduced from the events the store applies. */
@@ -44,6 +44,8 @@ export class History {
   private synced = new Map<string, number>();
   private listeners = new Set<Listener>();
   private writes: Promise<void> = Promise.resolve();
+  /** The rids of the cards Ledge's mailbox recorded: their result is the mailbox's, not the tool call's (not persisted). */
+  private readonly mailed = new Set<string>();
   private readonly dir: string;
   /** The Ledge session a SendMessage address or a sender's name is, when it is one (peers.ts). */
   private readonly peerOf: (target: string) => string | undefined;
@@ -114,6 +116,13 @@ export class History {
           messages.forEach((m, i) => { last = this.receive(id, { kind: 'received', id: `recv-${turn + 1}-${i}`, at: ev.at, turn: turn + 1, from: m.name ?? m.from, text: m.text }, m); });
           return last;
         }
+        const ledge = ledgeMessages(ev.text);
+        if (ledge) { // a Ledge session's message: the same, the sender known by its name alone
+          this.turns.set(id, turn + 1);
+          let last: ThreadItem | undefined;
+          ledge.forEach((m, i) => { last = this.receive(id, { kind: 'received', id: `recv-${turn + 1}-${i}`, at: ev.at, turn: turn + 1, from: m.from, text: m.text }, m); });
+          return last;
+        }
         const notices = crossSessionNotices(ev.text);
         if (notices) { // the harness's notices: the agent's turn on them, a system event each, no prompt
           this.turns.set(id, turn + 1);
@@ -136,6 +145,7 @@ export class History {
       case 'PostToolUseFailure': {
         if (!ev.tool) return undefined;
         const failed = ev.name === 'PostToolUseFailure';
+        if (ev.tool === 'SendMessage' && ev.toolUseId && this.mailed.has(ev.toolUseId)) return this.items(id).find(i => i.id === ev.toolUseId); // the hook denied it: the mailbox owns the card
         if (ev.tool === 'SendMessage') { // its card says delivered or not; read (the receiver's prompt came first) stays
           const sent = this.items(id).find((i): i is SentItem => i.kind === 'sent' && i.id === ev.toolUseId);
           if (sent?.status === 'read') return sent;
@@ -204,6 +214,20 @@ export class History {
       added.push(this.put(id, { kind: 'message', id: `msg-${m.id}`, at: m.at, turn, text: m.text, ...(opts.helperId ? { helperId: opts.helperId } : {}) }));
     }
     return added;
+  }
+
+  /** The mailbox has a message to send: its card, `sending`. A card of that id already (Claude's own PreToolUse) stays. */
+  recordSent(senderId: string, m: { rid: string; at: string; to: string; peer?: string; text: string; summary?: string }): ThreadItem {
+    this.mailed.add(m.rid);
+    const existing = this.items(senderId).find((i): i is SentItem => i.kind === 'sent' && i.id === m.rid);
+    if (existing) return m.peer && existing.peer !== m.peer ? this.put(senderId, { ...existing, peer: m.peer }) : existing;
+    return this.put(senderId, { kind: 'sent', id: m.rid, at: m.at, turn: this.turns.get(senderId) ?? 0, to: m.to, ...(m.peer ? { peer: m.peer } : {}), ...(m.summary ? { summary: m.summary } : {}), text: m.text, status: 'sending' });
+  }
+
+  /** The mailbox's outcome for a card; a `read` card stays read. */
+  markSent(senderId: string, rid: string, status: 'delivered' | 'failed'): void {
+    const sent = this.items(senderId).find((i): i is SentItem => i.kind === 'sent' && i.id === rid);
+    if (sent && sent.status !== 'read') this.put(senderId, { ...sent, status });
   }
 
   /** A SendMessage's card, from its input: `to` the address used, `peer` the Ledge session that address is. */
