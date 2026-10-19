@@ -13,6 +13,7 @@ interface State {
   since: number;
   windowStart: number;
   windowCount: number;
+  limited: boolean;
   framesIn: number;
   framesOut: number;
   bytesIn: number;
@@ -28,12 +29,13 @@ export class Hub {
   private readonly states = new Map<Conn, State>();
 
   constructor(private readonly log: RelayLog, limits: Partial<Limits> = {}) {
-    this.limits = { framesPerWindow: 300, windowMs: 10_000, now: Date.now, ...limits };
+    const defined = Object.fromEntries(Object.entries(limits).filter(([, v]) => v !== undefined)) as Partial<Limits>;
+    this.limits = { framesPerWindow: 300, windowMs: 10_000, now: Date.now, ...defined };
   }
 
   attach(conn: Conn, who: Who): void {
     const now = this.limits.now();
-    this.states.set(conn, { who, since: now, windowStart: now, windowCount: 0, framesIn: 0, framesOut: 0, bytesIn: 0, bytesOut: 0 });
+    this.states.set(conn, { who, since: now, windowStart: now, windowCount: 0, limited: false, framesIn: 0, framesOut: 0, bytesIn: 0, bytesOut: 0 });
     let peers = this.accounts.get(who.accountId);
     if (!peers) { peers = new Map(); this.accounts.set(who.accountId, peers); }
     const old = peers.get(who.peer);
@@ -65,12 +67,19 @@ export class Hub {
   receive(conn: Conn, raw: string): void {
     const st = this.states.get(conn);
     if (!st) return;
+    // A replaced socket is closed but may still be open for a moment: it must not route anything.
+    if (this.accounts.get(st.who.accountId)?.get(st.who.peer) !== conn) return;
     const now = this.limits.now();
-    if (now - st.windowStart >= this.limits.windowMs) { st.windowStart = now; st.windowCount = 0; }
+    if (now - st.windowStart >= this.limits.windowMs) { st.windowStart = now; st.windowCount = 0; st.limited = false; }
     st.windowCount++;
     st.framesIn++;
     st.bytesIn += raw.length;
-    if (st.windowCount > this.limits.framesPerWindow) return this.fail(conn, st, 'rate_limited');
+    if (st.windowCount > this.limits.framesPerWindow) {
+      // Answer and log once per window: further excess frames are dropped silently (no amplification).
+      if (st.limited) return;
+      st.limited = true;
+      return this.fail(conn, st, 'rate_limited');
+    }
 
     let json: unknown;
     try { json = JSON.parse(raw); } catch { return this.fail(conn, st, 'bad_frame'); }

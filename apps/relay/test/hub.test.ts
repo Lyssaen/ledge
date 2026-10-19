@@ -45,9 +45,15 @@ describe('Hub', () => {
   it('replaces a second PC socket and closes the first', () => {
     const { hub } = setup();
     const p1 = new Fake(), p2 = new Fake(), d = new Fake();
-    hub.attach(p1, pc()); hub.attach(d, dev(D1)); hub.attach(p2, pc());
+    hub.attach(p1, pc()); hub.attach(d, dev(D1));
+    const before = d.sent.length;
+    hub.attach(p2, pc());
+    expect(d.sent).toHaveLength(before); // no presence at all across the replacement
     expect(p1.closed).toEqual([[4000, 'replaced']]);
+    hub.receive(p1, send(D1, 'ghost')); // replaced socket must not route
+    expect(d.sent).toHaveLength(before);
     hub.detach(p1, 4000);
+    expect(d.sent).toHaveLength(before);
     hub.receive(d, send('pc', 'x'));
     expect(p2.sent.filter((m) => m.type === 'deliver')).toHaveLength(1);
     expect(p1.sent.filter((m) => m.type === 'deliver')).toHaveLength(0);
@@ -56,11 +62,14 @@ describe('Hub', () => {
 
   it('keeps accounts apart', () => {
     const { hub } = setup();
-    const pa = new Fake(), db = new Fake();
-    hub.attach(pa, pc('A')); hub.attach(db, dev(D1, 'B'));
+    const pa = new Fake(), db = new Fake(), pb = new Fake();
+    hub.attach(pa, pc('A')); hub.attach(db, dev(D1, 'B')); hub.attach(pb, pc('B'));
+    pb.sent.length = 0; db.sent.length = 0;
     hub.receive(pa, send(D1, 'x'));
+    // Cross-account sends answer offline, never bad_target: the hub cannot reveal devices of other accounts.
     expect(pa.sent.at(-1)).toEqual({ type: 'error', code: 'offline', to: D1 });
-    expect(db.sent).toHaveLength(1); // welcome only
+    expect(db.sent).toHaveLength(0);
+    expect(pb.sent).toHaveLength(0);
   });
 
   it('refuses device-to-device frames and pc-to-pc', () => {
@@ -100,15 +109,24 @@ describe('Hub', () => {
 
   it('rate-limits a flooding socket', () => {
     let t = 0;
-    const { hub } = setup({ framesPerWindow: 3, windowMs: 1000, now: () => t });
+    const { hub, events } = setup({ framesPerWindow: 3, windowMs: 1000, now: () => t });
     const p = new Fake(), d = new Fake();
     hub.attach(p, pc()); hub.attach(d, dev(D1));
-    for (let i = 0; i < 4; i++) hub.receive(d, send('pc', String(i)));
-    expect(d.sent.at(-1)).toEqual({ type: 'error', code: 'rate_limited' });
+    for (let i = 0; i < 6; i++) hub.receive(d, send('pc', String(i)));
+    expect(d.sent.filter((m) => m.type === 'error')).toEqual([{ type: 'error', code: 'rate_limited' }]);
+    expect(events.filter((e) => e.ev === 'frame_error')).toHaveLength(1);
     expect(p.sent.filter((m) => m.type === 'deliver')).toHaveLength(3);
     t = 1000;
     hub.receive(d, send('pc', 'again'));
     expect(p.sent.filter((m) => m.type === 'deliver')).toHaveLength(4);
+  });
+
+  it('ignores undefined limits instead of disabling them', () => {
+    const { hub } = setup({ framesPerWindow: undefined, windowMs: undefined, now: undefined });
+    const p = new Fake(), d = new Fake();
+    hub.attach(p, pc()); hub.attach(d, dev(D1));
+    for (let i = 0; i < 301; i++) hub.receive(d, send('pc', 'x'));
+    expect(d.sent.at(-1)).toEqual({ type: 'error', code: 'rate_limited' });
   });
 
   it('logs sizes and counts, never a body', () => {

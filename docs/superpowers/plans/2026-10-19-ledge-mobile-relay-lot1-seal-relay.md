@@ -247,8 +247,8 @@ describe('pairing code', () => {
 Règles du `Hub` :
 - Les sockets sont rangés par `accountId`, puis par `peer`. Un nouveau socket pour le même `(compte, peer)` remplace l'ancien, fermé avec `4000, 'replaced'`, sans événement de présence intermédiaire.
 - À l'attache : `welcome` au socket, puis `presence online` aux autres pairs du compte (au PC pour un appareil, à tous les appareils pour le PC). Au détachement d'un socket encore courant : `presence offline` de la même façon, puis le log `disconnect`.
-- `send` d'un appareil : seulement `to: 'pc'`, sinon `bad_target`. `send` du PC : seulement vers un appareil du même compte, sinon `bad_target`. Une cible du compte sans socket : `offline` avec `to`.
-- JSON invalide ou schéma refusé : `bad_frame` ; `body` trop long : `too_large` ; plus de `framesPerWindow` trames dans `windowMs` : `rate_limited` et trame ignorée. Chaque erreur est loguée en `frame_error` sans le contenu.
+- `send` d'un appareil : seulement `to: 'pc'`, sinon `bad_target`. `send` du PC vers `pc` : `bad_target`. Vers un appareil sans socket dans son compte : `offline` avec `to`, y compris un identifiant d'un autre compte — le relais ne cherche jamais hors du compte de l'émetteur, il ne révèle donc pas si un appareil existe ailleurs.
+- JSON invalide ou schéma refusé : `bad_frame` ; `body` trop long : `too_large` ; plus de `framesPerWindow` trames dans `windowMs` : trame ignorée, avec un seul `rate_limited` (réponse et log) par fenêtre. Chaque autre erreur est loguée en `frame_error` sans le contenu. Un socket remplacé ne route plus rien.
 
 - [ ] **Step 1: Créer `apps/relay`** — `package.json` : `"name": "@ledge/relay"`, `private`, `type: module`, `engines.node >=22`, scripts `dev` (`tsx src/main.ts`), `build` (`tsup`), `test`, `typecheck` ; dépendances `ws ^8.18.0`, `zod ^3.23.8` ; devDependencies `@ledge/protocol` et `@ledge/seal` en `workspace:*`, `@types/node ^22.7.0`, `@types/ws ^8.5.12`, `tsup ^8.3.0`. `tsconfig.json` comme `packages/seal`. `pnpm install`.
 
@@ -263,7 +263,7 @@ const D1 = 'd_aaaaaaaaaaaaaaaa', D2 = 'd_bbbbbbbbbbbbbbbb';
 it('routes a device frame to its PC and back', ...);           // deliver { from: D1 } côté PC ; deliver { from: 'pc' } côté D1
 it('welcomes with who is online and tells the others', ...);   // D1 seul : welcome.online = [] ; le PC arrive : D1 reçoit presence pc online ; welcome du PC : online = [D1]
 it('replaces a second PC socket and closes the first', ...);   // premier conn closed = [4000, 'replaced'] ; un message de D1 n'arrive qu'au second ; aucun presence offline envoyé
-it('keeps accounts apart', ...);                               // PC du compte A envoie à un D1 du compte B : error bad_target ; rien chez B
+it('keeps accounts apart', ...);                               // PC du compte A envoie à un D1 du compte B : error offline to D1 ; rien chez B
 it('refuses device-to-device frames', ...);                    // D1 → D2 : error bad_target
 it('says offline instead of queuing', ...);                    // D1 → pc sans PC : error offline to 'pc' ; le PC arrivé ensuite ne reçoit rien d'ancien
 it('answers bad JSON, unknown types and oversize bodies on that socket only', ...);
