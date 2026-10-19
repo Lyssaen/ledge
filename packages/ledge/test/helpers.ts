@@ -1,3 +1,4 @@
+import { readDaemonToken } from '../src/auth.js';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../src/tmux.js';
@@ -18,4 +19,9 @@ export async function until(pred: () => boolean | Promise<boolean>, ms = 4000): 
     if (Date.now() - t0 > ms) throw new Error('timeout');
     await new Promise(r => setTimeout(r, 50));
   }
+}
+
+/** Handshake headers for a raw socket opened against a daemon started in this test's LEDGE_HOME. */
+export function authHeaders(): { authorization: string } {
+  return { authorization: `Bearer ${readDaemonToken()}` };
 }

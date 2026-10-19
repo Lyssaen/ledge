@@ -16,7 +16,7 @@ import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { createDaemonUpdater } from '../src/update/run-update.js';
 import { History } from '../src/daemon/history.js';
-import { until } from './helpers.js';
+import { authHeaders, until } from './helpers.js';
 import { paths } from '../src/paths.js';
 import { writeMachines } from '../src/daemon/machines.js';
 import { writeProjects } from '../src/daemon/projects.js';
@@ -62,7 +62,7 @@ afterEach(async () => { await srv.close(); });
 /** Opens a raw WebSocket with the given Origin; resolves with 'open' or the HTTP status of the refusal. */
 function handshake(port: number, origin?: string): Promise<'open' | number> {
   return new Promise(res => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}`, origin ? { origin } : {});
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, { headers: authHeaders(), ...(origin ? { origin } : {}) });
     ws.once('open', () => { ws.terminate(); res('open'); });
     ws.once('unexpected-response', (_req, r) => { res(r.statusCode ?? 0); ws.terminate(); });
     ws.once('error', () => {});
@@ -854,7 +854,7 @@ describe('server', () => {
   describe('terminal preview delivery', () => {
     /** A raw socket that records every message type (and id) in arrival order. */
     async function recorder() {
-      const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`);
+      const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`, { headers: authHeaders() });
       const got: Array<{ type: string; id?: string; lines?: string[] }> = [];
       ws.on('message', d => got.push(JSON.parse(String(d))));
       await new Promise(res => ws.once('open', res));
@@ -1481,7 +1481,7 @@ describe('chat', () => {
   });
   it('tells a client connected before the question about the turn before its first step', async () => {
     const got: Array<{ type: string; turns?: Array<Record<string, unknown>> }> = [];
-    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`);
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`, { headers: authHeaders() });
     const finished = new Promise<void>(res => ws.on('message', d => { const m = JSON.parse(String(d)); got.push(m); if (m.type === 'chat.done') res(); }));
     await new Promise(r => ws.once('open', r));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
@@ -1608,7 +1608,7 @@ describe('session thread (spec 2026-10-13 §5)', () => {
 // Messages are recorded from the moment the socket is created: a snapshot can land while the test awaits a second connection.
 const inbox = new WeakMap<WebSocket, ServerMessage[]>();
 const open = (port: number, path = '') => new Promise<WebSocket>(r => {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`, { headers: { origin: 'tauri://localhost' } });
+  const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`, { headers: { origin: 'tauri://localhost', ...authHeaders() } });
   const got: ServerMessage[] = []; inbox.set(ws, got); ws.on('message', d => got.push(JSON.parse(String(d))));
   ws.on('open', () => r(ws));
 });
@@ -1742,7 +1742,7 @@ describe('machines list', () => {
   });
   it('refuses a /ssh/ client with an invalid alias at the upgrade and keeps serving', async () => {
     const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, ssh: async () => {} });
-    const bad = new WebSocket(`ws://127.0.0.1:${s.port}/ssh/bad%20alias!`, { headers: { origin: 'tauri://localhost' } });
+    const bad = new WebSocket(`ws://127.0.0.1:${s.port}/ssh/bad%20alias!`, { headers: { origin: 'tauri://localhost', ...authHeaders() } });
     const err = await new Promise<Error>(r => bad.on('error', r));
     expect(err.message).toContain('401'); // verifyClient already rejects it, so the handler's 1008 branch is a defensive backstop
     const a = await open(s.port); const gotA = collect(a);

@@ -1,9 +1,16 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, statSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ensureDaemonToken, hostAllowed, readDaemonToken, requestAuthorized, selectDaemonProtocol, tokenEquals } from '../src/auth.js';
 import { paths } from '../src/paths.js';
+import WebSocket from 'ws';
+import { startServer } from '../src/daemon/server.js';
+import { connect } from '../src/client.js';
+import { Store } from '../src/daemon/store.js';
+import type { Tmux } from '../src/tmux.js';
+import { authHeaders } from './helpers.js';
+
 
 describe('daemon token file', () => {
   beforeEach(() => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-auth-')); });
@@ -71,5 +78,73 @@ describe('token comparison, host and request', () => {
     expect(selectDaemonProtocol(new Set([`ledge.${t}`]), t)).toBe(`ledge.${t}`);
     expect(selectDaemonProtocol(new Set(['ledge.wrong']), t)).toBe(false);
     expect(selectDaemonProtocol(new Set(['other']), t)).toBe(false);
+  });
+});
+
+const fakeTmux = { async setOption() {}, async sendText() {}, async sendKeys() {}, async capture() { return null; }, async hasSession() { return false; }, async listSessions() { return []; }, async killSession() {}, async newSession() {}, attachArgs: () => [] } as unknown as Tmux;
+
+describe('handshake', () => {
+  let srv: Awaited<ReturnType<typeof startServer>>;
+  let url: string;
+  const other = 'ab'.repeat(32);
+  beforeEach(async () => {
+    process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-auth-'));
+    srv = await startServer({ store: new Store(), tmux: fakeTmux, port: 0, ssh: async () => {} });
+    url = `ws://127.0.0.1:${srv.port}`;
+  });
+  afterEach(async () => { await srv.close(); });
+
+  /** 'open', or the HTTP status of the refusal. */
+  const attempt = (target: string, protocols?: string[], options: WebSocket.ClientOptions = {}) => new Promise<'open' | number>(res => {
+    const ws = new WebSocket(target, protocols as string[], options);
+    ws.once('open', () => { ws.terminate(); res('open'); });
+    ws.once('unexpected-response', (_q, r) => { res(r.statusCode ?? 0); r.resume(); ws.terminate(); });
+    ws.once('error', () => {});
+  });
+  const bearer = (t = readDaemonToken()!) => ({ headers: { authorization: `Bearer ${t}` } });
+
+  it('refuses no token', async () => { expect(await attempt(url)).toBe(401); });
+  it('refuses a wrong token', async () => { expect(await attempt(url, undefined, bearer(other))).toBe(401); });
+  it('accepts Bearer', async () => { expect(await attempt(url, undefined, bearer())).toBe('open'); });
+  it('accepts the subprotocol and echoes it', async () => {
+    const t = readDaemonToken()!;
+    const ws = new WebSocket(url, ['ledge.' + t], { origin: 'tauri://localhost' });
+    await new Promise<void>((res, rej) => { ws.once('open', () => res()); ws.once('error', rej); });
+    expect(ws.protocol).toBe('ledge.' + t);
+    ws.terminate();
+  });
+  it('refuses a foreign Host', async () => {
+    expect(await attempt(url, undefined, { headers: { ...bearer().headers, host: 'evil.example:47831' } })).toBe(401);
+  });
+  it('refuses an unknown Origin', async () => {
+    expect(await attempt(url, undefined, { ...bearer(), origin: 'https://evil.example' })).toBe(401);
+  });
+  it('ignores a token in the query', async () => {
+    expect(await attempt(`${url}/?token=${readDaemonToken()}`)).toBe(401);
+  });
+  it('answers plain HTTP with 401 and no CORS', async () => {
+    const res = await fetch(`http://127.0.0.1:${srv.port}/`, { headers: { origin: 'tauri://localhost' } });
+    expect(res.status).toBe(401);
+    expect([...res.headers.keys()].filter(k => k.startsWith('access-control-'))).toEqual([]);
+  });
+  it('opens /ssh/<alias> with the token only', async () => {
+    expect(await attempt(`${url}/ssh/server`, undefined, bearer())).toBe('open');
+    expect(await attempt(`${url}/ssh/server`)).toBe(401);
+  });
+  it('logs why, never the token', async () => {
+    await attempt(url, undefined, bearer(other));
+    await new Promise(r => setTimeout(r, 50));
+    const log = readFileSync(paths().log, 'utf8');
+    expect(log).toContain('refused a connection (auth)');
+    expect(log).not.toContain(other);
+    expect(log).not.toContain(readDaemonToken()!);
+  });
+  it('connect() reads the file', async () => {
+    const c = await connect({ port: srv.port });
+    await c.close();
+    await expect(connect({ port: srv.port, token: null })).rejects.toThrow();
+  });
+  it('authHeaders() carries the file token', () => {
+    expect(authHeaders()).toEqual({ authorization: `Bearer ${readDaemonToken()}` });
   });
 });
