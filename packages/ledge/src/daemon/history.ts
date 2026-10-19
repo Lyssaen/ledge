@@ -1,12 +1,12 @@
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ReceivedItem, SentItem, SessionEvent, ThreadItem, ToolItem } from '@ledge/protocol';
+import type { NoticeItem, ReceivedItem, SentItem, SessionEvent, ThreadItem, ToolItem } from '@ledge/protocol';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
 import { filesOf } from './files.js';
 import { agentMessages } from './transcript.js';
 import { QUESTION_TOOLS } from './state.js';
-import { crossSession } from './crossSession.js';
+import { crossSession, crossSessionNotices, type CrossSessionNotice } from './crossSession.js';
 export { crossSession } from './crossSession.js';
 
 /** Native tracking (spec 2026-10-13 §3–4): one thread per session, reduced from the events the store applies. */
@@ -114,6 +114,13 @@ export class History {
           messages.forEach((m, i) => { last = this.receive(id, { kind: 'received', id: `recv-${turn + 1}-${i}`, at: ev.at, turn: turn + 1, from: m.name ?? m.from, text: m.text }, m); });
           return last;
         }
+        const notices = crossSessionNotices(ev.text);
+        if (notices) { // the harness's notices: the agent's turn on them, a system event each, no prompt
+          this.turns.set(id, turn + 1);
+          let last: ThreadItem | undefined;
+          notices.forEach((n, i) => { last = this.put(id, this.noticeOf(n, { id: `notice-${turn + 1}-${i}`, at: ev.at, turn: turn + 1 })); });
+          return last;
+        }
         this.turns.set(id, turn + 1);
         return this.put(id, { kind: 'prompt', id: `prompt-${turn + 1}`, at: ev.at, turn: turn + 1, text: ev.text });
       }
@@ -187,7 +194,7 @@ export class History {
     if (!opts.force && now - (this.synced.get(key) ?? 0) < SYNC_MS) return [];
     this.synced.set(key, now);
     const items = this.items(id);
-    const since = opts.helperId ? items.find(i => i.id === opts.helperId)?.at : [...items].reverse().find(i => i.kind === 'prompt' || i.kind === 'received')?.at;
+    const since = opts.helperId ? items.find(i => i.id === opts.helperId)?.at : [...items].reverse().find(i => i.kind === 'prompt' || i.kind === 'received' || i.kind === 'notice')?.at;
     if (!since) return []; // a daemon that joined mid-turn: the old tail would flood the thread
     const have = new Set(items.map(i => i.id));
     const turn = this.turns.get(id) ?? 0;
@@ -203,6 +210,18 @@ export class History {
   private sentOf(ev: SessionEvent, common: { at: string; turn: number; helperId?: string }, status: SentItem['status']): SentItem {
     const input = ev.toolInput ?? {}; const to = typeof input.to === 'string' ? input.to : ''; const peer = to ? this.peerOf(to) : undefined;
     return { kind: 'sent', id: ev.toolUseId ?? `sent-${ev.at}`, ...common, to, ...(peer ? { peer } : {}), ...(typeof input.summary === 'string' && input.summary ? { summary: input.summary } : {}), text: typeof input.message === 'string' ? input.message : '', status };
+  }
+
+  /** A notice as a thread item: the session it is about named, and its Ledge session when it is one. */
+  private noticeOf(n: CrossSessionNotice, common: { id: string; at: string; turn: number }): NoticeItem {
+    const base = { kind: 'notice' as const, ...common, notice: n.kind, text: n.text };
+    if (n.kind === 'other') return base;
+    if (n.kind === 'delivery') return { ...base, status: n.status, count: n.count, recipients: n.recipients, ...(n.reason ? { reason: n.reason } : {}) };
+    const peer = n.peer ? this.peerOf(n.peer) : undefined;
+    return {
+      ...base, name: n.peer, ...(peer ? { peer } : {}),
+      ...('time' in n && n.time ? { time: n.time } : {}), ...('summary' in n && n.summary ? { summary: n.summary } : {}), ...('reason' in n && n.reason ? { reason: n.reason } : {})
+    };
   }
 
   /** Puts a received card, paired with the sender's sent one when the sender is a Ledge session: the last of its

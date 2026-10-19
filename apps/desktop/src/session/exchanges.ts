@@ -1,4 +1,4 @@
-import type { FileChange, Helper, HelperItem, Pending, ReceivedItem, SentItem, Session, ThreadItem, ToolItem } from '@ledge/protocol';
+import type { FileChange, Helper, HelperItem, NoticeItem, Pending, ReceivedItem, SentItem, Session, ThreadItem, ToolItem } from '@ledge/protocol';
 import { helperThread, turns } from '@ledge/ui/thread/turns';
 import { elapsedMs, liveTool } from '@ledge/ui/thread/tools';
 import { findDocumentReferences } from '@ledge/ui/documents/references';
@@ -36,6 +36,8 @@ export interface Exchange {
   prompt: { id: string; text: string; from: 'you' | 'parent' } | null;
   /** The turn's received messages, in order: they open it like a prompt, so they are no segment. */
   received: ReceivedItem[];
+  /** The harness's cross-session notices that open it (an idle or delivery notice): system events, no segment. */
+  notices: NoticeItem[];
   segments: Segment[];
 }
 
@@ -125,7 +127,7 @@ function exchangesOf(items: readonly ThreadItem[], helperId?: string): Exchange[
     return [{
       key: helper?.id ?? `helper-${helperId}`, at: helper?.at ?? rest[0]!.at,
       prompt: helper ? { id: helper.id, text: helper.task, from: 'parent' } : null,
-      received: [], segments: segmentsOf(rest)
+      received: [], notices: [], segments: segmentsOf(rest)
     }];
   }
   return turns([...items]).map(t => {
@@ -133,14 +135,15 @@ function exchangesOf(items: readonly ThreadItem[], helperId?: string): Exchange[
     return {
       key: t.prompt?.id ?? `turn-${t.n}`, at: t.prompt?.at ?? t.items[0]!.at,
       prompt: t.prompt ? { id: t.prompt.id, text: t.prompt.text, from: 'you' as const } : null,
-      received: t.items.filter((i): i is ReceivedItem => i.kind === 'received'), segments: segmentsOf(rest)
+      received: t.items.filter((i): i is ReceivedItem => i.kind === 'received'),
+      notices: t.items.filter((i): i is NoticeItem => i.kind === 'notice'), segments: segmentsOf(rest)
     };
   });
 }
 
-/** Les ids dans l'ordre affiché : consigne, puis les messages reçus, puis chaque segment (chaque action d'un repli ; ses mises à jour de liste n'y sont pas). */
+/** Les ids dans l'ordre affiché : consigne, puis les messages reçus, les avis, puis chaque segment (chaque action d'un repli ; ses mises à jour de liste n'y sont pas). */
 export function displayIds(xs: readonly Exchange[]): string[] {
-  return xs.flatMap(x => [...(x.prompt ? [x.prompt.id] : []), ...x.received.map(m => m.id), ...x.segments.flatMap(s => s.kind === 'tools' ? s.tools.map(t => t.id) : [s.item.id])]);
+  return xs.flatMap(x => [...(x.prompt ? [x.prompt.id] : []), ...x.received.map(m => m.id), ...x.notices.map(n => n.id), ...x.segments.flatMap(s => s.kind === 'tools' ? s.tools.map(t => t.id) : [s.item.id])]);
 }
 
 export interface Summary {

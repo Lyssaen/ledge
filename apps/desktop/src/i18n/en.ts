@@ -524,6 +524,25 @@ export const en: Messages = {
       conversation: (n, k) => `Conversation with ${n} · ${k} messages`, fold: 'Fold', unfold: 'Unfold',
       readAll: 'Read the whole message', showLess: 'Show less', seeIn: (n) => `See it in ${n}'s thread`
     },
+    /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
+    notice: {
+      kicker: 'Automated notice', other: 'Automated notice between sessions', anotherSession: 'another session',
+      idle: (n, time) => `${n} finished${time ? ` · ${time}` : ''}`,
+      exited: (n, time) => `Session ${n} closed${time ? ` · ${time}` : ''}`,
+      unavailable: (n) => `No idle notice to expect from ${n}`,
+      expired: (n) => `No longer waiting for ${n}: the subscription expired`,
+      messages: (count, to) => (count > 1 ? `${count} messages to ${to}` : `Message to ${to}`),
+      status: {
+        held: (many) => `held: ${many ? 'they wait' : 'it waits'} for approval`,
+        denied: () => 'not delivered: denied by its user',
+        expired: () => 'not delivered: never approved',
+        refused: (many) => `not delivered: the session refuses ${many ? 'them' : 'it'}`,
+        dropped: () => 'not delivered: dropped by its inbox',
+        delivered: () => 'delivered after approval',
+        unknown: () => ': delivery notice'
+      },
+      open: (n) => `Open ${n}`
+    },
     plan: {
       kicker: 'Proposed plan', fallback: 'Plan',
       statuses: { proposed: 'Awaiting your approval', open: 'Proposed', approved: 'Approved', revised: 'Revised afterwards' },

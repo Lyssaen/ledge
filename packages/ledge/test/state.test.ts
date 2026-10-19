@@ -639,6 +639,13 @@ describe('topics', () => {
     const s = reduce(mk('a'), { name: 'UserPromptSubmit', at, source: 'hook', text: '<cross-session-message from="x" from-name="a-2d">\nHello' });
     expect(s.topic).toBeUndefined(); expect(s.state).toBe('working');
   });
+  it('a cross-session notice is neither the topic nor the user answering the last reply', () => {
+    const idle = '[Cross-session idle notice] "a-2d", which you asked to be notified about, is idle now — it finished a turn at 09:17.';
+    const s = reduce(mk('a'), { name: 'UserPromptSubmit', at, source: 'hook', text: idle });
+    expect(s.topic).toBeUndefined(); expect(s.state).toBe('working');
+    const replied = reduce(mk('a'), { name: 'Stop', at, source: 'hook', text: 'Fini, à toi.' });
+    expect(reduce(replied, { name: 'UserPromptSubmit', at, source: 'hook', text: idle }).lastReply?.text).toBe('Fini, à toi.');
+  });
   it('a pane title replaces a prompt topic, not a user one', () => {
     let s = reduce(mk('a'), { name: 'UserPromptSubmit', at, source: 'hook', text: 'premier prompt' });
     s = reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'add-readme-file' });

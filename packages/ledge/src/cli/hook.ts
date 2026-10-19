@@ -12,9 +12,9 @@ const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
 /** The longest first prompt sent as a topic candidate; the reducer cuts it to one line of TOPIC_MAX. */
 const PROMPT_MAX = 500;
-/** Claude Code hands a backgrounded helper's report back, or another session's message, as a prompt: that text is the
- *  report or message, capped like a tool input. */
-const fromAgent = (t: string) => t.startsWith('<agent-message from="') || t.startsWith('<cross-session-message ');
+/** Claude Code hands a backgrounded helper's report back, another session's message, or its harness's notice about one
+ *  (`[Cross-session idle notice]`…), as a prompt: that text is the report, message or notice, capped like a tool input. */
+const fromAgent = (t: string) => t.startsWith('<agent-message from="') || t.startsWith('<cross-session-message ') || t.startsWith('[Cross-session ');
 const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, fromAgent(t) ? INPUT_MAX : PROMPT_MAX) } : {}; };
 
 function describeTool(tool: string | undefined, input: unknown): string {

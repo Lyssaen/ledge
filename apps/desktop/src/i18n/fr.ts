@@ -546,6 +546,25 @@ export const fr = {
       conversation: (n: string, k: number) => `Échange avec ${n} · ${k} messages`, fold: 'Replier', unfold: 'Déplier',
       readAll: 'Lire tout le message', showLess: 'Réduire', seeIn: (n: string) => `Voir dans le fil de ${n}`
     },
+    /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
+    notice: {
+      kicker: 'Avis automatique', other: 'Avis automatique entre sessions', anotherSession: 'une autre session',
+      idle: (n: string, time?: string) => `${n} a terminé${time ? ` · ${time}` : ''}`,
+      exited: (n: string, time?: string) => `Session ${n} fermée${time ? ` · ${time}` : ''}`,
+      unavailable: (n: string) => `Aucun avis de fin à attendre de ${n}`,
+      expired: (n: string) => `Plus d’avis de fin attendu de ${n} : délai dépassé`,
+      messages: (count: number, to: string) => (count > 1 ? `${count} messages à ${to}` : `Message à ${to}`),
+      status: {
+        held: (many: boolean) => `retenu${many ? 's' : ''} : en attente d’approbation`,
+        denied: (many: boolean) => `non remis : refusé${many ? 's' : ''} par son utilisateur`,
+        expired: (many: boolean) => `non remis : jamais approuvé${many ? 's' : ''}`,
+        refused: (many: boolean) => `non remis : la session ${many ? 'les' : 'le'} refuse`,
+        dropped: (many: boolean) => `non remis : rejeté${many ? 's' : ''} par sa boîte de réception`,
+        delivered: (_many: boolean) => 'remis après approbation',
+        unknown: (_many: boolean) => ': avis de remise'
+      },
+      open: (n: string) => `Ouvrir ${n}`
+    },
     plan: {
       kicker: 'Plan proposé', fallback: 'Plan',
       statuses: { proposed: 'En attente de votre accord', open: 'Proposé', approved: 'Approuvé', revised: 'Révisé ensuite' } as Record<PlanStatus, string>,

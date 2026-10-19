@@ -454,6 +454,10 @@ describe('prompts and the chat marker', () => {
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toHaveLength(prompt.length);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(3000) }, at)?.event.text).toHaveLength(500);
   });
+  it('keeps a cross-session notice whole (up to INPUT_MAX), not cut like a prompt', () => {
+    const prompt = '[Cross-session idle notice] "a-2d", which you asked to be notified about, is idle now. Its harness reports: «' + 'x'.repeat(3000) + '».';
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toHaveLength(prompt.length);
+  });
   it('labels SendMessage with its summary', () => {
     const tool_input = { to: 'a-bf', summary: 'OK pour la sidebar', message: 'long' };
     expect(mapClaudeHook('PreToolUse', { session_id: 's', tool_name: 'SendMessage', tool_input }, at)?.event.text).toBe('OK pour la sidebar');

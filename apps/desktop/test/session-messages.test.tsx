@@ -188,4 +188,22 @@ describe('messages between agents in the thread', () => {
     expect(next.nextElementSibling).toHaveClass('turn-time');
     expect(next.parentElement!.querySelector('[data-message]')).toHaveAttribute('data-message', 'r1');
   });
+
+  it('a cross-session notice is a system event, never « Vous »: who finished, when, what its harness said, a way to that session', async () => {
+    const { user } = await openOtto([
+      { kind: 'notice', id: 'notice-1-0', at: at(0), turn: 1, notice: 'idle', name: 'nova', peer: 'nova', time: '09:17', summary: 'Le schéma est prêt…', text: '[Cross-session idle notice] "nova" …' },
+      { kind: 'notice', id: 'notice-1-1', at: at(0), turn: 1, notice: 'delivery', status: 'held', count: 1, recipients: ['kit'], text: '[Cross-session delivery notice] …' },
+      { kind: 'notice', id: 'notice-1-2', at: at(0), turn: 1, notice: 'delivery', status: 'refused', count: 2, recipients: [], text: '[Cross-session delivery notice] …' }
+    ]);
+    const idle = (await thread().findByText('Le schéma est prêt…')).closest<HTMLElement>('[data-notice="notice-1-0"]')!;
+    expect(idle).toHaveTextContent('Nova a terminé · 09:17');
+    expect(idle).toHaveAttribute('role', 'note');
+    expect(document.querySelector('[data-notice="notice-1-1"]')).toHaveTextContent('Message à kit retenu : en attente d\u2019approbation');
+    expect(document.querySelector('[data-notice="notice-1-1"]')).toHaveClass('warn');
+    expect(document.querySelector('[data-notice="notice-1-2"]')).toHaveTextContent('2 messages à une autre session non remis : la session les refuse');
+    expect(document.querySelector('.session-thread .prompt-block')).toBeNull();
+    expect(thread().queryByText('Vous')).toBeNull();
+    await user.click(within(idle).getByRole('button', { name: 'Ouvrir Nova' }));
+    await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:nova'));
+  });
 });

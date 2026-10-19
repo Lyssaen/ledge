@@ -287,6 +287,21 @@ describe('messages between agents', () => {
     expect(crossSession('<agent-message from="a">\nrapport')).toBeUndefined();
   });
 
+  it('records Claude Code\'s cross-session notices as system events opening a turn, never as a prompt', () => {
+    const idle = '[Cross-session idle notice] "a-bf", which you asked to be notified about, is idle now — it finished a turn at 09:17. Its harness reports: «Fini.». This is an automated notice.';
+    const held = '[Cross-session delivery notice] Your message to another session was held by that session (1 recipient: a-2d; msg_id: m1). NOT delivered.';
+    const h = new History({ peerOf });
+    h.record('s', ev('UserPromptSubmit', { text: 'Lance les tests' }));
+    h.record('s', ev('UserPromptSubmit', { text: `${idle}\n${held}` }, 5));
+    const items = h.items('s');
+    expect(items.map(i => i.kind)).toEqual(['prompt', 'notice', 'notice']);
+    expect(items[1]).toMatchObject({ kind: 'notice', id: 'notice-2-0', turn: 2, notice: 'idle', name: 'a-bf', peer: 'bc8e', time: '09:17', summary: 'Fini.' });
+    expect(items[2]).toMatchObject({ kind: 'notice', id: 'notice-2-1', turn: 2, notice: 'delivery', status: 'held', count: 1, recipients: ['a-2d'] });
+    const p = join(dir, 'n.jsonl');
+    writeFileSync(p, JSON.stringify({ uuid: 'n1', timestamp: later(6), type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Je reprends.' }] } }) + '\n');
+    expect(h.sync('s', p, { now: 9000 }).map(i => i.id)).toEqual(['msg-n1']); // the notice's turn is the agent's
+  });
+
   it('syncs the agent messages into a turn opened by a received message', () => {
     const p = join(dir, 'r.jsonl');
     writeFileSync(p, JSON.stringify({ uuid: 'r1', timestamp: later(2), type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Bien reçu.' }] } }) + '\n');

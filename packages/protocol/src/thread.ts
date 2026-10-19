@@ -23,10 +23,20 @@ export const ThreadItemSchema = z.discriminatedUnion('kind', [
   /** A message this session sent to another agent; `id` is the tool_use_id, `to` the address it used, `peer` the Ledge session id, `received` the paired item's id in the peer's thread. */
   z.object({ kind: z.literal('sent'), ...base, to: z.string(), peer: z.string().optional(), summary: z.string().optional(), text: z.string(), status: z.enum(['sending', 'delivered', 'read', 'failed']), received: z.string().optional() }),
   /** A message another agent sent to this session; `from` is its from-name (else its address), `sent` the paired item's id in the peer's thread. */
-  z.object({ kind: z.literal('received'), ...base, from: z.string(), peer: z.string().optional(), text: z.string(), sent: z.string().optional() })
+  z.object({ kind: z.literal('received'), ...base, from: z.string(), peer: z.string().optional(), text: z.string(), sent: z.string().optional() }),
+  /** An automated notice of the agent's harness about messages between sessions (Claude Code's `[Cross-session idle
+   *  notice]` / `[Cross-session delivery notice]`): a system event, never the user's words. `name` is the session it is
+   *  about as quoted, `peer` its Ledge session id; a delivery notice says the outcome of `count` messages to `recipients`. */
+  z.object({
+    kind: z.literal('notice'), ...base, notice: z.enum(['idle', 'exited', 'unavailable', 'expired', 'delivery', 'other']),
+    name: z.string().optional(), peer: z.string().optional(), time: z.string().optional(), summary: z.string().optional(),
+    status: z.enum(['held', 'denied', 'expired', 'delivered', 'refused', 'dropped', 'unknown']).optional(),
+    count: z.number().int().positive().optional(), recipients: z.array(z.string()).optional(), reason: z.string().optional(), text: z.string()
+  })
 ]);
 export type ThreadItem = z.infer<typeof ThreadItemSchema>;
 export type ToolItem = Extract<ThreadItem, { kind: 'tool' }>;
 export type HelperItem = Extract<ThreadItem, { kind: 'helper' }>;
 export type SentItem = Extract<ThreadItem, { kind: 'sent' }>;
 export type ReceivedItem = Extract<ThreadItem, { kind: 'received' }>;
+export type NoticeItem = Extract<ThreadItem, { kind: 'notice' }>;

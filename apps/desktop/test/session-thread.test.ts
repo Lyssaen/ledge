@@ -42,6 +42,18 @@ describe('session thread model', () => {
     expect(peerKey(msgs[0] as never)).toBe('ledge-a');
     expect(peerKey({ ...(msgs[2] as never as object), peer: 'p' } as never)).toBe('p');
   });
+  it('a cross-session notice opens its exchange like a received message: no prompt, no segment', () => {
+    const msgs: ThreadItem[] = [
+      { kind: 'notice', id: 'notice-4-0', at: at(0), turn: 4, notice: 'idle', name: 'ledge-a', time: '09:17', text: '[Cross-session idle notice] "ledge-a"…' },
+      { kind: 'notice', id: 'notice-4-1', at: at(0), turn: 4, notice: 'delivery', status: 'held', count: 1, recipients: ['ledge-b'], text: '[Cross-session delivery notice] …' },
+      tool('t9', 1, 'Read', 'a', { turn: 4 })
+    ];
+    const last = exchanges(msgs).at(-1)!;
+    expect(last.prompt).toBeNull();
+    expect(last.notices.map(n => n.id)).toEqual(['notice-4-0', 'notice-4-1']);
+    expect(shape([last])).toEqual([[null, 'tools:t9']]);
+    expect(displayIds([last])).toEqual(['notice-4-0', 'notice-4-1', 't9']);
+  });
   it('a flat thread by exchange: runs of actions fold, decided permissions and subagents stand between, the pending one is left out', () => {
     expect(shape(exchanges(items))).toEqual([
       ['you:Câble la liste', 'tools:t1,t2,t3', 'say:msg-1', 'decision:perm-1', 'tools:t4', 'helper:h1', 'say:reply-1'],

@@ -1,6 +1,6 @@
 import { Fragment, memo, useCallback, useMemo, useRef, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { daemonStore, qualify, splitId } from '@ledge/fleet';
-import type { Helper, HelperItem, ReceivedItem, SentItem, Session, ThreadItem } from '@ledge/protocol';
+import type { Helper, HelperItem, NoticeItem, ReceivedItem, SentItem, Session, ThreadItem } from '@ledge/protocol';
 import { ThreadMarkdown } from '@ledge/ui/documents/markdown';
 import type { DocumentReference } from '@ledge/ui/documents/references';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -12,6 +12,7 @@ import { SHELL_ICONS } from '../shell/icons';
 import { HelperBot, SessionBot, StateBadge } from '../shell/SessionBot';
 import { ActionGroup } from './ActionGroup';
 import { MessageCard } from './MessageCard';
+import { NoticeLine } from './NoticeLine';
 import { nameOf } from './changedFiles';
 import { PlanCard } from './PlanCard';
 import { docRefs, helperOf, peerKey, planTitle, timeMark, type Exchange, type Segment } from './exchanges';
@@ -123,8 +124,12 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
       folded={folded.has(key)} lit={flash === item.id} onFold={() => onFold(key)}
       onOpenPeer={() => peer && dispatch({ type: 'open', id: peer.id, ...(paired !== undefined && { item: paired }) })} />;
   };
-  // The marker opens the exchange above its time: on its prompt, else on the first message received that opens it.
-  const opener = x.prompt?.id ?? x.received[0]?.id;
+  const notice = (item: NoticeItem): ReactNode => {
+    const peer = item.peer !== undefined ? peers.get(item.peer) ?? null : null;
+    return <NoticeLine item={item} peer={peer} onOpenPeer={() => peer && dispatch({ type: 'open', id: peer.id })} />;
+  };
+  // The marker opens the exchange above its time: on its prompt, else on the first message received or notice that opens it.
+  const opener = x.prompt?.id ?? x.received[0]?.id ?? x.notices[0]?.id;
 
   const segment = (s: Segment): ReactNode => {
     if (s.kind === 'tools') {
@@ -157,6 +162,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
         </div>
       )}
       {x.received.map(r => <Fragment key={r.id}>{r.id !== opener && marker(r.id)}{message(r)}</Fragment>)}
+      {x.notices.map(n => <Fragment key={n.id}>{n.id !== opener && marker(n.id)}{notice(n)}</Fragment>)}
       {segments.length > 0 && <div className="turn-author">{author}</div>}
       {segments.map(segment)}
       {last && offline && <div className="frozen-end"><Icon d={SHELL_ICONS.offline} size={13} />{th.frozenEnd(since)}</div>}
@@ -188,7 +194,7 @@ function conversations(xs: readonly Exchange[]): ReadonlyMap<string, readonly st
 /** The sessions of the thread's peers that Ledge knows, by `peer` (a raw daemon id, on this session's machine). The same
  *  map while none of them changes, so the store's other changes leave the exchanges alone. */
 function usePeers(session: Session, xs: readonly Exchange[]): ReadonlyMap<string, Session> {
-  const ids = useMemo(() => [...new Set(xs.flatMap(messagesOf).flatMap(m => (m.peer !== undefined ? [m.peer] : [])))], [xs]);
+  const ids = useMemo(() => [...new Set([...xs.flatMap(messagesOf), ...xs.flatMap(x => x.notices)].flatMap(m => (m.peer !== undefined ? [m.peer] : [])))], [xs]);
   const machine = splitId(session.id)?.machine ?? 'local';
   const last = useRef<ReadonlyMap<string, Session>>(new Map());
   const select = useCallback(() => {

@@ -1,6 +1,6 @@
 import { cleanTopic, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
-import { crossSession } from './crossSession.js';
+import { crossSession, crossSessionNotices } from './crossSession.js';
 
 export const HOOK_PRIORITY_MS = 2000;
 
@@ -288,7 +288,9 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
     case 'PreToolUse':
     case 'PermissionRequest':
     case 'Notification': {
-      if (ev.name === 'UserPromptSubmit' && ev.text && !s.topic && !crossSession(ev.text)) s = withTopic(s, ev.text, 'prompt');
+      // The harness's cross-session notices are not the user's words: no topic, and the last reply still waits for the user.
+      const notice = ev.name === 'UserPromptSubmit' && !!ev.text && !!crossSessionNotices(ev.text);
+      if (ev.name === 'UserPromptSubmit' && ev.text && !s.topic && !notice && !crossSession(ev.text)) s = withTopic(s, ev.text, 'prompt');
       const incoming = pendingFor(ev);
       if (incoming) {
         // A Notification never overwrites an existing hook pending: only the hook timestamp moves.
@@ -300,7 +302,7 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       // A launch, a /clear or a resume starts no turn (only UserPromptSubmit does): the state stays, so nothing "finishes".
       if (ev.name === 'Notification' || ev.name === 'SessionStart') return { ...s, lastHookAt: at, lastActivityAt: at };
       // A new prompt answers the last reply: it is no longer "your turn" on that text.
-      const prompted = ev.name === 'UserPromptSubmit' && s.lastReply ? withoutReply(s) : s;
+      const prompted = ev.name === 'UserPromptSubmit' && s.lastReply && !notice ? withoutReply(s) : s;
       // A helper's routed request outlives the main agent's own activity (background helpers).
       if (prompted.pending?.helperId) return underHelper(prompted, 'working', at);
       if (prompted === s && s.state === 'working' && s.lastActivityAt === at && !s.pending) return s;
