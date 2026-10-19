@@ -351,7 +351,8 @@ export function identityContext(s: Identity): string {
   return [
     `Tu es ${s.name}, ${where} : une session lancée par Ledge (${s.tool}). Les autres sessions Ledge te connaissent sous le nom ${s.name}.`,
     'Pour voir les autres sessions (nom, outil, état, projet, branche, sujet), lance `ledge who`.',
-    ...(s.tool === 'claude' ? ['Pour écrire à une autre session Ledge, utilise son nom Ledge comme adresse SendMessage.'] : [])
+    s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge comme adresse SendMessage.'
+      : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.'
   ].join('\n');
 }
 

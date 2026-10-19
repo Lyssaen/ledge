@@ -359,12 +359,13 @@ describe('session identity (SessionStart additionalContext)', () => {
     expect(text).toContain('Tu es Pim, projet ledge, branche feat/x');
     expect(text).toContain('worktree ledge-wt');
     expect(text).toContain('`ledge who`');
-    expect(text).toContain('SendMessage');
-    // Codex has no SendMessage: only the directory is offered.
+    expect(text).toContain('Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge comme adresse SendMessage.');
+    // Codex has no SendMessage: it is told `ledge send`.
     const codex = identityContext({ name: 'Nova', tool: 'codex', project: 'api', cwd: '/w/api' });
     expect(codex).toContain('Tu es Nova, projet api');
     expect(codex).not.toMatch(/branche [^,]/);
     expect(codex).not.toContain('SendMessage');
+    expect(codex).toContain('Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.');
   });
 
   it('a launched session is told its current Ledge name (a rename wins over LEDGE_NAME), with the daemon\'s branch', async () => {
