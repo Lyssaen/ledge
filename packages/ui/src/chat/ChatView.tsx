@@ -1,5 +1,5 @@
 import { useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
-import { hideProposal, type ChatStep, type ChatTurn, type Session } from '@ledge/protocol';
+import { hideProposal, type ChatStep, type ChatTurn, type Session, type Tool } from '@ledge/protocol';
 import { ResidentMascot } from '../bots/ResidentMascot';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
@@ -31,6 +31,8 @@ export interface ChatViewProps {
   turnAvailable?: (qid: string) => boolean;
   /** The chat card being launched (its turn's qid) and the card's actions (spec 2026-10-12 §6). */
   launchingQid?: string | null; onLaunchProposal?: (qid: string, rows?: number[]) => void; onTerminal?: (id: string) => void;
+  /** A launch card's model chooser (#58), drawn by the front; left out, the card launches the agent's default. */
+  renderModel?: (qid: string, tool: Tool, disabled: boolean) => ReactNode;
   /** The rows of `launchingQid`'s card in flight (#24): the grouped card says « Launching » on those. */
   launchingRows?: readonly number[] | null;
   /** The relay card's turn being sent (its qid) and its actions. */
@@ -175,10 +177,12 @@ export function ChatView(p: ChatViewProps) {
                     ) : turn.answeredAt !== undefined && (turn.proposals?.length ?? 0) > 1 ? (
                       <LaunchGroupCard proposals={turn.proposals!} sessions={p.sessions} busy={p.launchingQid === turn.qid} busyRows={p.launchingQid === turn.qid ? p.launchingRows ?? [] : []}
                         disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid}
+                        model={turn.proposals!.some(x => x.launchedId === undefined) ? p.renderModel?.(turn.qid, turn.proposals![0]!.tool, p.launchingQid === turn.qid) : undefined}
                         onLaunch={rows => p.onLaunchProposal?.(turn.qid, rows)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
                     ) : turn.answeredAt !== undefined && turn.proposal && (
                       <LaunchCard proposal={turn.proposal} session={p.sessions.find(s => s.id === turn.proposal!.launchedId)} busy={p.launchingQid === turn.qid}
                         disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid}
+                        model={turn.proposal.launchedId === undefined ? p.renderModel?.(turn.qid, turn.proposal.tool, p.launchingQid === turn.qid) : undefined}
                         onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
                     )}
                     {turn.answeredAt !== undefined && turn.projectProposal && p.onProject && (

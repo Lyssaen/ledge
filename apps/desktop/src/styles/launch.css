@@ -46,7 +46,37 @@
 p.composer-missing{margin:0;white-space:normal;max-width:45%}
 .composer-footer .ledge-btn kbd{margin-left:4px;font-size:9px!important;background:color-mix(in srgb,var(--primary-foreground) 15%,transparent)!important;color:inherit!important;border-color:transparent!important}
 .composer-footer [aria-disabled=true]{opacity:.55}
-@media(max-width:700px){.composer-tools{grid-template-columns:1fr}.composer-footer{flex-wrap:wrap}.composer-preview{flex-basis:100%}}
+/* #58 (mockup ledge-model-picker): the agent's model under the tiles, its effort, the pick in the preview. */
+.composer .composer-models{position:relative;padding:12px 14px 14px;border:1px solid var(--border);border-radius:var(--radius-lg);background:color-mix(in srgb,var(--muted) 35%,var(--card))}
+.composer-models>legend{float:left;margin:0 0 8px}
+.models-remembered{position:absolute;top:12px;right:14px;font-size:11px;color:var(--muted-foreground)}
+.model-cards{clear:both;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px}
+.model-card{position:relative;display:flex;flex-direction:column;gap:2px;min-height:56px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--card);cursor:pointer;transition:border-color .15s,background .15s}
+.model-card:hover{border-color:var(--input);background:var(--accent)}
+.model-card.selected{border-color:var(--foreground);box-shadow:0 0 0 1px var(--foreground)}
+.model-card:has(input:focus-visible){outline:2px solid var(--ring);outline-offset:2px}
+.model-card input{position:absolute;opacity:0;pointer-events:none}
+.model-card strong{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.model-card small{font-size:11px;line-height:15px;color:var(--muted-foreground)}
+.model-card.other{border-style:dashed}
+.model-badge{padding:0 5px;border:1px solid var(--border);border-radius:4px;font-size:10px;font-weight:400;color:var(--muted-foreground)}
+.model-other{width:100%;height:32px;margin-top:8px;padding:0 10px;font:12px 'Geist Mono',monospace;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--background);color:var(--foreground)}
+.model-other:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+.model-other[aria-invalid=true]{border-color:var(--destructive)}
+.model-effort{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:12px}
+.model-effort>.composer-label{margin:0}
+.model-effort>small{font-size:11px;color:var(--muted-foreground)}
+.segmented{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--background)}
+.segmented label{position:relative;padding:3px 10px;border-radius:calc(var(--radius-md) - 2px);font-size:12px;color:var(--muted-foreground);cursor:pointer}
+.segmented label:hover{color:var(--foreground)}
+.segmented label.selected{background:var(--accent);color:var(--foreground);font-weight:500}
+.segmented label:has(input:focus-visible){outline:2px solid var(--ring);outline-offset:1px}
+.segmented input{position:absolute;opacity:0;pointer-events:none}
+.models-note{display:block;margin-top:8px;font-size:11px;color:var(--muted-foreground)}
+.composer-body>.models-note{margin-top:-8px}
+.preview-model{margin-left:6px;padding:0 6px;border:1px solid var(--border);border-radius:4px}
+.preview-model::before{content:'✳ ';opacity:.7}
+@media(max-width:700px){.model-cards{grid-auto-flow:row;grid-template-columns:repeat(2,minmax(0,1fr))}.composer-tools{grid-template-columns:1fr}.composer-footer{flex-wrap:wrap}.composer-preview{flex-basis:100%}}
 
 /* Not in the mockup: the bots kept out of the names (aria-hidden), laid out as if unwrapped; the one-repository note beside the chips, the project without repository on the machine, the form without project. */
 .composer .composer-bot{display:contents}
@@ -56,3 +86,7 @@ p.composer-missing{margin:0;white-space:normal;max-width:45%}
 .composer-empty{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:14px;border:1px dashed var(--border);border-radius:var(--radius-lg);background:var(--well)}
 .composer-empty strong{font-size:13px;font-weight:500}
 .composer-empty p{margin:0 0 4px;font-size:12px}
+/* #58: a chat card's model and effort, beside its agent or its « Launch all ». */
+.card-model{display:inline-flex;flex-wrap:wrap;gap:6px}
+.card-model select{height:24px;max-width:180px;padding:0 6px;font:inherit;font-size:11.5px;border:1px solid var(--input);border-radius:var(--radius-sm);background:var(--background);color:var(--foreground)}
+.card-model select:focus-visible{outline:2px solid var(--ring);outline-offset:1px}

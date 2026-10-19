@@ -8,8 +8,11 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
-import { isUp, launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, previewOf, reposOn, toggleRepo, withMachine, withProject, withTool, type LaunchForm, type LaunchMessage, type Tool } from './model';
+import { isUp, launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, NO_PICK, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm, type LaunchMessage, type Tool } from './model';
 import { useRepoInfo } from './useRepoInfo';
+import { useModels } from './useModels';
+import { loadPick, savePick } from './modelPrefs';
+import { effective, ModelPicker } from './ModelPicker';
 import type { LaunchState } from './useLaunch';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 
@@ -50,6 +53,11 @@ export function LaunchComposer(p: {
   const infos = useRepoInfo(p.client, online ? form.machine : null, here.map(r => r.path));
   const infosNow = useRef(infos);
   infosNow.current = infos;
+  // #58: the agent's models on that machine; a daemon too old for them takes no model, so none is offered or sent.
+  const models = useModels(p.client, online ? form.machine : null, form.tool);
+  const outdated = models.error === 'outdated';
+  const memo = form.tool ? loadPick(form.project, form.tool) : null;
+  const remembered = !!memo?.remembered && memo.model === form.model && memo.effort === form.effort;
 
   // A project removed, or the projects arriving after the form: the first one. The chosen machine going offline: the first one online, if any.
   useEffect(() => {
@@ -83,7 +91,8 @@ export function LaunchComposer(p: {
   const submit = () => {
     setTried(true);
     if (missing || launching || !project) return;
-    p.onLaunch(launchMessage(form, name), { name, project: project.name, projectId: project.id });
+    if (!outdated && form.tool) savePick(project.id, form.tool, { model: form.model, effort: form.effort });
+    p.onLaunch(launchMessage(outdated ? withPick(form, NO_PICK) : form, name), { name, project: project.name, projectId: project.id });
   };
   // Only Ctrl / ⌘ ↵ and « Launch » send: a plain Enter on a tile or a chip would submit the form implicitly (the textarea keeps its newline).
   const onKeyDown = (e: KeyboardEvent) => {
@@ -93,6 +102,7 @@ export function LaunchComposer(p: {
   };
 
   const multi = form.tool === null || MULTI_REPO_TOOLS.has(form.tool);
+  const run = form.tool && !outdated ? effective(models.models, form) : {};
   const machineLabel = chosen?.label ?? form.machine ?? '—';
   const branch = form.repos[0] ? infos.get(form.repos[0])?.branch : null;
   // After a try, every field still incomplete is marked (the mockup); the message names the first one.
@@ -119,13 +129,16 @@ export function LaunchComposer(p: {
             const [label, hint] = t.launch.tools[id];
             return (
               <label key={id} className={`tool-tile ${form.tool === id ? 'selected' : ''}`}>
-                <input type="radio" name="tool" value={id} checked={form.tool === id} onChange={() => setForm(f => withTool(f, id))} />
+                <input type="radio" name="tool" value={id} checked={form.tool === id} onChange={() => setForm(f => withTool(f, id, loadPick(f.project, id)))} />
                 <span className="composer-bot" aria-hidden="true"><Bot tool={id} state={form.tool === id ? 'working' : 'idle'} pose={1} size={46} theme={theme} seed={'pick-' + id} paused={p.paused} reducedMotion={reduced} /></span>
                 <span><strong>{label}</strong><small>{hint}</small></span>
               </label>
             );
           })}
         </fieldset>
+
+        {form.tool && online && (outdated ? <small className="models-note">{t.launch.modelsOutdated}</small>
+          : <ModelPicker key={`${form.machine}|${form.tool}|${form.project}`} tool={form.tool} state={models} pick={form} remembered={remembered} onPick={pick => setForm(f => withPick(f, pick))} />)}
 
         {projects.length === 0 ? (
           <div className="composer-empty">
@@ -139,7 +152,7 @@ export function LaunchComposer(p: {
               <legend className="composer-label">{t.launch.project}</legend>
               {projects.map(x => (
                 <label key={x.id} className={`chip ${form.project === x.id ? 'selected' : ''}`}>
-                  <input type="radio" name="project" checked={form.project === x.id} onChange={() => setForm(f => withProject(f, projects, x.id, infos))} />
+                  <input type="radio" name="project" checked={form.project === x.id} onChange={() => setForm(f => { const g = withProject(f, projects, x.id, infos); return g.tool ? withPick(g, loadPick(x.id, g.tool)) : g; })} />
                   <ProjectSwatch project={x} />{x.name}
                 </label>
               ))}
@@ -193,7 +206,7 @@ export function LaunchComposer(p: {
           {project && (
             <span>
               <span className="preview-line">{emphasized(t.launch.joins, form.tool ? name : t.launch.newAgent, project.name)}</span>
-              <small>{t.launch.seat(seat, machineLabel, form.repos.map(folderName).join(', ') || t.launch.noRepo)}</small>
+              <small>{t.launch.seat(seat, machineLabel, form.repos.map(folderName).join(', ') || t.launch.noRepo)}{run.model && <span className="preview-model">{t.launch.pickSummary(run.model.label, run.effort && ((t.launch.efforts as Record<string, string | undefined>)[run.effort] ?? run.effort).toLowerCase())}</span>}</small>
             </span>
           )}
         </div>

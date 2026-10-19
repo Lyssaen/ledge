@@ -372,3 +372,19 @@ describe('session management messages', () => {
     expect(isArchived({ archivedAt: '2026-10-18T10:00:00.000Z' })).toBe(true);
   });
 });
+
+describe('protocol: model and effort (#58)', () => {
+  it('session.launch carries a model and an effort, never one that reads as a flag', () => {
+    expect(parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w', model: 'opus', effort: 'high' })).toMatchObject({ model: 'opus', effort: 'high' });
+    expect(parseClientMessage({ type: 'session.launch', tool: 'cursor', cwd: '/w', model: 'claude-opus-4-8[effort=high,fast=false]' })).toMatchObject({ model: 'claude-opus-4-8[effort=high,fast=false]' });
+    for (const model of ['', '-p', '--dangerously-skip-permissions', 'a b', 'x;rm']) expect(() => parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w', model })).toThrow();
+    for (const effort of ['', 'HIGH', '-x', 'very high']) expect(() => parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w', effort })).toThrow();
+  });
+  it('models.list asks a machine, models.listing answers with the choices or why not', () => {
+    expect(parseClientMessage({ type: 'models.list', requestId: 'm1', tool: 'codex', machineId: 'dev' })).toEqual({ type: 'models.list', requestId: 'm1', tool: 'codex', machineId: 'dev' });
+    const models = [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol', efforts: ['low', 'ultra'], defaultEffort: 'low', isDefault: true }];
+    expect(parseServerMessage({ type: 'models.listing', requestId: 'm1', tool: 'codex', models })).toEqual({ type: 'models.listing', requestId: 'm1', tool: 'codex', models });
+    expect(parseServerMessage({ type: 'models.listing', requestId: 'm1', tool: 'codex', models: [], error: 'offline' })).toMatchObject({ error: 'offline' });
+    expect(() => parseClientMessage({ type: 'models.list', requestId: 'm1', tool: 'vim' })).toThrow();
+  });
+});

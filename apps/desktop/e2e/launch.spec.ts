@@ -121,3 +121,24 @@ test('an offline machine: its chip is disabled, the form launches on Local', asy
   const seat = page.getByRole('region', { name: 'Ledge table' }).getByRole('button', { name: new RegExp(`^${sent[0]!.name},`) });
   await expect(seat.locator('[data-badge]')).toHaveText('Running');
 });
+
+test('the model (#58): the block under the agents, Sonnet and High chosen, sent with the launch and summed up in the preview', async ({ page }) => {
+  const efforts = ['low', 'medium', 'high', 'xhigh', 'max'];
+  const daemon = await fakeDaemon(page, fleet, { projects, models: { claude: [
+    { id: 'fable', label: 'Fable', efforts }, { id: 'opus', label: 'Opus', efforts, isDefault: true }, { id: 'sonnet', label: 'Sonnet', efforts }, { id: 'haiku', label: 'Haiku', efforts }
+  ] } });
+  await open(page);
+  const form = dialog(page);
+  await form.getByLabel('Instruction').fill('Fix the failing tests');
+  await tile(form, 'Claude Code').click();
+  const models = form.getByRole('group', { name: 'Claude Code model' });
+  await expect(models).toBeVisible();
+  await models.locator('label.model-card', { hasText: 'Sonnet' }).click();
+  await models.locator('.segmented label', { hasText: /^High$/ }).click();
+  await expect(form.locator('.preview-model')).toHaveText('Sonnet · high');
+  expect(await noSideScroll(form)).toBe(true);
+  await form.screenshot({ path: test.info().outputPath('model-picker.png') });
+  await page.keyboard.press('Control+Enter');
+  await expect.poll(() => launchesOf(daemon.received).length).toBe(1);
+  expect(launchesOf(daemon.received)[0]).toMatchObject({ tool: 'claude', model: 'sonnet', effort: 'high' });
+});

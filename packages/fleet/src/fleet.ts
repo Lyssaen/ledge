@@ -1,4 +1,4 @@
-import { ChatTurnSchema, isArchived, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
+import { ChatTurnSchema, isArchived, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
 import type { TokenSource } from './token';
@@ -39,6 +39,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const listings = new Map<string, { machine: string; path: string; created?: string }>();
   /** `repos.scan` requestId -> the machine asked, so only its `repos.found` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const scans = new Map<string, string>();
+  /** `models.list` requestId -> the machine asked and the agent, so only its `models.listing` answers it (and a drop or a refusal answers « offline » or « outdated »). */
+  const modelLists = new Map<string, { machine: string; tool: Tool }>();
   const operations = new Map<string, string>();
   /** The paths of a pending inspection, to answer « not found » for each if its machine drops. */
   const unfound = new Map<string, { path: string; exists: false; branch: null }[]>();
@@ -53,6 +55,10 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** Each pending scan of `machine` is answered empty with `error`: 'offline' when it dropped, 'outdated' when its daemon does not know repos.scan. */
   const answerFailedScans = (machine: string, error: 'offline' | 'outdated') => {
     for (const [requestId, owner] of scans) if (owner === machine) { scans.delete(requestId); emit({ type: 'repos.found', requestId, repos: [], truncated: false, error }); }
+  };
+  /** Each pending models.list of `machine` is answered empty with `error` (#58): 'offline' when it dropped, 'outdated' when its daemon does not know models.list. */
+  const answerFailedModels = (machine: string, error: 'offline' | 'outdated') => {
+    for (const [requestId, l] of modelLists) if (l.machine === machine) { modelLists.delete(requestId); emit({ type: 'models.listing', requestId, tool: l.tool, models: [], error }); }
   };
   let source: 'daemon' | 'local' = 'local';
   /** The local daemon's projects (build spec §5); the last ones stay while it is down. */
@@ -187,6 +193,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'document.content' || m.type === 'document.error') { if (documents.get(m.requestId) === machine) { documents.delete(m.requestId); emit(m); } return; }
     if (m.type === 'repos.info') { if (inspections.get(m.requestId) === machine) { inspections.delete(m.requestId); unfound.delete(m.requestId); emit(m); } return; }
     if (m.type === 'repos.found') { if (scans.get(m.requestId) === machine) { scans.delete(m.requestId); emit(m); } return; }
+    if (m.type === 'models.listing') { if (modelLists.get(m.requestId)?.machine === machine) { modelLists.delete(m.requestId); emit(m); } return; }
     if (m.type === 'chat.routed') {
       if (routing?.qid !== m.qid || routing.coordinator !== machine) return;
       const req = routing; routing = null;
@@ -224,6 +231,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (m.request === 'repos.inspect') { answerUnfoundInspections(machine); return; }
       // Likewise for repos.scan (lot 11): the new daemon answers every scan with repos.found, so a refusal means an older daemon.
       if (m.request === 'repos.scan') { answerFailedScans(machine, 'outdated'); return; }
+      if (m.request === 'models.list') { answerFailedModels(machine, 'outdated'); return; }
       if ((m.request === 'folder.list' || m.request === 'folder.create') && [...listings.values()].some(l => l.machine === machine)) { answerUnfoundListings(machine, m.message || 'not found'); return; }
       // Only the in-flight operation's own refusal ends it: another refused command leaves it waiting for its answer or the machine's drop.
       if (m.request !== undefined && OPERATIONS.has(m.request)) operations.delete(machine);
@@ -242,7 +250,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         // A launch in flight names its request, as the daemon's refusal does, so the form that sent it hears it.
         const op = operations.get(c.id);
         if (operations.delete(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : {}) });
-        answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline');
+        answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline');
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
         for (const [qid, b] of bindings) { const t = turns.get(qid); if (b.machine === c.id && t && !t.answeredAt && !t.error) fail(qid, `${c.label} is offline`); }
@@ -303,6 +311,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const { machineId: _m, ...rest } = msg; outgoing = rest;
         if (!available(peers.get(machine))) { emit({ type: 'repos.found', requestId: msg.requestId, repos: [], truncated: false, error: 'offline' }); return; }
         scans.set(msg.requestId, machine);
+      }
+      if (msg.type === 'models.list') {
+        machine = msg.machineId ?? 'local';
+        const { machineId: _m, ...rest } = msg; outgoing = rest;
+        if (!available(peers.get(machine))) { emit({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, models: [], error: 'offline' }); return; }
+        modelLists.set(msg.requestId, { machine, tool: msg.tool });
       }
       if (msg.type === 'folder.list') {
         if (msg.machineId) machine = msg.machineId;

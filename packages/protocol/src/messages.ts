@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { PendingSchema, SessionSchema, ToolSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, MAX_PROPOSALS, ChatProjectProposalSchema } from './chat.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
+import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
@@ -58,7 +59,8 @@ export type Recent = z.infer<typeof RecentSchema>;
 export const SEMVER = /^\d+\.\d+\.\d+$/;
 /** What the daemon knows of itself (spec 2026-10-12 auto-update §6): its version, how it was installed, whether it runs
  *  as the systemd service, and the command a person runs by hand when it cannot update itself. */
-export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional(), archive: z.boolean().optional() });
+export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional(), archive: z.boolean().optional(),
+  /** Takes `model` and `effort` on `session.launch` and answers `models.list` (#58). */ models: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -69,6 +71,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   DocumentErrorSchema,
   ReposInfoSchema,
   ReposFoundSchema,
+  ModelsListingSchema,
   /** `recents`: the folders of past sessions, most recent first. `launcher`: the command that runs `ledge` inside WSL
    *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. `daemon`: absent
    *  from daemons older than the auto-update. */
@@ -114,13 +117,17 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   DocumentReadSchema,
   ReposInspectSchema,
   ReposScanSchema,
+  ModelsListSchema,
   /** The overlay starts a session: `cwd` is a WSL path (`~` allowed), `name` a preferred bot name (the daemon picks a
    *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation.
-   *  With `qid` it is the chat card of that turn: the daemon launches the turn's proposal and ignores the other fields. */
+   *  With `qid` it is the chat card of that turn: the daemon launches the turn's proposal and ignores the other fields
+   *  but `rows`, `model` and `effort`. */
   z.object({ type: z.literal('session.launch'), tool: ToolSchema, cwd: z.string().min(1), name: z.string().optional(), prompt: z.string().optional(), continue: z.boolean().optional(), qid: z.string().min(1).optional(),
     /** With `qid`: the card's rows to launch (#24), indexes into the turn's `proposals`, each once; the first row without it. */
     rows: z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice').optional(),
     /** Folders in addition to `cwd` (Claude: `--add-dir`); resolved like `cwd`. */ dirs: z.array(z.string().min(1)).max(20).optional(),
+    /** The agent's model and effort (#58), the agent's own default when left out; with `qid`, for every row launched. */
+    model: ModelIdSchema.optional(), effort: EffortSchema.optional(),
     /** Routing by the fleet, removed before the message reaches the daemon. */ machineId: z.string().optional() }),
   /** The launch form's folder browser: list a folder's subfolders (home when no `path`), or make `name` inside `parent`
    *  and list it. Both are answered with a `folder.listing`. */

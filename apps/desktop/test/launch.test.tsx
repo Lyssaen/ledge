@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { LaunchComposer } from '../src/launch/LaunchComposer';
+import { forgetModels } from '../src/launch/useModels';
 import { declarations, boot, closeDaemons, LAUNCH_PROJECTS, LAUNCH_REPOS, listSessions, openLaunch } from './helpers';
 import { machine } from './fleet-helpers';
 
@@ -333,5 +334,94 @@ describe('LaunchComposer and its machines', () => {
     expect(p.onLaunch).toHaveBeenCalledTimes(1);
     expect(p.onLaunch).toHaveBeenCalledWith({ type: 'session.launch', tool: 'claude', cwd: '/w/ledge/app', dirs: ['/w/ledge/docs'], name: 'Otto', prompt: 'Review', machineId: 'local' }, { name: 'Otto', project: 'Ledge', projectId: 'ledge' });
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  describe('the model (#58)', () => {
+    beforeEach(() => forgetModels());
+    const CLAUDE = [{ id: 'fable', label: 'Fable', efforts: ['low', 'high', 'max'] }, { id: 'opus', label: 'Opus', efforts: ['low', 'high', 'max'], isDefault: true }, { id: 'sonnet', label: 'Sonnet', efforts: ['low', 'high', 'max'] }, { id: 'haiku', label: 'Haiku', efforts: ['low', 'high', 'max'] }];
+    const asked = (sent: ClientMessage[]) => sent.filter((m): m is Extract<ClientMessage, { type: 'models.list' }> => m.type === 'models.list');
+    async function ready(tool: RegExp, models: unknown[], error?: string) {
+      const { client, sent, emit } = fakeClient();
+      const user = userEvent.setup();
+      const p = props(client, [local, nas]);
+      render(<LaunchComposer {...p} />);
+      expect(screen.queryByRole('group', { name: /model$/ })).toBeNull();
+      await user.click(screen.getByRole('radio', { name: tool }));
+      const ask = asked(sent).at(-1)!;
+      expect(ask).toMatchObject({ machineId: 'local' });
+      await act(async () => { emit({ type: 'models.listing', requestId: ask.requestId, tool: ask.tool, models, ...(error ? { error } : {}) } as ServerMessage); });
+      await user.type(screen.getByRole('textbox', { name: 'Instruction' }), 'Go');
+      return { user, p, sent, emit };
+    }
+    const sentMsg = (p: ReturnType<typeof props>) => p.onLaunch.mock.calls.at(-1)![0];
+
+    it('appears under the agents once one is chosen; its default passes nothing, another model and effort are sent and summed up', async () => {
+      const { user, p } = await ready(/Claude Code/, CLAUDE);
+      const group = within(screen.getByRole('group', { name: 'Claude Code model' }));
+      expect(group.getByRole('radio', { name: /Opus/ })).toBeChecked();
+      expect(group.getByText('default')).toBeVisible();
+      expect(group.getByRole('radio', { name: /Fable/ })).toBeInTheDocument();
+      expect(group.getByRole('radio', { name: 'High' })).not.toBeChecked();
+      expect(document.querySelector('.preview-model')!.textContent).toBe('Opus');
+      await user.click(screen.getByRole('button', { name: /Launch/ }));
+      expect(sentMsg(p)).not.toHaveProperty('model'); expect(sentMsg(p)).not.toHaveProperty('effort');
+      await user.click(group.getByRole('radio', { name: /Sonnet/ }));
+      await user.click(group.getByRole('radio', { name: 'High' }));
+      expect(document.querySelector('.preview-model')!.textContent).toBe('Sonnet · high');
+      await user.click(screen.getByRole('button', { name: /Launch/ }));
+      expect(sentMsg(p)).toMatchObject({ model: 'sonnet', effort: 'high' });
+    });
+
+    it('« Other… » takes an exact id among the machine\'s models or not; one that reads as a flag is not sent', async () => {
+      const cursor = [{ id: 'auto', label: 'Auto', isDefault: true }, ...Array.from({ length: 8 }, (_, i) => ({ id: `m-${i}`, label: `M ${i}` }))];
+      const { user, p } = await ready(/Cursor/, cursor);
+      const group = within(screen.getByRole('group', { name: 'Cursor Agent model' }));
+      expect(group.getAllByRole('radio').filter(r => r.getAttribute('name') === 'model')).toHaveLength(5); // four cards and Other…
+      expect(group.getByText('For Cursor, the effort is part of the model name.')).toBeVisible();
+      await user.click(group.getByRole('radio', { name: /Other/ }));
+      const typed = group.getByRole('combobox', { name: 'Other…' });
+      expect(document.querySelectorAll('datalist option')).toHaveLength(9);
+      await user.type(typed, '-p');
+      expect(typed).toHaveAttribute('aria-invalid', 'true');
+      await user.click(screen.getByRole('button', { name: /Launch/ }));
+      expect(sentMsg(p)).not.toHaveProperty('model');
+      await user.clear(typed); await user.type(typed, 'm-7');
+      await user.click(screen.getByRole('button', { name: /Launch/ }));
+      expect(sentMsg(p)).toMatchObject({ model: 'm-7' });
+      expect(sentMsg(p)).not.toHaveProperty('effort');
+    });
+
+    it('the last pick is kept per project and agent; changing agent takes that agent\'s own', async () => {
+      const { user, p, sent, emit } = await ready(/Claude Code/, CLAUDE);
+      await user.click(screen.getByRole('radio', { name: /Haiku/ }));
+      await user.click(screen.getByRole('radio', { name: 'Low' }));
+      await user.click(screen.getByRole('button', { name: /Launch/ }));
+      cleanup();
+      render(<LaunchComposer {...p} />);
+      await user.click(screen.getByRole('radio', { name: /Codex/ }));
+      const ask = asked(sent).at(-1)!;
+      await act(async () => { emit({ type: 'models.listing', requestId: ask.requestId, tool: 'codex', models: [{ id: 'sol', label: 'Sol', isDefault: true }] }); });
+      expect(screen.getByRole('radio', { name: /Sol/ })).toBeChecked();
+      expect(screen.queryByText('Last choice for this project kept')).toBeNull();
+      await user.click(screen.getByRole('radio', { name: /Claude Code/ }));    // known this run: not asked again
+      expect(asked(sent).filter(m => m.tool === 'claude')).toHaveLength(1);
+      expect(screen.getByRole('radio', { name: /Haiku/ })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'Low' })).toBeChecked();
+      expect(screen.getByText('Last choice for this project kept')).toBeVisible();
+    });
+
+    it('a machine that cannot list its models still offers the default and Other…; an older daemon offers no model and sends none', async () => {
+      const first = await ready(/Codex/, [], 'not installed');
+      const group = within(screen.getByRole('group', { name: 'Codex model' }));
+      expect(group.getByRole('radio', { name: /Default/ })).toBeChecked();
+      expect(group.getByText(/Model list unavailable \(not installed\)/)).toBeVisible();
+      cleanup(); forgetModels();
+      const { user, p } = await ready(/Codex/, [], 'outdated');
+      expect(screen.queryByRole('group', { name: 'Codex model' })).toBeNull();
+      expect(screen.getByText('Update Ledge on this machine to choose the model.')).toBeVisible();
+      await user.click(screen.getByRole('button', { name: /Launch/ }));
+      expect(sentMsg(p)).not.toHaveProperty('model');
+      void first;
+    });
   });
 });

@@ -628,7 +628,16 @@ export const fr = {
     missing: { tool: 'Choisissez un agent', prompt: 'Écrivez la consigne', machine: 'Aucune machine en ligne', repos: 'Choisissez au moins un dossier ou un dépôt' } as Record<'tool' | 'prompt' | 'machine' | 'repos', string>,
     cancel: 'Annuler', launch: 'Lancer', launching: 'Lancement…',
     started: (n: string, t: string) => `${n} démarre à la table ${t}.`, startedNoTable: (n: string) => `${n} démarre, sans projet.`, refused: (m: string) => `Démarrage refusé : ${m}`,
-    timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.'
+    timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.',
+    modelOf: (t: string) => `Modèle de ${t}`, remembered: 'Dernier choix pour ce projet retenu',
+    byDefault: 'Par défaut', byDefaultHint: 'Celui que l’agent prend de lui-même', defaultBadge: 'défaut',
+    otherModel: 'Autre…', otherModelHint: 'Un identifiant exact', otherPlaceholder: 'Identifiant du modèle, passé tel quel',
+    modelsLoading: 'Lecture des modèles de la machine…', modelsUnavailable: (e: string) => `Liste des modèles indisponible (${e}) : le défaut et « Autre… » restent possibles.`,
+    modelsOutdated: 'Mettez à jour Ledge sur cette machine pour choisir le modèle.',
+    effort: 'Effort', effortHint: 'Temps de réflexion par tour', cursorEffort: 'Pour Cursor, l’effort fait partie du nom du modèle.',
+    efforts: { low: 'Bas', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
+    modelHints: { 'claude:fable': 'Le plus capable', 'claude:opus': 'Très capable, plus lent', 'claude:sonnet': 'Équilibré, usage courant', 'claude:haiku': 'Rapide et économique' } as Record<string, string>,
+    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
   },
   projects: {
     titles: {
