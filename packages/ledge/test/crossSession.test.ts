@@ -66,6 +66,16 @@ describe('ledge messages (spec 2026-10-19 codex messaging §3.2)', () => {
     expect(line).toContain('session Pim,');
     expect(line).toContain('ledge send Pim "…")');
   });
+  it('types no control byte: ANSI sequences stripped, any other C0, C1 or DEL a space', () => {
+    const body = (text: string) => ledgeMessages(formatLedgeMessage({ from: 'Pim', tool: 'codex', text, to: 'claude' }))![0]!.text;
+    expect(body('\x1b[31mred\x1b[0m')).toBe('red');
+    expect(body('titre \x1b]0;x\x07fin')).toBe('titre fin');
+    expect(body('a\x15b\x03c\x04d\x7fe\x9bf\tg')).toBe('a b c d e f g');
+    expect(body('ligne 1\n\x1b[1mligne 2\x1b[0m')).toBe('ligne 1 ⏎ ligne 2');
+    const line = formatLedgeMessage({ from: 'P\x1b[2Jim\x03', tool: 'codex', text: 'ok\x1b', to: 'codex' });
+    expect(line).not.toMatch(/[\x00-\x1f\x7f-\x9f]/);
+    expect(ledgeMessages(line)![0]!.from).toBe('Pim');
+  });
   it('is undefined for any other prompt', () => {
     expect(ledgeMessages('Lance les tests')).toBeUndefined();
   });

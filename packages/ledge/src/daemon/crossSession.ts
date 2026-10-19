@@ -22,12 +22,18 @@ export function crossSession(text: string): { from: string; name?: string; text:
 
 /** What Ledge types into a session's prompt for a message from another one (Codex has no SendMessage of its own): one
  *  line, since `tmux.sendText` takes no newline, naming the sender and how to answer from the receiver's side. A
- *  closing tag quoted in the body is escaped so the parser can read up to the last one. */
+ *  closing tag quoted in the body is escaped so the parser can read up to the last one. Another agent's text may carry
+ *  control bytes (test output in colour): tmux would type them as keys (Esc, Ctrl-U, Ctrl-C), so none is left. */
 const LEDGE_CLOSE = '</ledge-message>';
 const LEDGE_BLOCK = /^<ledge-message\b([^>]*)>([\s\S]*?)(?:<\/ledge-message>(?![\s\S]*<\/ledge-message>)|$)/;
+/** ANSI sequences: CSI (`ESC [ … final`), a string ended by BEL or ST (OSC, DCS, APC, PM, SOS), any other `ESC … final`. */
+const ESCAPES = /\x1b(?:\[[0-?]*[ -/]*[@-~]|[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)|[ -/]*[0-~])/g;
+const CONTROLS = /[\x00-\x1f\x7f-\x9f]/g;
+/** The text with its escape sequences stripped, its line breaks as `newline`, any control byte left a space. */
+const typable = (text: string, newline: string) => text.replace(ESCAPES, '').replace(/\r\n|\r|\n/g, newline).replace(CONTROLS, ' ');
 export function formatLedgeMessage(m: { from: string; tool: Tool; text: string; to: Tool }): string {
-  const from = m.from.replace(/["<>\r\n]/g, '');
-  const body = m.text.replaceAll(LEDGE_CLOSE, '<\\/ledge-message>').replace(/\r\n|\r|\n/g, ' ⏎ ');
+  const from = typable(m.from, ' ').replace(/["<>]/g, '').trim();
+  const body = typable(m.text.replaceAll(LEDGE_CLOSE, '<\\/ledge-message>'), ' ⏎ ');
   const reply = m.to === 'codex' ? `ledge send ${from} "…"` : `SendMessage vers ${from}`;
   return `<ledge-message from="${from}" tool="${m.tool}">${body}${LEDGE_CLOSE} (message de la session ${from}, pas de l'utilisateur ; pour répondre : ${reply})`;
 }
