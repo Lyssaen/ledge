@@ -105,6 +105,18 @@ describe('the sidebar tree', () => {
     expect(screen.getByRole('dialog', { name: 'New project' })).toBeVisible();
   });
 
+  it('+N finished shows them with no link to hide them; H hides them again', async () => {
+    const { side, user } = await boot({ projects: PROJECTS, sessions: listSessions() });
+    await user.click(side.getByRole('button', { name: '+1 finished' }));
+    expect(side.getByRole('button', { name: /^Bix/ })).toBeVisible();
+    expect(side.queryByRole('button', { name: '+1 finished' })).toBeNull();
+    expect(side.queryByRole('button', { name: /^Hide (the finished one|finished)$/ })).toBeNull();
+    side.getByRole('button', { name: /^Otto/ }).focus();
+    await user.keyboard('hh');
+    expect(side.queryByRole('button', { name: /^Bix/ })).toBeNull();
+    expect(side.getByRole('button', { name: '+1 finished' })).toBeVisible();
+  });
+
   it('H hides finished ones; the open session stays in view', async () => {
     const { side, user } = await boot({ projects: PROJECTS, sessions: listSessions() });
     expect(side.queryByRole('button', { name: /^Bix/ })).toBeNull();

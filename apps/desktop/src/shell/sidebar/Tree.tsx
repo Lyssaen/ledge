@@ -105,6 +105,12 @@ export function Tree(p: {
   };
   useEffect(() => { if (p.current) openTo(p.current, false); }, [p.current]);
   useEffect(() => { if (p.revealCurrent && p.current) openTo(p.current, true); }, [p.revealCurrent]);
+  // H hides every finished session again, the ones a « +N finished » showed included, but not the open one.
+  useEffect(() => {
+    if (!p.hideDone) return;
+    setShown(new Set());
+    if (p.current) openTo(p.current, false);
+  }, [p.hideDone]);
 
   // Roving tabindex: the open session, or the first row when the atelier has none, is the tree's only tab stop.
   const tabKey = p.current && placeOf(p.groups, p.current) ? p.current : (p.groups[0] ? projectKey(p.groups[0].id) : '');
@@ -186,13 +192,14 @@ export function Tree(p: {
     const rows = list.filter(s => all || !isFinished(s)).flatMap(s => agentRows(s, depth, parentKey));
     if (p.hideDone && done.length > 0) {
       const moreKey = `${key}:more`;
-      nav.current.set(moreKey, { parent: parentKey });
+      // Once shown, the finished ones stay until H hides them all again: no « Hide finished » link.
+      if (!all) nav.current.set(moreKey, { parent: parentKey });
       rows.push(
         <div key={moreKey} className="st-row st-more" style={{ '--d': depth } as CSSProperties}>
           <span className="st-gap" />
-          <button type="button" data-tree-key={moreKey} tabIndex={tabOf(moreKey)} aria-expanded={all} onClick={() => flip(shown, setShown, key)}>
-            {all ? t.side.hideDoneLink(done.length) : t.side.moreDone(done.length)}
-          </button>
+          {!all && <button type="button" data-tree-key={moreKey} tabIndex={tabOf(moreKey)} aria-expanded={false} onClick={() => flip(shown, setShown, key)}>
+            {t.side.moreDone(done.length)}
+          </button>}
           <span className="st-fill" />
           <button type="button" tabIndex={-1} className="st-link" title={t.side.archiveDone} onClick={() => p.onArchive(done.map(s => s.id))}>
             <Icon d={SHELL_ICONS.archive} size={12} />{t.manage.menu.archive}
