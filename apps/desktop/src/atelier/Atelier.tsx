@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type JSX, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, type JSX, type MouseEvent, type ReactNode } from 'react';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -29,6 +29,8 @@ export interface AtelierProps {
   actions: SessionActions;
   /** The session menu's state, shared with the session page's header (the shell renders the menu): the seats open it, the keys use its terminal and rename. */
   menu: SessionMenuState;
+  /** More buttons at the end of the zoom bar (the detached Atelier's way out of full screen). */
+  tools?: ReactNode;
 }
 
 /** The filtered project has no agent yet: say where its table will appear, and offer to start a session there. */
@@ -50,7 +52,7 @@ function EmptyProject({ project, dispatch }: { project: Project; dispatch: (a: N
 /** The atelier (observatory.tsx, atelier mode): Ledge's desk, a table per project with agents, the filtered project's
  *  empty state, « Sans projet », then the legend; the zoom bar beside it. The mosaic is fitted to the space, zoomed and panned
  *  (useAtelierView). J / K (or ↓ / ↑) walk the agents shown, Entrée opens the chosen one; + / − / 0 zoom, Space pans. */
-export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing, actions, menu }: AtelierProps): JSX.Element {
+export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing, actions, menu, tools }: AtelierProps): JSX.Element {
   const { t } = useI18n();
   const { reduced } = useMotionPreferences();
   const { place } = nav;
@@ -121,6 +123,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
         <Icon d={ICONS.expand.d} size={13} />{t.zoom.fit}
       </Button>
       <span className="zoom-hint">{t.zoom.hint}</span>
+      {tools}
     </div>
     <div className="overview-scroll atelier" id="view-panel-atelier" role="region" aria-label={t.side.atelier} ref={view.scrollRef}>
       <div ref={view.shellRef} className={`office-shell ${nav.paused ? 'office-paused' : ''} ${reduced ? 'office-reduced' : ''}`}>

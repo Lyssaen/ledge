@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "atelier",
-  "description": "The detached Atelier (#21): the daemon's events, sending what it opens to the main window, closing itself (« Rattacher »), its focus, its own window bar (#30: minimise, maximise, restore, drag) and the webview zoom (UI scale).",
+  "description": "The detached Atelier (#21): the daemon's events, sending what it opens to the main window, closing itself (« Rattacher »), its focus, its own window bar (#30: minimise, maximise, restore, drag), full screen (#41) and the webview zoom (UI scale).",
   "windows": ["atelier"],
   "permissions": [
     "core:default",
@@ -17,6 +17,8 @@
     "core:window:allow-unmaximize",
     "core:window:allow-start-dragging",
     "core:window:allow-is-maximized",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
     "core:webview:allow-set-webview-zoom"
   ]
 }

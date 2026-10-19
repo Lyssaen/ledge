@@ -8,6 +8,7 @@
  * Outside Tauri there is nothing to detach: every call is a no-op.
  */
 import { isTauri } from '../tauri/bridge';
+import { setWindowFullscreen } from '../shell/fullscreen';
 import type { NavAction } from '../nav/state';
 
 export const ATELIER_LABEL = 'atelier';
@@ -72,9 +73,10 @@ export function toMain(a: NavAction): void {
   if (isTauri()) void event().then(e => e.emitTo(MAIN_LABEL, ACTION_EVENT, a)).catch(() => {});
 }
 
-/** The detached Atelier closes (its « Rattacher », its ×, Alt+F4, or the main window's « Rattacher »): the main window is told first. */
+/** The detached Atelier closes (its « Rattacher », its ×, Alt+F4, or the main window's « Rattacher »): the main window is told first.
+ *  From full screen it leaves it first (maximised again if it was, #18): the window-state plugin would remember it otherwise. */
 export function closeAtelierWindow(): void {
-  if (isTauri()) void currentWindow().then(w => w.close()).catch(() => {});
+  if (isTauri()) void currentWindow().then(async w => { if (await w.isFullscreen()) await setWindowFullscreen(false); await w.close(); }).catch(() => {});
 }
 
 /** The detached Atelier's window: says it closes, and closes when the main window takes it back. */

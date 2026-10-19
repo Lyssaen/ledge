@@ -40,7 +40,7 @@ import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMa
 import { Modal } from './shell/Modal';
 import { SearchPalette } from './shell/SearchPalette';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
-import { onFullscreenLeft, setWindowFullscreen } from './shell/fullscreen';
+import { useWindowFullscreen } from './shell/useWindowFullscreen';
 import { Toast, useToast } from './shell/Toast';
 import { preloadPlaces } from './shell/preload';
 import { useFiling } from './atelier/filing';
@@ -143,15 +143,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
   useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null });
-  // The window may leave full screen by itself (Escape in a browser, the OS): the layout follows.
-  useEffect(() => onFullscreenLeft(() => dispatch({ type: 'fullscreen', on: false })), []);
-  // The window follows the full screen state (not at mount: nothing was asked yet).
-  const fullscreenSeen = useRef(nav.fullscreen);
-  useEffect(() => {
-    if (fullscreenSeen.current === nav.fullscreen) return;
-    fullscreenSeen.current = nav.fullscreen;
-    void setWindowFullscreen(nav.fullscreen);
-  }, [nav.fullscreen]);
+  useWindowFullscreen(nav.fullscreen, () => dispatch({ type: 'fullscreen', on: false }));
   const session = place.kind === 'session' ? known.find(s => s.id === place.id) ?? null : null;
   // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
   const { threads } = useDaemon();

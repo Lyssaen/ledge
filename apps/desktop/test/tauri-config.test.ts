@@ -102,6 +102,11 @@ describe('Desktop Tauri config', () => {
     expect(caps.permissions).toContain('core:window:allow-set-fullscreen');
     expect(caps.permissions).toContain('core:window:allow-is-fullscreen');
   });
+  it('lets the detached Atelier go full screen on its own (#41); a new one never opens full screen', () => {
+    for (const p of ['set-fullscreen', 'is-fullscreen']) expect(atelierCaps.permissions).toContain(`core:window:allow-${p}`);
+    // the window-state plugin would bring back a full screen left by Alt+F4, with the Atelier's bar showing over it
+    expect(main).toMatch(/fn open_atelier[\s\S]*?set_fullscreen\(false\)[\s\S]*?window\.show\(\)/);
+  });
   it('may unmaximise the window before full screen and maximise it back after (#18)', () => {
     for (const p of ['unmaximize', 'maximize']) expect(caps.permissions).toContain(`core:window:allow-${p}`);
   });

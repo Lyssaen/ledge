@@ -85,7 +85,11 @@ async fn open_atelier(app: AppHandle) -> Result<(), String> {
         Some(w) => w,
         None => {
             let config = app.config().app.windows.iter().find(|w| w.label == ATELIER).cloned().ok_or("no atelier window")?;
-            tauri::WebviewWindowBuilder::from_config(&app, &config).map_err(|e| e.to_string())?.build().map_err(|e| e.to_string())?
+            let w = tauri::WebviewWindowBuilder::from_config(&app, &config).map_err(|e| e.to_string())?.build().map_err(|e| e.to_string())?;
+            // A new Atelier opens out of full screen (#41): the window-state plugin keeps one left by Alt+F4, and the page
+            // starts with its window bar.
+            let _ = w.set_fullscreen(false);
+            w
         }
     };
     // Created hidden: the window-state plugin has put it back where it was, show it now.
