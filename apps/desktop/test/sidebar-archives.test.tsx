@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import type { DaemonInfo } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { boot, closeDaemons, type MockDaemon } from './helpers';
+import { boot, closeDaemons, listSessions, PROJECTS, type MockDaemon } from './helpers';
 
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
@@ -72,5 +72,26 @@ describe('archives in the sidebar', () => {
     await user.type(filter, 'nox');
     expect(archives.getByRole('button', { name: /Reread Nox/ })).toBeVisible();
     expect(archives.queryByRole('button', { name: /Reread Nia/ })).toBeNull();
+  });
+
+  it('archiving the session being read leaves the section folded; the Archived crumb still unfolds it', async () => {
+    const sessions = listSessions();
+    const bix = sessions.find(s => s.id === 'bix')!;
+    const { d, side, user } = await boot({ projects: PROJECTS, sessions, daemon: CAN });
+    const tree = within(side.getByRole('tree', { name: 'Projects, branches and sessions' }));
+    await user.click(tree.getByRole('button', { name: '+1 finished' }));
+    await user.click(tree.getByRole('button', { name: /^Bix/ }));
+    expect(banner().getByText('Bix')).toBeVisible();
+    tree.getByRole('button', { name: /^Bix/ }).focus();
+    await user.keyboard('e');
+    await waitFor(() => expect(sent(d)).toContainEqual({ type: 'session.archive', id: 'bix' }));
+    act(() => d.upsert({ ...bix, archivedAt: ARCHIVED_AT }));
+    const toggle = archivesOf(side).getByRole('button', { name: /Archives/ });
+    await waitFor(() => expect(toggle).toHaveTextContent('1'));
+    expect(await screen.findByText('Archived session')).toBeVisible();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(banner().getByRole('button', { name: 'Archived' }));
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(archivesOf(side).getByRole('button', { name: /Reread Bix/ })).toHaveAttribute('aria-current', 'page');
   });
 });
