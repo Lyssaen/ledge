@@ -158,7 +158,7 @@ describe('Settings › Accès mobile', () => {
 
   it('while the « Lier un appareil » dialog is on screen, the pending rows leave the list (the mockup\'s showPending), then come back', () => {
     const asking: MobileState = { ...ONLINE, pairings: [{ id: 'p1', label: 'Pixel · Chrome', code: '482 913', expiresAt: new Date(Date.now() + 272_000).toISOString(), state: 'confirm' }] };
-    act(() => setPairingDialogOpen({ id: 'p1', dismiss: () => {} }));
+    act(() => setPairingDialogOpen('p1'));
     show(asking);
     expect(screen.queryByRole('article', { name: "Pixel · Chrome demande l'accès" })).toBeNull();
     expect(mobileAsks(asking, true)).toBe(false);

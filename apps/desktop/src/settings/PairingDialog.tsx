@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import type { MobileClientMessage, MobilePairing, MobileState } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -25,18 +25,19 @@ function useSecondsLeft(iso: string | null, running: boolean): number {
   return iso === null ? 0 : Math.max(0, Math.ceil((Date.parse(iso) - Date.now()) / 1000));
 }
 
+/** The pairing the dialog shows, and how to close it (Escape, the backdrop, the title's close, « Fermer », a sent Deny). */
+export interface PairingShown { pairing: MobilePairing; dismiss(): void }
+
 /**
- * « Lier un appareil » (docs/mockups/mobile-access, scenario « pairing »), mounted by the shell so it opens on any screen as soon
- * as a pairing comes to `confirm`; those are shown one at a time, the oldest first. Approve and Deny are commands to the daemon;
- * what follows is the daemon's state: approved (wait for the phone), linked or expired (« Fermer »), refused (closes). Escape,
- * the backdrop and the title's close only close it: Settings › Mobile access › « Comparer le code » opens it again.
+ * Which pairing « Lier un appareil » shows, decided by the shell at render time: as soon as a pairing comes to `confirm`, on any
+ * screen; one at a time, the oldest first; then what the daemon says of it (approved, linked, expired; refused closes it). A
+ * pairing closed here does not reopen by itself; Settings › Mobile access › « Comparer le code » opens it again.
+ * The shell renders the dialog and its `inert` from this one value, in the same commit: when the dialog goes away (a close here,
+ * or the daemon's state), the application is no longer inert when the Modal gives the focus back.
  */
-export function PairingDialog({ mobile, fleet, notify }: { mobile: MobileState | undefined; fleet: { sendMobile(msg: MobileClientMessage): void }; notify(text: string): void }): JSX.Element | null {
-  const { t } = useI18n();
-  const c = t.pairing;
-  const body = useId();
-  // The pairing on screen; the ones closed here (they do not reopen by themselves); the last look at the one on screen, so a
-  // linked or expired result stays until « Fermer » after the daemon forgets it.
+export function usePairingDialogState(mobile: MobileState | undefined): PairingShown | null {
+  // The pairing on screen; the ones closed here; the last look at the one on screen, so a linked or expired result stays until
+  // « Fermer » after the daemon forgets it.
   const [shownId, setShownId] = useState<string | null>(null);
   const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set());
   const kept = useRef<MobilePairing | null>(null);
@@ -66,19 +67,33 @@ export function PairingDialog({ mobile, fleet, notify }: { mobile: MobileState |
     setClosed(s => { if (!s.has(request.id)) return s; const n = new Set(s); n.delete(request.id); return n; });
     setShownId(request.id);
   }, [request]);
-  // The shell and the section follow; Escape closes from wherever the focus is, before the window's shortcuts see it.
+  const shown = useMemo(() => (current ? { pairing: current, dismiss: () => close(current.id) } : null), [current, close]);
+  // The section and its tab follow (they hide the pending rows and the dot); Escape closes from wherever the focus is, before the
+  // window's shortcuts see it.
   useEffect(() => {
     if (id === null) return;
     const dismiss = () => close(id);
-    setPairingDialogOpen({ id, dismiss });
+    setPairingDialogOpen(id);
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.isComposing) { e.preventDefault(); e.stopPropagation(); dismiss(); } };
     window.addEventListener('keydown', onKey, true);
     return () => { window.removeEventListener('keydown', onKey, true); setPairingDialogOpen(null); };
   }, [id, close]);
+  return shown;
+}
 
+/**
+ * « Lier un appareil » (docs/mockups/mobile-access, scenario « pairing »), mounted by the shell with `usePairingDialogState`.
+ * Approve and Deny are commands to the daemon; what follows is the daemon's state: approved (wait for the phone), linked or
+ * expired (« Fermer »), refused (closes). Escape, the backdrop and the title's close only close it.
+ */
+export function PairingDialog({ shown, mobile, fleet, notify }: { shown: PairingShown | null; mobile: MobileState | undefined; fleet: { sendMobile(msg: MobileClientMessage): void }; notify(text: string): void }): JSX.Element | null {
+  const { t } = useI18n();
+  const c = t.pairing;
+  const body = useId();
+  const current = shown?.pairing ?? null;
   const waiting = current !== null && (current.state === 'confirm' || current.state === 'approved');
   const left = useSecondsLeft(current?.expiresAt ?? null, waiting);
-  if (!current) return null;
+  if (!shown || !current) return null;
 
   const send = (msg: MobileClientMessage): boolean => {
     try { fleet.sendMobile(msg); return true; } catch (e) {
@@ -88,7 +103,7 @@ export function PairingDialog({ mobile, fleet, notify }: { mobile: MobileState |
   };
   const groups = (current.code ?? '').split(' ').filter(Boolean);
   const spelled = groups.map(g => [...g].join(' ')).join(', ');
-  const dismiss = () => close(current.id);
+  const { dismiss } = shown;
   const login = mobile?.account?.login;
 
   return (

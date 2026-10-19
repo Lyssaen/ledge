@@ -55,8 +55,7 @@ import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { useDefaultTool } from './settings/tool';
-import { PairingDialog } from './settings/PairingDialog';
-import { usePairingDialog } from './settings/pairingRequest';
+import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 
 const NO_PROJECTS: readonly Project[] = [];
 
@@ -89,7 +88,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdate.running });
   // A device asking to be linked: the dialog below opens on any screen, the notification only while Desktop is behind.
   usePairingAlerts(mobile);
-  const pairing = usePairingDialog();
+  // Decided here, at render: the dialog and the `inert` below change in one commit, so the Modal's focus return is not refused.
+  const pairing = usePairingDialogState(mobile);
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
   useEffect(() => onTrayAction(action => {
     if (action === 'dnd') setDnd(!getDnd());
@@ -280,7 +280,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} />
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
-      <PairingDialog mobile={mobile} fleet={fleet} notify={notify} />
+      <PairingDialog shown={pairing} mobile={mobile} fleet={fleet} notify={notify} />
       <Toast notice={notice} action={noticeAction} onAction={undo} />
     </ScreenKeysContext.Provider>
   );

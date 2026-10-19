@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, renderHook, screen } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DEFAULT_RELAY_URL, type MobileClientMessage, type MobilePairing, type MobileState } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
-import { PairingDialog } from '../src/settings/PairingDialog';
+import { PairingDialog, usePairingDialogState } from '../src/settings/PairingDialog';
 import { clearPairingRequest, requestPairingDialog, usePairingDialogOpen } from '../src/settings/pairingRequest';
 import { usePairingAlerts } from '../src/notify/useAlerts';
 import { resetDndForTests, setDnd } from '../src/notify/prefs';
+import { boot, closeDaemons } from './helpers';
 
 const ONLINE: MobileState = {
   enabled: true, relayUrl: DEFAULT_RELAY_URL, account: { login: 'octocat', accountId: '42' }, signin: null, signinError: null,
@@ -24,14 +25,25 @@ function show(mobile: MobileState, opts: { error?: string } = {}) {
   const fleet = { sendMobile(msg: MobileClientMessage) { if (opts.error) throw Object.assign(new Error(opts.error), { name: opts.error }); sent.push(msg); } };
   const open: boolean[] = [];
   function Probe() { open.push(usePairingDialogOpen()); return null; }
-  const tree = (m: MobileState) => <LangProvider lang="fr"><PairingDialog mobile={m} fleet={fleet} notify={t => notes.push(t)} /><Probe /></LangProvider>;
+  // As the shell mounts it: the state decided at render, the application behind inert while the dialog shows.
+  function Host({ m }: { m: MobileState }) {
+    const shown = usePairingDialogState(m);
+    return <><div className="application" inert={shown !== null}><button type="button">Behind</button></div><PairingDialog shown={shown} mobile={m} fleet={fleet} notify={t => notes.push(t)} /></>;
+  }
+  const tree = (m: MobileState) => <LangProvider lang="fr"><Host m={m} /><Probe /></LangProvider>;
   const view = render(tree(mobile));
   return { sent, notes, open, update: (m: MobileState) => view.rerender(tree(m)), user: userEvent.setup() };
 }
 const dialog = () => screen.queryByRole('dialog', { name: 'Lier un appareil' });
 
 beforeEach(() => { clearPairingRequest(); localStorage.clear(); resetDndForTests(); });
-afterEach(() => { vi.useRealTimers(); });
+afterEach(async () => { vi.useRealTimers(); vi.restoreAllMocks(); await closeDaemons(); });
+
+/** The browser refuses focus() on an element under an `inert` ancestor (WebView2 does; jsdom does not, hence this). */
+function refuseFocusUnderInert() {
+  const real = HTMLElement.prototype.focus;
+  vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation(function (this: HTMLElement, o?: FocusOptions) { if (this.closest('[inert]')) return; real.call(this, o); });
+}
 
 describe('« Lier un appareil »', () => {
   it('a pairing to confirm opens the dialog: the label, the code in large, the account and the countdown', () => {
@@ -131,6 +143,80 @@ describe('« Lier un appareil »', () => {
     expect(sent).toEqual([]);
     expect(notes).toEqual(['Le daemon local est hors ligne : rien n’a changé.']);
     expect(dialog()).toBeVisible();
+  });
+});
+
+describe('the focus goes back where it was when the dialog goes away (the application behind is inert while it shows)', () => {
+  /** Focuses « Behind », then a pairing comes to confirm: the dialog takes the focus. */
+  function opened() {
+    refuseFocusUnderInert();
+    const v = show(withPairings());
+    const behind = screen.getByRole('button', { name: 'Behind' });
+    act(() => behind.focus());
+    v.update(withPairings(pairing('p1')));
+    expect(dialog()).toBeVisible();
+    expect(behind.closest('[inert]')).not.toBeNull();
+    expect(document.activeElement).not.toBe(behind);
+    return { ...v, behind };
+  }
+
+  it('Escape', async () => {
+    const { behind, user } = opened();
+    await user.keyboard('{Escape}');
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(behind);
+  });
+
+  it('the backdrop, and the title\'s close', async () => {
+    const { behind, user, update } = opened();
+    await user.click(document.querySelector('.modal-backdrop')!);
+    expect(document.activeElement).toBe(behind);
+    update(withPairings(pairing('p1'), pairing('p2')));
+    expect(dialog()).toBeVisible();
+    await user.click(screen.getAllByRole('button', { name: 'Fermer' })[0]!);
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(behind);
+  });
+
+  it('« Refuser », and « Fermer » after linked', async () => {
+    const { behind, user, update } = opened();
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+    expect(document.activeElement).toBe(behind);
+    update(withPairings(pairing('p2')));
+    update(withPairings(pairing('p2', { state: 'linked' })));
+    await user.click(screen.getAllByRole('button', { name: 'Fermer' }).at(-1)!);
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(behind);
+  });
+
+  it('the daemon refuses the pairing, or forgets it', () => {
+    const { behind, update } = opened();
+    update(withPairings(pairing('p1', { state: 'refused' })));
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(behind);
+    update(withPairings(pairing('p2')));
+    expect(document.activeElement).not.toBe(behind);
+    update(withPairings());
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(behind);
+  });
+
+  it('in the app: the dialog opens over the atelier, and Escape or the daemon\'s refusal gives the focus back', async () => {
+    refuseFocusUnderInert();
+    const { d, user } = await boot();
+    const behind = screen.getAllByRole('button', { name: /^Local/ })[0]!;
+    act(() => behind.focus());
+    d.push({ type: 'mobile', state: { ...ONLINE, pairings: [pairing('p1')] } });
+    expect(await screen.findByRole('dialog', { name: 'Link a device' })).toBeVisible();
+    expect(behind.closest('[inert]')).not.toBeNull();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Link a device' })).toBeNull();
+    expect(document.activeElement).toBe(behind);
+    d.push({ type: 'mobile', state: { ...ONLINE, pairings: [pairing('p2')] } });
+    expect(await screen.findByRole('dialog', { name: 'Link a device' })).toBeVisible();
+    d.push({ type: 'mobile', state: { ...ONLINE, pairings: [pairing('p2', { state: 'refused' })] } });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Link a device' })).toBeNull());
+    expect(document.activeElement).toBe(behind);
   });
 });
 
