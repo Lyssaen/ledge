@@ -139,7 +139,8 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
   return (
     <section className={cls('project-room', filing.over === id && 'drop-over')} data-project={id} aria-label={t.atelier.table(name)} {...filing.dropProps(id)} style={{ '--room': `${width}px`, '--project': color } as CSSProperties}>
       <div className="table-scene">
-        <div className="office-rug" style={{ left: at(-RUG_SIDE), right: 'auto', width: length + 2 * RUG_SIDE }}>
+        <div className="office-rug" style={{ left: at(-RUG_SIDE), right: 'auto', width: length + 2 * RUG_SIDE }} />
+        <div className="rug-labels" style={{ left: at(-RUG_SIDE), width: length + 2 * RUG_SIDE }}>
           {heading}
           {extraCount > 0 && (
             <button className="table-more" title={t.atelier.moreTitle} onClick={showProject}>
