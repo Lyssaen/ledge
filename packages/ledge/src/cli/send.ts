@@ -59,6 +59,7 @@ export async function sendMessage(args: string[], opts: { port?: number; env?: N
  * comments, an unquoted backslash, newline or glob/tilde character) makes it `undefined`, as does an unclosed quote.
  */
 export function parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'send'; args: string[] } | undefined {
+  command = command.replace(/[\r\n\s]+$/, ''); // a trailing newline ends the one command, it chains nothing
   const words: string[] = [];
   let word = ''; let inWord = false; let quote: '"' | "'" | undefined;
   for (let i = 0; i < command.length; i++) {
