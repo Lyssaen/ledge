@@ -382,11 +382,27 @@ describe('messages through the Ledge mailbox', () => {
   it('recordSent puts a sending card; an existing card is kept, only its peer set', () => {
     const h = new History({ peerOf });
     h.recordSent('fce8', msg);
-    expect(h.items('fce8')).toEqual([{ kind: 'sent', id: 'rid-1', at: later(0), turn: 0, to: 'Pim', peer: 'c0de', text: 'Salut', status: 'sending' }]);
+    expect(h.items('fce8')).toEqual([{ kind: 'sent', id: 'rid-1', at: later(0), turn: 0, to: 'Pim', peer: 'c0de', text: 'Salut', status: 'sending', via: 'ledge' }]);
     h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'Pim', message: 'Vite' } }, 1));
     h.recordSent('fce8', { ...msg, rid: 'toolu_1', text: 'autre' });
     expect(h.items('fce8')).toHaveLength(2);
-    expect(h.items('fce8')[1]).toMatchObject({ id: 'toolu_1', text: 'Vite', peer: 'c0de', status: 'sending' });
+    expect(h.items('fce8')[1]).toMatchObject({ id: 'toolu_1', text: 'Vite', peer: 'c0de', status: 'sending', via: 'ledge' });
+  });
+
+  it('after a restart, a mailbox card still sending failed: its queue is gone; the hook\'s deny still leaves it alone', async () => {
+    const h = new History({ peerOf });
+    h.recordSent('fce8', msg);
+    h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'Pim', message: 'Vite' } }, 1));
+    h.recordSent('fce8', { ...msg, rid: 'toolu_1' });
+    h.recordSent('fce8', { ...msg, rid: 'rid-2' }); h.markSent('fce8', 'rid-2', 'delivered');
+    h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_2', toolInput: { to: 'Bob', message: 'natif' } }, 2));
+    await h.flush();
+    const again = new History({ peerOf }); await again.load(); await again.flush();
+    expect(again.items('fce8').map(i => i.kind === 'sent' && `${i.id}:${i.status}`)).toEqual(['rid-1:failed', 'toolu_1:failed', 'rid-2:delivered', 'toolu_2:sending']);
+    again.record('fce8', ev('PostToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1' }, 3));
+    expect(again.items('fce8')[1]).toMatchObject({ status: 'failed' });
+    const third = new History({ peerOf }); await third.load();
+    expect(third.items('fce8')).toEqual(again.items('fce8'));
   });
 
   it('markSent delivers, and never downgrades a read card', () => {

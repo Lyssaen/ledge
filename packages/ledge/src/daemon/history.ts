@@ -44,7 +44,7 @@ export class History {
   private synced = new Map<string, number>();
   private listeners = new Set<Listener>();
   private writes: Promise<void> = Promise.resolve();
-  /** The rids of the cards Ledge's mailbox recorded: their result is the mailbox's, not the tool call's (not persisted). */
+  /** The rids of the cards Ledge's mailbox recorded: their result is the mailbox's, not the tool call's (their `via`, read back at load). */
   private readonly mailed = new Set<string>();
   private readonly dir: string;
   /** The Ledge session a SendMessage address or a sender's name is, when it is one (peers.ts). */
@@ -60,7 +60,8 @@ export class History {
 
   /** Reads every `<id>.jsonl`: one item per line, the last line of an id wins, a bad line is skipped. A file that cannot
    *  be read is logged and left alone: the thread is a display, it must not keep the daemon from starting. A journal
-   *  holding more lines than items (updates, evicted items) is rewritten with the items kept, through the write chain. */
+   *  holding more lines than items (updates, evicted items) is rewritten with the items kept, through the write chain.
+   *  The mailbox's queue did not survive the restart: its cards still sending failed. */
   async load(): Promise<void> {
     await mkdir(this.dir, { recursive: true });
     for (const entry of await readdir(this.dir, { withFileTypes: true })) {
@@ -76,10 +77,15 @@ export class History {
         lines++;
         try { const it = JSON.parse(line) as ThreadItem; if (typeof it?.id === 'string') byId.set(it.id, it); /* a Map keeps the first position: the thread order survives */ } catch { /* a partial or corrupt line: skip it */ }
       }
-      const items = [...byId.values()].slice(-MAX_ITEMS);
+      const items = [...byId.values()].slice(-MAX_ITEMS); let lost = false;
+      items.forEach((it, i) => {
+        if (it.kind !== 'sent' || it.via !== 'ledge') return;
+        this.mailed.add(it.id);
+        if (it.status === 'sending') { items[i] = { ...it, status: 'failed' }; lost = true; }
+      });
       this.threads.set(id, items);
       this.turns.set(id, items.reduce((n, it) => (typeof it.turn === 'number' ? Math.max(n, it.turn) : n), 0));
-      if (lines > items.length) this.compact(id, items);
+      if (lines > items.length || lost) this.compact(id, items);
     }
   }
 
@@ -216,12 +222,12 @@ export class History {
     return added;
   }
 
-  /** The mailbox has a message to send: its card, `sending`. A card of that id already (Claude's own PreToolUse) stays. */
+  /** The mailbox has a message to send: its card, `sending`. A card of that id already (Claude's own PreToolUse) stays, marked as the mailbox's. */
   recordSent(senderId: string, m: { rid: string; at: string; to: string; peer?: string; text: string; summary?: string }): ThreadItem {
     this.mailed.add(m.rid);
     const existing = this.items(senderId).find((i): i is SentItem => i.kind === 'sent' && i.id === m.rid);
-    if (existing) return m.peer && existing.peer !== m.peer ? this.put(senderId, { ...existing, peer: m.peer }) : existing;
-    return this.put(senderId, { kind: 'sent', id: m.rid, at: m.at, turn: this.turns.get(senderId) ?? 0, to: m.to, ...(m.peer ? { peer: m.peer } : {}), ...(m.summary ? { summary: m.summary } : {}), text: m.text, status: 'sending' });
+    if (existing) return this.put(senderId, { ...existing, ...(m.peer ? { peer: m.peer } : {}), via: 'ledge' });
+    return this.put(senderId, { kind: 'sent', id: m.rid, at: m.at, turn: this.turns.get(senderId) ?? 0, to: m.to, ...(m.peer ? { peer: m.peer } : {}), ...(m.summary ? { summary: m.summary } : {}), text: m.text, status: 'sending', via: 'ledge' });
   }
 
   /** The mailbox's outcome for a card; a `read` card stays read. */
