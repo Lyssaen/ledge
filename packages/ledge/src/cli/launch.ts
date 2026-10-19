@@ -3,7 +3,7 @@ import { readFile, rm } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import type { Session, Tool } from '@ledge/protocol';
 import { PROTOCOL_PORT } from '@ledge/protocol';
-import { connect, type Client } from '../client.js';
+import { connect, DaemonRefusedError, type Client } from '../client.js';
 import { realTmux, type Tmux } from '../tmux.js';
 import { ensureLedgeDir } from '../paths.js';
 import { exitFile, spawnSession } from '../spawn.js';
@@ -39,9 +39,9 @@ function spawnDetachedDaemon(): void {
   child.unref();
 }
 
-export type DaemonConnection = { client: Client } | { client: null; reason: 'foreign' | 'unresponsive' | 'unreachable' };
+export type DaemonConnection = { client: Client } | { client: null; reason: 'foreign' | 'unauthorized' | 'unresponsive' | 'unreachable' };
 
-type Probe = { client: Client } | { client: null; state: 'refused' | 'timeout' | 'foreign' };
+type Probe = { client: Client } | { client: null; state: 'refused' | 'timeout' | 'foreign' | 'unauthorized' };
 
 /** Bounded close: a hung peer must not stall the launcher for ws's 30 s close timeout. */
 const closeQuietly = (c: Client) => Promise.race([c.close(), sleep(500)]);
@@ -55,6 +55,7 @@ async function probe(port: number, timeoutMs: number): Promise<Probe> {
   let client: Client;
   try { client = await connect({ port, timeoutMs }); }
   catch (e) {
+    if (e instanceof DaemonRefusedError) return { client: null, state: 'unauthorized' };
     if ((e as Error).message === 'connect timeout') return { client: null, state: 'timeout' };
     // The error code alone is not reliable (a refused connect can surface as ECONNRESET): ask TCP.
     return { client: null, state: (await portOpen(port)) ? 'foreign' : 'refused' };
@@ -70,6 +71,7 @@ export async function ensureDaemon(opts: { port?: number; spawnDaemon?: () => vo
   const first = await probe(port, timeoutMs);
   if (first.client) return { client: first.client };
   if (first.state === 'foreign') { log(`port ${port} is open but does not speak the Ledge protocol`); return { client: null, reason: 'foreign' }; }
+  if (first.state === 'unauthorized') { log(`the daemon on port ${port} refused this client's token`); return { client: null, reason: 'unauthorized' }; }
   if (first.state === 'timeout') { log(`port ${port} accepted a connection but did not answer within ${timeoutMs} ms`); return { client: null, reason: 'unresponsive' }; }
   (opts.spawnDaemon ?? spawnDetachedDaemon)();
   for (let i = 0; i < 3; i++) {
@@ -134,8 +136,9 @@ export interface LaunchOptions {
   retryDelayMs?: number;
 }
 
-const UNTRACKED: Record<'foreign' | 'unresponsive' | 'unreachable', (port: number) => string> = {
+const UNTRACKED: Record<'foreign' | 'unauthorized' | 'unresponsive' | 'unreachable', (port: number) => string> = {
   foreign: port => `ledge: port ${port} is used by another program, session not tracked`,
+  unauthorized: () => 'ledge: the daemon refused this client\'s token (missing or changed), session not tracked; restart the daemon: systemctl --user restart ledge-daemon',
   unresponsive: () => 'ledge: daemon not responding, session not tracked',
   unreachable: () => 'ledge: daemon not running, session not tracked'
 };

@@ -1749,6 +1749,14 @@ describe('machines list', () => {
     await until(() => gotA.some(m => m.type === 'snapshot'));
     a.close(); await s.close();
   });
+  it('routes /ssh/<alias>?q=1 like /ssh/<alias>', async () => {
+    const aliases: string[] = [];
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, ssh: async (_ws, alias) => { aliases.push(alias); } });
+    const r = await open(s.port, '/ssh/dev-server?q=1');
+    await until(() => aliases.length === 1);
+    expect(aliases).toEqual(['dev-server']);
+    r.close(); await s.close();
+  });
   it('logs once when machines.json exists but is invalid', async () => {
     const f = join(process.env.LEDGE_HOME!, 'machines.json'); writeFileSync(f, '{"trunc');
     const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, machinesFile: f });

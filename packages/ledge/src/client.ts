@@ -9,6 +9,9 @@ export interface Client {
   close(): Promise<void>;
 }
 
+/** The daemon answered the handshake with HTTP 401: it is a Ledge daemon, and it refused this client's token (missing or changed). */
+export class DaemonRefusedError extends Error {}
+
 export function connect(opts: { port?: number; host?: string; timeoutMs?: number; token?: string | null } = {}): Promise<Client> {
   const port = opts.port ?? PROTOCOL_PORT;
   const host = opts.host ?? '127.0.0.1';
@@ -43,6 +46,6 @@ export function connect(opts: { port?: number; host?: string; timeoutMs?: number
     ws.once('open', () => { clearTimeout(t); resolve(client); });
     let settled = false;
     ws.once('open', () => { settled = true; });
-    ws.on('error', e => { if (!settled) { settled = true; clearTimeout(t); reject(e); } });
+    ws.on('error', e => { if (!settled) { settled = true; clearTimeout(t); reject(/Unexpected server response: 401/.test(e.message) ? new DaemonRefusedError('daemon refused the token') : e); } });
   });
 }
