@@ -6,7 +6,7 @@ import { loadMessages } from './i18n/messages';
 import { useFleet } from './fleet/useFleet';
 import { useDecisions } from './fleet/decisions';
 import { useWaits } from './fleet/waits';
-import { useAlerts } from './notify/useAlerts';
+import { useAlerts, usePairingAlerts } from './notify/useAlerts';
 import { getDnd, setDnd, useDnd } from './notify/prefs';
 import { MarkdownLinks } from '@ledge/ui/documents/links';
 // The reader's styles stay in the first bundle, before app.css (as when the reader itself was there): session.css overrides them.
@@ -55,6 +55,8 @@ import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { useDefaultTool } from './settings/tool';
+import { PairingDialog } from './settings/PairingDialog';
+import { usePairingDialog } from './settings/pairingRequest';
 
 const NO_PROJECTS: readonly Project[] = [];
 
@@ -85,6 +87,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const whatsNew = useWhatsNew() !== null;
   // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
   const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdate.running });
+  // A device asking to be linked: the dialog below opens on any screen, the notification only while Desktop is behind.
+  usePairingAlerts(mobile);
+  const pairing = usePairingDialog();
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
   useEffect(() => onTrayAction(action => {
     if (action === 'dnd') setDnd(!getDnd());
@@ -143,7 +148,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
-  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null });
+  // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
+  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : pairing ? { cancel: pairing.dismiss } : null });
   // The window may leave full screen by itself (Escape in a browser, the OS): the layout follows.
   useEffect(() => onFullscreenLeft(() => dispatch({ type: 'fullscreen', on: false })), []);
   // The window follows the full screen state (not at mount: nothing was asked yet).
@@ -230,7 +236,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
 
   // A dialog over the application (a modal, a confirmation, the rename dialog): what lies behind it, the title bar's controls
   // included, takes neither clicks nor the focus.
-  const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew;
+  const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew || pairing !== null;
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
@@ -274,6 +280,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} />
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
+      <PairingDialog mobile={mobile} fleet={fleet} notify={notify} />
       <Toast notice={notice} action={noticeAction} onAction={undo} />
     </ScreenKeysContext.Provider>
   );

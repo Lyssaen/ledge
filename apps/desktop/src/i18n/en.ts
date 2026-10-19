@@ -337,7 +337,23 @@ export const en: Messages = {
     finished: (name) => `${name} has finished`,
     failed: (name) => `${name} ran into an error`,
     manyTitle: 'Your team',
-    many: (n) => `${n} sessions need you or have finished`
+    many: (n) => `${n} sessions need you or have finished`,
+    pairing: 'A device asks for access'
+  },
+  pairing: {
+    title: 'Link a device',
+    intro: { before: 'A device signed in with your account ', after: ' asks for access to your agents.' },
+    introNoAccount: 'A device asks for access to your agents.',
+    codeLabel: 'Pairing code',
+    codeSpelled: (spelled) => `Pairing code: ${spelled}`,
+    check: 'Check that the phone shows exactly this code. Approve here, then confirm on the phone.',
+    warn: 'If the codes differ, deny: someone else is trying to link.',
+    expiresIn: (left) => `expires in ${left}`,
+    deny: 'Deny', approve: 'Approve',
+    approved: { strong: 'Approved on this PC.', rest: ' Now confirm on the phone.' },
+    linked: { strong: (label) => `${label} is linked.`, rest: ' It shows in Settings › Mobile access › Devices.' },
+    expired: 'The request expired. Start again from the phone.',
+    close: 'Close'
   },
   atelier: {
     table: (name) => `${name} table`,

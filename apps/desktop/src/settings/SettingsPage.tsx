@@ -21,6 +21,7 @@ import { Projects } from './Projects';
 import { Shortcuts } from './Shortcuts';
 import { About } from './About';
 import { shownOf } from './machineDrafts';
+import { usePairingDialogOpen } from './pairingRequest';
 import { EscapeLayersContext, escapeLayers, type EscapeLayers } from './escape';
 
 /** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,
@@ -93,6 +94,7 @@ export function SettingsPage({ section, ctx }: { section: SectionId; ctx: Settin
   // Escape closes the one thing its first press did, no more, and never leaves the page (its repeats are taken and do nothing).
   const layers = useRef<EscapeLayers>({ list: [] }).current;
   useScreenKeys(e => e.key === 'Escape' && (e.repeat || escapeLayers(layers)));
+  const pairingOpen = usePairingDialogOpen();
   const alert = (id: SectionId): string | null =>
     id === 'machines' && ctx.machines.some(m => shownOf(m) === 'offline') ? s.machineOffline
     : id === 'mobile' && mobileDown(ctx.mobile) ? s.mobileOffline
@@ -109,7 +111,7 @@ export function SettingsPage({ section, ctx }: { section: SectionId; ctx: Settin
             <button key={id} type="button" className={id === section ? 'settings-tab active' : 'settings-tab'} aria-current={id === section ? 'page' : undefined}
               onClick={() => dispatch({ type: 'settings', section: id })}>
               <Icon d={SECTION_ICONS[id]} size={15} /><span>{t.sections[id]}</span>{note && <b className="side-alert" role="img" aria-label={note} />}
-              {id === 'mobile' && mobileAsks(ctx.mobile) && <b className="side-alert mob-ask" role="img" aria-label={s.mobileAsks} />}
+              {id === 'mobile' && mobileAsks(ctx.mobile, pairingOpen) && <b className="side-alert mob-ask" role="img" aria-label={s.mobileAsks} />}
             </button>
           );
         })}

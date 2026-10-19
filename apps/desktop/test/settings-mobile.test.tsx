@@ -3,8 +3,8 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DEFAULT_RELAY_URL, type MobileClientMessage, type MobileState } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
-import { Mobile, mobileDown } from '../src/settings/Mobile';
-import { clearPairingRequest, usePairingRequest } from '../src/settings/pairingRequest';
+import { Mobile, mobileAsks, mobileDown } from '../src/settings/Mobile';
+import { clearPairingRequest, setPairingDialogOpen, usePairingRequest } from '../src/settings/pairingRequest';
 import type { SettingsContext } from '../src/settings/SettingsPage';
 import { openUrl } from '../src/tauri/bridge';
 import { machine } from './fleet-helpers';
@@ -31,7 +31,7 @@ const field = () => screen.getByRole('textbox', { name: 'Serveur relais' });
 const accessSwitch = () => screen.getByRole('switch', { name: 'Accès mobile' });
 const card = (name: string) => within(screen.getByRole('region', { name }));
 
-beforeEach(() => { vi.mocked(openUrl).mockClear(); clearPairingRequest(); });
+beforeEach(() => { vi.mocked(openUrl).mockClear(); clearPairingRequest(); setPairingDialogOpen(null); });
 afterEach(async () => { vi.useRealTimers(); await closeDaemons(); });
 
 describe('Settings › Accès mobile', () => {
@@ -156,6 +156,17 @@ describe('Settings › Accès mobile', () => {
     expect(seen.at(-1)).toBe('p1');
   });
 
+  it('while the « Lier un appareil » dialog is on screen, the pending rows leave the list (the mockup\'s showPending), then come back', () => {
+    const asking: MobileState = { ...ONLINE, pairings: [{ id: 'p1', label: 'Pixel · Chrome', code: '482 913', expiresAt: new Date(Date.now() + 272_000).toISOString(), state: 'confirm' }] };
+    act(() => setPairingDialogOpen({ id: 'p1', dismiss: () => {} }));
+    show(asking);
+    expect(screen.queryByRole('article', { name: "Pixel · Chrome demande l'accès" })).toBeNull();
+    expect(mobileAsks(asking, true)).toBe(false);
+    act(() => setPairingDialogOpen(null));
+    expect(screen.getByRole('article', { name: "Pixel · Chrome demande l'accès" })).toBeVisible();
+    expect(mobileAsks(asking)).toBe(true);
+  });
+
   it('relay URL: an http address is refused under the field and nothing is sent; a valid one is sent on Enter as its origin', async () => {
     const { sent, user } = show(ONLINE);
     await user.clear(field());
@@ -197,7 +208,12 @@ describe('the Mobile access section in the app', () => {
   it('sits between Machines and Projects, with its dots; its commands reach the local daemon', async () => {
     const { d, user } = await boot({ projects: TWO_PROJECTS });
     const retryAt = new Date(Date.now() + 30_000).toISOString();
-    d.push({ type: 'mobile', state: { ...ONLINE, link: { state: 'offline', retryAt, error: 'x' }, pairings: [{ id: 'p1', label: 'Pixel · Chrome', code: '482913', expiresAt: retryAt, state: 'confirm' }] } });
+    d.push({ type: 'mobile', state: { ...ONLINE, link: { state: 'offline', retryAt, error: 'x' }, pairings: [{ id: 'p1', label: 'Pixel · Chrome', code: '482 913', expiresAt: retryAt, state: 'confirm' }] } });
+    // The pairing opens « Link a device » over the atelier; Escape only closes it (nothing goes to the daemon).
+    expect(await screen.findByRole('dialog', { name: 'Link a device' })).toBeVisible();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Link a device' })).toBeNull();
+    expect(d.received.some(m => m.type === 'mobile.pairing.deny')).toBe(false);
     await user.keyboard('{Control>},{/Control}');
     await screen.findByRole('heading', { level: 1, name: 'General' });
     const nav = within(screen.getByRole('navigation', { name: 'Settings sections' }));

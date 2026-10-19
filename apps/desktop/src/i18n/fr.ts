@@ -353,7 +353,25 @@ export const fr = {
     finished: (name: string) => `${name} a terminé`,
     failed: (name: string) => `${name} a rencontré une erreur`,
     manyTitle: 'Votre équipe',
-    many: (n: number) => `${n} sessions vous attendent ou ont terminé`
+    many: (n: number) => `${n} sessions vous attendent ou ont terminé`,
+    /** A pairing waits for its code to be compared (the dialog « Lier un appareil »); the body is the device's label. */
+    pairing: "Un appareil demande l'accès"
+  },
+  /** The dialog « Lier un appareil » (docs/mockups/mobile-access, scenario « pairing »). */
+  pairing: {
+    title: 'Lier un appareil',
+    intro: { before: 'Un appareil connecté avec votre compte ', after: " demande l'accès à vos agents." },
+    introNoAccount: "Un appareil demande l'accès à vos agents.",
+    codeLabel: 'Code de liaison',
+    codeSpelled: (spelled: string) => `Code de liaison : ${spelled}`,
+    check: 'Vérifiez que le téléphone affiche exactement ce code. Approuvez ici, puis confirmez sur le téléphone.',
+    warn: "Si les codes diffèrent, refusez : quelqu'un d'autre tente de se lier.",
+    expiresIn: (left: string) => `expire dans ${left}`,
+    deny: 'Refuser', approve: 'Approuver',
+    approved: { strong: 'Approuvé sur ce PC.', rest: ' Confirmez maintenant sur le téléphone.' },
+    linked: { strong: (label: string) => `${label} est lié.`, rest: ' Il apparaît dans Réglages › Accès mobile › Appareils.' },
+    expired: 'La demande a expiré. Recommencez depuis le téléphone.',
+    close: 'Fermer'
   },
   atelier: {
     table: (name: string) => `Table ${name}`,

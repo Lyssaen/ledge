@@ -270,3 +270,21 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 .pending-entry .machine-glyph{color:var(--sidebar-primary);border-color:color-mix(in srgb,var(--sidebar-primary) 40%,var(--input))}
 .pending-entry .machine-main>.set-actions{margin-left:0}
 .pending-what{font-size:13px;color:var(--muted-foreground)}
+/* « Lier un appareil » (docs/mockups/mobile-access/mobile-access.css): the dialog opens on any screen, so these load with the app. */
+.modal.pair-modal{width:440px}
+.pair-content{display:flex;flex-direction:column;gap:12px;padding:16px 20px 18px}
+.pair-content p{margin:0;font-size:13px;line-height:20px}
+.pair-content p strong{font-weight:600}
+.pair-device{display:flex;align-items:center;gap:10px;font-size:14px}
+.pair-device strong{font-weight:600}
+.pair-code{display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px 12px 16px;border-radius:var(--radius-lg);background:var(--well);border:1px solid var(--input);transition:opacity .2s}
+.pair-code.dim{opacity:.55}
+.pair-code-label{font-size:11px;color:var(--muted-foreground)}
+.pair-code output{font-family:'Geist Mono',ui-monospace,monospace;font-size:46px;line-height:54px;font-weight:500;letter-spacing:.08em;color:var(--foreground);font-variant-numeric:tabular-nums}
+.pair-gap{display:inline-block;width:.45em}
+.pair-content .pair-warn{padding-left:10px;border-left:2px solid var(--warning);font-size:12px;line-height:18px;color:var(--muted-foreground)}
+.pair-actions{display:flex;align-items:center;gap:8px;margin-top:6px}
+.pair-expiry{font-variant-numeric:tabular-nums}
+.set-well.pair-wait{margin:0;align-items:center;font-size:13px}
+.set-well.pair-result{margin:0;font-size:13px;line-height:20px}
+.set-well.pair-result>svg{margin-top:2px}

@@ -7,11 +7,11 @@ import { spanOf } from '../list/time';
 import { openUrl } from '../tauri/bridge';
 import { Card, Row, SwitchRow } from './controls';
 import { useEscapeLayer } from './escape';
-import { requestPairingDialog } from './pairingRequest';
+import { PHONE } from './PairingDialog';
+import { requestPairingDialog, usePairingDialogOpen } from './pairingRequest';
 import type { SettingsContext } from './SettingsPage';
 
-/** The mockup's phone (docs/mockups/mobile-access/main.tsx): the section's icon and each device's glyph. */
-export const PHONE = ['M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z', 'M11 18h2'];
+export { PHONE };
 const COPY = ['M9 9h11v11H9z', 'M5 15H4V4h11v1'];
 
 type Send = (msg: MobileClientMessage) => boolean;
@@ -34,8 +34,8 @@ function useNow(every: number | null): number {
 /** The mockup's link problems in the nav: the access is on but cannot reach the relay (offline, signed out, account refused). */
 export const mobileDown = (m: MobileState | undefined): boolean =>
   m !== undefined && m.enabled && (m.link.state === 'offline' || m.link.state === 'signed_out' || (m.link.state === 'off' && (m.signinError === 'not_allowed' || m.signinError === 'failed')));
-/** A device waits for its code to be compared. */
-export const mobileAsks = (m: MobileState | undefined): boolean => m !== undefined && m.enabled && m.pairings.some(p => p.state === 'confirm');
+/** A device waits for its code to be compared, and the « Link a device » dialog is not showing it (the mockup's `showPending`). */
+export const mobileAsks = (m: MobileState | undefined, dialogOpen = false): boolean => !dialogOpen && m !== undefined && m.enabled && m.pairings.some(p => p.state === 'confirm');
 
 /** Settings › Mobile access (docs/mockups/mobile-access, the validated mockup): the local daemon's relay, its GitHub account and the
  *  link's state, then the approved devices and the pairings waiting for their code. Every change is a command to the daemon
@@ -205,7 +205,9 @@ function Devices({ m, send }: { m: MobileState; send: Send }): JSX.Element {
   const [revoked, setRevoked] = useState<string | null>(null);
   const now = useNow(60_000);
   useEscapeLayer(() => { if (confirming === null) return false; setConfirming(null); return true; });
-  const asking = m.enabled ? m.pairings.filter(p => p.state === 'confirm') : [];
+  // While the dialog is on screen, its pairing (and the others waiting behind it) leave the list, as in the mockup.
+  const dialogOpen = usePairingDialogOpen();
+  const asking = m.enabled && !dialogOpen ? m.pairings.filter(p => p.state === 'confirm') : [];
   const date = new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'short', year: 'numeric' });
   const linkedOn = (iso: string) => { const at = Date.parse(iso); return Number.isNaN(at) ? null : c.linkedOn(date.format(at)); };
   const seen = (iso: string | undefined) => {
