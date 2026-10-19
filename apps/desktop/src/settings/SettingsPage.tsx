@@ -8,7 +8,7 @@ import { useI18n, type Lang } from '../i18n/lang';
 import { SECTIONS, type NavAction, type SectionId } from '../nav/state';
 import { useScreenKeys } from '../nav/screenKeys';
 import type { Alerts } from '../notify/useAlerts';
-import type { DaemonUpdate } from '../update/daemon';
+import type { DaemonUpdates } from '../update/daemon';
 import { updateReady, useUpdate } from '../update/store';
 import { General } from './General';
 import { Appearance } from './Appearance';
@@ -25,7 +25,7 @@ import { EscapeLayersContext, escapeLayers, type EscapeLayers } from './escape';
 /** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,
  *  in `lang` when given), the fleet, its client (what a machine says of its folders) and its machines, the projects, the island's settings
  *  (undefined until the local daemon speaks of them, null while none was set), the sessions, navigation, the alerts (the Sounds' Test), the
- *  local daemon's update, the language and how to change it (its strings load first: 'failed' leaves the language as it is),
+ *  daemons' updates (one per machine), the language and how to change it (its strings load first: 'failed' leaves the language as it is),
  *  and whether the animations are frozen. */
 export interface SettingsContext {
   notify(text: string): void;
@@ -39,7 +39,7 @@ export interface SettingsContext {
   sessions: readonly Session[];
   dispatch(a: NavAction): void;
   alerts: Alerts;
-  daemonUpdate: DaemonUpdate;
+  daemonUpdates: DaemonUpdates;
   lang: Lang;
   setLang(l: Lang): Promise<'ok' | 'failed'>;
   paused: boolean;
@@ -89,8 +89,9 @@ export function SettingsPage({ section, ctx }: { section: SectionId; ctx: Settin
   const layers = useRef<EscapeLayers>({ list: [] }).current;
   useScreenKeys(e => e.key === 'Escape' && (e.repeat || escapeLayers(layers)));
   const alert = (id: SectionId): string | null =>
-    id === 'machines' && ctx.machines.some(m => shownOf(m) === 'offline') ? s.machineOffline
-    : id === 'about' && (updateReady(update) || ctx.daemonUpdate.offer !== 'none') ? s.updateWaiting
+    // A machine whose daemon restarts for its update is not « offline » (#48).
+    id === 'machines' && ctx.machines.some(m => shownOf(m) === 'offline' && !ctx.daemonUpdates.updating.has(m.id)) ? s.machineOffline
+    : id === 'about' && (updateReady(update) || ctx.machines.some(m => ctx.daemonUpdates.of(m.id).offer !== 'none')) ? s.updateWaiting
     : null;
 
   return (

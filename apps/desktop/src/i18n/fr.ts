@@ -24,7 +24,7 @@ export const fr = {
   side: {
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
-    machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
+    machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
     ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…',
     openChat: 'Ouvrir la conversation avec Ledge',
     active: (n: number) => plural(n, `${n} actif`, `${n} actifs`),
@@ -280,10 +280,10 @@ export const fr = {
       install: { npm: 'npm', git: 'clone git', unknown: 'installation inconnue' } as Record<DaemonInfo['install'], string>,
       unknown: 'Version inconnue', behindTag: 'À mettre à jour', latest: 'Dernière version', latestUnknown: 'Pas encore vérifiée',
       behind: (names: readonly string[]) => `${new Intl.ListFormat('fr', { type: 'conjunction' }).format(names)} ${plural(names.length, 'n’a', 'n’ont')} pas la dernière version.`,
-      updateDaemon: 'Mettre à jour le daemon', updateDaemonHint: (v: string) => `Le daemon local passe à Ledge ${v}, puis redémarre.`, update: 'Mettre à jour',
-      log: 'Journal du daemon',
+      updateDaemon: (label: string) => `Mettre à jour le daemon · ${label}`, updateDaemonHint: (label: string, v: string) => `Le daemon de ${label} passe à Ledge ${v}, puis redémarre.`, update: 'Mettre à jour',
+      log: (label: string) => `Journal du daemon · ${label}`,
       step: {
-        sent: (v: string) => `Demande envoyée au daemon local : ${v}`,
+        sent: (label: string, v: string, auto: boolean) => auto ? `Mise à jour automatique du daemon de ${label} : ${v}` : `Demande envoyée au daemon de ${label} : ${v}`,
         installing: 'Installation de la nouvelle version…',
         restarting: 'Redémarrage du daemon…',
         done: (v: string) => `Daemon à jour : ${v}`
@@ -294,7 +294,7 @@ export const fr = {
         'sessions-at-risk': 'Vos sessions tournent dans le service du daemon : un redémarrage les fermerait. Fermez-les, ou redémarrez WSL, puis réessayez.',
         'npm-failed': 'Le daemon n’a pas pu se mettre à jour. Rien n’a changé.',
         busy: 'Une mise à jour est déjà en cours.',
-        offline: 'Le daemon local n’est pas connecté : rien n’a été envoyé.',
+        offline: 'Ce daemon n’est pas connecté : rien n’a été envoyé.',
         timeout: 'Le daemon ne répond plus.'
       } as Record<UpdateFailure | 'offline' | 'timeout', string>,
       timeoutCommand: 'systemctl --user status ledge-daemon',

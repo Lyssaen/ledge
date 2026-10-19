@@ -28,7 +28,7 @@ import { LaunchPlace } from './launch/lazy';
 import { ChatPlace } from './chat/lazy';
 import { SettingsPlace } from './settings/lazy';
 import type { SettingsContext } from './settings/SettingsPage';
-import { daemonTarget, useDaemonUpdate } from './update/daemon';
+import { daemonTarget, useDaemonUpdates } from './update/daemon';
 import { useUpdate } from './update/store';
 import { takeWhatsNew } from './update/notes';
 import { openWhatsNew, useWhatsNew } from './update/whatsNewView';
@@ -76,14 +76,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [revealArchives, setRevealArchives] = useState(0);
   // The session page's « N sous-agents » bumps this; the tree unfolds that session and scrolls to it (0 never counts).
   const [revealCurrent, setRevealCurrent] = useState(0);
-  // The local daemon's update, started from Settings › About; while it runs, the daemon's restart is expected and silent.
+  // Every machine's daemon follows Desktop on its own, or from Settings › About (#48); while one updates, its restart is expected and silent.
   const update = useUpdate();
-  const daemonUpdate = useDaemonUpdate(fleet, machines, daemonTarget(update));
+  const daemonUpdates = useDaemonUpdates(fleet, machines, daemonTarget(update), update.app);
   // The first launch on a new version shows its notes, once (#26).
   useEffect(() => { const w = takeWhatsNew(update.app); if (w) openWhatsNew({ mode: 'updated', ...w }); }, [update.app]);
   const whatsNew = useWhatsNew() !== null;
   // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
-  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdate.running });
+  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local') });
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
   useEffect(() => onTrayAction(action => {
     if (action === 'dnd') setDnd(!getDnd());
@@ -215,7 +215,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // What the Settings page's sections receive; « Setting saved · … » goes through the app's toast, once per accepted change
   // (in the language just chosen, for the language itself: the render that speaks it has not happened yet).
   const settings: SettingsContext = {
-    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, projectIdOf, sessions, dispatch, alerts, daemonUpdate,
+    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, projectIdOf, sessions, dispatch, alerts, daemonUpdates,
     lang, setLang, paused: nav.paused
   };
 
@@ -226,7 +226,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     <ScreenKeysContext.Provider value={screenKeys}>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
-        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
+        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
           onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent} />
         <section className="workspace">

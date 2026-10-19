@@ -100,7 +100,9 @@ export function Machines({ ctx }: { ctx: SettingsContext }): JSX.Element {
       {!localUp && <div role="status" className="set-well"><span>{t.offline}</span></div>}
       {machines.map(m => {
         if (form?.editing === m.id) return null;
-        const shown = shownOf(m);
+        // A daemon restarting for its update (#48) is coming back: « Connecting… », not « Offline ».
+        const seen = shownOf(m);
+        const shown = seen === 'offline' && ctx.daemonUpdates.updating.has(m.id) ? 'connecting' : seen;
         return (
           <article key={m.id} className="machine-entry" aria-label={m.label}>
             <span className="machine-glyph" aria-hidden="true"><Icon d={m.ssh ? SERVER_GLYPH : LOCAL_GLYPH} size={16} /></span>

@@ -126,6 +126,8 @@
 .side-swatch{width:9px;height:9px;border-radius:3px;margin:0 3px;flex-shrink:0;background:var(--info)}
 .machine-dot{width:7px;height:7px;border-radius:50%;margin:0 4px 0 2px;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 18%,transparent);flex-shrink:0}
 .machine-dot.off{background:none;border:1.5px solid var(--muted-foreground);box-shadow:none}
+/* A daemon restarting for its update (#48): neither online nor offline. */
+.machine-dot.updating{background:var(--warning);box-shadow:0 0 0 3px color-mix(in srgb,var(--warning) 18%,transparent)}
 @media(max-width:1250px){.sidebar.st{width:256px}}
 /* A narrow window: a 64 px rail, the projects as swatches with their tally, the rest behind icons. */
 @media(max-width:850px){
