@@ -1,4 +1,4 @@
-import { MachinesSchema, type Machine, type IslandPrefs } from '@ledge/protocol';
+import { MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
@@ -40,6 +40,10 @@ export interface Fleet {
   island(): IslandPrefs | null | undefined;
   /** Asks the local daemon to replace them; applied on its broadcast. Throws when invalid, `DaemonOffline` when not connected, `DaemonOutdated` when it never sent them. */
   setIsland(next: IslandPrefs): void;
+  /** The mobile access state as the local daemon holds it: undefined until it speaks of it; kept while it is down. */
+  mobile(): MobileState | undefined;
+  /** Sends a mobile access command to the local daemon; the effect arrives on its broadcast. Throws `DaemonOffline` when not connected, `DaemonOutdated` when it never sent the state. */
+  sendMobile(msg: MobileClientMessage): void;
 }
 export const LOCAL_MACHINE: MachineConfig = { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' };
 /** The shared list rules live in the protocol; the fleet only pins the local URL (spec §5.1). */
@@ -130,4 +134,8 @@ const undefinedSnapshot = () => undefined;
 /** The island's settings as the local daemon holds them: undefined until it speaks of them, null while none was set. */
 export function useIsland(client: DaemonClient): IslandPrefs | null | undefined {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.island ?? undefinedSnapshot, undefinedSnapshot);
+}
+/** The mobile access state as the local daemon holds it: undefined until it speaks of it. */
+export function useMobile(client: DaemonClient): MobileState | undefined {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.mobile ?? undefinedSnapshot, undefinedSnapshot);
 }

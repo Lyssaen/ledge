@@ -1,4 +1,4 @@
-import { ChatTurnSchema, isArchived, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
+import { ChatTurnSchema, isArchived, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
 import type { TokenSource } from './token';
@@ -59,6 +59,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   let projects: Projects | null = null;
   /** The local daemon's island settings: undefined until it sends them, null while none was set. */
   let island: IslandPrefs | null | undefined;
+  /** The local daemon's mobile access state: undefined until it sends it. */
+  let mobile: MobileState | undefined;
   let routing: PendingRoute | null = null, resetAt = '', lastStatus: DaemonStatus = 'connecting';
   const emit = (m: ServerMessage) => messages.forEach(fn => fn(m));
   const day = () => new Date().toISOString().slice(0, 10);
@@ -159,6 +161,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'island') {
       if (machine !== 'local') return;
       island = m.prefs; listeners.forEach(fn => fn());
+      return;
+    }
+    // Mobile access is the local daemon's alone (its relay session and approved devices): a remote machine's is ignored.
+    if (m.type === 'mobile') {
+      if (machine !== 'local') return;
+      mobile = m.state; listeners.forEach(fn => fn());
       return;
     }
     machineMessages.forEach(fn => fn(machine, m));
@@ -375,6 +383,13 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
         if (island === undefined) throw Object.assign(new Error('Update the local Ledge daemon: it does not know the island settings'), { name: 'DaemonOutdated' });
         local.send({ type: 'island.set', prefs: valid });
+      },
+      mobile: () => mobile,
+      sendMobile(msg) {
+        const local = peers.get('local')!.client;
+        if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
+        if (mobile === undefined) throw Object.assign(new Error('Update the local Ledge daemon: it does not know mobile access'), { name: 'DaemonOutdated' });
+        local.send(msg);
       }
     }
   };
