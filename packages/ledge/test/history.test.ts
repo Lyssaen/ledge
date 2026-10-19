@@ -432,4 +432,13 @@ describe('messages through the Ledge mailbox', () => {
     expect(h.items('fce8')).toEqual([{ kind: 'received', id: 'recv-1-0', at: later(1), turn: 1, from: 'Pim', text: 'Bonjour', peer: 'c0de', sent: 'rid-1' }]);
     expect(h.items('c0de')[0]).toMatchObject({ status: 'read', received: 'recv-1-0' });
   });
+
+  it('a multi-line message, typed on one line, pairs with its own card', () => {
+    const h = new History({ peerOf });
+    h.recordSent('c0de', { ...msg, to: 'Otto', peer: 'fce8', text: 'ligne 1\nligne 2' });
+    h.recordSent('c0de', { ...msg, rid: 'rid-2', to: 'Otto', peer: 'fce8', text: 'autre' });
+    h.record('fce8', ev('UserPromptSubmit', { text: formatLedgeMessage({ from: 'Pim', tool: 'codex', text: 'ligne 1\nligne 2', to: 'claude' }) }, 1));
+    expect(h.items('fce8')[0]).toMatchObject({ kind: 'received', sent: 'rid-1' });
+    expect(h.items('c0de').map(i => i.kind === 'sent' && `${i.id}:${i.status}`)).toEqual(['rid-1:read', 'rid-2:sending']);
+  });
 });

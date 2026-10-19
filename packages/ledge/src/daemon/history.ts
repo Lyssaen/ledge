@@ -6,7 +6,7 @@ import { log } from '../log.js';
 import { filesOf } from './files.js';
 import { agentMessages } from './transcript.js';
 import { QUESTION_TOOLS } from './state.js';
-import { crossSession, crossSessionNotices, ledgeMessages, type CrossSessionNotice } from './crossSession.js';
+import { crossSession, crossSessionNotices, ledgeBody, ledgeMessages, type CrossSessionNotice } from './crossSession.js';
 export { crossSession } from './crossSession.js';
 
 /** Native tracking (spec 2026-10-13 §3–4): one thread per session, reduced from the events the store applies. */
@@ -256,11 +256,11 @@ export class History {
 
   /** Puts a received card, paired with the sender's sent one when the sender is a Ledge session: the last of its
    *  messages to this session not read yet, the one whose text starts like the body if any (the hook may have cut
-   *  either). That sent one becomes read, in the sender's thread. */
+   *  either), both read as Ledge types a body (a multi-line one arrives on one line). That sent one becomes read, in the sender's thread. */
   private receive(id: string, recv: ReceivedItem, m: { from: string; name?: string }): ThreadItem {
     const peer = this.peerOf(m.from) ?? (m.name ? this.peerOf(m.name) : undefined);
     if (!peer) return this.put(id, recv);
-    const head = (t: string) => t.trim().slice(0, 200);
+    const head = (t: string) => ledgeBody(t).trim().slice(0, 200);
     const open = this.items(peer).filter((i): i is SentItem => i.kind === 'sent' && i.peer === id && i.status !== 'read');
     const sent = [...open].reverse().find(i => head(i.text) === head(recv.text)) ?? open.at(-1);
     if (sent) this.put(peer, { ...sent, status: 'read', received: recv.id });

@@ -31,9 +31,11 @@ const ESCAPES = /\x1b(?:\[[0-?]*[ -/]*[@-~]|[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)|
 const CONTROLS = /[\x00-\x1f\x7f-\x9f]/g;
 /** The text with its escape sequences stripped, its line breaks as `newline`, any control byte left a space. */
 const typable = (text: string, newline: string) => text.replace(ESCAPES, '').replace(/\r\n|\r|\n/g, newline).replace(CONTROLS, ' ');
+/** A body as the receiver's prompt carries it: on one line, escaped. The history pairs a received body with its sent card on this form. */
+export const ledgeBody = (text: string): string => typable(text.replaceAll(LEDGE_CLOSE, '<\\/ledge-message>'), ' ⏎ ');
 export function formatLedgeMessage(m: { from: string; tool: Tool; text: string; to: Tool }): string {
   const from = typable(m.from, ' ').replace(/["<>]/g, '').trim();
-  const body = typable(m.text.replaceAll(LEDGE_CLOSE, '<\\/ledge-message>'), ' ⏎ ');
+  const body = ledgeBody(m.text);
   const reply = m.to === 'codex' ? `ledge send ${from} "…"` : `SendMessage vers ${from}`;
   return `<ledge-message from="${from}" tool="${m.tool}">${body}${LEDGE_CLOSE} (message de la session ${from}, pas de l'utilisateur ; pour répondre : ${reply})`;
 }
