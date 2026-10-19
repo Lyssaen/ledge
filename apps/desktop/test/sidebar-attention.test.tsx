@@ -62,6 +62,34 @@ describe('Your turn', () => {
     expect(await screen.findByRole('menu', { name: 'Manage Otto' })).toBeVisible();
   });
 
+  it('a plan shows View, not Yes or No', async () => {
+    const plan = fakeSession('pia', {
+      name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission',
+      pending: { kind: 'plan', text: '# Plan', source: 'hook' }
+    });
+    const { d, side, user } = await boot({ sessions: [plan] });
+    const region = yours(side);
+    expect(region.queryByRole('button', { name: 'Yes' })).toBeNull();
+    expect(region.queryByRole('button', { name: 'No' })).toBeNull();
+    await user.click(region.getByRole('button', { name: 'View' }));
+    expect(banner().getByText('Pia')).toBeVisible();
+    expect(d.received.filter(m => m.type === 'session.decide')).toEqual([]);
+  });
+
+  it('a read-only permission shows View, not Yes or No', async () => {
+    const ro = fakeSession('ro', {
+      name: 'Ro', cwd: '/tmp', source: 'hook_only', state: 'waiting_permission',
+      pending: { kind: 'permission', text: 'npm test', source: 'hook' }
+    });
+    const { d, side, user } = await boot({ sessions: [ro] });
+    const region = yours(side);
+    expect(region.queryByRole('button', { name: 'Yes' })).toBeNull();
+    expect(region.queryByRole('button', { name: 'No' })).toBeNull();
+    await user.click(region.getByRole('button', { name: 'View' }));
+    expect(banner().getByText('Ro')).toBeVisible();
+    expect(d.received.filter(m => m.type === 'session.decide')).toEqual([]);
+  });
+
   it('View opens an error', async () => {
     const err = fakeSession('err', { name: 'Err', cwd: '/tmp', state: 'error' });
     const { side, user } = await boot({ sessions: [err] });

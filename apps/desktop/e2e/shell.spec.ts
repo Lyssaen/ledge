@@ -36,6 +36,16 @@ test('a stored list preference opens the atelier', async ({ page }) => {
   await expect(page.getByRole('tab', { name: 'List' })).toHaveCount(0);
 });
 
+test('at 520 px the sidebar is hidden and / opens the chat', async ({ page }) => {
+  await page.setViewportSize({ width: 520, height: 800 });
+  await fakeDaemon(page, eight, { projects: twoProjects });
+  await page.goto('/');
+  await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
+  await expect(page.locator('aside.sidebar')).toBeHidden();
+  await page.keyboard.press('/');
+  await expect(page.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
+});
+
 test('at 1000 px the top bar stays on one line with a long project name', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 700 });
   await fakeDaemon(page, eight, { projects: { projects: [{ id: 'ledge', name: 'Payment Service Platform Migration Europe', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] } });

@@ -31,10 +31,11 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
         e.preventDefault(); dispatch({ type: 'escape' }); return;
       }
       if (state.modal?.kind === 'search') return;
-      // / focuses Ask Ledge when the sidebar is showing; full screen has no sidebar, so it opens the chat (already open: its field takes the focus again). In a field, / is typed.
+      // / focuses Ask Ledge when that field is actually on screen. The rail (under 850px), a window under 540px,
+      // and full screen hide it, so / opens the chat (already open: its field takes the focus again). In a field, / is typed.
       if (!state.modal && e.key === '/' && !mod && !e.altKey && !typing(document.activeElement)) {
         const ask = document.querySelector<HTMLInputElement>('[data-ask-input]');
-        if (ask && !state.fullscreen) { e.preventDefault(); ask.focus(); return; }
+        if (ask && ask.getClientRects().length > 0 && !state.fullscreen) { e.preventDefault(); ask.focus(); return; }
         e.preventDefault(); dispatch({ type: 'chat', open: true }); return;
       }
       if (state.modal || state.chat || typing(document.activeElement)) return;

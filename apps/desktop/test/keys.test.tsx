@@ -53,6 +53,23 @@ describe('global shortcuts', () => {
     field.remove();
   });
 
+  it('/ opens the chat when Ask Ledge is hidden', async () => {
+    const { user } = await boot({ projects: TWO_PROJECTS });
+    const ask = screen.getByRole('textbox', { name: 'Ask Ledge' });
+    vi.spyOn(ask, 'getClientRects').mockReturnValue([] as unknown as DOMRectList);
+    await user.keyboard('/');
+    expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
+    expect(ask).not.toHaveFocus();
+  });
+
+  it('/ opens the chat in full screen', async () => {
+    const { user } = await boot({ projects: TWO_PROJECTS });
+    await user.click(screen.getByRole('button', { name: 'Full screen' }));
+    await user.keyboard('/');
+    expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
+    expect(document.querySelector('[data-ask-input]')).not.toHaveFocus();
+  });
+
   it('N opens New session, ? the shortcuts, / focuses Ask Ledge', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
     await user.keyboard('n'); expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible(); await user.keyboard('{Escape}');

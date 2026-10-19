@@ -19,6 +19,13 @@ describe('the sidebar shell', () => {
     expect(side.queryByRole('button', { name: /Search/ })).toBeNull();
   });
 
+  it('clicking the / hint focuses Ask Ledge and does not open the chat', async () => {
+    const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
+    await user.click(side.getByText('/', { selector: 'kbd' }));
+    expect(side.getByRole('textbox', { name: 'Ask Ledge' })).toHaveFocus();
+    expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
+  });
+
   it('/ focuses Ask Ledge; Enter with text opens the chat and sends chat.ask', async () => {
     // One machine: with two, the fleet sends chat.route instead of chat.ask (chat.test boots the same way).
     const { d, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions(), machines: [{ id: 'local', label: 'Local' }] });

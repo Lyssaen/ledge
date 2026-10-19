@@ -31,6 +31,21 @@ if (typeof document !== 'undefined' && !globalThis.localStorage) {
   }
 }
 
+// jsdom lays nothing out, so getClientRects() is always empty. `/` treats an empty list as "Ask Ledge is hidden"
+// and opens the chat. A connected element reports one rect unless it, or an ancestor, is hidden.
+if (typeof document !== 'undefined') {
+  const orig = Element.prototype.getClientRects;
+  Element.prototype.getClientRects = function (this: Element) {
+    const real = orig.call(this);
+    if (real.length > 0 || !this.isConnected) return real;
+    for (let el: Element | null = this; el; el = el.parentElement) {
+      if (el instanceof HTMLElement && (el.hidden || el.style.display === 'none' || el.style.visibility === 'hidden')) return real;
+    }
+    const box = new DOMRect(0, 0, 1, 1);
+    return { length: 1, 0: box, item: (i: number) => (i === 0 ? box : null), *[Symbol.iterator]() { yield box; } } as DOMRectList;
+  };
+}
+
 // jsdom has no ResizeObserver; a silent one lets measured layouts fall back to their defaults. Tests stub their own to report sizes.
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;

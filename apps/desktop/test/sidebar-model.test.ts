@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { projectOf } from '@ledge/fleet';
 import { TWO_PROJECTS } from './helpers';
-import { attentionOf, branchOf, filterArchived, isFinished, treeModel } from '../src/shell/sidebar/model';
+import { attentionOf, branchOf, filterArchived, isFinished, quickDecide, treeModel } from '../src/shell/sidebar/model';
 
 const idOf = (s: ReturnType<typeof fakeSession>) => projectOf(s, TWO_PROJECTS);
 
@@ -54,6 +54,20 @@ describe('attentionOf', () => {
       ['Kit', undefined, 'question']
     ]);
     expect(items[0]!.since).toBe('2026-10-18T09:48:00.000Z');
+  });
+});
+
+describe('quickDecide', () => {
+  const pending = (kind: 'permission' | 'diff' | 'plan' | 'question', text = 'npm test') =>
+    ({ kind, text, source: 'hook' as const });
+  it('is Yes/No only for a permission or a diff, never a plan, a question, offline, or read-only', () => {
+    const perm = fakeSession('a', { state: 'waiting_permission', pending: pending('permission') });
+    const diff = fakeSession('b', { state: 'waiting_permission', pending: pending('diff', 'edit') });
+    const plan = fakeSession('c', { state: 'waiting_permission', pending: pending('plan', '# Plan') });
+    const question = fakeSession('d', { state: 'waiting_input', pending: pending('question', '?') });
+    expect([perm, diff, plan, question, { ...perm, offline: true }, { ...perm, source: 'hook_only' as const }].map(quickDecide)).toEqual([
+      true, true, false, false, false, false
+    ]);
   });
 });
 

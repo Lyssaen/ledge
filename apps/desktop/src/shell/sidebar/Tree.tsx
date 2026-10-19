@@ -105,6 +105,10 @@ export function Tree(p: {
   useEffect(() => { if (p.current) openTo(p.current, false); }, [p.current]);
   useEffect(() => { if (p.revealCurrent && p.current) openTo(p.current, true); }, [p.revealCurrent]);
 
+  // Roving tabindex: the open session, or the first row when the atelier has none, is the tree's only tab stop.
+  const tabKey = p.current && placeOf(p.groups, p.current) ? p.current : (p.groups[0] ? projectKey(p.groups[0].id) : '');
+  const tabOf = (key: string) => key === tabKey ? 0 : -1;
+
   const onTreeKey = (e: ReactKeyboardEvent) => {
     const el = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>('[data-tree-key]') : null;
     if (!el || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -159,7 +163,7 @@ export function Tree(p: {
           ? <HelperBot helper={helper} parent={s} size={16} paused={p.paused} />
           : <SessionBot session={s} size={18} paused={p.paused} />}</span>
         {/* No « Name, » label: boot() and the title bar find the atelier seat with /^Name,/. */}
-        <button type="button" className="st-main" data-tree-key={treeKey} tabIndex={selected ? 0 : -1}
+        <button type="button" className="st-main" data-tree-key={treeKey} tabIndex={tabOf(treeKey)}
           onClick={() => helper ? p.onOpen(s.id, helper.id) : p.onOpen(s.id)}>
           <strong>{name}</strong>{task && <span>{task}</span>}
         </button>
@@ -185,7 +189,7 @@ export function Tree(p: {
       rows.push(
         <div key={moreKey} className="st-row st-more" style={{ '--d': depth } as CSSProperties}>
           <span className="st-gap" />
-          <button type="button" data-tree-key={moreKey} tabIndex={-1} aria-expanded={all} onClick={() => flip(shown, setShown, key)}>
+          <button type="button" data-tree-key={moreKey} tabIndex={tabOf(moreKey)} aria-expanded={all} onClick={() => flip(shown, setShown, key)}>
             {all ? t.side.hideDoneLink(done.length) : t.side.moreDone(done.length)}
           </button>
           <span className="st-fill" />
@@ -238,7 +242,7 @@ export function Tree(p: {
         style={{ '--d': 0 } as CSSProperties} {...(g.id ? p.filing.dropProps(g.id) : {})}>
         {toggle ? <Chevron open={open} label={open ? t.side.fold(label) : t.side.unfold(label)} onClick={toggle} /> : <span className="st-gap" />}
         <ProjectSwatch project={project} />
-        <button type="button" className="st-main" data-tree-key={pkey} tabIndex={-1} title={t.side.filterProject(label)} onClick={() => p.onHome(g.id ?? 'none')}>
+        <button type="button" className="st-main" data-tree-key={pkey} tabIndex={tabOf(pkey)} title={t.side.filterProject(label)} onClick={() => p.onHome(g.id ?? 'none')}>
           <strong>{label}</strong>{sub && <span className="mono">{sub}</span>}
         </button>
         <span className="st-tally">{tally(g).map(x => <span key={x.c} className={x.c} title={`${x.n} ${x.label}`}><i />{x.n}</span>)}</span>
@@ -257,7 +261,7 @@ export function Tree(p: {
         <div key={bkey} role="treeitem" aria-level={2} aria-expanded={bopen} className="st-row st-branch" style={{ '--d': 1 } as CSSProperties}>
           <Chevron open={bopen} label={bopen ? t.side.fold(b.branch) : t.side.unfold(b.branch)} onClick={btoggle} />
           <Icon d={branchIcon} size={13} />
-          <button type="button" className="st-main mono" data-tree-key={bkey} tabIndex={-1} onClick={btoggle}><span>{b.branch}</span></button>
+          <button type="button" className="st-main mono" data-tree-key={bkey} tabIndex={tabOf(bkey)} onClick={btoggle}><span>{b.branch}</span></button>
           {b.worktree && <span className="st-wt" title={t.side.wt}>wt</span>}
           <span className="st-fill" />
           <span className="st-count">{visible}</span>

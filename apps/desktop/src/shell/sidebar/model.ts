@@ -83,6 +83,14 @@ const attnKind = (state: Session['state']): AttnKind | null => {
   }
 };
 
+/** Yes / No on a one-line card: a permission or a diff. A plan is read on its page.
+ *  Offline and read-only (`hook_only`) are refused by `decisions.decide`. */
+export function quickDecide(s: Pick<Session, 'offline' | 'source' | 'pending'>): boolean {
+  if (s.offline || s.source === 'hook_only' || !s.pending) return false;
+  const k = s.pending.kind;
+  return k === 'permission' || k === 'diff';
+}
+
 export function attentionOf(
   sessions: readonly Session[],
   waits: ReadonlyMap<string, { since: string }>

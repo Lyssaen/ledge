@@ -67,6 +67,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
   // The header's Archived pill bumps this; Archives unfolds and scrolls on each change (0 never counts).
   const [revealArchives, setRevealArchives] = useState(0);
+  // The session page's « N sous-agents » bumps this; the tree unfolds that session and scrolls to it (0 never counts).
+  const [revealCurrent, setRevealCurrent] = useState(0);
   // The local daemon's update, started from Settings › About; while it runs, the daemon's restart is expected and silent.
   const daemonUpdate = useDaemonUpdate(fleet, machines, daemonTarget(useUpdate()));
   // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
@@ -215,14 +217,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
-          onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={0} />
+          onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent} />
         <section className="workspace">
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
             onRevealArchives={() => setRevealArchives(n => n + 1)}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
-                prefs={sessionPrefs} setPrefs={setSessionPrefs} order={order} projects={projects} projectIdOf={projectIdOf} />
+                prefs={sessionPrefs} setPrefs={setSessionPrefs} order={order} projects={projects} projectIdOf={projectIdOf} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>

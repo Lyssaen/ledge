@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, listSessions, PROJECTS } from './helpers';
 
@@ -56,6 +56,27 @@ describe('the sidebar tree', () => {
     const { side } = await boot({ projects: PROJECTS, sessions: listSessions() });
     fireEvent.contextMenu(side.getByRole('button', { name: /^Otto/ }));
     expect(await screen.findByRole('menuitem', { name: /^Open/ })).toBeVisible();
+  });
+
+  it('the tree tab stop is the open session, or the first row when none is open', async () => {
+    const { side, user } = await boot({ projects: PROJECTS, sessions: listSessions() });
+    const stops = () => [...side.getByRole('tree').querySelectorAll('[data-tree-key]')]
+      .flatMap(el => el instanceof HTMLElement && el.tabIndex === 0 ? [el.dataset.treeKey] : []);
+    expect(stops()).toEqual(['p:ledge']);
+    await user.click(side.getByRole('button', { name: /^Otto/ }));
+    expect(stops()).toEqual(['local:otto']);
+  });
+
+  it('the subagents pill unfolds the open session in the tree and scrolls to its row', async () => {
+    const { side, user } = await boot({ projects: PROJECTS, sessions: listSessions() });
+    await user.click(side.getByRole('button', { name: /^Otto/ }));
+    expect(side.queryByRole('button', { name: /^Explore/ })).toBeNull();
+    const row = side.getByRole('button', { name: /^Otto/ });
+    const scrolled = vi.fn();
+    row.scrollIntoView = scrolled;
+    await user.click(await screen.findByRole('button', { name: '1 subagent' }));
+    expect(await side.findByRole('button', { name: /^Explore/ })).toBeVisible();
+    await waitFor(() => expect(scrolled).toHaveBeenCalled());
   });
 
   it('H hides finished ones; the open session stays in view', async () => {

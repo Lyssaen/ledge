@@ -7,7 +7,7 @@ import { taskOf } from '../../nav/agents';
 import { ProjectSwatch } from '../../projects/ProjectSwatch';
 import { cls } from '../cls';
 import { HelperBot, SessionBot } from '../SessionBot';
-import type { AttnItem } from './model';
+import { quickDecide, type AttnItem } from './model';
 
 const CAP = 4;
 
@@ -61,10 +61,10 @@ export function Attention(p: {
               </div>
               <div className="st-l2">
                 <span className="st-req" title={ask}>{ask}</span>
-                {item.kind === 'approval' && <>
+                {item.kind === 'approval' && (quickDecide(item.session) ? <>
                   <button type="button" className="st-qa pri" onClick={() => p.onDecide(item.session, true)}>{t.side.allow}</button>
                   <button type="button" className="st-qa" onClick={() => p.onDecide(item.session, false)}>{t.side.deny}</button>
-                </>}
+                </> : <button type="button" className="st-qa" onClick={() => p.onOpen(item.session.id, item.helper?.id)}>{t.side.see}</button>)}
                 {item.kind === 'question' && <button type="button" className="st-qa" onClick={() => p.onOpen(item.session.id, item.helper?.id, 'reply')}>{t.side.reply}</button>}
                 {item.kind === 'error' && <button type="button" className="st-qa" onClick={() => p.onOpen(item.session.id, item.helper?.id)}>{t.side.see}</button>}
               </div>

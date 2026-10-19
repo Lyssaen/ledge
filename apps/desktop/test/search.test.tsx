@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, within } from '@testing-library/react';
+import { MESSAGES } from '../src/i18n/messages';
 import { boot, closeDaemons, listSessions, TWO_PROJECTS } from './helpers';
 
 beforeEach(() => localStorage.clear());
@@ -58,7 +59,13 @@ describe('the session search', () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
     await user.keyboard('?');
     const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
-    expect(within(dialog).getByText('Open Ledge chat')).toBeVisible();
+    expect(within(dialog).getByText('Focus Ask Ledge')).toBeVisible();
+    expect(within(dialog).queryByText('Open Ledge chat')).toBeNull();
+    const slash = (rows: ReadonlyArray<readonly [string, string]>) => rows.find(r => r[0] === '/')?.[1];
+    expect(slash(MESSAGES.en.shortcuts.rows)).toBe('Focus Ask Ledge');
+    expect(slash(MESSAGES.fr.shortcuts.rows)).toBe('Demander à Ledge');
+    expect(MESSAGES.en.top.chat).toBe('Chat Ledge');
+    expect(MESSAGES.fr.top.chat).toBe('Chat Ledge');
     expect(dialog.textContent).not.toContain('Ctrl Alt N');
   });
 });

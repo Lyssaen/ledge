@@ -94,14 +94,18 @@ export function Sidebar(p: {
           <Icon d={ICONS.plus.d} size={13} /><span>{t.side.newSession}</span><Kbd accent>N</Kbd>
         </button>
       </div>
-      <label className={cls('st-ask', p.nav.chat && 'on')}>
+      <div className={cls('st-ask', p.nav.chat && 'on')} onClick={e => {
+        const hit = e.target;
+        if (hit instanceof Element && hit.closest('button, input')) return;
+        e.currentTarget.querySelector<HTMLInputElement>('[data-ask-input]')?.focus();
+      }}>
         <button type="button" tabIndex={-1} className="st-mascot" aria-label={t.side.openChat} title={t.side.openChat} onClick={e => { e.preventDefault(); p.dispatch({ type: 'chat', open: true }); }}>
           <ResidentMascot size={20} theme={theme} paused={p.nav.paused} reducedMotion={reduced} />
         </button>
         <input data-ask-input="" type="text" aria-label={t.side.ask} placeholder={t.side.askPlaceholder} value={ask} onChange={e => setAsk(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitAsk(); } else if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.blur(); } }} />
         <Kbd>/</Kbd>
-      </label>
+      </div>
       <nav className="st-views" aria-label={t.side.views}>
         <button type="button" className={atelierOn ? 'on' : undefined} aria-current={atelierOn ? 'page' : undefined} onClick={() => p.dispatch({ type: 'home' })}>
           <Icon d={SHELL_ICONS.grid} size={13} /><span>{t.side.atelier}</span><span className="st-fill" /><small>{t.side.active(active)}</small>
