@@ -1,25 +1,52 @@
-import { z } from 'zod';
-import { RelayPeerSchema } from '@ledge/protocol';
+import pg from 'pg';
+import { startAccountsRelay } from './app.js';
 import { devTokens } from './auth.js';
+import { ConfigError, loadConfig } from './config.js';
+import { githubHttp } from './github.js';
 import { createRelay } from './server.js';
-
-const TokensSchema = z.record(z.string().min(1), z.object({ accountId: z.string().min(1), peer: RelayPeerSchema }));
 
 function die(msg: string): never {
   process.stderr.write(`ledge-relay: ${msg}\n`);
   process.exit(1);
 }
 
-if (process.env.NODE_ENV === 'production') die('refusing to start with dev tokens in production (GitHub accounts arrive in lot 2)');
-const raw = process.env.LEDGE_RELAY_DEV_TOKENS;
-if (!raw) die('LEDGE_RELAY_DEV_TOKENS is not set; it must be JSON {"<token>":{"accountId":"...","peer":"pc"|"d_..."}}');
-let parsed: z.infer<typeof TokensSchema>;
-try { parsed = TokensSchema.parse(JSON.parse(raw)); } catch { die('LEDGE_RELAY_DEV_TOKENS is not valid: expected JSON {"<token>":{"accountId":"...","peer":"pc"|"d_..."}}'); }
+let cfg;
+try {
+  cfg = loadConfig(process.env);
+} catch (e) {
+  if (e instanceof ConfigError) die(e.message);
+  throw e;
+}
 
-const portParsed = z.coerce.number().int().min(0).max(65535).safeParse(process.env.PORT ?? 8787);
-if (!portParsed.success) die('PORT must be an integer between 0 and 65535');
-const port = portParsed.data;
-const relay = createRelay({ authenticator: devTokens(parsed) });
-relay.server.on('error', (e: NodeJS.ErrnoException) => die(`cannot listen on port ${port}: ${e.code ?? 'error'}`));
-relay.server.listen(port, () => process.stdout.write(JSON.stringify({ at: new Date().toISOString(), ev: 'listening', port }) + '\n'));
-for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { void relay.close().then(() => process.exit(0)); });
+const port = cfg.port;
+const listening = (server: import('node:http').Server) => {
+  server.on('error', (e: NodeJS.ErrnoException) => die(`cannot listen on port ${port}: ${e.code ?? 'error'}`));
+  server.listen(port, () => process.stdout.write(JSON.stringify({ at: new Date().toISOString(), ev: 'listening', port, mode: cfg.mode }) + '\n'));
+};
+const onSignals = (stop: () => Promise<void>) => {
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { void stop().then(() => process.exit(0), () => process.exit(1)); });
+};
+
+if (cfg.mode === 'dev') {
+  const relay = createRelay({ authenticator: devTokens(cfg.tokens) });
+  listening(relay.server);
+  onSignals(() => relay.close());
+} else {
+  const pool = new pg.Pool({ connectionString: cfg.databaseUrl });
+  // An idle client failing must not crash the process; a query on it will fail on its own.
+  pool.on('error', () => {});
+  const github = githubHttp({
+    clientId: cfg.clientId,
+    clientSecret: cfg.clientSecret,
+    ...(cfg.githubWeb ? { webBase: cfg.githubWeb } : {}),
+    ...(cfg.githubApi ? { apiBase: cfg.githubApi } : {})
+  });
+  try {
+    const app = await startAccountsRelay(cfg, { db: pool, github });
+    listening(app.server);
+    onSignals(async () => { await app.close(); await pool.end(); });
+  } catch {
+    await pool.end().catch(() => {});
+    die('cannot start: the database is unreachable or its migration failed');
+  }
+}
