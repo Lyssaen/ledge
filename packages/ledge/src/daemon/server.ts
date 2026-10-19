@@ -150,11 +150,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     },
     handleProtocols: (protocols: Set<string>) => selectDaemonProtocol(protocols, token)
   });
+  // ws re-emits the http server's errors on wss, and an EventEmitter without an 'error' listener throws: listen failures reject here, later ones are logged.
   await new Promise<void>((res, rej) => {
     const onError = (e: Error) => rej(e);
-    httpServer.once('error', onError);
-    httpServer.listen(opts.port ?? PROTOCOL_PORT, opts.host ?? '127.0.0.1', () => { httpServer.off('error', onError); res(); });
+    wss.once('error', onError);
+    httpServer.listen(opts.port ?? PROTOCOL_PORT, opts.host ?? '127.0.0.1', () => { wss.off('error', onError); res(); });
   });
+  wss.on('error', e => log(`daemon server error: ${e.message}`));
   const port = (httpServer.address() as { port: number }).port;
 
   const machinesFile = opts.machinesFile ?? paths().machines;

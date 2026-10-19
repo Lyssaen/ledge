@@ -144,6 +144,9 @@ describe('handshake', () => {
     await c.close();
     await expect(connect({ port: srv.port, token: null })).rejects.toThrow();
   });
+  it('rejects with EADDRINUSE when the port is taken, without an uncaught exception', async () => {
+    await expect(startServer({ store: new Store(), tmux: fakeTmux, port: srv.port })).rejects.toMatchObject({ code: 'EADDRINUSE' });
+  });
   it('authHeaders() carries the file token', () => {
     expect(authHeaders()).toEqual({ authorization: `Bearer ${readDaemonToken()}` });
   });
