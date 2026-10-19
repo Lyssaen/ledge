@@ -71,7 +71,7 @@ describe('the atelier', () => {
   // Beyond the brief: the review ledger's carried items.
   it('the tables, the desk and the zone sit inside .office-shell (the label rules are scoped there); the legend outside', async () => {
     await boot();
-    const shell = document.querySelector<HTMLElement>('.overview-scroll.atelier > .office-shell')!;
+    const shell = document.querySelector<HTMLElement>('.overview-scroll.atelier > .atelier-floor > .office-shell')!;
     expect(shell).not.toBeNull();
     for (const name of ['Ledge table', 'Payment Service Platform Migration Europe table', 'No project']) expect(shell).toContainElement(screen.getByRole('region', { name }));
     expect(shell).toContainElement(screen.getByRole('button', { name: 'Talk to Ledge' }));
