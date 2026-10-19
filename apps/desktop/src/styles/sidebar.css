@@ -105,7 +105,6 @@
 .st-arch .st-bot{opacity:.7}
 .st .st-acts button.danger:hover{color:var(--danger-text)}
 .st-help{margin:6px 8px 0;font-size:11px;line-height:15px;color:var(--muted-foreground)}
-.st-hint{margin:auto 0 0;padding:6px 8px 0;font-size:11px;color:var(--muted-foreground);display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
 /* Compact: one line per session. */
 .st-dense .st-agent{min-height:26px;align-items:center}
 .st-dense .st-agent .st-main{flex-direction:row;gap:6px;align-items:baseline;padding:2px 0}
@@ -127,7 +126,7 @@
 .side-swatch{width:9px;height:9px;border-radius:3px;margin:0 3px;flex-shrink:0;background:var(--info)}
 .machine-dot{width:7px;height:7px;border-radius:50%;margin:0 4px 0 2px;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 18%,transparent);flex-shrink:0}
 .machine-dot.off{background:none;border:1.5px solid var(--muted-foreground);box-shadow:none}
-@media(max-width:1250px){.sidebar.st{width:256px}.st-hint{display:none}}
+@media(max-width:1250px){.sidebar.st{width:256px}}
 /* A narrow window: a 64 px rail, the projects as swatches with their tally, the rest behind icons. */
 @media(max-width:850px){
  .sidebar.st{width:64px}
@@ -136,7 +135,7 @@
  .st-keys-tip{left:calc(100% + 6px);bottom:8px} /* the rail's foot is a column: the tooltip opens beside it */
  .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask input,.st-ask kbd{display:none}
  .st-views{flex-direction:column;margin:10px 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
- .st-attn,.st-label,.st-hint,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}
+ .st-attn,.st-label,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}
  .st .st-views button{justify-content:center;padding:0}.st-views .st-fill{display:none}
  .st-project{justify-content:center;padding:0;min-height:36px}.st-project>.st-chev,.st-project>.st-gap,.st-project .st-main,.st-project .st-acts{display:none}
  .st-project .side-swatch{width:16px;height:16px;border-radius:5px}

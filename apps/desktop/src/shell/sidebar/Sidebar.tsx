@@ -133,9 +133,6 @@ export function Sidebar(p: {
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
           onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused} />
-        <p className="st-hint">
-          {place.kind === 'overview' && <><Kbd>N</Kbd>{t.side.hint.newSession} · </>}<Kbd>↑</Kbd><Kbd>↓</Kbd>{t.side.hint.move} · <Kbd>←</Kbd><Kbd>→</Kbd>{t.side.hint.fold} · <Kbd>E</Kbd>{t.side.hint.archive} · <Kbd>H</Kbd>{t.side.hint.done} · <Kbd>Ctrl ⇧ E</Kbd>{t.side.hint.focus}
-        </p>
       </div>
       <div className="st-foot">
         {p.machines.map(m => {
