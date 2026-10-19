@@ -24,7 +24,7 @@ function scrollArchive(id: string) {
   }));
 }
 
-/** Archives, folded until one is being read or the header pill asks. Past four, a filter; each row reads, puts back, resumes or deletes. No auto-archive delay. */
+/** Archives, folded until one is opened or the header pill asks: archiving the session being read leaves them as they are. Past four, a filter; each row reads, puts back, resumes or deletes. No auto-archive delay. */
 export function Archives(p: {
   archived: readonly Session[];
   current: string | null;
@@ -46,8 +46,12 @@ export function Archives(p: {
   const showFilter = p.archived.length > 4;
   const shown = filterArchived(p.archived, showFilter ? q : '', p.projectName);
 
+  // The last current session seen live: archiving it while it is read must not unfold the section, opening an archive does.
+  const live = useRef<string | null>(null);
   useEffect(() => {
-    if (!p.current || !reading) return;
+    if (!p.current) return;
+    if (!reading) { live.current = p.current; return; }
+    if (live.current === p.current) return;
     setOpen(true);
     scrollArchive(p.current);
   }, [p.current, reading]);

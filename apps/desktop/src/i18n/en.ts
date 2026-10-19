@@ -26,7 +26,6 @@ export const en: Messages = {
     newOn: (branch) => `New session on ${branch}`,
     filterProject: (name) => `Show only ${name} in the atelier`,
     moreDone: (n) => `+${n} finished`,
-    archiveDone: 'Archive this branch’s finished sessions',
     archiveOne: (name) => `Archive ${name}`,
     manageOne: (name) => `Manage ${name}’s session`,
     terminalOne: (name) => `Open ${name}’s terminal`,
