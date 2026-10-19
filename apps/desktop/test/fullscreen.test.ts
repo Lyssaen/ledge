@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { onFullscreenLeft } from '../src/shell/fullscreen';
 
-const win = vi.hoisted(() => ({ onResized: vi.fn(), isFullscreen: vi.fn(), setFullscreen: vi.fn() }));
+const win = vi.hoisted(() => ({ onResized: vi.fn(), isFullscreen: vi.fn(), setFullscreen: vi.fn(), isMaximized: vi.fn(), unmaximize: vi.fn(), maximize: vi.fn() }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => win }));
 const inTauri = () => { (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}; };
 const element = (value: Element | null) => Object.defineProperty(document, 'fullscreenElement', { value, configurable: true });
@@ -82,4 +82,28 @@ it('in the app, a programmatic enter seeds the edge when the OS sends no resize 
   expect(win.setFullscreen).toHaveBeenCalledWith(true);
   answer(false); resize(); await tick();
   expect(cb).toHaveBeenCalledTimes(1);
+});
+// #18: Windows keeps a maximised undecorated window's client area to the work area, full screen included,
+// so a black band stayed where the taskbar is. The window leaves maximised before full screen and gets it back after.
+it('in the app, a maximised window is unmaximised before full screen and maximised again after', async () => {
+  const { mod } = await listen();
+  const calls: string[] = [];
+  win.isMaximized.mockResolvedValue(true);
+  win.unmaximize.mockImplementation(async () => { calls.push('unmaximize'); });
+  win.maximize.mockImplementation(async () => { calls.push('maximize'); });
+  win.setFullscreen.mockImplementation(async (on: boolean) => { calls.push(`fullscreen ${on}`); });
+  answer(true);
+  await mod.setWindowFullscreen(true);
+  await mod.setWindowFullscreen(false);
+  expect(calls).toEqual(['unmaximize', 'fullscreen true', 'fullscreen false', 'maximize']);
+});
+it('in the app, a window that was not maximised is never maximised on the way out', async () => {
+  const { mod } = await listen();
+  win.isMaximized.mockResolvedValue(false);
+  win.setFullscreen.mockResolvedValue(undefined);
+  answer(true);
+  await mod.setWindowFullscreen(true);
+  await mod.setWindowFullscreen(false);
+  expect(win.unmaximize).not.toHaveBeenCalled();
+  expect(win.maximize).not.toHaveBeenCalled();
 });

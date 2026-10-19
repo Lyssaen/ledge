@@ -79,6 +79,9 @@ describe('Desktop Tauri config', () => {
     expect(caps.permissions).toContain('core:window:allow-set-fullscreen');
     expect(caps.permissions).toContain('core:window:allow-is-fullscreen');
   });
+  it('may unmaximise the window before full screen and maximise it back after (#18)', () => {
+    for (const p of ['unmaximize', 'maximize']) expect(caps.permissions).toContain(`core:window:allow-${p}`);
+  });
   it('shows toasts, zooms the WebView, and keeps the window hidden for Do not disturb (spec §9.4, §10)', () => {
     expect(caps.permissions).toContain('notification:default');
     expect(caps.permissions).toContain('core:webview:allow-set-webview-zoom');

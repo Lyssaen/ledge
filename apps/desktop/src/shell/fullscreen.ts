@@ -2,6 +2,8 @@ import { isTauri } from '../tauri/bridge';
 
 /** True once an answer of the window said « full screen » and the way out has not been seen yet (shared by both functions). */
 let armed = false;
+/** True when full screen was entered from a maximised window, which gets maximised again on the way out. */
+let wasMaximized = false;
 
 /** Puts the window in or out of full screen: the native window in Tauri, the page (Fullscreen API) in a browser.
  *  Never throws: a refusal leaves the window as it was. */
@@ -10,9 +12,16 @@ export async function setWindowFullscreen(on: boolean): Promise<void> {
     if (isTauri()) {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
       const win = getCurrentWindow();
+      // Windows keeps a maximised undecorated window's client area to the work area, full screen included:
+      // a black band would stay where the taskbar is (#18). Leave maximised first, get it back on the way out.
+      if (on && !armed && await win.isMaximized()) { await win.unmaximize(); wasMaximized = true; }
       await win.setFullscreen(on);
       // Some window managers send no resize after the flip: seed the edge of onFullscreenLeft from the window itself.
-      if (on) armed ||= await win.isFullscreen(); else armed = false;
+      if (on) armed ||= await win.isFullscreen();
+      else {
+        armed = false;
+        if (wasMaximized) { wasMaximized = false; await win.maximize(); }
+      }
     } else if (on) await document.documentElement.requestFullscreen();
     else if (document.fullscreenElement) await document.exitFullscreen();
   } catch { /* refused or unsupported */ }
