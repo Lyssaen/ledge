@@ -637,8 +637,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.remove(msg.id);
         return;
       }
-      // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
+      // An agent's message to another session: acked at once, typed when the target is free.
       case 'session.message': return send(ws, mailbox.submit(msg));
+      // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
