@@ -1,13 +1,13 @@
 import type { Locator, Page } from '@playwright/test';
 import type { ClientMessage, Projects } from '@ledge/protocol';
-import { test, expect } from './fixtures';
+import { test, expect, openNewProject } from './fixtures';
 import { eight, fakeDaemon, session, twoProjects, type Folder } from './daemon';
 
 type ProjectsSet = Extract<ClientMessage, { type: 'projects.set' }>;
 const sets = (received: ClientMessage[]) => received.filter((m): m is ProjectsSet => m.type === 'projects.set');
 const noSideScroll = (el: Locator) => el.evaluate(e => e.scrollWidth <= e.clientWidth + 1);
 const pageNoSideScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
-const sidebarProjects = (page: Page) => page.getByRole('navigation', { name: 'Projects' });
+const sidebarProjects = (page: Page) => page.getByRole('tree', { name: 'Projects, branches and sessions' });
 
 /** The home on Local: a Workspace with one Git repository on `main` and a plain folder. */
 const folders: Record<string, Folder> = {
@@ -21,7 +21,7 @@ test('+ Projects, a name, Workspace › paper-fonts on main from the folder brow
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects, folders });
   await page.goto('/');
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
-  await page.getByRole('button', { name: 'New project' }).click();
+  await openNewProject(page);
   const editor = page.getByRole('dialog', { name: 'New project' });
   await expect(editor).toBeVisible();
   await editor.getByLabel('Name', { exact: true }).fill('Paper Rendering');
@@ -50,7 +50,7 @@ test('+ Projects, a name, Workspace › paper-fonts on main from the folder brow
   expect(sent[0]!.projects.projects).toContainEqual({ id: 'paper-rendering', name: 'Paper Rendering', color: 'amber', description: '', repos: [{ machine: 'local', path: '/home/me/Workspace/paper-fonts' }] });
   const entry = sidebarProjects(page).getByRole('button', { name: /^Paper Rendering/ });
   await expect(entry).toBeVisible();
-  await expect(entry.locator('.side-swatch')).toHaveCSS('background-color', 'rgb(245, 158, 11)');
+  await expect(entry.locator('xpath=ancestor::*[@role="treeitem"][1]').locator('.side-swatch')).toHaveCSS('background-color', 'rgb(245, 158, 11)');
   await expect(page.locator('.toast')).toHaveText('Project Paper Rendering created. It appears in the sidebar; its table opens with the first session.');
 });
 
@@ -78,7 +78,7 @@ test('Move to… › New project… on an agent with no project: the project is 
   expect(sent[0]!.projects.rules).toContainEqual({ machine: 'local', path: '/tmp/scratch', project: 'scratch' });
   await expect(page.getByRole('region', { name: 'Scratch table' }).getByRole('button', { name: /^Kit,/ })).toBeVisible();
   await expect(page.locator('.unassigned-card')).toHaveCount(0);
-  await expect(page.locator('.side-unassigned')).toHaveCount(0);
+  await expect(sidebarProjects(page).getByRole('button', { name: /^No project/ })).toHaveCount(0);
   await expect(sidebarProjects(page).getByRole('button', { name: /^Scratch/ })).toBeVisible();
   await expect(page.locator('.toast')).toHaveText('Project Scratch created. Kit joins its table.');
 });
@@ -91,9 +91,9 @@ test('Edit project › Delete the project › Move to… Website: its agents joi
   const ledge = page.getByRole('region', { name: 'Ledge table' });
   await expect(ledge).toBeVisible();
   await expect(page.getByRole('region', { name: 'Website table' })).toHaveCount(0);
-  // Filtered: the Atelier row is not the active one (the project is), so its coming back below is the filter going back to All.
-  await expect(sidebarProjects(page).getByRole('button', { name: /^Ledge/ })).toHaveClass(/active/);
-  await expect(page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: /Atelier/ })).not.toHaveClass(/active/);
+  // Filtered: the Ledge row is selected. Atelier stays the current view.
+  await expect(sidebarProjects(page).getByRole('button', { name: /^Ledge/ }).locator('xpath=ancestor::*[@role="treeitem"][1]')).toHaveClass(/sel/);
+  await expect(page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: /Atelier/ })).toHaveAttribute('aria-current', 'page');
   await ledge.getByRole('button', { name: 'Actions of project Ledge' }).click();
   await page.getByRole('menu', { name: 'Actions of project Ledge' }).getByRole('menuitem', { name: 'Edit project' }).click();
   await expect(page.getByRole('dialog', { name: 'Edit Ledge' })).toBeVisible();
@@ -118,7 +118,7 @@ test('Edit project › Delete the project › Move to… Website: its agents joi
   expect(state.projects[0]!.repos).toEqual(expect.arrayContaining([{ machine: 'local', path: '/w/website' }, { machine: 'local', path: '/w/ledge' }]));
   await expect(page.locator('.toast')).toHaveText('Ledge deleted. 5 agents join Website.');
   // Back to All: the Atelier row is the active one, Ledge is gone from the sidebar and the floor.
-  await expect(page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: /Atelier/ })).toHaveClass(/active/);
+  await expect(page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: /Atelier/ })).toHaveAttribute('aria-current', 'page');
   await expect(sidebarProjects(page).getByRole('button', { name: /^Ledge/ })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toHaveCount(0);
   // Eight agents at Website now: six seats and +2.
@@ -137,7 +137,7 @@ test('a 900 px window: the editor and the folder browser fit without a side scro
   });
   await page.goto('/');
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
-  await page.getByRole('button', { name: 'New project' }).click();
+  await openNewProject(page);
   const editor = page.getByRole('dialog', { name: 'New project' });
   const list = editor.getByRole('list', { name: 'Contents of /home/me on Local' });
   await expect(list.getByRole('listitem')).toHaveCount(many.length + 1);   // the parent folder, then the entries

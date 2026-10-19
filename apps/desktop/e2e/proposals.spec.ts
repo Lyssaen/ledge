@@ -1,11 +1,11 @@
 import type { Page } from '@playwright/test';
 import type { ClientMessage, FoundRepo } from '@ledge/protocol';
-import { test, expect } from './fixtures';
+import { test, expect, openNewProject } from './fixtures';
 import { eight, fakeDaemon, twoProjects, type ChatReply } from './daemon';
 
 type ProjectsSet = Extract<ClientMessage, { type: 'projects.set' }>;
 const sets = (received: ClientMessage[]) => received.filter((m): m is ProjectsSet => m.type === 'projects.set');
-const sidebarProjects = (page: Page) => page.getByRole('navigation', { name: 'Projects' });
+const sidebarProjects = (page: Page) => page.getByRole('tree', { name: 'Projects, branches and sessions' });
 const pageNoSideScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
 const REMOTE = 'github.com/acme/ledge';
 
@@ -27,22 +27,23 @@ async function boot(page: Page) {
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
 }
 async function openProjectsSettings(page: Page) {
-  await expect(page.locator('aside.sidebar').getByText(/\d+ agents?/).first()).toBeVisible();
+  await expect(page.locator('aside.sidebar').getByText(/\d+ active/).first()).toBeVisible();
   await page.keyboard.press('Control+Comma');
-  await page.getByRole('navigation').getByRole('button', { name: /^Projects( |$)/ }).click();
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: /^Projects( |$)/ }).click();
   await expect(page.locator('.settings-head h1')).toHaveText('Projects');
 }
 
 test('New project › Let Ledge do it: the steps, then the proposal; uncheck one repository, Create: only the kept ones are in the new project', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects, found: { local: { repos: paperDisk } }, scanDelayMs: 600 });
   await boot(page);
-  await page.getByRole('button', { name: 'New project' }).click();
+  await openNewProject(page);
   const editor = page.getByRole('dialog', { name: 'New project' });
   await editor.getByRole('button', { name: 'Let Ledge do it' }).click();
   const scan = page.getByRole('dialog', { name: 'Ledge is preparing a project' });
   await expect(scan).toBeVisible();
   await expect(scan.getByText('Ledge is scanning Local…')).toBeVisible();
-  await expect(scan.getByText('Local · 5 repositories found')).toBeVisible();
+  // The done step stays up for a moment (SETTLE_MS), then the dialog becomes the proposal. Poll often enough to see it.
+  await expect.poll(() => scan.getByText('Local · 5 repositories found').isVisible(), { timeout: 5_000, intervals: [50] }).toBe(true);
   await expect(scan.getByText('Remotes and sessions compared')).toBeVisible();
   const proposal = page.getByRole('dialog', { name: 'Ledge proposal' });
   await expect(proposal).toBeVisible();
@@ -95,10 +96,11 @@ test('The chat proposes a project: Review the proposal opens the editor prefille
   const daemon = await fakeDaemon(page, eight, { projects, chat });
   await boot(page);
   await page.keyboard.press('/');
+  const ask = page.locator('aside.sidebar').getByRole('textbox', { name: 'Ask Ledge' });
+  await expect(ask).toBeFocused();
+  await ask.fill('Group my paper repositories');
+  await ask.press('Enter');
   const panel = page.getByRole('complementary', { name: 'Chat Ledge' });
-  await expect(panel.getByPlaceholder('Ask Ledge…')).toBeFocused();
-  await page.keyboard.type('Group my paper repositories');
-  await page.keyboard.press('Enter');
   const card = panel.getByRole('region', { name: 'Project proposal' });
   await expect(card).toContainText('Project proposal · Paper');
   await expect(card).toContainText('2 repositories');
@@ -119,7 +121,7 @@ test('At 900 px the scan view and the Settings cards fit with no side scroll', a
   const long: FoundRepo[] = [...paperDisk, { path: '/home/me/workspaces/clients/a-rather-long-client-name/projects/paper-a-very-long-repository-name-for-the-narrow-layout', branch: 'feature/a-quite-long-branch-name' }];
   await fakeDaemon(page, eight, { projects, found: { local: { repos: long } }, scanDelayMs: 1500 });
   await boot(page);
-  await page.getByRole('button', { name: 'New project' }).click();
+  await openNewProject(page);
   const editor = page.getByRole('dialog', { name: 'New project' });
   await editor.getByRole('button', { name: 'Let Ledge do it' }).click();
   const scan = page.getByRole('dialog', { name: 'Ledge is preparing a project' });

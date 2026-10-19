@@ -19,13 +19,14 @@ async function boot(page: Page) {
   await page.goto('/');
   await expect(ledgeTable(page)).toBeVisible();
 }
-/** `/` from the atelier: the chat opens with the focus in its field, then a question sent with Enter. */
+/** `/` focuses Ask Ledge in the sidebar; Enter with text opens the chat and sends the question. */
 async function ask(page: Page, question: string) {
   await page.keyboard.press('/');
+  const askField = page.locator('aside.sidebar').getByRole('textbox', { name: 'Ask Ledge' });
+  await expect(askField).toBeFocused();
+  await askField.fill(question);
+  await askField.press('Enter');
   await expect(panel(page)).toBeVisible();
-  await expect(field(page)).toBeFocused();
-  await page.keyboard.type(question);
-  await page.keyboard.press('Enter');
 }
 
 test('/, a question, the answer: hovering Otto lights him at his table; the atelier stays in view and narrows, with no side scroll', async ({ page }) => {
@@ -93,7 +94,7 @@ test('a 900 px window: the chat opens over the atelier, Escape closes it, and th
   await fakeDaemon(page, fleet, { projects: twoProjects });
   await boot(page);
   const before = await scroll(page).evaluate(e => e.clientWidth);
-  await page.keyboard.press('/');
+  await page.getByRole('button', { name: 'Chat Ledge', exact: true }).click();
   await expect(panel(page)).toBeVisible();
   await expect(field(page)).toBeFocused();
   // Over the atelier (the mockup's ≤ 900 px rule): fixed on the right edge, the atelier keeps its width, nothing scrolls sideways.

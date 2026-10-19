@@ -50,8 +50,9 @@
 body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 @media (max-width: 850px) { .titlebar-cmd kbd { display: none; } .titlebar-caps button { width: 38px; } }
 
-/* observatory.css: full screen. */
-.immersive .sidebar { display: none; }
+/* observatory.css: full screen. `.sidebar.st` sets display:flex and outranks `.sidebar`, so the aside is named too. */
+.immersive .sidebar,
+.immersive aside.sidebar.st { display: none; }
 .immersive .app-header { height: 48px; }
 
 @media (min-width: 1700px) { .overview-scroll { padding-left: 40px; padding-right: 40px; } }
@@ -63,7 +64,8 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
   .breadcrumb { gap: 7px; }
 }
 @media (max-width: 540px) {
-  .sidebar { display: none; }
+  .sidebar,
+  aside.sidebar.st { display: none; }
   .app-header { padding: 0 12px; }
   .breadcrumb > span:first-of-type { display: none; }
   .breadcrumb > .muted { display: none; }

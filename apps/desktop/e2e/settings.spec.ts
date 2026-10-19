@@ -32,7 +32,7 @@ const pastRightEdge = (page: Page, entry: string) => page.locator(entry).evaluat
 
 /** The app is up (its keys bound), then Ctrl , opens the settings on General. */
 async function openSettings(page: Page) {
-  await expect(page.locator('aside.sidebar').getByText(/\d+ agents?/).first()).toBeVisible();
+  await expect(page.locator('aside.sidebar').getByText(/\d+ active/).first()).toBeVisible();
   await page.keyboard.press('Control+Comma');
   await expect(heading(page)).toHaveText('General');
 }
@@ -93,7 +93,7 @@ test('Machines › Add a machine: an SSH server shows once the daemon broadcasts
   await expect(gpu).toContainText('Offline');
   await expect(alert).toBeVisible();
   // The app's sidebar lists it too, offline.
-  await expect(page.locator('aside.sidebar .side-machine', { hasText: 'GPU box' })).toContainText('offline');
+  await expect(page.locator('aside.sidebar .st-mach', { hasText: 'GPU box' })).toHaveAttribute('title', /offline/);
 
   await gpu.getByRole('button', { name: 'Remove' }).click();
   await expect(gpu.getByRole('alert')).toContainText('Remove GPU box?');
@@ -101,7 +101,7 @@ test('Machines › Add a machine: an SSH server shows once the daemon broadcasts
   await expect(gpu).toHaveCount(0);
   await savedOnce(page, 'Setting saved · GPU box removed');
   await expect(alert).toHaveCount(0);
-  await expect(page.locator('aside.sidebar .side-machine', { hasText: 'GPU box' })).toHaveCount(0);
+  await expect(page.locator('aside.sidebar .st-mach', { hasText: 'GPU box' })).toHaveCount(0);
   const last = daemon.received.filter(m => m.type === 'machines.set').at(-1) as Extract<ClientMessage, { type: 'machines.set' }>;
   expect(last.machines).toEqual([{ id: 'local', label: 'Local' }]);
   expect((await said(page)).filter(t => t.startsWith('Setting saved'))).toEqual(['Setting saved · GPU box added', 'Setting saved · GPU box removed']);

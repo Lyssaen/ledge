@@ -20,7 +20,7 @@ const setsOf = (received: ClientMessage[]) => received.filter((m): m is IslandSe
 
 /** The overview is up, then the footer's island state opens Settings › Notch. */
 async function openIsland(page: Page) {
-  await expect(page.locator('aside.sidebar').getByText(/\d+ agents?/).first()).toBeVisible();
+  await expect(page.locator('aside.sidebar').getByText(/\d+ active/).first()).toBeVisible();
   await expect(footerState(page)).toHaveText('Notch active');
   await footerState(page).click();
   await expect(heading(page)).toHaveText('Notch');
@@ -153,7 +153,7 @@ test('the shortcut recorder: Edit, a key without Ctrl, Alt or ⊞ is refused, Es
 test('a daemon too old for the notch: no footer state, the section says so and a change is refused under its row', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects, island: 'unknown' });
   await page.goto('/');
-  await expect(page.locator('aside.sidebar').getByText(/\d+ agents?/).first()).toBeVisible();
+  await expect(page.locator('aside.sidebar').getByText(/\d+ active/).first()).toBeVisible();
   await expect(footerState(page)).toHaveCount(0);
   await page.keyboard.press('Control+Comma');
   await tab(page, 'Notch').click();

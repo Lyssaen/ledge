@@ -1,4 +1,13 @@
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect, type Page } from '@playwright/test';
+
+/** The explorer has no « New project » row. Settings › Projects still opens the same dialog. */
+export async function openNewProject(page: Page): Promise<void> {
+  await page.keyboard.press('Control+Comma');
+  await expect(page.getByRole('heading', { level: 1, name: 'General' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: /^Projects/ }).click();
+  const card = page.locator('section.set-card').filter({ has: page.getByRole('heading', { level: 2, name: 'Projects' }) });
+  await card.getByRole('button', { name: 'New project' }).click();
+}
 
 /** Every spec runs in English (stored before the app boots) and any console or page error fails the test (spec §12). */
 export const test = base.extend<{ errors: string[] }>({

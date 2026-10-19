@@ -8,6 +8,8 @@
 .settings-tab:hover{background:var(--sidebar-accent);color:var(--foreground)}
 .settings-tab.active{background:var(--sidebar-accent);color:var(--foreground);font-weight:500}
 .settings-tab.active>svg{color:var(--sidebar-primary)}
+/* The offline / update dot on a section tab (the observatory mockup's `.side-alert`). */
+.side-alert{width:6px;height:6px;border-radius:50%;background:var(--warning);flex-shrink:0}
 .settings-scroll{flex:1;min-width:0;overflow:auto}
 .settings-content{max-width:760px;padding:28px 32px 56px;display:flex;flex-direction:column;gap:18px}
 .settings-head h1{margin:0 0 4px;font-size:22px;line-height:30px;font-weight:600;letter-spacing:-.5px}
