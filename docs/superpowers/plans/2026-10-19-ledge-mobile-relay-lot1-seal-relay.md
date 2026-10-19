@@ -241,14 +241,14 @@ describe('pairing code', () => {
   - `interface Who { accountId: string; peer: RelayPeer }`
   - `interface Conn { send(msg: RelayServerMessage): void; close(code: number, reason: string): void }`
   - `class Hub { constructor(log: RelayLog, limits?: Partial<Limits>); attach(conn: Conn, who: Who): void; detach(conn: Conn, code: number): void; receive(conn: Conn, raw: string): void }`
-  - `interface Limits { framesPerWindow: number; windowMs: number; now: () => number }`, défauts `300`, `10_000` et `Date.now`
-  - `type RelayLogEvent` = `{ ev: 'connect', account, peer }` | `{ ev: 'disconnect', account, peer, code, ms, framesIn, framesOut, bytesIn, bytesOut }` | `{ ev: 'refused', reason: 'no_auth' | 'bad_path' }` | `{ ev: 'frame_error', account, peer, code }` ; `type RelayLog = (e: RelayLogEvent) => void` ; `jsonLog: RelayLog` écrit une ligne JSON avec `at` sur stdout. Aucun champ texte libre : un événement ne peut pas porter de contenu.
+  - `interface Limits { framesPerWindow: number; bytesPerWindow: number; windowMs: number; now: () => number }`, défauts `300`, `8 * 1_048_576`, `10_000` et `Date.now`
+  - `type RelayLogEvent` = `{ ev: 'connect', account, peer }` | `{ ev: 'disconnect', account, peer, code, ms, framesIn, framesOut, bytesIn, bytesOut }` | `{ ev: 'refused', reason: 'no_auth' | 'bad_path' | 'auth_error' }` | `{ ev: 'frame_error', account, peer, code }` ; `type RelayLog = (e: RelayLogEvent) => void` ; `jsonLog: RelayLog` écrit une ligne JSON avec `at` sur stdout. Aucun champ texte libre : un événement ne peut pas porter de contenu.
 
 Règles du `Hub` :
 - Les sockets sont rangés par `accountId`, puis par `peer`. Un nouveau socket pour le même `(compte, peer)` remplace l'ancien, fermé avec `4000, 'replaced'`, sans événement de présence intermédiaire.
 - À l'attache : `welcome` au socket, puis `presence online` aux autres pairs du compte (au PC pour un appareil, à tous les appareils pour le PC). Au détachement d'un socket encore courant : `presence offline` de la même façon, puis le log `disconnect`.
 - `send` d'un appareil : seulement `to: 'pc'`, sinon `bad_target`. `send` du PC vers `pc` : `bad_target`. Vers un appareil sans socket dans son compte : `offline` avec `to`, y compris un identifiant d'un autre compte — le relais ne cherche jamais hors du compte de l'émetteur, il ne révèle donc pas si un appareil existe ailleurs.
-- JSON invalide ou schéma refusé : `bad_frame` ; `body` trop long : `too_large` ; plus de `framesPerWindow` trames dans `windowMs` : trame ignorée, avec un seul `rate_limited` (réponse et log) par fenêtre. Chaque autre erreur est loguée en `frame_error` sans le contenu. Un socket remplacé ne route plus rien.
+- JSON invalide ou schéma refusé : `bad_frame` ; `body` trop long : `too_large` ; plus de `framesPerWindow` trames ou de `bytesPerWindow` octets (longueur brute des trames) dans `windowMs` : un seul `rate_limited` (réponse et log), puis le socket est fermé avec `4008, 'rate_limited'` et ne route plus rien ; la reconnexion impose une nouvelle poignée de main. Chaque autre erreur est loguée en `frame_error` sans le contenu. Un socket remplacé ne route plus rien.
 
 - [ ] **Step 1: Créer `apps/relay`** — `package.json` : `"name": "@ledge/relay"`, `private`, `type: module`, `engines.node >=22`, scripts `dev` (`tsx src/main.ts`), `build` (`tsup`), `test`, `typecheck` ; dépendances `ws ^8.18.0`, `zod ^3.23.8` ; devDependencies `@ledge/protocol` et `@ledge/seal` en `workspace:*`, `@types/node ^22.7.0`, `@types/ws ^8.5.12`, `tsup ^8.3.0`. `tsconfig.json` comme `packages/seal`. `pnpm install`.
 
@@ -267,7 +267,7 @@ it('keeps accounts apart', ...);                               // PC du compte A
 it('refuses device-to-device frames', ...);                    // D1 → D2 : error bad_target
 it('says offline instead of queuing', ...);                    // D1 → pc sans PC : error offline to 'pc' ; le PC arrivé ensuite ne reçoit rien d'ancien
 it('answers bad JSON, unknown types and oversize bodies on that socket only', ...);
-it('rate-limits a flooding socket', ...);                      // limits { framesPerWindow: 3, windowMs: 1000 } : 4e trame → rate_limited, pas livrée
+it('rate-limits a flooding socket', ...);                      // limits { framesPerWindow: 3, windowMs: 1000 } : 4e trame → rate_limited, pas livrée, socket fermé en 4008
 it('logs sizes and counts, never a body', ...);                // corps contenant 'SECRET-123' livré puis frame invalide contenant 'SECRET-456' : aucune ligne JSON.stringify(event) ne contient 'SECRET'
 ```
 
