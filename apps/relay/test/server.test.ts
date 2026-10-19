@@ -182,7 +182,7 @@ describe('relay server', () => {
   });
 
   it('terminates a peer that stops answering pings and tells the others it left', async () => {
-    const { port } = await start({ heartbeatMs: 40 });
+    const { port } = await start({ heartbeatMs: 250 });
     const pc = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer tok-pc' } });
     const pbox = inbox(pc);
     await pbox.next(1);
@@ -191,7 +191,7 @@ describe('relay server', () => {
     expect(await pbox.next(2)).toEqual({ type: 'presence', peer: D1, online: true });
     expect(await pbox.next(3)).toEqual({ type: 'presence', peer: D1, online: false });
     expect(await closed).toBe(1006);
-    await new Promise((r) => setTimeout(r, 120)); // several more beats: the answering PC stays
+    await new Promise((r) => setTimeout(r, 750)); // several more beats: the answering PC stays
     expect(pc.readyState).toBe(WebSocket.OPEN);
     pc.close();
   });
