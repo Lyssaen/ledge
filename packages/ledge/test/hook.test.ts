@@ -279,7 +279,7 @@ describe('runHook', () => {
 
 describe('runHook: Claude SendMessage to a Codex', () => {
   const pim = (extra: Partial<Session> = {}): Session => ({ id: 'b', name: 'Pim', tool: 'codex', cwd: '/w/api', project: 'api', title: 'Pim · api', tmuxSession: 'ledge-b', state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...extra });
-  const send = (to = 'Pim') => JSON.stringify({ session_id: 'uuid-a', hook_event_name: 'PreToolUse', tool_name: 'SendMessage', tool_use_id: 'tu1', tool_input: { to, message: 'Salut', summary: 'Un salut' } });
+  const send = (to = 'Pim', message = 'Salut') => JSON.stringify({ session_id: 'uuid-a', hook_event_name: 'PreToolUse', tool_name: 'SendMessage', tool_use_id: 'tu1', tool_input: { to, message, summary: 'Un salut' } });
   const decision = (out: string | undefined) => (JSON.parse(out!) as { hookSpecificOutput: { hookEventName: string; permissionDecision: string; permissionDecisionReason: string } }).hookSpecificOutput;
   const tmux = { async setOption() {}, async capture() { return ''; }, async sendText() {}, async sendKeys() {} } as never;
   beforeEach(() => { process.env.LEDGE_SESSION = 'a'; });
@@ -320,6 +320,19 @@ describe('runHook: Claude SendMessage to a Codex', () => {
     const store = new Store(); store.upsert(pim({ tool: 'claude' }));
     const srv = await startServer({ store, tmux, port: 0 });
     try { expect(await runHook('PreToolUse', send(), { port: srv.port })).toBeUndefined(); } finally { await srv.close(); }
+  });
+  it('a message too long for Ledge still reaches a Claude target natively', async () => {
+    const store = new Store(); store.upsert(pim({ tool: 'claude' }));
+    const srv = await startServer({ store, tmux, port: 0 });
+    try { expect(await runHook('PreToolUse', send('Pim', 'x'.repeat(20001)), { port: srv.port })).toBeUndefined(); } finally { await srv.close(); }
+  });
+  it('a message too long for Ledge is refused to a Codex, with its length', async () => {
+    const store = new Store(); store.upsert(pim());
+    const srv = await startServer({ store, tmux, port: 0 });
+    try {
+      expect(decision(await runHook('PreToolUse', send('Pim', 'x'.repeat(20001)), { port: srv.port })).permissionDecisionReason)
+        .toBe("Ledge n'a pas pu transmettre le message à Pim : message trop long (20001 caractères, 20000 au plus)");
+    } finally { await srv.close(); }
   });
   it('with no daemon listening, it resolves undefined within 2 s', async () => {
     const t0 = Date.now();

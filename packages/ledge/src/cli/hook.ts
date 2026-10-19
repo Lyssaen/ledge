@@ -1,4 +1,4 @@
-import type { Session, SessionEvent, Tool } from '@ledge/protocol';
+import { MESSAGE_MAX, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
@@ -387,6 +387,8 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
   const to = input.to as string;
   const snapshot = await client.next('snapshot', left());
   const tool = snapshot.sessions.find(s => s.name === bareName(to))?.tool;
+  // Too long for Ledge: a Codex can only be reached through it (refused below, with the length), anyone else natively.
+  if (tool !== 'codex' && (input.message as string).length > MESSAGE_MAX) return undefined;
   const summary = str(input.summary);
   const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to, text: input.message as string, ...(summary ? { summary } : {}), intercept: true }, left());
   const target = tool ? `${to} (${tool})` : to;
