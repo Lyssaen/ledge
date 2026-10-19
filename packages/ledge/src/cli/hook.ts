@@ -1,12 +1,15 @@
-import type { Session, SessionEvent, Tool } from '@ledge/protocol';
-import { connect } from '../client.js';
+import { MESSAGE_MAX, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
 import { codexPlan } from '../daemon/transcript.js';
 import { gitInfo } from '../daemon/git.js';
+import { bareName } from '../daemon/peers.js';
 import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
+import { parseLedgeCommand, sendOnClient } from './send.js';
+import { formatWho } from './who.js';
 
 type Payload = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
@@ -351,7 +354,8 @@ export function identityContext(s: Identity): string {
   return [
     `Tu es ${s.name}, ${where} : une session lancée par Ledge (${s.tool}). Les autres sessions Ledge te connaissent sous le nom ${s.name}.`,
     'Pour voir les autres sessions (nom, outil, état, projet, branche, sujet), lance `ledge who`.',
-    ...(s.tool === 'claude' ? ['Pour écrire à une autre session Ledge, utilise son nom Ledge comme adresse SendMessage.'] : [])
+    s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge comme adresse SendMessage.'
+      : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.'
   ].join('\n');
 }
 
@@ -370,6 +374,45 @@ async function identity(agent: Tool, cwd: string | undefined, known: Session | u
   };
 }
 
+/** A Claude `SendMessage` waits this long for the daemon's ack: the message is typed into a Codex, not just recorded. */
+const SEND_MESSAGE_MS = 1500;
+
+/**
+ * Hands a Claude `SendMessage` to the daemon and turns its ack into the hook's decision: delivered or queued, the real tool is denied
+ * (the reason tells Claude it went through Ledge); `native` (a Claude target) or any failure leaves it to proceed.
+ */
+async function relayMessage(client: Client, from: string, toolUseId: string | undefined, input: Payload, deadline: number): Promise<string | undefined> {
+  if (!toolUseId) return undefined;
+  const left = () => Math.max(0, deadline - Date.now());
+  const to = input.to as string;
+  const snapshot = await client.next('snapshot', left());
+  const tool = snapshot.sessions.find(s => s.name === bareName(to))?.tool;
+  // Too long for Ledge: a Codex can only be reached through it (refused below, with the length), anyone else natively.
+  if (tool !== 'codex' && (input.message as string).length > MESSAGE_MAX) return undefined;
+  const summary = str(input.summary);
+  const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to, text: input.message as string, ...(summary ? { summary } : {}), intercept: true }, left());
+  const target = tool ? `${to} (${tool})` : to;
+  const reason = ack.outcome === 'accepted' ? `Message transmis par Ledge à ${target} : il le reçoit maintenant.`
+    : ack.outcome === 'queued' ? `Message transmis par Ledge à ${target} : il le recevra dès qu'il sera libre.`
+    : ack.outcome === 'refused' ? `Ledge n'a pas pu transmettre le message à ${to} : ${ack.reason ?? 'raison inconnue'}` : undefined;
+  return reason ? JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }) : undefined;
+}
+
+/**
+ * Codex's shell cannot reach the daemon, its hook can: a lone `ledge send` / `ledge who` is run here and its output is the deny
+ * reason the agent reads, sent on the hook's own connection so the daemon already knows the sender. A failure leaves the command to proceed; a send that got no ack is reported
+ * (the message may be delivered), not retried by the sandbox.
+ */
+async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeof parseLedgeCommand>>, from: string, deadline: number): Promise<string | undefined> {
+  const left = () => Math.max(0, deadline - Date.now());
+  let line: string;
+  if (cmd.cmd === 'who') line = formatWho((await client.next('snapshot', left())).sessions, from);
+  else {
+    line = (await sendOnClient(client, cmd.args, from, left())).line;
+  }
+  return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: line } });
+}
+
 /**
  * Always resolves, always fast: a hook must never slow the agent down. Resolves with what the hook prints for the agent:
  * on SessionStart, a session Ledge launched gets its identity as `additionalContext` (Claude Code and Codex read it);
@@ -382,22 +425,31 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
   if (process.env.LEDGE_CHAT === '1') { log(`hook ${label} ignored: Ledge chat`); return undefined; }
   let mapped: MappedHook | null = null;
   let identify = false; let known: Session | undefined; let deadline = Date.now() + (opts.timeoutMs ?? 100);
+  let relayed: string | undefined;
   try {
     const payload = JSON.parse(stdin || '{}');
     mapped = agent === 'cursor' ? mapCursorHook(eventName, payload, new Date().toISOString()) : mapHook(agent, eventName, payload, new Date().toISOString());
     if (!mapped) { log(`hook ${label} ignored: unknown event, malformed payload, non-terminal SessionEnd or subagent event without a session of its own`); return undefined; }
     const launchedId = agent === 'codex' ? codexLedgeId() : agent === 'claude' ? process.env.LEDGE_SESSION : undefined;
     identify = eventName === 'SessionStart' && !!launchedId && mapped.id === launchedId;
-    const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : 100);
+    const input = ((payload as Payload).tool_input ?? {}) as Payload;
+    const intercept = agent === 'claude' && eventName === 'PreToolUse' && str((payload as Payload).tool_name) === 'SendMessage'
+      && typeof input.to === 'string' && typeof input.message === 'string' && !!input.message;
+    const command = agent === 'codex' && eventName === 'PreToolUse' && str((payload as Payload).tool_name) === 'Bash' && typeof input.command === 'string'
+      ? parseLedgeCommand(input.command) : undefined;
+    const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : intercept || command ? SEND_MESSAGE_MS : 100);
     deadline = Date.now() + timeoutMs;
     const client = await connect({ port: opts.port, timeoutMs });
     client.send({ type: 'session.event', id: mapped.id, event: mapped.event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}) });
     if (identify) known = (await client.next('snapshot', Math.max(0, deadline - Date.now())).catch(() => undefined))?.sessions.find(s => s.id === mapped!.id);
+    if (intercept) relayed = await relayMessage(client, mapped.id, str((payload as Payload).tool_use_id), input, deadline);
+    if (command) relayed = await runLedgeCommand(client, command, mapped.id, deadline);
     // close() resolves once the handshake completes, i.e. after the send is flushed; one shared deadline
     await Promise.race([client.close(), new Promise(r => setTimeout(r, Math.max(0, deadline - Date.now())))]);
   } catch (e) {
     log(`hook ${label} dropped: ${(e as Error).message}`);
   }
+  if (relayed) return relayed;
   if (!identify || !mapped) return undefined;
   const who = await identity(agent, mapped.cwd, known, deadline);
   return who ? JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: identityContext(who) } }) : undefined;

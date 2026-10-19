@@ -373,6 +373,24 @@ describe('session management messages', () => {
   });
 });
 
+describe('session.message and message.ack', () => {
+  const message = { type: 'session.message', rid: 'r1', from: 'ab12', to: 'Otto [fce8]', text: 'Vas-y', summary: 'OK', intercept: true };
+  it('parses a full session.message and refuses an empty text', () => {
+    expect(parseClientMessage(message)).toEqual(message);
+    expect(() => parseClientMessage({ ...message, text: '' })).toThrow();
+  });
+  it('caps a session.message: 20000 characters of text, 500 of summary', () => {
+    expect(parseClientMessage({ ...message, text: 'x'.repeat(20000), summary: 's'.repeat(500) })).toBeTruthy();
+    expect(() => parseClientMessage({ ...message, text: 'x'.repeat(20001) })).toThrow();
+    expect(() => parseClientMessage({ ...message, summary: 's'.repeat(501) })).toThrow();
+  });
+  it('parses a message.ack and refuses an unknown outcome', () => {
+    const ack = { type: 'message.ack', rid: 'r1', outcome: 'refused', reason: 'x' };
+    expect(parseServerMessage(ack)).toEqual(ack);
+    expect(() => parseServerMessage({ ...ack, outcome: 'sent' })).toThrow();
+  });
+});
+
 describe('protocol: model and effort (#58)', () => {
   it('session.launch carries a model and an effort, never one that reads as a flag', () => {
     expect(parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w', model: 'opus', effort: 'high' })).toMatchObject({ model: 'opus', effort: 'high' });

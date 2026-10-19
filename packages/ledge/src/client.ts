@@ -1,12 +1,20 @@
 import WebSocket from 'ws';
 import { readDaemonToken } from './auth.js';
-import { PROTOCOL_PORT, parseServerMessage, type ClientMessage, type ServerMessage } from '@ledge/protocol';
+import { MESSAGE_MAX, PROTOCOL_PORT, SUMMARY_MAX, parseServerMessage, type ClientMessage, type MessageAck, type ServerMessage } from '@ledge/protocol';
 
 export interface Client {
   send(msg: ClientMessage): void;
   next<T extends ServerMessage['type']>(type: T, timeoutMs?: number): Promise<Extract<ServerMessage, { type: T }>>;
   /** Resolves once the close handshake completes (so queued sends are flushed). */
   close(): Promise<void>;
+}
+
+/** Sends a `session.message` and awaits its `message.ack`, within `timeoutMs`; rejects if the ack does not come in time. */
+export async function sendMessageAndAwaitAck(client: Client, msg: Extract<ClientMessage, { type: 'session.message' }>, timeoutMs: number): Promise<MessageAck> {
+  // The daemon answers a message its schema refuses (too long) with a bare `error`, no ack: refuse it here, with the reason.
+  if (msg.text.length > MESSAGE_MAX) return { type: 'message.ack', rid: msg.rid, outcome: 'refused', reason: `message trop long (${msg.text.length} caractères, ${MESSAGE_MAX} au plus)` };
+  client.send(msg.summary && msg.summary.length > SUMMARY_MAX ? { ...msg, summary: msg.summary.slice(0, SUMMARY_MAX) } : msg);
+  return client.next('message.ack', timeoutMs);
 }
 
 /** The daemon answered the handshake with HTTP 401: it is a Ledge daemon, and it refused this client's token (missing or changed). */
