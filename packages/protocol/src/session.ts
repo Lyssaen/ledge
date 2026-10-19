@@ -65,6 +65,8 @@ export const SessionSchema =z.object({
   repoPath: z.string().optional(),
   branch: z.string().optional(),
   worktree: z.boolean().optional(),
+  /** The folder the agent works in now, as its last hook reported it: `cwd` stays where it started, this follows a worktree it entered. */
+  workdir: z.string().optional(),
   tmuxSession: z.string().nullable(),
   state: SessionStateSchema,
   pending: PendingSchema.optional(),

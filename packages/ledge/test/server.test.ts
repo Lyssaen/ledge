@@ -285,6 +285,19 @@ describe('server', () => {
     c.close();
   });
 
+  it('reads a session document from the folder its hooks report, once the agent moved into a worktree', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ledge-doc-')); const workdir = join(root, 'wt'); mkdirSync(join(workdir, 'docs'), { recursive: true });
+    writeFileSync(join(workdir, 'docs', 'plan.md'), '# Plan\n');
+    store.upsert(mk('a', { cwd: root }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'a', cwd: workdir, event: { name: 'UserPromptSubmit', at: T0, source: 'hook', text: 'écris le plan' } });
+    await c.next('session.updated');
+    expect(store.get('a')).toMatchObject({ cwd: root, workdir });
+    c.send({ type: 'document.read', requestId: 'doc-wt', path: 'docs/plan.md', sessionId: 'a' });
+    expect(await c.next('document.content')).toMatchObject({ requestId: 'doc-wt', path: join(workdir, 'docs', 'plan.md') });
+    c.close();
+  });
+
   it('a hook from an archived hook_only session brings it back', async () => {
     store.upsert(mk('h', { source: 'hook_only', tmuxSession: null, archivedAt: T0 }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
