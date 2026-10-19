@@ -204,6 +204,8 @@ const fr = {
       launch: 'Lancer la session', launching: 'Lancement…', retry: 'Réessayer', orRephrase: 'ou reformule ta demande', orFolder: 'ou donne-moi un autre dossier',
       failed: (why: string) => `Échec du lancement : ${why}`, started: 'a démarré', startedUnknown: 'Session démarrée', terminal: 'Terminal'
     },
+    // #24 : plusieurs sessions dans une réponse.
+    group: { label: (n: number) => `${n} sessions proposées`, launchAll: (n: number) => `Tout lancer (${n})`, launchRow: 'Lancer', pick: (project: string) => `Lancer ${project}` },
     relay: {
       label: 'Instruction à envoyer', session: 'Session', instruction: 'Instruction',
       send: 'Envoyer', sending: 'Envoi…', cancel: 'Annuler', retry: 'Réessayer', orRephrase: 'ou reformule ta demande',
@@ -436,6 +438,8 @@ const en: Messages = {
       launch: 'Start the session', launching: 'Starting…', retry: 'Retry', orRephrase: 'or rephrase your request', orFolder: 'or give me another folder',
       failed: (why: string) => `Could not start: ${why}`, started: 'has started', startedUnknown: 'Session started', terminal: 'Terminal'
     },
+    // #24: several sessions in one answer.
+    group: { label: (n: number) => `${n} proposed sessions`, launchAll: (n: number) => `Start all (${n})`, launchRow: 'Start', pick: (project: string) => `Start ${project}` },
     relay: {
       label: 'Instruction to send', session: 'Session', instruction: 'Instruction',
       send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',

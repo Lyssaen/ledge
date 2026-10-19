@@ -341,6 +341,18 @@ describe('common chat routing', () => {
     server.set('unreachable');
     expect(got.at(-2)).toMatchObject({ type: 'error' });
   });
+  it('keeps every row of a session card and qualifies the launched ones (#24)', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'chat.ask', qid: 'q', text: 'Lance a et b sur le serveur' });
+    local.emit({ type: 'chat.routed', qid: 'q', result: { machineId: 'server', text: 'Lance a et b' } });
+    const a = { cwd: '/w/a', project: 'a', tool: 'claude' as const }, b = { cwd: '/w/b', project: 'b', tool: 'claude' as const };
+    server.emit({ type: 'chat.done', qid: 'q', text: 'Deux sessions.', at: new Date().toISOString(), proposal: a, proposals: [a, b] });
+    expect(lastHistory(got)[0]).toMatchObject({ proposal: a, proposals: [a, b] });
+    server.emit({ type: 'chat.history', turns: [{ qid: 'q', question: 'Lance a et b', askedAt: new Date().toISOString(), steps: [], answer: 'Deux sessions.', answeredAt: new Date().toISOString(), proposal: a, proposals: [a, { ...b, launchedId: 'n2' }] }] });
+    expect(lastHistory(got)[0]!.proposals![1]).toMatchObject({ launchedId: 'server:n2' });
+    client.send({ type: 'session.launch', cwd: '/w/a', tool: 'claude', qid: 'q', rows: [0, 1] });
+    expect(server.sent.at(-1)).toMatchObject({ type: 'session.launch', qid: 'q', rows: [0, 1] });
+  });
   it('keeps a project proposal on the routed turn, with its machine (lot 11 task 5)', () => {
     const { client, local, got } = setup();
     client.send({ type: 'chat.ask', qid: 'q', text: 'Crée un projet Paper' });

@@ -88,4 +88,23 @@ describe('launching from a chat card', () => {
     apply({ type: 'session.updated', session: juno }); apply({ type: 'session.launched', id: 'n1' });
     expect(bridge.focusTerminal).toHaveBeenCalledWith('Juno · ledge');
   });
+  it('a grouped card sends its rows in one message and stays busy until every row is marked (#24)', () => {
+    render(<Surface screenH={1080} theme="dark" client={client()} dnd={false} onToggleDnd={() => {}} />);
+    act(() => { daemonStore.setStatus('open'); daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('a')] }); });
+    act(() => { fireEvent.keyDown(window, { key: 'l', ctrlKey: true, altKey: true }); });
+    const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
+    fireEvent.change(input, { target: { value: 'open ledge and docs' } }); fireEvent.keyDown(input, { key: 'Enter' });
+    const qid = (sent.find(m => m.type === 'chat.ask') as Extract<ClientMessage, { type: 'chat.ask' }>).qid;
+    const docs: ChatProposal = { cwd: '/home/u/docs', project: 'docs', tool: 'claude' };
+    apply({ type: 'chat.done', qid, text: 'Two sessions.', at: new Date().toISOString(), proposal, proposals: [proposal, docs] });
+    const group = () => screen.getByRole('region', { name: '2 proposed sessions' });
+    fireEvent.click(within(group()).getByRole('button', { name: /Start all \(2\)/ }));
+    expect(sent.filter(m => m.type === 'session.launch')).toEqual([{ type: 'session.launch', tool: 'claude', cwd: '/home/u/ledge', prompt: 'Fix the build', qid, rows: [0, 1] }]);
+    apply({ type: 'session.updated', session: juno }); apply({ type: 'session.launched', id: 'n1' });
+    const turn = (rows: ChatProposal[]) => ({ qid, question: 'q', askedAt: new Date().toISOString(), steps: [], answer: 'a', answeredAt: new Date().toISOString(), proposal: rows[0], proposals: rows });
+    apply({ type: 'chat.history', turns: [turn([{ ...proposal, launchedId: 'n1' }, docs])] });
+    expect(within(group()).getByRole('button', { name: /Start all \(1\)/ })).toBeDisabled();
+    apply({ type: 'chat.history', turns: [turn([{ ...proposal, launchedId: 'n1' }, { ...docs, error: 'no such folder' }])] });
+    expect(within(group()).getByRole('button', { name: /Start all \(1\)/ })).toBeEnabled();
+  });
 });

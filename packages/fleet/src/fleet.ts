@@ -1,4 +1,4 @@
-import { ChatTurnSchema, isArchived, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type ChatTurn, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
+import { ChatTurnSchema, isArchived, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
 
@@ -108,12 +108,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   function globalQid(machine: string, raw: string): string {
     return [...bindings].find(([, b]) => b.machine === machine && b.raw === raw)?.[0] ?? qualify(machine, raw);
   }
+  /** A card row as the overlay knows it: its launched session's id qualified by the machine. */
+  const launchedOn = (p: Peer, x: ChatProposal): ChatProposal => ({ ...x, ...(x.launchedId ? { launchedId: qualify(p.config.id, x.launchedId) } : {}) });
   function mappedTurn(p: Peer, raw: ChatTurn): ChatTurn {
     const qid = globalQid(p.config.id, raw.qid), old = turns.get(qid);
     bindings.set(qid, { machine: p.config.id, raw: raw.qid });
     return { ...raw, qid, question: old?.question ?? raw.question, machineId: p.config.id, machineName: p.config.label,
       steps: raw.steps.map(s => ({ ...s, ...(s.id ? { id: qualify(p.config.id, s.id) } : {}) })),
-      ...(raw.proposal ? { proposal: { ...raw.proposal, ...(raw.proposal.launchedId ? { launchedId: qualify(p.config.id, raw.proposal.launchedId) } : {}) } } : {}),
+      ...(raw.proposal ? { proposal: launchedOn(p, raw.proposal) } : {}), ...(raw.proposals ? { proposals: raw.proposals.map(x => launchedOn(p, x)) } : {}),
       ...(raw.relay ? { relay: { ...raw.relay, id: qualify(p.config.id, raw.relay.id) } } : {}) };
   }
   /** Applies a confirmed list to the peers: no storage write, nothing for the overlay until `publish`. */
@@ -201,7 +203,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (routing?.qid === m.qid && routing.coordinator === machine && m.type === 'chat.error') { routing = null; fail(m.qid, m.message); return; }
       const qid = globalQid(machine, m.qid), old = turns.get(qid); if (!old) return;
       if (m.type === 'chat.done') {
-        const raw = { ...old, qid: m.qid, answer: m.text, answeredAt: m.at, proposal: m.proposal, relay: m.relay, projectProposal: m.projectProposal };
+        const raw = { ...old, qid: m.qid, answer: m.text, answeredAt: m.at, proposal: m.proposal, proposals: m.proposals, relay: m.relay, projectProposal: m.projectProposal };
         const t = mappedTurn(p, { ...raw, steps: [] }); turns.set(qid, { ...t, steps: old.steps }); history();
       } else if (m.type === 'chat.error') fail(qid, m.message);
       else if (m.type === 'chat.step') { const step = { ...m.step, ...(m.step.id ? { id: qualify(machine, m.step.id) } : {}) }; turns.set(qid, { ...old, steps: [...old.steps, step] }); emit({ ...m, qid, step }); }

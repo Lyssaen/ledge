@@ -707,6 +707,8 @@ export const fr = {
       launch: 'Lancer la session', launching: 'Lancement…', retry: 'Réessayer', orRephrase: 'ou reformule ta demande', orFolder: 'ou donne-moi un autre dossier',
       failed: (why: string) => `Échec du lancement : ${why}`, started: 'a démarré', startedUnknown: 'Session démarrée', terminal: 'Terminal'
     },
+    // #24 : plusieurs sessions dans une réponse.
+    group: { label: (n: number) => `${n} sessions proposées`, launchAll: (n: number) => `Tout lancer (${n})`, launchRow: 'Lancer', pick: (project: string) => `Lancer ${project}` },
     relay: {
       label: 'Instruction à envoyer', session: 'Session', instruction: 'Instruction',
       send: 'Envoyer', sending: 'Envoi…', cancel: 'Annuler', retry: 'Réessayer', orRephrase: 'ou reformule ta demande',

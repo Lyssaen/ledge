@@ -1206,6 +1206,60 @@ describe('server', () => {
       expect(marks.at(-1)).toEqual(['launched', 'q1', launched.id]);
       c.close(); await srv2.close();
     });
+
+    describe('several rows (#24)', () => {
+      /** A chat whose `q1` card holds these rows; marks are recorded per row. */
+      function rowsChat(initial: ChatProposal[]) {
+        const rows = [...initial]; const marks: Array<[string, number, string]> = [];
+        const chat: Chat = {
+          async ask() {}, cancel() {}, async reset() {}, history: () => [],
+          proposal: (qid, row = 0) => (qid === 'q1' ? rows[row] : undefined),
+          markLaunched(_qid, id, emit, row = 0) { marks.push(['launched', row, id]); rows[row] = { ...rows[row]!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
+          markFailed(_qid, message, emit, row = 0) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
+          relay: () => undefined, markRelay() {}, queuedRelays: () => []
+        };
+        return { chat, marks };
+      }
+      const row = (name: string): ChatProposal => ({ cwd: join(home(), name), project: name, tool: 'claude' });
+
+      it('launches the rows asked, one after the other, each with its own bot name', async () => {
+        for (const n of ['a', 'b', 'c']) mkdirSync(join(home(), n));
+        const { chat, marks } = rowsChat([row('a'), row('b'), row('c')]);
+        const srv2 = await start(chat);
+        const c = await connect({ port: srv2.port }); await c.next('snapshot');
+        c.send({ type: 'session.launch', tool: 'claude', cwd: '/x', qid: 'q1', rows: [2, 0] });
+        const first = await c.next('session.launched'); const second = await c.next('session.launched');
+        expect(tmux.created.map(t => t.cwd)).toEqual([join(home(), 'c'), join(home(), 'a')]);
+        expect(marks).toEqual([['launched', 2, first.id], ['launched', 0, second.id]]);
+        expect(store.get(first.id)!.name).not.toBe(store.get(second.id)!.name);
+        c.close(); await srv2.close();
+      });
+
+      it('skips a launched row, goes on past a failed one, then refuses with the failure', async () => {
+        mkdirSync(join(home(), 'c'));
+        const { chat, marks } = rowsChat([{ ...row('a'), launchedId: 'n0' }, row('gone'), row('c')]);
+        const srv2 = await start(chat);
+        const c = await connect({ port: srv2.port }); await c.next('snapshot');
+        c.send({ type: 'session.launch', tool: 'claude', cwd: '/x', qid: 'q1', rows: [0, 1, 2] });
+        const launched = await c.next('session.launched');
+        expect(await c.next('error')).toEqual({ type: 'error', message: `no such folder: ${join(home(), 'gone')}`, request: 'session.launch' });
+        expect(marks).toEqual([['failed', 1, `no such folder: ${join(home(), 'gone')}`], ['launched', 2, launched.id]]);
+        expect(tmux.created).toHaveLength(1);
+        c.close(); await srv2.close();
+      });
+
+      it('refuses when no row asked is left to launch, or none exists', async () => {
+        const { chat } = rowsChat([{ ...row('a'), launchedId: 'n0' }]);
+        const srv2 = await start(chat);
+        const c = await connect({ port: srv2.port }); await c.next('snapshot');
+        c.send({ type: 'session.launch', tool: 'claude', cwd: '/x', qid: 'q1', rows: [0] });
+        expect(await c.next('error')).toEqual({ type: 'error', message: 'already launched', request: 'session.launch' });
+        c.send({ type: 'session.launch', tool: 'claude', cwd: '/x', qid: 'q1', rows: [3] });
+        expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown proposal', request: 'session.launch' });
+        expect(tmux.created).toHaveLength(0);
+        c.close(); await srv2.close();
+      });
+    });
   });
 
   describe('relay from a chat card', () => {

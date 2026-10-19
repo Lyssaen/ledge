@@ -68,6 +68,22 @@ describe('chat service', () => {
     expect(seen[1]).toContain('## Ledge');
   });
 
+  it('a question about issues, PR/MR or CI gets the forge files the daemon read (#23); another question runs no forge command', async () => {
+    let home = ''; const seen: Array<string | null> = [];
+    const spawn = ((file: string, a: string[], o: object) => {
+      const f = join(home, 'chat', 'context', 'forge.md'); seen.push(existsSync(f) ? readFileSync(f, 'utf8') : null);
+      return nodeSpawn(file, a, o as never);
+    }) as unknown as typeof nodeSpawn;
+    const projects: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+    const writes: string[] = [];
+    const forge = { async write(ctx: { dir: string; steps: Map<string, unknown> }, p: Projects) { writes.push(p.projects[0]!.id); writeFileSync(join(ctx.dir, 'forge.md'), '- Ledge: forge-ledge.md'); } };
+    const s = setup({ spawn, projects: () => projects, forge }); home = s.home;
+    await s.chat.ask('q1', 'où en sont les autres ?', () => {});
+    await s.chat.ask('q2', 'quelles issues sont ouvertes ?', () => {});
+    expect(writes).toEqual(['ledge']);
+    expect(seen).toEqual([null, '- Ledge: forge-ledge.md']);
+  });
+
   it('the chat context leaves archived sessions out', async () => {
     let home = ''; let sessions = '';
     const spawn = ((file: string, a: string[], o: object) => { sessions = readFileSync(join(home, 'chat', 'context', 'sessions.md'), 'utf8'); return nodeSpawn(file, a, o as never); }) as unknown as typeof nodeSpawn;
@@ -217,9 +233,55 @@ describe('chat service', () => {
     const out: ServerMessage[] = [];
     await chat.ask('q1', 'ouvre une session pour corriger le build', m => out.push(m));
     const proposal = { cwd: dir, project: basename(dir), tool: 'claude', prompt: 'Corrige le build' };
-    expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je te propose cette session.', at: expect.any(String), proposal });
-    expect(chat.history()[0]).toMatchObject({ answer: 'Je te propose cette session.', proposal });
+    expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je te propose cette session.', at: expect.any(String), proposal, proposals: [proposal] });
+    expect(chat.history()[0]).toMatchObject({ answer: 'Je te propose cette session.', proposal, proposals: [proposal] });
     expect(chat.proposal('q1')).toEqual(proposal);
+  });
+
+  describe('several sessions in one answer (#24)', () => {
+    const fences = (...jsons: string[]) => 'Je lance ces sessions.\n\n' + jsons.map(j => '```ledge-session\n' + j + '\n```').join('\n');
+    it('every valid block is a row, in order; the first stays the turn proposal for older clients', async () => {
+      const a = mkdtempSync(join(tmpdir(), 'a-')), b = mkdtempSync(join(tmpdir(), 'b-'));
+      const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fences(`{"cwd": "${a}"}`, `{"cwd": "${b}", "prompt": "Rebase"}`) }) });
+      const out: ServerMessage[] = [];
+      await chat.ask('q1', 'lance une session sur a et une sur b', m => out.push(m));
+      const pa = { cwd: a, project: basename(a), tool: 'claude' }, pb = { cwd: b, project: basename(b), tool: 'claude', prompt: 'Rebase' };
+      expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je lance ces sessions.', at: expect.any(String), proposal: pa, proposals: [pa, pb] });
+      expect(chat.proposal('q1', 1)).toEqual(pb);
+      expect(chat.proposal('q1', 2)).toBeUndefined();
+    });
+    it('a bad or missing folder drops its row only', async () => {
+      const a = mkdtempSync(join(tmpdir(), 'a-'));
+      const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fences('{"cwd": "/nope/ledge-missing"}', `{"cwd": "${a}"}`, '{"cwd":') }) });
+      await chat.ask('q1', 'x', () => {});
+      expect(chat.history()[0]!.proposals).toEqual([{ cwd: a, project: basename(a), tool: 'claude' }]);
+    });
+    it('keeps the first 8 rows and logs the rest', async () => {
+      const dirs = Array.from({ length: 10 }, (_, i) => mkdtempSync(join(tmpdir(), `d${i}-`)));
+      const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fences(...dirs.map(d => `{"cwd": "${d}"}`)) }) });
+      logged.length = 0;
+      await chat.ask('q1', 'x', () => {});
+      expect(chat.history()[0]!.proposals!.map(p => p.cwd)).toEqual(dirs.slice(0, 8));
+      expect(logged.some(l => l.includes('2 sessions beyond 8 ignored'))).toBe(true);
+    });
+    it('marks each row on its own; the first row mirrors the turn proposal', async () => {
+      const a = mkdtempSync(join(tmpdir(), 'a-')), b = mkdtempSync(join(tmpdir(), 'b-'));
+      const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fences(`{"cwd": "${a}"}`, `{"cwd": "${b}"}`) }) });
+      await chat.ask('q1', 'x', () => {});
+      const out: ServerMessage[] = [];
+      chat.markLaunched('q1', 'n2', m => out.push(m), 1);
+      expect(chat.proposal('q1', 1)).toMatchObject({ launchedId: 'n2' });
+      expect(chat.history()[0]!.proposal).not.toHaveProperty('launchedId');
+      chat.markFailed('q1', 'boom', m => out.push(m), 0);
+      expect(chat.history()[0]!.proposal).toMatchObject({ error: 'boom' });
+      expect(chat.history()[0]!.proposals![0]).toMatchObject({ error: 'boom' });
+      chat.markLaunched('q1', 'n1', m => out.push(m));
+      expect(chat.history()[0]!.proposal).toEqual({ cwd: a, project: basename(a), tool: 'claude', launchedId: 'n1' });
+      expect(chat.history()[0]!.proposals![0]).toEqual(chat.history()[0]!.proposal);
+      expect(out).toHaveLength(3);
+      chat.markLaunched('q1', 'n9', m => out.push(m), 5);
+      expect(out).toHaveLength(3);
+    });
   });
 
   it('a ~ path resolves against the user home, a blank prompt means an empty session', async () => {

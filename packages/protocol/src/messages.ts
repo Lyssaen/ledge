@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { PendingSchema, SessionSchema, ToolSchema } from './session.js';
-import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatRelaySchema, ChatProjectProposalSchema } from './chat.js';
+import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, MAX_PROPOSALS, ChatProjectProposalSchema } from './chat.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
@@ -91,7 +91,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** The chat (spec 2026-10-11 §5): what Ledge reads, its words as they come, the final text, or why it stopped; the day's turns after each snapshot. */
   z.object({ type: z.literal('chat.step'), qid: z.string(), step: ChatStepSchema }),
   z.object({ type: z.literal('chat.delta'), qid: z.string(), text: z.string() }),
-  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), relay: ChatRelaySchema.optional(), projectProposal: ChatProjectProposalSchema.optional() }),
+  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), projectProposal: ChatProjectProposalSchema.optional() }),
   z.object({ type: z.literal('chat.error'), qid: z.string(), message: z.string() }),
   z.object({ type: z.literal('chat.history'), turns: z.array(ChatTurnSchema) }),
   /** The daemon updating itself: npm is running, then the service restarts (the socket closes right after). */
@@ -118,6 +118,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
    *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation.
    *  With `qid` it is the chat card of that turn: the daemon launches the turn's proposal and ignores the other fields. */
   z.object({ type: z.literal('session.launch'), tool: ToolSchema, cwd: z.string().min(1), name: z.string().optional(), prompt: z.string().optional(), continue: z.boolean().optional(), qid: z.string().min(1).optional(),
+    /** With `qid`: the card's rows to launch (#24), indexes into the turn's `proposals`, each once; the first row without it. */
+    rows: z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice').optional(),
     /** Folders in addition to `cwd` (Claude: `--add-dir`); resolved like `cwd`. */ dirs: z.array(z.string().min(1)).max(20).optional(),
     /** Routing by the fleet, removed before the message reaches the daemon. */ machineId: z.string().optional() }),
   /** The launch form's folder browser: list a folder's subfolders (home when no `path`), or make `name` inside `parent`

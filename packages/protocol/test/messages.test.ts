@@ -129,6 +129,22 @@ describe('protocol', () => {
   });
 });
 
+describe('protocol: several sessions in one answer (#24)', () => {
+  const a = { cwd: '/w/a', project: 'a', tool: 'claude' as const }, b = { cwd: '/w/b', project: 'b', tool: 'codex' as const, launchedId: 'n2' };
+  it('chat.done and a turn carry the list beside the first proposal', () => {
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, proposal: a, proposals: [a, b] })).toEqual({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, proposal: a, proposals: [a, b] });
+    const h = parseServerMessage({ type: 'chat.history', turns: [{ qid: 'q1', question: 'x', askedAt: T0, steps: [], proposal: a, proposals: [a, b] }] });
+    expect(h.type === 'chat.history' && h.turns[0]!.proposals).toEqual([a, b]);
+  });
+  it('holds at most 8 sessions', () => {
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, proposals: Array(9).fill(a) })).toThrow();
+  });
+  it('session.launch names the card rows to launch, each once, within the 8', () => {
+    expect(parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w/a', qid: 'q1', rows: [0, 2] })).toMatchObject({ rows: [0, 2] });
+    for (const rows of [[], [8], [-1], [1, 1], [0.5]]) expect(() => parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w/a', qid: 'q1', rows })).toThrow();
+  });
+});
+
 describe('protocol: launching from the overlay', () => {
   it('parses session.launch with its optional fields', () => {
     expect(parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '~/Workspace/api-gateway' }).type).toBe('session.launch');

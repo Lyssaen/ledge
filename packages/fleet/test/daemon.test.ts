@@ -181,6 +181,14 @@ describe('daemon client + store', () => {
     expect(daemonStore.getState().chat[0]).toMatchObject({ answer: 'ok', proposal });
   });
 
+  it('keeps every session row a chat.done carries (#24)', () => {
+    daemonStore.reset();
+    daemonStore.beginTurn({ qid: 'q1', question: 'x', askedAt: T0, steps: [] });
+    const a = { cwd: '/w/a', project: 'a', tool: 'claude' as const }, b = { cwd: '/w/b', project: 'b', tool: 'claude' as const };
+    daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, proposal: a, proposals: [a, b] });
+    expect(daemonStore.getState().chat[0]).toMatchObject({ proposal: a, proposals: [a, b] });
+  });
+
   it('chat.done keeps the relay', () => {
     daemonStore.reset();
     daemonStore.beginTurn({ qid: 'q1', question: 'dis à Otto', askedAt: T0, steps: [] });
