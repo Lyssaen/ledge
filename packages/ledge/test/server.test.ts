@@ -761,6 +761,12 @@ describe('server', () => {
       c.send({ type: 'session.reply', id: 'a', text: '1' });
       return c;
     }
+    it('the first question of a launched session takes its answer: blank rows and the titled input rule under the dialog (#31)', async () => {
+      const c = await answer([fx('claude2-question-fullscreen-gap'), fx('claude2-idle')], { kind: 'question', text: 'Quel est l objectif ?', source: 'pane' });
+      await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
+      expect(tmux.sent).toEqual([['text', 'ledge-a', '1']]);
+      c.close();
+    });
     it('question 2 coming up after question 1 is success, not a refused answer', async () => {
       const c = await answer([fx('claude2-question-multi-first'), fx('claude2-question-multi-second')], { kind: 'question', text: 'Color?', source: 'hook' });
       await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });

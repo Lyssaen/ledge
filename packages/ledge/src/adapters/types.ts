@@ -130,5 +130,13 @@ export function dialogMismatch(shown: PanePromptMatch | null, pending: Pending, 
   if (pending.tool !== undefined && COMMAND_TOOLS.has(pending.tool)) return shown.command ? commandMismatch(shown.command, pending.text, width) : UNCHECKED;
   return null;
 }
+/**
+ * The bottom of a dialog as `promptStillVisible` reads it: the last `n` non-blank lines of the pane. Claude Code in
+ * fullscreen keeps the input box's titled top rule (`───── Otto ─`) at the bottom of the pane, under a dialog that a
+ * short conversation leaves near the top: the blank rows between them are not the bottom of anything (#31).
+ */
+export function bottomLines(pane: string, n = 5): string {
+  return pane.split('\n').filter(l => l.trim() !== '').slice(-n).join('\n');
+}
 /** Tmux.sendText rejects newlines: a reply or a note is flattened to one line, Enter is a separate key step. */
 export const flatten = (text: string) => text.replace(/\s*[\r\n]+\s*/g, ' ').trim();

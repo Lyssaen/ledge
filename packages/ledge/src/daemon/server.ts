@@ -8,7 +8,7 @@ import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
-import { STALE, dialogMismatch } from '../adapters/types.js';
+import { STALE, bottomLines, dialogMismatch } from '../adapters/types.js';
 import { verifyGone } from '../adapters/verify.js';
 import { DETECT_LINES } from './poller.js';
 import { pickName } from '../names.js';
@@ -268,7 +268,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       let before: string | null = null;
       if (requirePrompt) {
         before = s.tmuxSession ? await tmux.capture(s.tmuxSession, DETECT_LINES) : null;
-        if (before === null || !adapter.promptStillVisible(before.split('\n').slice(-5).join('\n'))) throw new Error(NO_PROMPT);
+        if (before === null || !adapter.promptStillVisible(bottomLines(before))) throw new Error(NO_PROMPT);
         // The request checked before the capture may have been replaced while it ran: no key for one the user did not see.
         if (!stillTheSame()) throw new Error(STALE);
         // Nor for another dialog already on screen whose hook has not come yet: the daemon still holds the old request.
@@ -283,7 +283,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.
       const promptGone = () => decided && adapter.promptGone
         ? verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
-        : verifyGone(() => tmux.capture(s.tmuxSession!, 5), p => adapter.promptStillVisible(p), opts.verify);
+        : verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => adapter.promptStillVisible(bottomLines(p)), opts.verify);
       try { await runPlan(s, plan); }
       catch (e) {
         // The deny keys went and the input box never came back for the note: if the request is gone, the refusal

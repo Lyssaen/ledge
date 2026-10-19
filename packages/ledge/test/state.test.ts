@@ -280,6 +280,14 @@ describe('reduce: rulings', () => {
     expect(next.lastHookAt).toBe(later(5000));
     expect(next.state).toBe('waiting_permission');
   });
+  it('a Notification over a pane pending (question 2 of an AskUserQuestion) leaves it as it is (#31)', () => {
+    const pending = { kind: 'question' as const, text: 'Quel est l objectif ?', options: ['plan', 'analyse'], source: 'pane' as const };
+    const s = session('waiting_input', { pending });
+    const next = reduce(s, ev('Notification', { kind: 'permission', text: 'Claude needs your permission' }));
+    expect(next.pending).toEqual(pending);
+    expect(next.state).toBe('waiting_input');
+    expect(next.lastHookAt).toBe(later(5000));
+  });
   it('a PermissionRequest over a hook plan pending keeps kind plan', () => {
     const s = session('waiting_permission', { pending: { kind: 'plan', text: 'the plan', source: 'hook' } });
     const next = reduce(s, ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));

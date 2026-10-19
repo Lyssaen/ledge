@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { claudeAdapter } from '../src/adapters/claude.js';
 import { adapterFor } from '../src/adapters/index.js';
+import { bottomLines } from '../src/adapters/types.js';
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
-/** What the server's verify step sees: the last `n` lines, trailing whitespace trimmed like Tmux.capture. */
+/** The last `n` lines, trailing whitespace trimmed like Tmux.capture (the server reads its non-blank ones: bottomLines). */
 const tail = (pane: string, n = 5) => pane.replace(/\s+$/g, '').split('\n').slice(-n).join('\n');
 
 describe('claude adapter: detection (Claude Code 2.x captures)', () => {
@@ -193,6 +194,27 @@ describe('claude adapter: several questions in one AskUserQuestion (Claude Code 
     const perm = { kind: 'permission' as const, text: 'Bash: mkdir zz-ledge-probe (create the folder)', source: 'hook' as const };
     expect(claudeAdapter.promptGone!(fx('claude2-permission-bash'), perm)).toBe(false);
     expect(claudeAdapter.promptGone!(fx('claude2-idle'), perm)).toBe(true);
+  });
+});
+
+describe('claude adapter: fullscreen, a dialog over a short conversation (Claude Code 2.1.303 capture, #31)', () => {
+  // The input box's titled top rule stays at the bottom of the pane, blank rows between it and the dialog.
+  const gap = fx('claude2-question-fullscreen-gap');
+  const perm = { kind: 'permission' as const, text: 'mkdir zz-ledge-probe', source: 'hook' as const };
+  const permGap = `${fx('claude2-permission-bash').replace(/\s+$/, '')}${'\n'.repeat(16)}${'─'.repeat(40)} Otto ─`;
+  it('the dialog is at the bottom of the pane for the server\'s check', () => {
+    expect(tail(gap).trim()).toMatch(/^─+ Otto ─$/);
+    expect(claudeAdapter.promptStillVisible(bottomLines(gap))).toBe(true);
+    expect(claudeAdapter.promptStillVisible(bottomLines(permGap))).toBe(true);
+  });
+  it('detects the question on screen', () => {
+    expect(claudeAdapter.detectPrompt(gap)).toMatchObject({ kind: 'question', text: 'Quel est l objectif ?' });
+  });
+  it('an approval still on screen is not gone', () => {
+    expect(claudeAdapter.promptGone!(permGap, perm)).toBe(false);
+  });
+  it('chat quoting a dialog above the idle input box is still no dialog', () => {
+    expect(claudeAdapter.promptStillVisible(bottomLines(`${gap}\n${fx('claude2-fullscreen-idle')}`))).toBe(false);
   });
 });
 

@@ -293,8 +293,9 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       if (ev.name === 'UserPromptSubmit' && ev.text && !s.topic && !notice && !crossSession(ev.text)) s = withTopic(s, ev.text, 'prompt');
       const incoming = pendingFor(ev);
       if (incoming) {
-        // A Notification never overwrites an existing hook pending: only the hook timestamp moves.
-        if (ev.name === 'Notification' && s.pending?.source === 'hook') return { ...s, lastHookAt: at, lastActivityAt: at };
+        // A Notification never overwrites an existing pending, a hook's or the pane's (question 2 of an AskUserQuestion,
+        // #31): it names no tool and no option. Only the hook timestamp moves.
+        if (ev.name === 'Notification' && s.pending) return { ...s, lastHookAt: at, lastActivityAt: at };
         const pending = mergePending(s.pending, incoming);
         const state = pending.kind === 'question' ? 'waiting_input' : 'waiting_permission';
         return { ...s, state, pending, lastHookAt: at, lastActivityAt: at };

@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.303
+▝▜██████▀  Opus 5.5 · Claude Team
+ ▝▝   ▝▝   /home/dev/demo
+
+
+❯ Dis juste bonjour.
+
+● Bonjour !
+
+✻ Sautéed for 7s · done 11:48 AM
+
+❯ Appelle l'outil AskUserQuestion une seule fois avec exactement deux questions. Q1 'Quelle est la clé de la story ?'
+  header Story, options 'Hors story' (description 'Travail hors story Jira') et 'Autre clé' (description 'Préciser la
+  clé'). Q2 'Quel est l objectif ?' header Objectif, options plan, analyse, implementation, correction avec une
+  description d'un mot. Puis réponds OK.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Story  ☐ Objectif  ✔ Submit  →
+
+Quel est l objectif ?
+
+❯ 1. plan
+     Planification
+  2. analyse
+     Investigation
+  3. implementation
+     Développement
+  4. correction
+     Correctif
+  5. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  6. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────── Otto ─

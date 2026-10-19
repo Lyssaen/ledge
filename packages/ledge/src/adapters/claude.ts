@@ -1,5 +1,5 @@
 import type { Pending } from '@ledge/protocol';
-import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch, type ShownCommand } from './types.js';
+import { NO_ALWAYS, NO_NOTE, assertDialogIs, bottomLines, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch, type ShownCommand } from './types.js';
 
 // Claude Code 2.x draws a dialog at the bottom of the pane, without a box:
 //
@@ -211,7 +211,7 @@ const squash = (t: string) => t.replace(/\s+/g, ' ').trim();
  * at the bottom means it was not taken.
  */
 function promptGone(pane: string, pending: Pending): boolean {
-  if (pending.kind !== 'question' || !squash(pending.text)) return !promptStillVisible(pane.replace(/\s+$/, '').split('\n').slice(-5).join('\n'));
+  if (pending.kind !== 'question' || !squash(pending.text)) return !promptStillVisible(bottomLines(pane));
   const m = detectPrompt(pane);
   if (!m || m.kind !== 'question') return true;
   const shown = squash(m.text); const asked = squash(pending.text);
