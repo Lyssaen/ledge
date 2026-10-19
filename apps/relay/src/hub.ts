@@ -1,4 +1,4 @@
-import { RelayClientMessageSchema, SEALED_MAX, type RelayPeer, type RelayServerMessage } from '@ledge/protocol';
+import { RelayClientMessageSchema, RelayPeerSchema, SEALED_MAX, type RelayPeer, type RelayServerMessage } from '@ledge/protocol';
 import type { RelayLog } from './log.js';
 
 export interface Who { accountId: string; peer: RelayPeer }
@@ -6,13 +6,15 @@ export interface Conn {
   send(msg: RelayServerMessage): void;
   close(code: number, reason: string): void;
 }
-export interface Limits { framesPerWindow: number; windowMs: number; now: () => number }
+/** Per socket and per window. `bytesPerWindow` counts raw frame length. Exceeding either closes the socket with 4008. */
+export interface Limits { framesPerWindow: number; bytesPerWindow: number; windowMs: number; now: () => number }
 
 interface State {
   who: Who;
   since: number;
   windowStart: number;
   windowCount: number;
+  windowBytes: number;
   limited: boolean;
   framesIn: number;
   framesOut: number;
@@ -30,12 +32,12 @@ export class Hub {
 
   constructor(private readonly log: RelayLog, limits: Partial<Limits> = {}) {
     const defined = Object.fromEntries(Object.entries(limits).filter(([, v]) => v !== undefined)) as Partial<Limits>;
-    this.limits = { framesPerWindow: 300, windowMs: 10_000, now: Date.now, ...defined };
+    this.limits = { framesPerWindow: 300, bytesPerWindow: 8 * 1_048_576, windowMs: 10_000, now: Date.now, ...defined };
   }
 
   attach(conn: Conn, who: Who): void {
     const now = this.limits.now();
-    this.states.set(conn, { who, since: now, windowStart: now, windowCount: 0, limited: false, framesIn: 0, framesOut: 0, bytesIn: 0, bytesOut: 0 });
+    this.states.set(conn, { who, since: now, windowStart: now, windowCount: 0, windowBytes: 0, limited: false, framesIn: 0, framesOut: 0, bytesIn: 0, bytesOut: 0 });
     let peers = this.accounts.get(who.accountId);
     if (!peers) { peers = new Map(); this.accounts.set(who.accountId, peers); }
     const old = peers.get(who.peer);
@@ -69,25 +71,31 @@ export class Hub {
     if (!st) return;
     // A replaced socket is closed but may still be open for a moment: it must not route anything.
     if (this.accounts.get(st.who.accountId)?.get(st.who.peer) !== conn) return;
+    // A socket over its limits is being closed: nothing more is answered or routed (no amplification).
+    if (st.limited) return;
     const now = this.limits.now();
-    if (now - st.windowStart >= this.limits.windowMs) { st.windowStart = now; st.windowCount = 0; st.limited = false; }
+    if (now - st.windowStart >= this.limits.windowMs) { st.windowStart = now; st.windowCount = 0; st.windowBytes = 0; }
     st.windowCount++;
+    st.windowBytes += raw.length;
     st.framesIn++;
     st.bytesIn += raw.length;
-    if (st.windowCount > this.limits.framesPerWindow) {
-      // Answer and log once per window: further excess frames are dropped silently (no amplification).
-      if (st.limited) return;
+    if (st.windowCount > this.limits.framesPerWindow || st.windowBytes > this.limits.bytesPerWindow) {
+      // Dropping a frame silently would break the sender's strict-sequence channel unseen.
+      // Closing forces a reconnect, hence a fresh handshake.
       st.limited = true;
-      return this.fail(conn, st, 'rate_limited');
+      this.fail(conn, st, 'rate_limited');
+      return conn.close(4008, 'rate_limited');
     }
 
     let json: unknown;
     try { json = JSON.parse(raw); } catch { return this.fail(conn, st, 'bad_frame'); }
     const parsed = RelayClientMessageSchema.safeParse(json);
     if (!parsed.success) {
-      const body = (json as { body?: unknown } | null)?.body;
-      const big = typeof body === 'string' && body.length > SEALED_MAX;
-      return this.fail(conn, st, big ? 'too_large' : 'bad_frame');
+      const { body, to } = (json ?? {}) as { body?: unknown; to?: unknown };
+      if (typeof body !== 'string' || body.length <= SEALED_MAX) return this.fail(conn, st, 'bad_frame');
+      // Name the channel the sender just lost, when the target is a valid peer.
+      const peer = RelayPeerSchema.safeParse(to);
+      return this.fail(conn, st, 'too_large', peer.success ? peer.data : undefined);
     }
     const { to, body } = parsed.data;
     const { who } = st;

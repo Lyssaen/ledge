@@ -103,30 +103,88 @@ describe('Hub', () => {
     hub.receive(d, JSON.stringify({ type: 'ping' }));
     expect(d.sent.at(-1)).toEqual({ type: 'error', code: 'bad_frame' });
     hub.receive(d, send('pc', 'x'.repeat(1_048_577)));
-    expect(d.sent.at(-1)).toEqual({ type: 'error', code: 'too_large' });
+    expect(d.sent.at(-1)).toEqual({ type: 'error', code: 'too_large', to: 'pc' });
     expect(p.sent).toHaveLength(n);
   });
 
-  it('rate-limits a flooding socket', () => {
+  it('names the target of an oversize body only when it is a valid peer', () => {
+    const { hub } = setup();
+    const p = new Fake();
+    hub.attach(p, pc());
+    const big = 'x'.repeat(1_048_577);
+    hub.receive(p, send(D1, big));
+    expect(p.sent.at(-1)).toEqual({ type: 'error', code: 'too_large', to: D1 });
+    hub.receive(p, send('admin', big));
+    expect(p.sent.at(-1)).toEqual({ type: 'error', code: 'too_large' });
+    hub.receive(p, JSON.stringify({ type: 'send', to: D1, body: 42 }));
+    expect(p.sent.at(-1)).toEqual({ type: 'error', code: 'bad_frame' });
+  });
+
+  it('closes a flooding socket with 4008 after one rate_limited', () => {
     let t = 0;
     const { hub, events } = setup({ framesPerWindow: 3, windowMs: 1000, now: () => t });
     const p = new Fake(), d = new Fake();
     hub.attach(p, pc()); hub.attach(d, dev(D1));
     for (let i = 0; i < 6; i++) hub.receive(d, send('pc', String(i)));
     expect(d.sent.filter((m) => m.type === 'error')).toEqual([{ type: 'error', code: 'rate_limited' }]);
-    expect(events.filter((e) => e.ev === 'frame_error')).toHaveLength(1);
+    expect(d.closed).toEqual([[4008, 'rate_limited']]);
+    expect(events.filter((e) => e.ev === 'frame_error')).toEqual([{ ev: 'frame_error', account: 'A', peer: D1, code: 'rate_limited' }]);
     expect(p.sent.filter((m) => m.type === 'deliver')).toHaveLength(3);
-    t = 1000;
+    t = 1000; // a new window does not revive a socket being closed
     hub.receive(d, send('pc', 'again'));
+    expect(p.sent.filter((m) => m.type === 'deliver')).toHaveLength(3);
+    expect(d.sent.filter((m) => m.type === 'error')).toHaveLength(1);
+    expect(d.closed).toHaveLength(1);
+    hub.detach(d, 4008);
+    expect(p.sent.at(-1)).toEqual({ type: 'presence', peer: D1, online: false });
+  });
+
+  it('closes a socket over its byte budget with 4008', () => {
+    let t = 0;
+    const { hub, events } = setup({ bytesPerWindow: 100, windowMs: 1000, now: () => t });
+    const p = new Fake(), d = new Fake();
+    hub.attach(p, pc()); hub.attach(d, dev(D1));
+    const frame = send('pc', 'x'.repeat(10)); // 40 characters
+    hub.receive(d, frame); hub.receive(d, frame);
+    t = 999;
+    hub.receive(d, frame); hub.receive(d, frame);
+    expect(p.sent.filter((m) => m.type === 'deliver')).toHaveLength(2);
+    expect(d.sent.filter((m) => m.type === 'error')).toEqual([{ type: 'error', code: 'rate_limited' }]);
+    expect(d.closed).toEqual([[4008, 'rate_limited']]);
+    expect(events.filter((e) => e.ev === 'frame_error')).toHaveLength(1);
+  });
+
+  it('resets the byte budget with the window', () => {
+    let t = 0;
+    const { hub } = setup({ bytesPerWindow: 100, windowMs: 1000, now: () => t });
+    const p = new Fake(), d = new Fake();
+    hub.attach(p, pc()); hub.attach(d, dev(D1));
+    const frame = send('pc', 'x'.repeat(10));
+    hub.receive(d, frame); hub.receive(d, frame);
+    t = 1000;
+    hub.receive(d, frame); hub.receive(d, frame);
     expect(p.sent.filter((m) => m.type === 'deliver')).toHaveLength(4);
+    expect(d.closed).toEqual([]);
   });
 
   it('ignores undefined limits instead of disabling them', () => {
-    const { hub } = setup({ framesPerWindow: undefined, windowMs: undefined, now: undefined });
+    const { hub } = setup({ framesPerWindow: undefined, bytesPerWindow: undefined, windowMs: undefined, now: undefined });
     const p = new Fake(), d = new Fake();
     hub.attach(p, pc()); hub.attach(d, dev(D1));
     for (let i = 0; i < 301; i++) hub.receive(d, send('pc', 'x'));
     expect(d.sent.at(-1)).toEqual({ type: 'error', code: 'rate_limited' });
+    expect(d.closed).toEqual([[4008, 'rate_limited']]);
+  });
+
+  it('applies a default byte budget of 8 MiB per window', () => {
+    const { hub } = setup({ framesPerWindow: 1000 });
+    const p = new Fake(), d = new Fake();
+    hub.attach(p, pc()); hub.attach(d, dev(D1));
+    const big = send('pc', 'x'.repeat(1_048_576)); // a little over 1 MiB once framed
+    for (let i = 0; i < 7; i++) hub.receive(d, big);
+    expect(d.closed).toEqual([]);
+    hub.receive(d, big);
+    expect(d.closed).toEqual([[4008, 'rate_limited']]);
   });
 
   it('logs sizes and counts, never a body', () => {
