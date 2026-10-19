@@ -25,3 +25,22 @@ Chaque lot a son plan, écrit au moment de le commencer, sur le code de ce momen
 | 5 | PWA portée sur `main` (écrans de `mobile-ui`, `@ledge/fleet` + `@ledge/ui`), connexion relais + `@ledge/seal`, clés dans IndexedDB, service worker à version figée avec empreinte | lot 2 |
 | 6 | Confirmation WebAuthn des demandes à haut risque, Web Push (VAPID serveur, contenu chiffré par le PC), chat multi-fil | domaine définitif |
 | 7 | Mise en service : domaine sous `ledge.paradow.dev`, déploiement Railway, empreinte du build dans `release.yml` | Railway, DNS |
+
+## Reporté par la revue du lot 1
+
+Chaque plan de lot reprend ces points à son début.
+
+- **Lot 2** :
+  - l'authentificateur valide `Who.peer` contre `RelayPeerSchema` ;
+  - les jetons de session n'utilisent que les caractères de jeton RFC 7230, car ils voyagent en sous-protocole ;
+  - si le téléphone s'authentifie par cookie à l'upgrade, l'authentificateur vérifie `Origin` (détournement de websocket entre sites) ;
+  - un délai maximal sur `authenticate` (par exemple 10 s → 503) et un plafond d'upgrades en attente ;
+  - les lignes `refused` sont agrégées par intervalle, pour qu'un client anonyme ne puisse pas inonder les logs.
+- **Lot 3** :
+  - un canal vit le temps d'une paire de sockets : chaque `welcome` et chaque `hello` reçu en cours de session ouvre un canal neuf ;
+  - toute `error` du relais sur un corps scellé (`offline`, `too_large`, fermeture 4008) et toute `SealError` `gap` imposent une nouvelle poignée de main avec ce pair ;
+  - une confirmation de clé, ou l'empreinte des clés statiques dans le `hello`, pour distinguer « clé du PC changée » d'une altération ;
+  - la longueur des clés et des nonces est validée à la révélation du code de liaison ;
+  - la clé publique est dérivée du PKCS8 stocké, pas lue d'une copie.
+- **Lot 4** : décider du bourrage des messages scellés par paliers de taille, avant de figer le format de l'enveloppe. Sans bourrage, le relais voit la longueur exacte de chaque message.
+- **Lot 5** : un test qui vérifie que le WebCrypto de Safari et de Chrome rejette un point hors courbe, et un vecteur de test de dérivation de clés commun au navigateur et au daemon.
