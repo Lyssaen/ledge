@@ -276,6 +276,62 @@ describe('runHook', () => {
   });
 });
 
+describe('runHook: Claude SendMessage to a Codex', () => {
+  const pim = (extra: Partial<Session> = {}): Session => ({ id: 'b', name: 'Pim', tool: 'codex', cwd: '/w/api', project: 'api', title: 'Pim · api', tmuxSession: 'ledge-b', state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...extra });
+  const send = (to = 'Pim') => JSON.stringify({ session_id: 'uuid-a', hook_event_name: 'PreToolUse', tool_name: 'SendMessage', tool_use_id: 'tu1', tool_input: { to, message: 'Salut' } });
+  const decision = (out: string | undefined) => (JSON.parse(out!) as { hookSpecificOutput: { hookEventName: string; permissionDecision: string; permissionDecisionReason: string } }).hookSpecificOutput;
+  const tmux = { async setOption() {}, async capture() { return ''; }, async sendText() {}, async sendKeys() {} } as never;
+  beforeEach(() => { process.env.LEDGE_SESSION = 'a'; });
+
+  it('a free Codex gets the message through Ledge, and the real SendMessage is denied with the reason', async () => {
+    const store = new Store(); store.upsert(pim());
+    const srv = await startServer({ store, tmux, port: 0 });
+    const spy = await connect({ port: srv.port }); await spy.next('snapshot');
+    try {
+      const out = decision(await runHook('PreToolUse', send(), { port: srv.port }));
+      expect(out).toEqual({ hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Message transmis par Ledge à Pim (codex) : il le reçoit maintenant.' });
+    } finally { await spy.close(); await srv.close(); }
+  });
+  it('sends session.message after the session.event, with the tool_use_id as rid', async () => {
+    const got: Array<Record<string, unknown>> = [];
+    const { WebSocketServer } = await import('ws');
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' }); await new Promise(r => wss.once('listening', r));
+    wss.on('connection', ws => {
+      ws.send(JSON.stringify({ type: 'snapshot', sessions: [pim()] }));
+      ws.on('message', d => { const m = JSON.parse(String(d)); got.push(m); if (m.type === 'session.message') ws.send(JSON.stringify({ type: 'message.ack', rid: m.rid, outcome: 'queued' })); });
+    });
+    try {
+      const out = decision(await runHook('PreToolUse', send(), { port: (wss.address() as { port: number }).port }));
+      expect(out.permissionDecisionReason).toBe("Message transmis par Ledge à Pim (codex) : il le recevra dès qu'il sera libre.");
+      expect(got.map(m => m.type)).toEqual(['session.event', 'session.message']);
+      expect(got[1]).toEqual({ type: 'session.message', rid: 'tu1', from: 'a', to: 'Pim', text: 'Salut', intercept: true });
+    } finally { wss.close(); }
+  });
+  it('a refusal says why', async () => {
+    const store = new Store(); store.upsert(pim({ source: 'hook_only', tmuxSession: '' }));
+    const srv = await startServer({ store, tmux, port: 0 });
+    try {
+      expect(decision(await runHook('PreToolUse', send(), { port: srv.port }))).toEqual({ hookEventName: 'PreToolUse', permissionDecision: 'deny',
+        permissionDecisionReason: "Ledge n'a pas pu transmettre le message à Pim : Pim n'a pas été lancée par Ledge : impossible de lui écrire" });
+    } finally { await srv.close(); }
+  });
+  it('to a Claude target, the real SendMessage proceeds', async () => {
+    const store = new Store(); store.upsert(pim({ tool: 'claude' }));
+    const srv = await startServer({ store, tmux, port: 0 });
+    try { expect(await runHook('PreToolUse', send(), { port: srv.port })).toBeUndefined(); } finally { await srv.close(); }
+  });
+  it('with no daemon listening, it resolves undefined within 2 s', async () => {
+    const t0 = Date.now();
+    expect(await runHook('PreToolUse', send(), { port: 1 })).toBeUndefined();
+    expect(Date.now() - t0).toBeLessThan(2000);
+  });
+  it('a Codex SendMessage is never intercepted', async () => {
+    const store = new Store(); store.upsert(pim());
+    const srv = await startServer({ store, tmux, port: 0 });
+    try { expect(await runHook('PreToolUse', send(), { port: srv.port, tool: 'codex' })).toBeUndefined(); } finally { await srv.close(); }
+  });
+});
+
 describe('session identity (SessionStart additionalContext)', () => {
   const pim = (extra: Partial<Session> = {}): Session => ({ id: '7f3a', name: 'Pim', tool: 'claude', cwd: '/w/ledge-wt', project: 'ledge-wt', title: 'Pim · ledge-wt', tmuxSession: 'ledge-7f3a', state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...extra });
   const context = (out: string | undefined) => (JSON.parse(out!) as { hookSpecificOutput: { hookEventName: string; additionalContext: string } }).hookSpecificOutput;
