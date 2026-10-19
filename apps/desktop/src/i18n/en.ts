@@ -9,7 +9,7 @@ export const en: Messages = {
   side: {
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
-    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
+    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
     ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…',
     openChat: 'Open the conversation with Ledge',
     active: (n) => `${n} active`,
@@ -263,10 +263,10 @@ export const en: Messages = {
       install: { npm: 'npm', git: 'git clone', unknown: 'unknown install' },
       unknown: 'Unknown version', behindTag: 'Update needed', latest: 'Latest version', latestUnknown: 'Not checked yet',
       behind: (names) => `${new Intl.ListFormat('en', { type: 'conjunction' }).format(names)} ${pluralEn(names.length, 'does', 'do')} not have the latest version.`,
-      updateDaemon: 'Update the daemon', updateDaemonHint: (v) => `The local daemon moves to Ledge ${v}, then restarts.`, update: 'Update',
-      log: 'Daemon log',
+      updateDaemon: (label) => `Update the daemon · ${label}`, updateDaemonHint: (label, v) => `The daemon of ${label} moves to Ledge ${v}, then restarts.`, update: 'Update',
+      log: (label) => `Daemon log · ${label}`,
       step: {
-        sent: (v) => `Request sent to the local daemon: ${v}`,
+        sent: (label, v, auto) => auto ? `Automatic update of the daemon of ${label}: ${v}` : `Request sent to the daemon of ${label}: ${v}`,
         installing: 'Installing the new version…',
         restarting: 'Restarting the daemon…',
         done: (v) => `Daemon up to date: ${v}`
@@ -277,7 +277,7 @@ export const en: Messages = {
         'sessions-at-risk': 'Your sessions run inside the daemon service: a restart would close them. Close them, or restart WSL, then retry.',
         'npm-failed': 'The daemon could not update. Nothing changed.',
         busy: 'An update is already running.',
-        offline: 'The local daemon is not connected: nothing was sent.',
+        offline: 'This daemon is not connected: nothing was sent.',
         timeout: 'The daemon is not answering.'
       },
       timeoutCommand: 'systemctl --user status ledge-daemon',

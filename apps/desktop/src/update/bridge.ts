@@ -28,6 +28,8 @@ export async function relaunchApp(): Promise<void> {
 }
 
 export async function appVersion(): Promise<string | null> {
+  // The e2e build only (VITE_LEDGE_E2E): Playwright stands in for the app's version, so the daemons' update (#48) runs in the browser.
+  if (import.meta.env.VITE_LEDGE_E2E) { const v = (window as unknown as { __ledgeAppVersion?: string }).__ledgeAppVersion; if (v) return v; }
   if (!isTauri()) return null;
   const { getVersion } = await import('@tauri-apps/api/app');
   return getVersion();

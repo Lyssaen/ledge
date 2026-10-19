@@ -151,15 +151,16 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
 
 /** A second machine reached through the daemon's `/ssh/<alias>` relay. `close()` drops it and refuses new connections until `reopen()`,
  *  after which the fleet's own retry gets through. */
-export async function fakeRemote(page: Page, alias: string, initial: Session[], extras: { recents?: Recent[] } = {}) {
+export async function fakeRemote(page: Page, alias: string, initial: Session[], extras: { recents?: Recent[]; daemon?: DaemonInfo } = {}) {
   let sessions = initial;
+  let daemon = extras.daemon;
   let up = true;
   let socket: WebSocketRoute | null = null;
   const received: ClientMessage[] = [];
   await page.routeWebSocket(new RegExp(`127\\.0\\.0\\.1:47831/ssh/${alias}$`), ws => {
     if (!up) { ws.close(); return; }
     socket = ws;
-    ws.send(JSON.stringify({ type: 'snapshot', sshAlias: alias, sessions, ...(extras.recents ? { recents: extras.recents } : {}) }));
+    ws.send(JSON.stringify({ type: 'snapshot', sshAlias: alias, sessions, ...(extras.recents ? { recents: extras.recents } : {}), ...(daemon ? { daemon } : {}) }));
     ws.onMessage(m => { try { received.push(JSON.parse(String(m))); } catch { /* ignore */ } });
   });
   const push = (m: unknown) => socket?.send(JSON.stringify(m));
@@ -169,7 +170,8 @@ export async function fakeRemote(page: Page, alias: string, initial: Session[], 
     /** Answers a `session.launch` sent to this machine (raw id; the fleet qualifies it with the machine). */
     launched(s: Session) { sessions = [...sessions.filter(x => x.id !== s.id), s]; push({ type: 'session.updated', session: s }); push({ type: 'session.launched', id: s.id }); },
     close() { up = false; socket?.close(); socket = null; },
-    reopen(next: Session[] = sessions) { sessions = next; up = true; }
+    /** Accepts connections again; `nextDaemon`: what the daemon says of itself from now on (a daemon back from its update). */
+    reopen(next: Session[] = sessions, nextDaemon: DaemonInfo | undefined = daemon) { sessions = next; daemon = nextDaemon; up = true; }
   };
 }
 

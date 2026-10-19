@@ -5,7 +5,7 @@ import { compareVersions } from '@ledge/ui/semver';
 import type { UpdateSnapshot } from './store';
 
 export type DaemonOffer = 'none' | 'offer' | 'manual';
-/** What About offers for the local daemon (decision 2): nothing when it is up to date or unknown; the button for an npm
+/** What About offers for a machine's daemon (decision 2): nothing when it is up to date or unknown; the button for an npm
  *  service behind the target; its manual command otherwise (git checkout, no systemd: the daemon would refuse). */
 export function daemonOffer(local: MachineState | undefined, target: string | null): DaemonOffer {
   const d = local?.daemon;
@@ -16,48 +16,80 @@ export function daemonOffer(local: MachineState | undefined, target: string | nu
 export const daemonTarget = (s: UpdateSnapshot): string | null => (s.phase.kind === 'available' ? s.phase.version : s.latest ?? s.app);
 
 export type DaemonStep =
-  | { kind: 'sent'; version: string } | { kind: 'installing' } | { kind: 'restarting' } | { kind: 'done'; version: string }
+  | { kind: 'sent'; version: string; auto?: true } | { kind: 'installing' } | { kind: 'restarting' } | { kind: 'done'; version: string }
   | { kind: 'failed'; reason: UpdateFailure | 'offline' | 'timeout'; detail?: string; command?: string };
-export interface DaemonUpdate { offer: DaemonOffer; journal: DaemonStep[]; running: boolean; start(): void }
+/** One machine's daemon update: what About offers for it, its journal, whether it runs. */
+export interface MachineDaemonUpdate { offer: DaemonOffer; journal: readonly DaemonStep[]; running: boolean }
+export interface DaemonUpdates {
+  of(machine: string): MachineDaemonUpdate;
+  /** The machines whose update runs: their daemon's restart is expected, no « offline » alert for them. */
+  updating: ReadonlySet<string>;
+  start(machine: string): void;
+}
 /** Longer than the daemon's own 3-minute npm timeout (as the island's watchdog). */
 export const DAEMON_STALL_MS = 4 * 60_000;
+const NONE: readonly DaemonStep[] = [];
 
-/** The local daemon's update and its journal (spec §9.4, §11: `update.daemon` to the local daemon only). Done when the
- *  local daemon is back, open, with at least the version sent. */
-export function useDaemonUpdate(fleet: Pick<Fleet, 'sendTo' | 'onMachineMessage'>, machines: readonly MachineState[], target: string | null, stallMs = DAEMON_STALL_MS): DaemonUpdate {
-  const [journal, setJournal] = useState<DaemonStep[]>([]);
-  const sentVersion = useRef<string | null>(null);
-  const add = useCallback((s: DaemonStep) => {
-    if (s.kind === 'done' || s.kind === 'failed') sentVersion.current = null;
-    setJournal(j => [...j, s]);
-  }, []);
-  const running = sentVersion.current !== null;
-  const local = machines.find(m => m.id === 'local');
+/** Every machine's daemon update and its journal (#48, spec §11): `update.daemon` goes to that machine (`fleet.sendTo`), the WSL's
+ *  as a remote's. `start` sends `target` (the version the daemons follow). On its own, a daemon that is connected (open, ready),
+ *  installed by npm under systemd and behind `auto` (the version Desktop runs, null outside the app) is sent `auto` once per
+ *  version and per run of the app: a refusal is not retried by itself, « Update » still is. A daemon newer than Desktop is left
+ *  as it is. An update is done when its machine is back, open, with at least the version sent; a silent one fails after `stallMs`. */
+export function useDaemonUpdates(fleet: Pick<Fleet, 'sendTo' | 'onMachineMessage'>, machines: readonly MachineState[], target: string | null, auto: string | null, stallMs = DAEMON_STALL_MS): DaemonUpdates {
+  const [journals, setJournals] = useState<ReadonlyMap<string, readonly DaemonStep[]>>(new Map());
+  // The version sent to each machine whose update runs, its stall timer, and the automatic attempts already made (`id@version`).
+  const sent = useRef(new Map<string, string>());
+  const stalls = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const tried = useRef(new Set<string>());
+  const [updating, setUpdating] = useState<ReadonlySet<string>>(new Set());
+  const sync = useCallback(() => setUpdating(new Set(sent.current.keys())), []);
+  const add = useCallback((machine: string, s: DaemonStep) => {
+    if (s.kind === 'done' || s.kind === 'failed') {
+      sent.current.delete(machine);
+      clearTimeout(stalls.current.get(machine)); stalls.current.delete(machine);
+      sync();
+    }
+    setJournals(j => new Map(j).set(machine, [...(j.get(machine) ?? NONE), s]));
+  }, [sync]);
+  useEffect(() => () => { for (const t of stalls.current.values()) clearTimeout(t); }, []);
 
   useEffect(() => fleet.onMachineMessage((machine, m) => {
-    if (machine !== 'local' || sentVersion.current === null) return;
-    if (m.type === 'update.progress') add({ kind: m.step });
-    if (m.type === 'update.failed') add({ kind: 'failed', reason: m.reason, ...(m.detail ? { detail: m.detail } : {}), ...(m.command ? { command: m.command } : {}) });
+    if (!sent.current.has(machine)) return;
+    if (m.type === 'update.progress') add(machine, { kind: m.step });
+    if (m.type === 'update.failed') add(machine, { kind: 'failed', reason: m.reason, ...(m.detail ? { detail: m.detail } : {}), ...(m.command ? { command: m.command } : {}) });
   }), [fleet, add]);
 
-  const localVersion = local?.status === 'open' && local.ready ? local.daemon?.version ?? null : null;
+  const send = useCallback((machine: string, version: string, automatic: boolean) => {
+    if (sent.current.has(machine)) return;
+    if (!fleet.sendTo(machine, { type: 'update.daemon', version })) { add(machine, { kind: 'failed', reason: 'offline' }); return; }
+    sent.current.set(machine, version);
+    stalls.current.set(machine, setTimeout(() => { if (sent.current.has(machine)) add(machine, { kind: 'failed', reason: 'timeout' }); }, stallMs));
+    sync();
+    setJournals(j => new Map(j).set(machine, [...(j.get(machine) ?? NONE), { kind: 'sent', version, ...(automatic ? { auto: true as const } : {}) }]));
+  }, [fleet, add, sync, stallMs]);
+
+  // Back, open and ready with the version sent (or newer): done. Then, on its own, each connected daemon behind Desktop.
+  const connected = machines.filter(m => m.status === 'open' && m.ready);
+  const key = connected.map(m => `${m.id}@${m.daemon?.version ?? ''}:${m.daemon?.install ?? ''}:${m.daemon?.systemd ?? ''}`).join('\n');
   useEffect(() => {
-    const v = sentVersion.current;
-    if (v && localVersion && compareVersions(localVersion, v) >= 0) add({ kind: 'done', version: localVersion });
-  }, [localVersion, add]);
+    for (const m of connected) {
+      const v = sent.current.get(m.id); const now = m.daemon?.version;
+      if (v && now && SEMVER.test(now) && compareVersions(now, v) >= 0) add(m.id, { kind: 'done', version: now });
+    }
+    if (!auto) return;
+    for (const m of connected) {
+      if (daemonOffer(m, auto) !== 'offer' || sent.current.has(m.id) || tried.current.has(`${m.id}@${auto}`)) continue;
+      tried.current.add(`${m.id}@${auto}`);
+      send(m.id, auto, true);
+    }
+    // `key` stands for the connected machines' daemons: a new array of the same machines changes nothing.
+  }, [key, auto, add, send]);
 
-  useEffect(() => {
-    if (!running) return;
-    const t = setTimeout(() => { if (sentVersion.current !== null) add({ kind: 'failed', reason: 'timeout' }); }, stallMs);
-    return () => clearTimeout(t);
-  }, [running, stallMs, add]);
-
-  const start = useCallback(() => {
-    if (sentVersion.current !== null || !target) return;
-    if (!fleet.sendTo('local', { type: 'update.daemon', version: target })) { setJournal(j => [...j, { kind: 'failed', reason: 'offline' }]); return; }
-    sentVersion.current = target;
-    setJournal(j => [...j, { kind: 'sent', version: target }]);
-  }, [fleet, target]);
-
-  return { offer: daemonOffer(local, target), journal, running, start };
+  const start = useCallback((machine: string) => { if (target) send(machine, target, false); }, [send, target]);
+  const of = useCallback((machine: string): MachineDaemonUpdate => ({
+    offer: daemonOffer(machines.find(m => m.id === machine), target),
+    journal: journals.get(machine) ?? NONE,
+    running: updating.has(machine)
+  }), [machines, target, journals, updating]);
+  return { of, updating, start };
 }
