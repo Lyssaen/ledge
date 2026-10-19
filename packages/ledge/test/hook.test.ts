@@ -330,7 +330,7 @@ describe('runHook: Claude SendMessage to a Codex', () => {
     const store = new Store(); store.upsert(pim());
     const srv = await startServer({ store, tmux, port: 0 });
     try {
-      expect(decision(await runHook('PreToolUse', send(), { port: srv.port })).permissionDecision).toBe('deny');
+      expect(decision(await runHook('PreToolUse', send(), { port: srv.port })).permissionDecisionReason).toBe('Message transmis par Ledge à Pim (codex) : il le reçoit maintenant.');
     } finally { await srv.close(); }
   });
   it('a daemon that never acks leaves the real SendMessage to proceed, within 2 s', async () => {
