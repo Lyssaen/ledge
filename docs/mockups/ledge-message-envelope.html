@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge — enveloppe en vol</title>
+<style>
+:root{
+  --background:oklch(1 0 0);--foreground:oklch(0.145 0 0);--card:oklch(0.985 0 0);--popover:oklch(1 0 0);
+  --muted:oklch(0.97 0 0);--muted-foreground:oklch(0.556 0 0);--border:oklch(0.922 0 0);--input:oklch(0.922 0 0);
+  --ring:oklch(0.708 0 0);--rug:oklch(0.955 0.01 85);--accent-ok:oklch(0.62 0.15 150);--del:oklch(0.6 0.2 25);
+  --radius-md:8px;--radius-lg:10px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.18 0 0);--popover:oklch(0.205 0 0);
+  --muted:oklch(0.269 0 0);--muted-foreground:oklch(0.708 0 0);--border:#ffffff1a;--input:#ffffff26;--ring:oklch(0.556 0 0);
+  --rug:oklch(0.22 0.01 85);
+}}
+:root[data-theme="dark"]{
+  --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.18 0 0);--popover:oklch(0.205 0 0);
+  --muted:oklch(0.269 0 0);--muted-foreground:oklch(0.708 0 0);--border:#ffffff1a;--input:#ffffff26;--ring:oklch(0.556 0 0);
+  --rug:oklch(0.22 0.01 85);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--background);color:var(--foreground);font:13px/1.45 'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;padding:28px 16px 40px}
+main{max-width:1080px;margin:0 auto}
+h1{font-size:20px;font-weight:600;letter-spacing:-.3px;margin:0 0 4px}
+.lede{color:var(--muted-foreground);margin:0 0 22px;max-width:760px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:760px){.grid{grid-template-columns:1fr}}
+.panel{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);overflow:hidden}
+.panel header{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px}
+.panel header b{font-weight:600}
+.chip{font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid var(--border);color:var(--muted-foreground)}
+.chip.now{color:var(--del);border-color:color-mix(in srgb,var(--del) 40%,transparent)}
+.chip.next{color:var(--accent-ok);border-color:color-mix(in srgb,var(--accent-ok) 40%,transparent)}
+.stage{position:relative;height:340px}
+.rug{position:absolute;left:8%;right:8%;top:160px;height:130px;background:var(--rug);border-radius:14px;transform:skewY(-4deg)}
+.table-label{position:absolute;left:11%;top:262px;font-size:11px;color:var(--muted-foreground)}
+.seat{position:absolute;width:112px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 2px;border-radius:var(--radius-md)}
+.seat .av{width:38px;height:38px;border-radius:50%;background:var(--popover);border:1px solid var(--input);display:grid;place-items:center;font-weight:600;font-size:13px;box-shadow:0 2px 0 var(--border)}
+.seat strong{font-size:13px;font-weight:500;line-height:19px}
+.seat .meta{font-size:10px;color:var(--muted-foreground)}
+.s1{left:9%;top:98px}.s2{left:calc(50% - 56px);top:190px}.s3{right:9%;top:98px}
+.peer-tag{position:absolute;top:-2px;left:2px;display:inline-flex;align-items:center;gap:3px;height:16px;padding:0 5px;border:1px solid var(--border);border-radius:999px;background:var(--popover);color:var(--muted-foreground);font-size:10px;line-height:14px;white-space:nowrap}
+.panel.before .peer-tag{outline:2px dashed color-mix(in srgb,var(--del) 70%,transparent);outline-offset:2px}
+.wire{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.wire path{fill:none;stroke:var(--foreground);stroke-opacity:.5;stroke-width:1.5;stroke-dasharray:2 5;stroke-linecap:round;animation:flow 1s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-14}}
+.dot{position:absolute;left:0;top:0;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;background:var(--foreground);offset-rotate:0deg;animation:fly 3.6s cubic-bezier(.45,0,.3,1) infinite}
+.bubble{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;gap:2px;max-width:220px;padding:6px 10px 7px;border:1px solid var(--input);border-radius:10px 10px 10px 2px;background:var(--popover);box-shadow:0 3px 0 var(--border);animation:bubble 3.6s ease infinite}
+.bubble .to{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--muted-foreground)}
+.bubble .txt{font-size:11px;line-height:15px}
+@keyframes bubble{0%{opacity:0;transform:translate(-50%,-90%) scale(.92)}7%,80%{opacity:1;transform:translate(-50%,-100%)}100%{opacity:0;transform:translate(-50%,-100%)}}
+/* Proposed: the envelope */
+.env{position:absolute;left:0;top:0;width:26px;height:19px;margin:-9.5px 0 0 -13px;offset-rotate:0deg;animation:fly 3.6s cubic-bezier(.45,0,.3,1) infinite;filter:drop-shadow(0 2px 0 var(--border))}
+.env svg{display:block;width:100%;height:100%;animation:bob .45s ease-in-out infinite alternate}
+.env .body{fill:var(--popover);stroke:var(--foreground);stroke-width:1.4;stroke-linejoin:round}
+.env .flap{fill:none;stroke:var(--foreground);stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round}
+@keyframes bob{from{transform:translateY(-1.5px) rotate(-4deg)}to{transform:translateY(1.5px) rotate(4deg)}}
+@keyframes fly{0%{offset-distance:0%;opacity:0;scale:.6}10%{opacity:1;scale:1}62%{offset-distance:100%;opacity:1;scale:1}72%{offset-distance:100%;opacity:0;scale:.7}100%{offset-distance:100%;opacity:0}}
+.ring{position:absolute;inset:-6px;border-radius:var(--radius-lg);border:2px solid var(--foreground);opacity:0;animation:ring 3.6s ease-out infinite;pointer-events:none}
+@keyframes ring{0%,60%{opacity:0;transform:scale(.96)}64%{opacity:.5;transform:scale(1)}90%,100%{opacity:0;transform:scale(1.08)}}
+.notes{padding:12px 14px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--muted-foreground)}
+.notes ul{margin:6px 0 0;padding-left:18px}.notes li{margin:2px 0}
+.notes b{color:var(--foreground);font-weight:500}
+section.frames{margin-top:22px}
+section h2{font-size:14px;font-weight:600;margin:0 0 10px}
+.strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media (max-width:760px){.strip{grid-template-columns:repeat(2,1fr)}}
+.frame{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);padding:14px 10px 10px;text-align:center}
+.frame svg{width:52px;height:40px;overflow:visible}
+.frame p{margin:8px 0 0;font-size:11px;color:var(--muted-foreground)}
+.spec{margin-top:22px;border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;font-size:12px}
+.spec table{border-collapse:collapse;width:100%}
+.spec td{padding:5px 8px;border-top:1px solid var(--border);vertical-align:top}
+.spec td:first-child{color:var(--muted-foreground);width:180px}
+code{font:11px 'Geist Mono',ui-monospace,monospace;background:var(--muted);padding:1px 4px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){
+  .wire path,.dot,.bubble,.env,.env svg,.ring{animation:none}
+  .dot{display:none}.ring{display:none}
+  .env{offset-distance:50%}
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>Messages entre agents : l'enveloppe remplace les pastilles ✉</h1>
+  <p class="lede">Mockup de l'issue « Atelier : retirer les pastilles ✉ des sièges et faire voyager une enveloppe ». À gauche l'Atelier actuel, à droite la proposition. La bulle de l'expéditeur (5 s) et le fil pointillé restent ; le point qui voyage devient une enveloppe, et les pastilles d'historique (10 min) disparaissent.</p>
+
+  <div class="grid">
+    <!-- BEFORE -->
+    <div class="panel before">
+      <header><b>Aujourd'hui</b><span class="chip now">pastilles ✉ pendant 10 min</span></header>
+      <div class="stage" id="before">
+        <div class="rug"></div><div class="table-label">ledge · main</div>
+        <svg class="wire" aria-hidden="true"><path id="pb"/></svg>
+        <div class="dot" id="db"></div>
+        <div class="seat s1" id="b1"><span class="peer-tag">✉ Orion +1</span><div class="av">At</div><strong>Atlas</strong><span class="meta">au travail</span></div>
+        <div class="seat s2" id="b2"><span class="peer-tag">✉ Atlas</span><div class="av">Ir</div><strong>Iris</strong><span class="meta">au travail</span></div>
+        <div class="seat s3" id="b3"><span class="peer-tag">✉ Atlas</span><div class="av">Or</div><strong>Orion</strong><span class="meta">au repos</span></div>
+        <div class="bubble" id="bb"><span class="to">✉ à Orion</span><span class="txt">PRÊT feat/atlas-0.9 — #20 et #25 terminées</span></div>
+      </div>
+      <div class="notes">
+        <b>Ce qu'on retire</b>
+        <ul>
+          <li>Les pastilles « ✉ Nom +N » en haut à gauche de chaque siège (<code>PeerTag</code>), visibles 10 min.</li>
+          <li>Elles chargent la table, se chevauchent avec le menu « … » et répètent ce que le fil de la session dit déjà mieux.</li>
+          <li>Le point qui voyage sur le fil : trop discret pour être compris comme « un message part ».</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- AFTER -->
+    <div class="panel after">
+      <header><b>Proposé</b><span class="chip next">enveloppe en vol</span></header>
+      <div class="stage" id="after">
+        <div class="rug"></div><div class="table-label">ledge · main</div>
+        <svg class="wire" aria-hidden="true"><path id="pa"/></svg>
+        <div class="seat s1" id="a1"><div class="av">At</div><strong>Atlas</strong><span class="meta">au travail</span></div>
+        <div class="seat s2" id="a2"><div class="av">Ir</div><strong>Iris</strong><span class="meta">au travail</span></div>
+        <div class="seat s3" id="a3"><span class="ring"></span><div class="av">Or</div><strong>Orion</strong><span class="meta">au repos</span></div>
+        <div class="env" id="ea" aria-hidden="true">
+          <svg viewBox="0 0 26 19"><rect class="body" x="1" y="1" width="24" height="17" rx="2.5"/><path class="flap" d="M1.8 2.4 13 10.6 24.2 2.4"/></svg>
+        </div>
+        <div class="bubble" id="ba"><span class="to">✉ à Orion</span><span class="txt">PRÊT feat/atlas-0.9 — #20 et #25 terminées</span></div>
+      </div>
+      <div class="notes">
+        <b>Ce qui change</b>
+        <ul>
+          <li>Plus de pastille sur les sièges : la table reste propre une fois l'échange fini.</li>
+          <li>Une enveloppe part du siège de l'expéditeur, suit le fil pointillé en se balançant légèrement, puis se pose sur le destinataire. Le siège fait l'anneau d'arrivée existant.</li>
+          <li>Inchangé : la bulle 5 s (cliquable, ouvre le message), le fil, l'anneau, le surlignage des deux sièges au survol.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <section class="frames">
+    <h2>L'enveloppe, étape par étape</h2>
+    <div class="strip">
+      <div class="frame"><svg viewBox="-13 -10 52 40"><rect x="1" y="5" width="24" height="17" rx="2.5" fill="var(--popover)" stroke="var(--foreground)" stroke-width="1.4" opacity=".45" transform="scale(.7) translate(5 4)"/><path d="M1.8 6.4 13 14.6 24.2 6.4" fill="none" stroke="var(--foreground)" stroke-width="1.4" opacity=".45" transform="scale(.7) translate(5 4)"/></svg><p>1 · Départ : apparaît au siège de l'expéditeur (0 → 10 %)</p></div>
+      <div class="frame"><svg viewBox="-13 -10 52 40"><g transform="rotate(-4 13 13)"><rect x="1" y="5" width="24" height="17" rx="2.5" fill="var(--popover)" stroke="var(--foreground)" stroke-width="1.4"/><path d="M1.8 6.4 13 14.6 24.2 6.4" fill="none" stroke="var(--foreground)" stroke-width="1.4" stroke-linecap="round"/></g></svg><p>2 · Vol : suit le fil, se balance de ±4° (≈ 1,3 s)</p></div>
+      <div class="frame"><svg viewBox="-13 -10 52 40"><rect x="1" y="5" width="24" height="17" rx="2.5" fill="var(--popover)" stroke="var(--foreground)" stroke-width="1.4"/><path d="M1.8 6.4 13 -1.5 24.2 6.4" fill="none" stroke="var(--foreground)" stroke-width="1.4" stroke-linejoin="round"/><path d="M1.8 21 10 13.5M24.2 21 16 13.5" stroke="var(--foreground)" stroke-width="1.1" opacity=".5"/></svg><p>3 · Arrivée : le rabat s'ouvre sur le siège du destinataire</p></div>
+      <div class="frame"><svg viewBox="-13 -10 52 40"><rect x="-6" y="-2" width="38" height="31" rx="8" fill="none" stroke="var(--foreground)" stroke-width="2" opacity=".45"/></svg><p>4 · Anneau d'arrivée existant (<code>exchange-arrived</code>), l'enveloppe s'efface</p></div>
+    </div>
+  </section>
+
+  <section class="spec">
+    <h2>Notes d'implémentation</h2>
+    <table>
+      <tr><td>Retirer</td><td><code>PeerTag</code> et son appel dans <code>ProjectTable.tsx</code>, <code>.peer-tag</code> dans <code>atelier.css</code>, <code>TAG_MS</code> et l'échéance 10 min de <code>useMessageClock</code>, la clé i18n <code>atelier.peerTag</code>, les tests associés.</td></tr>
+      <tr><td>Remplacer</td><td>Le <code>&lt;circle r="3.5"&gt;</code> de <code>.exchange-wire</code> (<code>MessageLayer.tsx</code>) par une enveloppe : <code>&lt;g&gt;</code> SVG ou élément HTML positionné avec <code>offset-path</code> sur le même chemin, <code>offset-rotate: 0deg</code> (l'enveloppe reste droite), même durée <code>TRAVEL_MS</code> = 1,3 s.</td></tr>
+      <tr><td>Dessin</td><td>Reprendre l'icône <code>SHELL_ICONS.mail</code> (24 × 17, contour <code>--foreground</code>, fond <code>--popover</code>, ombre <code>0 2px 0 var(--border)</code>), environ 26 × 19 px à zoom 1.</td></tr>
+      <tr><td>Mouvement réduit / pause</td><td>Comme aujourd'hui : pas de vol. L'enveloppe n'est pas affichée (ou posée immobile au milieu du fil), la bulle et le fil restent fixes.</td></tr>
+      <tr><td>Accessibilité</td><td>Enveloppe <code>aria-hidden</code> ; l'annonce reste portée par la bulle (<code>aria-live</code> de la couche).</td></tr>
+    </table>
+  </section>
+</main>
+<script>
+// Draw the dotted wire between the sender's and the receiver's seats, like MessageLayer's measure().
+function wire(stageId, pathId, fromId, toId, travellerId, bubbleId){
+  const stage=document.getElementById(stageId), box=stage.getBoundingClientRect();
+  const pt=el=>{const r=el.getBoundingClientRect();return{x:r.left+r.width/2-box.left,y:r.top+6-box.top}};
+  const a=pt(document.getElementById(fromId)), b=pt(document.getElementById(toId));
+  const d=`M ${a.x} ${a.y} Q ${(a.x+b.x)/2} ${Math.min(a.y,b.y)-70-Math.abs(a.x-b.x)*.12} ${b.x} ${b.y}`;
+  document.getElementById(pathId).setAttribute('d',d);
+  document.getElementById(travellerId).style.offsetPath=`path('${d}')`;
+  const bub=document.getElementById(bubbleId); bub.style.left=a.x+'px'; bub.style.top=(a.y-12)+'px';
+}
+function draw(){wire('before','pb','b1','b3','db','bb');wire('after','pa','a1','a3','ea','ba')}
+draw();addEventListener('resize',draw);
+</script>
+</body>
+</html>
