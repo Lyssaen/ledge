@@ -49,6 +49,11 @@ export class Hub {
     if (!old) this.tellOthers(who, true);
   }
 
+  /** Closes this peer's socket if it is the one routed. Presence follows from the socket's own close, as for any other. */
+  kick(accountId: string, peer: RelayPeer, code: number, reason: string): void {
+    this.accounts.get(accountId)?.get(peer)?.close(code, reason);
+  }
+
   detach(conn: Conn, code: number): void {
     const st = this.states.get(conn);
     if (!st) return;

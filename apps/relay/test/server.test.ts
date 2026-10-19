@@ -5,6 +5,8 @@ import { parseRelayServerMessage, type RelayServerMessage } from '@ledge/protoco
 import { devTokens, RELAY_PROTOCOL_PREFIX } from '../src/auth.js';
 import { createRelay, type RelayOptions } from '../src/server.js';
 import type { RelayLogEvent } from '../src/log.js';
+import type { Authenticator } from '../src/auth.js';
+import type { Who } from '../src/hub.js';
 
 const D1 = 'd_aaaaaaaaaaaaaaaa';
 const TOKENS = devTokens({
@@ -54,9 +56,8 @@ describe('relay server', () => {
     const { port, events } = await start();
     expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`))).toBe(401);
     expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer nope' } }))).toBe(401);
-    expect(events.filter((e) => e.ev === 'refused')).toEqual([
-      { ev: 'refused', reason: 'no_auth' }, { ev: 'refused', reason: 'no_auth' }
-    ]);
+    await relay!.close(); // flushes the aggregated refusals
+    expect(events.filter((e) => e.ev === 'refused')).toEqual([{ ev: 'refused', reason: 'no_auth', count: 2 }]);
   });
 
   it('accepts a bearer token', async () => {
@@ -80,7 +81,8 @@ describe('relay server', () => {
   it('404s an upgrade on another path even with a good token', async () => {
     const { port, events } = await start();
     expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/autre`, { headers: { authorization: 'Bearer tok-pc' } }))).toBe(404);
-    expect(events).toContainEqual({ ev: 'refused', reason: 'bad_path' });
+    await relay!.close();
+    expect(events).toContainEqual({ ev: 'refused', reason: 'bad_path', count: 1 });
   });
 
   it('answers bad_frame and keeps the connection usable', async () => {
@@ -108,8 +110,9 @@ describe('relay server', () => {
       sock.on('error', () => res(out));
     });
     expect(raw).toMatch(/^HTTP\/1\.1 404/);
-    expect(events).toContainEqual({ ev: 'refused', reason: 'bad_path' });
     expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);
+    await relay!.close();
+    expect(events).toContainEqual({ ev: 'refused', reason: 'bad_path', count: 1 });
   });
 
   it('refuses an unknown token offered as a subprotocol', async () => {
@@ -146,21 +149,24 @@ describe('relay server', () => {
     await new Promise<void>((res) => relay!.server.listen(0, '127.0.0.1', res));
     const port = (relay.server.address() as AddressInfo).port;
     expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } }))).toBe(401);
-    expect(events).toEqual([{ ev: 'refused', reason: 'auth_error' }]);
+    await relay!.close();
+    expect(events).toEqual([{ ev: 'refused', reason: 'auth_error', count: 1 }]);
   });
 
   it('answers 401 when the authenticator throws synchronously, and keeps serving', async () => {
     const { port, events } = await start({ authenticator: { authenticate() { throw new Error('x'); } } });
     expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } }))).toBe(401);
-    expect(events).toEqual([{ ev: 'refused', reason: 'auth_error' }]);
     expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);
+    await relay!.close();
+    expect(events).toEqual([{ ev: 'refused', reason: 'auth_error', count: 1 }]);
   });
 
   it('survives an authenticator that returns a non-thenable', async () => {
     const { port, events } = await start({ authenticator: { authenticate: () => null as unknown as Promise<null> } });
     expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } }))).toBe(401);
-    expect(events).toEqual([{ ev: 'refused', reason: 'no_auth' }]);
     expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);
+    await relay!.close();
+    expect(events).toEqual([{ ev: 'refused', reason: 'no_auth', count: 1 }]);
   });
 
   it('drops an upgraded socket whose attach fails, without writing a 401 onto it', async () => {
@@ -216,5 +222,99 @@ describe('relay server', () => {
     expect(await pbox.next(3)).toEqual({ type: 'presence', peer: D1, online: false });
     sock.destroy();
     pc.close();
+  });
+
+  it('answers 503 and logs timeout when authenticate never resolves', async () => {
+    const { port, events } = await start({ authenticator: { authenticate: () => new Promise<Who | null>(() => {}) }, authTimeoutMs: 50 });
+    expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } }))).toBe(503);
+    await relay!.close();
+    expect(events).toContainEqual({ ev: 'refused', reason: 'timeout', count: 1 });
+  });
+
+  it('caps pending upgrades with 503 busy and frees the place once decided', async () => {
+    let release: (w: Who | null) => void = () => {};
+    let first = true;
+    const authenticator: Authenticator = {
+      authenticate: () => {
+        if (!first) return Promise.resolve({ accountId: 'A', peer: 'pc' } as Who);
+        first = false;
+        return new Promise<Who | null>((r) => { release = r; });
+      }
+    };
+    const { port, events } = await start({ authenticator, maxPendingUpgrades: 1, refusedLogMs: 20 });
+    const url = `ws://127.0.0.1:${port}/ws`;
+    const one = new WebSocket(url, { headers: { authorization: 'Bearer x' } });
+    one.on('error', () => {});
+    await new Promise((r) => setTimeout(r, 50));
+    expect(await refused(new WebSocket(url, { headers: { authorization: 'Bearer x' } }))).toBe(503);
+    release(null);
+    expect(await refused(one)).toBe(401);
+    const three = new WebSocket(url, { headers: { authorization: 'Bearer x' } });
+    expect(await inbox(three).next(1)).toMatchObject({ type: 'welcome' });
+    three.close();
+    await new Promise((r) => setTimeout(r, 60));
+    expect(events).toContainEqual({ ev: 'refused', reason: 'busy', count: 1 });
+  });
+
+  it('ignores a result that arrives after the timeout', async () => {
+    let late: (w: Who | null) => void = () => {};
+    const authenticator: Authenticator = { authenticate: () => new Promise<Who | null>((r) => { late = r; }) };
+    const { port, events } = await start({ authenticator, authTimeoutMs: 30 });
+    expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } }))).toBe(503);
+    late({ accountId: 'A', peer: 'pc' });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(events.some((e) => e.ev === 'connect')).toBe(false);
+  });
+
+  it('answers 401 bad_peer when the authenticator returns an invalid peer', async () => {
+    const authenticator: Authenticator = { authenticate: async () => ({ accountId: 'A', peer: 'phone' } as unknown as Who) };
+    const { port, events } = await start({ authenticator });
+    expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } }))).toBe(401);
+    await relay!.close();
+    expect(events).toEqual([{ ev: 'refused', reason: 'bad_peer', count: 1 }]);
+  });
+
+  it('aggregates refusals per reason and flushes the rest on close', async () => {
+    const { port, events } = await start({ refusedLogMs: 50 });
+    for (let i = 0; i < 3; i++) await refused(new WebSocket(`ws://127.0.0.1:${port}/autre`));
+    await new Promise((r) => setTimeout(r, 120));
+    expect(events.filter((e) => e.ev === 'refused')).toEqual([{ ev: 'refused', reason: 'bad_path', count: 3 }]);
+    await refused(new WebSocket(`ws://127.0.0.1:${port}/autre`));
+    await relay!.close();
+    expect(events.filter((e) => e.ev === 'refused')).toEqual([
+      { ev: 'refused', reason: 'bad_path', count: 3 }, { ev: 'refused', reason: 'bad_path', count: 1 }
+    ]);
+  });
+
+  it('gives an http hook the routes it handles, keeping /healthz and the 404', async () => {
+    const { port } = await start({
+      http: async (req, res) => {
+        if (req.method === 'GET' && req.url === '/x') { res.writeHead(200).end('x'); return true; }
+        return false;
+      }
+    });
+    const x = await fetch(`http://127.0.0.1:${port}/x`);
+    expect(await x.text()).toBe('x');
+    expect(await (await fetch(`http://127.0.0.1:${port}/healthz`)).text()).toBe('ok');
+    expect((await fetch(`http://127.0.0.1:${port}/y`)).status).toBe(404);
+  });
+
+  it('answers 500 and logs http_error when the http hook throws', async () => {
+    const { port, events } = await start({ http: async () => { throw new Error('secret-detail'); } });
+    const r = await fetch(`http://127.0.0.1:${port}/x`);
+    expect(r.status).toBe(500);
+    expect(await r.text()).toBe('');
+    expect(events).toContainEqual({ ev: 'http_error' });
+  });
+
+  it('lets the http hook kick a connected socket through RelayControl', async () => {
+    const { port } = await start({
+      http: async (_req, res, relay) => { relay.kick('A', 'pc', 4001, 'signed_out'); res.writeHead(204).end(); return true; }
+    });
+    const pc = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer tok-pc' } });
+    await inbox(pc).next(1);
+    const closed = new Promise<number>((res) => pc.once('close', (code) => res(code)));
+    await fetch(`http://127.0.0.1:${port}/kick`);
+    expect(await closed).toBe(4001);
   });
 });

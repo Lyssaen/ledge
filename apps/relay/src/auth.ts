@@ -15,7 +15,7 @@ export function presentedProtocols(req: IncomingMessage): string[] {
   return value.split(',').map((p) => p.trim()).filter(Boolean);
 }
 
-function presentedToken(req: IncomingMessage): string | null {
+export function presentedToken(req: IncomingMessage): string | null {
   const m = /^Bearer (.+)$/.exec(req.headers.authorization ?? '');
   if (m) return m[1]!;
   const proto = presentedProtocols(req).find((p) => p.startsWith(RELAY_PROTOCOL_PREFIX));

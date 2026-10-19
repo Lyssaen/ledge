@@ -200,4 +200,23 @@ describe('Hub', () => {
     expect(dis).toMatchObject({ framesIn: 2, bytesOut: 0 });
     expect(events.find((e) => e.ev === 'disconnect' && e.peer === 'pc')).toMatchObject({ bytesOut: 10 });
   });
+
+  it('kicks a routed peer with the given code, then tells the others once its socket is gone', () => {
+    const { hub } = setup();
+    const p = new Fake(), d = new Fake();
+    hub.attach(p, pc()); hub.attach(d, dev(D1));
+    hub.kick('A', 'pc', 4001, 'signed_out');
+    expect(p.closed).toEqual([[4001, 'signed_out']]);
+    hub.detach(p, 4001);
+    expect(d.sent).toContainEqual({ type: 'presence', peer: 'pc', online: false });
+  });
+
+  it('kicks nobody when the peer is not routed', () => {
+    const { hub } = setup();
+    const d = new Fake();
+    hub.attach(d, dev(D1));
+    expect(() => hub.kick('A', 'pc', 4001, 'signed_out')).not.toThrow();
+    expect(() => hub.kick('B', D1, 4001, 'signed_out')).not.toThrow();
+    expect(d.closed).toEqual([]);
+  });
 });
