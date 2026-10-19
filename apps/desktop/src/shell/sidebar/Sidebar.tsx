@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import type { MachineState } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
@@ -38,6 +38,7 @@ export function Sidebar(p: {
   const { t } = useI18n();
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
+  const keysTip = useId();
   const [ask, setAsk] = useState('');
   const [prefs, setPrefs] = useStored(loadSidebarPrefs, saveSidebarPrefs);
   const { place } = p.nav;
@@ -148,6 +149,15 @@ export function Sidebar(p: {
           );
         })}
         <span className="st-fill" />
+        <span className="st-keys">
+          <button type="button" className="st-icon" aria-label={t.side.shortcuts} aria-describedby={keysTip}
+            onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'shortcuts' } })}>
+            <Icon d={SHELL_ICONS.help} size={15} />
+          </button>
+          <span className="st-keys-tip" role="tooltip" id={keysTip}>
+            {t.shortcuts.rows.map(([keys, action]) => <span key={keys}>{action}<Kbd>{keys}</Kbd></span>)}
+          </span>
+        </span>
         <button type="button" className={cls('st-icon', inSettings && 'on')} aria-label={t.side.settings} title={`${t.side.settings} · Ctrl ,`} aria-current={inSettings ? 'page' : undefined}
           onClick={() => p.dispatch({ type: 'settings' })}>
           <Icon d={SHELL_ICONS.gear} size={15} />

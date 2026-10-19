@@ -88,6 +88,14 @@ describe('the Atelier shell', () => {
     expect(foot.queryByText(/island/i)).toBeNull();
   });
 
+  it('the footer has no shortcut reminders: they live behind the sidebar\'s ?', async () => {
+    await boot({ projects: TWO_PROJECTS });
+    const footer = screen.getByRole('contentinfo');
+    expect(footer.querySelector('kbd')).toBeNull();
+    expect(footer.querySelector('.keyboard-footer')).toBeNull();
+    expect(within(footer).queryByRole('button', { name: /Ctrl K|A session|Shortcuts/ })).toBeNull();
+  });
+
   it('N and the project + open their dialogs; Close and the backdrop close them', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
     await user.keyboard('n');
@@ -158,6 +166,6 @@ describe('the Atelier shell', () => {
   });
   it('the rules lot 3 ported for nothing are gone', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/shell.css'), 'utf8');
-    expect(css).not.toMatch(/workspace-footer > span|data-variant=outline\]|\(lot 5\)/);
+    expect(css).not.toMatch(/workspace-footer > span|data-variant=outline\]|\(lot 5\)|keyboard-footer/);
   });
 });

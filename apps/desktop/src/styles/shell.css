@@ -76,12 +76,6 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
   .modal { width: 100%; }
 }
 
-/* office.css: footer reminders. */
-.keyboard-footer { display: flex; gap: 16px; align-items: center; }
-.keyboard-footer button { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font-size: 10px; }
-.keyboard-footer kbd { font-size: 9px !important; height: 17px !important; }
-@media (max-width: 1000px) { .keyboard-footer { gap: 10px; } .keyboard-footer button { font-size: 0; gap: 0; } }
-
 /* office.css: breadcrumb, project filter and view controls. */
 .workspace { position: relative; }
 .view-actions-sep { width: 1px; height: 20px; background: var(--border); margin: 0 6px; }
