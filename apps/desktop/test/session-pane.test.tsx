@@ -5,7 +5,7 @@ import type { ClientMessage, ServerMessage, ThreadItem } from '@ledge/protocol';
 import { DOCUMENT_TIMEOUT_MS, useDocument } from '../src/session/useDocument';
 import { docRefs } from '../src/session/exchanges';
 import { besideDoc } from '../src/session/SidePane';
-import { boot, closeDaemons, listSessions, ottoThread } from './helpers';
+import { boot, closeDaemons, listSessions, ottoThread, unfoldPast } from './helpers';
 
 afterEach(async () => { cleanup(); localStorage.clear(); vi.useRealTimers(); await closeDaemons(); });
 
@@ -16,7 +16,7 @@ async function openOtto(extra: ThreadItem[] = withDoc) {
   env.d.thread('otto', [...ottoThread(), ...extra]);
   env.d.documents.set('docs/guide.md', '---\ntitle: Guide de Ledge\n---\n# Guide\n\nBonjour.');
   await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
-  await screen.findByText('Câble la liste');
+  await unfoldPast(env.user);
   return env;
 }
 
@@ -39,7 +39,6 @@ it('a document link opens beside the thread; the thread stays usable; Escape clo
 it('a held Escape closes one layer, as one press does, and never leaves the page', async () => {
   const { user } = await openOtto([...withDoc, { kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 2, tool: 'Write', label: '/w/ledge/docs/guide.md', status: 'success', files: [{ path: '/w/ledge/docs/guide.md', change: 'write', diff: '+ # Guide' }] }]);
   await user.click(screen.getByRole('button', { name: /guide\.md.*Read/ }));
-  await user.click(screen.getByRole('button', { name: /^3 actions/ }));
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="t3"]')!).getByRole('button', { name: 'View the change' }));
   (document.activeElement as HTMLElement).blur();
   expect(side().getAllByRole('tab')).toHaveLength(2);
@@ -57,7 +56,6 @@ it('a held Escape closes one layer, as one press does, and never leaves the page
 it('a document card under the message; several items become closable tabs; « View the change » opens a diff tab J / K walk', async () => {
   const { user } = await openOtto([...withDoc, { kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 2, tool: 'Write', label: '/w/ledge/docs/guide.md', status: 'success', files: [{ path: '/w/ledge/docs/guide.md', change: 'write', diff: '+ # Guide' }] }]);
   await user.click(screen.getByRole('button', { name: /guide\.md.*Read/ }));
-  await user.click(screen.getByRole('button', { name: /^3 actions/ }));
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="t3"]')!).getByRole('button', { name: 'View the change' }));
   expect(side().getAllByRole('tab').map(t => t.textContent)).toEqual(['guide.md', '± App.tsx']);
   expect(side().getByRole('tab', { name: '± App.tsx' })).toHaveAttribute('aria-selected', 'true');
@@ -69,7 +67,6 @@ it('a document card under the message; several items become closable tabs; « Vi
 });
 it('« All changes » opens the Changes view on that file; the pane waits under it, back on the thread', async () => {
   const { user } = await openOtto();
-  await user.click(screen.getByRole('button', { name: /^3 actions/ }));
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="t3"]')!).getByRole('button', { name: 'View the change' }));
   expect(side().getByText('Change · App.tsx')).toBeVisible();
   expect(side().getByText('1 / 1')).toHaveClass('file-pos');
@@ -152,9 +149,7 @@ const threeTabs: ThreadItem[] = [...withDoc, { kind: 'tool', id: 'w1', at: new D
 it('closing a middle tab hands over to the next one; the focus follows the active tab, then the pane, then the thread', async () => {
   const { user } = await openOtto(threeTabs);
   await user.click(screen.getByRole('button', { name: /guide\.md.*Read/ }));
-  await user.click(screen.getByRole('button', { name: /^3 actions/ }));
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="t3"]')!).getByRole('button', { name: 'View the change' }));
-  await user.click(screen.getAllByRole('button', { name: /^1 action/ }).at(-1)!);
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="w1"]')!).getByRole('button', { name: 'View the change' }));
   expect(side().getAllByRole('tab').map(t => t.textContent)).toEqual(['guide.md', '± App.tsx', '± guide.md']);
   await user.click(side().getByRole('tab', { name: '± App.tsx' }));

@@ -3,8 +3,7 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ThreadItem } from '@ledge/protocol';
-import { SPINNER, SPINNER_STILL } from '@ledge/ui/thread/tools';
-import { boot, closeDaemons, declarations, listSessions, ottoThread } from './helpers';
+import { boot, closeDaemons, declarations, listSessions, ottoThread, unfoldPast } from './helpers';
 import { createSessionMemory, memoKey } from '../src/session/memory';
 import { saveReduced } from '../src/motionPreferences';
 
@@ -27,102 +26,124 @@ async function openOtto(o: { offline?: boolean; withThread?: boolean } = {}) {
 }
 
 describe('the session page', () => {
-  it('the page replaces the pending place: one exchange per prompt, your prompt as a bubble, the agent named once', async () => {
-    await openOtto();
+  it('the page replaces the pending place: one exchange per prompt, the past one folded to a row that unfolds', async () => {
+    const { user } = await openOtto();
     expect(screen.queryByText('This screen is coming soon.')).toBeNull();
-    expect(await thread().findByText('Câble la liste')).toBeVisible();
-    expect(thread().getByText('Câble la liste').closest('.prompt-block')).toHaveTextContent('You');
+    // The past exchange is one row: its prompt, what it did; the current one is open.
+    const fold = await thread().findByRole('button', { name: /Câble la liste/, expanded: false });
+    expect(fold).toHaveTextContent(/^Exchange at \d\d:\d\d · Câble la liste · 4 actions · 1 file changed$/);
     expect(document.querySelectorAll('.session-thread .turn')).toHaveLength(2);
-    expect(document.querySelectorAll('.session-thread .turn-author')).toHaveLength(2);
+    expect(document.querySelectorAll('.session-thread .turn.folded')).toHaveLength(1);
+    expect(thread().getByText('Corrige-les').closest('.prompt-block')).toHaveTextContent('You');
+    await user.click(fold);
+    expect(fold).toHaveAttribute('aria-expanded', 'true');
+    expect(thread().getByText('Câble la liste').closest('.prompt-block')).toHaveTextContent('You');
+    // The agent is its bot on the rail, named for screen readers.
+    expect(document.querySelector('.say-row .botn')).toHaveTextContent('Otto');
     expect(thread().getByText('Deux tests échouent.').closest('.ledge-thread-md')).not.toBeNull();
     expect(document.querySelector('.pane-meta')).toHaveTextContent('Local · ledge');
     expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:otto'); // the fleet qualifies ids with the machine
     expect(document.querySelector('.session-page')).not.toHaveAttribute('data-helper');
   });
 
-  it('actions fold into a summary that unfolds; a failure stays visible; the running one shows live', async () => {
-    const { user } = await openOtto();
-    const summary = await thread().findByRole('button', { name: /^3 actions/ });
+  it('more than six actions fold into a summary that unfolds; a failure and the running one stay in sight', async () => {
+    const at = new Date().toISOString();
+    const read = (i: number): ThreadItem => ({ kind: 'tool', id: `r${i}`, at, turn: 1, tool: 'Read', label: `/w/ledge/src/F${i}.tsx`, status: 'success', durationMs: 100, files: [] });
+    const { d, user } = await boot({ sessions: listSessions(), list: true });
+    d.thread('otto', [
+      { kind: 'prompt', id: 'p', at, turn: 1, text: 'Lis tout' },
+      ...[1, 2, 3, 4, 5, 6].map(read),
+      { kind: 'tool', id: 'f', at, turn: 1, tool: 'Bash', label: 'npm test', status: 'failed', durationMs: 300, error: 'exit 1', files: [] },
+      { kind: 'tool', id: 'run', at, turn: 1, tool: 'Bash', label: 'npm run build', status: 'running', files: [] }
+    ]);
+    await user.click(screen.getByRole('button', { name: /^Otto,/ }));
+    const summary = await thread().findByRole('button', { name: /^8 actions/ });
     expect(summary).toHaveAttribute('aria-expanded', 'false');
-    expect(summary).toHaveTextContent('· 1 file changed');
-    expect(summary).toHaveTextContent('0.9 s');
-    expect([...summary.querySelectorAll('.kind-chip')].map(c => c.getAttribute('title'))).toEqual(['1 read', '1 search', '1 edit']);
+    expect(summary).toHaveTextContent('8 actions · 6 reads, 2 commands · 1 failed');
+    expect(summary.closest('.r')!.querySelector('.tm')).toHaveTextContent(/^running · /);
+    expect([...document.querySelectorAll('.turn [data-tool]')].map(e => e.getAttribute('data-tool'))).toEqual(['f', 'run']);
+    const failed = document.querySelector<HTMLElement>('.action-row.status-failed')!;
+    expect(within(failed).getByLabelText('Failed')).not.toBeNull();
+    expect(within(failed).getByText('exit 1')).toHaveClass('action-output', 'is-error');  // a failure shows its output
+    await user.click(within(failed).getByRole('button', { name: 'npm test' }));
+    expect(within(failed).queryByText('exit 1')).toBeNull();
+    expect(thread().getByRole('status', { name: 'Action running' })).toHaveTextContent('npm run build');
     await user.click(summary);
     expect(summary).toHaveAttribute('aria-expanded', 'true');
-    expect([...document.querySelectorAll('.action-list:not(.compact) .action-verb')].map(e => e.textContent)).toEqual(['Read', 'Search', 'Edit']);
-    const failed = document.querySelector<HTMLElement>('.action-row.status-failed')!;
-    expect(failed.closest('.action-list')).toHaveClass('compact');
-    expect(within(failed).getByLabelText('Failed')).toHaveTextContent('✕');
-    await user.click(within(failed).getByRole('button', { name: 'npm test' }));
-    expect(within(failed).getByText('exit 1')).toHaveClass('action-output', 'is-error');
-    const live = thread().getByRole('status', { name: 'Action running' });
-    expect(live).toHaveTextContent('npm test');
-    expect(live.closest('.turn')!.querySelector('.turn-live')).toHaveTextContent('running');
-    // Only running actions: no summary over the live line.
-    expect(live.closest('.action-group')!.querySelector('.action-summary')).toBeNull();
+    expect([...document.querySelectorAll('.turn [data-tool] .action-verb')].map(e => e.textContent)).toEqual([...Array(6).fill('Read'), 'Command', 'Command']);
   });
 
-  it('running actions end live: a result replaces its row in place, the live line gives way to the summary', async () => {
+  it('running actions end live: a result replaces its row in place, and the rows keep their order', async () => {
     const { d } = await openOtto();
     await thread().findByRole('status', { name: 'Action running' });
     const t5 = ottoThread().at(-1)! as Extract<ThreadItem, { kind: 'tool' }>;
     const t6 = { ...t5, id: 't6', tool: 'Read', label: '/w/ledge/src/List.tsx', at: new Date().toISOString() };
     d.threadItem('otto', t6);                                                            // a second action starts beside the first
     d.threadItem('otto', { ...t5, status: 'success', durationMs: 3000, output: 'ok' });  // then the first one's result comes
-    const summary = () => document.querySelector('.turn.current .action-summary');
-    await waitFor(() => expect(summary()).toHaveTextContent(/^2 actions.*running · /));
+    const row = (id: string) => document.querySelector(`.turn.current [data-tool="${id}"]`);
+    await waitFor(() => expect(row('t5')).toHaveClass('status-success'));
+    expect(row('t5')!.querySelector('.action-time')).toHaveTextContent('3.0 s');
     expect(thread().getByRole('status', { name: 'Action running' })).toHaveTextContent('Readsrc/List.tsx');
+    expect([...document.querySelectorAll('.turn.current [data-tool]')].map(e => e.getAttribute('data-tool'))).toEqual(['t5', 't6']);
     // The mock daemon stores the re-sent item where it was, as the daemon's store does.
     expect(d.threads.get('otto')!.map(i => i.id)).toEqual([...ottoThread().map(i => i.id), 't6']);
     d.threadItem('otto', { ...t6, status: 'success', durationMs: 1000 });
-    await waitFor(() => expect(summary()).toHaveTextContent(/^2 actions.*4\.0 s$/));
+    await waitFor(() => expect(row('t6')).toHaveClass('status-success'));
     expect(thread().queryByRole('status', { name: 'Action running' })).toBeNull();
-    expect(document.querySelector('.turn-live')).toBeNull();
   });
 
   it('past decisions are chips; a subagent is a card that opens its own thread', async () => {
     const { user } = await openOtto();
-    await thread().findByText('Allowed');
-    expect(document.querySelector('.decision-chip.accept')).toHaveTextContent('✓Allowednpm test');
+    await unfoldPast(user);
+    const chip = document.querySelector('.decision-chip.accept')!;
+    expect(chip.querySelector('[data-badge="idle"]')).toHaveTextContent('Allowed');
+    expect(chip).toHaveTextContent('npm test');
+    const card = document.querySelector<HTMLElement>('.helper-card[data-helper="h1"]')!;
+    expect(card).toHaveTextContent('Explore');
+    expect(card).toHaveTextContent('Lire le code');
     // The undecided request is pinned (task 7), never a chip.
     expect(document.querySelectorAll('.decision-chip')).toHaveLength(1);
-    await user.click(thread().getByRole('button', { name: 'Open Explore: Lire le code' }));
+    await user.click(thread().getByRole('button', { name: "Open Explore's thread" }));
     expect(await thread().findByText('Je lis.')).toBeVisible();
     expect(document.querySelector('.session-page')).toHaveAttribute('data-helper', 'h1');
     expect(thread().getByText('Lire le code').closest('.prompt-block')).toHaveClass('from-agent');
     expect(thread().getByText('Lire le code').closest('.prompt-block')).toHaveTextContent('Instruction from Otto');
-    expect(document.querySelector('.turn-author')).toHaveTextContent('Explore');
+    expect(document.querySelector('.say-row .botn')).toHaveTextContent('Explore');
     expect(thread().queryByText('Câble la liste')).toBeNull();
   });
 
   it('a subagent gone from the session keeps its page: named by its thread row, or waiting for the thread', async () => {
     const { d, user } = await openOtto();
-    await user.click(await thread().findByRole('button', { name: 'Open Explore: Lire le code' }));
+    await unfoldPast(user);
+    await user.click(thread().getByRole('button', { name: "Open Explore's thread" }));
     await thread().findByText('Je lis.');
     d.upsert({ ...listSessions()[0]!, helpers: [] });
-    await waitFor(() => expect(document.querySelector('.helper-card, .turn-author')).toHaveTextContent('Explore'));
+    await waitFor(() => expect(document.querySelector('.say-row .botn')).toHaveTextContent('Explore'));
     expect(thread().getByText('Je lis.')).toBeVisible();
     expect(document.querySelector('.session-page')).toHaveAttribute('data-helper', 'h1');
   });
 
-  it('a finished subagent leaves the parent thread: no « Done » card piles up there', async () => {
-    const { d } = await openOtto();
-    await thread().findByRole('button', { name: 'Open Explore: Lire le code' });
+  it('a finished subagent stays in the parent thread: its card says it is done, even once gone from the session', async () => {
+    const { d, user } = await openOtto();
+    await unfoldPast(user);
+    const card = () => document.querySelector('.helper-card[data-helper="h1"]');
+    expect(card()!.querySelector('[data-badge]')).not.toHaveAttribute('data-badge', 'done');
     d.upsert({ ...listSessions()[0]!, helpers: [{ id: 'h1', kind: 'Explore', task: 'Lire le code', state: 'exited' }] });
-    await waitFor(() => expect(document.querySelector('.helper-card')).toBeNull());
+    await waitFor(() => expect(card()!.querySelector('[data-badge]')).toHaveAttribute('data-badge', 'done'));
     d.upsert({ ...listSessions()[0]!, helpers: [] });
-    await waitFor(() => expect(document.querySelectorAll('.session-thread .turn')).toHaveLength(2));
-    expect(document.querySelector('.helper-card')).toBeNull();
+    await waitFor(() => expect(card()!.querySelector('[data-badge]')).toHaveAttribute('data-badge', 'done'));
+    expect(card()).toHaveTextContent('Explore');
   });
 
   it('a subagent without a name of its own is « Subagent », translated', async () => {
     const { d, user } = await boot({ sessions: listSessions(), list: true });
     d.thread('otto', ottoThread().map(i => (i.kind === 'helper' ? { ...i, agentType: undefined } : i)));
     await user.click(screen.getByRole('button', { name: /^Otto,/ }));
-    await user.click(await thread().findByRole('button', { name: 'Open Explore: Lire le code' }));
+    await unfoldPast(user);
+    await user.click(thread().getByRole('button', { name: "Open Explore's thread" }));
     // Gone from the session, it is named by its thread row, which has no name.
     d.upsert({ ...listSessions()[0]!, helpers: [] });
-    await waitFor(() => expect(document.querySelector('.turn-author')).toHaveTextContent('Subagent'));
+    await waitFor(() => expect(document.querySelector('.say-row .botn')).toHaveTextContent('Subagent'));
     expect(within(screen.getByRole('banner')).getByText('Subagent')).toBeVisible();
   });
 
@@ -161,8 +182,8 @@ describe('the session page', () => {
     expect(screen.getByText('Connection lost with Local').closest('.frozen-banner')).toHaveAttribute('role', 'status');
     expect(document.querySelector('.frozen-end')).toHaveTextContent('No news since the connection was lost');
     expect(screen.queryByRole('status', { name: 'Action running' })).toBeNull();
-    expect(document.querySelector('.turn-live')).toBeNull();
-    expect(thread().getByText('Câble la liste')).toBeVisible();
+    expect(document.querySelector('.spin')).toHaveClass('still');
+    expect(thread().getByRole('button', { name: /Câble la liste/ })).toBeVisible();
   });
 
   it('a session that ended says so after its last exchange', async () => {
@@ -173,7 +194,7 @@ describe('the session page', () => {
     ]);
     await user.click(screen.getByRole('button', { name: /^Bix,/ }));
     await thread().findByText('Relue.');
-    expect(document.querySelector('.turn.current .turn-end')).toHaveTextContent('Session ended · 1 h ago');
+    expect(document.querySelector('.turn.current .turn-end')).toHaveTextContent(/^Session ended at \d\d:\d\d · 1 h ago/);
   });
 
   it('« New since your last visit » marks what arrived while away', async () => {
@@ -230,7 +251,7 @@ describe('the session page', () => {
       const { el, g, watched, resized, latest } = await resizable();
       // The thread's column and what is in it are watched: a new item, a card that grows.
       expect(watched.has(el)).toBe(true);
-      expect(watched.has(el.querySelector('.turn')!)).toBe(true);
+      expect(watched.has(el.querySelector('.rail')!)).toBe(true);
       resized();
       expect(latest()).toBeNull();
       g.height = 2300;                                   // the pinned card came, the pane narrowed the column, an item grew
@@ -255,26 +276,22 @@ describe('the session page', () => {
   it('the running action spins; with reduced motion the spinner holds still', async () => {
     vi.stubEnv('VITE_LEDGE_MOTION', '1'); // the suite runs with motion off
     await openOtto();
-    const mark = () => thread().getByRole('status', { name: 'Action running' }).querySelector('.action-mark')!.textContent!;
+    const spin = () => thread().getByRole('status', { name: 'Action running' }).querySelector('.spin')!;
     await thread().findByRole('status', { name: 'Action running' });
-    const first = mark();
-    expect(SPINNER).toContain(first);
-    await waitFor(() => expect(mark()).not.toBe(first));
+    expect(spin()).not.toHaveClass('still');
     saveReduced(true);
-    await waitFor(() => expect(mark()).toBe(SPINNER_STILL));
+    await waitFor(() => expect(spin()).toHaveClass('still'));
   });
 
-  it('the spinner and the clock tick alone: a message is not rendered again', async () => {
+  it('the clock ticks alone: a message is not rendered again', async () => {
     vi.stubEnv('VITE_LEDGE_MOTION', '1');
-    await openOtto();
+    const { user } = await openOtto();
     const live = await thread().findByRole('status', { name: 'Action running' });
+    await unfoldPast(user);
     await thread().findByText('Deux tests échouent.');
     const before = renders.get('Deux tests échouent.');
-    const mark = () => thread().getByRole('status', { name: 'Action running' }).querySelector('.action-mark')!.textContent!;
     const time = live.querySelector('.action-time')!.textContent;
-    const frames = new Set([mark()]);
-    await waitFor(() => { frames.add(mark()); expect(frames.size).toBeGreaterThan(2); });      // the spinner turns…
-    await waitFor(() => expect(thread().getByRole('status', { name: 'Action running' }).querySelector('.action-time')).not.toHaveTextContent(time!), { timeout: 2500 }); // …and the clock ticked
+    await waitFor(() => expect(thread().getByRole('status', { name: 'Action running' }).querySelector('.action-time')).not.toHaveTextContent(time!), { timeout: 2500 });
     expect(renders.get('Deux tests échouent.')).toBe(before);
   });
 
@@ -284,27 +301,24 @@ describe('the session page', () => {
     await thread().findByRole('status', { name: 'Action running' });
     await d.close();
     const banner = await screen.findByText('Connection lost with Local');
-    const group = () => document.querySelector('.turn.current .action-group')!;
-    await waitFor(() => expect(group().querySelector('.action-summary')).not.toBeNull());
-    fireEvent.click(group().querySelector('.action-summary')!);
-    const summary = group().querySelector('.action-summary')!.textContent;
-    const row = group().querySelector('.action-row .action-time')!.textContent;
+    const time = () => document.querySelector('.turn.current [data-tool="t5"] .action-time')!.textContent;
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Action running' })).toBeNull());
+    const row = time();
     const since = banner.parentElement!.textContent;
     await act(async () => { vi.advanceTimersByTime(60_000); });
     expect(banner.parentElement!.textContent).not.toBe(since);                                    // the clock ran: « for 13 min »
-    expect(group().querySelector('.action-summary')!.textContent).toBe(summary);
-    expect(group().querySelector('.action-row .action-time')!.textContent).toBe(row);
+    expect(time()).toBe(row);
   });
 
-  it('the styles port the mockup: a reading column of 760 px, 14 / 23 px text, the side pane never leaves the thread under 440 px', () => {
+  it('the styles port the mockup: a reading column of 760 px, 14 / 22 px text, a rail, the side pane never leaves the thread under 440 px', () => {
     expect(declarations('session.css', '.session-thread')).toContain('--col:760px');
-    expect(declarations('session.css', '.msg-body')).toContain('font-size:14px;line-height:23px');
+    expect(declarations('session.css', '.msg-body')).toContain('font-size:14px;line-height:22px');
     // declarations() strips whitespace: the rule is `flex:0 0 min(var(--split),calc(100% - 440px))`.
     expect(declarations('session.css', '.side-pane')).toContain('flex:0 0 min(var(--split),calc(100% - 440px))'.replace(/\s+/g, ''));
     const css = readFileSync(resolve(__dirname, '../src/styles/session.css'), 'utf8');
     expect(css).toMatch(/@container session \(max-width:860px\)\{/);
-    // A flat thread only: the folded-turn rules are not ported.
-    expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/\.turn-head|\.turn-toggle|\.turn\.folded|\.folded-note/);
+    // The rail: a column of nodes, the row's text, its time.
+    expect(declarations('session.css', '.r')).toContain('grid-template-columns:40px minmax(0,1fr) 56px'.replace(/\s+/g, ''));
     expect(readFileSync(resolve(__dirname, '../src/styles/app.css'), 'utf8')).toMatch(/@import "\.\/list\.css";\s*@import "\.\/session\.css";/);
   });
 });

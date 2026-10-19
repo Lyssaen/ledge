@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import type { Session, ThreadItem } from '@ledge/protocol';
-import { boot, closeDaemons, declarations, listSessions, ottoThread } from './helpers';
+import { boot, closeDaemons, declarations, listSessions, ottoThread, unfoldPast } from './helpers';
 
 afterEach(async () => { cleanup(); localStorage.clear(); await closeDaemons(); });
 
@@ -16,7 +16,7 @@ async function openOtto(extra: ThreadItem[] = more, tool: Session['tool'] = 'cla
   const env = await boot({ sessions: listSessions().map(s => (s.name === 'Otto' ? { ...s, tool } : s)), list: true });
   env.d.thread('otto', [...base, ...extra]);
   await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
-  await screen.findByText('Câble la liste');
+  await unfoldPast(env.user);
   return env;
 }
 

@@ -15,6 +15,8 @@ type PlanStatus = PlanDoc['status'];
 
 /** French counts 0 and 1 as singular. */
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
+/** « de Otto », « d’Iris ». */
+const deName = (n: string) => (/^[aeiouyhàâéèêîôûAEIOUYHÀÂÉÈÊÎÔÛ]/.test(n) ? `d’${n}` : `de ${n}`);
 const andList = (xs: readonly string[]) => new Intl.ListFormat('fr', { type: 'conjunction' }).format(xs);
 
 /** Desktop's copy in French: the source of truth, whose shape is `Messages` (see messages.ts, which loads it on demand). */
@@ -517,7 +519,7 @@ export const fr = {
     thread: {
       label: 'Fil de la session',
       you: 'Vous', fromParent: (n: string) => `Consigne de ${n}`,
-      exchange: (at: string) => `Échange de ${at}`, live: 'en cours',
+      exchange: (at: string) => `Échange de ${at}`,
       actions: (n: number) => plural(n, `${n} action`, `${n} actions`),
       kinds: {
         read: (n: number) => plural(n, `${n} lecture`, `${n} lectures`), search: (n: number) => plural(n, `${n} recherche`, `${n} recherches`),
@@ -531,20 +533,48 @@ export const fr = {
       verbs: { create: 'Création', delete: 'Suppression', read: 'Lecture', search: 'Recherche', command: 'Commande', edit: 'Modification' } as Record<Verb, string>,
       // `unknown` : seul un historique écrit avant le lot 6b le porte (un Decided sans décision ne marque plus de permission).
       decided: { accept: 'Accordé', always: 'Toujours autorisé', deny: 'Refusé', unknown: 'Répondu dans le terminal' } as Record<'accept' | 'always' | 'deny' | 'unknown', string>,
-      helperLaunched: 'Sous-agent lancé', openHelper: (n: string, task: string) => `Ouvrir ${n} : ${task}`,
       seeChange: 'Voir la modification', seeChangeShort: 'Voir',
       read: 'Lire',
       unread: 'Nouveau depuis votre dernière visite', latest: 'Aller au dernier message',
       lost: (m: string) => `Connexion perdue avec ${m}`,
       lostBody: 'Le fil est figé : ce qui suit est le dernier état connu, l’activité actuelle n’est pas connue.',
-      frozenEnd: (s: string) => `Plus aucune nouvelle depuis la perte de connexion · ${s}`, ended: (s: string) => `Session terminée · ${s}`,
+      frozenEnd: (s: string) => `Plus aucune nouvelle depuis la perte de connexion · ${s}`, ended: (at: string, s: string) => `Session terminée à ${at} · ${s}`,
+      // The rail (issue #34, maquette B): a folded exchange or run, the end of an exchange, a subagent's card, the waiting row,
+      // the Story / Objectif markers and the task card.
+      endOf: 'Fin de l’échange',
+      endFailed: (n: number, recovered: boolean) => plural(n, `${n} échec`, `${n} échecs`) + (recovered ? plural(n, ' rattrapé', ' rattrapés') : ''),
+      subagent: 'sous-agent', openThread: (n: string) => `Ouvrir le fil ${deName(n)}`,
+      launched: (n: number) => plural(n, 'Sous-agent lancé', 'Sous-agents lancés'),
+      tally: {
+        done: (n: number) => plural(n, `${n} terminé`, `${n} terminés`), working: (n: number) => `${n} en cours`, error: (n: number) => `${n} en échec`
+      } as Record<'done' | 'working' | 'error', (n: number) => string>,
+      quote: (s: string) => `« ${s} »`,
+      waits: {
+        permission: (n: string) => `${n} attend votre accord pour une commande.`, question: (n: string) => `${n} attend votre réponse à une question.`,
+        plan: (n: string) => `${n} attend votre accord sur son plan.`, diff: (n: string) => `${n} attend votre accord sur une modification.`
+      } as Record<'permission' | 'question' | 'plan' | 'diff', (n: string) => string>,
+      resumes: 'Le fil reprend après votre réponse.',
+      planDecided: {
+        accept: 'Vous avez approuvé le plan', always: 'Vous avez approuvé le plan en mode automatique', deny: 'Vous avez renvoyé le plan à revoir', unknown: 'Plan répondu dans le terminal'
+      } as Record<'accept' | 'always' | 'deny' | 'unknown', string>,
+      objective: 'Objectif de la session', notedBy: (n: string) => `· noté par ${n}`,
+      tags: { story: 'Story', objectif: 'Objectif' },
+      tagValues: { 'hors-story': 'Hors story', analyse: 'Analyse', correction: 'Correction', implementation: 'Implémentation' } as Record<string, string>,
+      task: {
+        kicker: 'Tâche', statuses: { killed: 'Arrêtée', completed: 'Terminée', failed: 'En échec', other: 'Notifiée' } as Record<'killed' | 'completed' | 'failed' | 'other', string>,
+        agent: 'L’agent', command: 'La commande',
+        agentDid: { killed: 'a été arrêté. Il peut reprendre si vous lui écrivez.', completed: 'a terminé en arrière-plan.', failed: 'a échoué en arrière-plan.', other: 's’est arrêté.' } as Record<'killed' | 'completed' | 'failed' | 'other', string>,
+        commandDid: { killed: 'a été arrêtée.', completed: 's’est terminée en arrière-plan.', failed: 'a échoué en arrière-plan.', other: 's’est arrêtée.' } as Record<'killed' | 'completed' | 'failed' | 'other', string>,
+        code: (c: string) => `code ${c}`, raw: 'Notification brute'
+      },
       loading: 'Chargement du fil…', empty: 'Rien dans le fil pour l’instant.', notLoaded: 'Le fil n’a pas été chargé avant la perte de connexion.'
     },
     message: {
       sent: 'Message envoyé', received: 'Message reçu',
       readBy: (n: string) => `Lu par ${n}`, delivered: 'Remis, pas encore lu', sending: 'Envoi…', failed: 'Non remis',
       conversation: (n: string, k: number) => `Échange avec ${n} · ${k} messages`, fold: 'Replier', unfold: 'Déplier',
-      readAll: 'Lire tout le message', showLess: 'Réduire', seeIn: (n: string) => `Voir dans le fil de ${n}`
+      readAll: 'Lire tout le message', showLess: 'Réduire', seeIn: (n: string) => `Voir dans le fil de ${n}`,
+      to: 'À', from: 'De', seeTheirs: 'voir son fil', seen: 'lu'
     },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
     notice: {
@@ -577,7 +607,7 @@ export const fr = {
       summary: (n: number, s: string) => plural(n, `${n} étape : ${s}`, `${n} étapes : ${s}`)
     },
     todos: {
-      workPlan: 'Plan de travail', workPlanUpdated: 'Plan de travail mis à jour', updated: 'plan de travail mis à jour',
+      workPlan: 'Plan de travail', updated: 'plan de travail mis à jour',
       allDone: 'Tout est fait', paused: 'En pause',
       doneOf: (d: number, n: number) => `${d}/${n} faites`, inProgress: (t: string) => `en cours : ${t}`,
       boxes: { completed: 'Fait', in_progress: 'En cours', pending: 'À faire' } as Record<TodoStatus, string>
