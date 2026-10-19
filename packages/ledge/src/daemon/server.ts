@@ -418,7 +418,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'document.read': {
         const session = msg.sessionId ? store.get(msg.sessionId) : undefined;
         if (msg.sessionId && !session) return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'session_missing' });
-        return send(ws, await readDocument(msg, { cwd: session?.cwd, home: opts.home ?? process.env.HOME ?? '' }));
+        return send(ws, await readDocument(msg, { cwd: session?.cwd, workdir: session?.workdir, home: opts.home ?? process.env.HOME ?? '' }));
       }
       case 'repos.inspect': return send(ws, { type: 'repos.info', requestId: msg.requestId, repos: await inspectRepos(msg.paths, { home: opts.home }) });
       // Lot 11: home, then the parents of the recent and live folders outside it. Answered even when it fails: an `error` for
@@ -518,7 +518,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
           store.upsert(base);
           store.apply(msg.id, msg.event); // through apply, so the history sees the session's first event too
-        } else { settleByHook(msg.id, ev); store.apply(msg.id, msg.event); }
+        } else {
+          // The agent may have left its launch folder (a worktree it entered): its documents' relative links start there.
+          if (msg.cwd) store.patch(msg.id, { workdir: msg.cwd });
+          settleByHook(msg.id, ev); store.apply(msg.id, msg.event);
+        }
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
         return;
       }

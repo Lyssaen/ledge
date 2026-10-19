@@ -15,15 +15,26 @@ const errorCode = (e: unknown): DocumentErrorCode => {
 };
 
 /** Read one WSL Markdown file for the requesting socket. Never spawns a process or writes to the file. */
-export async function readDocument(request: DocumentRead, context: { cwd?: string; home: string }): Promise<DocumentContent | DocumentError> {
+export async function readDocument(request: DocumentRead, context: { cwd?: string; workdir?: string; home: string }): Promise<DocumentContent | DocumentError> {
   const source = request.path;
   if (/^(?:file:|[a-zA-Z]:[\\/]|\\\\)/.test(source) || source.includes('\0')) return failure(request, 'unsupported_path');
   if (request.basePath && (!isAbsolute(request.basePath) || !markdown(request.basePath))) return failure(request, 'unsupported_path');
   const expanded = source === '~' ? context.home : source.startsWith('~/') ? resolve(context.home, source.slice(2)) : source;
-  const base = request.basePath ? dirname(request.basePath) : context.cwd;
-  if (!isAbsolute(expanded) && !base) return failure(request, 'ambiguous_path');
-  const path = resolve(base ?? context.home, expanded);
-  if (!markdown(path)) return failure(request, 'unsupported_type');
+  // A link in a document starts from that document; one from a session, from where the agent works now (a worktree
+  // it entered), then from where it started.
+  const bases = request.basePath ? [dirname(request.basePath)] : [...new Set([context.workdir, context.cwd].filter((d): d is string => !!d))];
+  if (!isAbsolute(expanded) && !bases.length) return failure(request, 'ambiguous_path');
+  const paths = isAbsolute(expanded) ? [resolve(expanded)] : bases.map(base => resolve(base, expanded));
+  if (!markdown(paths[0]!)) return failure(request, 'unsupported_type');
+  let read: DocumentContent | DocumentError = failure(request, 'not_found');
+  for (const path of paths) {
+    read = await readAt(request, path);
+    if (read.type === 'document.content' || read.code !== 'not_found') return read;
+  }
+  return read;
+}
+
+async function readAt(request: DocumentRead, path: string): Promise<DocumentContent | DocumentError> {
   let file;
   try {
     // O_NONBLOCK also makes a path replaced by a FIFO between resolution and open safe to reject.

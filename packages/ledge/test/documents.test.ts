@@ -19,6 +19,13 @@ describe('readDocument', () => {
     const root = await dir(); const base = join(root, 'notes', 'index.md'); await mkdir(dirname(base)); await writeFile(join(root, 'notes', 'next.md'), '# Next');
     expect(await readDocument(req('next.md', base), { cwd: root, home: root })).toMatchObject({ type: 'document.content', path: join(root, 'notes', 'next.md'), text: '# Next' });
   });
+  it('resolves a relative path from the folder the agent moved to (a worktree), then from its launch folder', async () => {
+    const root = await dir(); const workdir = join(root, '.claude', 'worktrees', 'feat'); await mkdir(join(workdir, 'docs'), { recursive: true });
+    await writeFile(join(workdir, 'docs', 'plan.md'), '# Plan'); await writeFile(join(root, 'README.md'), '# Root');
+    expect(await readDocument(req('docs/plan.md'), { cwd: root, workdir, home: root })).toMatchObject({ type: 'document.content', path: join(workdir, 'docs', 'plan.md') });
+    expect(await readDocument(req('README.md'), { cwd: root, workdir, home: root })).toMatchObject({ type: 'document.content', path: join(root, 'README.md') });
+    expect(await readDocument(req('missing.md'), { cwd: root, workdir, home: root })).toMatchObject({ type: 'document.error', code: 'not_found' });
+  });
   it('reads home, absolute skills, names with spaces and regular symlink targets', async () => {
     const root = await dir(); await writeFile(join(root, 'My Skill.md'), 'étape'); await symlink(join(root, 'My Skill.md'), join(root, 'SKILL.md'));
     expect(await readDocument(req('~/My Skill.md'), { home: root })).toMatchObject({ type: 'document.content', text: 'étape' });
