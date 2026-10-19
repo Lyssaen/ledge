@@ -26,6 +26,8 @@ export const BACKOFF_FIRST_MS = 1000;
 export const BACKOFF_MAX_MS = 60_000;
 export const PING_EVERY_MS = 25_000;
 export const PONG_WITHIN_MS = 10_000;
+/** Bound on the upgrade, then again on the wait for `welcome` after `open`. */
+export const WELCOME_WITHIN_MS = 15_000;
 const ERROR_MAX = 200;
 
 const realSchedule: Schedule = (fn, ms) => {
@@ -66,6 +68,7 @@ export function createRelayLink(opts: {
   let failures = 0;
   let cancelRetry: (() => void) | null = null;
   let cancelPing: (() => void) | null = null;
+  let cancelDeadline: (() => void) | null = null;
   let finished = false;
 
   const setState = (s: LinkState) => {
@@ -74,10 +77,21 @@ export function createRelayLink(opts: {
   };
 
   const stopPing = () => { cancelPing?.(); cancelPing = null; };
+  const stopDeadline = () => { cancelDeadline?.(); cancelDeadline = null; };
+
+  /** A socket that is not welcomed in time (upgrade unanswered, or open but silent) is dropped and retried. */
+  const armDeadline = (sock: WebSocket, error: string) => {
+    stopDeadline();
+    cancelDeadline = schedule(() => {
+      cancelDeadline = null;
+      if (ws === sock) fail(error);
+    }, WELCOME_WITHIN_MS);
+  };
 
   /** Forgets the current socket: its later events are ignored. */
   const drop = () => {
     stopPing();
+    stopDeadline();
     const old = ws;
     ws = null;
     if (old) {
@@ -128,6 +142,7 @@ export function createRelayLink(opts: {
     setState({ state: 'connecting' });
     const sock = new Impl(url, { headers: { authorization: `Bearer ${opts.token}` } });
     ws = sock;
+    armDeadline(sock, 'no answer to the upgrade from the relay');
     let lastError = '';
     sock.on('error', (e: Error) => { lastError = e.message; });
     sock.on('unexpected-response', (_req, res) => {
@@ -136,7 +151,11 @@ export function createRelayLink(opts: {
       if (res.statusCode === 401) signedOut('session_invalid');
       else fail(`unexpected server response: ${res.statusCode ?? 0}`);
     });
-    sock.on('open', () => { if (ws === sock) armPing(sock); });
+    sock.on('open', () => {
+      if (ws !== sock) return;
+      armDeadline(sock, 'no welcome from the relay');
+      armPing(sock);
+    });
     sock.on('pong', () => { if (ws === sock) armPing(sock); });
     sock.on('message', (data: WebSocket.RawData) => {
       if (ws !== sock) return;
@@ -146,6 +165,7 @@ export function createRelayLink(opts: {
       if (!r.success) { log('mobile link: ignored an invalid relay frame'); return; }
       if (r.data.type === 'welcome') {
         failures = 0;
+        stopDeadline();
         if (state !== 'online') { log('mobile link: online'); setState({ state: 'online' }); }
       }
       opts.onMessage(r.data);
@@ -178,6 +198,7 @@ export function createRelayLink(opts: {
       cancelRetry = null;
       const old = ws;
       stopPing();
+      stopDeadline();
       ws = null;
       if (old) {
         old.removeAllListeners();

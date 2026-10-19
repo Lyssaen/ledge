@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import http from 'node:http';
+import net from 'node:net';
 import type { AddressInfo } from 'node:net';
 import { readFileSync } from 'node:fs';
 import WebSocket, { WebSocketServer } from 'ws';
@@ -207,6 +208,44 @@ describe('relay link', () => {
     t.clock.advance(1);
     await until(() => t.last()?.state === 'offline', 'offline');
     expect(delayOf(t.last(), t.clock.now())).toBe(1000);
+  });
+
+  it('goes offline and retries when the upgrade gets no answer within 15 s', async () => {
+    const sockets: net.Socket[] = [];
+    const server = net.createServer((s) => { sockets.push(s); s.on('error', () => {}); });
+    await new Promise<void>((res) => server.listen(0, '127.0.0.1', res));
+    cleanups.push(() => new Promise<void>((res) => { for (const s of sockets) s.destroy(); server.close(() => res()); }));
+    const t = link(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, 'tok');
+    await until(() => sockets.length === 1, 'tcp accepted');
+    t.clock.advance(14_999);
+    await settle();
+    expect(t.last()).toEqual({ state: 'connecting' });
+    t.clock.advance(1);
+    await until(() => t.last()?.state === 'offline', 'offline');
+    expect(t.last()).toMatchObject({ state: 'offline', error: 'no answer to the upgrade from the relay' });
+    expect(delayOf(t.last(), t.clock.now())).toBe(1000);
+    t.clock.advance(1000);
+    await until(() => sockets.length === 2, 'retried');
+    expect(t.last()).toEqual({ state: 'connecting' });
+  });
+
+  it('goes offline and retries when an open socket gets no welcome within 15 s', async () => {
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+    await new Promise<void>((res) => wss.once('listening', () => res()));
+    cleanups.push(() => new Promise<void>((res) => { for (const c of wss.clients) c.terminate(); wss.close(() => res()); }));
+    let opened = 0;
+    wss.on('connection', () => { opened++; });
+    const t = link(`http://127.0.0.1:${(wss.address() as AddressInfo).port}`, 'tok');
+    await until(() => opened === 1, 'open');
+    await settle();
+    t.clock.advance(14_999);
+    await settle();
+    expect(t.last()).toEqual({ state: 'connecting' });
+    t.clock.advance(1);
+    await until(() => t.last()?.state === 'offline', 'offline');
+    expect(t.last()).toMatchObject({ state: 'offline', error: 'no welcome from the relay' });
+    t.clock.advance(1000);
+    await until(() => opened === 2, 'retried');
   });
 
   it('close() goes off and stops retrying', async () => {
