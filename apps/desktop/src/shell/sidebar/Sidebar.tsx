@@ -27,6 +27,8 @@ export function Sidebar(p: {
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; archived: readonly Session[];
   machines: readonly MachineState[]; projects: Projects | null;
+  /** The machines whose daemon is updating (#48): their restart is expected. */
+  updating?: ReadonlySet<string>;
   order: readonly Session[]; projectIdOf: (s: Session) => string | null;
   filing: Filing; actions: SessionActions; decisions: Decisions;
   waits: ReadonlyMap<string, Wait>;
@@ -133,18 +135,17 @@ export function Sidebar(p: {
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
           onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused} />
-        <p className="st-hint">
-          {place.kind === 'overview' && <><Kbd>N</Kbd>{t.side.hint.newSession} · </>}<Kbd>↑</Kbd><Kbd>↓</Kbd>{t.side.hint.move} · <Kbd>←</Kbd><Kbd>→</Kbd>{t.side.hint.fold} · <Kbd>E</Kbd>{t.side.hint.archive} · <Kbd>H</Kbd>{t.side.hint.done} · <Kbd>Ctrl ⇧ E</Kbd>{t.side.hint.focus}
-        </p>
       </div>
       <div className="st-foot">
         {p.machines.map(m => {
-          const offline = m.status === 'unreachable';
+          // A daemon restarting for its update (#48) is said as such, not offline.
+          const updating = p.updating?.has(m.id) === true;
+          const offline = m.status === 'unreachable' && !updating;
           const count = p.sessions.filter(s => (s.machineId ?? 'local') === m.id).length;
           return (
-            <button key={m.id} type="button" className="st-mach" title={offline ? `${m.label} · ${t.side.offline}` : `${m.label} · ${t.side.agents(count)}`}
+            <button key={m.id} type="button" className="st-mach" title={updating ? `${m.label} · ${t.side.daemonUpdating}` : offline ? `${m.label} · ${t.side.offline}` : `${m.label} · ${t.side.agents(count)}`}
               onClick={() => p.dispatch({ type: 'settings', section: 'machines' })}>
-              <i className={`machine-dot${offline ? ' off' : ''}`} />{m.label}{!offline && <small>{count}</small>}
+              <i className={`machine-dot${offline ? ' off' : updating ? ' updating' : ''}`} />{m.label}{!offline && <small>{count}</small>}
             </button>
           );
         })}

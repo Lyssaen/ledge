@@ -271,7 +271,7 @@ changer l'UI.
 | Machines | Liste du daemon (§5) : ajout avec test de connexion (`probe`), modification, reconnexion (`retry`), retrait avec confirmation, aide SSH (`sshProblem`) ; `local` non supprimable |
 | Notifications | Ne pas déranger ; mode d'alerte à la fin d'une tâche (toast, son, les deux, aucun) |
 | Sons | Activation, volume, test, catégories, « seulement quand le terminal est derrière » |
-| À propos | Version Desktop, version et mode d'installation du daemon par machine (`DaemonInfo`), rechercher une mise à jour (updater Tauri), mettre à jour le daemon local (`update.daemon`), journal `update.progress`/`update.failed` |
+| À propos | Version Desktop, version et mode d'installation du daemon par machine (`DaemonInfo`), rechercher une mise à jour (updater Tauri), mise à jour du daemon de chaque machine (§11 : automatique, bouton « Mettre à jour » pour réessayer, commande manuelle hors npm + systemd), un journal `update.progress`/`update.failed` par machine |
 
 Vue, filtre, regroupement et sélection sont conservés au retour des paramètres.
 
@@ -295,7 +295,21 @@ Vue, filtre, regroupement et sélection sont conservés au retour des paramètre
   `latest-desktop.json` (Desktop), même clé minisign. L'updater de Desktop pointe sur `latest-desktop.json`.
 - NSIS `currentUser`, hooks `windows/hooks.nsh` propres à Desktop, entrée Démarrer et icône distinctes de l'île.
 - `createUpdaterArtifacts: true`, `installMode: passive`, relance après installation (`tauri-plugin-process`).
-- La mise à jour du daemon reste celle de l'île : `update.daemon` vers le daemon local seulement.
+- Mise à jour des daemons (#48) : Desktop met à jour **tout seul** le daemon de chaque machine connectée, la WSL
+  comprise, comme un daemon distant (`update.daemon` par `fleet.sendTo`, relayé par le bridge SSH).
+  - Condition : machine ouverte et prête, daemon installé par npm et lancé par systemd, version **plus ancienne que
+    celle de Desktop** (`update.app`). L'automatique vise la version qui tourne, jamais une release seulement proposée.
+  - Une tentative automatique par machine et par version, par exécution de l'app : un refus (`sessions-at-risk`,
+    `npm-failed`, délai dépassé…) reste au journal et n'est pas relancé seul. « Mettre à jour » dans À propos réessaie
+    (vers la release proposée si elle existe, sinon la version de Desktop).
+  - Un daemon plus récent que Desktop n'est jamais rétrogradé. Un clone git ou un daemon sans systemd n'est pas touché :
+    À propos montre sa commande manuelle (`DaemonInfo.manual`).
+  - Pendant le redémarrage, la machine n'est pas « hors ligne » : la puce de la barre latérale dit « mise à jour du
+    daemon », l'onglet Machines « Connexion… » sans point d'alerte, et le son local de déconnexion se tait. La mise à
+    jour est finie quand la machine revient avec au moins la version envoyée ; sans nouvelles après 4 min, elle échoue
+    (`timeout`).
+  - Pas de « Tout mettre à jour » : l'automatique le rend inutile. Hors de l'app (navigateur, `update.app` nul), rien ne
+    part seul.
 
 ## 12. Vérification
 

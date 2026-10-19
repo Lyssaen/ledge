@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, screen, within } from '@testing-library/react';
+import { act, cleanup, screen, within } from '@testing-library/react';
 import type { Session, ThreadItem } from '@ledge/protocol';
 import { boot, closeDaemons, listSessions, ottoThread, unfoldPast } from './helpers';
+import { resetAvatarForTests, setAvatar } from '../src/shell/avatar';
 
-afterEach(async () => { cleanup(); localStorage.clear(); await closeDaemons(); });
+afterEach(async () => { cleanup(); localStorage.clear(); resetAvatarForTests(); await closeDaemons(); });
 
 const thread = () => within(screen.getByRole('tabpanel', { name: 'Session thread' }));
 const ago = (s: number) => new Date(Date.now() - s * 1000).toISOString();
@@ -58,6 +59,18 @@ describe('the rail (issue #34)', () => {
     expect(cards[0]!.querySelector('.helpers-head')).toHaveTextContent('Subagents launched· 1 done, 1 running');
     expect([...cards[0]!.querySelectorAll('.helper-card')].map(c => c.getAttribute('data-helper'))).toEqual(['h1', 'h2']);
     expect(within(cards[0] as HTMLElement).getByRole('button', { name: "Open Plan's thread" })).toBeVisible();
+  });
+
+  it('your prompt\'s disc beside « You » shows your profile photo, the user icon without one (#50)', async () => {
+    await open('Bix', 'bix', [{ kind: 'prompt', id: 'p', at: ago(60), turn: 1, text: 'Relis la PR' }]);
+    const disc = () => thread().getByText('Relis la PR').closest('.prompt-row')!.querySelector('.n.av')!;
+    expect(disc()).toHaveAttribute('aria-hidden', 'true');
+    expect(disc().querySelector('img')).toBeNull();
+    expect(disc().querySelector('svg')).not.toBeNull();
+    act(() => setAvatar('data:image/webp;base64,UklGRg=='));
+    expect(disc().querySelector('img')).toHaveAttribute('src', 'data:image/webp;base64,UklGRg==');
+    act(() => setAvatar(null));
+    expect(disc().querySelector('img')).toBeNull();
   });
 
   it('a <task-notification> opens its exchange as a task card, its notification folded', async () => {

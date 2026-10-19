@@ -6,8 +6,11 @@ export type Tool = Session['tool'];
 export const MULTI_REPO_TOOLS: ReadonlySet<Tool> = new Set<Tool>(['claude']);
 export const LAUNCH_TIMEOUT_MS = 20_000;
 export type LaunchMessage = Extract<ClientMessage, { type: 'session.launch' }>;
-/** `repos` are paths on `machine`. */
-export interface LaunchForm { tool: Tool | null; prompt: string; project: string | null; machine: string | null; repos: string[] }
+/** `repos` are paths on `machine`. `model` and `effort` (#58): null leaves the agent's own default, nothing is passed. */
+export interface LaunchForm { tool: Tool | null; prompt: string; project: string | null; machine: string | null; repos: string[]; model: string | null; effort: string | null }
+/** The model and effort chosen for an agent, as the form keeps them per project. */
+export interface ModelPick { model: string | null; effort: string | null }
+export const NO_PICK: ModelPick = { model: null, effort: null };
 export type Missing = 'tool' | 'prompt' | 'machine' | 'repos';
 type Infos = ReadonlyMap<string, RepoInfo>;
 
@@ -30,7 +33,7 @@ export function launchDefaults(projects: readonly Project[], machines: readonly 
   const project = (find(projects, wanted.project ?? null) ?? find(projects, wanted.filter ?? null) ?? projects[0])?.id ?? null;
   const up = machines.filter(isUp);
   const machine = (up.find(m => m.id === 'local') ?? up[0])?.id ?? null;
-  return { tool: null, prompt: '', project, machine, repos: firstRepo(find(projects, project), machine, infos) };
+  return { tool: null, prompt: '', project, machine, repos: firstRepo(find(projects, project), machine, infos), ...NO_PICK };
 }
 
 export function withProject(f: LaunchForm, projects: readonly Project[], id: string, infos?: Infos): LaunchForm {
@@ -39,8 +42,12 @@ export function withProject(f: LaunchForm, projects: readonly Project[], id: str
 export function withMachine(f: LaunchForm, projects: readonly Project[], machine: string, infos?: Infos): LaunchForm {
   return { ...f, machine, repos: firstRepo(find(projects, f.project), machine, infos) };
 }
-export function withTool(f: LaunchForm, tool: Tool): LaunchForm {
-  return { ...f, tool, repos: MULTI_REPO_TOOLS.has(tool) ? f.repos : f.repos.slice(0, 1) };
+/** Another agent takes its own model: `pick`, the one remembered for it, or its default. */
+export function withTool(f: LaunchForm, tool: Tool, pick: ModelPick = NO_PICK): LaunchForm {
+  return { ...f, tool, repos: MULTI_REPO_TOOLS.has(tool) ? f.repos : f.repos.slice(0, 1), model: pick.model, effort: pick.effort };
+}
+export function withPick(f: LaunchForm, pick: ModelPick): LaunchForm {
+  return { ...f, model: pick.model, effort: pick.effort };
 }
 export function toggleRepo(f: LaunchForm, path: string): LaunchForm {
   if (f.tool !== null && !MULTI_REPO_TOOLS.has(f.tool)) return { ...f, repos: [path] };
@@ -67,5 +74,6 @@ export function previewOf(f: LaunchForm, sessions: readonly Session[], projectId
 export function launchMessage(f: LaunchForm, name: string): LaunchMessage {
   const [cwd = '', ...rest] = f.repos;
   const tool = f.tool!;
-  return { type: 'session.launch', tool, cwd, ...(MULTI_REPO_TOOLS.has(tool) && rest.length ? { dirs: rest } : {}), name, prompt: f.prompt.trim(), ...(f.machine ? { machineId: f.machine } : {}) };
+  return { type: 'session.launch', tool, cwd, ...(MULTI_REPO_TOOLS.has(tool) && rest.length ? { dirs: rest } : {}), name, prompt: f.prompt.trim(),
+    ...(f.model ? { model: f.model } : {}), ...(f.effort ? { effort: f.effort } : {}), ...(f.machine ? { machineId: f.machine } : {}) };
 }

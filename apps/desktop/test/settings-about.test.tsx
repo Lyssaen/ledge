@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
-import type { DaemonInfo } from '@ledge/protocol';
+import userEvent from '@testing-library/user-event';
+import type { DaemonInfo, Machines } from '@ledge/protocol';
 import { boot, closeDaemons, recordToasts, savedNotices, TWO_PROJECTS } from './helpers';
 import { machine } from './fleet-helpers';
 import { LangProvider } from '../src/i18n/lang';
@@ -26,11 +27,11 @@ const saved = () => savedNotices(log);
 const nav = () => within(screen.getByRole('navigation', { name: 'Settings sections' }));
 const tab = (name: string) => nav().getByRole('button', { name: new RegExp(`^${name}`) });
 const versions = () => [...document.querySelectorAll('.version-list > div')].map(row => [row.querySelector('dt')!.textContent, row.querySelector('dd')!.textContent]);
-const log_ = () => screen.getByRole('list', { name: 'Daemon log' });
+const log_ = (label = 'Local') => screen.getByRole('list', { name: `Daemon log · ${label}` });
 const steps = () => within(log_()).getAllByRole('listitem').map(li => li.textContent);
 
-async function open(daemon?: DaemonInfo) {
-  const env = await boot({ projects: TWO_PROJECTS, ...(daemon ? { daemon } : {}) });
+async function open(daemon?: DaemonInfo, machines?: Machines) {
+  const env = await boot({ projects: TWO_PROJECTS, ...(daemon ? { daemon } : {}), ...(machines ? { machines } : {}) });
   await env.user.keyboard('{Control>},{/Control}');
   await screen.findByRole('heading', { level: 1, name: 'General' });
   await env.user.click(tab('About'));
@@ -63,37 +64,60 @@ describe('Settings › About', () => {
     expect(tab('About').querySelector('.side-alert')).toBeNull();
   });
 
-  it('« Update » sends update.daemon to the local daemon, then the log says so and the button waits', async () => {
-    const { d, user } = await open(NPM_BEHIND);
-    const update = await screen.findByRole('button', { name: 'Update' });
-    expect(screen.getByText('The local daemon moves to Ledge 0.6.0, then restarts.')).toBeVisible();
-    await user.click(update);
-    await waitFor(() => expect(d.received.filter(m => m.type === 'update.daemon')).toEqual([{ type: 'update.daemon', version: '0.6.0' }]));
-    expect(steps()).toEqual(['Request sent to the local daemon: 0.6.0']);
+  it('Desktop updates a connected npm daemon behind it on its own (#48): update.daemon is sent once, the log says it is automatic, « Update » waits', async () => {
+    const { d } = await open(NPM_BEHIND);
+    await waitFor(() => expect(steps()).toEqual(['Automatic update of the daemon of Local: 0.6.0']));
+    expect(d.received.filter(m => m.type === 'update.daemon')).toEqual([{ type: 'update.daemon', version: '0.6.0' }]);
+    expect(screen.getByText('The daemon of Local moves to Ledge 0.6.0, then restarts.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Update' })).toBeDisabled();
   });
 
-  it('the log sits in a polite live region, there before its first step, so each step is heard', async () => {
-    const { user } = await open(NPM_BEHIND);
-    const update = await screen.findByRole('button', { name: 'Update' });
+  it('the logs sit in a polite live region, there before any step, so each step is heard', async () => {
+    await open({ version: '0.6.0', install: 'npm', systemd: true });
     const live = document.querySelector('[aria-live="polite"].update-live');
     expect(live).not.toBeNull();
     expect(live).toBeEmptyDOMElement();
-    await user.click(update);
-    await waitFor(() => expect(steps()).toEqual(['Request sent to the local daemon: 0.6.0']));
-    expect(live).toContainElement(log_());
+    cleanup(); await closeDaemons();
+    await open(NPM_BEHIND);
+    await waitFor(() => expect(document.querySelector('[aria-live="polite"].update-live')).toContainElement(log_()));
   });
 
-  it('the log follows the daemon’s steps; a refusal shows with its command, and « Update » can be used again', async () => {
+  it('the log follows the daemon’s steps; a refusal shows with its command, is not retried on its own, and « Update » sends it again', async () => {
     const { d, user } = await open(NPM_BEHIND);
-    await user.click(await screen.findByRole('button', { name: 'Update' }));
+    await waitFor(() => expect(steps()).toHaveLength(1));
     act(() => d.push({ type: 'update.progress', version: '0.6.0', step: 'installing' }));
-    await waitFor(() => expect(steps()).toEqual(['Request sent to the local daemon: 0.6.0', 'Installing the new version…']));
+    await waitFor(() => expect(steps()).toEqual(['Automatic update of the daemon of Local: 0.6.0', 'Installing the new version…']));
     act(() => d.push({ type: 'update.failed', version: '0.6.0', reason: 'sessions-at-risk', command: 'ledge update --force' }));
     await waitFor(() => expect(steps()).toHaveLength(3));
     expect(steps()[2]).toBe('Your sessions run inside the daemon service: a restart would close them. Close them, or restart WSL, then retry.ledge update --force');
     expect(within(log_()).getByText('ledge update --force').tagName).toBe('CODE');
-    expect(screen.getByRole('button', { name: 'Update' })).toBeEnabled();
+    expect(d.received.filter(m => m.type === 'update.daemon')).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Update' }));
+    await waitFor(() => expect(steps()[3]).toBe('Request sent to the daemon of Local: 0.6.0'));
+    expect(d.received.filter(m => m.type === 'update.daemon')).toHaveLength(2);
+  });
+
+  it('a daemon back with the version sent: the log says it is up to date', async () => {
+    const { d } = await open(NPM_BEHIND);
+    await waitFor(() => expect(steps()).toHaveLength(1));
+    act(() => d.push({ type: 'update.progress', version: '0.6.0', step: 'restarting' }));
+    await waitFor(() => expect(steps()).toHaveLength(2));
+    d.extras.daemon = { version: '0.6.0', install: 'npm', systemd: true };
+    await d.dropClients();
+    await waitFor(() => expect(steps()).toEqual(['Automatic update of the daemon of Local: 0.6.0', 'Restarting the daemon…', 'Daemon up to date: 0.6.0']), { timeout: 8000 });
+    await waitFor(() => expect(versions()[1]).toEqual(['Daemon · Local', '0.6.0· npm']));
+  });
+
+  it('a daemon away for its update is said updating in the sidebar, never offline, and Machines has no offline dot', async () => {
+    const { d } = await open(NPM_BEHIND, [{ id: 'local', label: 'Local' }]);
+    await waitFor(() => expect(steps()).toHaveLength(1));
+    await d.close();
+    const local = () => document.querySelector<HTMLElement>('.st-mach .machine-dot.updating')?.closest('button');
+    await waitFor(() => expect(local()).toHaveAttribute('title', 'Local · daemon updating'), { timeout: 8000 });
+    expect([...document.querySelectorAll<HTMLElement>('.st-mach')].map(b => b.title)).toEqual(['Local · daemon updating']);
+    expect(tab('Machines').querySelector('.side-alert')).toBeNull();
+    await userEvent.click(tab('Machines'));
+    expect(within(await screen.findByRole('article', { name: 'Local' })).getByText('Connecting…')).toBeVisible();
   });
 
   it('a daemon from a git clone: the note and its command, no button', async () => {
@@ -112,7 +136,7 @@ describe('Settings › About', () => {
         machine('nas', { label: 'NAS', daemon: { version: '0.5.2', install: 'git', systemd: true } }),
         machine('dev', { label: 'Dev', status: 'unreachable', ready: false })
       ],
-      daemonUpdate: { offer: 'none', journal: [], running: false, start: () => {} },
+      daemonUpdates: { of: () => ({ offer: 'none', journal: [], running: false }), updating: new Set(), start: () => {} },
       saved: () => {}, notify: () => {}, paused: true
     } as unknown as SettingsContext;
     render(<LangProvider lang="en"><About ctx={ctx} /></LangProvider>);
@@ -124,5 +148,31 @@ describe('Settings › About', () => {
       ['Latest version', '0.6.0']
     ]);
     expect(screen.getByText('NAS does not have the latest version.')).toBeVisible();
+  });
+
+  it('a remote machine’s daemon: its own button or manual command, its own log', async () => {
+    const start = vi.fn();
+    const ctx = {
+      machines: [
+        machine('local', { daemon: { version: '0.6.0', install: 'npm', systemd: true } }),
+        machine('nas', { label: 'NAS', daemon: { version: '0.5.2', install: 'git', systemd: true, manual: 'cd ~/ledge && git pull' } }),
+        machine('dev', { label: 'Dev', daemon: { version: '0.5.0', install: 'npm', systemd: true } })
+      ],
+      daemonUpdates: {
+        of: (id: string) => id === 'nas' ? { offer: 'manual', journal: [], running: false }
+          : id === 'dev' ? { offer: 'offer', journal: [{ kind: 'sent', version: '0.6.0', auto: true }, { kind: 'failed', reason: 'npm-failed', detail: 'EACCES' }], running: false }
+          : { offer: 'none', journal: [], running: false },
+        updating: new Set(), start
+      },
+      saved: () => {}, notify: () => {}, paused: true
+    } as unknown as SettingsContext;
+    render(<LangProvider lang="en"><About ctx={ctx} /></LangProvider>);
+    expect(screen.getByText('cd ~/ledge && git pull').tagName).toBe('CODE');
+    expect(screen.getByText('The daemon of Dev moves to Ledge 0.6.0, then restarts.')).toBeVisible();
+    expect(screen.getAllByRole('button', { name: 'Update' })).toHaveLength(1);
+    expect(within(log_('Dev')).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Automatic update of the daemon of Dev: 0.6.0', 'The daemon could not update. Nothing changed.EACCES']);
+    expect(screen.queryByRole('list', { name: 'Daemon log · Local' })).toBeNull();
+    screen.getByRole('button', { name: 'Update' }).click();
+    expect(start).toHaveBeenCalledWith('dev');
   });
 });

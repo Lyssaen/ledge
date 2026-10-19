@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import type { ClientMessage, Projects } from '@ledge/protocol';
 import { test, expect } from './fixtures';
 import { eight, fakeDaemon, fakeRemote, session, twoProjects } from './daemon';
+import { fleet, ottoThread } from './thread';
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Settings sections' });
 /** A section's tab: its name, then its alert when it has one. */
@@ -178,4 +179,39 @@ test('a 900 px window: the settings fit without a side scroll, their section bar
   }
   // Machines: the offline server keeps the bar's alert in the folded row.
   await expect(tab(page, 'Machines').getByRole('img', { name: 'A machine is offline' })).toBeVisible();
+});
+
+test('Appearance › Profile photo: a real picture is cropped to its centre square at 128 px, then shows beside « You » in the thread (#50)', async ({ page }) => {
+  await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: ottoThread } });
+  await page.goto('/');
+  await openSettings(page);
+  await tab(page, 'Appearance').click();
+  const profile = page.getByRole('region', { name: 'Profile' });
+  // 300 × 200: red on the left half, blue on the right. Its centre square (x 50 → 250) is half red, half blue.
+  const png = await page.evaluate(() => {
+    const c = document.createElement('canvas'); c.width = 300; c.height = 200;
+    const g = c.getContext('2d')!; g.fillStyle = '#ff0000'; g.fillRect(0, 0, 150, 200); g.fillStyle = '#0000ff'; g.fillRect(150, 0, 150, 200);
+    return c.toDataURL('image/png').split(',')[1]!;
+  });
+  await profile.getByLabel('Profile photo file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+  const preview = profile.locator('.avatar-preview img');
+  await expect(preview).toHaveAttribute('src', /^data:image\/webp;base64,/);
+  await savedOnce(page, 'Setting saved · Profile photo');
+  const pixels = await preview.evaluate(async (img: HTMLImageElement) => {
+    await img.decode();
+    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const g = c.getContext('2d')!; g.drawImage(img, 0, 0);
+    const at = (x: number) => [...g.getImageData(x, 64, 1, 1).data.slice(0, 3)].map(v => (v > 128 ? 1 : 0)).join('');
+    return { w: img.naturalWidth, h: img.naturalHeight, left: at(20), right: at(108), round: getComputedStyle(img.parentElement!).borderRadius };
+  });
+  expect(pixels).toEqual({ w: 128, h: 128, left: '100', right: '001', round: '50%' });
+  const stored = await page.evaluate(() => localStorage.getItem('desktop.avatar'));
+  expect(stored!.length, 'the preference stays small').toBeLessThan(20_000);
+  // Beside « You » in Otto's thread.
+  await page.keyboard.press('Escape');
+  await page.getByRole('tree').getByRole('button', { name: /^Otto/ }).click();
+  const you = page.locator('.session-thread .prompt-row .n.av').first();
+  await expect(you.locator('img')).toHaveAttribute('src', stored!);
+  await expect(you).toHaveAttribute('aria-hidden', 'true');
+  expect(await you.locator('img').evaluate(img => getComputedStyle(img).objectFit)).toBe('cover');
 });

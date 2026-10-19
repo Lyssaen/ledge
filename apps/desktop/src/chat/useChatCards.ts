@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DaemonError } from '@ledge/fleet';
 import { proposalRows, type ChatProposal, type ChatTurn, type ClientMessage, type Session } from '@ledge/protocol';
 import { answers } from '../launch/useLaunch';
+import { NO_PICK, type ModelPick } from '../launch/model';
 
 export interface ChatCardsOptions {
   send(m: ClientMessage): void;
@@ -23,6 +24,8 @@ export interface ChatCards {
   launchingRows: readonly number[] | null;
   /** Launches the card's rows (#24; its first row without `rows`): the launched ones are left out, all in one message. */
   launch(qid: string, rows?: number[]): void; relay(qid: string): void; cancelRelay(qid: string): void;
+  /** The model and effort chosen on the card (#58), sent with its launch; the agent's default until one is chosen. */
+  pick(qid: string): ModelPick; setPick(qid: string, pick: ModelPick): void;
 }
 
 /** A launch in flight: its rows and each row as sent (its error tells a new failure from the old one), what was seen at the send, the rows announced. */
@@ -48,6 +51,9 @@ export function useChatCards(o: ChatCardsOptions): ChatCards {
   const [launchingQid, setLaunchingQid] = useState<string | null>(null);
   const [launchingRows, setLaunchingRows] = useState<readonly number[] | null>(null);
   const [relayingQid, setRelayingQid] = useState<string | null>(null);
+  const [picks, setPicks] = useState<ReadonlyMap<string, ModelPick>>(new Map());
+  const picksNow = useRef(picks);
+  picksNow.current = picks;
   const freeLaunch = () => { launching.current = null; setLaunchingQid(null); setLaunchingRows(null); };
   const freeRelay = () => { relaying.current = null; setRelayingQid(null); };
 
@@ -61,8 +67,11 @@ export function useChatCards(o: ChatCardsOptions): ChatCards {
     launching.current = { qid, rows, from: rows.map(r => all[r]!), machineId: turnMachine(qid), launchedSeq: lastLaunched?.seq ?? 0, errorSeq: errors.at(-1)?.seq ?? 0, announced: new Set() };
     setLaunchingQid(qid); setLaunchingRows(rows);
     // The daemon reads the rows' own fields; tool and cwd stay for the schema and an older daemon (the first row).
-    send({ type: 'session.launch', tool: p.tool, cwd: p.cwd, ...(p.prompt ? { prompt: p.prompt } : {}), qid, ...(asked ? { rows } : {}) });
+    const { model, effort } = picksNow.current.get(qid) ?? NO_PICK;
+    send({ type: 'session.launch', tool: p.tool, cwd: p.cwd, ...(p.prompt ? { prompt: p.prompt } : {}), qid, ...(asked ? { rows } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
   }, []);
+  const pick = useCallback((qid: string) => picks.get(qid) ?? NO_PICK, [picks]);
+  const setPick = useCallback((qid: string, next: ModelPick) => setPicks(m => new Map(m).set(qid, next)), []);
 
   const relayCard = useCallback((type: 'session.relay' | 'session.relay.cancel', qid: string) => {
     const { chat, send, turnReady, errors } = latest.current;
@@ -97,5 +106,5 @@ export function useChatCards(o: ChatCardsOptions): ChatCards {
     if (r && (relayState(chat, r.qid) !== r.from || errors.some(e => e.seq > r.errorSeq && e.id === undefined) || !ready)) freeRelay();
   }, [chat, lastLaunched, errors, sessions, ready]);
 
-  return { launchingQid, launchingRows, relayingQid, launch, relay, cancelRelay };
+  return { launchingQid, launchingRows, relayingQid, launch, relay, cancelRelay, pick, setPick };
 }

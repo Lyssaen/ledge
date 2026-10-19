@@ -51,8 +51,8 @@ describe('Desktop Tauri config', () => {
     expect(commands).toContain('take_open_target');
     expect(readFileSync(resolve(root, 'src-tauri/Cargo.toml'), 'utf8')).toMatch(/^tauri-plugin-single-instance = "2"$/m);
   });
-  it('reaches only the daemon and the fonts, and updates from its own manifest, signed with our key', () => {
-    expect(conf.app.security.csp).toBe("default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src ipc: http://ipc.localhost ws://127.0.0.1:47831");
+  it('reaches only the daemon and the fonts, shows the profile photo kept as a data URL (#50), and updates from its own manifest, signed with our key', () => {
+    expect(conf.app.security.csp).toBe("default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src ipc: http://ipc.localhost ws://127.0.0.1:47831");
     expect(Buffer.from(conf.plugins.updater.pubkey, 'base64').toString()).toMatch(/^untrusted comment: minisign public key: 763CCCF3D01336AD\n/);
     expect(conf.plugins.updater.endpoints).toEqual(['https://github.com/Lyssaen/ledge/releases/latest/download/latest-desktop.json']);
     expect(conf.plugins.updater.windows.installMode).toBe('passive');

@@ -115,6 +115,11 @@ test('dezoomed, dragging the floor carries the whole group to any edge, and part
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   for (let i = 0; i < 3; i++) await page.keyboard.press('-');
   await expect(page.getByRole('button', { name: /Fit/ })).toHaveAttribute('aria-pressed', 'false');
+  // The view overflows and still scrolls (panning sets scrollLeft / scrollTop), but shows no scrollbar (#49).
+  expect(await scroller(page).evaluate(el => {
+    const css = getComputedStyle(el);
+    return { overflows: el.scrollWidth > el.clientWidth + 1 && el.scrollHeight > el.clientHeight + 1, overflow: [css.overflowX, css.overflowY], scrollbar: css.scrollbarWidth };
+  })).toEqual({ overflows: true, overflow: ['auto', 'auto'], scrollbar: 'none' });
   // The group: Ledge's desk, the tables and « Sans projet », as one box.
   const group = () => page.locator('.office-shell').evaluate(shell => {
     const rs = [...shell.querySelectorAll('.ledge-corner,.project-room,.unassigned-zone')].map(el => el.getBoundingClientRect());

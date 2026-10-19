@@ -41,13 +41,25 @@ export function claudeSessionId(tool: Tool, args: string[]): string | undefined 
 export function exitFile(id: string): string { return join(paths().dir, `exit-${id}`); }
 
 /**
+ * What a running Claude Code session leaves in the environment of the commands it runs. An agent launched from one
+ * (`ledge claude` typed by an agent, or a daemon or tmux server started from one) would take itself for that session's
+ * child: CLAUDE_CODE_CHILD_SESSION turns its transcript off, and Ledge reads the transcript. The user's own settings
+ * (CLAUDE_CONFIG_DIR, CLAUDE_CODE_ENABLE_TELEMETRY...) are not in this list and pass.
+ */
+export const PARENT_AGENT_VARS = [
+  'CLAUDECODE', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN', 'CLAUDE_PID', 'CLAUDE_EFFORT'
+] as const;
+const PARENT_AGENT = new Set<string>(PARENT_AGENT_VARS);
+
+/**
  * The agent's environment: the launching shell's (AWS_PROFILE, venv, ANTHROPIC_*, CLAUDE_CONFIG_DIR...)
- * so `ledge claude` behaves like plain `claude`, minus the launcher's own tmux variables, plus `extra`.
- * Without this the pane only gets the tmux server's global environment, frozen when it started.
+ * so `ledge claude` behaves like plain `claude`, minus the launcher's own tmux variables and a launching agent's
+ * (`PARENT_AGENT_VARS`), plus `extra`. Without this the pane only gets the tmux server's global environment, frozen when it started.
  */
 export function agentEnv(base: NodeJS.ProcessEnv, extra: Record<string, string>): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(base)) if (v !== undefined && k !== 'TMUX' && !k.startsWith('TMUX_')) env[k] = v;
+  for (const [k, v] of Object.entries(base)) if (v !== undefined && k !== 'TMUX' && !k.startsWith('TMUX_') && !PARENT_AGENT.has(k)) env[k] = v;
   return { ...env, ...extra };
 }
 
@@ -86,7 +98,7 @@ export async function spawnSession(opts: SpawnOptions): Promise<Session> {
   // With recordExit, sh runs the agent with its argv untouched ("$@") and writes its exit code to
   // the file passed as $0, so the session can die naturally and the code is still readable.
   const command = opts.recordExit ? ['sh', '-c', '"$@"; echo $? > "$0"', exitFile(id), ...agent] : agent;
-  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(env, { LEDGE_SESSION: id, LEDGE_NAME: name, ...(opts.tool === 'codex' ? { [CODEX_ENV_VAR]: id } : {}) }), command });
+  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(env, { LEDGE_SESSION: id, LEDGE_NAME: name, ...(opts.tool === 'codex' ? { [CODEX_ENV_VAR]: id } : {}) }), unset: PARENT_AGENT_VARS, command });
   const at = now();
   return { id, name, tool: opts.tool, cwd: opts.cwd, project, title: `${name} · ${project}`, tmuxSession, state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...(agentSessionId ? { agentSessionId } : {}), ...(transcriptPath ? { transcriptPath } : {}) };
 }

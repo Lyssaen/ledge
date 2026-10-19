@@ -67,6 +67,8 @@
 .pip{width:5px;height:5px;margin-top:8px;border-radius:50%;background:color-mix(in srgb,var(--muted-foreground) 35%,var(--sidebar))}
 .av,.botn{width:28px;height:28px;margin-top:-3px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
 .av{background:var(--foreground);color:var(--background)}
+/* Your profile photo (#50): it fills the disc, cropped round. */
+.av img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 .botn{background:var(--sidebar)}
 .new-dot{width:8px;height:8px;margin-top:6px;border-radius:50%;background:var(--sidebar-primary)}
 

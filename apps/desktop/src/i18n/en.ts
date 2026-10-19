@@ -9,7 +9,7 @@ export const en: Messages = {
   side: {
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
-    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
+    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
     ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…',
     openChat: 'Open the conversation with Ledge',
     active: (n) => `${n} active`,
@@ -39,7 +39,6 @@ export const en: Messages = {
     resumeOne: (name) => `Resume ${name}`,
     deleteOne: (name) => `Delete ${name}`,
     dropHelp: (name) => `Drop on a project to file ${name}.`,
-    hint: { newSession: 'new session', move: 'move', fold: 'fold', archive: 'archive', done: 'finished', focus: 'focus' },
     state: {
       approval: 'is waiting for you', question: 'has a question', error: 'has an error',
       working: 'is working', starting: 'is starting', idle: 'is idle', done: 'finished', offline: 'offline'
@@ -104,6 +103,10 @@ export const en: Messages = {
       source: 'From the GitHub releases of Lyssaen/ledge.', check: 'Check'
     },
     appearance: {
+      profile: 'Profile', avatar: 'Profile photo', avatarHint: 'Beside « You » in a session’s thread. Choose an image or drop it on the disc. It stays on this PC.',
+      avatarFile: 'Profile photo file', avatarChoose: 'Choose an image…', avatarRemove: 'Remove the photo',
+      avatarSaved: 'Profile photo', avatarRemoved: 'Profile photo removed',
+      avatarRefused: { notImage: 'This file is not an image.', tooLarge: 'This image is too large: 8 MB at most.', unreadable: 'This image could not be read.' },
       theme: 'Theme', themeHint: 'Also changes the mascots’ material.',
       themes: { light: ['Light', 'Pebble'], dark: ['Dark', 'Signal'] },
       themeSaved: { light: 'Light theme · Pebble', dark: 'Dark theme · Signal' },
@@ -260,10 +263,10 @@ export const en: Messages = {
       install: { npm: 'npm', git: 'git clone', unknown: 'unknown install' },
       unknown: 'Unknown version', behindTag: 'Update needed', latest: 'Latest version', latestUnknown: 'Not checked yet',
       behind: (names) => `${new Intl.ListFormat('en', { type: 'conjunction' }).format(names)} ${pluralEn(names.length, 'does', 'do')} not have the latest version.`,
-      updateDaemon: 'Update the daemon', updateDaemonHint: (v) => `The local daemon moves to Ledge ${v}, then restarts.`, update: 'Update',
-      log: 'Daemon log',
+      updateDaemon: (label) => `Update the daemon · ${label}`, updateDaemonHint: (label, v) => `The daemon of ${label} moves to Ledge ${v}, then restarts.`, update: 'Update',
+      log: (label) => `Daemon log · ${label}`,
       step: {
-        sent: (v) => `Request sent to the local daemon: ${v}`,
+        sent: (label, v, auto) => auto ? `Automatic update of the daemon of ${label}: ${v}` : `Request sent to the daemon of ${label}: ${v}`,
         installing: 'Installing the new version…',
         restarting: 'Restarting the daemon…',
         done: (v) => `Daemon up to date: ${v}`
@@ -274,7 +277,7 @@ export const en: Messages = {
         'sessions-at-risk': 'Your sessions run inside the daemon service: a restart would close them. Close them, or restart WSL, then retry.',
         'npm-failed': 'The daemon could not update. Nothing changed.',
         busy: 'An update is already running.',
-        offline: 'The local daemon is not connected: nothing was sent.',
+        offline: 'This daemon is not connected: nothing was sent.',
         timeout: 'The daemon is not answering.'
       },
       timeoutCommand: 'systemctl --user status ledge-daemon',
@@ -292,7 +295,7 @@ export const en: Messages = {
     title: 'Keyboard shortcuts',
     intro: 'Active while the window has focus. Navigation keys stay available for typing and the terminal when they have focus.',
     outro: 'Ctrl / ⌘ K opens the search from any view. Y and N only act on the pinned request of the open session, never while typing.',
-    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes)'],['O','Show or hide the terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']]
+    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['← / →','Fold / unfold a project (sidebar)'],['E','Archive the selected session'],['H','Show / hide the finished sessions'],['Ctrl ⇧ E','Focus the sidebar'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes)'],['O','Show or hide the terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']]
   },
   tray: { open: 'Open Ledge Desktop', newSession: 'New session', dnd: 'Do not disturb', dndOff: 'Resume alerts', quit: 'Quit Ledge Desktop' },
   notify: {
@@ -594,7 +597,16 @@ export const en: Messages = {
     missing: { tool: 'Choose an agent', prompt: 'Write the instruction', machine: 'No machine online', repos: 'Choose at least one folder or repository' },
     cancel: 'Cancel', launch: 'Launch', launching: 'Launching…',
     started: (n, t) => `${n} is starting at the ${t} table.`, startedNoTable: (n) => `${n} is starting, with no project.`, refused: (m) => `Launch refused: ${m}`,
-    timeout: 'The launch did not answer. Check the machine, then try again.'
+    timeout: 'The launch did not answer. Check the machine, then try again.',
+    modelOf: (t: string) => `${t} model`, remembered: 'Last choice for this project kept',
+    byDefault: 'Default', byDefaultHint: 'The one the agent picks by itself', defaultBadge: 'default',
+    otherModel: 'Other…', otherModelHint: 'An exact id', otherPlaceholder: 'Model id, passed as is',
+    modelsLoading: 'Reading the machine’s models…', modelsUnavailable: (e: string) => `Model list unavailable (${e}): the default and « Other… » still work.`,
+    modelsOutdated: 'Update Ledge on this machine to choose the model.',
+    effort: 'Effort', effortHint: 'Thinking time per turn', cursorEffort: 'For Cursor, the effort is part of the model name.',
+    efforts: { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
+    modelHints: { 'claude:fable': 'The most capable', 'claude:opus': 'Very capable, slower', 'claude:sonnet': 'Balanced, everyday use', 'claude:haiku': 'Fast and economical' } as Record<string, string>,
+    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
   },
   projects: {
     titles: {

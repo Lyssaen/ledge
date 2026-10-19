@@ -24,7 +24,7 @@ export const fr = {
   side: {
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
-    machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
+    machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
     ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…',
     openChat: 'Ouvrir la conversation avec Ledge',
     active: (n: number) => plural(n, `${n} actif`, `${n} actifs`),
@@ -54,7 +54,6 @@ export const fr = {
     resumeOne: (name: string) => `Reprendre ${name}`,
     deleteOne: (name: string) => `Supprimer ${name}`,
     dropHelp: (name: string) => `Déposez sur un projet pour y ranger ${name}.`,
-    hint: { newSession: 'nouvelle session', move: 'parcourir', fold: 'plier', archive: 'archiver', done: 'terminées', focus: 'focus' },
     state: {
       approval: 'attend ton accord', question: 'te pose une question', error: 'en erreur',
       working: 'au travail', starting: 'démarre', idle: 'au repos', done: 'terminée', offline: 'hors ligne'
@@ -120,6 +119,10 @@ export const fr = {
       source: 'Sur les releases GitHub de Lyssaen/ledge.', check: 'Vérifier'
     },
     appearance: {
+      profile: 'Profil', avatar: 'Photo de profil', avatarHint: 'À côté de « Vous » dans le fil d’une session. Choisissez une image ou déposez-la sur le rond. Elle reste sur ce PC.',
+      avatarFile: 'Fichier de la photo de profil', avatarChoose: 'Choisir une image…', avatarRemove: 'Retirer la photo',
+      avatarSaved: 'Photo de profil', avatarRemoved: 'Photo de profil retirée',
+      avatarRefused: { notImage: 'Ce fichier n’est pas une image.', tooLarge: 'Image trop lourde : 8 Mo au plus.', unreadable: 'Cette image n’a pas pu être lue.' },
       theme: 'Thème', themeHint: 'Change aussi la matière des mascottes.',
       themes: { light: ['Clair', 'Galet'], dark: ['Sombre', 'Signal'] } as Record<'light' | 'dark', readonly [string, string]>,
       themeSaved: { light: 'Thème clair · Galet', dark: 'Thème sombre · Signal' } as Record<'light' | 'dark', string>,
@@ -277,10 +280,10 @@ export const fr = {
       install: { npm: 'npm', git: 'clone git', unknown: 'installation inconnue' } as Record<DaemonInfo['install'], string>,
       unknown: 'Version inconnue', behindTag: 'À mettre à jour', latest: 'Dernière version', latestUnknown: 'Pas encore vérifiée',
       behind: (names: readonly string[]) => `${new Intl.ListFormat('fr', { type: 'conjunction' }).format(names)} ${plural(names.length, 'n’a', 'n’ont')} pas la dernière version.`,
-      updateDaemon: 'Mettre à jour le daemon', updateDaemonHint: (v: string) => `Le daemon local passe à Ledge ${v}, puis redémarre.`, update: 'Mettre à jour',
-      log: 'Journal du daemon',
+      updateDaemon: (label: string) => `Mettre à jour le daemon · ${label}`, updateDaemonHint: (label: string, v: string) => `Le daemon de ${label} passe à Ledge ${v}, puis redémarre.`, update: 'Mettre à jour',
+      log: (label: string) => `Journal du daemon · ${label}`,
       step: {
-        sent: (v: string) => `Demande envoyée au daemon local : ${v}`,
+        sent: (label: string, v: string, auto: boolean) => auto ? `Mise à jour automatique du daemon de ${label} : ${v}` : `Demande envoyée au daemon de ${label} : ${v}`,
         installing: 'Installation de la nouvelle version…',
         restarting: 'Redémarrage du daemon…',
         done: (v: string) => `Daemon à jour : ${v}`
@@ -291,7 +294,7 @@ export const fr = {
         'sessions-at-risk': 'Vos sessions tournent dans le service du daemon : un redémarrage les fermerait. Fermez-les, ou redémarrez WSL, puis réessayez.',
         'npm-failed': 'Le daemon n’a pas pu se mettre à jour. Rien n’a changé.',
         busy: 'Une mise à jour est déjà en cours.',
-        offline: 'Le daemon local n’est pas connecté : rien n’a été envoyé.',
+        offline: 'Ce daemon n’est pas connecté : rien n’a été envoyé.',
         timeout: 'Le daemon ne répond plus.'
       } as Record<UpdateFailure | 'offline' | 'timeout', string>,
       timeoutCommand: 'systemctl --user status ledge-daemon',
@@ -309,7 +312,7 @@ export const fr = {
     title: 'Raccourcis clavier',
     intro: 'Actifs lorsque la fenêtre a le focus. Les touches de navigation restent disponibles pour la saisie et le terminal lorsqu’ils ont le focus.',
     outro: 'Ctrl / ⌘ K ouvre la recherche depuis n’importe quelle vue. Y et N n’agissent que sur la demande épinglée de la session ouverte, jamais pendant la saisie.',
-    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (Modifications)'],['O','Afficher ou masquer le terminal'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>
+    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['← / →','Plier / déplier un projet (barre latérale)'],['E','Archiver la session sélectionnée'],['H','Afficher / masquer les sessions terminées'],['Ctrl ⇧ E','Aller à la barre latérale'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (Modifications)'],['O','Afficher ou masquer le terminal'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>
   },
   tray: { open: 'Ouvrir Ledge Desktop', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', dndOff: 'Réactiver les alertes', quit: 'Quitter Ledge Desktop' },
   notify: {
@@ -625,7 +628,16 @@ export const fr = {
     missing: { tool: 'Choisissez un agent', prompt: 'Écrivez la consigne', machine: 'Aucune machine en ligne', repos: 'Choisissez au moins un dossier ou un dépôt' } as Record<'tool' | 'prompt' | 'machine' | 'repos', string>,
     cancel: 'Annuler', launch: 'Lancer', launching: 'Lancement…',
     started: (n: string, t: string) => `${n} démarre à la table ${t}.`, startedNoTable: (n: string) => `${n} démarre, sans projet.`, refused: (m: string) => `Démarrage refusé : ${m}`,
-    timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.'
+    timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.',
+    modelOf: (t: string) => `Modèle de ${t}`, remembered: 'Dernier choix pour ce projet retenu',
+    byDefault: 'Par défaut', byDefaultHint: 'Celui que l’agent prend de lui-même', defaultBadge: 'défaut',
+    otherModel: 'Autre…', otherModelHint: 'Un identifiant exact', otherPlaceholder: 'Identifiant du modèle, passé tel quel',
+    modelsLoading: 'Lecture des modèles de la machine…', modelsUnavailable: (e: string) => `Liste des modèles indisponible (${e}) : le défaut et « Autre… » restent possibles.`,
+    modelsOutdated: 'Mettez à jour Ledge sur cette machine pour choisir le modèle.',
+    effort: 'Effort', effortHint: 'Temps de réflexion par tour', cursorEffort: 'Pour Cursor, l’effort fait partie du nom du modèle.',
+    efforts: { low: 'Bas', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
+    modelHints: { 'claude:fable': 'Le plus capable', 'claude:opus': 'Très capable, plus lent', 'claude:sonnet': 'Équilibré, usage courant', 'claude:haiku': 'Rapide et économique' } as Record<string, string>,
+    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
   },
   projects: {
     titles: {

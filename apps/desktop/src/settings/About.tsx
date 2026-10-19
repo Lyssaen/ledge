@@ -20,7 +20,7 @@ const versionOf = (m: MachineState): string | undefined => m.daemon?.version ?? 
 
 /** Settings › About (settings.tsx, `about`; origin/feat/desktop's AboutPanel for the daemon): Ledge, then the versions (Desktop,
  *  each machine's daemon with its install and « À mettre à jour » when it is behind the version the daemons follow, the latest
- *  version), the local daemon's update (the button for an npm service, the manual note otherwise) and its log; then the app's
+ *  version), each machine's daemon update (the button for an npm service, the manual note otherwise) and its log; then the app's
  *  updates, the card of General. */
 export function About({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
@@ -28,16 +28,15 @@ export function About({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
   const update = useUpdate();
-  // The daemons follow Desktop: the release on offer, else the running app (as useDaemonUpdate does).
+  // The daemons follow Desktop: the release on offer, else the running app (as useDaemonUpdates does).
   const target = daemonTarget(update);
   const behind = (v: string | undefined) => !!v && !!target && SEMVER.test(v) && SEMVER.test(target) && compareVersions(v, target) < 0;
   const late = ctx.machines.filter(m => behind(versionOf(m)));
   const latest = update.latest ?? (update.phase.kind === 'current' && update.app ? update.app : c.latestUnknown);
-  const { offer, journal, running, start } = ctx.daemonUpdate;
-  const local = ctx.machines.find(m => m.id === 'local')?.daemon;
-  const stepText = (step: DaemonStep): string => {
+  const updates = ctx.daemonUpdates;
+  const stepText = (label: string, step: DaemonStep): string => {
     switch (step.kind) {
-      case 'sent': return c.step.sent(step.version);
+      case 'sent': return c.step.sent(label, step.version, step.auto === true);
       case 'installing': return c.step.installing;
       case 'restarting': return c.step.restarting;
       case 'done': return c.step.done(step.version);
@@ -78,33 +77,42 @@ export function About({ ctx }: { ctx: SettingsContext }): JSX.Element {
             <Button size="sm" variant="ghost" onClick={() => update.app && openUrl(releaseUrl(update.app))}>{t.whatsNew.release}</Button>
           </div>
         )}
-        {offer === 'offer' && target && (
-          <Row label={c.updateDaemon} hint={c.updateDaemonHint(target)}>
-            <Button size="sm" variant="primary" disabled={running} onClick={start}>{c.update}</Button>
-          </Row>
-        )}
-        {offer === 'manual' && local && (
-          <div className="set-well warn">
-            <span>{local.install === 'git' ? c.failed['git-install'] : local.install === 'unknown' ? c.manualUnknown : c.failed['no-systemd']}</span>
-            {local.manual && <code>{local.manual}</code>}
-          </div>
-        )}
-        {/* A polite live region, there before the first step: each step that comes is read out. */}
+        {/* Each machine's daemon update (#48): the button for an npm service behind, its manual command otherwise. */}
+        {ctx.machines.map(m => {
+          const { offer, running } = updates.of(m.id);
+          const d = m.daemon;
+          if (offer === 'offer' && target) return (
+            <Row key={m.id} label={c.updateDaemon(m.label)} hint={c.updateDaemonHint(m.label, target)}>
+              <Button size="sm" variant="primary" disabled={running} onClick={() => updates.start(m.id)}>{c.update}</Button>
+            </Row>
+          );
+          if (offer === 'manual' && d) return (
+            <div key={m.id} className="set-well warn">
+              <span>{d.install === 'git' ? c.failed['git-install'] : d.install === 'unknown' ? c.manualUnknown : c.failed['no-systemd']}</span>
+              {d.manual && <code>{d.manual}</code>}
+            </div>
+          );
+          return null;
+        })}
+        {/* A polite live region, there before the first step: each step that comes, on any machine, is read out. */}
         <div className="update-live" aria-live="polite">
-          {journal.length > 0 && (
-            <ol className="set-well steps update-log" aria-label={c.log}>
-              {journal.map((step, i) => {
-                const command = step.kind === 'failed' ? step.command ?? (step.reason === 'timeout' ? c.timeoutCommand : null) : null;
-                return (
-                  <li key={i} className={step.kind === 'failed' ? 'set-error' : undefined}>
-                    {stepText(step)}
-                    {command && <code>{command}</code>}
-                    {step.kind === 'failed' && step.detail && <small>{step.detail}</small>}
-                  </li>
-                );
-              })}
-            </ol>
-          )}
+          {ctx.machines.map(m => {
+            const { journal } = updates.of(m.id);
+            return journal.length > 0 && (
+              <ol key={m.id} className="set-well steps update-log" aria-label={c.log(m.label)}>
+                {journal.map((step, i) => {
+                  const command = step.kind === 'failed' ? step.command ?? (step.reason === 'timeout' ? c.timeoutCommand : null) : null;
+                  return (
+                    <li key={i} className={step.kind === 'failed' ? 'set-error' : undefined}>
+                      {stepText(m.label, step)}
+                      {command && <code>{command}</code>}
+                      {step.kind === 'failed' && step.detail && <small>{step.detail}</small>}
+                    </li>
+                  );
+                })}
+              </ol>
+            );
+          })}
         </div>
       </Card>
       <UpdatesCard saved={ctx.saved} />

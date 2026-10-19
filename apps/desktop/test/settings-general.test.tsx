@@ -43,6 +43,7 @@ import { loadChat } from '../src/chat/lazy';
 import { applyUiScale, resetAppliedUiScaleForTests } from '../src/settings/scale';
 import { saveReduced } from '../src/motionPreferences';
 import { resetAppearanceForTests } from '../src/shell/theme';
+import { AVATAR_MAX_BYTES, resetAvatarForTests, setAvatarShrinkForTests } from '../src/shell/avatar';
 import { boot, closeDaemons, recordToasts, savedNotices, TWO_PROJECTS, type MockDaemon } from './helpers';
 
 let log: string[] = [];
@@ -224,6 +225,65 @@ describe('Settings › General: updates', () => {
     expect(updates.getByRole('switch', { name: 'Check for updates' })).toHaveAttribute('aria-checked', 'false');
     expect(localStorage.getItem('desktop.update.auto')).toBe('0');
     expect(saved()).toEqual(['Setting saved · Manual update checks']);
+  });
+});
+
+describe('Settings › Appearance › Profile photo (#50)', () => {
+  const PICTURE = 'data:image/webp;base64,UklGRg==';
+  const image = (type = 'image/png', size = 2000) => new File([new Uint8Array(size)], 'me.png', { type });
+  const preview = () => document.querySelector('.avatar-preview')!;
+  const input = () => screen.getByLabelText<HTMLInputElement>('Profile photo file');
+  beforeEach(() => { resetAvatarForTests(); setAvatarShrinkForTests(() => Promise.resolve(PICTURE)); });
+  afterEach(() => { setAvatarShrinkForTests(null); });
+
+  it('choosing an image keeps it, shows it in the round preview, says it once; « Remove » goes back to the icon', async () => {
+    const { user } = await openSettings('Appearance');
+    expect(screen.getByRole('region', { name: 'Profile' })).toBeVisible();
+    expect(preview().querySelector('svg')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove the photo' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Choose an image…' }));
+    await user.upload(input(), image());
+    await waitFor(() => expect(preview().querySelector('img')).toHaveAttribute('src', PICTURE));
+    expect(localStorage.getItem('desktop.avatar')).toBe(PICTURE);
+    expect(saved()).toEqual(['Setting saved · Profile photo']);
+    await user.click(screen.getByRole('button', { name: 'Remove the photo' }));
+    expect(preview().querySelector('img')).toBeNull();
+    expect(preview().querySelector('svg')).not.toBeNull();
+    expect(localStorage.getItem('desktop.avatar')).toBeNull();
+    expect(saved()).toEqual(['Setting saved · Profile photo', 'Setting saved · Profile photo removed']);
+  });
+
+  it('an image dropped on the photo is kept as well', async () => {
+    await openSettings('Appearance');
+    fireEvent.drop(document.querySelector('.avatar-drop')!, { dataTransfer: { files: [image('image/jpeg')], types: ['Files'] } });
+    await waitFor(() => expect(preview().querySelector('img')).toHaveAttribute('src', PICTURE));
+  });
+
+  it('a file that is not an image, or too heavy, is refused with a message; nothing is kept', async () => {
+    await openSettings('Appearance');
+    // The file dialog can show « All files »: what it hands over is not always an image.
+    const user = userEvent.setup({ applyAccept: false });
+    await user.upload(input(), image('application/pdf'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('This file is not an image.');
+    await user.upload(input(), image('image/png', AVATAR_MAX_BYTES + 1));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('This image is too large: 8 MB at most.'));
+    expect(localStorage.getItem('desktop.avatar')).toBeNull();
+    expect(preview().querySelector('img')).toBeNull();
+    expect(saved()).toEqual([]);
+    // A good one clears the message.
+    await user.upload(input(), image());
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('speaks French', async () => {
+    await bootFrench();
+    const user = userEvent.setup({ applyAccept: false });
+    await user.click(nav('Sections des réglages').getByRole('button', { name: /^Apparence/ }));
+    expect(await screen.findByRole('region', { name: 'Profil' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Choisir une image…' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Retirer la photo' })).toBeDisabled();
+    await user.upload(screen.getByLabelText('Fichier de la photo de profil'), image('text/plain'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ce fichier n’est pas une image.');
   });
 });
 

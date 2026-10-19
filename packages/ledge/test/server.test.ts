@@ -93,6 +93,12 @@ describe('launchArgs and resolveFolder', () => {
     expect(launchArgs({ tool: 'claude', continue: true, dirs: ['/w/a'] })).toEqual(['--continue', '--add-dir', '/w/a']);
     expect(launchArgs({ tool: 'claude', prompt: 'Relis', dirs: [] })).toEqual(['Relis']);
   });
+  it('model and effort go before the folders and the prompt, each agent its own way (#58)', () => {
+    expect(launchArgs({ tool: 'claude', prompt: 'Relis', model: 'opus', effort: 'high', dirs: ['/w/a'] })).toEqual(['--model', 'opus', '--effort', 'high', '--add-dir', '/w/a', '--', 'Relis']);
+    expect(launchArgs({ tool: 'codex', prompt: 'Relis', model: 'gpt-6.1-sol', effort: 'ultra', continue: true })).toEqual(['resume', '--last', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort="ultra"', 'Relis']);
+    expect(launchArgs({ tool: 'cursor', model: 'gpt-5.3-codex-high' })).toEqual(['--model', 'gpt-5.3-codex-high']);
+    expect(launchArgs({ tool: 'claude', effort: 'low' })).toEqual(['--effort', 'low']);
+  });
   it('resolves a folder: ~ against the given home, absolute paths normalised', async () => {
     const home = mkdtempSync(join(tmpdir(), 'ledge-home-')); mkdirSync(join(home, 'w'));
     expect(await resolveFolder('~', home)).toBe(home);
@@ -109,6 +115,17 @@ describe('server: extra folders and repos.inspect', () => {
     c.send({ type: 'session.launch', tool: 'codex', cwd: home(), dirs: [tmpdir()] });
     expect(await c.next('error')).toEqual({ type: 'error', message: 'launch: codex takes one folder', request: 'session.launch' });
     expect(tmux.created).toEqual([]);
+    c.close();
+  });
+  it('a launch records the model and effort asked; Cursor refuses an effort apart from its model (#58)', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.launch', tool: 'claude', cwd: home(), model: 'sonnet', effort: 'max' });
+    const { id } = await c.next('session.launched');
+    expect(store.get(id)).toMatchObject({ model: 'sonnet', effort: 'max' });
+    expect(tmux.created[0]!.command).toEqual(expect.arrayContaining(['--model', 'sonnet', '--effort', 'max']));
+    c.send({ type: 'session.launch', tool: 'cursor', cwd: home(), model: 'auto', effort: 'high' });
+    expect(await c.next('error')).toEqual({ type: 'error', message: 'launch: cursor takes its effort in the model id', request: 'session.launch' });
+    expect(tmux.created).toHaveLength(1);
     c.close();
   });
   it('an extra folder is resolved like the cwd: a missing one is refused', async () => {
@@ -1183,6 +1200,13 @@ describe('server', () => {
       expect(tmux.created[1]!.command.slice(-2)).toEqual(['--resume', 'cu-1']);
       c.close();
     });
+    it('a resumed session keeps the model and effort it was launched with (#58)', async () => {
+      store.upsert(ended('m1', { tool: 'codex', agentSessionId: 'cx-1', model: 'gpt-6-luna', effort: 'high' }));
+      const c = await resume('m1'); await until(() => !!store.get('m1')?.tmuxSession);
+      expect(tmux.created[0]!.command.slice(-6)).toEqual(['resume', 'cx-1', '-m', 'gpt-6-luna', '-c', 'model_reasoning_effort="high"']);
+      expect(store.get('m1')).toMatchObject({ model: 'gpt-6-luna', effort: 'high' });
+      c.close();
+    });
     it('falls back to the transcript name for Claude', async () => {
       store.upsert(ended('t1', { transcriptPath: '/h/.claude/projects/x/u-9.jsonl' }));
       const c = await resume('t1'); await until(() => tmux.created.length === 1);
@@ -1300,6 +1324,17 @@ describe('server', () => {
       expect(await c.next('error')).toEqual({ type: 'error', message: 'already launched', request: 'session.launch' });
       expect(tmux.created).toHaveLength(1);
       c.close(); other.close(); await srv2.close();
+    });
+
+    it('a card launches its rows with the model chosen on the card (#58)', async () => {
+      mkdirSync(join(home(), 'ledge'), { recursive: true });
+      const srv2 = await start(stubChat({ cwd: join(home(), 'ledge'), project: 'ledge', tool: 'claude', prompt: 'Corrige' }).chat);
+      const c = await connect({ port: srv2.port }); await c.next('snapshot');
+      c.send({ type: 'session.launch', tool: 'claude', cwd: '/x', qid: 'q1', model: 'haiku', effort: 'low' });
+      const { id } = await c.next('session.launched');
+      expect(tmux.created[0]!.command).toEqual(expect.arrayContaining(['--model', 'haiku', '--effort', 'low']));
+      expect(store.get(id)).toMatchObject({ model: 'haiku', effort: 'low' });
+      c.close(); await srv2.close();
     });
 
     it('refuses an unknown proposal without spawning', async () => {
@@ -1698,7 +1733,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); } } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -1990,5 +2025,20 @@ describe('island settings', () => {
     expect(gotB.filter(m => m.type === 'island')).toHaveLength(1);
     expect(existsSync(paths().island)).toBe(false);
     a.close(); b.close(); await s.close();
+  });
+});
+
+describe('server: models.list (#58)', () => {
+  it('answers with the machine\'s catalog, or its error, under the requestId; the snapshot says the daemon knows models', async () => {
+    const asked: string[] = [];
+    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, models: { async list(tool) { asked.push(tool); return tool === 'codex' ? { models: [], error: 'not installed' } : { models: [{ id: 'opus', label: 'Opus', isDefault: true }] }; } } });
+    const c = await connect({ port: srv2.port });
+    expect((await c.next('snapshot')).daemon).toMatchObject({ models: true });
+    c.send({ type: 'models.list', requestId: 'r1', tool: 'claude' });
+    expect(await c.next('models.listing')).toEqual({ type: 'models.listing', requestId: 'r1', tool: 'claude', models: [{ id: 'opus', label: 'Opus', isDefault: true }] });
+    c.send({ type: 'models.list', requestId: 'r2', tool: 'codex' });
+    expect(await c.next('models.listing')).toEqual({ type: 'models.listing', requestId: 'r2', tool: 'codex', models: [], error: 'not installed' });
+    expect(asked).toEqual(['claude', 'codex']);
+    c.close(); await srv2.close();
   });
 });

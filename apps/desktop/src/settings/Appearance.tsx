@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type JSX } from 'react';
 import { DEFAULT_ACCENT, parseAccent } from '@ledge/ui/accent';
 import { Bot } from '@ledge/ui/bots/Bot';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
@@ -6,7 +6,9 @@ import { UI_SCALES, type UiScale } from '@ledge/ui/scale';
 import { Button } from '@ledge/ui/ui/Button';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
+import { prepareAvatar, setAvatar, useAvatar, type AvatarRefusal } from '../shell/avatar';
 import { setAccent, setTheme, useAccent, useTheme, type Theme } from '../shell/theme';
+import { UserAvatar } from '../shell/UserAvatar';
 import { Card, Row, Segmented, SwitchRow } from './controls';
 import { appliedUiScale, loadUiScale, saveUiScale, zoomsNatively } from './scale';
 import { useEscapeLayer } from './escape';
@@ -47,6 +49,8 @@ export function Appearance({ ctx }: { ctx: SettingsContext }): JSX.Element {
   };
 
   return (
+    <>
+    <ProfileCard ctx={ctx} />
     <Card>
       <Row label={a.theme} hint={a.themeHint} stack>
         <div className="theme-picks" role="radiogroup" aria-label={a.theme}>
@@ -68,6 +72,52 @@ export function Appearance({ ctx }: { ctx: SettingsContext }): JSX.Element {
           options={UI_SCALES.map(s => ({ value: toChoice(s), label: s === 'auto' ? (autoFactor === null ? a.auto : a.autoAt(a.percent(autoFactor))) : a.percent(s), wide: s === 'auto' }))} />}
       </Row>
       <SwitchRow label={a.reduced} hint={a.reducedHint} checked={motion.app} onChange={on => { motion.setReduced(on); saved(on ? a.reduced : a.reducedOff); }} />
+    </Card>
+    </>
+  );
+}
+
+/** Your profile photo (#50): chosen from a file or dropped on the disc, cropped square and shrunk to 128 px before it is kept
+ *  (prepareAvatar), shown beside « You » in the thread. « Remove » brings the user icon back. A refused file says why. */
+function ProfileCard({ ctx }: { ctx: SettingsContext }): JSX.Element {
+  const { t } = useI18n();
+  const a = t.settings.appearance;
+  const photo = useAvatar();
+  const [refused, setRefused] = useState<AvatarRefusal | null>(null);
+  const [over, setOver] = useState(false);
+  const file = useRef<HTMLInputElement>(null);
+  // Only the last file chosen counts: an earlier one that finishes shrinking late is dropped.
+  const lastPick = useRef(0);
+  const take = (f: File | undefined) => {
+    if (!f) return;
+    const turn = ++lastPick.current;
+    void prepareAvatar(f).then(r => {
+      if (turn !== lastPick.current) return;
+      if (!r.ok) { setRefused(r.reason); return; }
+      setRefused(null);
+      setAvatar(r.url);
+      ctx.saved(a.avatarSaved);
+    });
+  };
+  const remove = () => { lastPick.current++; setRefused(null); setAvatar(null); ctx.saved(a.avatarRemoved); };
+  const files = (e: DragEvent) => [...e.dataTransfer.types].includes('Files');
+
+  return (
+    <Card title={a.profile}>
+      <Row label={a.avatar} hint={a.avatarHint} error={refused ? a.avatarRefused[refused] : null}>
+        {describedBy => (
+          <div className={over ? 'avatar-drop over' : 'avatar-drop'}
+            onDragOver={e => { if (!files(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setOver(true); }}
+            onDragLeave={() => setOver(false)}
+            onDrop={e => { if (!files(e)) return; e.preventDefault(); setOver(false); take(e.dataTransfer.files[0]); }}>
+            <UserAvatar className="avatar-preview" size={24} />
+            <input ref={file} type="file" accept="image/*" hidden aria-label={a.avatarFile}
+              onChange={e => { take(e.target.files?.[0]); e.target.value = ''; }} />
+            <Button size="sm" aria-describedby={describedBy} onClick={() => file.current?.click()}>{a.avatarChoose}</Button>
+            <Button size="sm" variant="ghost" disabled={photo === null} onClick={remove}>{a.avatarRemove}</Button>
+          </div>
+        )}
+      </Row>
     </Card>
   );
 }

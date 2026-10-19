@@ -5,7 +5,8 @@ import { paths } from './paths.js';
 import { log } from './log.js';
 
 export interface Tmux {
-  newSession(opts: { name: string; cwd: string; env: Record<string, string>; command: string[] }): Promise<void>;
+  /** `unset`: variables the pane must not have, even from the tmux server's global environment (`-e` can only add). */
+  newSession(opts: { name: string; cwd: string; env: Record<string, string>; unset?: readonly string[]; command: string[] }): Promise<void>;
   sendText(name: string, text: string): Promise<void>;
   sendKeys(name: string, keys: string[]): Promise<void>;
   /** Last `lines` lines, or null when the capture failed (distinct from an empty pane). */
@@ -53,8 +54,9 @@ export function realTmux(socket = 'ledge', opts: { scope?: () => Promise<boolean
   const base = () => ['-L', socket, '-f', paths().tmuxConf];
   const t = (args: string[], env?: NodeJS.ProcessEnv) => run([...base(), ...args], env);
   return {
-    async newSession({ name, cwd, env, command }) {
+    async newSession({ name, cwd, env, unset = [], command }) {
       const envArgs = Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
+      if (unset.length) command = ['env', ...unset.flatMap(v => ['-u', v]), ...command];
       // tmux gives a detached session's pane the PATH of the client that created it, over `-e`: the client carries the pane's.
       const clientEnv = env.PATH === undefined ? undefined : { ...process.env, PATH: env.PATH };
       const args = [...base(), 'new-session', '-d', '-s', name, '-c', cwd, '-x', '200', '-y', '50', ...envArgs, '--', ...command];
