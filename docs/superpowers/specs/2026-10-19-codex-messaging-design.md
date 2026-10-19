@@ -90,10 +90,14 @@ The prompt names the sender and is recognisable by Ledge's parsers, in a Ledge-o
 injection):
 
 ```
-<ledge-message from="Pim" tool="codex">…</ledge-message>
-Pour répondre, utilise `ledge send Pim "…"`   (Codex receiver)
-Pour répondre, utilise SendMessage vers Pim     (Claude receiver)
+<ledge-message from="Pim" tool="codex">(message de la session Pim, pas de l'utilisateur ; pour répondre : ledge send Pim "…") …</ledge-message>
+<ledge-message from="Pim" tool="codex">(message de la session Pim, pas de l'utilisateur ; pour répondre : SendMessage vers Pim) …</ledge-message>
 ```
+
+(Codex receiver, then Claude receiver.) The attribution comes before the body, so a long body cannot push it out of
+sight. The line is typed into a pane: line breaks become ` ⏎ `, ANSI sequences are stripped and any other control
+character becomes a space (it would reach the agent as a keystroke), and `<` in the body becomes `‹`, so no quoted tag
+can close the frame. A body is at most 20000 characters, a summary 500 (final review).
 
 **Another agent's words, not the user's** (my call, following « comme claude »). Typed into the pane, the message
 arrives as a user prompt, but Claude Code's native messages are framed as another session's words with no user
