@@ -60,6 +60,23 @@ describe('token source', () => {
     await expect(source.get(false)).resolves.toEqual({ kind: 'unavailable' });
     expect(source.missing()).toBe(false);
   });
+  it('a malformed answer is unavailable', async () => {
+    const source = createTokenSource(vi.fn(async () => undefined as unknown as TokenRead));
+    await expect(source.get(false)).resolves.toEqual({ kind: 'unavailable' });
+  });
+  it('a read that never answers gives up after 10 s, and the next fresh get reads again', async () => {
+    vi.useFakeTimers();
+    try {
+      const read = vi.fn(() => new Promise<TokenRead>(() => {}));
+      const source = createTokenSource(read);
+      const first = source.get(false);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(first).resolves.toEqual({ kind: 'unavailable' });
+      expect(source.missing()).toBe(false);
+      void source.get(true);
+      expect(read).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
+  });
   it('an unsubscribed listener hears nothing', async () => {
     const source = createTokenSource(reader({ kind: 'absent' }));
     const fn = vi.fn(); source.onMissing(fn)();

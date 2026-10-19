@@ -13,14 +13,21 @@ export interface TokenSource {
   onMissing(fn: (missing: boolean) => void): () => void;
 }
 
+const READ_TIMEOUT_MS = 10_000;
+
 /** Wraps the app's reader. Concurrent gets share the read in flight, so several connections cost one read. */
 export function createTokenSource(read: () => Promise<TokenRead>): TokenSource {
   let cached: string | null = null, missing = false, inflight: Promise<TokenRead> | null = null;
   const fns = new Set<(missing: boolean) => void>();
   const setMissing = (m: boolean) => { if (m !== missing) { missing = m; fns.forEach(f => f(m)); } };
   const load = async (): Promise<TokenRead> => {
-    let r: TokenRead;
-    try { r = await read(); } catch { r = { kind: 'unavailable' }; }
+    let r: TokenRead, timer: ReturnType<typeof setTimeout> | undefined;
+    const unavailable: TokenRead = { kind: 'unavailable' };
+    try {
+      // A hung read must not freeze every later get(): the shared in-flight promise gives up after READ_TIMEOUT_MS.
+      const got = await Promise.race([read(), new Promise<TokenRead>(res => { timer = setTimeout(() => res(unavailable), READ_TIMEOUT_MS); })]);
+      r = (got?.kind === 'token' && typeof got.token === 'string') || got?.kind === 'absent' ? got : unavailable;
+    } catch { r = unavailable; } finally { clearTimeout(timer); }
     if (r.kind === 'token') cached = r.token;
     else if (r.kind === 'absent') cached = null; // the file is gone: the old token opens nothing any more
     setMissing(r.kind === 'absent');
