@@ -3,7 +3,7 @@ import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
 import { daemonStore, attachClient } from '../src/store';
 import type { DaemonClient, DaemonStatus } from '../src/client';
-import { LOCAL_MACHINE, canManage, parseMachines, probeMachine, sshProblem, terminalCommand, type MachineState } from '../src/machines';
+import { LOCAL_MACHINE, canManage, parseMachines, probeMachine, shellCommand, sshProblem, terminalCommand, type MachineState } from '../src/machines';
 import { fakeSession } from './mockDaemon';
 import { createTokenSource, type TokenRead } from '../src/token';
 
@@ -91,6 +91,29 @@ describe('multi-machine connections', () => {
     expect(server.sent[0]).toMatchObject({ type: 'document.read', sessionId: 'same' });
     client.send({ type: 'document.read', requestId: 'unknown', path: '/w/a.md' });
     expect(local.sent).toEqual([]); expect(server.sent).toHaveLength(1);
+  });
+  it('a read-only attach asks ledge for it, locally and through ssh', () => {
+    const at = (ssh: string | undefined) => ({ ...LOCAL_MACHINE, ssh, launcher: ['node', '/opt/ledge/cli.js'], status: 'open', ready: true, recents: [], sessions: [] }) as MachineState;
+    expect(terminalCommand(at(undefined), 'a1', { readOnly: true })).toEqual(['node', '/opt/ledge/cli.js', 'attach', '--read-only', 'a1']);
+    expect(terminalCommand(at('dev-server'), 'a1', { readOnly: true })!.at(-1)).toBe("'node' '/opt/ledge/cli.js' 'attach' '--read-only' 'a1'");
+  });
+  it('a shell starts in the folder, falls back to home, and runs the login shell', () => {
+    const at = (ssh?: string) => ({ ...LOCAL_MACHINE, ssh, launcher: null, status: 'open', ready: true, recents: [], sessions: [] }) as MachineState;
+    expect(shellCommand(at(), '/home/u/w t')).toEqual(['sh', '-c', "cd '/home/u/w t' 2>/dev/null || cd; exec $(getent passwd $(id -un) | cut -d: -f7) -l"]);
+    expect(shellCommand(at('build-01'), "/srv/it's")).toEqual(['ssh', '-t', '--', 'build-01', "cd '/srv/it'\\''s' 2>/dev/null || cd; exec $SHELL -l"]);
+  });
+  it('no shell for a folder wsl.exe would mangle', () => {
+    const local = { ...LOCAL_MACHINE, launcher: null, status: 'open', ready: true, recents: [], sessions: [] } as MachineState;
+    expect(shellCommand(local, '/w/"x"')).toBeNull();
+    expect(shellCommand(local, '/w/x\\')).toBeNull();
+    expect(shellCommand(local, '')).toBeNull();
+  });
+  it('the fleet opens a shell in the folder the agent moved into', () => {
+    const { client, local } = setup();
+    local.emit({ type: 'snapshot', sessions: [fakeSession('a1', { cwd: '/r', workdir: '/r/.worktrees/x' })], launcher: ['node', '/opt/ledge/cli.js'], daemon: { version: '0.4.0', install: 'npm', systemd: true, routing: true } });
+    expect(client.fleet!.shell('local:a1')!.at(-1)).toContain("cd '/r/.worktrees/x'");
+    expect(client.fleet!.shell('local:nope')).toBeNull();
+    expect(client.fleet!.terminal('local:a1', { readOnly: true })).toContain('--read-only');
   });
   it('opens a terminal whatever the path or the id holds, as plain arguments; none for one WSL cannot receive as is', () => {
     const at = (ssh: string | undefined, launcher: string[]) => ({ ...LOCAL_MACHINE, ssh, launcher, status: 'open', ready: true, recents: [], sessions: [] }) as MachineState;
