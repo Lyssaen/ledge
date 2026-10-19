@@ -22,6 +22,10 @@ export interface AtelierView {
 const INTERACTIVE = 'button,a,input,textarea,select,label,[draggable="true"],.agent-seat,.unassigned-card,.room-heading,.ledge-desk,.zoom-controls';
 /** A double-click on these neither frames nor refits. */
 const NO_FRAME = 'button,a,input,textarea,.unassigned-card,.agent-seat';
+/** A finger on these scrolls them, not the floor. */
+const OWN_TOUCH = '.assign-menu,textarea';
+/** How far a finger goes before it pans instead of tapping. */
+const TAP_SLOP = 8;
 /** Space on these keeps its own activation. */
 const OWN_SPACE = 'button,a,input,textarea,select,[role=button],[role=checkbox],[role=menuitem],[role=tab],[contenteditable=true]';
 
@@ -167,8 +171,8 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
   };
 
   // The listeners call the latest render's actions.
-  const actions = useRef({ zoomTo, fit, frame, arm });
-  actions.current = { zoomTo, fit, frame, arm };
+  const actions = useRef({ setZoom, zoomTo, fit, frame, arm });
+  actions.current = { setZoom, zoomTo, fit, frame, arm };
   useEffect(() => {
     const scroll = scrollRef.current;
     if (!scroll) return;
@@ -178,7 +182,47 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
       actions.current.zoomTo(wheelZoom(applied.current, e.deltaY), { x: e.clientX, y: e.clientY });
     };
     let pan: { x: number; y: number; left: number; top: number; id: number } | null = null;
+    // Fingers (the scroller's `touch-action: none` keeps the WebView from zooming the whole window): two pinch the zoom
+    // around their midpoint and carry the view along, one pans from anywhere once it has moved past a tap. Each change in
+    // the number of fingers starts the gesture again from where they are.
+    const fingers = new Map<number, { x: number; y: number }>();
+    let pinch: { d: number; zoom: number; x: number; y: number } | null = null;
+    let swipe: { x: number; y: number; left: number; top: number; moved: boolean } | null = null;
+    const span = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+      ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) });
+    const regrip = () => {
+      const [a, b] = [...fingers.values()];
+      pinch = null; swipe = null;
+      if (a && b) {
+        const m = span(a, b), r = scroll.getBoundingClientRect(), z = applied.current;
+        pinch = { d: Math.max(m.d, 1), zoom: z, x: (scroll.scrollLeft + m.x - r.left) / z, y: (scroll.scrollTop + m.y - r.top) / z };
+      } else if (a) swipe = { x: a.x, y: a.y, left: scroll.scrollLeft, top: scroll.scrollTop, moved: false };
+    };
+    const fingerDown = (e: PointerEvent) => {
+      if (e.target instanceof Element && e.target.closest(OWN_TOUCH)) return;
+      fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      regrip();
+    };
+    const fingerMove = (e: PointerEvent) => {
+      if (!fingers.has(e.pointerId)) return;
+      fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const [a, b] = [...fingers.values()];
+      if (pinch && a && b) {
+        const m = span(a, b), r = scroll.getBoundingClientRect(), z = clampZoom(pinch.zoom * m.d / pinch.d);
+        actions.current.setZoom(z, pinch.x * z - (m.x - r.left), pinch.y * z - (m.y - r.top));
+      } else if (swipe) {
+        const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+        if (!swipe.moved && Math.hypot(dx, dy) < TAP_SLOP) return;
+        swipe.moved = true;
+        scroll.scrollLeft = swipe.left - dx;
+        scroll.scrollTop = swipe.top - dy;
+      }
+    };
+    const fingerUp = (e: PointerEvent) => {
+      if (fingers.delete(e.pointerId)) regrip();
+    };
     const down = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') { fingerDown(e); return; }
       const t = e.target instanceof Element ? e.target : null;
       if (!(e.button === 1 || space.current || (e.button === 0 && !t?.closest(INTERACTIVE)))) return;
       if (scroll.scrollWidth <= scroll.clientWidth && scroll.scrollHeight <= scroll.clientHeight) return;
@@ -188,11 +232,13 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
       scroll.classList.add('panning');
     };
     const move = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') { fingerMove(e); return; }
       if (!pan) return;
       scroll.scrollLeft = pan.left - (e.clientX - pan.x);
       scroll.scrollTop = pan.top - (e.clientY - pan.y);
     };
-    const up = () => {
+    const up = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') { fingerUp(e); return; }
       if (!pan) return;
       if (scroll.hasPointerCapture?.(pan.id)) scroll.releasePointerCapture(pan.id);
       pan = null;
