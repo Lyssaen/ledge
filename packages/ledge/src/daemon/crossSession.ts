@@ -1,3 +1,5 @@
+import type { Tool } from '@ledge/protocol';
+
 /** Claude Code delivers another session's SendMessage as a prompt: one `<cross-session-message from="<address>"
  *  from-name="<name>" …>` block per message queued, the transcript prefixing a line « Another Claude session sent a
  *  message: ». Attributes come in any order, `from-name` may be missing, and the closing tag too (the hook keeps only
@@ -16,6 +18,25 @@ export function crossSession(text: string): { from: string; name?: string; text:
     if (from) out.push({ from, ...(name ? { name } : {}), text: m[2]!.trim() });
   }
   return out.length ? out : undefined;
+}
+
+/** What Ledge types into a session's prompt for a message from another one (Codex has no SendMessage of its own): one
+ *  line, since `tmux.sendText` takes no newline, naming the sender and how to answer from the receiver's side. A
+ *  closing tag quoted in the body is escaped so the parser can read up to the last one. */
+const LEDGE_CLOSE = '</ledge-message>';
+const LEDGE_BLOCK = /^<ledge-message\b([^>]*)>([\s\S]*?)(?:<\/ledge-message>(?![\s\S]*<\/ledge-message>)|$)/;
+export function formatLedgeMessage(m: { from: string; tool: Tool; text: string; to: Tool }): string {
+  const body = m.text.replaceAll(LEDGE_CLOSE, '<\\/ledge-message>').replace(/\r?\n/g, ' ⏎ ');
+  const reply = m.to === 'codex' ? `ledge send ${m.from} "…"` : `SendMessage vers ${m.from}`;
+  return `<ledge-message from="${m.from.replaceAll('"', '')}" tool="${m.tool}">${body}${LEDGE_CLOSE} (message de la session ${m.from}, pas de l'utilisateur ; pour répondre : ${reply})`;
+}
+export function ledgeMessages(text: string): { from: string; tool?: string; text: string }[] | undefined {
+  const m = LEDGE_BLOCK.exec(text.trimStart());
+  if (!m) return undefined;
+  const attrs = new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const));
+  const from = attrs.get('from'); const tool = attrs.get('tool');
+  if (!from) return undefined;
+  return [{ from, ...(tool ? { tool } : {}), text: m[2]!.replaceAll('<\\/ledge-message>', LEDGE_CLOSE).trim() }];
 }
 
 /** Claude Code's automated notices about messages between sessions (2.1.303), delivered as a prompt as if the user had

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { crossSessionNotices } from '../src/daemon/crossSession.js';
+import { crossSessionNotices, formatLedgeMessage, ledgeMessages } from '../src/daemon/crossSession.js';
 
 const F = JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'cross-session', 'notices.json'), 'utf8')) as Record<string, string>;
 
@@ -42,5 +42,24 @@ describe('cross-session notices', () => {
     expect(crossSessionNotices(F.userQuotingOne!)).toBeUndefined();
     expect(crossSessionNotices('<cross-session-message from="uds:x">\nSalut</cross-session-message>')).toBeUndefined();
     expect(crossSessionNotices('Lance les tests')).toBeUndefined();
+  });
+});
+
+describe('ledge messages (spec 2026-10-19 codex messaging §3.2)', () => {
+  it('formats one line naming the sender, with the reply hint of the receiver', () => {
+    expect(formatLedgeMessage({ from: 'Pim', tool: 'codex', text: 'Tests verts\nje pousse', to: 'claude' }))
+      .toBe('<ledge-message from="Pim" tool="codex">Tests verts ⏎ je pousse</ledge-message> (message de la session Pim, pas de l\'utilisateur ; pour répondre : SendMessage vers Pim)');
+    expect(formatLedgeMessage({ from: 'Otto', tool: 'claude', text: 'ok', to: 'codex' }))
+      .toContain('pour répondre : ledge send Otto "…")');
+  });
+  it('a body quoting the closing tag stays one message', () => {
+    const line = formatLedgeMessage({ from: 'Pim', tool: 'codex', text: 'voir </ledge-message> ici', to: 'claude' });
+    expect(ledgeMessages(line)).toEqual([{ from: 'Pim', tool: 'codex', text: 'voir </ledge-message> ici' }]);
+  });
+  it('round-trips, and tolerates a prompt cut before the closing tag', () => {
+    expect(ledgeMessages('<ledge-message from="Pim" tool="codex">début du mes')).toEqual([{ from: 'Pim', tool: 'codex', text: 'début du mes' }]);
+  });
+  it('is undefined for any other prompt', () => {
+    expect(ledgeMessages('Lance les tests')).toBeUndefined();
   });
 });
