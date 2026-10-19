@@ -1,5 +1,5 @@
 import type { Session, SessionEvent, Tool } from '@ledge/protocol';
-import { connect, type Client } from '../client.js';
+import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
 import { codexPlan } from '../daemon/transcript.js';
@@ -385,8 +385,7 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
   const snapshot = await client.next('snapshot', left());
   const tool = snapshot.sessions.find(s => s.name === to.replace(/ \[[^\]]*\]$/, ''))?.tool;
   const summary = str(input.summary);
-  client.send({ type: 'session.message', rid: toolUseId, from, to, text: input.message as string, ...(summary ? { summary } : {}), intercept: true });
-  const ack = await client.next('message.ack', left());
+  const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to, text: input.message as string, ...(summary ? { summary } : {}), intercept: true }, left());
   const target = tool ? `${to} (${tool})` : to;
   const reason = ack.outcome === 'accepted' ? `Message transmis par Ledge à ${target} : il le reçoit maintenant.`
     : ack.outcome === 'queued' ? `Message transmis par Ledge à ${target} : il le recevra dès qu'il sera libre.`

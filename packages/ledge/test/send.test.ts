@@ -3,12 +3,12 @@ import { WebSocketServer } from 'ws';
 import { sendMessage } from '../src/cli/send.js';
 
 /** A daemon that answers every `session.message` with `ack`, and keeps what it received. */
-async function fakeDaemon(ack: { outcome: string; reason?: string }) {
+async function fakeDaemon(ack: { outcome: string; reason?: string } | null) {
   const got: Array<Record<string, unknown>> = [];
   const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' }); await new Promise(r => wss.once('listening', r));
   wss.on('connection', ws => {
     ws.send(JSON.stringify({ type: 'snapshot', sessions: [] }));
-    ws.on('message', d => { const m = JSON.parse(String(d)); got.push(m); if (m.type === 'session.message') ws.send(JSON.stringify({ type: 'message.ack', rid: m.rid, ...ack })); });
+    ws.on('message', d => { const m = JSON.parse(String(d)); got.push(m); if (ack && m.type === 'session.message') ws.send(JSON.stringify({ type: 'message.ack', rid: m.rid, ...ack })); });
   });
   return { got, port: (wss.address() as { port: number }).port, close: () => wss.close() };
 }
@@ -33,6 +33,19 @@ describe('ledge send', () => {
     const d = await fakeDaemon({ outcome: 'refused', reason: 'Pim est introuvable' });
     try { expect(await sendMessage(['Pim', 'Salut'], { port: d.port, env: { LEDGE_SESSION: 'a' } })).toEqual({ line: 'refusé : Pim est introuvable', code: 1 }); } finally { d.close(); }
   });
+  it('refused without a reason: says so', async () => {
+    const d = await fakeDaemon({ outcome: 'refused' });
+    try { expect(await sendMessage(['Pim', 'Salut'], { port: d.port, env: { LEDGE_SESSION: 'a' } })).toEqual({ line: 'refusé : raison inconnue', code: 1 }); } finally { d.close(); }
+  });
+  it('no ack after the send: not a refusal, within timeoutMs', async () => {
+    const d = await fakeDaemon(null);
+    try {
+      const t = Date.now();
+      expect(await sendMessage(['Pim', 'Salut'], { port: d.port, env: { LEDGE_SESSION: 'a' }, timeoutMs: 300 })).toEqual({ line: 'pas de réponse de Ledge : le message est peut-être déjà parti', code: 1 });
+      expect(Date.now() - t).toBeLessThan(1000);
+      expect(d.got).toHaveLength(1);
+    } finally { d.close(); }
+  });
   it('passes --summary through, wherever it stands', async () => {
     const d = await fakeDaemon({ outcome: 'accepted' });
     try {
@@ -54,7 +67,7 @@ describe('ledge send', () => {
   it('with no daemon listening, says so', async () => {
     const r = await sendMessage(['Pim', 'Salut'], { port: 1, env: { LEDGE_SESSION: 'a' } });
     expect(r.code).toBe(1);
-    expect(r.line).toMatch(/^daemon not running/);
+    expect(r.line).toBe('daemon not running (start a session with `ledge claude`, or run `ledge daemon`)');
   });
   it('bad usage prints the usage line', async () => {
     const usage = 'ledge send <nom> "<message>" [--summary <texte>]   write to another Ledge session';

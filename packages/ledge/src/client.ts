@@ -9,6 +9,12 @@ export interface Client {
   close(): Promise<void>;
 }
 
+/** Sends a `session.message` and awaits its `message.ack`, within `timeoutMs`; rejects if the ack does not come in time. */
+export function sendMessageAndAwaitAck(client: Client, msg: Extract<ClientMessage, { type: 'session.message' }>, timeoutMs: number) {
+  client.send(msg);
+  return client.next('message.ack', timeoutMs);
+}
+
 /** The daemon answered the handshake with HTTP 401: it is a Ledge daemon, and it refused this client's token (missing or changed). */
 export class DaemonRefusedError extends Error {}
 
