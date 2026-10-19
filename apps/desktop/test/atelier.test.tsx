@@ -111,6 +111,14 @@ describe('the atelier', () => {
     for (const decl of ['display:flex', 'max-width:100%']) expect(declarations('atelier.css', '.agent-seat>strong')).toContain(decl);
     expect(declarations('atelier.css', '.agent-seat .seat-shortcut')).toContain('flex-shrink:0');
   });
+  it('the atelier view shows no scrollbars, but still scrolls so the floor can be panned (#49)', () => {
+    const rule = declarations('atelier.css', '.overview-scroll.atelier');
+    expect(rule).toContain('scrollbar-width:none');
+    expect(declarations('atelier.css', '.overview-scroll.atelier::-webkit-scrollbar')).toContain('display:none');
+    // Panning moves scrollLeft / scrollTop: only the fitted view clips its overflow.
+    expect(rule).not.toContain('overflow:hidden');
+    expect(declarations('atelier.css', '.overview-scroll.atelier:not(.fitted)')).not.toContain('overflow:hidden');
+  });
   it('Enter on a focused button keeps its own action: the chosen agent is not opened', async () => {
     const { user } = await boot();
     await user.keyboard('j');
