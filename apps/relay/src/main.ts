@@ -32,7 +32,12 @@ if (cfg.mode === 'dev') {
   listening(relay.server);
   onSignals(() => relay.close());
 } else {
-  const pool = new pg.Pool({ connectionString: cfg.databaseUrl });
+  const pool = new pg.Pool({
+    connectionString: cfg.databaseUrl,
+    // An unreachable or hanging database must fail calls (500 / auth_error), not queue them forever.
+    connectionTimeoutMillis: 5_000,
+    query_timeout: 10_000
+  });
   // An idle client failing must not crash the process; a query on it will fail on its own.
   pool.on('error', () => {});
   const github = githubHttp({
@@ -45,8 +50,9 @@ if (cfg.mode === 'dev') {
     const app = await startAccountsRelay(cfg, { db: pool, github });
     listening(app.server);
     onSignals(async () => { await app.close(); await pool.end(); });
-  } catch {
+  } catch (e) {
     await pool.end().catch(() => {});
-    die('cannot start: the database is unreachable or its migration failed');
+    const code = (e as { code?: unknown }).code;
+    die(`cannot start: the database is unreachable or its migration failed${typeof code === 'string' ? ` (${code})` : ''}`);
   }
 }

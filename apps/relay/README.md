@@ -60,7 +60,7 @@ For a local callback, register `http://localhost:8787/auth/github/callback` in t
 
 ## Deploy on Railway
 
-- Create the service from the repository root (not `apps/relay`), and set its config file to `apps/relay/railway.json`. It builds with `pnpm install --frozen-lockfile && pnpm --filter @ledge/relay build`, starts `node apps/relay/dist/main.js`, checks `/healthz` and restarts on failure.
+- Create the service from the repository root (not `apps/relay`), and set its config file to `apps/relay/railway.json`. It builds with `pnpm install --frozen-lockfile --prod=false && pnpm --filter @ledge/relay build` (`--prod=false`: devDependencies are needed to build even when `NODE_ENV=production` is set at build time), starts `node apps/relay/dist/main.js`, checks `/healthz` and restarts on failure.
 - Add the Railway Postgres plugin: it provides `DATABASE_URL`.
 - Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `LEDGE_RELAY_ALLOWED_GITHUB_IDS`, `LEDGE_RELAY_PUBLIC_URL` (the https URL of the service) and `NODE_ENV=production`. Railway provides `PORT`.
 

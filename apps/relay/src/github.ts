@@ -82,7 +82,7 @@ export function githubHttp(opts: {
     init: { method: string; headers: Record<string, string>; body?: string },
   ): Promise<{ status: number; body: unknown }> {
     try {
-      const res = await doFetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+      const res = await doFetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' });
       const text = await res.text();
       let body: unknown;
       try {

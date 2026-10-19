@@ -195,6 +195,17 @@ describe('githubHttp', () => {
     expect(Date.now() - started).toBeLessThan(2000);
   });
 
+  it('a redirect is not followed: unavailable, and the target never receives the secret', async () => {
+    handler = (req, res) => {
+      if (req.url === '/login/oauth/access_token') {
+        res.writeHead(307, { location: '/elsewhere' });
+        res.end();
+      } else json(res, 200, {});
+    };
+    expect((await failure(gh().exchangeCode('CODE', 'http://r/cb'))).code).toBe('unavailable');
+    expect(seen.map((s) => s.url)).not.toContain('/elsewhere');
+  });
+
   it('a 500 gives unavailable', async () => {
     handler = (_q, res) => json(res, 500, {});
     expect((await failure(gh().deviceStart())).code).toBe('unavailable');
