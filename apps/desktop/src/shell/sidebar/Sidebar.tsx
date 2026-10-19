@@ -3,7 +3,7 @@ import type { MachineState } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Kbd } from '@ledge/ui/ui/Kbd';
-import { Icon, ICONS } from '@ledge/ui/ui/icons';
+import { Icon } from '@ledge/ui/ui/icons';
 import type { Filing } from '../../atelier/filing';
 import type { Decisions } from '../../fleet/decisions';
 import { useI18n } from '../../i18n/lang';
@@ -88,12 +88,6 @@ export function Sidebar(p: {
   };
   return (
     <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}>
-      <div className="st-brand">
-        <span className="st-fill" />
-        <button type="button" className="st-new" onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'launch' } })}>
-          <Icon d={ICONS.plus.d} size={13} /><span>{t.side.newSession}</span><Kbd accent>N</Kbd>
-        </button>
-      </div>
       <div className={cls('st-ask', p.nav.chat && 'on')} onClick={e => {
         const hit = e.target;
         if (hit instanceof Element && hit.closest('button, input')) return;
@@ -139,7 +133,7 @@ export function Sidebar(p: {
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
           onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused} />
         <p className="st-hint">
-          <Kbd>↑</Kbd><Kbd>↓</Kbd>{t.side.hint.move} · <Kbd>←</Kbd><Kbd>→</Kbd>{t.side.hint.fold} · <Kbd>E</Kbd>{t.side.hint.archive} · <Kbd>H</Kbd>{t.side.hint.done} · <Kbd>Ctrl ⇧ E</Kbd>{t.side.hint.focus}
+          {place.kind === 'overview' && <><Kbd>N</Kbd>{t.side.hint.newSession} · </>}<Kbd>↑</Kbd><Kbd>↓</Kbd>{t.side.hint.move} · <Kbd>←</Kbd><Kbd>→</Kbd>{t.side.hint.fold} · <Kbd>E</Kbd>{t.side.hint.archive} · <Kbd>H</Kbd>{t.side.hint.done} · <Kbd>Ctrl ⇧ E</Kbd>{t.side.hint.focus}
         </p>
       </div>
       <div className="st-foot">

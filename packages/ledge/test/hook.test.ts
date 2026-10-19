@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
-import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
+import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, identityContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
+import type { Session } from '@ledge/protocol';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import { connect } from '../src/client.js';
@@ -275,6 +276,51 @@ describe('runHook', () => {
   });
 });
 
+describe('session identity (SessionStart additionalContext)', () => {
+  const pim = (extra: Partial<Session> = {}): Session => ({ id: '7f3a', name: 'Pim', tool: 'claude', cwd: '/w/ledge-wt', project: 'ledge-wt', title: 'Pim · ledge-wt', tmuxSession: 'ledge-7f3a', state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...extra });
+  const context = (out: string | undefined) => (JSON.parse(out!) as { hookSpecificOutput: { hookEventName: string; additionalContext: string } }).hookSpecificOutput;
+
+  it('says who the session is: its Ledge name, project, branch, worktree, and how to reach the others', () => {
+    const text = identityContext({ name: 'Pim', tool: 'claude', project: 'ledge-wt', repo: 'ledge', branch: 'feat/x', worktree: true, cwd: '/w/ledge-wt' });
+    expect(text).toContain('Tu es Pim, projet ledge, branche feat/x');
+    expect(text).toContain('worktree ledge-wt');
+    expect(text).toContain('`ledge who`');
+    expect(text).toContain('SendMessage');
+    // Codex has no SendMessage: only the directory is offered.
+    const codex = identityContext({ name: 'Nova', tool: 'codex', project: 'api', cwd: '/w/api' });
+    expect(codex).toContain('Tu es Nova, projet api');
+    expect(codex).not.toMatch(/branche [^,]/);
+    expect(codex).not.toContain('SendMessage');
+  });
+
+  it('a launched session is told its current Ledge name (a rename wins over LEDGE_NAME), with the daemon\'s branch', async () => {
+    const store = new Store();
+    store.upsert(pim({ repo: 'ledge', branch: 'main' }));
+    const srv = await startServer({ store, tmux: {} as never, port: 0 });
+    process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_NAME = 'Otto';
+    try {
+      const out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: '/w/ledge-wt', source: 'startup' }), { port: srv.port }));
+      expect(out.hookEventName).toBe('SessionStart');
+      expect(out.additionalContext).toContain('Tu es Pim, projet ledge, branche main');
+    } finally { await srv.close(); delete process.env.LEDGE_NAME; }
+  });
+
+  it('without a daemon, the name comes from LEDGE_NAME and the project from the folder', async () => {
+    process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_NAME = 'Otto';
+    try {
+      const out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: join(home, 'shop') }), { port: 1, timeoutMs: 50 }));
+      expect(out.additionalContext).toContain('Tu es Otto, projet shop');
+    } finally { delete process.env.LEDGE_NAME; }
+  });
+
+  it('says nothing to a session Ledge did not launch, nor on another event', async () => {
+    expect(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: '/w' }), { port: 1, timeoutMs: 50 })).toBeUndefined();
+    process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_NAME = 'Otto';
+    try { expect(await runHook('Stop', JSON.stringify({ session_id: 'u-1' }), { port: 1, timeoutMs: 50 })).toBeUndefined(); }
+    finally { delete process.env.LEDGE_NAME; }
+  });
+});
+
 // Payloads as Cursor Agent 2026.10 sends them (trimmed of workspace_roots, user_email, model and token counts).
 const MAIN = { conversation_id: 'b617', session_id: 'b617', generation_id: '3885', hook_event_name: '' };
 const SUB = { conversation_id: 'b335', session_id: 'b335', generation_id: 'b335', hook_event_name: '' };
@@ -453,6 +499,10 @@ describe('prompts and the chat marker', () => {
     const prompt = '<cross-session-message from="uds:/run/user/1000/cc-socks/1.sock" from-name="a-2d" from-mode="prompting">\n' + 'x'.repeat(3000);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toHaveLength(prompt.length);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(3000) }, at)?.event.text).toHaveLength(500);
+  });
+  it('keeps a cross-session notice whole (up to INPUT_MAX), not cut like a prompt', () => {
+    const prompt = '[Cross-session idle notice] "a-2d", which you asked to be notified about, is idle now. Its harness reports: «' + 'x'.repeat(3000) + '».';
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toHaveLength(prompt.length);
   });
   it('labels SendMessage with its summary', () => {
     const tool_input = { to: 'a-bf', summary: 'OK pour la sidebar', message: 'long' };

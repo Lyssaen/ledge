@@ -40,7 +40,7 @@ export const en: Messages = {
     resumeOne: (name) => `Resume ${name}`,
     deleteOne: (name) => `Delete ${name}`,
     dropHelp: (name) => `Drop on a project to file ${name}.`,
-    hint: { move: 'move', fold: 'fold', archive: 'archive', done: 'finished', focus: 'focus' },
+    hint: { newSession: 'new session', move: 'move', fold: 'fold', archive: 'archive', done: 'finished', focus: 'focus' },
     state: {
       approval: 'is waiting for you', question: 'has a question', error: 'has an error',
       working: 'is working', starting: 'is starting', idle: 'is idle', done: 'finished', offline: 'offline'
@@ -523,6 +523,25 @@ export const en: Messages = {
       readBy: (n) => `Read by ${n}`, delivered: 'Delivered, not read yet', sending: 'Sending…', failed: 'Not delivered',
       conversation: (n, k) => `Conversation with ${n} · ${k} messages`, fold: 'Fold', unfold: 'Unfold',
       readAll: 'Read the whole message', showLess: 'Show less', seeIn: (n) => `See it in ${n}'s thread`
+    },
+    /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
+    notice: {
+      kicker: 'Automated notice', other: 'Automated notice between sessions', anotherSession: 'another session',
+      idle: (n, time) => `${n} finished${time ? ` · ${time}` : ''}`,
+      exited: (n, time) => `Session ${n} closed${time ? ` · ${time}` : ''}`,
+      unavailable: (n) => `No idle notice to expect from ${n}`,
+      expired: (n) => `No longer waiting for ${n}: the subscription expired`,
+      messages: (count, to) => (count > 1 ? `${count} messages to ${to}` : `Message to ${to}`),
+      status: {
+        held: (many) => `held: ${many ? 'they wait' : 'it waits'} for approval`,
+        denied: () => 'not delivered: denied by its user',
+        expired: () => 'not delivered: never approved',
+        refused: (many) => `not delivered: the session refuses ${many ? 'them' : 'it'}`,
+        dropped: () => 'not delivered: dropped by its inbox',
+        delivered: () => 'delivered after approval',
+        unknown: () => ': delivery notice'
+      },
+      open: (n) => `Open ${n}`
     },
     plan: {
       kicker: 'Proposed plan', fallback: 'Plan',

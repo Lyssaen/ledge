@@ -31,7 +31,7 @@ describe('the « Commande » title bar', () => {
     expect(document.querySelector('.sidebar [data-brand]')).toBeNull();
     expect(document.querySelector('.side-brand')).toBeNull();
     expect(side.queryByRole('button', { name: /Search|Go to a session/ })).toBeNull();
-    expect(side.getByRole('button', { name: /^New session N/ })).toBeVisible();
+    expect(side.queryByRole('button', { name: /^New session N/ })).toBeNull();
   });
 
   it('the search field opens the search palette, as Ctrl K does', async () => {

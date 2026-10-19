@@ -412,3 +412,13 @@
 /* What this agent sent sits in its column, under its name, as the rest of what it did. */
 .session-thread .message-head.sent,.session-thread .message-card.sent,.session-thread .message-line.sent{margin-left:var(--gutter)}
 .session-thread .message-line.sent{width:calc(100% - var(--gutter))}
+
+/* Claude Code's automated cross-session notices (NoticeLine): a quiet system line, not a card nor a prompt. */
+.notice-line{margin:8px 0;padding:6px 10px;border-left:2px solid var(--border);font-size:12px;color:var(--muted-foreground)}
+.notice-line.warn{border-left-color:var(--warning)}
+.notice-line.warn .notice-title{color:var(--warning)}
+.notice-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.notice-head .spacer{flex:1}
+.notice-kicker{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:500;letter-spacing:.04em;text-transform:uppercase}
+.notice-title{color:var(--foreground);font-weight:500}
+.notice-summary{margin:4px 0 0;padding-left:8px;border-left:2px solid var(--input);font-style:italic;line-height:18px;white-space:pre-wrap}

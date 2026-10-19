@@ -88,9 +88,9 @@ describe('the Atelier shell', () => {
     expect(foot.queryByText(/island/i)).toBeNull();
   });
 
-  it('New session and the project + open their dialogs; Close and the backdrop close them', async () => {
-    const { side, user } = await boot({ projects: TWO_PROJECTS });
-    await user.click(side.getByRole('button', { name: /^New session N/ }));
+  it('N and the project + open their dialogs; Close and the backdrop close them', async () => {
+    const { user } = await boot({ projects: TWO_PROJECTS });
+    await user.keyboard('n');
     const dialog = screen.getByRole('dialog', { name: 'New session' });
     expect(within(dialog).getByRole('textbox', { name: 'Instruction' })).toBeVisible();
     await user.click(within(dialog).getByRole('button', { name: 'Close' }));

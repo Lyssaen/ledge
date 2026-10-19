@@ -1,8 +1,9 @@
-import type { SessionEvent, Tool } from '@ledge/protocol';
+import type { Session, SessionEvent, Tool } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
 import { codexPlan } from '../daemon/transcript.js';
+import { gitInfo } from '../daemon/git.js';
 import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
@@ -12,9 +13,9 @@ const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
 /** The longest first prompt sent as a topic candidate; the reducer cuts it to one line of TOPIC_MAX. */
 const PROMPT_MAX = 500;
-/** Claude Code hands a backgrounded helper's report back, or another session's message, as a prompt: that text is the
- *  report or message, capped like a tool input. */
-const fromAgent = (t: string) => t.startsWith('<agent-message from="') || t.startsWith('<cross-session-message ');
+/** Claude Code hands a backgrounded helper's report back, another session's message, or its harness's notice about one
+ *  (`[Cross-session idle notice]`…), as a prompt: that text is the report, message or notice, capped like a tool input. */
+const fromAgent = (t: string) => t.startsWith('<agent-message from="') || t.startsWith('<cross-session-message ') || t.startsWith('[Cross-session ');
 const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, fromAgent(t) ? INPUT_MAX : PROMPT_MAX) } : {}; };
 
 function describeTool(tool: string | undefined, input: unknown): string {
@@ -340,23 +341,64 @@ function mapCursorEvent(eventName: string, p: Payload, at: string, launched: boo
   }
 }
 
-/** Always resolves, always fast: a hook must never slow the agent down. */
-export async function runHook(eventName: string, stdin: string, opts: { port?: number; timeoutMs?: number; tool?: Tool } = {}): Promise<void> {
-  const timeoutMs = opts.timeoutMs ?? 100;
-  const deadline = Date.now() + timeoutMs;
+type Identity = Pick<Session, 'name' | 'tool' | 'project' | 'cwd'> & Partial<Pick<Session, 'repo' | 'branch' | 'worktree'>>;
+
+/** What a session Ledge launched is told of itself when it starts, resumes or is cleared (#20): its Ledge name, project,
+ *  branch and worktree, and how to find the other sessions. Claude Code is launched with `-n <name>`, so the Ledge name
+ *  is also its SendMessage address. */
+export function identityContext(s: Identity): string {
+  const where = [`projet ${s.repo ?? s.project}`, ...(s.branch ? [`branche ${s.branch}`] : []), ...(s.worktree ? [`worktree ${basename(s.cwd) || s.cwd}`] : [])].join(', ');
+  return [
+    `Tu es ${s.name}, ${where} : une session lancée par Ledge (${s.tool}). Les autres sessions Ledge te connaissent sous le nom ${s.name}.`,
+    'Pour voir les autres sessions (nom, outil, état, projet, branche, sujet), lance `ledge who`.',
+    ...(s.tool === 'claude' ? ['Pour écrire à une autre session Ledge, utilise son nom Ledge comme adresse SendMessage.'] : [])
+  ].join('\n');
+}
+
+/** The identity of a launched session: the daemon's record (it follows renames), else LEDGE_NAME and the folder, with
+ *  the branch read from git when the daemon has none yet. */
+async function identity(agent: Tool, cwd: string | undefined, known: Session | undefined, deadline: number): Promise<Identity | undefined> {
+  const name = known?.name ?? process.env.LEDGE_NAME;
+  const dir = known?.cwd ?? cwd;
+  if (!name || !dir) return undefined;
+  const git = known?.branch ? null : await Promise.race([gitInfo(dir).catch(() => null), new Promise<null>(r => setTimeout(() => r(null), Math.max(0, deadline - Date.now())))]);
+  return {
+    name, tool: known?.tool ?? agent, cwd: dir, project: known?.project ?? (basename(dir) || dir),
+    ...(known?.repo ?? git?.repo ? { repo: known?.repo ?? git!.repo } : {}),
+    ...(known?.branch ?? git?.branch ? { branch: known?.branch ?? git!.branch } : {}),
+    ...(known?.worktree ?? git?.worktree ? { worktree: true } : {})
+  };
+}
+
+/**
+ * Always resolves, always fast: a hook must never slow the agent down. Resolves with what the hook prints for the agent:
+ * on SessionStart, a session Ledge launched gets its identity as `additionalContext` (Claude Code and Codex read it);
+ * that one hook waits for the daemon's snapshot, within a second.
+ */
+export async function runHook(eventName: string, stdin: string, opts: { port?: number; timeoutMs?: number; tool?: Tool } = {}): Promise<string | undefined> {
   const agent = opts.tool ?? 'claude';
   const label = agent === 'claude' ? eventName : `${agent} ${eventName}`;
   // Ledge's own chat runs Claude Code headless: its hooks (if any ran) must never make a session.
-  if (process.env.LEDGE_CHAT === '1') { log(`hook ${label} ignored: Ledge chat`); return; }
+  if (process.env.LEDGE_CHAT === '1') { log(`hook ${label} ignored: Ledge chat`); return undefined; }
+  let mapped: MappedHook | null = null;
+  let identify = false; let known: Session | undefined; let deadline = Date.now() + (opts.timeoutMs ?? 100);
   try {
     const payload = JSON.parse(stdin || '{}');
-    const mapped = agent === 'cursor' ? mapCursorHook(eventName, payload, new Date().toISOString()) : mapHook(agent, eventName, payload, new Date().toISOString());
-    if (!mapped) { log(`hook ${label} ignored: unknown event, malformed payload, non-terminal SessionEnd or subagent event without a session of its own`); return; }
+    mapped = agent === 'cursor' ? mapCursorHook(eventName, payload, new Date().toISOString()) : mapHook(agent, eventName, payload, new Date().toISOString());
+    if (!mapped) { log(`hook ${label} ignored: unknown event, malformed payload, non-terminal SessionEnd or subagent event without a session of its own`); return undefined; }
+    const launchedId = agent === 'codex' ? codexLedgeId() : agent === 'claude' ? process.env.LEDGE_SESSION : undefined;
+    identify = eventName === 'SessionStart' && !!launchedId && mapped.id === launchedId;
+    const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : 100);
+    deadline = Date.now() + timeoutMs;
     const client = await connect({ port: opts.port, timeoutMs });
     client.send({ type: 'session.event', id: mapped.id, event: mapped.event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}) });
+    if (identify) known = (await client.next('snapshot', Math.max(0, deadline - Date.now())).catch(() => undefined))?.sessions.find(s => s.id === mapped!.id);
     // close() resolves once the handshake completes, i.e. after the send is flushed; one shared deadline
     await Promise.race([client.close(), new Promise(r => setTimeout(r, Math.max(0, deadline - Date.now())))]);
   } catch (e) {
     log(`hook ${label} dropped: ${(e as Error).message}`);
   }
+  if (!identify || !mapped) return undefined;
+  const who = await identity(agent, mapped.cwd, known, deadline);
+  return who ? JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: identityContext(who) } }) : undefined;
 }

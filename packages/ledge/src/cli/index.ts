@@ -6,6 +6,7 @@ ledge hook [codex|cursor] <Event>                            receive a hook (rea
 ledge setup                                                  install hooks and ~/.ledge
 ledge uninstall [--purge]                                    remove hooks, service and link (--purge: ~/.ledge too)
 ledge status                                                 list sessions
+ledge who                                                    list the live sessions (name, tool, state, project, branch, topic)
 ledge bridge                                                 exchange Ledge messages over SSH stdio
 ledge --version                                              print the installed version`;
 
@@ -21,7 +22,9 @@ async function hookMain(args: string[]): Promise<void> {
     const chunks: Buffer[] = [];
     for await (const c of process.stdin) chunks.push(c as Buffer);
     const { runHook } = await import('./hook.js');
-    await runHook(event, Buffer.concat(chunks).toString('utf8'), { tool });
+    const out = await runHook(event, Buffer.concat(chunks).toString('utf8'), { tool });
+    // SessionStart: the identity Claude Code and Codex add to the agent's context.
+    if (out) process.stdout.write(`${out}\n`);
   } catch { /* swallowed on purpose */ }
   if (tool === 'cursor') process.stdout.write('{}\n');
 }
@@ -34,6 +37,7 @@ async function main(argv: string[]): Promise<number> {
     case 'setup': { const { runSetup } = await import('./setup.js'); for (const l of await runSetup()) console.log(l); return 0; }
     case 'uninstall': { const { runUninstall } = await import('./uninstall.js'); const r = await runUninstall({ purge: rest.includes('--purge') }); for (const l of r.lines) console.log(l); return r.ok ? 0 : 1; }
     case 'status': { const { printStatus } = await import('./status.js'); console.log(await printStatus()); return 0; }
+    case 'who': { const { printWho } = await import('./who.js'); console.log(await printWho()); return 0; }
     case 'bridge': { const { bridge } = await import('./bridge.js'); await bridge(); return 0; }
     case 'claude': case 'codex': case 'cursor': { const { launch } = await import('./launch.js'); return launch(cmd, rest); }
     case 'attach': { const { attach } = await import('./attach.js'); return attach(rest[0] ?? ''); }
