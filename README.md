@@ -255,7 +255,11 @@ Clients to daemon:
 | `session.thread { id }` | overlay | Ask for a session's thread; it is not in the snapshot. |
 | `snapshot.request` | any | Ask for a fresh snapshot. |
 
-The server accepts connections with no `Origin` header (Node clients) or with the Tauri origins (`tauri://localhost`, `http://tauri.localhost`, the Vite dev server). Any other web page is refused.
+The handshake is checked before any message is read; anything else gets HTTP 401:
+
+- The token from `~/.ledge/token`: `Authorization: Bearer <token>` for Node clients, or the subprotocol `ledge.<token>` for Ledge Desktop's WebViews (the daemon echoes it). A token in the URL is ignored.
+- A loopback `Host`: `localhost`, `127.0.0.1` or `[::1]`, with or without a port.
+- An `Origin` that is absent (Node clients) or one of the Tauri origins (`tauri://localhost`, `http://tauri.localhost`, the Vite dev server). Any other web page is refused.
 
 ## Session model
 
@@ -331,7 +335,7 @@ Windows side, the overlay keeps its preferences in the WebView's `localStorage`:
 
 ## Security and failure model
 
-- The daemon listens on the loopback only and refuses browser origins other than the overlay's. There is no authentication beyond that: anything running on the machine can talk to it, which is the accepted scope of a personal tool.
+- The daemon listens on the loopback only, checks `Host` and `Origin`, and requires the per-user token from `~/.ledge/token` (mode `0600`, `LEDGE_HOME` honoured; `Authorization: Bearer` or the `ledge.<token>` subprotocol) on every connection. Ledge Desktop reads it from WSL through `wsl.exe`; the token is never logged, put in a URL or stored on the Windows side. Across machines nothing is shared: a remote `/ssh/<alias>` bridge uses that machine's own token. Two limits are accepted for a personal tool: a program running as the same Linux user can read the token file, and while the port is free (Windows login, daemon restart) a program of another user can take it and collect the token a client presents.
 - A hook never blocks or fails the agent: 100 ms budget, every error swallowed and logged.
 - The `transcriptPath` of a local `session.event` is read by the daemon to fill the thread: only the tail of the file (512 KiB at most), only its text blocks, broadcast to local clients. It trusts that path under the same loopback model as `session.reply`: whatever can send it could already type into a pane.
 - An answer is typed only if the prompt is on screen, and reported as taken only if the prompt then disappears. Nothing is retried automatically; the session goes to `error` and the overlay offers a retry.
@@ -421,6 +425,8 @@ npm i -g @paradow/ledge@latest && systemctl --user restart ledge-daemon
 
 Then on Windows, quit Ledge Desktop from its tray menu and run the newer installer over the old one, downloaded from the releases. A daemon that runs from a git clone is never touched by the button: Ledge Desktop shows the command to run, and `git pull && pnpm install && pnpm --filter @paradow/ledge build` followed by the restart does the same job.
 
+Updating is a clean cut, with no transition version: the app and the daemon must both be current, since the daemon now requires a token. A new app against an old daemon (no token file) shows a notice that the daemon must be updated, with the command to run (an old daemon refuses nothing, but the new app will not connect to a daemon that has no token file), and reconnects by itself once it is done. The same notice also shows when the daemon has never started yet, when there is no systemd user session, or when Ledge lives in a WSL distro that is not the default one (the app reads the token from the default distro). For a git clone: `cd <your Ledge clone> && git pull && pnpm install && pnpm --filter @paradow/ledge build && systemctl --user restart ledge-daemon`. A new daemon against an old app shows "unreachable" until the app updates itself.
+
 A tmux server started before the scoped-service version lives inside the daemon's service, so a restart would close its sessions. Ledge refuses to restart then, and says so. Close those sessions or restart WSL once; later sessions are safe.
 
 ### Uninstall
@@ -454,7 +460,7 @@ Then:
 ```sh
 pnpm -r typecheck
 pnpm test                           # pnpm -r test, then the release scripts' tests; protocol, ledge (unit + tmux + end-to-end, needs tmux, no AI), overlay (vitest + jsdom)
-pnpm --filter overlay dev           # the UI alone on http://localhost:1420, against a daemon running in WSL
+pnpm --filter overlay dev           # the UI alone on http://localhost:1420, against a daemon running in WSL (needs its token: VITE_LEDGE_TOKEN=$(cat ~/.ledge/token) pnpm --filter overlay dev)
 pnpm --filter overlay test:e2e      # Playwright, chromium
 LEDGE_SCREENSHOTS=1 pnpm --filter overlay exec playwright test e2e/screenshots.spec.ts   # refresh docs/screens (see docs/tour.md)
 pnpm --filter desktop tauri dev     # Windows only: Ledge Desktop with the notch

@@ -1,9 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession, T0 } from './mockDaemon';
 import { createDaemonClient } from '../src/client';
 import { daemonStore, attachClient } from '../src/store';
+import { createTokenSource, type TokenRead } from '../src/token';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 let mock: Awaited<ReturnType<typeof createMockDaemon>>;
@@ -277,5 +278,124 @@ describe('daemon client + store', () => {
     daemonStore.reset();
     daemonStore.apply({ type: 'error', id: 'a', message: 'denied, but the note could not be typed', request: 'session.decide', code: 'note_not_typed' });
     expect(daemonStore.getState().lastError).toEqual({ id: 'a', message: 'denied, but the note could not be typed', seq: 1, request: 'session.decide', code: 'note_not_typed' });
+  });
+});
+
+describe('daemon token', () => {
+  const T = 'a'.repeat(64), WRONG = 'b'.repeat(64);
+  /** Replaces the plain mock with one that requires the token. */
+  const authed = async (token = T, port?: number) => { await mock.close(); mock = await createMockDaemon({ token, port }); };
+  const fixed = (r: TokenRead) => vi.fn(async () => r);
+
+  it('without a source nothing changes: the socket is opened with the url alone', async () => {
+    const args: unknown[][] = [];
+    function Recording(...a: unknown[]) { args.push(a); return new (WebSocket as unknown as new (...x: unknown[]) => WebSocket)(...a); }
+    const client = createDaemonClient({ url: mock.url, WebSocketImpl: Recording as never });
+    client.connect();
+    await vi.waitFor(() => expect(client.status()).toBe('open'));
+    expect(args).toEqual([[mock.url]]);
+    expect(mock.handshakes).toEqual([[]]);
+    client.close();
+  });
+
+  it('presents the token as a subprotocol', async () => {
+    await authed(); mock.sessions.set('a', fakeSession('a'));
+    const client = createDaemonClient({ url: mock.url, token: createTokenSource(fixed({ kind: 'token', token: T })), WebSocketImpl: WebSocket as never });
+    const detach = attachClient(client); client.connect();
+    await vi.waitFor(() => expect(daemonStore.getState().sessions.map(s => s.id)).toEqual(['a']));
+    expect(client.status()).toBe('open');
+    expect(mock.handshakes).toEqual([[`ledge.${T}`]]);
+    detach(); client.close();
+  });
+
+  it('stays unreachable and opens nothing while the token is absent', async () => {
+    await authed();
+    const source = createTokenSource(fixed({ kind: 'absent' }));
+    const client = createDaemonClient({ url: mock.url, token: source, WebSocketImpl: WebSocket as never });
+    client.connect(); await sleep(300);
+    expect(client.status()).toBe('unreachable');
+    expect(mock.handshakes).toHaveLength(0);
+    expect(source.missing()).toBe(true);
+    client.close();
+  });
+
+  it('an unavailable token is unreachable but not missing', async () => {
+    await authed();
+    const source = createTokenSource(fixed({ kind: 'unavailable' }));
+    const client = createDaemonClient({ url: mock.url, token: source, WebSocketImpl: WebSocket as never });
+    client.connect();
+    await vi.waitFor(() => expect(client.status()).toBe('unreachable'));
+    expect(mock.handshakes).toHaveLength(0);
+    expect(source.missing()).toBe(false);
+    client.close();
+  });
+
+  it('re-reads the token after a failed connection', async () => {
+    await authed();
+    let n = 0;
+    const read = vi.fn(async (): Promise<TokenRead> => ({ kind: 'token', token: n++ === 0 ? WRONG : T }));
+    const client = createDaemonClient({ url: mock.url, token: createTokenSource(read), WebSocketImpl: WebSocket as never, minBackoffMs: 50 });
+    client.connect();
+    await vi.waitFor(() => expect(client.status()).toBe('open'));
+    expect(read.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(mock.handshakes[0]).toEqual([`ledge.${WRONG}`]);
+    expect(mock.handshakes.at(-1)).toEqual([`ledge.${T}`]);
+    client.close();
+  });
+
+  it('keeps the cached token after a connection that opened and then dropped', async () => {
+    await authed();
+    const read = vi.fn(async (): Promise<TokenRead> => ({ kind: 'token', token: T }));
+    const client = createDaemonClient({ url: mock.url, token: createTokenSource(read), WebSocketImpl: WebSocket as never, minBackoffMs: 50 });
+    client.connect();
+    await vi.waitFor(() => expect(client.status()).toBe('open'));
+    await mock.dropClients();
+    await vi.waitFor(() => expect(mock.handshakes).toHaveLength(2));
+    await vi.waitFor(() => expect(client.status()).toBe('open'));
+    expect(read).toHaveBeenCalledTimes(1);
+    client.close();
+  });
+
+  it('reconnects on its own to a daemon restarted with a fresh token', async () => {
+    await authed();
+    let current = T;
+    const read = vi.fn(async (): Promise<TokenRead> => ({ kind: 'token', token: current }));
+    const client = createDaemonClient({ url: mock.url, token: createTokenSource(read), WebSocketImpl: WebSocket as never, minBackoffMs: 50, maxBackoffMs: 100 });
+    const statuses: string[] = []; client.onStatus(s => statuses.push(s));
+    client.connect();
+    await vi.waitFor(() => expect(client.status()).toBe('open'));
+    const fresh = 'c'.repeat(64); current = fresh;
+    await authed(fresh, mock.port);
+    await vi.waitFor(() => expect(statuses.filter(s => s === 'open')).toHaveLength(2));
+    expect(statuses).toEqual(['open', 'unreachable', 'open']);
+    expect(read.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(mock.handshakes.at(-1)).toEqual([`ledge.${fresh}`]);
+    client.close();
+  });
+
+  it('a close during the token read opens nothing', async () => {
+    await authed();
+    const read = vi.fn(() => new Promise<TokenRead>(r => setTimeout(() => r({ kind: 'token', token: T }), 100)));
+    const client = createDaemonClient({ url: mock.url, token: createTokenSource(read), WebSocketImpl: WebSocket as never });
+    client.connect(); client.close();
+    const left = client.status();
+    const statuses: string[] = []; client.onStatus(s => statuses.push(s));
+    await sleep(200);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(mock.handshakes).toHaveLength(0);
+    expect(client.status()).toBe(left);
+    expect(statuses).toEqual([]);
+  });
+
+  it('a newer connect() supersedes a pending token read', async () => {
+    await authed();
+    const read = vi.fn(() => new Promise<TokenRead>(r => setTimeout(() => r({ kind: 'token', token: T }), 50)));
+    const client = createDaemonClient({ url: mock.url, token: createTokenSource(read), WebSocketImpl: WebSocket as never });
+    client.connect(); client.connect();
+    await vi.waitFor(() => expect(client.status()).toBe('open'));
+    await sleep(50);
+    expect(mock.handshakes).toHaveLength(1);
+    expect(mock.clientCount).toBe(1);
+    client.close();
   });
 });

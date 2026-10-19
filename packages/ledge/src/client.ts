@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import { readDaemonToken } from './auth.js';
 import { PROTOCOL_PORT, parseServerMessage, type ClientMessage, type ServerMessage } from '@ledge/protocol';
 
 export interface Client {
@@ -8,10 +9,16 @@ export interface Client {
   close(): Promise<void>;
 }
 
-export function connect(opts: { port?: number; host?: string; timeoutMs?: number } = {}): Promise<Client> {
+/** The daemon answered the handshake with HTTP 401: it is a Ledge daemon, and it refused this client's token (missing or changed). */
+export class DaemonRefusedError extends Error {}
+
+export function connect(opts: { port?: number; host?: string; timeoutMs?: number; token?: string | null } = {}): Promise<Client> {
   const port = opts.port ?? PROTOCOL_PORT;
   const host = opts.host ?? '127.0.0.1';
-  const ws = new WebSocket(`ws://${host}:${port}`);
+  // `undefined` reads the daemon token file, `null` sends none. A hook must never fail on it: no token, the daemon refuses like a down one.
+  let token: string | null | undefined;
+  try { token = opts.token === undefined ? readDaemonToken() : opts.token; } catch { token = null; }
+  const ws = new WebSocket(`ws://${host}:${port}`, token ? { headers: { authorization: `Bearer ${token}` } } : {});
   const queue: ServerMessage[] = [];
   const MAX_QUEUED = 100;
   const waiters: Array<{ type: string; resolve: (m: ServerMessage) => void }> = [];
@@ -39,6 +46,6 @@ export function connect(opts: { port?: number; host?: string; timeoutMs?: number
     ws.once('open', () => { clearTimeout(t); resolve(client); });
     let settled = false;
     ws.once('open', () => { settled = true; });
-    ws.on('error', e => { if (!settled) { settled = true; clearTimeout(t); reject(e); } });
+    ws.on('error', e => { if (!settled) { settled = true; clearTimeout(t); reject(/Unexpected server response: 401/.test(e.message) ? new DaemonRefusedError('daemon refused the token') : e); } });
   });
 }

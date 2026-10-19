@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { attachClient, createDaemonClient, createFleetClient, loadMachines, LOCAL_MACHINE, useDaemon, useMachines, type DaemonClient, type DaemonError, type DaemonStatus, type Fleet, type MachineState } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
+import { daemonTokenSource } from '../tauri/bridge';
 
 const LOCAL_URL = LOCAL_MACHINE.url!;
 
@@ -11,8 +12,8 @@ export function createDesktopFleet(opts: { url?: string; WebSocketImpl?: unknown
   const backoff = import.meta.env.VITE_LEDGE_E2E ? { minBackoffMs: 200, maxBackoffMs: 500 } : {};
   return createFleetClient(
     loadMachines('desktop'),
-    (c) => createDaemonClient({ url: (c.url ?? LOCAL_URL).replace(LOCAL_URL, opts.url ?? LOCAL_URL), ...(opts.WebSocketImpl ? { WebSocketImpl: opts.WebSocketImpl as never } : {}), ...backoff }),
-    { prefix: 'desktop', keepStale: true, machinesFromDaemon: true },
+    (c) => createDaemonClient({ url: (c.url ?? LOCAL_URL).replace(LOCAL_URL, opts.url ?? LOCAL_URL), ...(opts.WebSocketImpl ? { WebSocketImpl: opts.WebSocketImpl as never } : {}), ...backoff, token: c.token }),
+    { prefix: 'desktop', keepStale: true, machinesFromDaemon: true, token: daemonTokenSource() },
   );
 }
 

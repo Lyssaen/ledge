@@ -1,8 +1,20 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { parseClientMessage, type ClientMessage, type DaemonInfo, type FoundRepo, type Machines, type Projects, type Recent, type RepoInfo, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
 
-export async function createMockDaemon(opts: { port?: number } = {}) {
-  const wss = new WebSocketServer({ host: '127.0.0.1', port: opts.port ?? 0 });
+/** `token`: like the daemon, refuse (HTTP 401) a handshake that does not offer the subprotocol `ledge.<token>`, and echo it back when it does. */
+export async function createMockDaemon(opts: { port?: number; token?: string } = {}) {
+  /** Every handshake seen, refused ones included, with the subprotocols it offered (`[]` for none). */
+  const handshakes: string[][] = [];
+  const expected = opts.token === undefined ? undefined : `ledge.${opts.token}`;
+  const wss = new WebSocketServer({
+    host: '127.0.0.1', port: opts.port ?? 0,
+    verifyClient: (info, done) => {
+      const offered = String(info.req.headers['sec-websocket-protocol'] ?? '').split(',').map(p => p.trim()).filter(Boolean);
+      handshakes.push(offered);
+      if (expected === undefined || offered.includes(expected)) done(true); else done(false, 401);
+    },
+    ...(expected === undefined ? {} : { handleProtocols: (protocols: Set<string>) => (protocols.has(expected) ? expected : false) })
+  });
   await new Promise<void>(r => wss.once('listening', r));
   const port = (wss.address() as { port: number }).port;
   const sessions = new Map<string, Session>();
@@ -51,7 +63,7 @@ export async function createMockDaemon(opts: { port?: number } = {}) {
   });
   return {
     get clientCount() { return [...wss.clients].filter(c => c.readyState === WebSocket.OPEN).length; },
-    port, url: `ws://127.0.0.1:${port}`, sessions, received, extras, threads, documents, repoInfo, folders, found, options,
+    port, url: `ws://127.0.0.1:${port}`, handshakes, sessions, received, extras, threads, documents, repoInfo, folders, found, options,
     upsert(s: Session) { sessions.set(s.id, s); bc({ type: 'session.updated', session: s }); },
     remove(id: string) { sessions.delete(id); bc({ type: 'session.removed', id }); },
     preview(id: string, lines: string[]) { bc({ type: 'session.preview', id, lines }); },

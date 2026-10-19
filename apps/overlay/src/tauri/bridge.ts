@@ -12,6 +12,7 @@
  *   focus_terminal { title }           bring the matching terminal window forward (true when found)
  *   open_terminal { title, command }   open a Windows Terminal tab running `command` in WSL (true once spawned)
  *   open_url { url }                   open a web URL in the default browser (the webview never navigates)
+ *   daemon_token                       the per-user daemon token read from WSL: { kind: 'token', token } | { kind: 'absent' } | { kind: 'unavailable' }
  *   open_in_ledge { target }           show Ledge Desktop's window on the target (the same process)
  *   event `ledge://outside-click`      a mouse button went down outside the window while the watch was armed
  *   event `ledge://cursor-near` { x, y } | null    cursor in the top band around the island, in logical work-area coordinates
@@ -22,6 +23,7 @@
  * takes an optional `zoom` (one CSS px = `zoom` monitor px) and round frames outward here. The shell
  * itself never knows about any zoom.
  */
+import { createTokenSource, type TokenRead, type TokenSource } from '@ledge/fleet';
 import { resolveMonitor, type MonitorInfo } from '../monitor';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { EventCallback, UnlistenFn } from '@tauri-apps/api/event';
@@ -80,6 +82,17 @@ const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T
   core ??= import('@tauri-apps/api/core');
   return (await core).invoke<T>(cmd, args);
 };
+
+/** The daemon token this window presents: one source per window, so the client and the notice share the reads. Inside Tauri
+ *  it asks the shell (`daemon_token`); in a browser it is `VITE_LEDGE_TOKEN` when set, else none (tokenless, as dev, demo and e2e). */
+let tokenSource: TokenSource | undefined;
+export function daemonTokenSource(): TokenSource | undefined {
+  if (tokenSource) return tokenSource;
+  if (isTauri()) return (tokenSource = createTokenSource(() => invoke<TokenRead>('daemon_token')));
+  const fixed = (import.meta.env.DEV ? import.meta.env.VITE_LEDGE_TOKEN : undefined) as string | undefined; // dev only: a release build never inlines a token
+  if (fixed) return (tokenSource = createTokenSource(async () => ({ kind: 'token', token: fixed })));
+  return undefined;
+}
 
 /** A frame in CSS px to monitor px under `zoom`: the edges are rounded outward so the window always holds the drawing. */
 export function toMonitorFrame(f: Frame, zoom = 1): Frame {

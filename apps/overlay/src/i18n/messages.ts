@@ -40,6 +40,7 @@ const fr = {
   offline: 'Hors connexion : reconnexion au daemon',
   readOnlyBlocked: 'Lecture seule : lancée sans Ledge, répondez dans son terminal',
   unreachable: 'daemon injoignable, nouvelle tentative',
+  daemonOutdated: 'Démon Ledge à mettre à jour · voir Ledge Desktop',
   lost: 'La connexion a été perdue avant la réponse du terminal',
   notTaken: 'Le terminal ne l’a pas pris en compte',
   list: {
@@ -275,6 +276,7 @@ const en: Messages = {
   offline: 'Offline: reconnecting to the daemon',
   readOnlyBlocked: 'Read only: started without Ledge, answer in its terminal',
   unreachable: 'daemon unreachable, retrying',
+  daemonOutdated: 'Ledge daemon to update · see Ledge Desktop',
   lost: 'The connection dropped before the terminal answered',
   notTaken: 'The terminal did not take it',
   list: {

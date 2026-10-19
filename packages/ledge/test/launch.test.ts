@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, createConnection } from 'node:net';
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,6 +53,18 @@ describe('ensureDaemon', () => {
     expect(spawnDaemon).not.toHaveBeenCalled();
     expect(readFileSync(join(process.env.LEDGE_HOME!, 'daemon.log'), 'utf8')).toMatch(/does not speak the Ledge protocol/);
     foreign.close();
+  });
+  it('says the token was refused, without spawning or blaming another program, when the daemon answers 401', async () => {
+    const srv = await startServer({ store: new Store(), tmux: noop, port: 0 });
+    writeFileSync(join(process.env.LEDGE_HOME!, 'token'), `${'0'.repeat(64)}\n`);
+    const spawnDaemon = vi.fn();
+    const r = await ensureDaemon({ port: srv.port, spawnDaemon });
+    expect(r).toEqual({ client: null, reason: 'unauthorized' });
+    expect(spawnDaemon).not.toHaveBeenCalled();
+    const log = readFileSync(join(process.env.LEDGE_HOME!, 'daemon.log'), 'utf8');
+    expect(log).toMatch(/refused this client's token/);
+    expect(log).not.toMatch(/0{64}/);
+    await srv.close();
   });
   it('spawns the daemon when nothing listens, and connects once it is up', async () => {
     const port = await freePort();

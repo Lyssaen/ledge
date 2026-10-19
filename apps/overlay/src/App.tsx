@@ -5,8 +5,9 @@ import { createFleetClient } from './daemon/fleet';
 import { fleetOptions } from './surface/fleetOptions';
 import { loadMachines, useIsland } from './daemon/machines';
 import { attachClient } from './daemon/store';
+import { useTokenMissing } from '@ledge/fleet';
 import { Surface } from './surface/Surface';
-import { isTauri, listMonitors, screenHeight, screenWidth, setMonitor } from './tauri/bridge';
+import { daemonTokenSource, isTauri, listMonitors, screenHeight, screenWidth, setMonitor } from './tauri/bridge';
 import { autoScale, loadScale, migrateLegacyScale, resolveScale, saveScale, type ScaleTarget, type UiScale } from './scale';
 import { loadMonitor, saveMonitor, type MonitorInfo } from './monitor';
 import { LangProvider, loadLang, type Lang } from './i18n/lang';
@@ -18,8 +19,12 @@ import { loadIslandPosition, saveIslandPosition, loadDiscreet, saveDiscreet, loa
 
 export function App() {
   // An isolated browser demo can point at a fake daemon without disturbing the live WSL daemon.
-  const client = useMemo(() => import.meta.env.DEV && import.meta.env.VITE_LEDGE_DEMO_WS
-    ? createDaemonClient({ url: import.meta.env.VITE_LEDGE_DEMO_WS }) : createFleetClient(loadMachines(), undefined, fleetOptions), []);
+  const token = daemonTokenSource();
+  const demo = !!(import.meta.env.DEV && import.meta.env.VITE_LEDGE_DEMO_WS); // the demo stays tokenless
+  const client = useMemo(() => demo
+    ? createDaemonClient({ url: import.meta.env.VITE_LEDGE_DEMO_WS })
+    : createFleetClient(loadMachines(), undefined, { ...fleetOptions, token }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const daemonOutdated = useTokenMissing(demo ? undefined : token);
   // The work-area height in logical px. The page is never zoomed: each layer applies its own scale.
   const [workH, setWorkH] = useState(window.innerHeight);
   const [workW, setWorkW] = useState(window.innerWidth);
@@ -87,7 +92,7 @@ export function App() {
   useEffect(() => { const h = (e: KeyboardEvent) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 't') setTheme(t => (t === 'dark' ? 'light' : 'dark')); }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, []);
   return (
     <LangProvider lang={lang}>
-      <Surface desktopUpdate={desktopUpdate} screenH={workH} screenW={workW} handleScale={handleScale} panelScale={panelScale} scales={scales} autoScales={{ handle: autoScale(workH, 'handle'), panel: autoScale(workH, 'panel') }}
+      <Surface daemonOutdated={daemonOutdated} desktopUpdate={desktopUpdate} screenH={workH} screenW={workW} handleScale={handleScale} panelScale={panelScale} scales={scales} autoScales={{ handle: autoScale(workH, 'handle'), panel: autoScale(workH, 'panel') }}
         onScale={(target, s) => setScales(x => ({ ...x, [target]: s }))}
         monitors={monitors} monitor={monitor} onMonitor={setMonitorChoice} onSettingsOpen={onSettingsOpen}
         theme={theme} client={client} dnd={dnd} soundPlayer={player} onToggleDnd={() => setDnd(d => !d)} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}

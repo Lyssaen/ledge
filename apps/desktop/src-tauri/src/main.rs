@@ -52,6 +52,17 @@ fn open_terminal(title: String, command: Vec<String>) -> Result<bool, String> { 
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> { ledge_native::browser::open_url(&url) }
 
+/// The daemon's token, read from WSL: `{ kind: "token", token }`, `{ kind: "absent" }` or `{ kind: "unavailable" }`.
+#[tauri::command]
+async fn daemon_token() -> serde_json::Value {
+    use ledge_native::daemon_token::{read, TokenRead};
+    match tauri::async_runtime::spawn_blocking(|| read(std::time::Duration::from_secs(5))).await {
+        Ok(TokenRead::Token(token)) => serde_json::json!({ "kind": "token", "token": token }),
+        Ok(TokenRead::Absent) => serde_json::json!({ "kind": "absent" }),
+        _ => serde_json::json!({ "kind": "unavailable" }),
+    }
+}
+
 /// The island's target if it is one JSON line, as `--open` would carry it.
 fn checked_target(target: &str) -> Result<&str, String> {
     if ledge_native::desktop::valid_target(target) { Ok(target) } else { Err("invalid target".into()) }
@@ -191,7 +202,7 @@ fn main() {
         .manage(notch::PrevForeground::default())
         .manage(notch::Screen::default())
         .invoke_handler(tauri::generate_handler![
-            focus_terminal, foreground_is_terminal, open_terminal, open_url, get_autostart, set_autostart, set_tray_labels, take_open_target,
+            focus_terminal, foreground_is_terminal, open_terminal, open_url, daemon_token, get_autostart, set_autostart, set_tray_labels, take_open_target,
             open_in_ledge, notch::set_frame, notch::set_hot_zone, notch::set_outside_watch, notch::focus_overlay, notch::release_focus,
             notch::list_monitors, notch::set_monitor, open_atelier,
         ])
