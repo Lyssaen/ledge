@@ -68,6 +68,7 @@ export function Tree(p: {
   onTerminal(s: Session): void;
   onToggleHide(): void;
   onToggleDense(): void;
+  onNewProject(): void;
   paused: boolean;
 }): JSX.Element {
   const { t } = useI18n();
@@ -275,5 +276,24 @@ export function Tree(p: {
     }
   }
 
-  return <div ref={treeRef} role="tree" aria-label={t.side.tree} className={cls('st-tree', p.dense && 'st-dense')} onKeyDown={onTreeKey}>{rows}</div>;
+  return (
+    <>
+      <div className="st-label">
+        <span>{t.side.projects}</span><span className="st-fill" />
+        <button type="button" className={cls('st-icon', p.hideDone && 'on')} aria-pressed={p.hideDone} aria-label={t.side.hideDone} title={t.side.hideDone} onClick={p.onToggleHide}>
+          <Icon d={SHELL_ICONS.eyeOff} size={14} />
+        </button>
+        <button type="button" className={cls('st-icon', p.dense && 'on')} aria-pressed={p.dense} aria-label={t.side.dense} title={t.side.dense} onClick={p.onToggleDense}>
+          <Icon d={SHELL_ICONS.densityTight} size={14} />
+        </button>
+        <button type="button" className="st-icon" aria-label={t.side.foldAll} title={t.side.foldAll} onClick={() => setClosed(new Set(p.groups.map(g => projectKey(g.id))))}>
+          <Icon d={SHELL_ICONS.foldAll} size={14} />
+        </button>
+        <button type="button" className="st-icon" aria-label={t.side.newProject} title={t.side.newProject} onClick={p.onNewProject}>
+          <Icon d={ICONS.plus.d} size={14} />
+        </button>
+      </div>
+      <div ref={treeRef} role="tree" aria-label={t.side.tree} className={cls('st-tree', p.dense && 'st-dense')} onKeyDown={onTreeKey}>{rows}</div>
+    </>
+  );
 }

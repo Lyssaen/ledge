@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { boot, closeDaemons, listSessions, TWO_PROJECTS } from './helpers';
+import { boot, closeDaemons, declarations, listSessions, TWO_PROJECTS } from './helpers';
 import { resetDndForTests } from '../src/notify/prefs';
 
 // The window exists only in Tauri: the test plays the bridge (what the buttons call, the maximised state, the resize event).
@@ -24,6 +24,8 @@ describe('the « Commande » title bar', () => {
     const el = screen.getByRole('group', { name: 'Window bar' });
     expect(el).toHaveAttribute('data-tauri-drag-region');
     expect(el.querySelector('[data-brand]')).toHaveTextContent('Ledge.');
+    expect(el.querySelector('.brand-dot')).toHaveTextContent('.');
+    expect(declarations('shell.css', '.brand-dot')).toContain('color:var(--sidebar-primary)');
     expect(bar().getByRole('button', { name: 'Go to a session, a project, a setting…' })).toHaveTextContent('Ctrl K');
     for (const n of ['Minimize', 'Maximize', 'Close']) expect(bar().getByRole('button', { name: n })).toBeVisible();
     expect(document.querySelector('.sidebar [data-brand]')).toBeNull();

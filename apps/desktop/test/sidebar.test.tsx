@@ -37,6 +37,19 @@ describe('the sidebar shell', () => {
     expect(d.received).toContainEqual({ type: 'chat.ask', qid: expect.stringMatching(/^q-/), text: 'hello', tool: 'claude' });
   });
 
+  it('shows the tree shortcuts at the foot of the sidebar', async () => {
+    const { side } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
+    const hint = side.getByText(/move/).closest('.st-hint');
+    expect(hint).toBeVisible();
+    expect(hint).toHaveTextContent(/↑/);
+    expect(hint).toHaveTextContent(/↓/);
+    expect(hint).toHaveTextContent(/←/);
+    expect(hint).toHaveTextContent(/→/);
+    expect(hint).toHaveTextContent(/E/);
+    expect(hint).toHaveTextContent(/H/);
+    expect(hint).toHaveTextContent(/Ctrl ⇧ E/);
+  });
+
   it('the machine chips open Settings › Machines; the gear opens Settings', async () => {
     const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
     await user.click(side.getByRole('button', { name: /Local/ }));

@@ -54,7 +54,7 @@ export const fr = {
     resumeOne: (name: string) => `Reprendre ${name}`,
     deleteOne: (name: string) => `Supprimer ${name}`,
     dropHelp: (name: string) => `Déposez sur un projet pour y ranger ${name}.`,
-    hint: '↑ ↓ parcourir · ← → plier · E archiver · H terminées · Ctrl ⇧ E focus',
+    hint: { move: 'parcourir', fold: 'plier', archive: 'archiver', done: 'terminées', focus: 'focus' },
     state: {
       approval: 'attend ton accord', question: 'te pose une question', error: 'en erreur',
       working: 'au travail', starting: 'démarre', idle: 'au repos', done: 'terminée', offline: 'hors ligne'

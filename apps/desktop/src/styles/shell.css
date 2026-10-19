@@ -31,6 +31,7 @@
 .titlebar-tools { display: flex; align-items: center; gap: 2px; }
 .titlebar-mid { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; padding: 0 16px; }
 .titlebar-mark { font-size: 13px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+.brand-dot { color: var(--sidebar-primary); }
 .titlebar-cmd { width: min(440px, 100%); height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--muted-foreground); font-size: 12px; }
 .titlebar-cmd > span { flex: 1; min-width: 0; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .titlebar-cmd:hover { border-color: var(--ring); color: var(--foreground); }

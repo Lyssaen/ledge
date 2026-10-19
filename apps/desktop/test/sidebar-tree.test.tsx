@@ -79,6 +79,32 @@ describe('the sidebar tree', () => {
     await waitFor(() => expect(scrolled).toHaveBeenCalled());
   });
 
+  it('the Projects heading has hide, compact, fold-all and new-project', async () => {
+    const { side, user } = await boot({ projects: PROJECTS, sessions: listSessions() });
+    const projects = within(side.getByRole('region', { name: 'Projects' }));
+    const hide = projects.getByRole('button', { name: 'Hide finished sessions (H)' });
+    const compact = projects.getByRole('button', { name: 'Compact mode (D)' });
+    expect(hide).toHaveAttribute('aria-pressed', 'true');
+    expect(compact).toHaveAttribute('aria-pressed', 'false');
+    expect(projects.getByRole('button', { name: 'Fold all' })).toBeVisible();
+    expect(projects.getByRole('button', { name: 'New project' })).toBeVisible();
+
+    await user.click(hide);
+    expect(side.getByRole('button', { name: /^Bix/ })).toBeVisible();
+    expect(hide).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(compact);
+    expect(screen.getByRole('complementary', { name: /sidebar/i })).toHaveClass('st-dense');
+    expect(compact).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(projects.getByRole('button', { name: 'Fold all' }));
+    expect(side.queryByRole('button', { name: /^Otto/ })).toBeNull();
+    expect(side.getByRole('button', { name: /^Ledge/ })).toBeVisible();
+
+    await user.click(projects.getByRole('button', { name: 'New project' }));
+    expect(screen.getByRole('dialog', { name: 'New project' })).toBeVisible();
+  });
+
   it('H hides finished ones; the open session stays in view', async () => {
     const { side, user } = await boot({ projects: PROJECTS, sessions: listSessions() });
     expect(side.queryByRole('button', { name: /^Bix/ })).toBeNull();

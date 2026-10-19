@@ -94,6 +94,13 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
     ? <><HelperBot helper={helper} parent={session} size={20} /><strong>{helper.kind}</strong></>
     : <><SessionBot session={session} size={20} /><strong>{session.name}</strong></>;
 
+  // A finished subagent leaves the parent thread: its card would only pile up « Done » there (a failed one stays).
+  const ended = (item: HelperItem) => {
+    const s = helperState(helperOf(session, items, item.id, t.session.subagent)!);
+    return s === 'done' || s === 'idle';
+  };
+  const segments = x.segments.filter(s => s.kind !== 'helper' || !ended(s.item));
+
   const helperCard = (item: HelperItem) => {
     const h = helperOf(session, items, item.id, t.session.subagent)!;
     return (
@@ -150,8 +157,8 @@ const Turn = memo(function Turn({ session, helper, items, x, at, running, last, 
         </div>
       )}
       {x.received.map(r => <Fragment key={r.id}>{r.id !== opener && marker(r.id)}{message(r)}</Fragment>)}
-      {x.segments.length > 0 && <div className="turn-author">{author}</div>}
-      {x.segments.map(segment)}
+      {segments.length > 0 && <div className="turn-author">{author}</div>}
+      {segments.map(segment)}
       {last && offline && <div className="frozen-end"><Icon d={SHELL_ICONS.offline} size={13} />{th.frozenEnd(since)}</div>}
       {last && !offline && session.state === 'exited' && <div className="turn-end">{th.ended(since)}</div>}
     </section>

@@ -10,6 +10,9 @@ export const SHELL_ICONS = {
   machine: ['M3 4h18v12H3z', 'M12 16v4', 'M8 20h8'],
   densityComfy: ['M4 5h16', 'M4 12h16', 'M4 19h16'],
   densityTight: ['M4 4h16', 'M4 8h16', 'M4 12h16', 'M4 16h16', 'M4 20h16'],
+  // sidebar-tree.tsx: hide finished, fold every project.
+  eyeOff: ['M9.9 9.9a3 3 0 1 0 4.2 4.2', 'M10.7 5.1A10.4 10.4 0 0 1 12 5c7 0 10 7 10 7a13 13 0 0 1-1.7 2.7', 'M6.6 6.6A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.4-1.6', 'M2 2l20 20'],
+  foldAll: ['m7 20 5-5 5 5', 'm7 4 5 5 5-5'],
   unassigned: ['M4 7h16v12H4z', 'M4 7l2-3h4l2 3', 'M9 13h6'],
   subagents: ['M4 4h7v6H4z', 'M13 14h7v6h-7z', 'M7.5 10v7H13'],
   subagentsOff: ['M4 4h7v6H4z', 'M7.5 10v7H11', 'M14 15l5 5', 'M19 15l-5 5'],

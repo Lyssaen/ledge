@@ -1,6 +1,6 @@
 import { test as base, expect, type Page } from '@playwright/test';
 
-/** The explorer has no « New project » row. Settings › Projects still opens the same dialog. */
+/** Opens the New project dialog from Settings › Projects (same dialog as the explorer's +). */
 export async function openNewProject(page: Page): Promise<void> {
   await page.keyboard.press('Control+Comma');
   await expect(page.getByRole('heading', { level: 1, name: 'General' })).toBeVisible();

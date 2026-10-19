@@ -144,7 +144,7 @@ export async function openLaunch(opts: { repoInfo?: Map<string, RepoInfo>; list?
   return { ...env, form: within(await screen.findByRole('dialog', { name: 'New session' })) };
 }
 
-/** Opens the New project dialog. The explorer sidebar has no « New project » row; Settings › Projects still does, and the dialog is the same one. */
+/** Opens the New project dialog from Settings › Projects (same dialog as the explorer's +). */
 export async function openProjectEditor(user: UserEvent): Promise<void> {
   await user.keyboard('{Control>},{/Control}');
   await screen.findByRole('heading', { level: 1, name: 'General' });

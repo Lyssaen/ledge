@@ -41,7 +41,7 @@ export const en: Messages = {
     resumeOne: (name) => `Resume ${name}`,
     deleteOne: (name) => `Delete ${name}`,
     dropHelp: (name) => `Drop on a project to file ${name}.`,
-    hint: '↑ ↓ move · ← → fold · E archive · H finished · Ctrl ⇧ E focus',
+    hint: { move: 'move', fold: 'fold', archive: 'archive', done: 'finished', focus: 'focus' },
     state: {
       approval: 'is waiting for you', question: 'has a question', error: 'has an error',
       working: 'is working', starting: 'is starting', idle: 'is idle', done: 'finished', offline: 'offline'

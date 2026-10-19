@@ -105,13 +105,24 @@ describe('the session page', () => {
     expect(document.querySelector('.session-page')).toHaveAttribute('data-helper', 'h1');
   });
 
+  it('a finished subagent leaves the parent thread: no « Done » card piles up there', async () => {
+    const { d } = await openOtto();
+    await thread().findByRole('button', { name: 'Open Explore: Lire le code' });
+    d.upsert({ ...listSessions()[0]!, helpers: [{ id: 'h1', kind: 'Explore', task: 'Lire le code', state: 'exited' }] });
+    await waitFor(() => expect(document.querySelector('.helper-card')).toBeNull());
+    d.upsert({ ...listSessions()[0]!, helpers: [] });
+    await waitFor(() => expect(document.querySelectorAll('.session-thread .turn')).toHaveLength(2));
+    expect(document.querySelector('.helper-card')).toBeNull();
+  });
+
   it('a subagent without a name of its own is « Subagent », translated', async () => {
-    const sessions = listSessions().map(s => (s.name === 'Otto' ? { ...s, helpers: [] } : s));
-    const { d, user } = await boot({ sessions, list: true });
+    const { d, user } = await boot({ sessions: listSessions(), list: true });
     d.thread('otto', ottoThread().map(i => (i.kind === 'helper' ? { ...i, agentType: undefined } : i)));
     await user.click(screen.getByRole('button', { name: /^Otto,/ }));
-    await user.click(await thread().findByRole('button', { name: 'Open Subagent: Lire le code' }));
-    expect(document.querySelector('.turn-author')).toHaveTextContent('Subagent');
+    await user.click(await thread().findByRole('button', { name: 'Open Explore: Lire le code' }));
+    // Gone from the session, it is named by its thread row, which has no name.
+    d.upsert({ ...listSessions()[0]!, helpers: [] });
+    await waitFor(() => expect(document.querySelector('.turn-author')).toHaveTextContent('Subagent'));
     expect(within(screen.getByRole('banner')).getByText('Subagent')).toBeVisible();
   });
 
