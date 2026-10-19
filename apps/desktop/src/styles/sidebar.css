@@ -1,7 +1,7 @@
 /* The sidebar as an IDE explorer, from docs/mockups/session-management/sidebar-tree.css: ask field, views,
    « À toi », the project › branch › session tree. No search row, no auto-hide, no word mark (the titlebar owns the brand).
    `.side-swatch` and `.machine-dot` stay: they are used across the app; `.side-footer` is an alias of `.st-foot`. */
-.sidebar.st{width:288px;display:flex;flex-direction:column;padding:0;gap:0;background:var(--sidebar);border-right:1px solid var(--sidebar-border)}
+.sidebar.st{position:relative;width:288px;display:flex;flex-direction:column;padding:0;gap:0;background:var(--sidebar);border-right:1px solid var(--sidebar-border)}
 .st button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
 .st button:focus-visible{outline:2px solid var(--ring);outline-offset:-2px;border-radius:var(--radius-sm)}
 .st .mono{font-family:'Geist Mono',monospace}
@@ -117,6 +117,12 @@
 .st .st-mach:hover{color:var(--sidebar-foreground)}
 .st-mach small{font:10px 'Geist Mono',monospace}
 .st-mach .machine-dot{margin:0}
+/* The ? beside Settings: its tooltip lists the shortcuts (t.shortcuts.rows), on hover and on keyboard focus. It hangs from the
+   aside (position:relative), above the foot, so the foot's overflow:hidden does not clip it. */
+.st-keys-tip{position:absolute;left:8px;bottom:48px;z-index:30;width:max-content;max-width:320px;display:none;flex-direction:column;gap:5px;padding:10px 12px;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay);font-size:11px;line-height:15px;pointer-events:none}
+.st-keys:hover .st-keys-tip,.st-keys:focus-within .st-keys-tip{display:flex}
+.st-keys-tip>span{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.st-keys-tip kbd{flex:none;font-size:10px!important}
 .side-footer{padding:0;border:0} /* alias: Settings' test reads this selector; the foot is .st-foot */
 .side-swatch{width:9px;height:9px;border-radius:3px;margin:0 3px;flex-shrink:0;background:var(--info)}
 .machine-dot{width:7px;height:7px;border-radius:50%;margin:0 4px 0 2px;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 18%,transparent);flex-shrink:0}
@@ -126,6 +132,8 @@
 @media(max-width:850px){
  .sidebar.st{width:64px}
  .st kbd{display:none!important}
+ .st .st-keys-tip kbd{display:inline-flex!important}
+ .st-keys-tip{left:calc(100% + 6px);bottom:8px} /* the rail's foot is a column: the tooltip opens beside it */
  .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask input,.st-ask kbd{display:none}
  .st-views{flex-direction:column;margin:10px 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
  .st-attn,.st-label,.st-hint,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, within } from '@testing-library/react';
 import { activeCount } from '../src/nav/agents';
@@ -22,7 +24,7 @@ describe('the sidebar shell', () => {
 
   it('clicking the / hint focuses Ask Ledge and does not open the chat', async () => {
     const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
-    await user.click(side.getByText('/', { selector: 'kbd' }));
+    await user.click(side.getByText('/', { selector: '.st-ask kbd' }));
     expect(side.getByRole('textbox', { name: 'Ask Ledge' })).toHaveFocus();
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
   });
@@ -36,6 +38,26 @@ describe('the sidebar shell', () => {
     await user.keyboard('hello{Enter}');
     expect(await screen.findByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
     expect(d.received).toContainEqual({ type: 'chat.ask', qid: expect.stringMatching(/^q-/), text: 'hello', tool: 'claude' });
+  });
+
+  it('a ? beside Settings lists the shortcuts in its tooltip and opens their dialog', async () => {
+    const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
+    const help = side.getByRole('button', { name: 'Keyboard shortcuts', exact: true });
+    expect(help.closest('.st-foot')).toBe(side.getByRole('button', { name: 'Settings' }).closest('.st-foot'));
+    // The tooltip describes the button, for a mouse and for the keyboard alike: it is in the DOM, CSS shows it on hover and focus.
+    const tip = document.getElementById(help.getAttribute('aria-describedby')!)!;
+    expect(tip).toHaveAttribute('role', 'tooltip');
+    expect(within(tip).getByText('Search and open a session')).toBeInTheDocument();
+    expect(within(tip).getByText('Ctrl / ⌘ K')).toBeInTheDocument();
+    expect(within(tip).getByText('Show these shortcuts')).toBeInTheDocument();
+    await user.click(help);
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
+  });
+
+  it('the shortcuts tooltip shows on hover and on keyboard focus', () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/sidebar.css'), 'utf8');
+    expect(css).toMatch(/\.st-keys:hover \.st-keys-tip/);
+    expect(css).toMatch(/\.st-keys:focus-within \.st-keys-tip/);
   });
 
   it('shows the tree shortcuts at the foot of the sidebar', async () => {

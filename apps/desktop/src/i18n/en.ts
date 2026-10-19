@@ -9,7 +9,7 @@ export const en: Messages = {
   side: {
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
-    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', settings: 'Settings',
+    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
     ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…',
     openChat: 'Open the conversation with Ledge',
     active: (n) => `${n} active`,
@@ -56,7 +56,7 @@ export const en: Messages = {
     chat: 'Chat Ledge', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
     terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)'
   },
-  foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
+  foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
   sections: { general: 'General', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
   settings: {
