@@ -1266,7 +1266,7 @@ describe('server', () => {
       const s = store.get(launched.id)!;
       expect(s).toMatchObject({ name: 'Juno', tool: 'claude', cwd: join(home(), 'api-gateway'), project: 'api-gateway', title: 'Juno · api-gateway', state: 'starting', source: 'launcher', tmuxSession: `ledge-${launched.id}` });
       expect(tmux.created).toHaveLength(1);
-      expect(tmux.created[0]).toMatchObject({ name: `ledge-${launched.id}`, cwd: join(home(), 'api-gateway'), command: ['claude', '--continue', 'run the tests'] });
+      expect(tmux.created[0]).toMatchObject({ name: `ledge-${launched.id}`, cwd: join(home(), 'api-gateway'), command: ['claude', '-n', 'Juno', '--continue', 'run the tests'] });
       // The daemon runs with systemd's bare PATH: the agent gets the login shell's instead, so `claude` resolves as in a terminal.
       expect(tmux.created[0]!.env).toMatchObject({ LEDGE_SESSION: launched.id, LEDGE_NAME: 'Juno', PATH: '/login/bin:/usr/bin', HTTPS_PROXY: 'http://proxy:8080' });
       expect((await other.next('session.updated')).session.id).toBe(launched.id);
@@ -1284,14 +1284,15 @@ describe('server', () => {
       expect(cmd[0]).toBe('claude'); expect(cmd[1]).toBe('--session-id');
       const uuid = cmd[2]!;
       expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-      expect(cmd.slice(3)).toEqual(['plan it']);
+      // Its Claude Code session takes the Ledge name (`-n`): SendMessage reaches it by that name.
+      expect(cmd.slice(3)).toEqual(['-n', store.get(launched.id)!.name, 'plan it']);
       const s = store.get(launched.id)!;
       expect(s.agentSessionId).toBe(uuid);
       const dir = join(home(), 'my_app.v2').replace(/[^a-zA-Z0-9]/g, '-');
       expect(s.transcriptPath).toMatch(new RegExp(`/projects/${dir}/${uuid}\\.jsonl$`));
       c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'my_app.v2'), continue: true });
       const resumed = await c.next('session.launched');
-      expect(tmux.created[1]!.command).toEqual(['claude', '--continue']);
+      expect(tmux.created[1]!.command).toEqual(['claude', '-n', store.get(resumed.id)!.name, '--continue']);
       expect(store.get(resumed.id)!.transcriptPath).toBeUndefined();
       c.close();
     });

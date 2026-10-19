@@ -22,6 +22,14 @@ export function agentIdArgs(tool: Tool, id: string): string[] {
   return tool === 'codex' ? ['-c', `shell_environment_policy.set.${CODEX_HOOK_VAR}="${id}"`] : [];
 }
 
+/** Claude Code arguments that name its session themselves: Ledge then sets none. */
+const CLAUDE_OWN_NAME = /^(-n|--name)(=|$)/;
+/** Claude Code takes the Ledge name as its session name (`-n`, 2.1.303): SendMessage and ListAgents address a session by
+ *  it, so « écris à Pim » reaches the session Ledge calls Pim. */
+export function agentNameArgs(tool: Tool, name: string, args: string[]): string[] {
+  return tool === 'claude' && !args.some(a => CLAUDE_OWN_NAME.test(a)) ? ['-n', name] : [];
+}
+
 /** Claude Code arguments that pick the conversation themselves: Ledge then names none. */
 const CLAUDE_OWN_SESSION = /^(--resume|-r|--continue|-c|--session-id|--fork-session)(=|$)/;
 /** Claude Code started fresh gets its session id from Ledge, so its transcript is known even without hooks. */
@@ -72,7 +80,7 @@ export async function spawnSession(opts: SpawnOptions): Promise<Session> {
   const project = basename(opts.cwd) || opts.cwd;
   const tmuxSession = `ledge-${id}`;
   const agentSessionId = opts.command ? undefined : claudeSessionId(opts.tool, opts.args);
-  const agent = opts.command ?? [AGENT_BIN[opts.tool], ...agentIdArgs(opts.tool, id), ...(agentSessionId ? ['--session-id', agentSessionId] : []), ...opts.args];
+  const agent = opts.command ?? [AGENT_BIN[opts.tool], ...agentIdArgs(opts.tool, id), ...(agentSessionId ? ['--session-id', agentSessionId] : []), ...agentNameArgs(opts.tool, name, opts.args), ...opts.args];
   const env = opts.env ?? process.env;
   const transcriptPath = agentSessionId ? claudeTranscriptPath(opts.cwd, agentSessionId, env) : undefined;
   // With recordExit, sh runs the agent with its argv untouched ("$@") and writes its exit code to
