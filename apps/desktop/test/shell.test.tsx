@@ -129,6 +129,11 @@ describe('the Atelier shell', () => {
     expect(declarations('sidebar.css', '.st-time.t-error')).toBe('color:var(--danger-text)');
   });
 
+  it('Ask Ledge and the Atelier view are set apart, as far as the field is from the title bar', () => {
+    expect(declarations('sidebar.css', '.st-ask')).toContain('margin:10px10px0');
+    expect(declarations('sidebar.css', '.st-views')).toContain('margin:10px10px6px');
+  });
+
   it('the toast sits above a dialog and the narrow chat', () => {
     expect(declarations('shell.css', '.toast-region')).toBe('position:fixed;width:0;height:0;z-index:10');
   });

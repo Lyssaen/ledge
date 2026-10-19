@@ -14,7 +14,7 @@
 .st-ask input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:13px 'Geist',system-ui,sans-serif;outline:none}
 .st-ask input::placeholder{color:var(--muted-foreground)}
 .st .st-mascot{display:inline-flex;flex:none}
-.st-views{display:flex;gap:2px;margin:0 10px 6px;padding:2px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st-views{display:flex;gap:2px;margin:10px 10px 6px;padding:2px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
 .st .st-views button{flex:1;height:28px;display:flex;align-items:center;gap:7px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
 .st .st-views button:hover{color:var(--sidebar-foreground)}
 .st .st-views button.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
@@ -132,7 +132,7 @@
  .st kbd{display:none!important}
  .st-brand{justify-content:center;padding:0}.st-brand .st-fill,.st .st-new span,.st .st-new kbd{display:none}
  .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask input,.st-ask kbd{display:none}
- .st-views{flex-direction:column;margin:0 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
+ .st-views{flex-direction:column;margin:10px 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
  .st-attn,.st-label,.st-hint,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}
  .st .st-views button{justify-content:center;padding:0}.st-views .st-fill{display:none}
  .st-project{justify-content:center;padding:0;min-height:36px}.st-project>.st-chev,.st-project>.st-gap,.st-project .st-main,.st-project .st-acts{display:none}
