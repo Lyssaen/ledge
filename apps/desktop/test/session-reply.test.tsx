@@ -18,7 +18,7 @@ const card = (name: string) => within(screen.getByRole('region', { name }));
 const sent = (d: MockDaemon, type: string) => d.received.filter(m => m.type === type);
 async function open(name: string, sessions = listSessions(), list = true) {
   const env = await boot({ sessions, list });
-  await env.user.click(screen.getByRole('listitem', { name: new RegExp(`^${name},`) }));
+  await env.user.click(screen.getByRole('button', { name: new RegExp(`^${name},`) }));
   await waitFor(() => expect(document.querySelector('.session-reply')).not.toBeNull());
   return env;
 }
@@ -136,8 +136,7 @@ describe('the pinned request and the reply', () => {
     const { user } = await open('Otto', [otto, ...listSessions().slice(1)]);
     expect(card('Approval requested').getByText('Explore wants your approval')).toBeVisible();
     await user.keyboard('{Escape}');
-    await user.click(within(screen.getByRole('listitem', { name: /^Otto,/ })).getByRole('button', { name: 'Show 1 subagent' }));
-    await user.click(screen.getByRole('listitem', { name: /subagent of Otto/ }));
+    await user.click(screen.getByRole('button', { name: /subagent of Otto/ }));
     expect(card('Approval requested').getByText('Otto passes this decision on.')).toBeVisible();
     expect(card('Approval requested').queryByRole('button', { name: /^Allow/ })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Open Otto' }));
@@ -154,9 +153,9 @@ describe('the pinned request and the reply', () => {
     expect(field()).toHaveValue('à moitié');
   });
 
-  it('Reply from the List lands in the reply field', async () => {
-    const { user } = await boot({ sessions: listSessions(), list: true });
-    await user.click(within(screen.getByRole('listitem', { name: /^Kit,/ })).getByRole('button', { name: 'Reply' }));
+  it('Reply from the sidebar lands in the reply field', async () => {
+    const { side, user } = await boot({ sessions: listSessions() });
+    await user.click(side.getByRole('button', { name: 'Reply' }));
     expect(await screen.findByRole('textbox', { name: 'Reply to the agent' })).toHaveFocus();
   });
 });
@@ -270,8 +269,7 @@ describe('the reply, beyond the brief (carried items)', () => {
     const otto = { ...listSessions()[0]!, pending: { kind: 'permission' as const, text: 'cat a', source: 'hook' as const, helperId: 'h1' } };
     const { d, user } = await open('Otto', [otto, ...listSessions().slice(1)]);
     await user.keyboard('{Escape}');
-    await user.click(within(screen.getByRole('listitem', { name: /^Otto,/ })).getByRole('button', { name: 'Show 1 subagent' }));
-    await user.click(screen.getByRole('listitem', { name: /subagent of Otto/ }));
+    await user.click(screen.getByRole('button', { name: /subagent of Otto/ }));
     await waitFor(() => expect(document.querySelector('.session-page[data-helper=h1]')).not.toBeNull());
     await user.keyboard('yr');
     expect(sent(d, 'session.decide')).toEqual([]);

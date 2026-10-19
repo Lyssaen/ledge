@@ -15,7 +15,7 @@ const more: ThreadItem[] = [
 async function openOtto(extra: ThreadItem[] = more, tool: Session['tool'] = 'claude', base: ThreadItem[] = ottoThread()) {
   const env = await boot({ sessions: listSessions().map(s => (s.name === 'Otto' ? { ...s, tool } : s)), list: true });
   env.d.thread('otto', [...base, ...extra]);
-  await env.user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
   await screen.findByText('Câble la liste');
   return env;
 }
@@ -93,7 +93,7 @@ it('a held J does not walk the files: only a new press does', async () => {
 });
 it('before the thread is there, Changes says what the thread says, and the tab gives no count', async () => {
   const { user } = await boot({ sessions: listSessions().map(s => (s.name === 'Otto' ? { ...s, offline: true } : s)), list: true });
-  await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await user.click(screen.getByRole('button', { name: /^Otto,/ }));
   await screen.findByText('The thread was not loaded before the connection was lost.');
   expect(tab(/^Changes/).querySelector('.tab-count')).toBeNull();
   await user.click(tab(/^Changes/));

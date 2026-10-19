@@ -217,11 +217,11 @@ describe('the Ledge chat docked on the right', () => {
     await panel().findByText('has started');
   });
 
-  it('on the List, a hovered name lights its row', async () => {
+  it('a hovered name lights the atelier seat, even when a list view was stored', async () => {
     const env = await openChat({ list: true });
     await ask(env, 'Who works?', '**Otto** relit la PR.');
     await env.user.hover(panel().getByRole('link', { name: 'Otto' }));
-    expect(screen.getByRole('listitem', { name: /^Otto,/ })).toHaveClass('chat-hover');
+    expect(screen.getByRole('button', { name: /^Otto,/ })).toHaveClass('chat-hover');
     await env.user.unhover(panel().getByRole('link', { name: 'Otto' }));
     expect(document.querySelectorAll('.chat-hover')).toHaveLength(0);
   });

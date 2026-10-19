@@ -15,7 +15,7 @@ async function openOtto(extra: ThreadItem[] = withDoc) {
   const env = await boot({ sessions: listSessions(), list: true });
   env.d.thread('otto', [...ottoThread(), ...extra]);
   env.d.documents.set('docs/guide.md', '---\ntitle: Guide de Ledge\n---\n# Guide\n\nBonjour.');
-  await env.user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
   await screen.findByText('Câble la liste');
   return env;
 }

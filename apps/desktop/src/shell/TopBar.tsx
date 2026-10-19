@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import type { Helper, Projects, Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Button } from '@ledge/ui/ui/Button';
@@ -6,7 +5,7 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { helperState } from '../atelier/layout';
 import { useI18n } from '../i18n/lang';
 import { taskOf } from '../nav/agents';
-import type { NavAction, NavState, ProjectFilter, View } from '../nav/state';
+import type { NavAction, NavState, ProjectFilter } from '../nav/state';
 import { isArchived } from '@ledge/protocol';
 import { SHELL_ICONS } from './icons';
 import { HelperBot, SessionBot, StateBadge } from './SessionBot';
@@ -14,10 +13,9 @@ import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 /** The session menu opens under its button, its right edge on the button's (Menu keeps it inside the window). */
 const MENU_WIDTH = 260;
-const VIEWS: readonly View[] = ['atelier', 'list'];
 
 /** The mockup's top bar: the breadcrumb on the left (no page title; on a subagent's page, its parent before it); on the right,
- *  icons only, in groups: view and display (overview only), or the open agent's state, the terminal toggle and the session menu; then
+ *  icons only, in groups: display (overview only), or the open agent's state, the terminal toggle and the session menu; then
  *  shortcuts and full screen (search and chat are in the title bar). */
 export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal, manage, onRevealArchives }: {
   nav: NavState; dispatch: (a: NavAction) => void; session: Session | null; projects: Projects | null; projectIdOf: (s: Session) => string | null;
@@ -29,9 +27,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
   onRevealArchives?: () => void;
 }) {
   const { t } = useI18n();
-  const tabs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
   const { place } = nav;
-  const viewName = (v: View) => (v === 'list' ? t.crumb.list : t.crumb.atelier);
   const project = (id: string) => projects?.projects.find(p => p.id === id);
   const filterName = (f: ProjectFilter) => (f === 'none' ? t.side.unassigned : project(f)?.name ?? t.side.unassigned);
   const overview = place.kind === 'overview';
@@ -46,7 +42,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
     if (place.kind === 'session' && session) {
       const pid = projectIdOf(session) ?? 'none';
       return <>
-        <button className="crumb-link" onClick={() => dispatch({ type: 'home' })} title={t.crumb.escape}>{viewName(place.view)}</button>
+        <button className="crumb-link" onClick={() => dispatch({ type: 'home' })} title={t.crumb.escape}>{t.crumb.atelier}</button>
         <span className="muted">/</span>
         <button className="crumb-link" onClick={() => dispatch({ type: 'home', project: pid })} title={filterName(pid)}>{filterName(pid)}</button>
         <span className="muted">/</span>
@@ -69,12 +65,11 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
         )}
       </>;
     }
-    const view = place.view;
     const filter = place.project;
-    if (filter === 'all') return <strong>{viewName(view)}</strong>;
+    if (filter === 'all') return <strong>{t.crumb.atelier}</strong>;
     const color = project(filter)?.color;
     return <>
-      <button className="crumb-link" onClick={() => dispatch({ type: 'home' })}>{viewName(view)}</button>
+      <button className="crumb-link" onClick={() => dispatch({ type: 'home' })}>{t.crumb.atelier}</button>
       <span className="muted">/</span>
       <span className="project-filter">
         <ProjectSwatch project={filter !== 'none' && color ? { color } : null} />
@@ -83,21 +78,6 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
       </span>
     </>;
   };
-
-  const current: View = place.kind === 'settings' ? place.back.view : place.view;
-  const tab = (v: View, d: readonly string[]) => (
-    <button key={v} ref={el => { tabs.current[v] = el; }} role="tab" id={`view-tab-${v}`} aria-controls={`view-panel-${v}`} aria-selected={current === v} tabIndex={current === v ? 0 : -1}
-      title={viewName(v)} aria-label={viewName(v)} onClick={() => dispatch({ type: 'view', view: v })}
-      onKeyDown={e => {
-        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-        e.preventDefault();
-        const next = VIEWS[(VIEWS.indexOf(current) + 1) % VIEWS.length]!;
-        dispatch({ type: 'view', view: next });
-        tabs.current[next]?.focus();
-      }}>
-      <Icon d={d} size={15} />
-    </button>
-  );
 
   return (
     <header className="app-header" role="banner">
@@ -121,8 +101,6 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
       )}
       {overview && (
         <div className="header-view">
-          <div className="icon-tabs" role="tablist" aria-label={t.top.viewTabs}>{tab('atelier', SHELL_ICONS.grid)}{tab('list', SHELL_ICONS.list)}</div>
-          <span className="view-actions-sep" />
           <Button variant="ghost" size="icon" aria-pressed={nav.helpers} aria-label={nav.helpers ? t.top.helpersHide : t.top.helpersShow} title={nav.helpers ? t.top.helpersHide : t.top.helpersShow} onClick={() => dispatch({ type: 'helpers' })}>
             <Icon d={nav.helpers ? SHELL_ICONS.subagents : SHELL_ICONS.subagentsOff} size={16} />
           </Button>

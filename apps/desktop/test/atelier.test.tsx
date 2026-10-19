@@ -75,9 +75,8 @@ describe('the atelier', () => {
     expect(shell).not.toBeNull();
     for (const name of ['Ledge table', 'Payment Service Platform Migration Europe table', 'No project']) expect(shell).toContainElement(screen.getByRole('region', { name }));
     expect(shell).toContainElement(screen.getByRole('button', { name: 'Talk to Ledge' }));
-    const panel = screen.getByRole('tabpanel');
+    const panel = screen.getByRole('region', { name: 'Atelier' });
     expect(panel).toHaveAttribute('id', 'view-panel-atelier');
-    expect(panel).toHaveAttribute('aria-labelledby', 'view-tab-atelier');
     const legend = document.querySelector<HTMLElement>('.workspace-legend')!;
     expect(panel).toContainElement(legend);
     expect(shell).not.toContainElement(legend);
@@ -128,12 +127,8 @@ describe('the atelier', () => {
     await user.keyboard('{Enter}');
     expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible();
   });
-  it('J / K leave the view tabs and an open menu alone', async () => {
+  it('J / K leave an open menu alone', async () => {
     const { user } = await boot();
-    screen.getByRole('tab', { name: 'Atelier' }).focus();
-    await user.keyboard('j');
-    expect(screen.getByRole('tab', { name: 'Atelier' })).toHaveFocus();
-    expect(document.querySelector('.keyboard-selected')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Actions of project Ledge' }));
     const first = within(screen.getByRole('menu')).getAllByRole('menuitem')[0]!;
     expect(first).toHaveFocus();
@@ -168,13 +163,11 @@ describe('the atelier', () => {
     await user.click(side.getByRole('button', { name: /^Docs/ }));
     expect(document.querySelector('.empty-project')).toHaveTextContent('The table will appear as soon as a session starts in docs.');
   });
-  it('the List tab shows the list', async () => {
-    const { user } = await boot();
-    await user.click(screen.getByRole('tab', { name: 'List' }));
-    expect(screen.getByRole('tabpanel', { name: 'List' })).toBeVisible();
-    expect(document.querySelector('.list-view')).not.toBeNull();
-    expect(screen.queryByText('This screen is coming soon.')).toBeNull();
-    expect(document.querySelector('.office-shell')).toBeNull();
+  it('the overview is the atelier, with no List tab', async () => {
+    await boot({ list: true });
+    expect(screen.queryByRole('tab', { name: 'List' })).toBeNull();
+    expect(document.querySelector('.list-view')).toBeNull();
+    expect(document.querySelector('.office-shell')).not.toBeNull();
   });
 
   describe('messages between agents', () => {

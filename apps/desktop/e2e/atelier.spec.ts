@@ -103,17 +103,17 @@ test('drag Kit from Sans projet onto a table: the daemon gets the rule, Kit sits
   await expect(page.locator('.toast')).toHaveText('Kit joins the Ledge table. Ledge will remember this folder.');
 });
 
-test('a crowded table: six seats, four at the ends, +N opens the List on the project', async ({ page }) => {
+test('a crowded table: six seats, four at the ends, +N filters the atelier on the project', async ({ page }) => {
   await fakeDaemon(page, crowd, { projects: twoProjects });
   await page.goto('/');
   const table = page.getByRole('region', { name: 'Ledge table' });
   await expect(table.locator('.agent-seat:not(.helper-seat)')).toHaveCount(6);
   await expect(table.locator('.helper-seat')).toHaveCount(4);
   await table.getByRole('button', { name: /\+3 at this table/ }).click();
-  await expect(page.getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: 'List' })).toHaveCount(0);
   await expect(page.getByRole('banner').getByText('Ledge')).toBeVisible();
-  await expect(page.locator('.lgroup')).toHaveCount(1);
-  await expect(page.getByRole('region', { name: 'Ledge' }).getByRole('listitem')).toHaveCount(8);
+  await expect(page.getByRole('button', { name: 'Remove the filter: show every project' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
 });
 
 test('a long project name on the rug is cut with an ellipsis and stays inside the rug', async ({ page }) => {

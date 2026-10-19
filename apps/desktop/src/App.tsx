@@ -31,7 +31,6 @@ import { daemonTarget, useDaemonUpdate } from './update/daemon';
 import { useUpdate } from './update/store';
 import { useLaunch } from './launch/useLaunch';
 import { Atelier } from './atelier/Atelier';
-import { List } from './list/List';
 import { Modal } from './shell/Modal';
 import { SearchPalette } from './shell/SearchPalette';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
@@ -57,7 +56,7 @@ const NO_PROJECTS: readonly Project[] = [];
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
 const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'reconcile' ? reconcile(s, a.sessions, a.projects) : navReducer(s, a));
 
-/** The Atelier's shell: sidebar, top bar, the current place (the atelier, the List, a session, Settings), footer, chat and dialogs;
+/** The Atelier's shell: sidebar, top bar, the current place (the atelier, a session, Settings), footer, chat and dialogs;
  *  the real fleet, toasts and sounds, and the tray. */
 function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): Promise<'ok' | 'failed'> }) {
   const fleetView = useFleet(client);
@@ -105,8 +104,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
   const { notice, action: noticeAction, notify, undo } = useToast();
   const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
-  // Allow / Deny from the List (and, lot 6, the session): one send per request; a refusal or a silence is said in the toast.
-  // End, archive, resume, restore, delete (lot 8): the confirmation below; the atelier, the List and the session page hand it their menus.
+  // Allow / Deny from the session (and the sidebar): one send per request; a refusal or a silence is said in the toast.
+  // End, archive, resume, restore, delete (lot 8): the confirmation below; the atelier and the session page hand it their menus.
   const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
   // The session menu, from the atelier's seats and the session page's header « … » (one at a time).
   const sessionMenu = useSessionMenu({ client: fleetClient, sessions, notify });
@@ -224,8 +223,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} order={order} projects={projects} projectIdOf={projectIdOf} />
-            : view === 'atelier' ? <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu} />
-            : <List nav={nav} dispatch={dispatch} order={order} projects={projects} projectIdOf={projectIdOf} machines={machines} decisions={decisions} filing={filing} waits={waits} />}
+            : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>
         {nav.chat && (

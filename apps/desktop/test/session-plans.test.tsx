@@ -18,7 +18,7 @@ it('the plan card in the thread, read beside; the pinned plan sums it up and app
   const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'hook' } });
   const { d, user } = await boot({ sessions: [...listSessions(), pia], list: true });
   d.thread('pia', [{ kind: 'prompt', id: 'prompt-1', at: new Date().toISOString(), turn: 1, text: 'Prépare la 0.6' }, exit('p1', 'running')]);
-  await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await user.click(screen.getByRole('button', { name: /^Pia,/ }));
   const plan = within(await screen.findByText('Proposed plan').then(e => e.closest<HTMLElement>('.plan-card')!));
   expect(plan.getByText('Awaiting your approval')).toBeVisible();
   expect([...document.querySelectorAll('.plan-steps li')].map(e => e.textContent)).toEqual(['Changelog', 'Monter les versions', 'Construire', '… and 1 more step']);
@@ -36,7 +36,7 @@ it('keep planning with a note: the old card is revised, the new one and the pinn
   const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'hook' } });
   const { d, user } = await boot({ sessions: [...listSessions(), pia], list: true });
   d.thread('pia', [exit('p1', 'running')]);
-  await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await user.click(screen.getByRole('button', { name: /^Pia,/ }));
   await user.type(await screen.findByRole('textbox', { name: 'Reply to the agent' }), 'Sans la publication{Enter}');
   await waitFor(() => expect(d.received.filter(m => m.type === 'session.decide')).toEqual([{ type: 'session.decide', id: 'pia', decision: 'deny', note: 'Sans la publication', expect: { kind: 'plan', text: '# Plan : version 0.6.0', key: expect.any(String) } }]));
   const v2 = md.replace('# Plan : version 0.6.0', '# Plan : version 0.6.0 (révisé)').replace('\n4. Publier', '');
@@ -57,7 +57,7 @@ it('a plan still running when the agent proposes another is revised: its tab say
   const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : version 0.6.0 (révisé)', body: v2, source: 'hook' } });
   const { d, user } = await boot({ sessions: [...listSessions(), pia], list: true });
   d.thread('pia', [exit('p1', 'running'), { ...exit('p2', 'running'), input: JSON.stringify({ plan: v2 }) }]);
-  await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await user.click(screen.getByRole('button', { name: /^Pia,/ }));
   await waitFor(() => expect([...document.querySelectorAll('.plan-card')].map(c => c.querySelector('.plan-status')!.textContent)).toEqual(['Revised afterwards', 'Awaiting your approval']));
   await user.click(card('p1').getByRole('button', { name: /Read the plan/ }));
   expect(status()).toBe('Revised afterwards');
@@ -68,7 +68,7 @@ it('the keys are not offered where the plan cannot be answered: read only, offli
   const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', source: 'hook_only', pending: { kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'hook' } });
   const env = await boot({ sessions: [...listSessions(), pia], list: true });
   env.d.thread('pia', [exit('p1', 'running')]);
-  await env.user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await env.user.click(screen.getByRole('button', { name: /^Pia,/ }));
   await screen.findByText('Proposed plan');
   await env.user.click(card('p1').getByRole('button', { name: /Read the plan/ }));
   expect(status()).toBe('Awaiting your approval');
@@ -78,7 +78,7 @@ it('the keys are not offered where the plan cannot be answered: read only, offli
   const online = { ...pia, source: 'launcher' as const };
   const { d, user } = await boot({ sessions: [...listSessions(), online], list: true });
   d.thread('pia', [exit('p1', 'running')]);
-  await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await user.click(screen.getByRole('button', { name: /^Pia,/ }));
   await screen.findByText('Proposed plan');
   await user.click(card('p1').getByRole('button', { name: /Read the plan/ }));
   expect(status()).toBe(HINT);
@@ -90,7 +90,7 @@ it('the keys are not offered where the plan cannot be answered: read only, offli
   const otto = { ...listSessions()[0]!, pending: { kind: 'plan' as const, text: '# Plan : version 0.6.0', body: md, source: 'hook' as const, helperId: 'h1' } };
   const sub = await boot({ sessions: [otto, ...listSessions().slice(1)], list: true });
   sub.d.thread('otto', [...ottoThread(), { ...exit('hp', 'running'), turn: 1, helperId: 'h1' }]);
-  await sub.user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await sub.user.click(screen.getByRole('button', { name: /^Otto,/ }));
   await sub.user.click(await screen.findByRole('button', { name: 'Open Explore: Lire le code' }));
   await screen.findByText('Proposed plan');
   await sub.user.click(card('hp').getByRole('button', { name: /Read the plan/ }));
@@ -101,7 +101,7 @@ it('a request tab opened before its action arrived keeps its keys', async () => 
   const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'hook' } });
   const { d, user } = await boot({ sessions: [...listSessions(), pia], list: true });
   d.thread('pia', [{ kind: 'prompt', id: 'prompt-1', at: new Date().toISOString(), turn: 1, text: 'Prépare la 0.6' }]);
-  await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await user.click(screen.getByRole('button', { name: /^Pia,/ }));
   await screen.findByText('Prépare la 0.6');
   await user.click(within(screen.getByRole('region', { name: 'Plan to approve' })).getByRole('button', { name: 'Read the plan' }));
   expect(status()).toBe(HINT);
@@ -112,7 +112,7 @@ it('a request tab opened before its action arrived keeps its keys', async () => 
 it('a decided plan is a chip', async () => {
   const { d, user } = await boot({ sessions: listSessions(), list: true });
   d.thread('otto', [...ottoThread(), { kind: 'permission', id: 'perm-plan', at: new Date().toISOString(), turn: 2, tool: 'ExitPlanMode', text: '# Plan : version 0.6.0', decision: 'always' }]);
-  await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await user.click(screen.getByRole('button', { name: /^Otto,/ }));
   await screen.findByText('Câble la liste');
   expect(document.querySelector('.decision-chip.plan.always')).toHaveTextContent('✓Plan approved · auto modePlan : version 0.6.0');
   // Answered in the terminal, its fate is not known: no success colour.
@@ -122,7 +122,7 @@ it('a plan without its action (Codex) is read from the request; once answered, i
   const cora = fakeSession('cora', { name: 'Cora', tool: 'codex', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'pane' } });
   const { d, user } = await boot({ sessions: [...listSessions(), cora], list: true });
   d.thread('cora', [{ kind: 'prompt', id: 'prompt-1', at: new Date().toISOString(), turn: 1, text: 'Prépare la 0.6' }]);
-  await user.click(screen.getByRole('listitem', { name: /^Cora,/ }));
+  await user.click(screen.getByRole('button', { name: /^Cora,/ }));
   await screen.findByText('Prépare la 0.6');
   expect(document.querySelector('.plan-card')).toBeNull();
   await user.click(within(screen.getByRole('region', { name: 'Plan to approve' })).getByRole('button', { name: 'Read the plan' }));
@@ -141,7 +141,7 @@ it('a plan whose steps are headings: counted, no step shown twice as the intro; 
   const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : nettoyage', body: prose, source: 'hook' } });
   const { d, user } = await boot({ sessions: [...listSessions(), pia], list: true });
   d.thread('pia', [{ ...exit('p1', 'success'), input: JSON.stringify({ plan: headed }) }, { ...exit('p2', 'running'), input: JSON.stringify({ plan: prose }) }]);
-  await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await user.click(screen.getByRole('button', { name: /^Pia,/ }));
   await screen.findAllByText('Proposed plan');
   expect([...document.querySelectorAll('[data-plan-card="p1"] .plan-steps li')].map(e => e.textContent)).toEqual(['Lire le code', 'Écrire les tests', 'Livrer']);
   expect(document.querySelector('[data-plan-card="p1"] .plan-intro')).toBeNull();
@@ -155,7 +155,7 @@ it('the pinned request reads its own plan: a stale waiting card with another pla
   const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : autre chose', body: v2, source: 'hook' } });
   const { d, user } = await boot({ sessions: [...listSessions(), pia], list: true });
   d.thread('pia', [exit('p0', 'running')]);
-  await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await user.click(screen.getByRole('button', { name: /^Pia,/ }));
   await screen.findByText('Proposed plan');
   await user.click(within(screen.getByRole('region', { name: 'Plan to approve' })).getByRole('button', { name: 'Read the plan' }));
   expect(side().getByText('Plan : autre chose', { selector: 'strong' })).toBeVisible();
@@ -168,7 +168,7 @@ it('a waiting card no request holds any more is « Proposed », its fate untold,
   const pia = fakeSession('pia', { name: 'Pia', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'hook' } });
   const { d, user } = await boot({ sessions: [...listSessions(), pia], list: true });
   d.thread('pia', [exit('p1', 'running')]);
-  await user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await user.click(screen.getByRole('button', { name: /^Pia,/ }));
   await user.type(await screen.findByRole('textbox', { name: 'Reply to the agent' }), 'Sans la publication{Enter}');
   await waitFor(() => expect(d.received.filter(m => m.type === 'session.decide')).toHaveLength(1));
   d.upsert({ ...pia, state: 'working', pending: undefined, lastActivityAt: new Date().toISOString() });
@@ -187,7 +187,7 @@ it('a waiting card no request holds any more is « Proposed », its fate untold,
   // Offline: lot 6a's frozen thread, no live status.
   const off = await boot({ sessions: [...listSessions(), { ...pia, pending: undefined, state: 'working' }], list: true });
   off.d.thread('pia', [exit('p1', 'running')]);
-  await off.user.click(screen.getByRole('listitem', { name: /^Pia,/ }));
+  await off.user.click(screen.getByRole('button', { name: /^Pia,/ }));
   await waitFor(() => expect(document.querySelector('[data-plan-card="p1"] .plan-status')).toHaveTextContent(/^Proposed$/));
   off.d.upsert({ ...pia, pending: undefined, state: 'working', offline: true });
   await waitFor(() => expect(document.querySelector('[data-plan-card="p1"] .plan-status')).toHaveTextContent('Awaiting your approval'));

@@ -122,7 +122,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
       </Button>
       <span className="zoom-hint">{t.zoom.hint}</span>
     </div>
-    <div className="overview-scroll atelier" id="view-panel-atelier" role="tabpanel" aria-labelledby="view-tab-atelier" ref={view.scrollRef}>
+    <div className="overview-scroll atelier" id="view-panel-atelier" role="region" aria-label={t.side.atelier} ref={view.scrollRef}>
       <div ref={view.shellRef} className={`office-shell ${nav.paused ? 'office-paused' : ''} ${reduced ? 'office-reduced' : ''}`}>
         <MessageLayer sessions={sessions} clock={clock} paused={nav.paused} reduced={reduced} dispatch={dispatch} />
         <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />

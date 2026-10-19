@@ -1,7 +1,7 @@
 import { isRecord, readJson, writeJson } from '../state/storage';
 import type { View } from './state';
 
-/** The overview preferences that survive a restart: which view, helpers shown, agents paused. */
+/** The overview preferences that survive a restart: the atelier, helpers shown, agents paused. A stored `list` reads as the atelier. */
 export interface Overview { view: View; helpers: boolean; paused: boolean }
 export const OVERVIEW_KEY = 'desktop.overview';
 
@@ -9,7 +9,7 @@ export function loadOverview(): Overview {
   const raw = readJson(OVERVIEW_KEY);
   const r = isRecord(raw) ? raw : {};
   return {
-    view: r.view === 'list' ? 'list' : 'atelier',
+    view: 'atelier',
     helpers: typeof r.helpers === 'boolean' ? r.helpers : true,
     paused: typeof r.paused === 'boolean' ? r.paused : false
   };

@@ -13,7 +13,7 @@ const longThread: ThreadItem[] = Array.from({ length: 120 }, (_, i): ThreadItem[
   ];
 }).flat();
 
-const open = async (page: Page, name: string) => { await page.getByRole('tab', { name: 'List' }).click(); await page.getByRole('listitem', { name: new RegExp(`^${name},`) }).click(); };
+const open = async (page: Page, name: string) => { await page.getByRole('tree').getByRole('button', { name: new RegExp(`^${name}`) }).click(); };
 const thread = (page: Page) => page.locator('.session-thread');
 const gap = (page: Page) => thread(page).evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight);
 
@@ -52,12 +52,10 @@ test('at the end of the thread, a new item stays in view', async ({ page }) => {
   daemon.item('nova', { kind: 'reply', id: 'reply-live', at: new Date().toISOString(), turn: 120, text: 'Terminé.' });
   await expect(thread(page).getByText('Terminé.')).toBeInViewport();
 });
-test('Reply from the List lands in the field; Enter sends the reply', async ({ page }) => {
+test('Reply from the sidebar lands in the field; Enter sends the reply', async ({ page }) => {
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects });
   await page.goto('/');
-  await page.getByRole('tab', { name: 'List' }).click();
-  await page.getByRole('listitem', { name: /^Luna,/ }).hover();
-  await page.getByRole('listitem', { name: /^Luna,/ }).getByRole('button', { name: 'Reply' }).click();
+  await page.getByRole('complementary').getByRole('button', { name: 'Reply' }).click();
   await expect(page.getByRole('textbox', { name: 'Reply to the agent' })).toBeFocused();
   await page.keyboard.type('Port 3000');
   await page.keyboard.press('Enter');
@@ -67,6 +65,7 @@ test('the terminal on O follows from agent to agent and survives a reload', asyn
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects });
   await page.goto('/');
   await open(page, 'Otto');
+  await expect(page.locator('.session-page')).toBeVisible();
   daemon.preview('otto', ['$ npm test']); daemon.preview('nova', ['$ git status']);
   await page.keyboard.press('o');
   await expect(page.getByRole('region', { name: 'Terminal' }).getByText('$ npm test')).toBeVisible();

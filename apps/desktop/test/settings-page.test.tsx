@@ -51,15 +51,15 @@ describe('the Settings page', () => {
     expect(tab('Machines')).toHaveAttribute('aria-current', 'page');
   });
 
-  it('Escape goes back to the place it came from (the List), whichever section was open', async () => {
+  it('Escape goes back to the atelier, whichever section was open', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS, list: true });
     await user.keyboard('{Control>},{/Control}');
     await user.click(tab('Sounds'));
     expect(title()).toHaveTextContent('Sounds');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
-    expect(banner().getByText('List')).toBeVisible();
-    expect(screen.getByRole('listitem', { name: /^Otto,/ })).toBeVisible();
+    expect(banner().getByText('Atelier')).toBeVisible();
+    expect(screen.getByRole('button', { name: /^Otto,/ })).toBeVisible();
   });
 
   it('« Back to the atelier » does as Escape', async () => {
@@ -68,7 +68,7 @@ describe('the Settings page', () => {
     await user.click(tab('About'));
     await user.click(nav().getByRole('button', { name: /^Back to the atelier/ }));
     expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
-    expect(banner().getByText('List')).toBeVisible();
+    expect(banner().getByText('Atelier')).toBeVisible();
   });
 
   it('a dot on Machines while a machine is offline, none while every machine is online', async () => {
@@ -109,7 +109,7 @@ describe('the Settings page', () => {
     const rows = rowsOf('In Ledge Desktop');
     expect(rows[0]).toEqual(['Open the settings', 'Ctrl ,']);
     expect(rows[1]).toEqual(['Search and open a session', 'Ctrl / ⌘ K']);
-    expect(rows).toHaveLength(20);
+    expect(rows).toHaveLength(19);
     expect(within(screen.getByRole('region', { name: 'In Ledge Desktop' })).getByText('Show these shortcuts')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Edit the notch’s shortcut' }));
     expect(title()).toHaveTextContent('Notch');

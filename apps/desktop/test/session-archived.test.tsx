@@ -83,7 +83,7 @@ describe('the header « … » of a session page', () => {
     // The daemon drops it: the page goes back to the atelier.
     act(() => d.remove('bix'));
     await waitFor(() => expect(document.querySelector('.session-page')).toBeNull());
-    expect(await screen.findByRole('tabpanel', { name: /Atelier/i })).toBeVisible();
+    expect(await screen.findByRole('region', { name: 'Atelier' })).toBeVisible();
   });
 
   it('a live session shows its state, not the Archived pill', async () => {

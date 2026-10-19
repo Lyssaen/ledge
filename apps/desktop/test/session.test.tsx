@@ -22,7 +22,7 @@ async function openOtto(o: { offline?: boolean; withThread?: boolean } = {}) {
   const sessions = listSessions().map(s => (s.name === 'Otto' && o.offline ? { ...s, offline: true } : s));
   const env = await boot({ sessions, list: true });
   if (o.withThread !== false) env.d.thread('otto', ottoThread());
-  await env.user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
   return env;
 }
 
@@ -109,7 +109,7 @@ describe('the session page', () => {
     const sessions = listSessions().map(s => (s.name === 'Otto' ? { ...s, helpers: [] } : s));
     const { d, user } = await boot({ sessions, list: true });
     d.thread('otto', ottoThread().map(i => (i.kind === 'helper' ? { ...i, agentType: undefined } : i)));
-    await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+    await user.click(screen.getByRole('button', { name: /^Otto,/ }));
     await user.click(await thread().findByRole('button', { name: 'Open Subagent: Lire le code' }));
     expect(document.querySelector('.turn-author')).toHaveTextContent('Subagent');
     expect(within(screen.getByRole('banner')).getByText('Subagent')).toBeVisible();
@@ -117,8 +117,7 @@ describe('the session page', () => {
 
   it('a subagent page before its thread came: it waits, without crashing', async () => {
     const { user } = await boot({ sessions: listSessions(), list: true });
-    await user.click(within(screen.getByRole('listitem', { name: /^Otto,/ })).getByRole('button', { name: 'Show 1 subagent' }));
-    await user.click(screen.getByRole('listitem', { name: /subagent of Otto/ }));
+    await user.click(screen.getByRole('button', { name: /subagent of Otto/ }));
     expect(await thread().findByText('Loading the thread…')).toBeVisible();
     expect(document.querySelector('.session-page')).toHaveAttribute('data-helper', 'h1');
   });
@@ -138,7 +137,7 @@ describe('the session page', () => {
   it('an empty thread says so', async () => {
     const { d, user } = await boot({ sessions: listSessions(), list: true });
     d.thread('nova', []);
-    await user.click(screen.getByRole('listitem', { name: /^Nova,/ }));
+    await user.click(screen.getByRole('button', { name: /^Nova,/ }));
     expect(await thread().findByText('Nothing in the thread yet.')).toBeVisible();
     expect(thread().getByText('Nothing in the thread yet.')).toHaveClass('thread-note');
   });
@@ -161,7 +160,7 @@ describe('the session page', () => {
       { kind: 'prompt', id: 'p', at: new Date(Date.now() - 95 * 60_000).toISOString(), turn: 1, text: 'Relis la PR' },
       { kind: 'reply', id: 'r', at: new Date(Date.now() - 90 * 60_000).toISOString(), turn: 1, text: 'Relue.' }
     ]);
-    await user.click(screen.getByRole('listitem', { name: /^Bix,/ }));
+    await user.click(screen.getByRole('button', { name: /^Bix,/ }));
     await thread().findByText('Relue.');
     expect(document.querySelector('.turn.current .turn-end')).toHaveTextContent('Session ended · 1 h ago');
   });
@@ -172,7 +171,7 @@ describe('the session page', () => {
     expect(thread().queryByRole('separator', { name: 'New since your last visit' })).toBeNull(); // a first visit marks nothing
     await user.keyboard('{Escape}');
     d.threadItem('otto', { kind: 'message', id: 'msg-new', at: new Date().toISOString(), turn: 2, text: 'J’ai corrigé le premier test.' });
-    await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+    await user.click(screen.getByRole('button', { name: /^Otto,/ }));
     const marker = await thread().findByRole('separator', { name: 'New since your last visit' });
     expect(marker.nextElementSibling).toHaveTextContent('J’ai corrigé le premier test.');
     // Frozen for the life of the page: another item does not move it.

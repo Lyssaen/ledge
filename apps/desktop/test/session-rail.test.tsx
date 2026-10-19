@@ -14,7 +14,7 @@ const rail = () => within(screen.getByRole('navigation', { name: 'Agents of the 
 const banner = () => within(screen.getByRole('banner'));
 async function openOtto() {
   const env = await boot({ sessions: listSessions(), list: true });
-  await env.user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
   await screen.findByRole('navigation', { name: 'Agents of the project Ledge' });
   return env;
 }
@@ -34,7 +34,7 @@ describe('the agents rail, the subagent page, the terminal', () => {
   it('an agent in error has the red dot; the dot is not read apart from its row; an empty task leaves no lone « · » in the crumb', async () => {
     const sessions = listSessions().map(s => (s.name === 'Bix' ? { ...s, state: 'error' as const } : s.name === 'Otto' ? { ...s, topic: '', title: '' } : s));
     const { user } = await boot({ sessions, list: true });
-    await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+    await user.click(screen.getByRole('button', { name: /^Otto,/ }));
     await screen.findByRole('navigation', { name: 'Agents of the project Ledge' });
     const bix = rail().getByRole('button', { name: /^Bix/ });
     expect(bix.querySelector('.rail-dot')).toHaveClass('error');
@@ -91,7 +91,7 @@ describe('the agents rail, the subagent page, the terminal', () => {
     const { user } = await openOtto();
     await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: 'Hide subagents' }));
-    await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+    await user.click(screen.getByRole('button', { name: /^Otto,/ }));
     expect(screen.queryByRole('group', { name: 'Subagents of Otto' })).toBeNull();
     await user.click(screen.getByRole('button', { name: '1 subagent' }));
     expect(await screen.findByRole('group', { name: 'Subagents of Otto' })).toHaveClass('rail-flash');
@@ -102,7 +102,7 @@ describe('the agents rail, the subagent page, the terminal', () => {
     await user.click(rail().getByRole('button', { name: 'New session here' }));
     expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible();
     await user.keyboard('{Escape}{Escape}');
-    await user.click(screen.getByRole('listitem', { name: /^Kit,/ }));
+    await user.click(screen.getByRole('button', { name: /^Kit,/ }));
     expect(screen.getByRole('navigation', { name: 'Agents of the project No project' })).toBeVisible();
   });
 
@@ -122,7 +122,7 @@ describe('the agents rail, the subagent page, the terminal', () => {
     expect(screen.getByRole('region', { name: 'Terminal' })).toBeVisible();
     view.unmount();
     render(<App client={client} />);
-    await user.click(await screen.findByRole('listitem', { name: /^Otto,/ }));     // only the prefs survive, never the place
+    await user.click(await screen.findByRole('button', { name: /^Otto,/ }));     // only the prefs survive, never the place
     expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
   });
 

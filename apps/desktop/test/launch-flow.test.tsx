@@ -116,7 +116,7 @@ describe('launching', () => {
     // The held launch answers late: the agent appears at its place, nothing reopens, nothing is said.
     const name = launches(d)[0]!.name!;
     d.releaseLaunch();
-    await screen.findByRole('listitem', { name: new RegExp(`^${name},`) });
+    await screen.findByRole('button', { name: new RegExp(`^${name},`) });
     act(() => { vi.advanceTimersByTime(1000); });
     expect(dialog()).toBeNull();
     expect(document.querySelector('.toast')).toBeNull();
@@ -133,7 +133,7 @@ describe('launching', () => {
     expect(dialog()).toBeNull();
     const name = launches(d)[0]!.name!;
     d.releaseLaunch();
-    await screen.findByRole('listitem', { name: new RegExp(`^${name},`) });
+    await screen.findByRole('button', { name: new RegExp(`^${name},`) });
     expect(document.querySelector('.toast')).toBeNull();
     // Reopened, the form starts afresh.
     await user.keyboard('n');
@@ -175,7 +175,7 @@ describe('launching', () => {
     const { d, user, side } = await openLaunch();
     await user.keyboard('{Escape}');
     await user.click(side.getByRole('button', { name: /^Payment Service/ }));
-    await user.click(screen.getByRole('listitem', { name: /^Nova,/ }));
+    await user.click(screen.getByRole('button', { name: /^Nova,/ }));
     const rail = within(await screen.findByRole('navigation', { name: 'Agents of the project Payment Service Platform Migration Europe' }));
     await user.click(rail.getByRole('button', { name: 'New session here' }));
     const form = within(await screen.findByRole('dialog', { name: 'New session' }));
@@ -188,7 +188,7 @@ describe('launching', () => {
     expect(screen.getByText(/ is starting at the Ledge table\.$/)).toBeVisible();
     expect(screen.getByRole('navigation', { name: 'Agents of the project Payment Service Platform Migration Europe' })).toBeVisible();
     expect(within(screen.getByRole('banner')).getByText('Nova')).toBeVisible();
-    expect(screen.queryByRole('listitem', { name: /^Otto,/ })).toBeNull();      // not back on the List
+    expect(screen.queryByRole('button', { name: /^Otto,/ })).toBeNull();       // the session page stays open
   });
 
   it('a launch from another project filter switches the filter to All, keeping the view', async () => {
@@ -208,9 +208,9 @@ describe('launching', () => {
     await waitFor(() => expect(dialog()).toBeNull());
     expect(banner.queryByRole('button', { name: 'Remove the filter: show every project' })).toBeNull();
     expect(side.getByRole('button', { name: /^Payment Service/ }).closest('[role="treeitem"]')).not.toHaveClass('sel');
-    expect(document.querySelector('.agent-seat')).toBeNull();                  // still the List
+    expect(document.querySelector('.agent-seat')).not.toBeNull();
     const name = launches(d)[0]!.name!;
-    expect(await screen.findByRole('listitem', { name: new RegExp(`^${name},`) })).toBeVisible();
+    expect(await screen.findByRole('button', { name: new RegExp(`^${name},`) })).toBeVisible();
   });
 
   it('a launch into the filtered project keeps the filter', async () => {

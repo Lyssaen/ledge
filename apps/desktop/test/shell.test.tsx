@@ -42,22 +42,17 @@ describe('the Atelier shell', () => {
     expect(top.getByText('Atelier')).toBeVisible();
   });
 
-  it('the view tabs switch Atelier / List and the choice survives a remount', async () => {
-    const { view, user, client } = await boot({ projects: TWO_PROJECTS });
-    await user.click(screen.getByRole('tab', { name: 'List' }));
-    expect(screen.getByRole('tabpanel', { name: 'List' })).toBeVisible();
-    expect(JSON.parse(localStorage.getItem('desktop.overview')!)).toMatchObject({ view: 'list' });
+  it('there is no List tab; booting on a stored list shows the atelier', async () => {
+    const { view, client } = await boot({ projects: TWO_PROJECTS, list: true });
+    expect(screen.queryByRole('tab', { name: 'List' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Atelier' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'Ledge table' })).toBeVisible();
+    expect(JSON.parse(localStorage.getItem('desktop.overview')!)).toMatchObject({ view: 'atelier' });
     view.unmount();
+    localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false }));
     render(<App client={client} />);
-    expect(await screen.findByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true');
-  });
-
-  it('the view tabs follow the arrow keys', async () => {
-    const { user } = await boot({ projects: TWO_PROJECTS });
-    screen.getByRole('tab', { name: 'Atelier' }).focus();
-    await user.keyboard('{ArrowRight}');
-    expect(screen.getByRole('tab', { name: 'List' })).toHaveFocus();
-    expect(screen.getByRole('tabpanel', { name: 'List' })).toBeVisible();
+    expect(await screen.findByRole('region', { name: 'Ledge table' })).toBeVisible();
+    expect(screen.queryByRole('tab', { name: 'List' })).toBeNull();
   });
 
   it('helpers and animation toggles are pressed buttons, remembered', async () => {

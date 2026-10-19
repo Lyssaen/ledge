@@ -111,9 +111,9 @@ export async function closeDaemons(): Promise<void> {
 
 /** Mounts the app on a mock daemon (machines Local and Dev SSH unless `machines` says otherwise; `repoInfo`: what `repos.inspect` answers;
  *  `daemon`: what the local daemon's snapshot says of itself, its version and install).
- *  `list` writes `desktop.overview` on the List before rendering.
+ *  `list` is ignored: the atelier is the only overview (a stored `view: 'list'` is read as the atelier).
  *  Ready once the Atelier counter shows the active sessions, the last project's row is in the sidebar and, with sessions,
- *  the first one is shown (its seat in the atelier, its row in the List). */
+ *  the first one is shown on its atelier seat. */
 export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false, machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }], repoInfo, daemon }: { sessions?: Session[]; projects?: Projects; list?: boolean; machines?: Machines; repoInfo?: ReadonlyMap<string, RepoInfo>; daemon?: DaemonInfo } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
   // The session page's, the New session form's, the project editor's and the Settings page's own chunks are there before a test opens them: they come in the same render, as once preloaded in the app.
   await loadWorkspace();
@@ -126,18 +126,18 @@ export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, l
   for (const [path, info] of repoInfo ?? []) d.repoInfo.set(path, info);
   if (daemon) d.extras.daemon = daemon;
   for (const s of sessions) d.upsert(s);
-  if (list) localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false }));
+  void list;
   const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
   const view = render(createElement(App as ComponentType<{ client?: DaemonClient }>, { client }));
   const side = within(await screen.findByRole('complementary', { name: /sidebar/i }));
   await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(sessions))));
   const last = projects.projects[projects.projects.length - 1];
   if (last) await side.findByRole('button', { name: new RegExp(`^${last.name}`) });
-  if (sessions.length > 0) await screen.findByRole(list ? 'listitem' : 'button', { name: new RegExp(`^${sessions[0]!.name},`) });
+  if (sessions.length > 0) await screen.findByRole('button', { name: new RegExp(`^${sessions[0]!.name},`) });
   return { d, side, view, client, user: userEvent.setup() };
 }
 
-/** The app on the List (the Atelier with `list: false`) with listSessions, LAUNCH_PROJECTS, Local and NAS (offline), then N: the New session dialog. */
+/** The app on the atelier with listSessions, LAUNCH_PROJECTS, Local and NAS (offline), then N: the New session dialog. */
 export async function openLaunch(opts: { repoInfo?: Map<string, RepoInfo>; list?: boolean } = {}) {
   const env = await boot({ sessions: listSessions(), list: opts.list ?? true, projects: LAUNCH_PROJECTS, machines: LOCAL_AND_NAS, repoInfo: opts.repoInfo ?? LAUNCH_REPOS() });
   await env.user.keyboard('n');

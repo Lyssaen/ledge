@@ -1,14 +1,14 @@
 import type { Projects, Session } from '@ledge/protocol';
 import type { Overview } from './overview';
 
-export type View = 'atelier' | 'list';
+export type View = 'atelier';
 /** 'all', 'none' (Sans projet) or a project id. */
 export type ProjectFilter = string;
 export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'projects' | 'shortcuts' | 'about';
 export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'projects', 'shortcuts', 'about'];
 export type Place =
   | { kind: 'overview'; view: View; project: ProjectFilter }
-  /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre » de la Liste) ; item : le message (id du fil) que la page met en vue et allume (« Voir dans le fil de X »). */
+  /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre ») ; item : le message (id du fil) que la page met en vue et allume (« Voir dans le fil de X »). */
   | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; item?: string; view: View; project: ProjectFilter }
   | { kind: 'settings'; section: SectionId; back: Exclude<Place, { kind: 'settings' }> };
 export type Modal =
@@ -21,8 +21,7 @@ export type Modal =
 /** chatFocus: bumped each time the chat is asked for (/, an open button), even already open: its field takes the focus again. */
 export interface NavState { place: Place; modal: Modal; chat: boolean; chatFocus: number; fullscreen: boolean; helpers: boolean; paused: boolean }
 export type NavAction =
-  | { type: 'home'; project?: ProjectFilter; view?: View }
-  | { type: 'view'; view: View }
+  | { type: 'home'; project?: ProjectFilter }
   /** Sets the current place's project filter without going anywhere (a session page stays open; in Settings, the place behind). */
   | { type: 'filter'; project: ProjectFilter }
   | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string }
@@ -34,7 +33,7 @@ export type NavAction =
   | { type: 'escape' };
 
 export function initialNav(overview: Overview): NavState {
-  return { place: { kind: 'overview', view: overview.view, project: 'all' }, modal: null, chat: false, chatFocus: 0, fullscreen: false, helpers: overview.helpers, paused: overview.paused };
+  return { place: { kind: 'overview', view: 'atelier', project: 'all' }, modal: null, chat: false, chatFocus: 0, fullscreen: false, helpers: overview.helpers, paused: overview.paused };
 }
 
 type Base = Exclude<Place, { kind: 'settings' }>;
@@ -43,14 +42,8 @@ const baseOf = (p: Place): Base => (p.kind === 'settings' ? p.back : p);
 export function navReducer(s: NavState, a: NavAction): NavState {
   const { place } = s;
   switch (a.type) {
-    case 'home': {
-      const b = baseOf(place);
-      return { ...s, place: { kind: 'overview', view: a.view ?? b.view, project: a.project ?? 'all' } };
-    }
-    case 'view': {
-      const b = baseOf(place);
-      return { ...s, place: { kind: 'overview', view: a.view, project: b.project } };
-    }
+    case 'home':
+      return { ...s, place: { kind: 'overview', view: 'atelier', project: a.project ?? 'all' } };
     case 'filter': {
       if (baseOf(place).project === a.project) return s;
       return { ...s, place: place.kind === 'settings' ? { ...place, back: { ...place.back, project: a.project } } : { ...place, project: a.project } };

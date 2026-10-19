@@ -37,7 +37,7 @@ async function openOtto(extra: ThreadItem[] = []) {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   const env = await boot({ sessions: listSessions(), list: true });
   env.d.thread('otto', [...ottoThread(), ...extra]);
-  await env.user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
   await thread().findByRole('status', { name: 'Action running' });
   // Settled: the thread's renders have stopped (waitFor polls with setInterval, held still here).
   for (let seen = -1; seen !== marks.n;) { seen = marks.n; await pause(150); }

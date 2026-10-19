@@ -147,7 +147,8 @@ describe('deleting a project', () => {
     await env.user.click(within(screen.getByRole('dialog', { name: 'Delete Ledge' })).getByRole('button', { name: 'Delete Ledge' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(top.queryByRole('button', { name: 'Remove the filter: show every project' })).toBeNull();
-    expect(top.getByRole('tab', { name: 'Atelier' })).toHaveAttribute('aria-selected', 'true');
+    expect(top.queryByRole('tab')).toBeNull();
+    expect(top.getByText('Atelier')).toBeVisible();
     expect(screen.getByRole('region', { name: 'Payment Service table' })).toBeVisible();
     expect(within(screen.getByRole('region', { name: 'No project' })).getByRole('button', { name: /^Otto,/ })).toBeVisible();
   });
@@ -278,9 +279,9 @@ describe('the deletion copy', () => {
 });
 
 describe('the filter nav action', () => {
-  it('sets the overview filter and keeps the view', () => {
-    const s = navReducer(navReducer(initialNav({ view: 'atelier', helpers: true, paused: false }), { type: 'view', view: 'list' }), { type: 'home', project: 'ledge', view: 'list' });
-    expect(navReducer(s, { type: 'filter', project: 'all' }).place).toEqual({ kind: 'overview', view: 'list', project: 'all' });
+  it('sets the overview filter and keeps the atelier', () => {
+    const s = navReducer(initialNav({ view: 'atelier', helpers: true, paused: false }), { type: 'home', project: 'ledge' });
+    expect(navReducer(s, { type: 'filter', project: 'all' }).place).toEqual({ kind: 'overview', view: 'atelier', project: 'all' });
   });
   it('on a session page, sets its filter without leaving it', () => {
     const s = navReducer(navReducer(initialNav({ view: 'atelier', helpers: true, paused: false }), { type: 'home', project: 'ledge' }), { type: 'open', id: 'local:otto', helper: 'h1' });

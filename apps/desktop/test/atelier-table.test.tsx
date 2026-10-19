@@ -64,13 +64,14 @@ it("helpers sit at the ends with ↳ parent; the first one's task is a post-it w
   expect(document.querySelector('.helper-seat')).toBeNull();
   expect(document.querySelector('.sheet-note')).toBeNull();
 });
-it('beyond six agents and four helpers: +N opens the List on the project, no plant under it', async () => {
+it('beyond six agents and four helpers: +N filters the atelier on the project, no plant under it', async () => {
   const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(id => main(id, { helpers: id === 'a' ? ['a1', 'a2', 'a3', 'a4', 'a5'].map(h => helper(h)) : [] }));
   const { dispatch } = renderTable(many);
   expect(document.querySelectorAll('.agent-seat:not(.helper-seat)')).toHaveLength(6);
   expect(document.querySelectorAll('.helper-seat')).toHaveLength(4);
+  expect(screen.getByRole('button', { name: /\+2 at this table/ })).toHaveAttribute('title', 'See every agent of the project');
   await userEvent.click(screen.getByRole('button', { name: /\+2 at this table/ }));       // g and a5
-  expect(dispatch).toHaveBeenCalledWith({ type: 'home', project: 'ledge', view: 'list' });
+  expect(dispatch).toHaveBeenCalledWith({ type: 'home', project: 'ledge' });
   expect(document.querySelector('.plant-spot.spot-br')).toBeNull();
 });
 it('the label: colour, a long name cut with its full name in title, the main branch', () => {

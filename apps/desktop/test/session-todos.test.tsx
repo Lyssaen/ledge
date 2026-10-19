@@ -13,7 +13,7 @@ const v1 = todo('d1', { todos: [{ content: 'Lire', status: 'completed', activeFo
 it('the work plan sits on top of the thread and unfolds as a checklist; Escape folds it back first', async () => {
   const { d, user } = await boot({ sessions: listSessions(), list: true });
   d.thread('otto', [...ottoThread(), { ...v1, at: new Date().toISOString(), turn: 2 }]);
-  await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await user.click(screen.getByRole('button', { name: /^Otto,/ }));
   const head = await screen.findByRole('button', { name: /^Work plan/ });
   expect(head).toHaveTextContent('1/3');
   expect(head).toHaveTextContent('Écriture des tests');
@@ -26,7 +26,7 @@ it('the work plan sits on top of the thread and unfolds as a checklist; Escape f
 it('no list, no bar', async () => {
   const { d, user } = await boot({ sessions: listSessions(), list: true });
   d.thread('otto', ottoThread());
-  await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await user.click(screen.getByRole('button', { name: /^Otto,/ }));
   await screen.findByText('Câble la liste');
   expect(document.querySelector('.todo-bar')).toBeNull();
 });
@@ -35,7 +35,7 @@ const v2 = todo('d2', { todos: [{ content: 'Lire', status: 'completed' }, { cont
 async function openOtto(extra: ThreadItem[]) {
   const env = await boot({ sessions: listSessions(), list: true });
   env.d.thread('otto', [...ottoThread(), ...extra]);
-  await env.user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+  await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
   await screen.findByText('Câble la liste');
   return env;
 }

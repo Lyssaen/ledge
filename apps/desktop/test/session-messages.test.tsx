@@ -37,8 +37,10 @@ async function openOtto(items: ThreadItem[]) {
   const side = within(await screen.findByRole('complementary', { name: 'Barre latérale' }));
   await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(listSessions()))));
   await side.findByRole('button', { name: /^Docs/ });
+  expect(within(screen.getByRole('banner')).getByText('Atelier')).toBeVisible();
+  expect(screen.queryByRole('tab', { name: 'Liste' })).toBeNull();
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('listitem', { name: /^Otto,/ }));
+  await user.click(within(side.getByRole('tree')).getByRole('button', { name: /^Otto/ }));
   await screen.findByRole('tabpanel', { name: 'Fil de la session' });
   return { d, user };
 }
@@ -173,13 +175,13 @@ describe('messages between agents in the thread', () => {
     await thread().findByText('Préviens Nova');
     await user.keyboard('{Escape}');
     d.threadItem('otto', sent('s1', 5, 1, { summary: 'Envoyé pendant ton absence' }));
-    await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+    await user.click(within(screen.getByRole('tree')).getByRole('button', { name: /^Otto/ }));
     await screen.findByRole('tabpanel', { name: 'Fil de la session' });
     const marker = await thread().findByRole('separator', { name: 'Nouveau depuis votre dernière visite' });
     expect(marker.nextElementSibling).toHaveAttribute('data-message', 's1');
     await user.keyboard('{Escape}');
     d.threadItem('otto', received('r1', 10, 2, { text: 'Reçu pendant ton absence' }));
-    await user.click(screen.getByRole('listitem', { name: /^Otto,/ }));
+    await user.click(within(screen.getByRole('tree')).getByRole('button', { name: /^Otto/ }));
     await screen.findByRole('tabpanel', { name: 'Fil de la session' });
     const next = await thread().findByRole('separator', { name: 'Nouveau depuis votre dernière visite' });
     // It opens its exchange as a prompt would: above the exchange's time.

@@ -27,6 +27,14 @@ describe('the sidebar tree', () => {
     expect(tree.getByRole('button', { name: 'Archive' })).toBeVisible();
   });
 
+  it('a stored list preference opens the atelier', async () => {
+    localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false }));
+    await boot({ projects: PROJECTS, sessions: listSessions() });
+    expect(screen.queryByRole('tab', { name: 'List' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'Ledge table' })).toBeVisible();
+    expect(JSON.parse(localStorage.getItem('desktop.overview')!).view).toBe('atelier');
+  });
+
   it('opens a session from its row and filters the atelier from the project row', async () => {
     const { side, user } = await boot({ projects: PROJECTS, sessions: listSessions() });
     await user.click(side.getByRole('button', { name: /^Otto/ }));

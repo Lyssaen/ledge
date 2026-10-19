@@ -22,12 +22,18 @@ test('Ctrl K finds a session by its task and opens it; Escape comes back', async
   await expect(page.getByRole('banner').getByText('Atelier')).toBeVisible();
 });
 
-test('the view choice survives a reload', async ({ page }) => {
-  await fakeDaemon(page, eight);
+test('a stored list preference opens the atelier', async ({ page }) => {
+  await fakeDaemon(page, eight, { projects: twoProjects });
+  await page.addInitScript(() => {
+    try { localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false })); }
+    catch { /* about:blank denies storage; the app page does not */ }
+  });
   await page.goto('/');
-  await page.getByRole('tab', { name: 'List' }).click();
+  await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'List' })).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'List' })).toHaveCount(0);
 });
 
 test('at 1000 px the top bar stays on one line with a long project name', async ({ page }) => {

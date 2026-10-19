@@ -91,7 +91,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
   const choose = dispatch;
   // The principal agents whose session is over and whose machine answers: « Archiver les terminées » puts them all away.
   const finished = mains.filter(s => s.state === 'exited' && !s.offline);
-  const toList = () => dispatch({ type: 'home', project: id, view: 'list' });
+  const showProject = () => dispatch({ type: 'home', project: id });
 
   const bot = (s: Session, size: number) => <SessionBot session={s} size={size} paused={paused} />;
   const helperBot = (h: Session['helpers'][number], parent: Session, size: number) => <HelperBot helper={h} parent={parent} size={size} paused={paused} />;
@@ -100,7 +100,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
     <div className="room-heading">
       <ProjectSwatch project={project} />
       <span className="heading-names">
-        <button className="project-conversations" title={name} aria-label={t.atelier.conversations(name)} onClick={toList}>{name}</button>
+        <button className="project-conversations" title={name} aria-label={t.atelier.conversations(name)} onClick={showProject}>{name}</button>
         {branch !== null && <span className="heading-branch" title={branch}>⎇ {branch}</span>}
       </span>
       {filing.dragging && <span className="drop-hint">{filing.over === id ? t.filing.dropNow(filing.dragging.name) : t.filing.dropHere}</span>}
@@ -142,7 +142,7 @@ export function ProjectTable({ project, mains, order, helpers, paused, isolated,
         <div className="office-rug" style={{ left: at(-RUG_SIDE), right: 'auto', width: length + 2 * RUG_SIDE }}>
           {heading}
           {extraCount > 0 && (
-            <button className="table-more" title={t.atelier.moreTitle} onClick={toList}>
+            <button className="table-more" title={t.atelier.moreTitle} onClick={showProject}>
               <span className="more-faces" aria-hidden="true">{faces.map(f => <i key={f.key}>{f.el}</i>)}</span>
               {t.atelier.more(extraCount)}
             </button>

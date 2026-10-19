@@ -12,9 +12,9 @@ const sess = (id: string, extra: Partial<Session> = {}) => fakeSession(id, { mac
 describe('nav state', () => {
   beforeEach(() => localStorage.clear());
 
-  it('starts on the overview of the stored view, nothing open', () => {
+  it('starts on the atelier, even when a list view was stored', () => {
     expect(s0).toEqual({ place: { kind: 'overview', view: 'atelier', project: 'all' }, modal: null, chat: false, chatFocus: 0, fullscreen: false, helpers: true, paused: false });
-    expect(initialNav({ ...o, view: 'list' }).place).toEqual({ kind: 'overview', view: 'list', project: 'all' });
+    expect(initialNav({ ...o, view: 'list' as 'atelier' }).place).toEqual({ kind: 'overview', view: 'atelier', project: 'all' });
   });
   it('asking for the chat when it is already open asks its field for the focus again; closing it does not', () => {
     const opened = navReducer(s0, { type: 'chat', open: true });
@@ -26,9 +26,9 @@ describe('nav state', () => {
   });
   it('opens a session from a filtered overview and comes back to it', () => {
     let s = navReducer(s0, { type: 'home', project: 'ledge' });
-    s = navReducer(navReducer(s, { type: 'view', view: 'list' }), { type: 'open', id: 'local:otto' });
-    expect(s.place).toEqual({ kind: 'session', id: 'local:otto', view: 'list', project: 'ledge' });
-    expect(navReducer(s, { type: 'escape' }).place).toEqual({ kind: 'overview', view: 'list', project: 'ledge' });
+    s = navReducer(s, { type: 'open', id: 'local:otto' });
+    expect(s.place).toEqual({ kind: 'session', id: 'local:otto', view: 'atelier', project: 'ledge' });
+    expect(navReducer(s, { type: 'escape' }).place).toEqual({ kind: 'overview', view: 'atelier', project: 'ledge' });
   });
   it('open with an item keeps it on the place; the next open forgets it', () => {
     const r = navReducer(s0, { type: 'open', id: 'local:nova', item: 'recv-1-0' });
@@ -73,10 +73,10 @@ describe('nav state', () => {
       [null, false, 'overview', 'all', false]
     ]);
   });
-  it('the view change and home keep the place kind sensible', () => {
+  it('home returns to the atelier, on every project or on one', () => {
     const inSession = navReducer(s0, { type: 'open', id: 'local:otto' });
     expect(navReducer(inSession, { type: 'home' }).place).toEqual({ kind: 'overview', view: 'atelier', project: 'all' });
-    expect(navReducer(s0, { type: 'view', view: 'list' }).place).toEqual({ kind: 'overview', view: 'list', project: 'all' });
+    expect(navReducer(s0, { type: 'home', project: 'ledge' }).place).toEqual({ kind: 'overview', view: 'atelier', project: 'ledge' });
   });
   it('reconcile drops a gone session and a gone project filter, keeps an offline session, returns the same object when nothing changes', () => {
     const projects: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [] }], rules: [] };
@@ -87,11 +87,13 @@ describe('nav state', () => {
     expect(reconcile(navReducer(s0, { type: 'home', project: 'ledge' }), [], null).place).toMatchObject({ project: 'all' });
     expect(reconcile(navReducer(s0, { type: 'home', project: 'none' }), [], null).place).toMatchObject({ project: 'none' });
   });
-  it('overview storage survives garbage and keeps valid fields', () => {
+  it('overview storage survives garbage and reads a stored list as the atelier', () => {
     localStorage.setItem('desktop.overview', JSON.stringify({ view: 'room', helpers: 'yes', paused: true }));
     expect(loadOverview()).toEqual({ view: 'atelier', helpers: true, paused: true });
-    saveOverview({ view: 'list', helpers: false, paused: false });
-    expect(loadOverview()).toEqual({ view: 'list', helpers: false, paused: false });
+    localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: false, paused: false }));
+    expect(loadOverview()).toEqual({ view: 'atelier', helpers: false, paused: false });
+    saveOverview({ view: 'atelier', helpers: false, paused: true });
+    expect(loadOverview()).toEqual({ view: 'atelier', helpers: false, paused: true });
   });
 
   it('reconcile repairs the back of a settings place whose session is gone', () => {
@@ -100,8 +102,9 @@ describe('nav state', () => {
     const r = reconcile(st, [], null);
     expect(r.place).toEqual({ kind: 'settings', section: 'general', back: { kind: 'overview', view: 'atelier', project: 'all' } });
   });
-  it('home may switch the view too (the « +N » pill opens the List on its project)', () => {
-    expect(navReducer(s0, { type: 'home', project: 'ledge', view: 'list' }).place).toEqual({ kind: 'overview', view: 'list', project: 'ledge' });
+  it('home on a project stays on the atelier', () => {
+    const listed = initialNav({ ...o, view: 'list' as 'atelier' });
+    expect(navReducer(listed, { type: 'home', project: 'ledge' }).place).toEqual({ kind: 'overview', view: 'atelier', project: 'ledge' });
   });
   it('dialogs carry their target; full screen off when already off changes nothing', () => {
     expect(navReducer(s0, { type: 'modal', modal: { kind: 'launch', project: 'ledge' } }).modal).toEqual({ kind: 'launch', project: 'ledge' });

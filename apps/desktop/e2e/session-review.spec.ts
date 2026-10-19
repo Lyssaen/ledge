@@ -22,7 +22,7 @@ const review: ThreadItem[] = [
 ];
 const documents = { 'docs/guide.md': '# Guide\n\nBonjour.' };
 
-const open = async (page: Page) => { await page.getByRole('tab', { name: 'List' }).click(); await page.getByRole('listitem', { name: /^Otto,/ }).click(); };
+const open = async (page: Page) => { await page.getByRole('tree').getByRole('button', { name: /^Otto/ }).click(); };
 
 test('Changes: J / K walk the files; a 400-character line scrolls in the diff only', async ({ page }) => {
   expect(wide).toHaveLength(400);
@@ -63,6 +63,7 @@ test('a narrow conversation (terminal open): the pane covers the thread above th
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: review }, documents });
   await page.goto('/');
   await open(page);
+  await expect(page.locator('.session-page')).toBeVisible();
   await page.keyboard.press('o');
   await expect(page.getByRole('region', { name: 'Terminal' })).toBeVisible();
   expect((await page.locator('.session-page').boundingBox())!.width).toBeLessThan(860);
