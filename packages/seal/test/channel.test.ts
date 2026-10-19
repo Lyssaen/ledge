@@ -86,4 +86,20 @@ describe('channel', () => {
     await expect(cdev.open(b64u(bytes))).rejects.toMatchObject({ code: 'bad_seal' });
     expect(await cdev.open(good)).toBe('hello');
   });
+  it('consumes the handshake synchronously on concurrent finish', async () => {
+    const pc = await generateIdentity(), dev = await generateIdentity();
+    const hp = await startHandshake(pc, 'pc', dev.publicKey);
+    const hd = await startHandshake(dev, 'device', pc.publicKey);
+    const r = await Promise.allSettled([hp.finish(hd.hello), hp.finish(hd.hello)]);
+    expect(r.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
+    const rejected = r.find((x) => x.status === 'rejected') as PromiseRejectedResult;
+    expect(rejected.reason).toMatchObject({ code: 'bad_key' });
+  });
+  it('a failed finish consumes the handshake', async () => {
+    const pc = await generateIdentity(), dev = await generateIdentity();
+    const hp = await startHandshake(pc, 'pc', dev.publicKey);
+    const hd = await startHandshake(dev, 'device', pc.publicKey);
+    await expect(hp.finish('AAAA')).rejects.toMatchObject({ code: 'bad_key' });
+    await expect(hp.finish(hd.hello)).rejects.toMatchObject({ code: 'bad_key' });
+  });
 });

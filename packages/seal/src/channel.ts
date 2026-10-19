@@ -54,10 +54,11 @@ export async function startHandshake(self: Identity, role: Role, peerPublicKey: 
     hello: b64u(ephRaw),
     async finish(peerHello: string): Promise<Channel> {
       // One-shot: a second finish would yield a second channel with the same keys and nonces.
+      // Consumed synchronously (before any await), even if peerHello turns out invalid.
       const priv = ephPrivate;
+      ephPrivate = null;
       if (!priv) throw new SealError('bad_key', 'handshake already finished');
       const peerEph = await importPublicKey(peerHello);
-      ephPrivate = null;
       const peerEphRaw = fromB64u(peerHello);
       const ee = await ecdh(priv, peerEph);
 
@@ -110,24 +111,24 @@ export async function startHandshake(self: Identity, role: Role, peerPublicKey: 
       };
 
       const openOne = async (sealed: string): Promise<string> => {
-          const frame = fromB64u(sealed);
-          if (frame.length < SEQ_BYTES + TAG_BYTES) throw new SealError('bad_seal', 'frame too short');
-          const seq = frame.slice(0, SEQ_BYTES);
-          if (new DataView(seq.buffer).getBigUint64(0) !== BigInt(recvSeq)) {
-            throw new SealError('replay', 'unexpected sequence number');
-          }
-          let plain: ArrayBuffer;
-          try {
-            plain = await subtle.decrypt(params(seq), recvKey, frame.slice(SEQ_BYTES));
-          } catch {
-            throw new SealError('bad_seal', 'authentication failed');
-          }
-          recvSeq++;
-          try {
-            return dec.decode(plain);
-          } catch {
-            throw new SealError('bad_seal', 'payload is not UTF-8');
-          }
+        const frame = fromB64u(sealed);
+        if (frame.length < SEQ_BYTES + TAG_BYTES) throw new SealError('bad_seal', 'frame too short');
+        const seq = frame.slice(0, SEQ_BYTES);
+        if (new DataView(seq.buffer).getBigUint64(0) !== BigInt(recvSeq)) {
+          throw new SealError('replay', 'unexpected sequence number');
+        }
+        let plain: ArrayBuffer;
+        try {
+          plain = await subtle.decrypt(params(seq), recvKey, frame.slice(SEQ_BYTES));
+        } catch {
+          throw new SealError('bad_seal', 'authentication failed');
+        }
+        recvSeq++;
+        try {
+          return dec.decode(plain);
+        } catch {
+          throw new SealError('bad_seal', 'payload is not UTF-8');
+        }
       };
 
       return {
