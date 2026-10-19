@@ -414,7 +414,7 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
     identify = eventName === 'SessionStart' && !!launchedId && mapped.id === launchedId;
     const input = ((payload as Payload).tool_input ?? {}) as Payload;
     const intercept = agent === 'claude' && eventName === 'PreToolUse' && str((payload as Payload).tool_name) === 'SendMessage'
-      && !!launchedId && typeof input.to === 'string' && typeof input.message === 'string' && !!input.message;
+      && typeof input.to === 'string' && typeof input.message === 'string' && !!input.message;
     const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : intercept ? SEND_MESSAGE_MS : 100);
     deadline = Date.now() + timeoutMs;
     const client = await connect({ port: opts.port, timeoutMs });
