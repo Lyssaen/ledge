@@ -14,6 +14,44 @@ const touch = (type: string, el: Element, pointerId: number, clientX: number, cl
   el.dispatchEvent(e);
 });
 
+const mouse = (type: string, el: Element, clientX: number, clientY: number) => act(() => {
+  const e = new MouseEvent(type, { clientX, clientY, button: 0, bubbles: true, cancelable: true });
+  Object.defineProperties(e, { pointerId: { value: 1 }, pointerType: { value: 'mouse' } });
+  el.dispatchEvent(e);
+});
+const rect = (x: number, y: number, width: number, height: number) =>
+  ({ x, y, left: x, top: y, width, height, right: x + width, bottom: y + height, toJSON: () => ({}) }) as DOMRect;
+
+/** A browser in miniature: a 1000 × 750 shell at zoom 1, its tiles covering 100–700 × 50–550 (Ledge's desk stands for all of
+ *  them), in an 800 × 600 view; the floor's padding wraps the zoomed shell, and the scroll is clamped whenever the content
+ *  shrinks, as a browser does on reflow. */
+function miniBrowser() {
+  const scroller = document.querySelector<HTMLElement>('.overview-scroll.atelier')!;
+  const floor = scroller.querySelector<HTMLElement>('.atelier-floor')!;
+  const shell = floor.querySelector<HTMLElement>(':scope > .office-shell')!;
+  let zoom = 1, left = 0, top = 0;
+  const pad = (side: 'Left' | 'Right' | 'Top' | 'Bottom') => Number.parseFloat(floor.style[`padding${side}`]) || 0;
+  const width = () => Math.max(800, Math.round(pad('Left') + 1000 * zoom + pad('Right')));
+  const height = () => Math.max(600, Math.round(pad('Top') + 750 * zoom + pad('Bottom')));
+  const clamp = () => { left = Math.max(0, Math.min(left, width() - 800)); top = Math.max(0, Math.min(top, height() - 600)); };
+  const props: Record<string, PropertyDescriptor> = {
+    clientWidth: { get: () => 800 }, clientHeight: { get: () => 600 }, offsetWidth: { get: () => 800 }, offsetHeight: { get: () => 600 },
+    scrollWidth: { get: width }, scrollHeight: { get: height },
+    scrollLeft: { get: () => left, set: (v: number) => { left = v; clamp(); } },
+    scrollTop: { get: () => top, set: (v: number) => { top = v; clamp(); } }
+  };
+  for (const [k, p] of Object.entries(props)) Object.defineProperty(scroller, k, { configurable: true, ...p });
+  Object.defineProperty(shell.style, 'zoom', { configurable: true, get: () => String(zoom), set: (v: string) => { zoom = Number(v) || 1; clamp(); } });
+  shell.getBoundingClientRect = () => rect(0, 0, 1000 * zoom, 750 * zoom);
+  shell.querySelector<HTMLElement>('.ledge-corner')!.getBoundingClientRect = () => rect(100 * zoom, 50 * zoom, 600 * zoom, 500 * zoom);
+  // Where the tiles sit in the view.
+  const tiles = () => ({
+    left: pad('Left') + 100 * zoom - left, right: pad('Left') + 700 * zoom - left,
+    top: pad('Top') + 50 * zoom - top, bottom: pad('Top') + 550 * zoom - top
+  });
+  return { scroller, shell, floor, pad, tiles, zoom: () => zoom };
+}
+
 describe('the atelier zoom', () => {
   it('the zoom bar: − and + step by 1.2, the percentage goes back to 100 %, Fit is pressed when fitted', async () => {
     const { user } = await boot();
@@ -77,32 +115,18 @@ describe('the atelier zoom', () => {
   });
   it('a refit while zoomed keeps the zoom and the point at the centre of the view, instead of jumping to the top left', async () => {
     const { d, user } = await boot();
-    const scroller = document.querySelector<HTMLElement>('.overview-scroll.atelier')!;
-    const shell = scroller.querySelector<HTMLElement>('.office-shell')!;
-    // A browser in miniature: 1000 × 750 of content at zoom 1 in an 800 × 600 view; the scroll is clamped whenever the
-    // content shrinks, as a browser does on reflow.
-    let zoom = 1, left = 0, top = 0;
-    const width = () => Math.max(800, Math.round(1000 * zoom)), height = () => Math.max(600, Math.round(750 * zoom));
-    const clamp = () => { left = Math.max(0, Math.min(left, width() - 800)); top = Math.max(0, Math.min(top, height() - 600)); };
-    const props: Record<string, PropertyDescriptor> = {
-      clientWidth: { get: () => 800 }, clientHeight: { get: () => 600 }, offsetWidth: { get: () => 800 }, offsetHeight: { get: () => 600 },
-      scrollWidth: { get: width }, scrollHeight: { get: height },
-      scrollLeft: { get: () => left, set: (v: number) => { left = v; clamp(); } },
-      scrollTop: { get: () => top, set: (v: number) => { top = v; clamp(); } }
-    };
-    for (const [k, p] of Object.entries(props)) Object.defineProperty(scroller, k, { configurable: true, ...p });
-    Object.defineProperty(shell.style, 'zoom', { configurable: true, get: () => String(zoom), set: (v: string) => { zoom = Number(v) || 1; clamp(); } });
+    const { scroller, pad } = miniBrowser();
     await user.keyboard('+');
     const level = () => bar().getByRole('button', { name: 'Back to 100 %' });
     expect(level()).toHaveTextContent('120 %');
-    scroller.scrollLeft = 300; scroller.scrollTop = 200;
+    scroller.scrollLeft = pad('Left') + 300; scroller.scrollTop = pad('Top') + 200;
     const centre = { x: (300 + 400) / 1.2, y: (200 + 300) / 1.2 };
     d.upsert(fakeSession('mia', { name: 'Mia', cwd: '/w/docs', state: 'working' }));        // one more agent: the mosaic refits
     await screen.findByRole('button', { name: /^Mia,/ });
     expect(level()).toHaveTextContent('120 %');
     expect(scroller).not.toHaveClass('fitted');
-    expect((scroller.scrollLeft + 400) / 1.2).toBeCloseTo(centre.x);
-    expect((scroller.scrollTop + 300) / 1.2).toBeCloseTo(centre.y);
+    expect((scroller.scrollLeft - pad('Left') + 400) / 1.2).toBeCloseTo(centre.x);
+    expect((scroller.scrollTop - pad('Top') + 300) / 1.2).toBeCloseTo(centre.y);
   });
   it('a new seat refits with a handful of layouts: the zoom notches are bisected, not stepped through one by one', async () => {
     const { d } = await boot();
@@ -126,19 +150,7 @@ describe('the atelier zoom', () => {
   });
   it('two fingers pinch the zoom around their midpoint and carry the view along; one finger pans, from anywhere', async () => {
     const { user } = await boot();
-    const scroller = document.querySelector<HTMLElement>('.overview-scroll.atelier')!;
-    const shell = scroller.querySelector<HTMLElement>('.office-shell')!;
-    let zoom = 1, left = 0, top = 0;
-    const width = () => Math.max(800, Math.round(1000 * zoom)), height = () => Math.max(600, Math.round(750 * zoom));
-    const clamp = () => { left = Math.max(0, Math.min(left, width() - 800)); top = Math.max(0, Math.min(top, height() - 600)); };
-    const props: Record<string, PropertyDescriptor> = {
-      clientWidth: { get: () => 800 }, clientHeight: { get: () => 600 }, offsetWidth: { get: () => 800 }, offsetHeight: { get: () => 600 },
-      scrollWidth: { get: width }, scrollHeight: { get: height },
-      scrollLeft: { get: () => left, set: (v: number) => { left = v; clamp(); } },
-      scrollTop: { get: () => top, set: (v: number) => { top = v; clamp(); } }
-    };
-    for (const [k, p] of Object.entries(props)) Object.defineProperty(scroller, k, { configurable: true, ...p });
-    Object.defineProperty(shell.style, 'zoom', { configurable: true, get: () => String(zoom), set: (v: string) => { zoom = Number(v) || 1; clamp(); } });
+    const { scroller, shell, pad } = miniBrowser();
     const level = () => bar().getByRole('button', { name: 'Back to 100 %' });
     const seat = screen.getAllByRole('button', { name: /,/ }).find(b => b.closest('.agent-seat'))!;
     // Fingers 200 px apart, then 400: twice the zoom; the midpoint moves 100 px right and the floor follows it.
@@ -147,22 +159,60 @@ describe('the atelier zoom', () => {
     touch('pointermove', seat, 2, 700, 300);
     expect(level()).toHaveTextContent('200 %');
     expect(scroller).not.toHaveClass('fitted');
-    expect(scroller.scrollLeft).toBe(400 * 2 - 500);
-    expect(scroller.scrollTop).toBe(300 * 2 - 300);
+    expect(scroller.scrollLeft - pad('Left')).toBe(400 * 2 - 500);
+    expect(scroller.scrollTop - pad('Top')).toBe(300 * 2 - 300);
     touch('pointerup', seat, 2, 700, 300);
     // The finger left behind pans from where it is, without a jump.
     touch('pointermove', shell, 1, 300, 300);
-    expect(scroller.scrollLeft).toBe(300);
+    expect(scroller.scrollLeft - pad('Left')).toBe(300);
     touch('pointerup', shell, 1, 300, 300);
     // One finger, even on a seat, pans once it has moved past a tap.
     touch('pointerdown', seat, 3, 400, 400);
     touch('pointermove', seat, 3, 300, 350);
-    expect(scroller.scrollLeft).toBe(400);
-    expect(scroller.scrollTop).toBe(350);
+    expect(scroller.scrollLeft - pad('Left')).toBe(400);
+    expect(scroller.scrollTop - pad('Top')).toBe(350);
     touch('pointerup', seat, 3, 300, 350);
     expect(level()).toHaveTextContent('200 %');
     await user.keyboard('0');
     expect(bar().getByRole('button', { name: /Fit/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+  it('dezoomed, the floor reaches past the tables on every side: the group drags to any edge and a strip of it stays in sight', async () => {
+    const { user } = await boot();
+    const { scroller, shell, floor, tiles, zoom } = miniBrowser();
+    await user.keyboard('---');
+    expect(zoom()).toBeCloseTo(1 / 1.2 ** 3);
+    expect(scroller).not.toHaveClass('fitted');
+    expect(floor.style.paddingLeft).not.toBe('');
+    // Dragged far down and right: the tiles stop with 120 px of them left in the view's bottom right corner.
+    mouse('pointerdown', shell, 400, 300); mouse('pointermove', shell, 2400, 2300); mouse('pointerup', shell, 2400, 2300);
+    expect(tiles().left).toBeCloseTo(800 - 120);
+    expect(tiles().top).toBeCloseTo(600 - 120);
+    // Far up and left: 120 px of them in the top left corner.
+    mouse('pointerdown', shell, 400, 300); mouse('pointermove', shell, -3600, -3700); mouse('pointerup', shell, -3600, -3700);
+    expect(tiles().right).toBeCloseTo(120, 0);
+    expect(tiles().bottom).toBeCloseTo(120, 0);
+    // Back to the middle, from the floor itself.
+    mouse('pointerdown', floor, 100, 100); mouse('pointermove', floor, 400, 300); mouse('pointerup', floor, 400, 300);
+    expect(tiles().left).toBeGreaterThan(0);
+    expect(tiles().right).toBeLessThan(800);
+  });
+  it('dezoomed, Ctrl + wheel keeps the point under the pointer still; Fit takes the floor away and starts at the top left', async () => {
+    const { user } = await boot();
+    const { scroller, floor, pad, zoom } = miniBrowser();
+    await user.keyboard('--');
+    const under = () => ({ x: (scroller.scrollLeft - pad('Left') + 200) / zoom(), y: (scroller.scrollTop - pad('Top') + 150) / zoom() });
+    const before = under();
+    fireEvent.wheel(scroller, { deltaY: 100, ctrlKey: true, clientX: 200, clientY: 150 });
+    expect(zoom()).toBeLessThan(1 / 1.2 ** 2);
+    expect(under().x).toBeCloseTo(before.x);
+    expect(under().y).toBeCloseTo(before.y);
+    fireEvent.wheel(scroller, { deltaY: -300, ctrlKey: true, clientX: 200, clientY: 150 });
+    expect(under().x).toBeCloseTo(before.x);
+    expect(under().y).toBeCloseTo(before.y);
+    await user.keyboard('0');
+    expect(scroller).toHaveClass('fitted');
+    expect(floor.style.paddingLeft).toBe('');
+    expect([scroller.scrollLeft, scroller.scrollTop]).toEqual([0, 0]);
   });
   it('a double-click on the floor refits; the zoom bar titles its buttons and shows its hint', async () => {
     const { user } = await boot();

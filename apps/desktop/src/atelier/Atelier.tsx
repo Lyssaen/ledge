@@ -126,19 +126,21 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
       {tools}
     </div>
     <div className="overview-scroll atelier" id="view-panel-atelier" role="region" aria-label={t.side.atelier} ref={view.scrollRef}>
-      <div ref={view.shellRef} className={`office-shell ${nav.paused ? 'office-paused' : ''} ${reduced ? 'office-reduced' : ''}`}>
-        <MessageLayer sessions={sessions} clock={clock} paused={nav.paused} reduced={reduced} dispatch={dispatch} />
-        <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
-        <div className={`project-grid ${scene.tables.length === 1 ? 'focused' : ''}`}>
-          {scene.tables.map(({ project, mains }) => (
-            <ProjectTable key={project.id} project={project} mains={mains} order={order} helpers={nav.helpers} paused={nav.paused}
-              isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
-              actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt} />
-          ))}
+      <div ref={view.floorRef} className="atelier-floor">
+        <div ref={view.shellRef} className={`office-shell ${nav.paused ? 'office-paused' : ''} ${reduced ? 'office-reduced' : ''}`}>
+          <MessageLayer sessions={sessions} clock={clock} paused={nav.paused} reduced={reduced} dispatch={dispatch} />
+          <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
+          <div className={`project-grid ${scene.tables.length === 1 ? 'focused' : ''}`}>
+            {scene.tables.map(({ project, mains }) => (
+              <ProjectTable key={project.id} project={project} mains={mains} order={order} helpers={nav.helpers} paused={nav.paused}
+                isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
+                actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt} />
+            ))}
+          </div>
+          {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
+          <Unassigned sessions={scene.unassigned} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch}
+            filing={filing} projects={projects?.projects ?? []} onMenu={menuAt} />
         </div>
-        {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
-        <Unassigned sessions={scene.unassigned} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch}
-          filing={filing} projects={projects?.projects ?? []} onMenu={menuAt} />
       </div>
       <div className="workspace-legend">
         <span><i className="live-dot" />{t.atelier.legend.working}</span>

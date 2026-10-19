@@ -5,7 +5,7 @@ import type { Helper, Projects, Session } from '@ledge/protocol';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import { mainOrder } from '../src/nav/agents';
 import { layoutTable, tableLength, roomWidth, noteX, tableBranch, sheetState, helperState, sceneOf, walkOrder, type AtelierScene } from '../src/atelier/layout';
-import { widestRow, fitCeiling, clampZoom, stepZoom, wheelZoom, zoomAround, frameZoom, centreOf, centreOn } from '../src/atelier/zoom';
+import { widestRow, fitCeiling, clampZoom, stepZoom, wheelZoom, zoomAround, frameZoom, centreOf, centreOn, floorPad } from '../src/atelier/zoom';
 import { plantsFor } from '../src/atelier/plantSpots';
 
 describe('atelier geometry', () => {
@@ -82,6 +82,22 @@ it('mosaic rows and zoom arithmetic', () => {
   // clamped to the scrollable range, never negative
   expect(centreOn({ x: 990, y: 10 }, 2, view, { width: 2000, height: 1500 })).toEqual({ left: 1200, top: 0 });
   expect(centreOn({ x: 400, y: 200 }, 1, view, { width: 500, height: 400 })).toEqual({ left: 0, top: 0 });
+  // past the floor's padding, the shell starts at `pad`
+  expect(centreOn({ x: 400, y: 200 }, 2, view, { width: 3000, height: 2500 }, { left: 300, top: 250 })).toEqual({ left: 700, top: 350 });
+});
+it('the floor reaches a view beyond the tables on every side, and always keeps a strip of them in sight', () => {
+  // A 1000 × 750 shell whose tiles cover 100–700 × 50–550, at zoom 0.5 in an 800 × 600 view: 120 px of the tiles stay visible.
+  const pad = floorPad({ width: 800, height: 600 }, { width: 1000, height: 750 }, { x: 100, y: 50, w: 600, h: 500 }, 0.5);
+  expect(pad).toEqual({ left: 800 - 120 - 50, right: 800 - 120 - 150, top: 600 - 120 - 25, bottom: 600 - 120 - 100 });
+  // Scrolled all the way left, the tiles' left edge sits 120 px before the view's right edge; all the way right, their right
+  // edge sits 120 px after the view's left edge.
+  const width = pad.left + 1000 * 0.5 + pad.right;
+  expect(800 - (pad.left + 100 * 0.5)).toBe(120);
+  expect(pad.left + 700 * 0.5 - (width - 800)).toBe(120);
+  // Tiles smaller than the strip stay whole; a huge zoom needs no floor at all.
+  const small = floorPad({ width: 800, height: 600 }, { width: 1000, height: 750 }, { x: 100, y: 50, w: 100, h: 100 }, 0.5);
+  expect([small.left, small.top]).toEqual([800 - 50 - 50, 600 - 50 - 25]);
+  expect(floorPad({ width: 800, height: 600 }, { width: 1000, height: 750 }, { x: 100, y: 50, w: 600, h: 500 }, 2.5)).toEqual({ left: 430, right: 0, top: 355, bottom: 0 });
 });
 it('plants: one or two per table, from the project id, never on the label corner, away from the +N pill', () => {
   expect(plantsFor('ledge', [])).toEqual([{ spot: 'br', species: 'monstera', flip: false }]);

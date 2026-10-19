@@ -109,6 +109,49 @@ test('double-click frames a table, the floor fits again; legend and zoom bar sta
   expect(await noScroll(page)).toBe(true);
 });
 
+test('dezoomed, dragging the floor carries the whole group to any edge, and part of it always stays in sight (#42)', async ({ page }) => {
+  await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
+  await page.goto('/');
+  await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
+  for (let i = 0; i < 3; i++) await page.keyboard.press('-');
+  await expect(page.getByRole('button', { name: /Fit/ })).toHaveAttribute('aria-pressed', 'false');
+  // The group: Ledge's desk, the tables and « Sans projet », as one box.
+  const group = () => page.locator('.office-shell').evaluate(shell => {
+    const rs = [...shell.querySelectorAll('.ledge-corner,.project-room,.unassigned-zone')].map(el => el.getBoundingClientRect());
+    const left = Math.min(...rs.map(r => r.left)), top = Math.min(...rs.map(r => r.top));
+    return { left, top, right: Math.max(...rs.map(r => r.right)), bottom: Math.max(...rs.map(r => r.bottom)) };
+  });
+  const v = (await scroller(page).boundingBox())!, c = center(v);
+  // Dezoomed around the centre of the view, the group stays in its middle instead of clinging to the top.
+  const g0 = await group();
+  expect(Math.abs((g0.left + g0.right) / 2 - c.x)).toBeLessThan(v.width * 0.1);
+  expect(g0.top).toBeGreaterThan(v.y + 40);
+  // Space + drag from the middle, three times each way.
+  const drag = async (dx: number, dy: number) => {
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.down(' ');
+      await page.mouse.move(c.x, c.y); await page.mouse.down(); await page.mouse.move(c.x + dx, c.y + dy, { steps: 4 }); await page.mouse.up();
+      await page.keyboard.up(' ');
+    }
+  };
+  await drag(v.width * 0.45, v.height * 0.4);
+  const g1 = await group();
+  expect(g1.left).toBeGreaterThan(c.x);
+  expect(g1.top).toBeGreaterThan(c.y);
+  expect(g1.left, 'some of the group stays in sight on the right').toBeLessThan(v.x + v.width - 100);
+  expect(g1.top, 'and above the legend').toBeLessThan(v.y + v.height - 76 - 100);
+  await drag(-v.width * 0.45, -v.height * 0.4);
+  const g2 = await group();
+  expect(g2.right).toBeLessThan(c.x);
+  expect(g2.bottom).toBeLessThan(c.y);
+  expect(g2.right, 'some of the group stays in sight on the left').toBeGreaterThan(v.x + 100);
+  expect(g2.bottom).toBeGreaterThan(v.y + 100);
+  // Fit brings it back, nothing to scroll.
+  await page.keyboard.press('0');
+  await expect(page.getByRole('button', { name: /Fit/ })).toHaveAttribute('aria-pressed', 'true');
+  expect(await noScroll(page)).toBe(true);
+});
+
 test('a resize and full screen refit without scrollbars', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
   await page.goto('/');

@@ -1,5 +1,7 @@
 export const ZOOM_MIN = 0.3, ZOOM_MAX = 2.5, FIT_MAX = 1.8, FIT_MIN = 0.4, FIT_STEP = 0.02, FRAME_MAX = 2.2;
 export const FLOOR_MARGIN = 56, TILE_GAP = 12, LEDGE_TILE = 230, ZONE_TILE = 420;
+/** How much of the tiles (screen pixels) a pan always leaves in sight. */
+export const FLOOR_KEEP = 120;
 
 /** Width of the widest row when aiming at `rows` rows (the mockup's first useLayoutEffect). */
 export function widestRow(widths: readonly number[], rows: number): number {
@@ -26,10 +28,23 @@ export function zoomAround(from: { zoom: number; left: number; top: number }, zo
 export const centreOf = (at: { zoom: number; left: number; top: number }, view: { width: number; height: number }): { x: number; y: number } =>
   ({ x: (at.left + view.width / 2) / at.zoom, y: (at.top + view.height / 2) / at.zoom });
 
-/** The scroll that brings `point` back to the centre of the view at `zoom`, clamped to the content's scrollable range. */
-export function centreOn(point: { x: number; y: number }, zoom: number, view: { width: number; height: number }, content: { width: number; height: number }): { left: number; top: number } {
+/** The scroll that brings `point` back to the centre of the view at `zoom`, clamped to the content's scrollable range; the
+ *  shell starts `pad` into the content (the floor's padding). */
+export function centreOn(point: { x: number; y: number }, zoom: number, view: { width: number; height: number }, content: { width: number; height: number },
+  pad: { left: number; top: number } = { left: 0, top: 0 }): { left: number; top: number } {
   const clamp = (v: number, max: number) => Math.max(0, Math.min(v, Math.max(0, max)));
-  return { left: clamp(point.x * zoom - view.width / 2, content.width - view.width), top: clamp(point.y * zoom - view.height / 2, content.height - view.height) };
+  return { left: clamp(pad.left + point.x * zoom - view.width / 2, content.width - view.width), top: clamp(pad.top + point.y * zoom - view.height / 2, content.height - view.height) };
+}
+
+/** The floor around the zoomed shell (screen pixels): enough to drag the tiles (`tiles`, in the unzoomed shell of size
+ *  `shell`) to any edge of the view, never so much that fewer than FLOOR_KEEP pixels of them stay in sight. */
+export function floorPad(view: { width: number; height: number }, shell: { width: number; height: number }, tiles: { x: number; y: number; w: number; h: number }, zoom: number): { left: number; right: number; top: number; bottom: number } {
+  const keepX = Math.min(FLOOR_KEEP, tiles.w * zoom), keepY = Math.min(FLOOR_KEEP, tiles.h * zoom);
+  const room = (v: number, keep: number, before: number) => Math.max(0, v - keep - before * zoom);
+  return {
+    left: room(view.width, keepX, tiles.x), right: room(view.width, keepX, shell.width - tiles.x - tiles.w),
+    top: room(view.height, keepY, tiles.y), bottom: room(view.height, keepY, shell.height - tiles.y - tiles.h)
+  };
 }
 
 export function frameZoom(box: { x: number; y: number; w: number; h: number }, view: { width: number; height: number }): { zoom: number; left: number; top: number } {

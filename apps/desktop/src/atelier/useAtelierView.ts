@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { ScreenKeyHandler } from '../nav/screenKeys';
-import { centreOf, centreOn, clampZoom, fitCeiling, FIT_MIN, FIT_STEP, FLOOR_MARGIN, frameZoom, stepZoom, wheelZoom, widestRow, zoomAround } from './zoom';
+import { centreOf, centreOn, clampZoom, fitCeiling, FIT_MIN, FIT_STEP, FLOOR_MARGIN, floorPad, frameZoom, stepZoom, wheelZoom, widestRow, zoomAround } from './zoom';
 
 export interface AtelierView {
   scrollRef: RefObject<HTMLDivElement | null>;
+  /** Around the shell: padded, once zoomed by hand, so the tiles can be dragged to any edge of the view. */
+  floorRef: RefObject<HTMLDivElement | null>;
   shellRef: RefObject<HTMLDivElement | null>;
   /** Shown: the manual zoom, else the fit's. */
   zoom: number;
@@ -28,12 +30,17 @@ const OWN_TOUCH = '.assign-menu,textarea';
 const TAP_SLOP = 8;
 /** Space on these keeps its own activation. */
 const OWN_SPACE = 'button,a,input,textarea,select,[role=button],[role=checkbox],[role=menuitem],[role=tab],[contenteditable=true]';
+/** The mosaic's tiles: what the floor keeps in sight. */
+const TILES = '.ledge-corner,.project-room,.empty-project,.unassigned-zone';
+const NO_PAD = { left: 0, right: 0, top: 0, bottom: 0 };
 
 /** The atelier as a canvas (observatory.tsx, the first `useLayoutEffect`, `zoomAt`, `fitView`, `zoomTo`, `zoomStep` and the
- *  wheel / pan / double-click effect): the mosaic is fitted to the scroller, then the viewer may zoom and pan it.
+ *  wheel / pan / double-click effect): the mosaic is fitted to the scroller, then the viewer may zoom and pan it, over a floor
+ *  that reaches past it on every side (#42). Scrolls handed around are the shell's own (the floor's padding left out).
  *  `tiles`: the tiles' widths in render order; `refit`: what, when it changes, redoes the fit. */
 export function useAtelierView(tiles: readonly number[], refit: readonly unknown[]): AtelierView {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const floorRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const [fitZoom, setFitZoom] = useState(1);
   const [manual, setManual] = useState<number | null>(null);
@@ -43,6 +50,30 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
   // The scroller's border box at the last fit: a resize that keeps it (scroll bars coming and going) does not refit.
   const fittedAt = useRef({ w: -1, h: -1 });
   const space = useRef(false);
+  // The floor's padding now (screen pixels): the shell starts at `left`, `top` in the scroller.
+  const pad = useRef(NO_PAD);
+
+  /** Pads the floor for the shell at `zoom` (already applied), or takes it away (fitted). */
+  const placeFloor = (zoom: number | null) => {
+    const scroll = scrollRef.current, floor = floorRef.current, shell = shellRef.current;
+    if (!scroll || !floor || !shell) return;
+    if (zoom === null) { pad.current = NO_PAD; floor.style.padding = ''; return; }
+    const r = shell.getBoundingClientRect();
+    let box: { x0: number; y0: number; x1: number; y1: number } | null = null;
+    for (const el of shell.querySelectorAll(TILES)) {
+      const e = el.getBoundingClientRect();
+      if (e.width === 0 && e.height === 0) continue;
+      const x0 = (e.left - r.left) / zoom, y0 = (e.top - r.top) / zoom, x1 = x0 + e.width / zoom, y1 = y0 + e.height / zoom;
+      box = box ? { x0: Math.min(box.x0, x0), y0: Math.min(box.y0, y0), x1: Math.max(box.x1, x1), y1: Math.max(box.y1, y1) } : { x0, y0, x1, y1 };
+    }
+    const size = { width: r.width / zoom, height: r.height / zoom };
+    const tiles = box ? { x: box.x0, y: box.y0, w: box.x1 - box.x0, h: box.y1 - box.y0 } : { x: 0, y: 0, w: size.width, h: size.height };
+    // The scroller's bottom padding (under the legend and the zoom bar) is no place to leave the tiles.
+    const below = Number.parseFloat(getComputedStyle(scroll).paddingBottom) || 0;
+    const p = floorPad({ width: scroll.clientWidth, height: scroll.clientHeight - below }, size, tiles, zoom);
+    pad.current = p;
+    Object.assign(floor.style, { paddingLeft: `${p.left}px`, paddingRight: `${p.right}px`, paddingTop: `${p.top}px`, paddingBottom: `${p.bottom}px` });
+  };
 
   const tilesKey = tiles.join(',');
   const compute = useCallback(() => {
@@ -52,7 +83,8 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
     // Zoomed by hand: the point at the centre of the view, brought back once the manual zoom is re-applied (the fit below
     // shrinks the content, which clamps the scroll to the top left).
     const kept = manualRef.current === null ? null
-      : centreOf({ zoom: applied.current, left: scroll.scrollLeft, top: scroll.scrollTop }, { width: scroll.clientWidth, height: scroll.clientHeight });
+      : centreOf({ zoom: applied.current, left: scroll.scrollLeft - pad.current.left, top: scroll.scrollTop - pad.current.top }, { width: scroll.clientWidth, height: scroll.clientHeight });
+    placeFloor(null);
     const s = shell.style;
     s.width = s.paddingInline = s.minHeight = s.maxWidth = s.marginInline = '';
     s.zoom = '1';
@@ -101,7 +133,8 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
     s.zoom = String(applied.current);
     scroll.classList.toggle('fitted', manualRef.current === null);
     if (kept) {
-      const { left, top } = centreOn(kept, applied.current, { width: scroll.clientWidth, height: scroll.clientHeight }, { width: scroll.scrollWidth, height: scroll.scrollHeight });
+      placeFloor(applied.current);
+      const { left, top } = centreOn(kept, applied.current, { width: scroll.clientWidth, height: scroll.clientHeight }, { width: scroll.scrollWidth, height: scroll.scrollHeight }, pad.current);
       scroll.scrollLeft = left; scroll.scrollTop = top;
     }
   }, [tilesKey]);
@@ -123,13 +156,15 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
     return () => observer.disconnect();
   }, []);
 
+  /** `left`, `top`: the shell's scroll, the floor's padding left out. */
   const setZoom = (z: number, left: number, top: number) => {
     const scroll = scrollRef.current, shell = shellRef.current;
     applied.current = z; manualRef.current = z; setManual(z);
     if (!scroll || !shell) return;
     shell.style.zoom = String(z);
     scroll.classList.remove('fitted');
-    scroll.scrollLeft = left; scroll.scrollTop = top;
+    placeFloor(z);
+    scroll.scrollLeft = left + pad.current.left; scroll.scrollTop = top + pad.current.top;
   };
   const zoomTo = (target: number, at?: { x: number; y: number }) => {
     const scroll = scrollRef.current;
@@ -137,7 +172,7 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
     if (!scroll) { setZoom(z, 0, 0); return; }
     const r = scroll.getBoundingClientRect();
     const point = at ? { x: at.x - r.left, y: at.y - r.top } : { x: scroll.clientWidth / 2, y: scroll.clientHeight / 2 };
-    const { left, top } = zoomAround({ zoom: applied.current, left: scroll.scrollLeft, top: scroll.scrollTop }, z, point);
+    const { left, top } = zoomAround({ zoom: applied.current, left: scroll.scrollLeft - pad.current.left, top: scroll.scrollTop - pad.current.top }, z, point);
     setZoom(z, left, top);
   };
   const step = (dir: 1 | -1) => zoomTo(stepZoom(applied.current, dir));
@@ -151,7 +186,7 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
     const scroll = scrollRef.current;
     if (!scroll) return;
     const old = applied.current, r = scroll.getBoundingClientRect(), e = el.getBoundingClientRect();
-    const box = { x: (scroll.scrollLeft + e.left - r.left) / old, y: (scroll.scrollTop + e.top - r.top) / old, w: e.width / old, h: e.height / old };
+    const box = { x: (scroll.scrollLeft - pad.current.left + e.left - r.left) / old, y: (scroll.scrollTop - pad.current.top + e.top - r.top) / old, w: e.width / old, h: e.height / old };
     if (box.w <= 0 || box.h <= 0) return;
     const { zoom, left, top } = frameZoom(box, { width: scroll.clientWidth, height: scroll.clientHeight });
     setZoom(zoom, left, top);
@@ -195,7 +230,7 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
       pinch = null; swipe = null;
       if (a && b) {
         const m = span(a, b), r = scroll.getBoundingClientRect(), z = applied.current;
-        pinch = { d: Math.max(m.d, 1), zoom: z, x: (scroll.scrollLeft + m.x - r.left) / z, y: (scroll.scrollTop + m.y - r.top) / z };
+        pinch = { d: Math.max(m.d, 1), zoom: z, x: (scroll.scrollLeft - pad.current.left + m.x - r.left) / z, y: (scroll.scrollTop - pad.current.top + m.y - r.top) / z };
       } else if (a) swipe = { x: a.x, y: a.y, left: scroll.scrollLeft, top: scroll.scrollTop, moved: false };
     };
     const fingerDown = (e: PointerEvent) => {
@@ -278,5 +313,5 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
   const fitted = manual === null;
   useLayoutEffect(() => { scrollRef.current?.classList.toggle('fitted', fitted); }, [fitted]);
 
-  return { scrollRef, shellRef, zoom: manual ?? fitZoom, fitted, zoomTo, step, fit, frame, keys };
+  return { scrollRef, floorRef, shellRef, zoom: manual ?? fitZoom, fitted, zoomTo, step, fit, frame, keys };
 }
