@@ -20,6 +20,11 @@ describe('claudeArgs', () => {
     expect(PERSONA).toContain('8 sessions au plus');
     expect(PERSONA).toContain('ne mets un bloc que pour les dossiers sûrs');
   });
+  it('the persona sends questions about issues, PR/MR and CI to the forge files, dated, and says when there is no access (#23)', () => {
+    expect(PERSONA).toContain('forge.md');
+    expect(PERSONA).toContain('forge-<projet>.md');
+    expect(PERSONA).toContain('dis que Ledge n\'a pas accès');
+  });
   it('the persona allows a relay block for one sure, writable session, and never sends anything itself', () => {
     expect(PERSONA).toContain('```ledge-relay');
     expect(PERSONA).toContain('{"session": "<id>", "text": "<l\'instruction, formulée pour l\'agent>"}');

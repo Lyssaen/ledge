@@ -9,6 +9,7 @@ import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
 import { gitSummary } from '../daemon/git.js';
 import { writeContext, stepFor } from './context.js';
+import { asksForge, type Forge } from './forge.js';
 import { runClaude, type ClaudeEvent, type RunHandle, type RunOptions } from './claude.js';
 import { runCodex } from './codex.js';
 import { runCursor } from './cursor.js';
@@ -36,6 +37,8 @@ export interface ChatDeps {
   env: () => Promise<NodeJS.ProcessEnv>;
   /** The projects and folder rules as the daemon holds them now (read at each question); a daemon with none omits it. */
   projects?: () => Projects;
+  /** Reads the projects' GitHub/GitLab (#23) into the context, for a question that asks about issues, PR/MR or CI. */
+  forge?: Forge;
   now?: () => string; today?: () => string; uuid?: () => string; bin?: string[]; bins?: Partial<Record<Tool, string[]>>; spawn?: typeof nodeSpawn; timeoutMs?: number;
 }
 
@@ -159,6 +162,8 @@ export function createChat(deps: ChatDeps): Chat {
 
   async function run(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
     const ctx = await writeContext(contextDir, { sessions: deps.store.all().filter(s => !isArchived(s)), recents: deps.store.recents(), projects: deps.projects?.(), now: now(), capture, git: cwd => gitSummary(cwd) });
+    // Only a question about the forge runs gh/glab: the others never wait on the network.
+    if (deps.forge && asksForge(turn.question)) await deps.forge.write(ctx, deps.projects?.() ?? { projects: [], rules: [] }).catch(e => log(`chat ${turn.qid}: forge files not written (${e instanceof Error ? e.message : String(e)})`));
     if (mine.cancelled) return CANCELLED;
     const { sessionId, resume } = await daySession(fresh, tool);
     const label = TOOL_LABEL[tool];

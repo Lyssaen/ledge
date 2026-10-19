@@ -68,6 +68,22 @@ describe('chat service', () => {
     expect(seen[1]).toContain('## Ledge');
   });
 
+  it('a question about issues, PR/MR or CI gets the forge files the daemon read (#23); another question runs no forge command', async () => {
+    let home = ''; const seen: Array<string | null> = [];
+    const spawn = ((file: string, a: string[], o: object) => {
+      const f = join(home, 'chat', 'context', 'forge.md'); seen.push(existsSync(f) ? readFileSync(f, 'utf8') : null);
+      return nodeSpawn(file, a, o as never);
+    }) as unknown as typeof nodeSpawn;
+    const projects: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+    const writes: string[] = [];
+    const forge = { async write(ctx: { dir: string; steps: Map<string, unknown> }, p: Projects) { writes.push(p.projects[0]!.id); writeFileSync(join(ctx.dir, 'forge.md'), '- Ledge: forge-ledge.md'); } };
+    const s = setup({ spawn, projects: () => projects, forge }); home = s.home;
+    await s.chat.ask('q1', 'où en sont les autres ?', () => {});
+    await s.chat.ask('q2', 'quelles issues sont ouvertes ?', () => {});
+    expect(writes).toEqual(['ledge']);
+    expect(seen).toEqual([null, '- Ledge: forge-ledge.md']);
+  });
+
   it('the chat context leaves archived sessions out', async () => {
     let home = ''; let sessions = '';
     const spawn = ((file: string, a: string[], o: object) => { sessions = readFileSync(join(home, 'chat', 'context', 'sessions.md'), 'utf8'); return nodeSpawn(file, a, o as never); }) as unknown as typeof nodeSpawn;
