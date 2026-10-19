@@ -377,6 +377,14 @@ describe('runHook: Codex runs `ledge send` and `ledge who` itself', () => {
       expect(d.got[1]).not.toHaveProperty('intercept');
     } finally { d.close(); }
   });
+  it('a Codex with no Ledge id is accepted: the send travels on the hook connection that registered it', async () => {
+    delete process.env.LEDGE_CODEX_HOOK_SESSION; delete process.env.LEDGE_SESSION;
+    const store = new Store(); store.upsert(sess('a', 'Otto'));
+    const srv = await startServer({ store, tmux, port: 0 });
+    try {
+      expect(reason(await runHook('PreToolUse', bash('ledge send Otto "x"'), { port: srv.port, tool: 'codex' })).permissionDecisionReason).toBe('remis à Otto');
+    } finally { await srv.close(); }
+  });
   it('a busy target says it is queued', async () => {
     const d = await fake('queued');
     try { expect(reason(await runHook('PreToolUse', bash('ledge send Otto Salut'), { port: d.port, tool: 'codex' })).permissionDecisionReason).toBe("Otto est occupé : il le recevra dès qu'il sera libre"); } finally { d.close(); }

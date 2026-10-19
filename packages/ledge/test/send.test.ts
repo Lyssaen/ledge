@@ -78,12 +78,21 @@ describe('ledge send', () => {
 describe('parseLedgeCommand', () => {
   it('reads a lone `ledge who` and `ledge send`', () => {
     expect(parseLedgeCommand('ledge who')).toEqual({ cmd: 'who' });
-    expect(parseLedgeCommand('  ledge who \n')).toEqual({ cmd: 'who' });
+    expect(parseLedgeCommand('  ledge who ')).toEqual({ cmd: 'who' });
     expect(parseLedgeCommand('ledge send Otto "Tests verts\nje pousse"')).toEqual({ cmd: 'send', args: ['Otto', 'Tests verts\nje pousse'] });
     expect(parseLedgeCommand("ledge send Otto 'coût: $5'")).toEqual({ cmd: 'send', args: ['Otto', 'coût: $5'] });
     expect(parseLedgeCommand('ledge send Otto "dit \\"oui\\""')).toEqual({ cmd: 'send', args: ['Otto', 'dit "oui"'] });
     expect(parseLedgeCommand('ledge send Otto "a;b|c&d" --summary x#y')).toEqual({ cmd: 'send', args: ['Otto', 'a;b|c&d', '--summary', 'x#y'] });
     expect(parseLedgeCommand('ledge send Otto ""')).toEqual({ cmd: 'send', args: ['Otto', ''] });
+  });
+  it('keeps a newline inside quotes literal, but an unquoted newline or carriage return is a command separator', () => {
+    expect(parseLedgeCommand('ledge send Otto "a\nb"')).toEqual({ cmd: 'send', args: ['Otto', 'a\nb'] });
+    expect(parseLedgeCommand('ledge send Otto "hi"\nls')).toBeUndefined();
+    expect(parseLedgeCommand('ledge who\r')).toBeUndefined();
+  });
+  it('rejects an unquoted glob or tilde, which the shell would expand, and keeps it literal when quoted', () => {
+    for (const c of ['ledge send Otto *', 'ledge send Otto a?', 'ledge send Otto [a]', 'ledge send Otto ~', 'ledge send Otto {a,b}']) expect(parseLedgeCommand(c), c).toBeUndefined();
+    expect(parseLedgeCommand(`ledge send Otto "a*b?[c]~{d}" '*'`)).toEqual({ cmd: 'send', args: ['Otto', 'a*b?[c]~{d}', '*'] });
   });
   it('rejects anything else', () => {
     for (const c of [

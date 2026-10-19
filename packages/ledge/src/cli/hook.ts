@@ -7,7 +7,7 @@ import { gitInfo } from '../daemon/git.js';
 import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
-import { parseLedgeCommand, sendMessage } from './send.js';
+import { parseLedgeCommand, sendOnClient } from './send.js';
 import { formatWho } from './who.js';
 
 type Payload = Record<string, unknown>;
@@ -397,16 +397,15 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
 
 /**
  * Codex's shell cannot reach the daemon, its hook can: a lone `ledge send` / `ledge who` is run here and its output is the deny
- * reason the agent reads. `daemon not running` or a failure leaves the command to proceed; a send that got no ack is reported
+ * reason the agent reads, sent on the hook's own connection so the daemon already knows the sender. A failure leaves the command to proceed; a send that got no ack is reported
  * (the message may be delivered), not retried by the sandbox.
  */
-async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeof parseLedgeCommand>>, from: string, port: number | undefined, deadline: number): Promise<string | undefined> {
+async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeof parseLedgeCommand>>, from: string, deadline: number): Promise<string | undefined> {
   const left = () => Math.max(0, deadline - Date.now());
   let line: string;
   if (cmd.cmd === 'who') line = formatWho((await client.next('snapshot', left())).sessions, from);
   else {
-    line = (await sendMessage(cmd.args, { port, from, timeoutMs: left() })).line;
-    if (line.startsWith('daemon not running')) return undefined;
+    line = (await sendOnClient(client, cmd.args, from, left())).line;
   }
   return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: line } });
 }
@@ -441,7 +440,7 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
     client.send({ type: 'session.event', id: mapped.id, event: mapped.event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}) });
     if (identify) known = (await client.next('snapshot', Math.max(0, deadline - Date.now())).catch(() => undefined))?.sessions.find(s => s.id === mapped!.id);
     if (intercept) relayed = await relayMessage(client, mapped.id, str((payload as Payload).tool_use_id), input, deadline);
-    if (command) relayed = await runLedgeCommand(client, command, mapped.id, opts.port, deadline);
+    if (command) relayed = await runLedgeCommand(client, command, mapped.id, deadline);
     // close() resolves once the handshake completes, i.e. after the send is flushed; one shared deadline
     await Promise.race([client.close(), new Promise(r => setTimeout(r, Math.max(0, deadline - Date.now())))]);
   } catch (e) {
