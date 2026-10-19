@@ -29,6 +29,7 @@ import { readProjects, writeProjects } from './projects.js';
 import { readIsland, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createRelay } from './relay.js';
+import { createMailbox } from './mailbox.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
@@ -192,7 +193,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     store.onEvent((id, ev) => history.record(id, ev)),
     store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })
   ] : [];
-  const relay = createRelay({ chat, store, replyTo, broadcast, now });
+  // One lock for both: a session is never typed into by the relay and the mailbox at once.
+  const typing = new Set<string>();
+  const mailbox = createMailbox({
+    store, replyTo, typing, now,
+    relayQueued: id => chat.queuedRelays().some(q => q.relay.id === id),
+    sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
+  });
+  const relay = createRelay({ chat, store, replyTo, broadcast, now, typing, next: id => mailbox.kick(id) });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -630,6 +638,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
+      case 'session.message': return send(ws, mailbox.submit(msg));
       case 'session.relay': return relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
@@ -687,6 +696,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port,
     broadcast,
     preview,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); relay.close(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); relay.close(); mailbox.close(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

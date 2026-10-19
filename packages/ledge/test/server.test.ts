@@ -636,6 +636,40 @@ describe('server', () => {
     c.close();
   });
 
+  describe('session.message', () => {
+    const line = 'Salut';
+    it('to a free Codex is acked accepted and typed', async () => {
+      tmux = fakeTmux({ 'ledge-b': [fx('codex-idle-after-turn')] }); await srv.close();
+      srv = await startServer({ store, tmux, port: 0 });
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.message', rid: 'r1', from: 'a', to: 'Pim', text: line });
+      expect(await c.next('message.ack', 3000)).toEqual({ type: 'message.ack', rid: 'r1', outcome: 'accepted' });
+      await until(() => tmux.sent.some(x => x[0] === 'keys' && x[2] === 'Enter'), 3000);
+      expect(tmux.sent[0]).toEqual(['text', 'ledge-b', expect.stringContaining(`<ledge-message from="Otto" tool="claude">${line}</ledge-message>`)]);
+      expect(tmux.sent.at(-1)).toEqual(['keys', 'ledge-b', 'Enter']);
+      c.close();
+    });
+    it('intercept to a Claude is native, nothing typed', async () => {
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.message', rid: 'r1', from: 'a', to: 'Pim', text: line, intercept: true });
+      expect(await c.next('message.ack', 3000)).toEqual({ type: 'message.ack', rid: 'r1', outcome: 'native' });
+      expect(tmux.sent).toEqual([]);
+      c.close();
+    });
+    it("the card in the sender's thread goes sending → delivered", async () => {
+      tmux = fakeTmux({ 'ledge-b': [fx('codex-idle-after-turn')] }); await srv.close();
+      const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.message', rid: 'r1', from: 'a', to: 'Pim', text: line });
+      expect((await c.next('session.thread.item', 3000)).item).toMatchObject({ kind: 'sent', id: 'r1', to: 'Pim', peer: 'b', status: 'sending' });
+      expect((await c.next('session.thread.item', 3000)).item).toMatchObject({ kind: 'sent', id: 'r1', status: 'delivered' });
+      c.close();
+    });
+  });
+
   describe('deny with a note whose input box does not come back', () => {
     async function denyWithNote(panes: string[]) {
       tmux = fakeTmux({ 'ledge-a': panes }); await srv.close();
