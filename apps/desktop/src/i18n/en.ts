@@ -496,7 +496,7 @@ export const en: Messages = {
     thread: {
       label: 'Session thread',
       you: 'You', fromParent: (n) => `Instruction from ${n}`,
-      exchange: (at) => `Exchange at ${at}`, live: 'running',
+      exchange: (at) => `Exchange at ${at}`,
       actions: (n) => pluralEn(n, '1 action', `${n} actions`),
       kinds: {
         read: (n) => pluralEn(n, `${n} read`, `${n} reads`), search: (n) => pluralEn(n, `${n} search`, `${n} searches`),
@@ -509,20 +509,42 @@ export const en: Messages = {
       marks: { running: 'Running', success: 'Succeeded', failed: 'Failed', unknown: 'Interrupted' },
       verbs: { create: 'Create', delete: 'Delete', read: 'Read', search: 'Search', command: 'Command', edit: 'Edit' },
       decided: { accept: 'Allowed', always: 'Always allowed', deny: 'Denied', unknown: 'Answered in the terminal' },
-      helperLaunched: 'Subagent started', openHelper: (n, task) => `Open ${n}: ${task}`,
       seeChange: 'View the change', seeChangeShort: 'View',
       read: 'Read',
       unread: 'New since your last visit', latest: 'Go to the latest message',
       lost: (m) => `Connection lost with ${m}`,
       lostBody: 'The thread is frozen: what follows is the last known state; what the agent is doing now is not known.',
-      frozenEnd: (s) => `No news since the connection was lost · ${s}`, ended: (s) => `Session ended · ${s}`,
+      frozenEnd: (s) => `No news since the connection was lost · ${s}`, ended: (at, s) => `Session ended at ${at} · ${s}`,
+      endOf: 'End of the exchange',
+      endFailed: (n, recovered) => `${n} failed` + (recovered ? ', recovered' : ''),
+      subagent: 'subagent', openThread: (n) => `Open ${n}'s thread`,
+      launched: (n) => pluralEn(n, 'Subagent launched', 'Subagents launched'),
+      tally: { done: (n) => `${n} done`, working: (n) => `${n} running`, error: (n) => `${n} failed` },
+      quote: (s) => `“${s}”`,
+      waits: {
+        permission: (n) => `${n} is waiting for your approval of a command.`, question: (n) => `${n} is waiting for your answer to a question.`,
+        plan: (n) => `${n} is waiting for your approval of its plan.`, diff: (n) => `${n} is waiting for your approval of a change.`
+      },
+      resumes: 'The thread resumes after your answer.',
+      planDecided: { accept: 'You approved the plan', always: 'You approved the plan in auto mode', deny: 'You sent the plan back for revision', unknown: 'Plan answered in the terminal' },
+      objective: 'Session objective', notedBy: (n) => `· noted by ${n}`,
+      tags: { story: 'Story', objectif: 'Objective' },
+      tagValues: { 'hors-story': 'No story', analyse: 'Analysis', correction: 'Fix', implementation: 'Implementation' },
+      task: {
+        kicker: 'Task', statuses: { killed: 'Stopped', completed: 'Done', failed: 'Failed', other: 'Notified' },
+        agent: 'The agent', command: 'The command',
+        agentDid: { killed: 'was stopped. It can resume if you write to it.', completed: 'finished in the background.', failed: 'failed in the background.', other: 'stopped.' },
+        commandDid: { killed: 'was stopped.', completed: 'finished in the background.', failed: 'failed in the background.', other: 'stopped.' },
+        code: (c) => `exit ${c}`, raw: 'Raw notification'
+      },
       loading: 'Loading the thread…', empty: 'Nothing in the thread yet.', notLoaded: 'The thread was not loaded before the connection was lost.'
     },
     message: {
       sent: 'Message sent', received: 'Message received',
       readBy: (n) => `Read by ${n}`, delivered: 'Delivered, not read yet', sending: 'Sending…', failed: 'Not delivered',
       conversation: (n, k) => `Conversation with ${n} · ${k} messages`, fold: 'Fold', unfold: 'Unfold',
-      readAll: 'Read the whole message', showLess: 'Show less', seeIn: (n) => `See it in ${n}'s thread`
+      readAll: 'Read the whole message', showLess: 'Show less', seeIn: (n) => `See it in ${n}'s thread`,
+      to: 'To', from: 'From', seeTheirs: 'see their thread', seen: 'read'
     },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
     notice: {
@@ -554,7 +576,7 @@ export const en: Messages = {
       summary: (n, s) => pluralEn(n, `1 step: ${s}`, `${n} steps: ${s}`)
     },
     todos: {
-      workPlan: 'Work plan', workPlanUpdated: 'Work plan updated', updated: 'work plan updated',
+      workPlan: 'Work plan', updated: 'work plan updated',
       allDone: 'All done', paused: 'Paused',
       doneOf: (d, n) => `${d}/${n} done`, inProgress: (t) => `in progress: ${t}`,
       boxes: { completed: 'Done', in_progress: 'In progress', pending: 'To do' }

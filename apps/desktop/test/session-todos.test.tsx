@@ -3,7 +3,7 @@ import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import type { ThreadItem, ToolItem } from '@ledge/protocol';
 import { T0 } from '@ledge/fleet/test/mockDaemon';
 import { saveReduced } from '../src/motionPreferences';
-import { boot, closeDaemons, listSessions, ottoThread } from './helpers';
+import { boot, closeDaemons, listSessions, ottoThread, unfoldPast } from './helpers';
 
 afterEach(async () => { cleanup(); saveReduced(false); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllEnvs(); await closeDaemons(); });
 
@@ -27,7 +27,7 @@ it('no list, no bar', async () => {
   const { d, user } = await boot({ sessions: listSessions(), list: true });
   d.thread('otto', ottoThread());
   await user.click(screen.getByRole('button', { name: /^Otto,/ }));
-  await screen.findByText('Câble la liste');
+  await unfoldPast(user);
   expect(document.querySelector('.todo-bar')).toBeNull();
 });
 
@@ -36,13 +36,12 @@ async function openOtto(extra: ThreadItem[]) {
   const env = await boot({ sessions: listSessions(), list: true });
   env.d.thread('otto', [...ottoThread(), ...extra]);
   await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
-  await screen.findByText('Câble la liste');
+  await unfoldPast(env.user);
   return env;
 }
 
 it('Escape folds the work plan before it closes the pane tab, and only then leaves the page', async () => {
   const { user } = await openOtto([{ ...v1, at: new Date().toISOString(), turn: 2 }]);
-  await user.click(screen.getByRole('button', { name: /^3 actions/ }));
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="t3"]')!).getByRole('button', { name: 'View the change' }));
   const head = screen.getByRole('button', { name: /^Work plan/ });
   await user.click(head);
@@ -56,19 +55,13 @@ it('Escape folds the work plan before it closes the pane tab, and only then leav
   await user.keyboard('{Escape}');
   expect(document.querySelector('.session-page')).toBeNull();
 });
-it('an update is no action: the summary says the plan was updated, unfolded it is a row of its own; alone, it is the summary', async () => {
+it('an update is no action: a run shows its last update as a row of its own, a run of updates alone too', async () => {
   const now = new Date().toISOString();
-  const { user } = await openOtto([{ ...v1, at: now, turn: 2 }, { ...v2, at: now, turn: 2 }, { kind: 'message', id: 'msg-2', at: now, turn: 2, text: 'Je continue.' }, { ...v2, id: 'd3', at: now, turn: 2 }]);
-  // t5 still runs: its fold has a summary only because the updates are there to sum up.
-  const fold = screen.getByRole('button', { name: /^1 action.*· work plan updated ×2/ });
-  expect(fold).toHaveTextContent('running · ');
-  await user.click(fold);
-  expect([...fold.parentElement!.querySelectorAll('.todo-row')].map(r => r.textContent)).toEqual(['☰Work plan1/3 done · in progress: Écriture des tests', '☰Work plan2/2 done']);
-  const alone = screen.getByRole('button', { name: 'Work plan updated' });
-  expect(alone.querySelector('.mono')).toBeNull();                               // untimed
-  await user.click(alone);
-  expect(alone.parentElement!.querySelectorAll('.todo-row')).toHaveLength(1);
-  expect(alone.parentElement!.querySelectorAll('[data-tool]')).toHaveLength(0);
+  await openOtto([{ ...v1, at: now, turn: 2 }, { ...v2, at: now, turn: 2 }, { kind: 'message', id: 'msg-2', at: now, turn: 2, text: 'Je continue.' }, { ...v2, id: 'd3', at: now, turn: 2 }]);
+  // Two runs: t5 with its two updates, then the update alone after the message.
+  expect([...document.querySelectorAll('.turn.current .todo-row')].map(r => r.textContent)).toEqual(['Work plan2/2 done', 'Work plan2/2 done']);
+  expect(document.querySelectorAll('.turn.current li[data-tool]')).toHaveLength(1);
+  expect(screen.queryByRole('button', { name: /work plan updated/i })).toBeNull();     // no fold under six actions
   // The bar reads the latest list.
   const head = document.querySelector('.todo-head');
   expect(head).toHaveTextContent('2/2');
@@ -77,7 +70,7 @@ it('an update is no action: the summary says the plan was updated, unfolded it i
 it("a subagent's page shows its own list, not its parent's", async () => {
   const { user } = await openOtto([{ ...v1, at: new Date().toISOString(), turn: 2 }, { ...v2, at: new Date().toISOString(), helperId: 'h1' }]);
   expect(document.querySelector('.todo-head')).toHaveTextContent('1/3');
-  await user.click(screen.getByRole('button', { name: 'Open Explore: Lire le code' }));
+  await user.click(screen.getByRole('button', { name: "Open Explore's thread" }));
   await screen.findByText('Je lis.');
   const head = document.querySelector('.todo-head');
   expect(head).toHaveTextContent('2/2');

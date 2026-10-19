@@ -19,7 +19,8 @@ import { ArchivedBanner } from '../manage/ArchivedBanner';
 import type { SessionActions } from '../manage/useSessionActions';
 import { Reply } from './Reply';
 import { SidePane, tabId, type PanePlan, type PaneTab } from './SidePane';
-import { Thread } from './Thread';
+import { Tags, Thread } from './Thread';
+import { marksOf } from './markers';
 import { TodoBar } from './TodoBar';
 import { latestTodos } from './todos';
 import { atEnd, displayIds, exchanges, helperOf, pendingPlan, unreadFrom, type PlanDoc, type Segment } from './exchanges';
@@ -190,6 +191,10 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
       ? { ...x, segments: x.segments.map(s => (s.kind === 'plan' && stale(s) ? { ...s, plan: { ...s.plan, status: 'open' as const } } : s)) }
       : x));
   }, [xs, offline, requestKey]);
+  // The Story / Objectif the shown thread's markers leave, in the heading; the pinned request, as the thread's last row says it.
+  const tags = useMemo(() => marksOf(shownXs).latest, [shownXs]);
+  const waitKind = shown && (!helper || shown.helperId === helper.id) ? shown.kind : null;
+  const waiting = useMemo(() => (waitKind ? { kind: waitKind, asker } : null), [waitKind, asker]);
   // Once answered, the request's plan stays readable in its tab, its fate untold.
   const [lastRequest, setLastRequest] = useState<{ plan: PlanDoc; by: string } | null>(null);
   if (requestPlan && (lastRequest?.plan.markdown !== requestPlan.markdown || lastRequest.by !== asker)) setLastRequest({ plan: requestPlan, by: asker });
@@ -383,7 +388,9 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
           ))}
         </div>
         <span className="pane-meta mono" title={t.session.meta}>{machine} · {repoOf(session)}</span>
-        {kids.length > 0 && <><span className="spacer" /><button type="button" className="kids-pill" title={t.session.kidsPillTitle} onClick={p.onShowKids}><Icon d={SHELL_ICONS.subagents} size={13} />{t.session.kidsPill(kids.length)}</button></>}
+        {(tags || kids.length > 0) && <span className="spacer" />}
+        {tags && <Tags tags={tags} />}
+        {kids.length > 0 && <><button type="button" className="kids-pill" title={t.session.kidsPillTitle} onClick={p.onShowKids}><Icon d={SHELL_ICONS.subagents} size={13} />{t.session.kidsPill(kids.length)}</button></>}
       </div>
       {archived && <ArchivedBanner session={session} actions={p.actions} now={now} />}
       <div className={cls('session-split', paneShown && 'has-pane')} style={{ '--split': `${p.split * 100}%`, '--reply-h': `${replyH}px` } as CSSProperties}>
@@ -401,7 +408,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
               {items === undefined ? <p className="thread-note muted">{offline ? th.notLoaded : th.loading}</p>
                 : xs.length === 0 ? <p className="thread-note muted">{th.empty}</p>
                 : <Thread session={session} helper={helper} items={items} xs={shownXs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
-                    flash={flash} onChange={openDiff} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan} />}
+                    flash={flash} onChange={openDiff} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan} waiting={waiting} />}
             </div>
             {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}
             {view === 'changes' && !loaded && <div className="changes-empty"><p className="muted">{offline ? th.notLoaded : th.loading}</p></div>}

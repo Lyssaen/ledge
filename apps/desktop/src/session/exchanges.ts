@@ -178,11 +178,17 @@ export function fmtDur(ms: number, lang: Lang): string {
   return `${h} h ${String(m).padStart(2, '0')}`;
 }
 
+/** « 14:32 », l'heure locale d'un instant : celle d'une ligne du fil. */
+export function clock(at: string): string {
+  const d = new Date(at);
+  const p2 = (x: number) => String(x).padStart(2, '0');
+  return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+
 /** La marque d'heure d'un échange : « 14:32 » le jour même (heure locale), sinon « 16 oct. · 09:05 » (fr-BE) / « Oct 16 · 09:05 » (en-US). */
 export function timeMark(at: string, now: number, lang: Lang): string {
   const d = new Date(at), n = new Date(now);
-  const p2 = (x: number) => String(x).padStart(2, '0');
-  const hour = `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  const hour = clock(at);
   if (d.toDateString() === n.toDateString()) return hour;
   const day = d.toLocaleDateString(lang === 'fr' ? 'fr-BE' : 'en-US', { day: 'numeric', month: 'short' });
   return `${day} · ${hour}`;

@@ -101,6 +101,12 @@ export function ottoThread(): ThreadItem[] {
   ];
 }
 
+/** Unfolds a past exchange of the thread shown (by default ottoThread's turn 1, « Câble la liste »): the rail folds it to its
+ *  row, as the reader finds it. */
+export async function unfoldPast(user: UserEvent, prompt: RegExp = /Câble la liste/): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: prompt, expanded: false }));
+}
+
 export type MockDaemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: MockDaemon[] = [];
 

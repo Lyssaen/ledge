@@ -38,6 +38,8 @@ export const SHELL_ICONS = {
   // A message between agents (MessageCard): its envelope, the arrow from its sender to its addressee.
   mail: ['M3 6h18v12H3z', 'm3 7 9 6 9-6'],
   arrowRight: ['M5 12h14', 'm13 6 6 6-6 6'],
+  // The thread's rail (issue #34): your node, as the app knows no name to draw initials from.
+  user: ['M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8', 'M5 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1'],
   // session.tsx: the view switch (threadIcon, diffIcon), « Copier le chemin », a folded diff's unfold.
   thread: ['M4 6h16', 'M4 12h10', 'M4 18h13'],
   diff: ['M12 3v8', 'M8 7h8', 'M8 17h8', 'M5 21h14'],
