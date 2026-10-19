@@ -9,7 +9,7 @@ import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
 import { getAutostart, setAutostart } from '../tauri/bridge';
 import { updater, useUpdate, type UpdatePhase } from '../update/store';
-import { notesBeforeInstall, openWhatsNew } from '../update/whatsNew';
+import { notesBeforeInstall, openWhatsNew } from '../update/whatsNewView';
 import { Card, Row, Segmented, SwitchRow } from './controls';
 import type { SettingsContext } from './SettingsPage';
 import { TOOLS, useDefaultTool } from './tool';

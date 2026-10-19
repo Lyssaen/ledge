@@ -6,7 +6,7 @@ import { Modal } from '../shell/Modal';
 import { openUrl } from '../tauri/bridge';
 import { releaseUrl, RELEASES_URL } from './notes';
 import { updater } from './store';
-import { closeWhatsNew, useWhatsNew } from './whatsNew';
+import { closeWhatsNew, useWhatsNew } from './whatsNewView';
 
 /** The « What's new » panel (#26): the release notes, in French as the tags carry them, read as Markdown (HTML never parsed);
  *  the GitHub release; the releases passed over when the update skipped some (the manifest carries only the last one's notes).

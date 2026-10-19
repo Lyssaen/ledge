@@ -10,7 +10,7 @@ import { useTheme } from '../shell/theme';
 import { daemonTarget, type DaemonStep } from '../update/daemon';
 import { installedNotes, releaseUrl } from '../update/notes';
 import { useUpdate } from '../update/store';
-import { openWhatsNew } from '../update/whatsNew';
+import { openWhatsNew } from '../update/whatsNewView';
 import { openUrl } from '../tauri/bridge';
 import { Card, Row } from './controls';
 import { UpdatesCard } from './General';

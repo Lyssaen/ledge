@@ -30,7 +30,7 @@ import type { SettingsContext } from './settings/SettingsPage';
 import { daemonTarget, useDaemonUpdate } from './update/daemon';
 import { useUpdate } from './update/store';
 import { takeWhatsNew } from './update/notes';
-import { openWhatsNew, useWhatsNew } from './update/whatsNew';
+import { openWhatsNew, useWhatsNew } from './update/whatsNewView';
 import { WhatsNew } from './update/WhatsNew';
 import { useLaunch } from './launch/useLaunch';
 import { Atelier } from './atelier/Atelier';
