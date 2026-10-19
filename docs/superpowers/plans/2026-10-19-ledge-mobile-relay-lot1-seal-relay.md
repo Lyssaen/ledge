@@ -267,7 +267,7 @@ it('keeps accounts apart', ...);                               // PC du compte A
 it('refuses device-to-device frames', ...);                    // D1 → D2 : error bad_target
 it('says offline instead of queuing', ...);                    // D1 → pc sans PC : error offline to 'pc' ; le PC arrivé ensuite ne reçoit rien d'ancien
 it('answers bad JSON, unknown types and oversize bodies on that socket only', ...);
-it('rate-limits a flooding socket', ...);                      // limits { framesPerWindow: 3, windowMs: 1000 } : 4e trame → rate_limited, pas livrée, socket fermé en 4008
+it('closes a flooding socket with 4008 after one rate_limited', ...);// limits { framesPerWindow: 3, windowMs: 1000 } : 4e trame → rate_limited, pas livrée, socket fermé en 4008
 it('logs sizes and counts, never a body', ...);                // corps contenant 'SECRET-123' livré puis frame invalide contenant 'SECRET-456' : aucune ligne JSON.stringify(event) ne contient 'SECRET'
 ```
 
