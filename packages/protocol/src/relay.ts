@@ -33,10 +33,25 @@ export const RelayServerMessageSchema = z.discriminatedUnion('type', [
 ]);
 export type RelayServerMessage = z.infer<typeof RelayServerMessageSchema>;
 
+/** Maximum length of a device label in a `pair_commit` frame, after trim. */
+export const PAIR_LABEL_MAX = 40;
+
+const KeyB64 = z.string().regex(/^[A-Za-z0-9_-]{87}$/);
+const Nonce = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+const Fingerprint = z.string().regex(/^[A-Za-z0-9_-]{22}$/);
+
 /** The content of `body` between the PC and a device; the relay never reads it. */
 export const SealedFrameSchema = z.discriminatedUnion('k', [
-  z.object({ k: z.literal('hello'), e: z.string() }),
-  z.object({ k: z.literal('msg'), s: z.string() })
+  /** `e` is the ephemeral key, `f` the fingerprint of the sender's static key. */
+  z.object({ k: z.literal('hello'), e: KeyB64, f: Fingerprint }),
+  z.object({ k: z.literal('msg'), s: z.string() }),
+  z.object({ k: z.literal('pair_commit'), c: Nonce, label: z.string().trim().min(1).max(PAIR_LABEL_MAX) }),
+  z.object({ k: z.literal('pair_offer'), pc: KeyB64, n: Nonce }),
+  z.object({ k: z.literal('pair_reveal'), d: KeyB64, n: Nonce }),
+  z.object({ k: z.literal('pair_ok') }),
+  z.object({ k: z.literal('pair_no') }),
+  z.object({ k: z.literal('denied') }),
+  z.object({ k: z.literal('rekey') })
 ]);
 export type SealedFrame = z.infer<typeof SealedFrameSchema>;
 

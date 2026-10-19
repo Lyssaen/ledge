@@ -32,8 +32,15 @@ describe('identity', () => {
   });
   it('exports and re-imports an extractable identity', async () => {
     const id = await generateIdentity({ extractable: true });
-    const back = await importIdentity(await exportIdentity(id), id.publicKey);
+    const back = await importIdentity(await exportIdentity(id));
     expect(back.publicKey).toBe(id.publicKey);
+    const other = await generateIdentity();
+    const bits = async (priv: CryptoKey) =>
+      new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: await importPublicKey(other.publicKey) }, priv, 256));
+    expect(await bits(back.privateKey)).toEqual(await bits(id.privateKey));
+  });
+  it('refuses a malformed PKCS8', async () => {
+    await expect(importIdentity('AAAA')).rejects.toThrow();
   });
   it('refuses a malformed public key', async () => {
     await expect(importPublicKey(b64u(new Uint8Array(65)))).rejects.toMatchObject({ code: 'bad_key' });

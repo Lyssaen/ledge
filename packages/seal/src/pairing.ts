@@ -1,8 +1,8 @@
 /**
  * Linking code with a commitment. Exchange order (implemented in lot 3):
- *  1. the phone sends `commit(devicePublicKey, deviceNonce)`;
- *  2. the PC answers with its public key and `pcNonce`;
- *  3. the phone reveals its public key and `deviceNonce`;
+ *  1. the phone sends `pair_commit` with `commit(devicePublicKey, deviceNonce)` and a label;
+ *  2. the PC answers `pair_offer` with its public key and `pcNonce`;
+ *  3. the phone sends `pair_reveal` with its public key and `deviceNonce`;
  *  4. the PC runs `checkCommitment`;
  *  5. both sides display `pairingCode`.
  * Each side fixes its share before seeing the other's, so a relay cannot

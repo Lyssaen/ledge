@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import { parseRelayServerMessage, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
-import { generateIdentity, startHandshake } from '@ledge/seal';
+import { fingerprint, generateIdentity, startHandshake } from '@ledge/seal';
 import { devTokens } from '../src/auth.js';
 import { createRelay } from '../src/server.js';
 import { Hub, type Conn } from '../src/hub.js';
@@ -56,8 +56,8 @@ describe('end to end', () => {
 
     const hsPc = await startHandshake(pcId, 'pc', phoneId.publicKey);
     const hsPhone = await startHandshake(phoneId, 'device', pcId.publicKey);
-    pc.sendFrame(D1, { k: 'hello', e: hsPc.hello });
-    phone.sendFrame('pc', { k: 'hello', e: hsPhone.hello });
+    pc.sendFrame(D1, { k: 'hello', e: hsPc.hello, f: await fingerprint(pcId.publicKey) });
+    phone.sendFrame('pc', { k: 'hello', e: hsPhone.hello, f: await fingerprint(phoneId.publicKey) });
     const fromPc = await phone.deliver(), fromPhone = await pc.deliver();
     if (fromPc.frame.k !== 'hello' || fromPhone.frame.k !== 'hello') throw new Error('expected hello frames');
     const chPhone = await hsPhone.finish(fromPc.frame.e);

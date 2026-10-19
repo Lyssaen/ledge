@@ -1,3 +1,4 @@
+import { concat } from './bytes.js';
 import { b64u, fromB64u } from './encoding.js';
 import { SealError } from './errors.js';
 
@@ -22,9 +23,14 @@ export async function exportIdentity(id: Identity): Promise<string> {
   return b64u(new Uint8Array(await subtle.exportKey('pkcs8', id.privateKey)));
 }
 
-export async function importIdentity(pkcs8: string, publicKey: string): Promise<Identity> {
-  await importPublicKey(publicKey);
+/** The public key is derived from the private key, never taken from a separate stored copy. */
+export async function importIdentity(pkcs8: string): Promise<Identity> {
   const privateKey = await subtle.importKey('pkcs8', fromB64u(pkcs8), ALGO, true, ['deriveBits']);
+  const jwk = await subtle.exportKey('jwk', privateKey);
+  if (!jwk.x || !jwk.y) throw new SealError('bad_key', 'private key has no public coordinates');
+  const point = concat(new Uint8Array([0x04]), fromB64u(jwk.x), fromB64u(jwk.y));
+  const publicKey = b64u(point);
+  await importPublicKey(publicKey);
   return { publicKey, privateKey };
 }
 
