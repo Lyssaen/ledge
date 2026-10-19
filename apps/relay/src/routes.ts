@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 import {
@@ -8,14 +9,23 @@ import {
   type MeResponse
 } from '@ledge/protocol';
 import { sessionOf, type AccountsDeps } from './accounts.js';
-import { setCookie } from './cookies.js';
+import { parseCookies, setCookie } from './cookies.js';
 import { GitHubError, type GitHub } from './github.js';
 import { countedLog, type RelayLogEvent } from './log.js';
 import type { HttpHandler } from './server.js';
-import { hashToken, newSessionToken } from './tokens.js';
+import { hashToken, newDevicePeer, newOpaque, newSessionToken } from './tokens.js';
 
 const MAX_BODY = 4096;
 const DEFAULT_MAX_GITHUB_CALLS = 16;
+const STATE_COOKIE = 'ledge_oauth_state';
+const STATE_PATH = '/auth/github';
+const STATE_MAX_AGE_S = 600;
+
+/** Equal only if both strings are; compares fixed-length digests so lengths neither throw nor leak. */
+function sameSecret(a: string, b: string): boolean {
+  const d = (s: string) => createHash('sha256').update(s).digest();
+  return timingSafeEqual(d(a), d(b));
+}
 
 type SignInRefused = Extract<RelayLogEvent, { ev: 'sign_in_refused' }>;
 
@@ -141,6 +151,64 @@ export function authRoutes(
     json(res, 200, body);
   }
 
+  const isSecure = () => deps.publicUrl.startsWith('https:');
+  const redirect = (res: ServerResponse, location: string, cookies: string[]) => {
+    res.writeHead(302, { location, 'cache-control': 'no-store', 'set-cookie': cookies });
+    res.end();
+  };
+
+  async function githubStart(res: ServerResponse): Promise<void> {
+    const state = newOpaque();
+    const url = deps.github.authorizeUrl(state, `${deps.publicUrl}/auth/github/callback`);
+    redirect(res, url, [setCookie(STATE_COOKIE, state, { maxAgeS: STATE_MAX_AGE_S, path: STATE_PATH, secure: isSecure() })]);
+  }
+
+  /** Always a 302 to `/?signin=<issue>` and the state cookie cleared. No code, state or token is ever put in a URL. */
+  async function githubCallback(req: IncomingMessage, res: ServerResponse, kick: Parameters<HttpHandler>[2]['kick']): Promise<void> {
+    const clearState = setCookie(STATE_COOKIE, '', { maxAgeS: 0, path: STATE_PATH, secure: isSecure() });
+    const done = (issue: string, extra: string[] = []) => redirect(res, `/?signin=${issue}`, [clearState, ...extra]);
+    const q = new URL(req.url ?? '/', 'http://relay').searchParams;
+    const cookies = parseCookies(req.headers.cookie);
+    const state = q.get('state');
+    const expected = cookies.get(STATE_COOKIE);
+    if (!state || !expected || !sameSecret(state, expected)) { refusedFor('bad_state'); return done('bad_state'); }
+    if (q.get('error') === 'access_denied') { refusedFor('denied'); return done('denied'); }
+    const code = q.get('code');
+    if (!code) { refusedFor('github'); return done('error'); }
+
+    let user: { id: string; login: string };
+    try {
+      // The GitHub token never leaves this block.
+      user = await withGitHub(async (gh) => gh.user(await gh.exchangeCode(code, `${deps.publicUrl}/auth/github/callback`)));
+    } catch (e) {
+      if (!(e instanceof Answer)) throw e;
+      if (e.status === 503) refusedFor('github'); // withGitHub already counted a GitHubError
+      return done('error');
+    }
+    if (!deps.allowed.has(user.id)) { refusedFor('not_allowed'); return done('not_allowed'); }
+
+    await deps.store.upsertAccount(user.id, user.login);
+    // Keep the phone's peer when it already holds a live device session of this account. A top-level redirect
+    // from GitHub carries no same-origin Origin, so the cookie is looked up without that check.
+    let peer = newDevicePeer();
+    const old = cookies.get(RELAY_SESSION_COOKIE);
+    if (old) {
+      const oldHash = hashToken(old);
+      const found = await deps.store.findSession(oldHash);
+      if (found && found.kind === 'device' && found.accountId === user.id) {
+        const revoked = await deps.store.revokeSession(oldHash);
+        if (revoked) {
+          peer = revoked.peer;
+          kick(user.id, peer, RELAY_CLOSE_SIGNED_OUT, 'signed_out');
+        }
+      }
+    }
+    const token = newSessionToken();
+    await deps.store.createSession(hashToken(token), { accountId: user.id, login: user.login, peer, kind: 'device' });
+    deps.log({ ev: 'sign_in', account: user.id, peer, kind: 'device' });
+    done('ok', [setCookie(RELAY_SESSION_COOKIE, token, { maxAgeS: Math.floor(deps.store.ttlMs / 1000), path: '/', secure: isSecure() })]);
+  }
+
   async function me(req: IncomingMessage, res: ServerResponse): Promise<void> {
     // A GET changes nothing: no Origin check, so the phone's page can read who it is.
     const found = await sessionOf(req, deps, { checkOrigin: false });
@@ -159,7 +227,7 @@ export function authRoutes(
     deps.log({ ev: 'sign_out', account: revoked.accountId, peer: revoked.peer });
     const headers: Record<string, string> = { 'cache-control': 'no-store' };
     if (found.viaCookie) {
-      headers['set-cookie'] = setCookie(RELAY_SESSION_COOKIE, '', { maxAgeS: 0, path: '/', secure: deps.publicUrl.startsWith('https:') });
+      headers['set-cookie'] = setCookie(RELAY_SESSION_COOKIE, '', { maxAgeS: 0, path: '/', secure: isSecure() });
     }
     res.writeHead(204, headers);
     res.end();
@@ -175,6 +243,8 @@ export function authRoutes(
     switch (route) {
       case 'POST /auth/device/start': run = () => deviceStart(res); break;
       case 'POST /auth/device/poll': run = () => devicePoll(req, res, kick); break;
+      case 'GET /auth/github/start': run = () => githubStart(res); break;
+      case 'GET /auth/github/callback': run = () => githubCallback(req, res, kick); break;
       case 'GET /auth/me': run = () => me(req, res); break;
       case 'POST /auth/logout': run = () => logout(req, res, kick); break;
     }

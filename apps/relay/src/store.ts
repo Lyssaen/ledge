@@ -44,7 +44,8 @@ function toSession(row: SessionRow): Session {
 /** Accounts and sessions. Only the sha256 hex of a token is stored. The SQL never calls `now()`: time is a parameter. */
 export class Store {
   private readonly now: () => number;
-  private readonly ttlMs: number;
+  /** Session lifetime; also the cookie's Max-Age. */
+  readonly ttlMs: number;
 
   constructor(
     private readonly db: Db,
