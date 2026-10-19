@@ -15,10 +15,11 @@ afterEach(async () => { await relay?.close(); relay = undefined; });
 function client(port: number, token: string) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: `Bearer ${token}` } });
   const msgs: RelayServerMessage[] = [];
+  const seen: string[] = [];
   const waiters: Array<() => void> = [];
-  ws.on('message', (d) => { msgs.push(parseRelayServerMessage(JSON.parse(d.toString('utf8')))); waiters.splice(0).forEach((w) => w()); });
+  ws.on('message', (d) => { seen.push(d.toString('utf8')); msgs.push(parseRelayServerMessage(JSON.parse(d.toString('utf8')))); waiters.splice(0).forEach((w) => w()); });
   return {
-    ws, msgs,
+    ws, msgs, seen,
     async deliver(): Promise<{ from: string; frame: SealedFrame }> {
       for (;;) {
         const i = msgs.findIndex((m) => m.type === 'deliver');
@@ -69,7 +70,12 @@ describe('end to end', () => {
     expect(await chPc.open(got.frame.s)).toBe('session.reply hi SECRET-789');
 
     expect(JSON.stringify(events)).not.toContain('SECRET');
-    expect(JSON.stringify([...pc.msgs, ...phone.msgs])).not.toContain('SECRET');
+    const seen = [...pc.seen, ...phone.seen, ...other.seen];
+    expect(seen.join('\n')).not.toContain('SECRET');
+    expect(seen.some((raw) => {
+      const m = JSON.parse(raw) as { type: string; body?: string };
+      return m.type === 'deliver' && (JSON.parse(m.body!) as SealedFrame).k === 'msg';
+    })).toBe(true);
     expect(other.msgs.map((m) => m.type)).toEqual(['welcome']);
     for (const c of [pc, phone, other]) c.ws.close();
   });
@@ -83,7 +89,7 @@ describe('end to end', () => {
       send(m) {
         if (m.type !== 'deliver') return;
         const f = JSON.parse(m.body) as SealedFrame;
-        if (f.k === 'msg' && tamper) f.s = f.s.slice(0, -1) + (f.s.endsWith('A') ? 'B' : 'A');
+        if (f.k === 'msg' && tamper) { const i = Math.floor(f.s.length / 2); f.s = f.s.slice(0, i) + (f.s[i] === 'A' ? 'B' : 'A') + f.s.slice(i + 1); }
         delivered.push(JSON.stringify(f));
       },
       close() {}

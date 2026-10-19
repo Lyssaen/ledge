@@ -16,7 +16,10 @@ if (!raw) die('LEDGE_RELAY_DEV_TOKENS is not set; it must be JSON {"<token>":{"a
 let parsed: z.infer<typeof TokensSchema>;
 try { parsed = TokensSchema.parse(JSON.parse(raw)); } catch { die('LEDGE_RELAY_DEV_TOKENS is not valid: expected JSON {"<token>":{"accountId":"...","peer":"pc"|"d_..."}}'); }
 
-const port = Number(process.env.PORT ?? 8787);
+const portParsed = z.coerce.number().int().min(0).max(65535).safeParse(process.env.PORT ?? 8787);
+if (!portParsed.success) die('PORT must be an integer between 0 and 65535');
+const port = portParsed.data;
 const relay = createRelay({ authenticator: devTokens(parsed) });
+relay.server.on('error', (e: NodeJS.ErrnoException) => die(`cannot listen on port ${port}: ${e.code ?? 'error'}`));
 relay.server.listen(port, () => process.stdout.write(JSON.stringify({ at: new Date().toISOString(), ev: 'listening', port }) + '\n'));
 for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { void relay.close().then(() => process.exit(0)); });

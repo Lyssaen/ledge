@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import type { AddressInfo } from 'node:net';
+import net, { type AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import { parseRelayServerMessage, type RelayServerMessage } from '@ledge/protocol';
 import { devTokens, RELAY_PROTOCOL_PREFIX } from '../src/auth.js';
@@ -90,8 +90,62 @@ describe('relay server', () => {
     await box.next(1);
     pc.send('not json');
     expect(await box.next(2)).toEqual({ type: 'error', code: 'bad_frame' });
+    const d1 = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer tok-d1' } });
+    const dbox = inbox(d1);
+    await dbox.next(1);
     pc.send(JSON.stringify({ type: 'send', to: D1, body: 'x' }));
-    expect(await box.next(3)).toEqual({ type: 'error', code: 'offline', to: D1 });
+    expect(await dbox.next(2)).toEqual({ type: 'deliver', from: 'pc', body: 'x' });
+    pc.close(); d1.close();
+  });
+
+  it('survives a malformed request target and keeps serving', async () => {
+    const { port, events } = await start();
+    const raw = await new Promise<string>((res) => {
+      const sock = net.connect(port, '127.0.0.1', () => sock.write('GET http://[ HTTP/1.1\r\nHost: x\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n'));
+      let out = '';
+      sock.on('data', (d) => { out += d.toString(); });
+      sock.on('close', () => res(out));
+      sock.on('error', () => res(out));
+    });
+    expect(raw).toMatch(/^HTTP\/1\.1 404/);
+    expect(events).toContainEqual({ ev: 'refused', reason: 'bad_path' });
+    expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);
+  });
+
+  it('refuses an unknown token offered as a subprotocol', async () => {
+    const { port } = await start();
+    expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, [`${RELAY_PROTOCOL_PREFIX}nope`]))).toBe(401);
+  });
+
+  it('accepts a query string on /ws', async () => {
+    const { port } = await start();
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?x=1`, { headers: { authorization: 'Bearer tok-pc' } });
+    expect(await inbox(ws).next(1)).toMatchObject({ type: 'welcome' });
+    ws.close();
+  });
+
+  it('closes a socket over maxPayload with 1009 and tells the peer it left', async () => {
+    const { port } = await start();
+    const pc = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer tok-pc' } });
+    const pbox = inbox(pc);
+    await pbox.next(1);
+    const d1 = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer tok-d1' } });
+    const dbox = inbox(d1);
+    await dbox.next(1);
+    await pbox.next(2); // presence: d1 online
+    const closed = new Promise<number>((res) => d1.once('close', (code) => res(code)));
+    d1.send('x'.repeat(1_048_576 + 4096 + 1));
+    expect(await closed).toBe(1009);
+    expect(await pbox.next(3)).toEqual({ type: 'presence', peer: D1, online: false });
     pc.close();
+  });
+
+  it('answers 401 and logs auth_error when the authenticator throws', async () => {
+    const events: RelayLogEvent[] = [];
+    relay = createRelay({ authenticator: { authenticate: async () => { throw new Error('secret-detail'); } }, log: (e) => events.push(e) });
+    await new Promise<void>((res) => relay!.server.listen(0, '127.0.0.1', res));
+    const port = (relay.server.address() as AddressInfo).port;
+    expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } }))).toBe(401);
+    expect(events).toEqual([{ ev: 'refused', reason: 'auth_error' }]);
   });
 });

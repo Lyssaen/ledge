@@ -2,7 +2,7 @@
 export type RelayLogEvent =
   | { ev: 'connect'; account: string; peer: string }
   | { ev: 'disconnect'; account: string; peer: string; code: number; ms: number; framesIn: number; framesOut: number; bytesIn: number; bytesOut: number }
-  | { ev: 'refused'; reason: 'no_auth' | 'bad_path' }
+  | { ev: 'refused'; reason: 'no_auth' | 'bad_path' | 'auth_error' }
   | { ev: 'frame_error'; account: string; peer: string; code: 'bad_frame' | 'too_large' | 'bad_target' | 'offline' | 'rate_limited' };
 
 export type RelayLog = (e: RelayLogEvent) => void;

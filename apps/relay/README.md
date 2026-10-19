@@ -1,6 +1,6 @@
 # @ledge/relay
 
-Relay between phones and a PC. It routes opaque end-to-end-encrypted bodies and never decrypts them; nothing is stored or logged.
+Relay between phones and a PC. It routes opaque end-to-end-encrypted bodies and never decrypts them; no content is stored or logged.
 
 ## Run locally
 

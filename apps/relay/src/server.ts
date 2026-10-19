@@ -9,8 +9,8 @@ import { jsonLog, type RelayLog } from './log.js';
 export interface RelayOptions { authenticator: Authenticator; log?: RelayLog; limits?: Partial<Limits> }
 
 function refuse(socket: Duplex, status: '401 Unauthorized' | '404 Not Found'): void {
+  socket.once('finish', () => socket.destroy());
   socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
-  socket.destroy();
 }
 
 export function createRelay(opts: RelayOptions): { server: http.Server; close(): Promise<void> } {
@@ -28,13 +28,19 @@ export function createRelay(opts: RelayOptions): { server: http.Server; close():
     res.end(ok ? 'ok' : 'not found');
   });
 
+  let closing = false;
+  const pathOf = (url: string | undefined): string | null => {
+    try { return new URL(url ?? '/', 'http://relay').pathname; } catch { return null; }
+  };
+
   server.on('upgrade', (req, socket, head) => {
     socket.on('error', () => {});
-    if (new URL(req.url ?? '/', 'http://relay').pathname !== '/ws') {
+    if (pathOf(req.url) !== '/ws') {
       log({ ev: 'refused', reason: 'bad_path' });
       return refuse(socket, '404 Not Found');
     }
     opts.authenticator.authenticate(req).then((who) => {
+      if (closing) return refuse(socket, '401 Unauthorized');
       if (!who) {
         log({ ev: 'refused', reason: 'no_auth' });
         return refuse(socket, '401 Unauthorized');
@@ -49,8 +55,8 @@ export function createRelay(opts: RelayOptions): { server: http.Server; close():
         ws.on('error', () => {});
         hub.attach(conn, who);
       });
-    }, () => {
-      log({ ev: 'refused', reason: 'no_auth' });
+    }).catch(() => {
+      log({ ev: 'refused', reason: 'auth_error' });
       refuse(socket, '401 Unauthorized');
     });
   });
@@ -58,6 +64,7 @@ export function createRelay(opts: RelayOptions): { server: http.Server; close():
   return {
     server,
     close: () => new Promise<void>((resolve) => {
+      closing = true;
       for (const c of wss.clients) c.terminate();
       server.close(() => resolve());
       server.closeAllConnections();
