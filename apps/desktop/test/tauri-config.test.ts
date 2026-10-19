@@ -73,9 +73,9 @@ describe('Desktop Tauri config', () => {
   it('registers the notch\'s commands beside its own', () => {
     for (const c of ['set_frame', 'set_hot_zone', 'set_outside_watch', 'focus_overlay', 'release_focus', 'list_monitors', 'set_monitor', 'open_in_ledge']) expect(commands).toContain(c);
   });
-  it('declares the detached Atelier (#21): made on demand, decorated, hidden until its saved place is restored, with the same WebView2 flags', () => {
+  it('declares the detached Atelier (#21): made on demand, undecorated as the main window (#30), hidden until its saved place is restored, with the same WebView2 flags', () => {
     const w = conf.app.windows.find((x: { label: string }) => x.label === 'atelier');
-    expect(w).toMatchObject({ create: false, decorations: true, resizable: true, visible: false, dragDropEnabled: false });
+    expect(w).toMatchObject({ create: false, decorations: false, resizable: true, visible: false, dragDropEnabled: false });
     expect(w.additionalBrowserArgs).toBe(conf.app.windows[0].additionalBrowserArgs);
     expect(w.url).toBeUndefined();
     expect(w.alwaysOnTop).not.toBe(true); expect(w.skipTaskbar).not.toBe(true);
@@ -90,6 +90,8 @@ describe('Desktop Tauri config', () => {
     expect(atelierCaps.windows).toEqual(['atelier']);
     for (const p of ['core:default', 'core:event:allow-listen', 'core:event:allow-unlisten', 'core:event:allow-emit-to', 'core:window:allow-close', 'core:window:allow-destroy', 'core:window:allow-set-focus', 'core:webview:allow-set-webview-zoom']) expect(atelierCaps.permissions).toContain(p);
     for (const p of ['updater:default', 'process:allow-restart', 'global-shortcut:allow-register']) expect(atelierCaps.permissions).not.toContain(p);
+    // its own window bar (#30): minimise, maximise and restore, drag, and the maximised state for the restore icon
+    for (const p of ['minimize', 'toggle-maximize', 'maximize', 'unmaximize', 'start-dragging', 'is-maximized']) expect(atelierCaps.permissions).toContain(`core:window:allow-${p}`);
     // the main window comes forward when the Atelier opens a session there
     expect(caps.permissions).toContain('core:window:allow-unminimize');
   });

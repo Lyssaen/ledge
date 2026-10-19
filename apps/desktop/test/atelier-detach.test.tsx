@@ -28,11 +28,21 @@ vi.mock('../src/atelier/detach', async importOriginal => {
   };
 });
 
+// The window buttons go through the bridge, which acts on the current window (here, the detached one).
+const caps = vi.hoisted(() => ({ minimize: vi.fn(), toggle: vi.fn(), maximized: false, resize: null as null | (() => void) }));
+vi.mock('../src/tauri/bridge', async importOriginal => ({
+  ...(await importOriginal<typeof import('../src/tauri/bridge')>()),
+  minimizeWindow: () => caps.minimize(),
+  toggleMaximizeWindow: () => caps.toggle(),
+  isWindowMaximized: async () => caps.maximized,
+  onWindowResized: (fn: () => void) => { caps.resize = fn; return () => { caps.resize = null; }; }
+}));
+
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { AtelierApp } from '../src/atelier/AtelierWindow';
 import { boot, closeDaemons } from './helpers';
 
-beforeEach(() => { localStorage.clear(); win.open = false; for (const f of [win.detach, win.attach, win.show, win.toMain, win.close]) f.mockClear(); });
+beforeEach(() => { localStorage.clear(); win.open = false; caps.maximized = false; for (const f of [win.detach, win.attach, win.show, win.toMain, win.close, caps.minimize, caps.toggle]) f.mockClear(); });
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
 const away = () => screen.queryByRole('region', { name: 'The Atelier is in its own window' });
@@ -135,6 +145,38 @@ describe('the detached Atelier’s window (#21)', () => {
       await user.click(screen.getByRole('button', { name: 'Conversations of project Ledge' }));
       expect(screen.queryByRole('region', { name: 'No project' })).toBeNull();
       expect(win.toMain).not.toHaveBeenCalled();
+    } finally { await close(); }
+  });
+
+  it('has the Ledge window bar in place of Windows\' (#30): the word mark, « Atelier », « Bring it back here » and the window buttons', async () => {
+    const { close } = await atelier();
+    try {
+      const el = screen.getByRole('group', { name: 'Window bar' });
+      expect(el).toHaveClass('titlebar');
+      expect(el).toHaveAttribute('data-tauri-drag-region');
+      expect(el.querySelector('[data-brand]')).toHaveTextContent('Ledge.');
+      const bar = within(el);
+      expect(bar.getByText('Atelier')).toBeVisible();
+      expect(bar.getByRole('button', { name: 'Bring it back here' })).toBeVisible();
+      for (const n of ['Minimize', 'Maximize', 'Close']) expect(bar.getByRole('button', { name: n })).toBeVisible();
+      expect(document.querySelector('.atelier-alone-bar')).toBeNull();
+      expect(document.querySelectorAll('.titlebar')).toHaveLength(1);
+    } finally { await close(); }
+  });
+
+  it('its window buttons minimise, maximise and restore it; its × closes it, which gives the Atelier back', async () => {
+    const { user, close } = await atelier();
+    try {
+      const bar = within(screen.getByRole('group', { name: 'Window bar' }));
+      await user.click(bar.getByRole('button', { name: 'Minimize' }));
+      expect(caps.minimize).toHaveBeenCalledTimes(1);
+      await user.click(bar.getByRole('button', { name: 'Maximize' }));
+      expect(caps.toggle).toHaveBeenCalledTimes(1);
+      caps.maximized = true;
+      await act(async () => { caps.resize!(); });
+      expect(await bar.findByRole('button', { name: 'Restore' })).toBeVisible();
+      await user.click(bar.getByRole('button', { name: 'Close' }));
+      expect(win.close).toHaveBeenCalledTimes(1);
     } finally { await close(); }
   });
 

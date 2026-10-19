@@ -47,7 +47,7 @@ export const en: Messages = {
     }
   },
   titlebar: {
-    label: 'Window bar', search: 'Go to a session, a project, a setting…',
+    label: 'Window bar',
     waiting: (n) => pluralEn(n, `${n} session waiting: open the first`, `${n} sessions waiting: open the first`),
     dnd: 'Do not disturb', dndOn: 'Do not disturb: on', minimize: 'Minimize', maximize: 'Maximize', restore: 'Restore', close: 'Close'
   },

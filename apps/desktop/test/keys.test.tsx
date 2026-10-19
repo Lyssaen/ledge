@@ -130,15 +130,12 @@ describe('global shortcuts', () => {
     expect(document.querySelector('.application')).not.toHaveClass('immersive');
   });
 
-  it('focus goes back to the opener when the search closes, with the button or with Ctrl K', async () => {
+  it('focus goes back to where it was when the search closes', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
-    const btn = screen.getByRole('button', { name: 'Go to a session, a project, a setting…' });
-    await user.click(btn);
-    expect(screen.getByRole('combobox')).toHaveFocus();
-    await user.keyboard('{Escape}');
-    expect(btn).toHaveFocus();
+    const btn = screen.getByRole('button', { name: 'Full screen' });
     btn.focus();
     await user.keyboard('{Control>}k{/Control}');
+    expect(screen.getByRole('combobox')).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(btn).toHaveFocus();
   });

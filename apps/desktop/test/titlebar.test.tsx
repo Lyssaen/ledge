@@ -19,14 +19,15 @@ afterEach(async () => { cleanup(); await closeDaemons(); });
 const bar = () => within(screen.getByRole('group', { name: 'Window bar' }));
 
 describe('the « Commande » title bar', () => {
-  it('shows the word mark, the search field and the window buttons; the sidebar has neither brand nor search', async () => {
+  it('shows the word mark and the window buttons, no search field; the sidebar has neither brand nor search', async () => {
     const { side } = await boot({ projects: TWO_PROJECTS });
     const el = screen.getByRole('group', { name: 'Window bar' });
     expect(el).toHaveAttribute('data-tauri-drag-region');
     expect(el.querySelector('[data-brand]')).toHaveTextContent('Ledge.');
     expect(el.querySelector('.brand-dot')).toHaveTextContent('.');
     expect(declarations('shell.css', '.brand-dot')).toContain('color:var(--sidebar-primary)');
-    expect(bar().getByRole('button', { name: 'Go to a session, a project, a setting…' })).toHaveTextContent('Ctrl K');
+    expect(bar().queryByRole('button', { name: /Go to a session|Search/ })).toBeNull();
+    expect(el.querySelector('.titlebar-mid')).toHaveAttribute('data-tauri-drag-region');
     for (const n of ['Minimize', 'Maximize', 'Close']) expect(bar().getByRole('button', { name: n })).toBeVisible();
     expect(document.querySelector('.sidebar [data-brand]')).toBeNull();
     expect(document.querySelector('.side-brand')).toBeNull();
@@ -34,14 +35,17 @@ describe('the « Commande » title bar', () => {
     expect(side.queryByRole('button', { name: /^New session N/ })).toBeNull();
   });
 
-  it('the search field opens the search palette, as Ctrl K does', async () => {
+  it('is 32 px high, as a Windows title bar (#33)', () => {
+    expect(declarations('shell.css', ':root')).toContain('--titlebar-h:32px');
+    expect(declarations('shell.css', '.titlebar')).toContain('height:var(--titlebar-h)');
+  });
+
+  it('Ctrl K still opens the search palette without the field', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
-    const field = bar().getByRole('button', { name: 'Go to a session, a project, a setting…' });
-    await user.click(field);
+    await user.keyboard('{Control>}k{/Control}');
     expect(screen.getByRole('combobox')).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('combobox')).toBeNull();
-    expect(field).toHaveFocus();
   });
 
   it('the waiting pill counts the sessions that wait and opens the first one', async () => {
@@ -105,30 +109,28 @@ describe('the « Commande » title bar', () => {
     expect(screen.getByRole('group', { name: 'Window bar' })).toBeVisible();
   });
 
-  it('behind a dialog or a pending confirmation, the search, the pill, the bell and the chat do nothing; the window buttons stay live', async () => {
+  it('behind a dialog or a pending confirmation, the pill, the bell and the chat do nothing; the window buttons stay live', async () => {
     const { user } = await boot({ sessions: listSessions(), list: true });
-    const field = bar().getByRole('button', { name: 'Go to a session, a project, a setting…' });
+    const bell = bar().getByRole('button', { name: 'Do not disturb' });
     await user.keyboard('n');
     expect(await screen.findByRole('dialog', { name: 'New session' })).toBeVisible();
-    await user.click(field);
-    expect(screen.queryByRole('combobox')).toBeNull();
+    await user.click(bell);
+    expect(bell).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible();
-    expect(field.closest('[inert]')).not.toBeNull();
+    expect(bell.closest('[inert]')).not.toBeNull();
     expect(bar().getByRole('button', { name: /waiting/ }).closest('[inert]')).not.toBeNull();
     expect(bar().getByRole('button', { name: 'Close' }).closest('[inert]')).toBeNull();
     await user.click(bar().getByRole('button', { name: 'Minimize' }));
     expect(win.minimize).toHaveBeenCalledTimes(1);
   });
 
-  it('with a confirmation pending, the pill and the search field do nothing and the confirmation stays', async () => {
+  it('with a confirmation pending, the pill does nothing and the confirmation stays', async () => {
     const { user } = await boot({ sessions: listSessions(), daemon: { version: '0.7.0', install: 'npm', systemd: true, archive: true } });
     fireEvent.contextMenu(await screen.findByRole('button', { name: /^Bix,/ }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete…' }));
     expect(await screen.findByRole('alertdialog', { name: 'Delete Bix?' })).toBeVisible();
     await user.click(bar().getByRole('button', { name: /waiting/ }));
-    await user.click(bar().getByRole('button', { name: 'Go to a session, a project, a setting…' }));
     expect(screen.getByRole('alertdialog', { name: 'Delete Bix?' })).toBeVisible();
-    expect(screen.queryByRole('combobox')).toBeNull();
     expect(within(screen.getByRole('banner')).queryByText('Otto')).toBeNull();
     // The application behind is inert too, so Tab cannot leave the confirmation.
     expect(document.querySelector('.application')).toHaveAttribute('inert');
@@ -136,12 +138,12 @@ describe('the « Commande » title bar', () => {
     expect(document.querySelector('.application')).not.toHaveAttribute('inert');
   });
 
-  it('behind the rename dialog, the search field and the pill are inert, and so is the application', async () => {
+  it('behind the rename dialog, the pill and the bell are inert, and so is the application', async () => {
     const { user } = await boot({ sessions: listSessions(), daemon: { version: '0.7.0', install: 'npm', systemd: true, archive: true } });
     fireEvent.contextMenu(await screen.findByRole('button', { name: /^Nova,/ }));
     await user.click(await screen.findByRole('menuitem', { name: 'Rename…' }));
     expect(await screen.findByRole('dialog', { name: /Rename Nova/ })).toBeVisible();
-    expect(bar().getByRole('button', { name: 'Go to a session, a project, a setting…' }).closest('[inert]')).not.toBeNull();
+    expect(bar().getByRole('button', { name: 'Do not disturb' }).closest('[inert]')).not.toBeNull();
     expect(bar().getByRole('button', { name: /waiting/ }).closest('[inert]')).not.toBeNull();
     expect(bar().getByRole('button', { name: 'Close' }).closest('[inert]')).toBeNull();
     expect(document.querySelector('.application')).toHaveAttribute('inert');

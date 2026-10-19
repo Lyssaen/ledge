@@ -60,7 +60,7 @@ export const fr = {
     } satisfies Record<string, string>
   },
   titlebar: {
-    label: 'Barre de fenêtre', search: 'Aller à une session, un projet, un réglage…',
+    label: 'Barre de fenêtre',
     waiting: (n: number) => plural(n, `${n} session attend : ouvrir la première`, `${n} sessions attendent : ouvrir la première`),
     dnd: 'Ne pas déranger', dndOn: 'Ne pas déranger : activé', minimize: 'Réduire', maximize: 'Agrandir', restore: 'Restaurer', close: 'Fermer'
   },
