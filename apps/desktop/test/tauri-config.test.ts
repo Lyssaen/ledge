@@ -5,6 +5,7 @@ const root = resolve(__dirname, '..');
 const conf = JSON.parse(readFileSync(resolve(root, 'src-tauri/tauri.conf.json'), 'utf8'));
 const caps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/default.json'), 'utf8'));
 const notchCaps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/notch.json'), 'utf8'));
+const atelierCaps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/atelier.json'), 'utf8'));
 const version = (pkg: string) => JSON.parse(readFileSync(resolve(root, pkg, 'package.json'), 'utf8')).version;
 const main = readFileSync(resolve(root, 'src-tauri/src/main.rs'), 'utf8');
 /** The commands in `generate_handler![…]`, whatever its line breaks (`notch::set_frame` reads `set_frame`). */
@@ -71,6 +72,26 @@ describe('Desktop Tauri config', () => {
   });
   it('registers the notch\'s commands beside its own', () => {
     for (const c of ['set_frame', 'set_hot_zone', 'set_outside_watch', 'focus_overlay', 'release_focus', 'list_monitors', 'set_monitor', 'open_in_ledge']) expect(commands).toContain(c);
+  });
+  it('declares the detached Atelier (#21): made on demand, decorated, hidden until its saved place is restored, with the same WebView2 flags', () => {
+    const w = conf.app.windows.find((x: { label: string }) => x.label === 'atelier');
+    expect(w).toMatchObject({ create: false, decorations: true, resizable: true, visible: false, dragDropEnabled: false });
+    expect(w.additionalBrowserArgs).toBe(conf.app.windows[0].additionalBrowserArgs);
+    expect(w.url).toBeUndefined();
+    expect(w.alwaysOnTop).not.toBe(true); expect(w.skipTaskbar).not.toBe(true);
+    // made from its declaration, in an async command (a window made in a sync command deadlocks on Windows)
+    expect(commands).toContain('open_atelier');
+    expect(main).toMatch(/async fn open_atelier\(app: AppHandle\)/);
+    expect(main).toContain('WebviewWindowBuilder::from_config(&app, &config)');
+    // remembered by the window-state plugin: only the notch is denied
+    expect(main).toContain('.with_denylist(&[notch::NOTCH])');
+  });
+  it('gives the detached Atelier its own capability: events, focus, close and zoom; no updater, no notch', () => {
+    expect(atelierCaps.windows).toEqual(['atelier']);
+    for (const p of ['core:default', 'core:event:allow-listen', 'core:event:allow-unlisten', 'core:event:allow-emit-to', 'core:window:allow-close', 'core:window:allow-destroy', 'core:window:allow-set-focus', 'core:webview:allow-set-webview-zoom']) expect(atelierCaps.permissions).toContain(p);
+    for (const p of ['updater:default', 'process:allow-restart', 'global-shortcut:allow-register']) expect(atelierCaps.permissions).not.toContain(p);
+    // the main window comes forward when the Atelier opens a session there
+    expect(caps.permissions).toContain('core:window:allow-unminimize');
   });
   it('lets HTML5 drag and drop reach the page (native file drop off, or WebView2 swallows dragover/drop)', () => {
     expect(conf.app.windows[0].dragDropEnabled).toBe(false);

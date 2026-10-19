@@ -232,6 +232,30 @@ describe('proposeFor', () => {
     expect(p.repos).toEqual([{ machine: 'local', path: '/home/me/Workspace/paper/paper-fonts', why: { kind: 'name', word: 'fonts' } }]);
   });
 
+  describe('a name that is no folder name (#22)', () => {
+    // « Communication Platform »: the folders are enterprise-solution-*, the GitLab group and a manifest say it.
+    const cp: ScanOf = { machine: 'local', label: 'PC local', status: 'ok', truncated: false, repos: [
+      { path: '/home/me/src/enterprise-solution-front', branch: 'main', remote: 'gitlab.example.com/communication-platform/enterprise-solution-front' },
+      { path: '/home/me/src/es-back', branch: 'main', remote: 'gitlab.example.com/speos/es-back', manifest: '@speos/communication-api' },
+      { path: '/home/me/src/communication-tools', branch: 'main' },
+      { path: '/home/me/src/unrelated', branch: 'main', remote: 'github.com/me/unrelated', manifest: 'unrelated' }
+    ] };
+    const cpInput = { projects: { projects: [], rules: [] }, scans: [cp], sessions: [] };
+
+    it('the remote’s groups and the manifest’s name count too, after the folder’s name, each with its reason', () => {
+      const p = proposeFor({ name: 'Communication Platform', file: [] }, proposeProjects(cpInput), cpInput)!;
+      expect(p.repos).toEqual([
+        { machine: 'local', path: '/home/me/src/communication-tools', why: { kind: 'name', word: 'communication' } },
+        { machine: 'local', path: '/home/me/src/enterprise-solution-front', why: { kind: 'name', word: 'communication', in: 'remote', value: 'gitlab.example.com/communication-platform/enterprise-solution-front' } },
+        { machine: 'local', path: '/home/me/src/es-back', why: { kind: 'name', word: 'communication', in: 'manifest', value: '@speos/communication-api' } }
+      ]);
+    });
+
+    it('the host of a remote is no match', () => {
+      expect(proposeFor({ name: 'Gitlab', file: [] }, [], cpInput)).toBeNull();
+    });
+  });
+
   it("from a project's editor, the proposal that already targets it, the project keeping its name", () => {
     const p = proposeFor({ id: 'ledge', name: 'Ledge', file: [] }, all, input)!;
     expect(p).toMatchObject({ targetId: 'ledge', name: 'Ledge', color: 'blue', summary: { target: 'Ledge' } });

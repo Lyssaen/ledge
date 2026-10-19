@@ -236,3 +236,6 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 .suggest-card strong{font-size:13px;font-weight:600}
 .suggest-actions{display:flex;flex-direction:column;align-items:stretch;gap:4px;flex-shrink:0}
 @media(max-width:700px){.suggest-card{flex-wrap:wrap}.suggest-actions{flex-direction:row}}
+
+/* Settings › About: the installed version's notes and its GitHub release (#26). */
+.about-notes { display: flex; gap: 8px; margin-top: 12px; }

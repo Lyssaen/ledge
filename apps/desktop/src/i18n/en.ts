@@ -619,13 +619,14 @@ export const en: Messages = {
     why: (w) => w.kind === 'remote' ? `Same remote ${w.remote}${w.machines.length > 1 ? `, on ${andList(w.machines)}` : ''}`
       : w.kind === 'agent' ? `Folder opened by ${andList(w.names)}`
       : w.kind === 'naming' ? `Named ${w.stem}-*`
-      : w.kind === 'name' ? `Name close to “${w.word}”`
+      : w.kind === 'name' ? (w.in === 'remote' ? `Remote ${w.value} close to “${w.word}”` : w.in === 'manifest' ? `Manifest “${w.value}” close to “${w.word}”` : `Name close to “${w.word}”`)
       : w.kind === 'folder' ? `Kept in ${w.parent}`
       : w.text,
     ledge: {
       offerTitle: 'Rather not look for the repositories yourself?',
       offerBody: 'Ledge scans your machines, groups the repositories that go together and proposes a project for you to check.',
       offer: 'Let Ledge do it', ask: 'Ask Ledge',
+      searchFor: (name) => `Search the repositories of “${name}”`, browse: 'Browse the folders',
       scanning: (ms) => `Ledge is scanning ${ms.length ? andList(ms) : 'your machines'}…`,
       step: (s) => s.state === 'waiting' ? `Scanning ${s.label}…`
         : s.state === 'done' ? `${s.label} · ${s.repos} ${pluralEn(s.repos, 'repository', 'repositories')} found${s.truncated ? ' · scan limited' : ''}`
@@ -693,6 +694,17 @@ export const en: Messages = {
     },
   },
   machines: { clarification: 'You can also answer in the chat.', destination: 'Destination', choose: (name: string) => `On ${name}.`, local: 'This machine', offline: 'Offline' },
+  whatsNew: {
+    title: (v: string) => `What’s new in Ledge ${v}`, updated: (v: string) => `Ledge was updated to ${v}`,
+    none: 'This version’s notes are not on this machine. They are on its GitHub release.',
+    skipped: (from: string) => `You came from Ledge ${from}: the notes of the versions in between are on the GitHub releases.`,
+    release: 'GitHub release', all: 'All releases', later: 'Later', update: 'Update', open: 'What’s new'
+  },
+  detached: {
+    detach: 'Detach the Atelier', detachTitle: 'Open the Atelier in its own window',
+    away: 'The Atelier is in its own window', awayBody: 'The sessions you open there show here.',
+    show: 'Show the Atelier', attach: 'Bring it back here', attachTitle: 'Put the Atelier back in the main window'
+  },
   time: { seconds: (n: number) => `${n}s`, minutes: (n: number) => `${n}m`, hours: (n: number) => `${n}h`, locale: 'en-US' },
   offline: 'The local daemon is offline.',
   stateLabel: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },

@@ -29,8 +29,13 @@ import { SettingsPlace } from './settings/lazy';
 import type { SettingsContext } from './settings/SettingsPage';
 import { daemonTarget, useDaemonUpdate } from './update/daemon';
 import { useUpdate } from './update/store';
+import { takeWhatsNew } from './update/notes';
+import { openWhatsNew, useWhatsNew } from './update/whatsNewView';
+import { WhatsNew } from './update/WhatsNew';
 import { useLaunch } from './launch/useLaunch';
 import { Atelier } from './atelier/Atelier';
+import { AtelierAway } from './atelier/Away';
+import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
 import { Modal } from './shell/Modal';
 import { SearchPalette } from './shell/SearchPalette';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
@@ -70,7 +75,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The session page's « N sous-agents » bumps this; the tree unfolds that session and scrolls to it (0 never counts).
   const [revealCurrent, setRevealCurrent] = useState(0);
   // The local daemon's update, started from Settings › About; while it runs, the daemon's restart is expected and silent.
-  const daemonUpdate = useDaemonUpdate(fleet, machines, daemonTarget(useUpdate()));
+  const update = useUpdate();
+  const daemonUpdate = useDaemonUpdate(fleet, machines, daemonTarget(update));
+  // The first launch on a new version shows its notes, once (#26).
+  useEffect(() => { const w = takeWhatsNew(update.app); if (w) openWhatsNew({ mode: 'updated', ...w }); }, [update.app]);
+  const whatsNew = useWhatsNew() !== null;
   // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
   const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdate.running });
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
@@ -80,6 +89,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   }), []);
   // « Open in Ledge » from the island: the shell has already brought the window forward; this shows what was asked.
   useEffect(() => onOpenTarget(raw => { const target = parseTarget(raw); if (target) dispatch(targetAction(target)); }), []);
+  // The Atelier in its own window (#21): what it opens shows here, this window brought forward; its closing gives it back.
+  const [detached, setDetached] = useState(false);
+  useEffect(() => {
+    void atelierOpen().then(open => { if (open) setDetached(true); });
+    return onAtelier({ action: a => { dispatch(a); showMainWindow(); }, closed: () => setDetached(false) });
+  }, []);
+  const detach = () => { void detachAtelier().then(ok => { if (ok) setDetached(true); }); };
+  const attach = () => { attachAtelier(); setDetached(false); };
   // The tray speaks the app's language and names the way back from do not disturb.
   const [dnd] = useDnd();
   useEffect(() => {
@@ -210,7 +227,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
 
   // A dialog over the application (a modal, a confirmation, the rename dialog): what lies behind it, the title bar's controls
   // included, takes neither clicks nor the focus.
-  const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null;
+  const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew;
   return (
     <ScreenKeysContext.Provider value={screenKeys}>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
@@ -220,11 +237,12 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent} />
         <section className="workspace">
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
-            onRevealArchives={() => setRevealArchives(n => n + 1)}
+            onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
+            : detached ? <AtelierAway onShow={detach} onAttach={attach} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>
@@ -250,6 +268,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           notify={notify} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}
       <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} />
+      <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <Toast notice={notice} action={noticeAction} onAction={undo} />
     </ScreenKeysContext.Provider>

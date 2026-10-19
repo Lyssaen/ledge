@@ -644,7 +644,7 @@ export const fr = {
     why: (w: Why): string => w.kind === 'remote' ? `Même remote ${w.remote}${w.machines.length > 1 ? `, sur ${andList(w.machines)}` : ''}`
       : w.kind === 'agent' ? `Dossier ouvert par ${andList(w.names)}`
       : w.kind === 'naming' ? `Nommé ${w.stem}-*`
-      : w.kind === 'name' ? `Nom proche de « ${w.word} »`
+      : w.kind === 'name' ? (w.in === 'remote' ? `Remote ${w.value} proche de « ${w.word} »` : w.in === 'manifest' ? `Manifeste « ${w.value} » proche de « ${w.word} »` : `Nom proche de « ${w.word} »`)
       : w.kind === 'folder' ? `Rangé dans ${w.parent}`
       : w.text,
     /** « Laisser Ledge faire » (lot 11): the offer, the scan's steps, the proposal. */
@@ -652,6 +652,8 @@ export const fr = {
       offerTitle: 'Pas envie de chercher les dépôts vous-même ?',
       offerBody: 'Ledge parcourt vos machines, regroupe les dépôts qui vont ensemble et vous propose un projet à vérifier.',
       offer: 'Laisser Ledge faire', ask: 'Demander à Ledge',
+      /** The offer once a name is typed (#22); `browse` opens the folder browser after a scan cut short. */
+      searchFor: (name: string) => `Chercher les dépôts de « ${name} »`, browse: 'Parcourir les dossiers',
       scanning: (ms: readonly string[]) => `Ledge parcourt ${ms.length ? andList(ms) : 'vos machines'}…`,
       step: (s: ScanStep): string => s.state === 'waiting' ? `Parcourt ${s.label}…`
         : s.state === 'done' ? `${s.label} · ${s.repos} dépôt${plural(s.repos, '', 's')} trouvé${plural(s.repos, '', 's')}${s.truncated ? ' · parcours limité' : ''}`
@@ -721,6 +723,18 @@ export const fr = {
     },
   },
   machines: { clarification: 'Vous pouvez aussi répondre dans le chat.', destination: 'Destination', choose: (name: string) => `Sur ${name}.`, local: 'Cette machine', offline: 'Hors ligne' },
+  whatsNew: {
+    title: (v: string) => `Nouveautés de Ledge ${v}`, updated: (v: string) => `Ledge a été mis à jour en ${v}`,
+    none: 'Les notes de cette version ne sont pas sur cette machine. Elles sont sur sa release GitHub.',
+    skipped: (from: string) => `Vous veniez de Ledge ${from} : les notes des versions intermédiaires sont sur les releases GitHub.`,
+    release: 'Release GitHub', all: 'Toutes les releases', later: 'Plus tard', update: 'Mettre à jour', open: 'Nouveautés'
+  },
+  /** The detached Atelier (#21): its own window, beside the session the main window keeps. */
+  detached: {
+    detach: 'Détacher l’Atelier', detachTitle: 'Ouvrir l’Atelier dans sa propre fenêtre',
+    away: 'L’Atelier est dans sa propre fenêtre', awayBody: 'Les sessions que vous y ouvrez s’affichent ici.',
+    show: 'Afficher l’Atelier', attach: 'Rattacher ici', attachTitle: 'Remettre l’Atelier dans la fenêtre principale'
+  },
   time: { seconds: (n: number) => `${n} s`, minutes: (n: number) => `${n} min`, hours: (n: number) => `${n} h`, locale: 'fr-FR' },
   /** Why the chat cannot send while the local daemon is away. */
   offline: 'Le daemon local est hors ligne.',

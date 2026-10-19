@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AvailableUpdate } from '../src/update/bridge';
 import { createUpdater, UPDATE_EVERY_MS, updateReady } from '../src/update/store';
+import { installedNotes } from '../src/update/notes';
 
 function release(version = '0.6.0') {
   let finish!: () => void; let fail!: (e: Error) => void;
@@ -54,6 +55,7 @@ describe('nothing is installed without a click (Review Focus 5)', () => {
     r.finish(); await Promise.all([a, b]);
     expect(r.u.downloadAndInstall).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem('desktop.update.from')).toBe('0.5.0');
+    expect(installedNotes('0.6.0')).toBe('Fixes');   // what the next launch shows once (#26)
     expect(d.relaunch).toHaveBeenCalledTimes(1);
   });
 

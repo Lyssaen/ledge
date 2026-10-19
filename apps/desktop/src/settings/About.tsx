@@ -8,7 +8,10 @@ import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
 import { daemonTarget, type DaemonStep } from '../update/daemon';
+import { installedNotes, releaseUrl } from '../update/notes';
 import { useUpdate } from '../update/store';
+import { openWhatsNew } from '../update/whatsNewView';
+import { openUrl } from '../tauri/bridge';
 import { Card, Row } from './controls';
 import { UpdatesCard } from './General';
 import type { SettingsContext } from './SettingsPage';
@@ -68,6 +71,13 @@ export function About({ ctx }: { ctx: SettingsContext }): JSX.Element {
           })}
           <div><dt>{c.latest}</dt><dd className="mono">{latest}</dd></div>
         </dl>
+        {/* The installed version's notes, kept at its install (#26); its GitHub release has them in any case. */}
+        {update.app && (
+          <div className="about-notes">
+            <Button size="sm" variant="outline" onClick={() => update.app && openWhatsNew({ mode: 'installed', version: update.app, notes: installedNotes(update.app) })}>{t.whatsNew.open}</Button>
+            <Button size="sm" variant="ghost" onClick={() => update.app && openUrl(releaseUrl(update.app))}>{t.whatsNew.release}</Button>
+          </div>
+        )}
         {offer === 'offer' && target && (
           <Row label={c.updateDaemon} hint={c.updateDaemonHint(target)}>
             <Button size="sm" variant="primary" disabled={running} onClick={start}>{c.update}</Button>

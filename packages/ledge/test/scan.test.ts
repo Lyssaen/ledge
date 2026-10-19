@@ -37,6 +37,20 @@ describe('scanRepos', () => {
     expect(s.read.some(p => p.startsWith(join(home, 'node_modules')) || p.startsWith(join(home, '.hidden')))).toBe(false);
   });
 
+  it('names a repository by its manifest: package.json’s name, else pom.xml’s own artifactId (not its parent’s); a broken one names nothing (#22)', async () => {
+    const home = tmp();
+    repo(join(home, 'w/front'));
+    writeFileSync(join(home, 'w/front/package.json'), JSON.stringify({ name: '@speos/communication-front', version: '1.0.0' }));
+    repo(join(home, 'w/back'));
+    writeFileSync(join(home, 'w/back/pom.xml'), '<project><parent><artifactId>speos-parent</artifactId></parent><groupId>be.speos</groupId><artifactId>communication-api</artifactId></project>');
+    repo(join(home, 'w/broken'));
+    writeFileSync(join(home, 'w/broken/package.json'), '{ not json');
+    const out = await scanRepos({ home });
+    const named = Object.fromEntries(out.repos.map(r => [r.path.slice(home.length + 1), r.manifest]));
+    expect(named).toEqual({ 'w/back': 'communication-api', 'w/broken': undefined, 'w/front': '@speos/communication-front' });
+    expect(out.repos.find(r => r.path.endsWith('broken'))).not.toHaveProperty('manifest');
+  });
+
   it('reads at most two folders at once: a stalled mount never holds libuv\'s whole pool (4 threads)', async () => {
     const home = tmp();
     for (const n of ['a', 'b', 'c', 'd', 'e', 'f']) mkdirSync(join(home, n, 'x'), { recursive: true });

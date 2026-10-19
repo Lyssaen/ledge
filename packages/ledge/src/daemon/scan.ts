@@ -80,12 +80,24 @@ async function remoteOf(dir: string, dotIsFile: boolean, readFile: (p: string) =
   } catch { return undefined; }
 }
 
-async function describe(dir: string, dotIsFile: boolean, home: string, readFile: (p: string) => Promise<string>): Promise<FoundRepo> {
-  const [branch, remote] = await Promise.all([
+/** The manifests a repository may be named by (#22), in this order: the first one present counts. */
+export const MANIFESTS = ['package.json', 'pom.xml'] as const;
+
+/** The name a manifest gives: package.json's `name`; pom.xml's own `artifactId` (its parent's left aside). Undefined when unreadable. */
+export function manifestName(file: (typeof MANIFESTS)[number], text: string): string | undefined {
+  let name: unknown;
+  if (file === 'package.json') { try { name = (JSON.parse(text) as { name?: unknown }).name; } catch { return undefined; } }
+  else name = /<artifactId>\s*([^<]+?)\s*<\/artifactId>/.exec(text.replace(/<!--[\s\S]*?-->/g, '').replace(/<parent>[\s\S]*?<\/parent>/g, ''))?.[1];
+  return typeof name === 'string' && name.trim() && name.length <= 200 ? name.trim() : undefined;
+}
+
+async function describe(dir: string, dotIsFile: boolean, home: string, readFile: (p: string) => Promise<string>, manifest?: (typeof MANIFESTS)[number]): Promise<FoundRepo> {
+  const [branch, remote, named] = await Promise.all([
     dotIsFile ? inspectRepos([dir], { home }).then(r => r[0]?.branch ?? null) : headBranch(join(dir, '.git')),
-    remoteOf(dir, dotIsFile, readFile)
+    remoteOf(dir, dotIsFile, readFile),
+    manifest ? readFile(join(dir, manifest)).then(text => manifestName(manifest, text), () => undefined) : undefined
   ]);
-  return { path: dir, branch, ...(remote ? { remote } : {}) };
+  return { path: dir, branch, ...(remote ? { remote } : {}), ...(named ? { manifest: named } : {}) };
 }
 
 /**
@@ -94,7 +106,7 @@ async function describe(dir: string, dotIsFile: boolean, home: string, readFile:
  * worktree or a submodule) is one, and is not entered; home is the exception (a home kept in Git, dotfiles, hides nothing).
  * Links are not followed; skip-listed and hidden folders are not entered; a folder that cannot be read is passed over.
  * Stops at SCAN_DIRS folders read, SCAN_MS or SCAN_REPOS repositories, and then says `truncated`. Writes nothing, runs git only
- * for a `.git` file's branch.
+ * for a `.git` file's branch. A repository's manifest (package.json, pom.xml) at its root names it too (#22).
  */
 export async function scanRepos(opts: ScanOptions): Promise<{ repos: FoundRepo[]; truncated: boolean }> {
   const now = opts.now ?? Date.now;
@@ -123,7 +135,8 @@ export async function scanRepos(opts: ScanOptions): Promise<{ repos: FoundRepo[]
         batch.forEach((d, i) => {
           const entries = listed[i]; if (!entries) return;
           const dot = entries.find(e => e.name === '.git' && (e.isDirectory() || e.isFile()));
-          if (dot) found.push(describe(d.path, dot.isFile(), opts.home, readFile));
+          const manifest = dot ? MANIFESTS.find(m => entries.some(e => e.name === m && e.isFile())) : undefined;
+          if (dot) found.push(describe(d.path, dot.isFile(), opts.home, readFile, manifest));
           if ((dot && d.path !== home) || d.depth >= depth) return;
           const names = entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && !SKIP.has(e.name)).map(e => e.name).sort();
           for (const name of names) { const path = join(d.path, name); if (!seen.has(path)) { seen.add(path); queue.push({ path, depth: d.depth + 1 }); } }

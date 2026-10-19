@@ -17,7 +17,7 @@ const MENU_WIDTH = 260;
 /** The mockup's top bar: the breadcrumb on the left (no page title; on a subagent's page, its parent before it); on the right,
  *  icons only, in groups: display (overview only), or the open agent's state, the terminal toggle and the session menu; then
  *  shortcuts and full screen (search and chat are in the title bar). */
-export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal, manage, onRevealArchives }: {
+export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal, manage, onRevealArchives, onDetach }: {
   nav: NavState; dispatch: (a: NavAction) => void; session: Session | null; projects: Projects | null; projectIdOf: (s: Session) => string | null;
   /** The subagent whose page is open (session is then its parent). */
   helper: Helper | null; terminal: boolean; onTerminal(): void;
@@ -25,6 +25,8 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
   manage?: { open: boolean; onOpen(at: { x: number; y: number }, opener: HTMLElement): void };
   /** The Archived pill: ask the sidebar to unfold Archives and bring the open archive into view. */
   onRevealArchives?: () => void;
+  /** « Détacher l'Atelier » (#21), on the overview: only in Tauri, while the Atelier is in this window. */
+  onDetach?: () => void;
 }) {
   const { t } = useI18n();
   const { place } = nav;
@@ -107,6 +109,11 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
           <Button variant="ghost" size="icon" aria-pressed={nav.paused} aria-label={nav.paused ? t.top.play : t.top.pause} title={nav.paused ? t.top.play : t.top.pause} onClick={() => dispatch({ type: 'paused' })}>
             <Icon d={nav.paused ? SHELL_ICONS.play : SHELL_ICONS.pause} size={16} />
           </Button>
+          {onDetach && (
+            <Button variant="ghost" size="icon" aria-label={t.detached.detach} title={t.detached.detachTitle} onClick={onDetach}>
+              <Icon d={SHELL_ICONS.detach} size={16} />
+            </Button>
+          )}
         </div>
       )}
       <div className="header-actions">
