@@ -6,19 +6,35 @@ const block = (json: string) => '```ledge-session\n' + json + '\n```';
 describe('extractProposal', () => {
   it('leaves an answer without a block untouched', () => {
     const a = 'Deux compagnons travaillent.\n\n```bash\nls\n```\n';
-    expect(extractProposal(a)).toEqual({ text: a, kind: null, raw: null });
+    expect(extractProposal(a)).toEqual({ text: a, kind: null, raw: null, blocks: [] });
   });
   it('takes the block out and returns its JSON', () => {
-    expect(extractProposal('Je te propose ça.\n\n' + block('{"cwd": "/w/ledge"}'))).toEqual({ text: 'Je te propose ça.', kind: 'session', raw: '{"cwd": "/w/ledge"}' });
+    expect(extractProposal('Je te propose ça.\n\n' + block('{"cwd": "/w/ledge"}'))).toMatchObject({ text: 'Je te propose ça.', kind: 'session', raw: '{"cwd": "/w/ledge"}' });
   });
   it('keeps the text after the block', () => {
-    expect(extractProposal('Avant.\n' + block('{"cwd": "/a"}') + '\nAprès.')).toEqual({ text: 'Avant.\n\nAprès.', kind: 'session', raw: '{"cwd": "/a"}' });
+    expect(extractProposal('Avant.\n' + block('{"cwd": "/a"}') + '\nAprès.')).toMatchObject({ text: 'Avant.\n\nAprès.', kind: 'session', raw: '{"cwd": "/a"}' });
   });
   it('removes every block and keeps the last one', () => {
-    expect(extractProposal('A\n' + block('{"cwd": "/a"}') + '\n\nB\n' + block('{"cwd": "/b"}'))).toEqual({ text: 'A\n\nB', kind: 'session', raw: '{"cwd": "/b"}' });
+    expect(extractProposal('A\n' + block('{"cwd": "/a"}') + '\n\nB\n' + block('{"cwd": "/b"}'))).toMatchObject({ text: 'A\n\nB', kind: 'session', raw: '{"cwd": "/b"}' });
   });
   it('takes an unclosed block to the end of the answer', () => {
-    expect(extractProposal('A\n```ledge-session\n{"cwd":')).toEqual({ text: 'A', kind: 'session', raw: '{"cwd":' });
+    expect(extractProposal('A\n```ledge-session\n{"cwd":')).toMatchObject({ text: 'A', kind: 'session', raw: '{"cwd":' });
+  });
+});
+
+describe('extractProposal: several blocks (#24)', () => {
+  it('lists every block in order, the last one still giving kind and raw', () => {
+    const r = extractProposal('Trois sessions.\n' + block('{"cwd": "/a"}') + '\n' + block('{"cwd": "/b"}') + '\n' + block('{"cwd": "/c"}'));
+    expect(r.text).toBe('Trois sessions.');
+    expect(r.blocks).toEqual([{ kind: 'session', raw: '{"cwd": "/a"}' }, { kind: 'session', raw: '{"cwd": "/b"}' }, { kind: 'session', raw: '{"cwd": "/c"}' }]);
+    expect(r).toMatchObject({ kind: 'session', raw: '{"cwd": "/c"}' });
+  });
+  it('an answer without a block has no blocks', () => {
+    expect(extractProposal('Rien.').blocks).toEqual([]);
+  });
+  it('keeps the kind of each block when they are mixed', () => {
+    const r = extractProposal('A\n```ledge-relay\n{"session": "s1", "text": "a"}\n```\n' + block('{"cwd": "/w"}'));
+    expect(r.blocks.map(b => b.kind)).toEqual(['relay', 'session']);
   });
 });
 
@@ -46,13 +62,13 @@ describe('hideProposal', () => {
 describe('relay blocks (spec 2026-10-12 relay §3)', () => {
   const relay = (json: string) => 'Je transmets à **Otto**.\n\n```ledge-relay\n' + json + '\n```';
   it('extracts a relay block and says which kind it is', () => {
-    expect(extractProposal(relay('{"session": "s1", "text": "Lance les tests"}'))).toEqual({ text: 'Je transmets à **Otto**.', kind: 'relay', raw: '{"session": "s1", "text": "Lance les tests"}' });
-    expect(extractProposal('Rien à faire.')).toEqual({ text: 'Rien à faire.', kind: null, raw: null });
+    expect(extractProposal(relay('{"session": "s1", "text": "Lance les tests"}'))).toMatchObject({ text: 'Je transmets à **Otto**.', kind: 'relay', raw: '{"session": "s1", "text": "Lance les tests"}' });
+    expect(extractProposal('Rien à faire.')).toEqual({ text: 'Rien à faire.', kind: null, raw: null, blocks: [] });
     expect(extractProposal('A\n```ledge-session\n{"cwd": "/w"}\n```').kind).toBe('session');
   });
   it('mixed blocks: all leave the text, the last one counts whatever its language', () => {
     const answer = 'Voilà.\n```ledge-relay\n{"session": "s1", "text": "a"}\n```\n```ledge-session\n{"cwd": "/w"}\n```';
-    expect(extractProposal(answer)).toEqual({ text: 'Voilà.', kind: 'session', raw: '{"cwd": "/w"}' });
+    expect(extractProposal(answer)).toMatchObject({ text: 'Voilà.', kind: 'session', raw: '{"cwd": "/w"}' });
     const other = 'Voilà.\n```ledge-session\n{"cwd": "/w"}\n```\n```ledge-relay\n{"session": "s1", "text": "b"}\n```';
     expect(extractProposal(other)).toMatchObject({ kind: 'relay', raw: '{"session": "s1", "text": "b"}' });
   });
@@ -76,7 +92,7 @@ describe('project blocks (lot 11 task 5)', () => {
   const project = (json: string) => 'Je propose **Paper** avec deux dépôts.\n\n```ledge-project\n' + json + '\n```';
   const valid = '{"name": " Paper ", "description": "Les polices", "repos": [{"path": "/w/paper-fonts", "why": " Nommé paper-* "}], "addTo": " Ledge "}';
   it('extracts a ledge-project block and says it is a project', () => {
-    expect(extractProposal(project(valid))).toEqual({ text: 'Je propose **Paper** avec deux dépôts.', kind: 'project', raw: valid });
+    expect(extractProposal(project(valid))).toMatchObject({ text: 'Je propose **Paper** avec deux dépôts.', kind: 'project', raw: valid });
     expect(extractProposal('A\n```ledge-project\n{"name":').kind).toBe('project');
   });
   it('parseProjectBlock reads the block, trims, and keeps the bounds', () => {

@@ -16,6 +16,11 @@ export const ChatProposalSchema = z.object({
 });
 export type ChatProposal = z.infer<typeof ChatProposalSchema>;
 
+/** The most sessions one answer may propose (#24): beyond, a burst nobody asked for. */
+export const MAX_PROPOSALS = 8;
+/** Every session an answer proposes, in order (#24); a turn's `proposal` stays the first one for older clients. */
+export const ChatProposalsSchema = z.array(ChatProposalSchema).min(1).max(MAX_PROPOSALS);
+
 /** An instruction the chat proposes to send to a tracked session (spec 2026-10-12 relay §5): the session as the store named it,
  *  `status` once the card sent it or queued it, `error` when the last attempt failed. */
 export const ChatRelaySchema = z.object({
@@ -37,7 +42,7 @@ export type ChatProjectProposal = z.infer<typeof ChatProjectProposalSchema>;
 export const ChatTurnSchema = z.object({
   machineId: z.string().optional(), machineName: z.string().optional(), choices: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
   qid: z.string().min(1), question: z.string(), askedAt: z.string().datetime(),
-  steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), relay: ChatRelaySchema.optional(),
+  steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(),
   projectProposal: ChatProjectProposalSchema.optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;

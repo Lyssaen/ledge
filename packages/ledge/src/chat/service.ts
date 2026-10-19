@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, isArchived, parseProjectBlock, parseProposalBlock, parseRelayBlock, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { extractProposal, isArchived, MAX_PROPOSALS, parseProjectBlock, parseProposalBlock, parseRelayBlock, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -17,10 +17,10 @@ import { log } from '../log.js';
 export type ChatMessage = Extract<ServerMessage, { type: 'chat.history' | 'chat.step' | 'chat.delta' | 'chat.done' | 'chat.error' }>;
 export interface Chat {
   ask(qid: string, text: string, emit: (m: ChatMessage) => void, tool?: Tool): Promise<void>; cancel(qid: string): void; reset(emit: (m: ChatMessage) => void): Promise<void>; history(): ChatTurn[];
-  /** The turn's session proposal (spec 2026-10-12 §4), if the turn is still in the day's history. */
-  proposal(qid: string): ChatProposal | undefined;
-  /** The card's launch went through (`launchedId`) or failed (`error`); every client gets the new history. */
-  markLaunched(qid: string, id: string, emit: (m: ChatMessage) => void): void; markFailed(qid: string, message: string, emit: (m: ChatMessage) => void): void;
+  /** The turn's session proposal (spec 2026-10-12 §4) at that row of its card (#24, the first by default), if the turn is still in the day's history. */
+  proposal(qid: string, row?: number): ChatProposal | undefined;
+  /** The card row's launch went through (`launchedId`) or failed (`error`); every client gets the new history. */
+  markLaunched(qid: string, id: string, emit: (m: ChatMessage) => void, row?: number): void; markFailed(qid: string, message: string, emit: (m: ChatMessage) => void, row?: number): void;
   /** The turn's relay (spec 2026-10-12 relay §4), if the turn is still in the day's history. */
   relay(qid: string): ChatRelay | undefined;
   /** The card's state: queued, sent, failed, or `{}` back to proposed; every client gets the new history. */
@@ -147,6 +147,12 @@ export function createChat(deps: ChatDeps): Chat {
     return { name: block.name, ...(description ? { description } : {}), repos, ...(block.addTo ? { addTo: block.addTo } : {}) };
   }
   const turnOf = (qid: string) => turns.find(t => t.qid === qid);
+  /** A turn's card rows: `proposals`, or the lone `proposal` of a turn from before #24. */
+  const rowsOf = (t: ChatTurn | undefined): ChatProposal[] => t?.proposals ?? (t?.proposal ? [t.proposal] : []);
+  /** Sets a row and keeps `proposal` the first row, for the clients from before #24. */
+  function setRow(t: ChatTurn, row: number, next: ChatProposal) {
+    const rows = [...rowsOf(t)]; rows[row] = next; t.proposals = rows; t.proposal = rows[0];
+  }
 
   /** One run; the context folder (terminal tails, last replies) is removed once it ends, whatever the outcome. */
   async function attempt(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
@@ -176,29 +182,34 @@ export function createChat(deps: ChatDeps): Chat {
     if (r.code !== 0) return { ok: false, message: r.code === null ? `${label} could not start: ${r.stderr.trim() || 'not found in PATH'}` : r.stderr.trim() || `${label} exited with code ${r.code}`, resumed: resume };
     if (resultError) return { ok: false, message: resultError, resumed: false };
     // The proposal block never reaches the reader: the card stands for it (spec 2026-10-12 §3-4).
-    const { text, kind, raw } = extractProposal(answer);
-    const proposal = kind === 'session' ? await proposalFrom(raw!, tool, turn.qid) : undefined;
+    const { text, kind, raw, blocks } = extractProposal(answer);
+    // Every session block is a row of the card (#24); the last block's kind still decides which card the turn gets.
+    const sessionBlocks = kind === 'session' ? blocks.filter(b => b.kind === 'session') : [];
+    if (sessionBlocks.length > MAX_PROPOSALS) log(`chat ${turn.qid}: ${sessionBlocks.length - MAX_PROPOSALS} sessions beyond ${MAX_PROPOSALS} ignored`);
+    const proposals: ChatProposal[] = [];
+    for (const b of sessionBlocks.slice(0, MAX_PROPOSALS)) { const p = await proposalFrom(b.raw, tool, turn.qid); if (p) proposals.push(p); }
+    const proposal = proposals[0];
     const relay = kind === 'relay' ? relayFrom(raw!, turn.qid) : undefined;
     const projectProposal = kind === 'project' ? await projectFrom(raw!, turn.qid) : undefined;
     turn.answer = text; turn.answeredAt = now();
-    if (proposal) turn.proposal = proposal;
+    if (proposal) { turn.proposal = proposal; turn.proposals = proposals; }
     if (relay) turn.relay = relay;
     if (projectProposal) turn.projectProposal = projectProposal;
-    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal } : {}), ...(relay ? { relay } : {}), ...(projectProposal ? { projectProposal } : {}) });
+    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal, proposals } : {}), ...(relay ? { relay } : {}), ...(projectProposal ? { projectProposal } : {}) });
     return { ok: true };
   }
 
   return {
     history: () => turns,
-    proposal: qid => turnOf(qid)?.proposal,
-    markLaunched(qid, id, emit) {
-      const t = turnOf(qid); if (!t?.proposal) return;
-      const next = { ...t.proposal, launchedId: id }; delete next.error; t.proposal = next;
+    proposal: (qid, row = 0) => rowsOf(turnOf(qid))[row],
+    markLaunched(qid, id, emit, row = 0) {
+      const t = turnOf(qid); const p = rowsOf(t)[row]; if (!t || !p) return;
+      const next = { ...p, launchedId: id }; delete next.error; setRow(t, row, next);
       emit({ type: 'chat.history', turns });
     },
-    markFailed(qid, message, emit) {
-      const t = turnOf(qid); if (!t?.proposal) return;
-      t.proposal = { ...t.proposal, error: message };
+    markFailed(qid, message, emit, row = 0) {
+      const t = turnOf(qid); const p = rowsOf(t)[row]; if (!t || !p) return;
+      setRow(t, row, { ...p, error: message });
       emit({ type: 'chat.history', turns });
     },
     relay: qid => { rollDay(); return turnOf(qid)?.relay; },

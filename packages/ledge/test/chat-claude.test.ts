@@ -15,6 +15,11 @@ describe('claudeArgs', () => {
     expect(PERSONA).toContain('seulement des commandes de lecture');
     expect(PERSONA).not.toContain('pas de commande,');
   });
+  it('the persona asks for one block per session, up to 8, the sure folders only and a question for the others (#24)', () => {
+    expect(PERSONA).toContain('un bloc ```ledge-session par session');
+    expect(PERSONA).toContain('8 sessions au plus');
+    expect(PERSONA).toContain('ne mets un bloc que pour les dossiers sûrs');
+  });
   it('the persona allows a relay block for one sure, writable session, and never sends anything itself', () => {
     expect(PERSONA).toContain('```ledge-relay');
     expect(PERSONA).toContain('{"session": "<id>", "text": "<l\'instruction, formulée pour l\'agent>"}');

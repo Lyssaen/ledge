@@ -22,12 +22,13 @@ const FENCES = ['```ledge-session', '```ledge-relay', '```ledge-project'];
 /** A block from its fence to the closing fence, or to the end of the text when it is not closed (yet). */
 const BLOCK = /```ledge-(session|relay|project)[ \t]*\n?([\s\S]*?)(?:```|$)/g;
 
-/** The answer without its card blocks, and the language and content of the last one (null when there is none). */
-export function extractProposal(answer: string): { text: string; kind: BlockKind | null; raw: string | null } {
+/** The answer without its card blocks; every block in order (#24: several sessions in one answer), and the language and content of
+ *  the last one (null when there is none), which decides the turn's card. */
+export function extractProposal(answer: string): { text: string; kind: BlockKind | null; raw: string | null; blocks: Array<{ kind: BlockKind; raw: string }> } {
   const found: Array<{ kind: BlockKind; raw: string }> = [];
   const text = answer.replace(BLOCK, (_m, kind: BlockKind, body: string) => { found.push({ kind, raw: body.trim() }); return ''; });
   const last = found.at(-1);
-  return last ? { text: text.replace(/\n{3,}/g, '\n\n').trim(), kind: last.kind, raw: last.raw } : { text: answer, kind: null, raw: null };
+  return last ? { text: text.replace(/\n{3,}/g, '\n\n').trim(), kind: last.kind, raw: last.raw, blocks: found } : { text: answer, kind: null, raw: null, blocks: [] };
 }
 
 /** The block's JSON as a proposal, or null when it is not an object with a non-empty `cwd`. */

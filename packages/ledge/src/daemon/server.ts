@@ -389,17 +389,25 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.launch': {
         // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
         if (msg.qid === undefined) return send(ws, { type: 'session.launched', id: (await launch(msg)).id });
-        // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's.
-        const qid = msg.qid; const p = chat.proposal(qid);
-        if (!p) return refuse('unknown proposal');
-        if (p.launchedId || chatLaunches.has(qid)) return refuse('already launched');
-        chatLaunches.add(qid);
+        // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's. Its rows (#24) start one after the other,
+        // so each launch registers its bot before the next picks a name; a launched row, or one in flight, is passed over.
+        const qid = msg.qid; const rows = msg.rows ?? [0];
+        const todo = rows.filter(r => { const p = chat.proposal(qid, r); return p && !p.launchedId && !chatLaunches.has(`${qid}#${r}`); });
+        if (todo.length === 0) return refuse(rows.some(r => chat.proposal(qid, r)) ? 'already launched' : 'unknown proposal');
+        for (const r of todo) chatLaunches.add(`${qid}#${r}`);
+        let failure: unknown = null;
         try {
-          const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt });
-          send(ws, { type: 'session.launched', id: session.id });
-          chat.markLaunched(qid, session.id, broadcast);
-        } catch (e) { chat.markFailed(qid, (e as Error).message, broadcast); throw e; }
-        finally { chatLaunches.delete(qid); }
+          for (const r of todo) {
+            const p = chat.proposal(qid, r)!;
+            try {
+              const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt });
+              send(ws, { type: 'session.launched', id: session.id });
+              chat.markLaunched(qid, session.id, broadcast, r);
+            } catch (e) { chat.markFailed(qid, (e as Error).message, broadcast, r); failure = e; }
+            finally { chatLaunches.delete(`${qid}#${r}`); }
+          }
+        } finally { for (const r of todo) chatLaunches.delete(`${qid}#${r}`); }
+        if (failure) throw failure;
         return;
       }
       case 'folder.list': return send(ws, await listFolder(msg.path, opts.home, msg.requestId));
