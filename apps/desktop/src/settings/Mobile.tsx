@@ -33,7 +33,7 @@ function useNow(every: number | null): number {
 
 /** The mockup's link problems in the nav: the access is on but cannot reach the relay (offline, signed out, account refused). */
 export const mobileDown = (m: MobileState | undefined): boolean =>
-  m !== undefined && m.enabled && (m.link.state === 'offline' || m.link.state === 'signed_out' || (m.link.state === 'off' && m.signinError === 'not_allowed'));
+  m !== undefined && m.enabled && (m.link.state === 'offline' || m.link.state === 'signed_out' || (m.link.state === 'off' && (m.signinError === 'not_allowed' || m.signinError === 'failed')));
 /** A device waits for its code to be compared. */
 export const mobileAsks = (m: MobileState | undefined): boolean => m !== undefined && m.enabled && m.pairings.some(p => p.state === 'confirm');
 
@@ -149,6 +149,14 @@ function GitHubAccount({ m, send }: { m: MobileState; send: Send }): JSX.Element
     <Row label={c.account} hint={c.accountHint}>
       <span className="gh-account"><span className="gh-avatar" aria-hidden="true">{m.account.login.slice(0, 1)}</span><strong>@{m.account.login}</strong></span>
       <Button size="sm" variant="ghost" onClick={() => send({ type: 'mobile.signout' })}>{c.signout}</Button>
+    </Row>
+  );
+  // A sign-in that ended without a session (not_allowed has its own row above): why, then the way in again.
+  const ended = m.signinError === null ? null : c.signinEnded[m.signinError];
+  if (ended) return (
+    <Row label={c.account} hint={c.accountHint} stack>
+      <div role="alert" className="set-well bad"><Icon d={ICONS.close.d} size={14} /><span>{ended}</span></div>
+      <div className="set-actions"><Button size="sm" variant="primary" onClick={signIn}>{c.signin}</Button></div>
     </Row>
   );
   return (

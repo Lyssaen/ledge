@@ -3,7 +3,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DEFAULT_RELAY_URL, type MobileClientMessage, type MobileState } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
-import { Mobile } from '../src/settings/Mobile';
+import { Mobile, mobileDown } from '../src/settings/Mobile';
 import { clearPairingRequest, usePairingRequest } from '../src/settings/pairingRequest';
 import type { SettingsContext } from '../src/settings/SettingsPage';
 import { openUrl } from '../src/tauri/bridge';
@@ -94,6 +94,21 @@ describe('Settings › Accès mobile', () => {
     await user.click(screen.getByRole('button', { name: 'Réessayer avec un autre compte' }));
     expect(sent).toEqual([{ type: 'mobile.signin' }]);
   });
+
+  for (const [error, text, dot] of [
+    ['failed', 'La connexion à GitHub a échoué. Vérifiez le serveur relais, puis réessayez.', true],
+    ['expired', 'Le code a expiré. Recommencez la connexion.', false],
+    ['denied', 'La connexion a été refusée sur GitHub.', false]
+  ] as const) {
+    it(`a sign-in that ended ${error}: said above the sign-in button, which signs in again`, async () => {
+      const state: MobileState = { ...OFF, enabled: true, signinError: error };
+      const { sent, user } = show(state);
+      expect(screen.getByRole('alert')).toHaveTextContent(text);
+      await user.click(screen.getByRole('button', { name: 'Se connecter avec GitHub' }));
+      expect(sent).toEqual([{ type: 'mobile.signin' }]);
+      expect(mobileDown(state)).toBe(dot);
+    });
+  }
 
   it('signed out by the relay: another PC, or a session no longer valid; « Se reconnecter » signs in again', async () => {
     const { sent, update, user } = show({ ...ONLINE, link: { state: 'signed_out', reason: 'other_pc' } });

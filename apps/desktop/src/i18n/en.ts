@@ -202,6 +202,7 @@ export const en: Messages = {
       notAllowed: 'This GitHub account is not allowed on this server. Ask its administrator to add it.', otherAccount: 'Try again with another account',
       signedOut: { other_pc: 'This PC was signed out: another PC signed in with this account. An account has only one PC.', session_invalid: 'This PC was signed out: the session is no longer valid.' },
       reconnect: 'Sign in again',
+      signinEnded: { failed: 'The connection to GitHub failed. Check the relay server, then try again.', expired: 'The code expired. Start the sign-in again.', denied: 'The sign-in was refused on GitHub.', not_allowed: null },
       status: 'Status',
       states: { off: 'Disabled', idle: 'Not connected yet', online: 'Connected to the relay', connecting: 'Connecting…', offline: 'Offline' },
       retryIn: (s) => `Offline · retrying in ${s} s`,

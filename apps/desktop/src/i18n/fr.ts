@@ -216,6 +216,8 @@ export const fr = {
       notAllowed: "Ce compte GitHub n'est pas autorisé sur ce serveur. Demandez à son administrateur de l'ajouter.", otherAccount: 'Réessayer avec un autre compte',
       signedOut: { other_pc: "Ce PC a été déconnecté : un autre PC s'est connecté avec ce compte. Un compte n'a qu'un PC.", session_invalid: "Ce PC a été déconnecté : la session n'est plus valide." },
       reconnect: 'Se reconnecter',
+      /** Why the last sign-in ended without a session; not_allowed has its own well (notAllowed). */
+      signinEnded: { failed: 'La connexion à GitHub a échoué. Vérifiez le serveur relais, puis réessayez.', expired: 'Le code a expiré. Recommencez la connexion.', denied: 'La connexion a été refusée sur GitHub.', not_allowed: null } as Record<'failed' | 'expired' | 'denied' | 'not_allowed', string | null>,
       status: 'État',
       states: { off: 'Désactivé', idle: 'Pas encore connecté', online: 'Connecté au relais', connecting: 'Connexion…', offline: 'Hors ligne' },
       retryIn: (s: number) => `Hors ligne · nouvel essai dans ${s} s`,
