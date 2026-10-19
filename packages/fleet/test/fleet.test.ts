@@ -5,6 +5,7 @@ import { daemonStore, attachClient } from '../src/store';
 import type { DaemonClient, DaemonStatus } from '../src/client';
 import { LOCAL_MACHINE, canManage, parseMachines, probeMachine, sshProblem, terminalCommand, type MachineState } from '../src/machines';
 import { fakeSession } from './mockDaemon';
+import { createTokenSource } from '../src/token';
 
 const remote = { id: 'server', label: 'dev-server', url: 'ws://127.0.0.1:47832', ssh: 'dev-server' };
 function peer() {
@@ -366,15 +367,35 @@ describe('common chat routing', () => {
 });
 
 class FakeProbe {
-  static last: FakeProbe; url: string; closed = false;
+  static last: FakeProbe; url: string; protocols?: string[]; closed = false;
   onmessage: ((ev: { data: unknown }) => void) | null = null; onclose: (() => void) | null = null; onerror: (() => void) | null = null;
-  constructor(url: string) { this.url = url; FakeProbe.last = this; }
+  constructor(url: string, protocols?: string[]) { this.url = url; this.protocols = protocols; FakeProbe.last = this; }
   close() { this.closed = true; }
   emit(m: ServerMessage) { this.onmessage?.({ data: JSON.stringify(m) }); }
 }
 const probeSnapshot = (sshAlias?: string): ServerMessage => ({ type: 'snapshot', sessions: [fakeSession('a'), fakeSession('b')], daemon: { version: '0.4.1', install: 'npm', systemd: true, routing: true }, sshAlias });
 
 describe('connection test', () => {
+  it('probe presents the token', async () => {
+    const T = 'a'.repeat(64);
+    vi.stubGlobal('WebSocket', FakeProbe);
+    try {
+      const fleet = createFleetClient([LOCAL_MACHINE], () => peer().client, { token: createTokenSource(async () => ({ kind: 'token', token: T })) }).fleet!;
+      const done = fleet.probe('dev-server');
+      await vi.waitFor(() => expect(FakeProbe.last?.url).toBe('ws://127.0.0.1:47831/ssh/dev-server'));
+      expect(FakeProbe.last.protocols).toEqual([`ledge.${T}`]);
+      FakeProbe.last.emit(probeSnapshot('dev-server'));
+      await expect(done).resolves.toEqual({ ok: true, version: '0.4.1', sessions: 2 });
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it('a probe without the token opens nothing and says why', async () => {
+    const before = FakeProbe.last;
+    const absent = probeMachine('ws://127.0.0.1:47831', 'box', { WebSocketImpl: FakeProbe, token: createTokenSource(async () => ({ kind: 'absent' })) });
+    await expect(absent).resolves.toEqual({ ok: false, error: expect.stringContaining('token') });
+    const unavailable = probeMachine('ws://127.0.0.1:47831', 'box', { WebSocketImpl: FakeProbe, token: createTokenSource(async () => ({ kind: 'unavailable' })) });
+    await expect(unavailable).resolves.toEqual({ ok: false, error: expect.stringContaining('token') });
+    expect(FakeProbe.last).toBe(before);
+  });
   it('opens the SSH route of the local daemon and answers with the remote version and sessions', async () => {
     const done = probeMachine('ws://127.0.0.1:47831', 'dev-server', { WebSocketImpl: FakeProbe });
     expect(FakeProbe.last.url).toBe('ws://127.0.0.1:47831/ssh/dev-server');

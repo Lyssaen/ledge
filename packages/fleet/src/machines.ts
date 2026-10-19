@@ -2,6 +2,7 @@ import { MachinesSchema, type Machine, type IslandPrefs } from '@ledge/protocol'
 import type { DaemonClient, DaemonStatus } from './client';
 import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
+import { DAEMON_PROTOCOL_PREFIX, type TokenSource } from './token';
 
 /** The url exists for `local` only: set by the fleet, never persisted nor sent. */
 export type MachineConfig = Machine & { url?: string };
@@ -56,22 +57,31 @@ export function loadMachines(prefix = 'ledge'): MachineConfig[] {
   try { return parseMachines(JSON.parse(localStorage.getItem(`${prefix}.machines`) ?? 'null')); } catch { return [LOCAL_MACHINE]; }
 }
 type ProbeSocket = { close(): void; onclose: null | (() => void); onerror: null | (() => void); onmessage: null | ((ev: { data: unknown }) => void) };
-/** Opens `/ssh/<alias>` on the local daemon once and settles on the first snapshot, error or close. */
-export function probeMachine(url: string, ssh: string, opts: { WebSocketImpl?: new (url: string) => ProbeSocket; timeoutMs?: number } = {}): Promise<ProbeResult> {
-  const Ws = opts.WebSocketImpl ?? (globalThis as unknown as { WebSocket: new (url: string) => ProbeSocket }).WebSocket;
+/** Opens `/ssh/<alias>` on the local daemon once and settles on the first snapshot, error or close. With `token`, the socket offers it, and none opens without one. */
+export function probeMachine(url: string, ssh: string, opts: { token?: TokenSource; WebSocketImpl?: new (url: string, protocols?: string[]) => ProbeSocket; timeoutMs?: number } = {}): Promise<ProbeResult> {
+  const Ws = opts.WebSocketImpl ?? (globalThis as unknown as { WebSocket: new (url: string, protocols?: string[]) => ProbeSocket }).WebSocket;
   return new Promise(resolve => {
-    let sock: ProbeSocket, error = '', done = false;
+    let sock: ProbeSocket | undefined, error = '', done = false;
     const finish = (r: ProbeResult) => { if (done) return; done = true; clearTimeout(timer); if (sock) { sock.onclose = sock.onmessage = sock.onerror = null; sock.close(); } resolve(r); };
     // The daemon gives up on a silent remote after 60 s; this only guards against a daemon that never answers.
     const timer = setTimeout(() => finish({ ok: false, error: 'SSH: no Ledge snapshot received.' }), opts.timeoutMs ?? 75_000);
-    try { sock = new Ws(machineUrl({ id: 'probe', label: ssh, ssh }, { ...LOCAL_MACHINE, url })); } catch (e) { finish({ ok: false, error: (e as Error).message }); return; }
-    sock.onmessage = ev => {
-      let m: ServerMessage; try { m = parseServerMessage(JSON.parse(String(ev.data))); } catch { return; }
-      if (m.type === 'error') error = m.message;
-      else if (m.type === 'snapshot') finish(m.sshAlias === ssh ? { ok: true, version: m.daemon?.version, sessions: m.sessions.length } : { ok: false, error: 'Update the local Ledge daemon: SSH transport is unavailable' });
+    const start = (protocols?: string[]) => {
+      if (done) return;
+      // With a token, the browser's own error would quote a malformed subprotocol, hence the token: not repeated.
+      try { const target = machineUrl({ id: 'probe', label: ssh, ssh }, { ...LOCAL_MACHINE, url }); sock = protocols ? new Ws(target, protocols) : new Ws(target); } catch (e) { finish({ ok: false, error: protocols ? 'The local Ledge daemon could not be reached.' : (e as Error).message }); return; }
+      sock.onmessage = ev => {
+        let m: ServerMessage; try { m = parseServerMessage(JSON.parse(String(ev.data))); } catch { return; }
+        if (m.type === 'error') error = m.message;
+        else if (m.type === 'snapshot') finish(m.sshAlias === ssh ? { ok: true, version: m.daemon?.version, sessions: m.sessions.length } : { ok: false, error: 'Update the local Ledge daemon: SSH transport is unavailable' });
+      };
+      sock.onerror = () => { /* onclose follows */ };
+      sock.onclose = () => finish({ ok: false, error: error || 'The local Ledge daemon closed the connection.' });
     };
-    sock.onerror = () => { /* onclose follows */ };
-    sock.onclose = () => finish({ ok: false, error: error || 'The local Ledge daemon closed the connection.' });
+    if (!opts.token) { start(); return; }
+    void opts.token.get(false).then(r => {
+      if (r.kind === 'token') start([DAEMON_PROTOCOL_PREFIX + r.token]);
+      else finish({ ok: false, error: r.kind === 'absent' ? 'The local Ledge daemon token is missing: start or update the daemon.' : 'The local Ledge daemon token could not be read.' });
+    });
   });
 }
 export type SshProblem = 'alias' | 'key' | 'hostKey' | 'unreachable' | 'ledge' | 'stopped' | 'local' | 'other';

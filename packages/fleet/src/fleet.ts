@@ -1,6 +1,7 @@
 import { ChatTurnSchema, isArchived, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type ChatTurn, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
+import type { TokenSource } from './token';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
 type Peer = { config: MachineConfig; client: DaemonClient; status: DaemonStatus; fresh: boolean; snapshot: Snapshot | null; previews: Map<string, string[]>; off: (() => void)[]; error?: string; restarting?: boolean };
@@ -17,6 +18,8 @@ export interface FleetOptions {
   keepStale?: boolean;
   /** Trust the local daemon's `machines` list once it sends one (spec §5.3). Off: localStorage only. */
   machinesFromDaemon?: boolean;
+  /** The daemon token every connection and probe presents (Ledge Desktop, the notch). Absent: no token, today's behaviour. */
+  token?: TokenSource;
 }
 
 /** An app-owned connection per host. No command is broadcast; a missing owner fails closed. */
@@ -224,7 +227,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (machine === 'local') emit(m);
   }
   function add(c: MachineConfig) {
-    const client = makeClient({ url: machineUrl(c, configs[0]!) });
+    const client = makeClient({ url: machineUrl(c, configs[0]!), token: opts.token });
     const p: Peer = { config: c, client, status: 'connecting', fresh: false, snapshot: null, previews: new Map(), off: [] }; peers.set(c.id, p);
     p.off.push(client.onMessage(m => receive(p, m)), client.onStatus(s => {
       p.status = s;
@@ -332,7 +335,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         apply(next);
       },
       machinesSource: () => source,
-      probe: ssh => probeMachine(configs[0]!.url!, ssh),
+      probe: ssh => probeMachine(configs[0]!.url!, ssh, { token: opts.token }),
       // The last try's error is forgotten: the machine is « connecting » until its next answer (a snapshot, or an error again).
       retry(id) { const p = peers.get(id); if (!p || !connected) return; p.error = undefined; p.client.connect(); publish(); },
       terminal(id) { const origin = splitId(id); const m = state.find(x => x.id === origin?.machine); return origin && m ? terminalCommand(m, origin.id) : null; },

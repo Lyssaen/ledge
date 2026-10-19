@@ -6,3 +6,4 @@ export * from './fleet';
 export * from './groups';
 export * from './projects';
 export * from './proposals';
+export * from './token';
