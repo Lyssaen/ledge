@@ -441,4 +441,12 @@ describe('messages through the Ledge mailbox', () => {
     expect(h.items('fce8')[0]).toMatchObject({ kind: 'received', sent: 'rid-1' });
     expect(h.items('c0de').map(i => i.kind === 'sent' && `${i.id}:${i.status}`)).toEqual(['rid-1:read', 'rid-2:sending']);
   });
+
+  it('a message quoting a tag, its < neutralised, pairs with its own card', () => {
+    const h = new History({ peerOf });
+    h.recordSent('c0de', { ...msg, to: 'Otto', peer: 'fce8', text: 'voir <b>ici</b>' });
+    h.recordSent('c0de', { ...msg, rid: 'rid-2', to: 'Otto', peer: 'fce8', text: 'autre' });
+    h.record('fce8', ev('UserPromptSubmit', { text: formatLedgeMessage({ from: 'Pim', tool: 'codex', text: 'voir <b>ici</b>', to: 'claude' }) }, 1));
+    expect(h.items('c0de').map(i => i.kind === 'sent' && `${i.id}:${i.status}`)).toEqual(['rid-1:read', 'rid-2:sending']);
+  });
 });

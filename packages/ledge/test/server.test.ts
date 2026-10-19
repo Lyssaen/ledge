@@ -646,7 +646,7 @@ describe('server', () => {
       c.send({ type: 'session.message', rid: 'r1', from: 'a', to: 'Pim', text: line });
       expect(await c.next('message.ack', 3000)).toEqual({ type: 'message.ack', rid: 'r1', outcome: 'accepted' });
       await until(() => tmux.sent.some(x => x[0] === 'keys' && x[2] === 'Enter'), 3000);
-      expect(tmux.sent[0]).toEqual(['text', 'ledge-b', expect.stringContaining(`<ledge-message from="Otto" tool="claude">${line}</ledge-message>`)]);
+      expect(tmux.sent[0]).toEqual(['text', 'ledge-b', expect.stringMatching(new RegExp(`^<ledge-message from="Otto" tool="claude">\\(message de la session Otto, .*\\) ${line}</ledge-message>$`))]);
       expect(tmux.sent.at(-1)).toEqual(['keys', 'ledge-b', 'Enter']);
       c.close();
     });

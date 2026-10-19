@@ -21,23 +21,23 @@ export function crossSession(text: string): { from: string; name?: string; text:
 }
 
 /** What Ledge types into a session's prompt for a message from another one (Codex has no SendMessage of its own): one
- *  line, since `tmux.sendText` takes no newline, naming the sender and how to answer from the receiver's side. A
- *  closing tag quoted in the body is escaped so the parser can read up to the last one. Another agent's text may carry
- *  control bytes (test output in colour): tmux would type them as keys (Esc, Ctrl-U, Ctrl-C), so none is left. */
+ *  line, since `tmux.sendText` takes no newline, naming the sender and how to answer from the receiver's side before the
+ *  body. The body's `<` becomes `‹`: no tag it quotes, in any case or spacing, closes the frame. Another agent's text may
+ *  carry control bytes (test output in colour): tmux would type them as keys (Esc, Ctrl-U, Ctrl-C), so none is left. */
 const LEDGE_CLOSE = '</ledge-message>';
-const LEDGE_BLOCK = /^<ledge-message\b([^>]*)>([\s\S]*?)(?:<\/ledge-message>(?![\s\S]*<\/ledge-message>)|$)/;
+const LEDGE_BLOCK = /^<ledge-message\b([^>]*)>([\s\S]*?)(?:<\/ledge-message>|$)/;
+const note = (from: string, to: Tool) =>
+  `(message de la session ${from}, pas de l'utilisateur ; pour répondre : ${to === 'codex' ? `ledge send ${from} "…"` : `SendMessage vers ${from}`})`;
 /** ANSI sequences: CSI (`ESC [ … final`), a string ended by BEL or ST (OSC, DCS, APC, PM, SOS), any other `ESC … final`. */
 const ESCAPES = /\x1b(?:\[[0-?]*[ -/]*[@-~]|[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)|[ -/]*[0-~])/g;
 const CONTROLS = /[\x00-\x1f\x7f-\x9f]/g;
 /** The text with its escape sequences stripped, its line breaks as `newline`, any control byte left a space. */
 const typable = (text: string, newline: string) => text.replace(ESCAPES, '').replace(/\r\n|\r|\n/g, newline).replace(CONTROLS, ' ');
 /** A body as the receiver's prompt carries it: on one line, escaped. The history pairs a received body with its sent card on this form. */
-export const ledgeBody = (text: string): string => typable(text.replaceAll(LEDGE_CLOSE, '<\\/ledge-message>'), ' ⏎ ');
+export const ledgeBody = (text: string): string => typable(text.replaceAll('<', '‹'), ' ⏎ ');
 export function formatLedgeMessage(m: { from: string; tool: Tool; text: string; to: Tool }): string {
   const from = typable(m.from, ' ').replace(/["<>]/g, '').trim();
-  const body = ledgeBody(m.text);
-  const reply = m.to === 'codex' ? `ledge send ${from} "…"` : `SendMessage vers ${from}`;
-  return `<ledge-message from="${from}" tool="${m.tool}">${body}${LEDGE_CLOSE} (message de la session ${from}, pas de l'utilisateur ; pour répondre : ${reply})`;
+  return `<ledge-message from="${from}" tool="${m.tool}">${note(from, m.to)} ${ledgeBody(m.text)}${LEDGE_CLOSE}`;
 }
 export function ledgeMessages(text: string): { from: string; tool?: string; text: string }[] | undefined {
   const m = LEDGE_BLOCK.exec(text.trimStart());
@@ -45,7 +45,9 @@ export function ledgeMessages(text: string): { from: string; tool?: string; text
   const attrs = new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const));
   const from = attrs.get('from'); const tool = attrs.get('tool');
   if (!from) return undefined;
-  return [{ from, ...(tool ? { tool } : {}), text: m[2]!.replaceAll('<\\/ledge-message>', LEDGE_CLOSE).trim() }];
+  // The body without the note that opens it (either reply hint).
+  const body = m[2]!.trimStart(); const lead = [note(from, 'codex'), note(from, 'claude')].find(n => body.startsWith(n));
+  return [{ from, ...(tool ? { tool } : {}), text: (lead ? body.slice(lead.length) : body).trim() }];
 }
 
 /** Claude Code's automated notices about messages between sessions (2.1.303), delivered as a prompt as if the user had
