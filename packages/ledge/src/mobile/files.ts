@@ -22,10 +22,19 @@ function writePrivate(file: string, content: string): void {
   renameSync(tmp, file);
 }
 
-/** Absent file: null silently. Invalid file: null, with the name of the file in the log and never its content. */
+/** Only a missing file is "absent": any other read error (EACCES, EIO...) must not read as "no file", or the next write would replace it. */
+function readText(file: string, name: string): string | null {
+  try { return readFileSync(file, 'utf8'); }
+  catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw new Error(`${name} cannot be read (${(e as NodeJS.ErrnoException).code ?? 'error'})`);
+  }
+}
+
+/** Absent file: null silently. Invalid file: null, with the name of the file in the log and never its content. Unreadable file: throws. */
 function readJson<T>(file: string, name: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>): T | null {
-  let raw: string;
-  try { raw = readFileSync(file, 'utf8'); } catch { return null; }
+  const raw = readText(file, name);
+  if (raw === null) return null;
   try { return schema.parse(JSON.parse(raw)); }
   catch { log(`${name} is invalid, ignoring it`); return null; }
 }
@@ -57,8 +66,7 @@ export function clearRelaySession(): void {
 /** The PC's key: PKCS8 base64url only; the public key is always derived from it, never read from a copy. */
 export async function loadPcIdentity(): Promise<Identity> {
   const file = paths().mobileKey;
-  let stored: string | null = null;
-  try { stored = readFileSync(file, 'utf8').trim(); } catch { /* none yet */ }
+  const stored = readText(file, 'mobile-key')?.trim();
   if (stored) {
     try { return await importIdentity(stored); }
     catch { log('mobile-key is invalid, creating a new key'); }

@@ -68,7 +68,7 @@ afterEach(async () => { for (const c of cleanups.splice(0).reverse()) await c();
 async function relayWithAuth() {
   const calls = { revoked: [] as Array<{ peer: string; bearer: string }>, polls: 0 };
   /** The poll answers `pending` until the test lets it through. */
-  const gate = { allow: false };
+  const gate = { allow: false, kick: true };
   let relay!: TestRelay;
   relay = await startTestRelay({
     auth: async (req, res, control) => {
@@ -88,7 +88,7 @@ async function relayWithAuth() {
       if (path === '/auth/devices/revoke') {
         const { peer } = (await readBody(req)) as { peer: string };
         calls.revoked.push({ peer, bearer: String(req.headers.authorization ?? '') });
-        control.kick(TEST_ACCOUNT, peer as `d_${string}`, 4001, 'signed_out');
+        if (gate.kick) control.kick(TEST_ACCOUNT, peer as `d_${string}`, 4001, 'signed_out');
         json(res, { revoked: 1 });
         return true;
       }
@@ -182,10 +182,39 @@ describe('mobile access service', () => {
     expect(ctx.s.state().devices).toEqual([]);
     expect(JSON.parse(readFileSync(paths().devices, 'utf8'))).toEqual([]);
     expect(ctx.calls.revoked).toEqual([{ peer: PEER, bearer: `Bearer ${ctx.relay.pcToken}` }]);
+    await until(() => phone.frames.some((f) => f.k === 'denied'), 'denied right after the revoke');
     await until(() => phone.linkStates.some((x) => x.state === 'signed_out' && x.reason === 'other_pc'), 'device socket closed in 4001');
     // A second revoke does nothing.
     await ctx.s.handle({ type: 'mobile.device.revoke', id });
     expect(ctx.calls.revoked).toHaveLength(1);
+  });
+
+  it('revoke: a msg sent by the device afterwards is answered denied', async () => {
+    const ctx = await signedIn();
+    const phone = await linkedPhone(ctx);
+    const id = await fingerprint(phone.publicKey);
+    ctx.gate.kick = false; // the relay keeps the socket open, so only the PC's own refusal is under test
+    const msg = await phone.seal('after revoke');
+    await ctx.s.handle({ type: 'mobile.device.revoke', id });
+    await until(() => phone.frames.filter((f) => f.k === 'denied').length === 1, 'denied right after the revoke');
+    phone.sendFrame(msg);
+    await until(() => phone.frames.filter((f) => f.k === 'denied').length === 2, 'denied answer to the next msg');
+    expect(ctx.s.state().devices).toEqual([]);
+  });
+
+  it('approving while the relay link is offline throws and leaves the pairing in confirm, nothing stored', async () => {
+    const ctx = await signedIn();
+    const phone = await fakeDevice({ relayUrl: ctx.relay.url, token: ctx.relay.deviceToken(PEER), peer: PEER, label: 'Pixel 8' });
+    cleanups.push(() => phone.close());
+    void phone.pair().catch(() => undefined);
+    await until(() => ctx.s.state().pairings[0]?.state === 'confirm', 'pairing to confirm');
+    const p = ctx.s.state().pairings[0]!;
+    await ctx.relay.relay.close();
+    await until(() => ctx.s.state().link.state === 'offline', 'link offline');
+    await expect(ctx.s.handle({ type: 'mobile.pairing.approve', id: p.id })).rejects.toThrow(/offline/);
+    expect(ctx.s.state().pairings[0]?.state).toBe('confirm');
+    expect(ctx.s.state().devices).toEqual([]);
+    expect(existsSync(paths().devices) ? JSON.parse(readFileSync(paths().devices, 'utf8')) : []).toEqual([]);
   });
 
   it('disabled: the link goes off and no connection to the relay follows for 5 simulated seconds', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { statSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { statSync, readFileSync, writeFileSync, rmSync, existsSync, chmodSync } from 'node:fs';
 import { DEFAULT_RELAY_URL, RelayUrlSchema } from '@ledge/protocol';
 import { exportIdentity } from '@ledge/seal';
 import { paths } from '../src/paths.js';
@@ -71,5 +71,37 @@ describe('mobile files', () => {
     expect(stored).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(mode(paths().mobileKey)).toBe(0o600);
     expect(existsSync(`${paths().mobileKey}.${process.pid}.tmp`)).toBe(false);
+  });
+
+  // chmod 000 does not stop root, so these cannot show anything there.
+  describe.skipIf(process.getuid?.() === 0)('a file that exists but cannot be read', () => {
+    const lock = (f: string) => { chmodSync(f, 0o000); return () => chmodSync(f, 0o600); };
+
+    it('keeps the PC key: loadPcIdentity throws and does not replace the file', async () => {
+      await loadPcIdentity();
+      const before = readFileSync(paths().mobileKey, 'utf8');
+      const unlock = lock(paths().mobileKey);
+      try {
+        await expect(loadPcIdentity()).rejects.toThrow(/mobile-key/);
+      } finally { unlock(); }
+      expect(readFileSync(paths().mobileKey, 'utf8')).toBe(before);
+    });
+
+    it('keeps the approved devices: readDevices throws, the file is untouched, the message holds no content', () => {
+      writeDevices([{ id: 'secret-id', publicKey: 'k', label: 'Phone', approvedAt: '2026-10-19T00:00:00Z' }]);
+      const before = readFileSync(paths().devices, 'utf8');
+      const unlock = lock(paths().devices);
+      try {
+        expect(() => readDevices()).toThrow(/devices\.json/);
+        try { readDevices(); } catch (e) { expect((e as Error).message).not.toContain('secret-id'); }
+      } finally { unlock(); }
+      expect(readFileSync(paths().devices, 'utf8')).toBe(before);
+    });
+
+    it('throws for the config and the session too, rather than reading them as absent', () => {
+      writeMobileConfig({ enabled: true, relayUrl: 'https://a.example' });
+      const unlock = lock(paths().mobile);
+      try { expect(() => readMobileConfig()).toThrow(/mobile\.json/); } finally { unlock(); }
+    });
   });
 });

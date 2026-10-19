@@ -319,6 +319,8 @@ export async function createMobileService(opts: {
           return;
         case 'mobile.pairing.approve':
           pairingIn(msg.id, ['confirm']);
+          // pair_ok would go nowhere while the device is stored: refuse, the pairing stays in confirm.
+          if (linkState.state !== 'online') throw new Error('the relay is offline');
           pairing.approve(msg.id);
           return;
         case 'mobile.pairing.deny':
