@@ -36,7 +36,9 @@ pub fn read(timeout: std::time::Duration) -> TokenRead {
         .creation_flags(0x0800_0000).spawn() else { return TokenRead::Unavailable };
     let Some(mut pipe) = child.stdout.take() else { let _ = child.kill(); return TokenRead::Unavailable };
     // Drained on its own thread so a full pipe never stalls the child; the thread ends when the child's end closes.
-    let reader = std::thread::spawn(move || { let mut buf = Vec::new(); let _ = pipe.by_ref().take(4096).read_to_end(&mut buf); buf });
+    // It hands its buffer over a channel, so a process that inherited stdout and holds it open cannot stall us past the deadline.
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || { let mut buf = Vec::new(); let _ = pipe.by_ref().take(4096).read_to_end(&mut buf); let _ = tx.send(buf); });
     let deadline = Instant::now() + timeout;
     let code = loop {
         match child.try_wait() {
@@ -45,7 +47,7 @@ pub fn read(timeout: std::time::Duration) -> TokenRead {
             _ => { let _ = child.kill(); let _ = child.wait(); return TokenRead::Unavailable; }
         }
     };
-    match reader.join() { Ok(buf) => outcome(code, &buf), Err(_) => TokenRead::Unavailable }
+    match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) { Ok(buf) => outcome(code, &buf), Err(_) => TokenRead::Unavailable }
 }
 
 #[cfg(not(windows))]
