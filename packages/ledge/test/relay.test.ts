@@ -235,4 +235,14 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     expect(c.map.get('q2')!.status).toBe('sent');
     relay.close();
   });
+
+  it('a refused delivery with nothing else queued hands the free session to next', async () => {
+    store.upsert(mk('s1', { state: 'idle' }));
+    const c = fakeChat({ q1: otto('a') });
+    const next: string[] = []; answer = async () => 'refused';
+    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast, next: id => next.push(id) });
+    await expect(relay.request('q1')).rejects.toThrow('refused');
+    expect(next).toEqual(['s1']);
+    relay.close();
+  });
 });
