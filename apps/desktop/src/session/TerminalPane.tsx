@@ -27,7 +27,7 @@ export function TerminalPane({ client, session, notify }: { client: DaemonClient
           : <p className="muted">{tt.empty}</p>}
       </div>
       <div className="terminal-footer">
-        <span className={offline ? 'muted' : 'terminal-prompt'} aria-hidden="true">●</span>{offline ? tt.offline : tt.readOnly}
+        <span className={offline ? 'muted' : 'terminal-prompt'} aria-hidden="true">●</span>{offline ? tt.offline : tt.preview}
         {isTauri() && !offline && <><span className="spacer" /><Button variant="ghost" size="sm" onClick={open}>{tt.open}</Button></>}
       </div>
     </section>
