@@ -6,6 +6,9 @@ export type RelayLogEvent =
   | { ev: 'disconnect'; account: string; peer: string; code: number; ms: number; framesIn: number; framesOut: number; bytesIn: number; bytesOut: number }
   | { ev: 'refused'; reason: 'no_auth' | 'bad_path' | 'auth_error' | 'bad_peer' | 'timeout' | 'busy'; count: number }
   | { ev: 'http_error' }
+  | { ev: 'sign_in'; account: string; peer: string; kind: 'pc' | 'device' }
+  | { ev: 'sign_out'; account: string; peer: string }
+  | { ev: 'sign_in_refused'; reason: 'not_allowed' | 'denied' | 'expired' | 'bad_state' | 'github'; count: number }
   | { ev: 'frame_error'; account: string; peer: string; code: Extract<RelayServerMessage, { type: 'error' }>['code'] };
 
 export type RelayLog = (e: RelayLogEvent) => void;
