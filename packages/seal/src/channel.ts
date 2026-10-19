@@ -48,13 +48,18 @@ export async function startHandshake(self: Identity, role: Role, peerPublicKey: 
   const ss = await ecdh(self.privateKey, peerStatic);
   const eph = await subtle.generateKey(ECDH, false, ['deriveBits']);
   const ephRaw = new Uint8Array(await subtle.exportKey('raw', eph.publicKey));
+  let ephPrivate: CryptoKey | null = eph.privateKey;
 
   return {
     hello: b64u(ephRaw),
     async finish(peerHello: string): Promise<Channel> {
+      // One-shot: a second finish would yield a second channel with the same keys and nonces.
+      const priv = ephPrivate;
+      if (!priv) throw new SealError('bad_key', 'handshake already finished');
       const peerEph = await importPublicKey(peerHello);
+      ephPrivate = null;
       const peerEphRaw = fromB64u(peerHello);
-      const ee = await ecdh(eph.privateKey, peerEph);
+      const ee = await ecdh(priv, peerEph);
 
       const selfStaticRaw = fromB64u(self.publicKey);
       const peerStaticRaw = fromB64u(peerPublicKey);
@@ -74,12 +79,12 @@ export async function startHandshake(self: Identity, role: Role, peerPublicKey: 
           512,
         ),
       );
-      const aes = (raw: Uint8Array<ArrayBuffer>) =>
-        subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
-      const kPcToDevice = await aes(okm.slice(0, 32));
-      const kDeviceToPc = await aes(okm.slice(32, 64));
-      const sendKey = role === 'pc' ? kPcToDevice : kDeviceToPc;
-      const recvKey = role === 'pc' ? kDeviceToPc : kPcToDevice;
+      const aes = (raw: Uint8Array<ArrayBuffer>, usage: 'encrypt' | 'decrypt') =>
+        subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, [usage]);
+      const pcToDevice = okm.slice(0, 32);
+      const deviceToPc = okm.slice(32, 64);
+      const sendKey = await aes(role === 'pc' ? pcToDevice : deviceToPc, 'encrypt');
+      const recvKey = await aes(role === 'pc' ? deviceToPc : pcToDevice, 'decrypt');
 
       let sendSeq = 0;
       let recvSeq = 0;
@@ -89,13 +94,22 @@ export async function startHandshake(self: Identity, role: Role, peerPublicKey: 
         additionalData: concat(th, seq),
       });
 
-      return {
-        async seal(text) {
-          const seq = seqBytes(sendSeq++);
-          const ct = new Uint8Array(await subtle.encrypt(params(seq), sendKey, enc.encode(text)));
-          return b64u(concat(seq, ct));
-        },
-        async open(sealed) {
+      // Each direction runs one operation at a time so that seq order and
+      // resolution order are preserved; a rejection does not break the chain.
+      let sealChain: Promise<unknown> = Promise.resolve();
+      let openChain: Promise<unknown> = Promise.resolve();
+      const serial = <T>(chain: Promise<unknown>, task: () => Promise<T>): [Promise<T>, Promise<unknown>] => {
+        const run = chain.then(task);
+        return [run, run.catch(() => undefined)];
+      };
+
+      const sealOne = async (text: string): Promise<string> => {
+        const seq = seqBytes(sendSeq++);
+        const ct = new Uint8Array(await subtle.encrypt(params(seq), sendKey, enc.encode(text)));
+        return b64u(concat(seq, ct));
+      };
+
+      const openOne = async (sealed: string): Promise<string> => {
           const frame = fromB64u(sealed);
           if (frame.length < SEQ_BYTES + TAG_BYTES) throw new SealError('bad_seal', 'frame too short');
           const seq = frame.slice(0, SEQ_BYTES);
@@ -114,6 +128,18 @@ export async function startHandshake(self: Identity, role: Role, peerPublicKey: 
           } catch {
             throw new SealError('bad_seal', 'payload is not UTF-8');
           }
+      };
+
+      return {
+        seal(text) {
+          const [run, next] = serial(sealChain, () => sealOne(text));
+          sealChain = next;
+          return run;
+        },
+        open(sealed) {
+          const [run, next] = serial(openChain, () => openOne(sealed));
+          openChain = next;
+          return run;
         },
       };
     },

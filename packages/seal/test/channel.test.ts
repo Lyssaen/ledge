@@ -52,4 +52,38 @@ describe('channel', () => {
     const hp = await startHandshake(pc, 'pc', dev.publicKey);
     await expect(hp.finish('AAAA')).rejects.toMatchObject({ code: 'bad_key' });
   });
+  it('accepts a frame only once when opens run concurrently', async () => {
+    const { cpc, cdev } = await pair();
+    const a = await cpc.seal('a');
+    const r = await Promise.allSettled([cdev.open(a), cdev.open(a)]);
+    expect(r.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
+    const rejected = r.find((x) => x.status === 'rejected') as PromiseRejectedResult;
+    expect(rejected.reason).toMatchObject({ code: 'replay' });
+  });
+  it('opens in-order frames concurrently', async () => {
+    const { cpc, cdev } = await pair();
+    const a = await cpc.seal('a'), b = await cpc.seal('b');
+    expect(await Promise.all([cdev.open(a), cdev.open(b)])).toEqual(['a', 'b']);
+  });
+  it('resolves seals in seq order', async () => {
+    const { cpc, cdev } = await pair();
+    const order: string[] = [];
+    await Promise.all(Array.from({ length: 20 }, (_, i) => cpc.seal(`m${i}`).then((f) => void order.push(f))));
+    for (let i = 0; i < 20; i++) expect(await cdev.open(order[i]!)).toBe(`m${i}`);
+  });
+  it('finishes only once', async () => {
+    const pc = await generateIdentity(), dev = await generateIdentity();
+    const hp = await startHandshake(pc, 'pc', dev.publicKey);
+    const hd = await startHandshake(dev, 'device', pc.publicKey);
+    await hp.finish(hd.hello);
+    await expect(hp.finish(hd.hello)).rejects.toMatchObject({ code: 'bad_key' });
+  });
+  it('stays usable after a rejected frame', async () => {
+    const { cpc, cdev } = await pair();
+    const good = await cpc.seal('hello');
+    const bytes = fromB64u(good);
+    bytes[bytes.length - 1]! ^= 1;
+    await expect(cdev.open(b64u(bytes))).rejects.toMatchObject({ code: 'bad_seal' });
+    expect(await cdev.open(good)).toBe('hello');
+  });
 });
