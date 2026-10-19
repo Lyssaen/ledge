@@ -265,6 +265,9 @@ importers:
       '@ledge/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@ledge/seal':
+        specifier: workspace:*
+        version: link:../seal
       '@types/node':
         specifier: ^22.7.0
         version: 22.20.5
