@@ -35,7 +35,7 @@
 .room-menu button>span{display:flex;align-items:center;gap:8px}
 .room-menu button svg{color:var(--muted-foreground)}
 .project-room:has(.room-menu){z-index:6}
-.office-shell .office-rug .room-menu{transform:skewY(4deg);transform-origin:right bottom}
+.office-shell .rug-labels .room-menu{transform:skewY(4deg);transform-origin:right bottom}
 
 /* office.css, line 3: the shortcut hint, keyboard selection, the shell, the rug, the chairs, pause and full screen. */
 .seat-shortcut{display:none;font-family:'Geist Mono',monospace;font-size:9px;color:var(--muted-foreground);margin-left:5px}
@@ -128,24 +128,29 @@
 
 /* office.css, lines 146-151. */
 /* The project's label is woven into the rug, bottom-left; it shares the rug's skew. */
-.office-shell .office-rug .room-heading{position:absolute;left:14px;bottom:12px;margin:0;width:auto;max-width:calc(100% - 28px);padding:5px 6px 5px 10px;gap:6px;background:color-mix(in srgb,var(--sidebar) 88%,transparent);border:1px solid var(--input);box-shadow:0 2px 0 var(--border);border-radius:var(--radius-md);z-index:4}
-.office-shell .office-rug .room-heading .spacer{width:2px}
-.office-shell .office-rug .room-heading strong,.office-shell .office-rug .project-conversations{font-size:12px;font-weight:500}
+.office-shell .rug-labels .room-heading{position:absolute;left:14px;bottom:12px;margin:0;width:auto;max-width:calc(100% - 28px);padding:5px 6px 5px 10px;gap:6px;background:color-mix(in srgb,var(--sidebar) 88%,transparent);border:1px solid var(--input);box-shadow:0 2px 0 var(--border);border-radius:var(--radius-md);z-index:4}
+.office-shell .rug-labels .room-heading .spacer{width:2px}
+.office-shell .rug-labels .room-heading strong,.office-shell .rug-labels .project-conversations{font-size:12px;font-weight:500}
 .office-shell .table-scene{height:490px}
 
 /* office.css, lines 155-171. */
 /* Wider, flatter rugs: the label sits in the free bottom-left corner, and a long name is cut. */
-.office-shell .office-rug{top:-6px!important;bottom:6px!important}
+.office-shell .office-rug,.office-shell .rug-labels{top:-6px!important;bottom:6px!important}
+/* The label and « +N » lie on the rug but in their own layer: the rug's skew makes it a stacking context under the table,
+   so a menu opened from inside it would slide under the table, its legs and the seats. Open, the layer comes in front. */
+.rug-labels{position:absolute;top:80px;bottom:20px;border:1px solid transparent;transform:skewY(-4deg);pointer-events:none}
+.rug-labels>*{pointer-events:auto}
+.rug-labels:has(.room-menu){z-index:5}
 .office-shell .table-scene{height:446px!important}
-.office-shell .office-rug .room-heading{left:14px;bottom:10px;max-width:206px;padding:4px 4px 4px 9px;gap:5px}
-.office-shell .office-rug .project-conversations{flex-shrink:0;min-width:0;max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
-.office-shell .office-rug .heading-branch{flex:0 1 auto;min-width:0;max-width:64px;margin-left:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.office-shell .office-rug .room-heading>svg,.office-shell .office-rug .room-heading .icon-action{flex-shrink:0}
-.office-shell .office-rug .room-heading .side-swatch{margin:0 2px 0 0}
-.office-shell .office-rug .room-heading .icon-action{width:22px;height:22px}
+.office-shell .rug-labels .room-heading{left:14px;bottom:10px;max-width:206px;padding:4px 4px 4px 9px;gap:5px}
+.office-shell .rug-labels .project-conversations{flex-shrink:0;min-width:0;max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.office-shell .rug-labels .heading-branch{flex:0 1 auto;min-width:0;max-width:64px;margin-left:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.office-shell .rug-labels .room-heading>svg,.office-shell .rug-labels .room-heading .icon-action{flex-shrink:0}
+.office-shell .rug-labels .room-heading .side-swatch{margin:0 2px 0 0}
+.office-shell .rug-labels .room-heading .icon-action{width:22px;height:22px}
 .heading-names{display:flex;align-items:baseline;gap:4px;min-width:0}
-.office-shell .office-rug .heading-names{flex-direction:column;align-items:flex-start;gap:0;line-height:14px}
-.office-shell .office-rug .heading-branch{max-width:118px;font-size:9px;line-height:12px}
+.office-shell .rug-labels .heading-names{flex-direction:column;align-items:flex-start;gap:0;line-height:14px}
+.office-shell .rug-labels .heading-branch{max-width:118px;font-size:9px;line-height:12px}
 /* Rugs now reach the top seats; with the skew, rows need air between them. */
 .office-shell .project-room{margin:26px 0 30px!important}
 /* Full screen: no width cap, the zoom computed in App fills the screen. */
@@ -155,9 +160,9 @@
 /* Several sub-agents on one parent: the sticky note counts the others. */
 .note-more{position:absolute;right:-6px;bottom:-6px;min-width:16px;height:14px;padding:0 3px;border-radius:999px;background:var(--card);border:1px solid var(--input);font:600 8px/12px 'Geist Mono',monospace;font-style:normal;text-align:center;color:var(--foreground)}
 /* Overflow, on the rug's bottom-right corner (mirror of the project label): who else sits at this table. */
-.office-rug .table-more{position:absolute;right:14px;bottom:10px;z-index:4;display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 10px 0 5px;border:1px solid var(--input);border-radius:999px;background:color-mix(in srgb,var(--sidebar) 90%,transparent);box-shadow:0 2px 0 var(--border);font-size:11px;font-weight:500;color:var(--muted-foreground);white-space:nowrap}
-.office-rug .table-more:hover{color:var(--foreground);border-color:var(--ring)}
-.office-rug .table-more:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.rug-labels .table-more{position:absolute;right:14px;bottom:10px;z-index:4;display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 10px 0 5px;border:1px solid var(--input);border-radius:999px;background:color-mix(in srgb,var(--sidebar) 90%,transparent);box-shadow:0 2px 0 var(--border);font-size:11px;font-weight:500;color:var(--muted-foreground);white-space:nowrap}
+.rug-labels .table-more:hover{color:var(--foreground);border-color:var(--ring)}
+.rug-labels .table-more:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 .more-faces{display:flex}
 .more-faces i{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--secondary);border:1.5px solid var(--sidebar);margin-left:-7px;overflow:hidden}
 .more-faces i:first-child{margin-left:0}

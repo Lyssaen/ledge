@@ -160,7 +160,7 @@ describe('the filing styles', () => {
     const hint = declarations('atelier.css', '.drop-hint');
     for (const decl of ['min-width:0', 'overflow:hidden', 'text-overflow:ellipsis', 'white-space:nowrap']) expect(hint).toContain(decl);
     // its flex parent is capped by the rug, and the label's names shrink too
-    expect(declarations('atelier.css', '.office-shell .office-rug .room-heading')).toContain('max-width:calc(100%-28px)');
+    expect(declarations('atelier.css', '.office-shell .rug-labels .room-heading')).toContain('max-width:calc(100%-28px)');
     expect(declarations('atelier.css', '.heading-names')).toContain('min-width:0');
     expect(declarations('atelier.css', '.task-sheet p')).toContain('overflow-wrap:anywhere');
     const menu = declarations('atelier.css', '.assign-menu');
