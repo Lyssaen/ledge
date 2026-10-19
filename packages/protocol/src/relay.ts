@@ -19,6 +19,12 @@ export const RelayServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('welcome'), accountId: z.string(), self: RelayPeerSchema, online: z.array(RelayPeerSchema) }),
   z.object({ type: z.literal('deliver'), from: RelayPeerSchema, body: z.string() }),
   z.object({ type: z.literal('presence'), peer: RelayPeerSchema, online: z.boolean() }),
+  /**
+   * A frame was refused; `to` names the target when it is known.
+   * Contract: an error concerning a sealed body (`offline`, `too_large`, or a socket closed with 4008
+   * `rate_limited`) means that body was not delivered, so the sequence on that channel is lost: the
+   * sender must re-handshake with that peer before sending to it again.
+   */
   z.object({
     type: z.literal('error'),
     code: z.enum(['bad_frame', 'too_large', 'bad_target', 'offline', 'rate_limited']),
