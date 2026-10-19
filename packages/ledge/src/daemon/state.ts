@@ -62,10 +62,20 @@ function mergePending(current: Pending | undefined, incoming: Pending): Pending 
 }
 
 /** The tool whose PostToolUse means a hook pending was answered (in the terminal or from Ledge). */
-function pendingTool(p: Pending): string | undefined {
+export function pendingTool(p: Pending): string | undefined {
   if (p.kind === 'question') return p.tool ?? 'AskUserQuestion';
   if (p.kind === 'plan') return 'ExitPlanMode';
   return p.tool;
+}
+
+/**
+ * The hook that says a request typed from Ledge was taken: the PostToolUse (or its failure) of the tool it is for,
+ * from the same requester. Nothing for a request no tool is tied to (the pane's, a Notification's): the screen tells.
+ */
+export function answeredBy(p: Pending, ev: SessionEvent): boolean {
+  if (p.source !== 'hook' || (ev.name !== 'PostToolUse' && ev.name !== 'PostToolUseFailure')) return false;
+  const tool = pendingTool(p);
+  return tool !== undefined && ev.tool === tool && ev.helperId === p.helperId;
 }
 
 /** A pane pending or a tool-less one (from a Notification) cannot be matched to a tool: any tool run ends it. */

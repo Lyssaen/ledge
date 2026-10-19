@@ -94,3 +94,31 @@ export function claudePlan(path: string): string | undefined {
   }
   return plan?.text;
 }
+
+type ToolBlock = { type?: string; id?: string; name?: string; tool_use_id?: string };
+/** The main thread's tool calls in the transcript, each with whether its result came. */
+function claudeCalls(path: string): Array<{ id: string; name: string; answered: boolean }> {
+  const calls: Array<{ id: string; name: string; answered: boolean }> = [];
+  for (const line of tailLines(path)) {
+    let e: { type?: string; isSidechain?: boolean; message?: { content?: unknown } };
+    try { e = JSON.parse(line); } catch { continue; }
+    if (e.isSidechain === true || !Array.isArray(e.message?.content)) continue;
+    for (const b of e.message!.content as ToolBlock[]) {
+      if (e.type === 'assistant' && b?.type === 'tool_use' && typeof b.id === 'string' && typeof b.name === 'string') calls.push({ id: b.id, name: b.name, answered: false });
+      else if (e.type === 'user' && b?.type === 'tool_result') { const c = calls.find(c => c.id === b.tool_use_id); if (c) c.answered = true; }
+    }
+  }
+  return calls;
+}
+
+/** The call of `tool` Claude Code waits on (the dialog on screen is its own): the last main-thread one, when it has no
+ *  result yet. Claude Code writes the call before it asks. */
+export function claudeOpenCall(path: string, tool: string): string | undefined {
+  const last = claudeCalls(path).filter(c => c.name === tool).at(-1);
+  return last && !last.answered ? last.id : undefined;
+}
+
+/** Whether the call `id` has its result in the transcript: the agent took the answer (#35). */
+export function claudeToolAnswered(path: string, id: string): boolean {
+  return claudeCalls(path).some(c => c.id === id && c.answered);
+}

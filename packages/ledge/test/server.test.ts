@@ -627,7 +627,7 @@ describe('server', () => {
     async function denyWithNote(panes: string[]) {
       tmux = fakeTmux({ 'ledge-a': panes }); await srv.close();
       const history = new History({ dir: tmpDir() });
-      srv = await startServer({ store, tmux, port: 0, history, untilMs: 300, verify: { attempts: 2, intervalMs: 20 } });
+      srv = await startServer({ store, tmux, port: 0, history, untilMs: 300, verify: { attempts: 2, intervalMs: 20 }, confirmMs: 400 });
       store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'mkdir zz-ledge-probe', tool: 'Bash', source: 'hook' } }));
       store.apply('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'mkdir zz-ledge-probe' });
       const c = await connect({ port: srv.port }); await c.next('snapshot');
@@ -778,6 +778,71 @@ describe('server', () => {
       const c = await answer([fx('claude2-question-multi-review'), fx('claude2-idle')], { kind: 'question', text: 'Ready to submit your answers?', source: 'pane' });
       await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
       expect(tmux.sent).toEqual([['text', 'ledge-a', '1']]);
+      c.close();
+    });
+  });
+
+  describe('Claude Code: a reply confirmed by its PostToolUse or its tool_result, not by the screen (#35)', () => {
+    // The dialog stays drawn as it was: read alone, the screen would call every answer not taken.
+    const question = { kind: 'question' as const, text: 'Which?', options: ['Red', 'Blue'], source: 'hook' as const };
+    const call = (id: string) => JSON.stringify({ type: 'assistant', uuid: 'u1', timestamp: T0, message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'AskUserQuestion', input: {} }] } });
+    const result = (id: string) => JSON.stringify({ type: 'user', uuid: 'u2', timestamp: T0, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'Your questions have been answered' }] } });
+    async function reply(pending: Session['pending'], extra: Partial<Session> = {}) {
+      tmux = fakeTmux({ 'ledge-a': [QUESTION] }); await srv.close();
+      srv = await startServer({ store, tmux, port: 0, verify: { attempts: 2, intervalMs: 20 }, confirmMs: 400 });
+      store.upsert(mk('a', { state: 'waiting_input', pending, ...extra }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.reply', id: 'a', text: '1' });
+      await vi.waitFor(() => expect(tmux.sent).toEqual([['text', 'ledge-a', '1']]), { timeout: 2000 });
+      return c;
+    }
+    /** Past the confirmation window: a reply not confirmed by then is an error. */
+    const settle = () => new Promise(r => setTimeout(r, 600));
+    it('a question is answered once its PostToolUse comes, whatever the screen shows', async () => {
+      const c = await reply(question);
+      c.send({ type: 'session.event', id: 'a', event: { name: 'PostToolUse', at: T0, source: 'hook', tool: 'AskUserQuestion' } });
+      await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
+      await settle();
+      expect(store.get('a')).toMatchObject({ state: 'working' });
+      expect(store.get('a')?.lastError).toBeUndefined();
+      c.close();
+    });
+    it('or once its tool_result is in the transcript', async () => {
+      const transcriptPath = join(mkdtempSync(join(tmpdir(), 'ledge-tr-')), 't.jsonl');
+      writeFileSync(transcriptPath, call('toolu_1') + '\n');
+      const c = await reply(question, { transcriptPath });
+      writeFileSync(transcriptPath, [call('toolu_1'), result('toolu_1')].join('\n') + '\n');
+      await vi.waitFor(() => expect(store.get('a')?.state).toBe('working'), { timeout: 2000 });
+      await settle();
+      expect(store.get('a')?.state).toBe('working');
+      expect(store.get('a')?.pending).toBeUndefined();
+      c.close();
+    });
+    it('a permission decided from Ledge lands in the thread once its PostToolUse comes', async () => {
+      const history = new History({ dir: tmpDir() });
+      tmux = fakeTmux({ 'ledge-a': [bashPrompt('mkdir x')] }); await srv.close();
+      srv = await startServer({ store, tmux, port: 0, history, verify: { attempts: 2, intervalMs: 20 }, confirmMs: 400 });
+      store.upsert(mk('a', { state: 'working' }));
+      store.apply('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'mkdir x' });
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+      await vi.waitFor(() => expect(tmux.sent.length).toBeGreaterThan(0), { timeout: 2000 });
+      c.send({ type: 'session.event', id: 'a', event: { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Bash' } });
+      await vi.waitFor(() => expect(history.items('a').find(i => i.kind === 'permission')).toMatchObject({ decision: 'accept' }), { timeout: 2000 });
+      await settle();
+      expect(store.get('a')?.state).toBe('working');
+      c.close();
+    });
+    it('another tool\'s PostToolUse confirms nothing: not taken, as before', async () => {
+      const c = await reply(question);
+      c.send({ type: 'session.event', id: 'a', event: { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Read', helperId: 'h1' } });
+      await vi.waitFor(() => expect(store.get('a')?.state).toBe('error'), { timeout: 2000 });
+      expect(store.get('a')?.lastError).toBe('the terminal did not take it');
+      c.close();
+    });
+    it('a pane request keeps the screen\'s answer: no hook can name it', async () => {
+      const c = await reply({ ...question, source: 'pane' });
+      await vi.waitFor(() => expect(store.get('a')?.state).toBe('error'), { timeout: 2000 });
       c.close();
     });
   });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Session, SessionEvent, SessionState } from '@ledge/protocol';
-import { reduce, HOOK_PRIORITY_MS } from '../src/daemon/state.js';
+import { reduce, answeredBy, HOOK_PRIORITY_MS } from '../src/daemon/state.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const later = (ms: number) => new Date(Date.parse(T0) + ms).toISOString();
@@ -690,5 +690,27 @@ describe('the agent conversation id', () => {
     const s = reduce(session('exited'), ev('SessionEnd', { agentSessionId: 'late' }));
     expect(s.agentSessionId).toBe('late');
     expect(s.state).toBe('exited');
+  });
+});
+
+describe('answeredBy: the hook that confirms a reply typed from Ledge (#35)', () => {
+  const question = { kind: 'question' as const, text: 'Quel est l objectif ?', source: 'hook' as const };
+  const bash = { kind: 'permission' as const, text: 'mkdir x', tool: 'Bash', source: 'hook' as const };
+  it('the PostToolUse of the pending tool, success or failure', () => {
+    expect(answeredBy(question, ev('PostToolUse', { tool: 'AskUserQuestion' }))).toBe(true);
+    expect(answeredBy(bash, ev('PostToolUse', { tool: 'Bash' }))).toBe(true);
+    expect(answeredBy(bash, ev('PostToolUseFailure', { tool: 'Bash' }))).toBe(true);
+    expect(answeredBy({ kind: 'plan', text: 'p', source: 'hook' }, ev('PostToolUse', { tool: 'ExitPlanMode' }))).toBe(true);
+  });
+  it('not another tool, another event, an interrupt or another requester', () => {
+    expect(answeredBy(bash, ev('PostToolUse', { tool: 'Read' }))).toBe(false);
+    expect(answeredBy(bash, ev('PreToolUse', { tool: 'Bash' }))).toBe(false);
+    expect(answeredBy(bash, ev('PostToolUseFailure', { interrupt: true }))).toBe(false);
+    expect(answeredBy(bash, ev('PostToolUse', { tool: 'Bash', helperId: 'h1' }))).toBe(false);
+    expect(answeredBy({ ...bash, helperId: 'h1' }, ev('PostToolUse', { tool: 'Bash', helperId: 'h1' }))).toBe(true);
+  });
+  it('nothing for a request no tool is tied to: the pane\'s, or a Notification\'s', () => {
+    expect(answeredBy({ ...question, source: 'pane' }, ev('PostToolUse', { tool: 'AskUserQuestion' }))).toBe(false);
+    expect(answeredBy({ kind: 'permission', text: 'Claude needs your permission', source: 'hook' }, ev('PostToolUse', { tool: 'Bash' }))).toBe(false);
   });
 });

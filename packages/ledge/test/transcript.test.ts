@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { agentMessages, claudePlan, claudeTranscriptPath, codexPlan, tailLines, TAIL_BYTES } from '../src/daemon/transcript.js';
+import { agentMessages, claudeOpenCall, claudePlan, claudeToolAnswered, claudeTranscriptPath, codexPlan, tailLines, TAIL_BYTES } from '../src/daemon/transcript.js';
 
 let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ledge-')); });
@@ -99,5 +99,26 @@ describe('Claude Code transcript without hooks', () => {
     writeFileSync(p, [exit('toolu_1', '# Old plan'), entry('user', [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ok' }])].join('\n') + '\n');
     expect(claudePlan(p)).toBeUndefined();
     expect(claudePlan(join(dir, 'none.jsonl'))).toBeUndefined();
+  });
+});
+
+describe('Claude Code transcript: the call a request waits on (#35)', () => {
+  const entry = (type: string, content: unknown[], extra: Record<string, unknown> = {}) => JSON.stringify({ type, uuid: `${type}-${Math.random()}`, timestamp: '2026-10-19T09:20:41.699Z', message: { role: type, content }, ...extra });
+  const ask = (id: string) => entry('assistant', [{ type: 'tool_use', id, name: 'AskUserQuestion', input: { questions: [] } }]);
+  const result = (id: string) => entry('user', [{ type: 'tool_result', tool_use_id: id, content: 'Your questions have been answered' }]);
+  it('the open call is the last main-thread call of the tool without a result', () => {
+    const p = join(dir, 'calls.jsonl');
+    writeFileSync(p, [ask('toolu_1'), result('toolu_1'), ask('toolu_2'), JSON.stringify({ ...JSON.parse(ask('toolu_3')), isSidechain: true })].join('\n') + '\n');
+    expect(claudeOpenCall(p, 'AskUserQuestion')).toBe('toolu_2');
+    expect(claudeOpenCall(p, 'Bash')).toBeUndefined();
+    expect(claudeToolAnswered(p, 'toolu_2')).toBe(false);
+    expect(claudeToolAnswered(p, 'toolu_1')).toBe(true);
+  });
+  it('no open call once the last one has its result, nor without a file', () => {
+    const p = join(dir, 'answered.jsonl');
+    writeFileSync(p, [ask('toolu_1'), result('toolu_1')].join('\n') + '\n');
+    expect(claudeOpenCall(p, 'AskUserQuestion')).toBeUndefined();
+    expect(claudeOpenCall(join(dir, 'none.jsonl'), 'AskUserQuestion')).toBeUndefined();
+    expect(claudeToolAnswered(join(dir, 'none.jsonl'), 'toolu_1')).toBe(false);
   });
 });

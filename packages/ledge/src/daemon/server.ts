@@ -3,7 +3,7 @@ import type { Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type Decision, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
@@ -11,6 +11,8 @@ import { adapterFor, type KeyPlan } from '../adapters/index.js';
 import { STALE, bottomLines, dialogMismatch } from '../adapters/types.js';
 import { verifyGone } from '../adapters/verify.js';
 import { DETECT_LINES } from './poller.js';
+import { answeredBy, pendingTool } from './state.js';
+import { claudeOpenCall, claudeToolAnswered } from './transcript.js';
 import { pickName } from '../names.js';
 import { spawnSession } from '../spawn.js';
 import { inspectRepos } from './repos.js';
@@ -126,7 +128,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -245,6 +247,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   }
 
   const inFlight = new Set<string>();
+  /**
+   * How long an answer to a request tied to a tool (a hook's, Claude Code) waits for its PostToolUse or its tool_result,
+   * the screen read meanwhile: a tool may take a moment to run after its approval.
+   */
+  const CONFIRM_MS = opts.confirmMs ?? 3000;
+  /** The answers typed from Ledge that wait for their hook, by session: the hook that comes settles the request at once. */
+  const awaited = new Map<string, { pending: Pending; decision?: Decision; settled: boolean; byHook: boolean }>();
+  /** A hook that confirms an awaited answer settles its request before it is applied: `Decided` (with the decision, so
+   *  the thread names it) first, the PostToolUse on top. A request replaced meanwhile is left alone. */
+  function settleByHook(id: string, ev: SessionEvent): void {
+    const a = awaited.get(id); const cur = store.get(id)?.pending;
+    if (!a || a.settled || !answeredBy(a.pending, ev) || !cur || pendingKey(cur) !== pendingKey(a.pending)) return;
+    a.settled = true; a.byHook = true;
+    store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(a.decision ? { decision: a.decision } : {}) });
+  }
 
   /**
    * With `requirePrompt`, fail closed: the prompt must be on screen before anything is typed, else a
@@ -281,9 +298,25 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       const plan = typeof planFor === 'function' ? planFor(before ?? '') : planFor;
       // An adapter that can tell one prompt from the next reads more of the pane: a new prompt is not a failed answer.
-      const promptGone = () => decided && adapter.promptGone
-        ? verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => !adapter.promptGone!(p, decided), opts.verify)
-        : verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), p => adapter.promptStillVisible(bottomLines(p)), opts.verify);
+      const stillShown = (p: string) => decided && adapter.promptGone ? !adapter.promptGone(p, decided) : adapter.promptStillVisible(bottomLines(p));
+      // A Claude Code request a hook tied to a tool is confirmed by that tool's PostToolUse or its tool_result (#35); the
+      // screen, read meanwhile, still tells a step the tool does not end (question 1 of several). Any other: the screen.
+      const tool = s.tool === 'claude' && decided?.source === 'hook' ? pendingTool(decided) : undefined;
+      const answer = tool ? { pending: decided!, ...(decision ? { decision } : {}), settled: false, byHook: false } : undefined;
+      const transcript = tool && !decided!.helperId && s.transcriptPath ? s.transcriptPath : undefined;
+      const call = transcript ? claudeOpenCall(transcript, tool!) : undefined;
+      const promptGone = async (): Promise<boolean> => {
+        if (!answer) return verifyGone(() => tmux.capture(s.tmuxSession!, DETECT_LINES), stillShown, opts.verify);
+        const interval = opts.verify?.intervalMs ?? 200;
+        for (const end = Date.now() + CONFIRM_MS; ;) {
+          if (answer.byHook || (call && claudeToolAnswered(transcript!, call))) return true;
+          const pane = await tmux.capture(s.tmuxSession!, DETECT_LINES);
+          if (answer.byHook || (pane !== null && !stillShown(pane))) return true; // a failed capture is never "gone"
+          if (Date.now() >= end) return false;
+          await new Promise(r => setTimeout(r, interval));
+        }
+      };
+      if (answer) awaited.set(id, answer);
       try { await runPlan(s, plan); }
       catch (e) {
         // The deny keys went and the input box never came back for the note: if the request is gone, the refusal
@@ -291,21 +324,25 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // if it stays, nothing was refused.
         if (e instanceof NoteNotTyped) {
           if (await promptGone()) {
-            if (stillTheSame()) store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) });
+            if (answer) answer.settled = true;
+            if (!answer?.byHook && stillTheSame()) store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) });
             throw e;
           }
           e = new Error(NOT_TAKEN);
         }
+        if (answer?.byHook) return true; // a later step failed, but the agent took the answer: its hook says so
         store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: (e as Error).message });
         throw e;
       }
       const gone = await promptGone();
+      if (answer) answer.settled = true;
+      if (answer?.byHook) return true; // its hook settled it
       if (!stillTheSame()) return false; // a newer prompt arrived meanwhile: leave it alone
       if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) }); return true; }
       // The client gets an `error` reply for that id (via the caller's catch), so a retry from `error` reads as failed.
       store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: NOT_TAKEN });
       throw new Error(NOT_TAKEN);
-    } finally { inFlight.delete(id); }
+    } finally { inFlight.delete(id); awaited.delete(id); }
   }
 
   const READ_ONLY = 'session started without ledge, read only';
@@ -481,7 +518,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
           store.upsert(base);
           store.apply(msg.id, msg.event); // through apply, so the history sees the session's first event too
-        } else store.apply(msg.id, msg.event);
+        } else { settleByHook(msg.id, ev); store.apply(msg.id, msg.event); }
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
         return;
       }
