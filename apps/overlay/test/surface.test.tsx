@@ -6,6 +6,7 @@ import { createDaemonClient } from '../src/daemon/client';
 import { attachClient, daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
 import { DEFAULT_SOUNDS, resetSoundPrefsForTests } from '../src/sounds/preferences';
+import { LangProvider } from '../src/i18n/lang';
 import { MESSAGES } from '../src/i18n/messages';
 import { filetWidth, islandWidth, ISLAND } from '../src/surface/geometry';
 import { SHOULDER_R, STRIP_SHOULDER_R } from '../src/surface/Shoulders';
@@ -27,6 +28,13 @@ const pim = (extra = {}) => fakeSession('b', { name: 'Pim', tool: 'codex', proje
 const pimAsks = () => pim({ state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } });
 
 describe('<Surface>', () => {
+  it('the notch says the daemon is too old instead of unreachable', () => {
+    act(() => { daemonStore.setStatus('unreachable'); });
+    render(<LangProvider lang="fr"><Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} daemonOutdated /></LangProvider>);
+    expect(screen.getByText('Démon Ledge à mettre à jour · voir Ledge Desktop')).toBeInTheDocument();
+    expect(screen.queryByText(MESSAGES.fr.unreachable)).toBeNull();
+  });
+
   it('starts as the handle sized to the team', () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     expect(surface()).toHaveStyle({ width: `${filetWidth([2])}px` });

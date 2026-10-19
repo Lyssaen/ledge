@@ -4,6 +4,7 @@
  *   focus_terminal { title }           bring the matching terminal window forward (true when found)
  *   open_terminal { title, command }   open a Windows Terminal tab running `command` in WSL (true once spawned)
  *   open_url { url }                   open a web URL in the default browser
+ *   daemon_token                       the per-user daemon token read from WSL: { kind: 'token', token } | { kind: 'absent' } | { kind: 'unavailable' }
  *   get_autostart / set_autostart { on }   launch at login (null: not offered)
  *   foreground_is_terminal             whether a terminal window is in front (sounds: « only when the terminal is behind »)
  *   set_tray_labels { open, newSession, dnd, quit }   tray entries in the app's language
@@ -13,6 +14,7 @@
  *   window minimize / toggleMaximize / close / isMaximized / onResized   the title bar's buttons (decorations are off)
  */
 import { listen } from '@tauri-apps/api/event';
+import { createTokenSource, type TokenRead, type TokenSource } from '@ledge/fleet';
 
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 export const TRAY_EVENT = 'ledge://tray';
@@ -24,6 +26,17 @@ const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T
   core ??= import('@tauri-apps/api/core');
   return (await core).invoke<T>(cmd, args);
 };
+
+/** The daemon token this window presents: one source per window, so the client and the notice share the reads. Inside Tauri
+ *  it asks the shell (`daemon_token`); in a browser it is `VITE_LEDGE_TOKEN` when set, else none (tokenless, as dev, demo and e2e). */
+let tokenSource: TokenSource | undefined;
+export function daemonTokenSource(): TokenSource | undefined {
+  if (tokenSource) return tokenSource;
+  if (isTauri()) return (tokenSource = createTokenSource(() => invoke<TokenRead>('daemon_token')));
+  const fixed = import.meta.env.VITE_LEDGE_TOKEN as string | undefined;
+  if (fixed) return (tokenSource = createTokenSource(async () => ({ kind: 'token', token: fixed })));
+  return undefined;
+}
 
 /** Brings the terminal window whose title matches `title` forward; true when one was found (always false in the browser). */
 export async function focusTerminal(title: string): Promise<boolean> {

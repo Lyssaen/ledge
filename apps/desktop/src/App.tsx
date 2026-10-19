@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { daemonStore, projectOf, useDaemon, useIsland, useProjects, type DaemonClient } from '@ledge/fleet';
+import { daemonStore, projectOf, useDaemon, useIsland, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -11,7 +11,8 @@ import { getDnd, setDnd, useDnd } from './notify/prefs';
 import { MarkdownLinks } from '@ledge/ui/documents/links';
 // The reader's styles stay in the first bundle, before app.css (as when the reader itself was there): session.css overrides them.
 import '@ledge/ui/documents/markdown.css';
-import { onOpenTarget, onTrayAction, openUrl, setTrayLabels } from './tauri/bridge';
+import { DaemonOutdated } from './shell/DaemonOutdated';
+import { daemonTokenSource, onOpenTarget, onTrayAction, openUrl, setTrayLabels } from './tauri/bridge';
 import { parseTarget, targetAction } from './open/target';
 import { useAppearance } from './shell/theme';
 import { initialNav, navReducer, reconcile, type NavAction, type NavState } from './nav/state';
@@ -63,6 +64,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
   const projects = useProjects(fleetClient);
   const island = useIsland(fleetClient);
+  const tokenMissing = useTokenMissing(daemonTokenSource());
   const { t, lang } = useI18n();
   const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
   // The header's Archived pill bumps this; Archives unfolds and scrolls on each change (0 never counts).
@@ -219,6 +221,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
           onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent} />
         <section className="workspace">
+          {tokenMissing && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
             onRevealArchives={() => setRevealArchives(n => n + 1)}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />

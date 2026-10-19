@@ -47,3 +47,31 @@ describe('in the app', () => {
     expect(notification.sendNotification).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('the daemon token source', () => {
+  // The source is a module singleton: each case loads a fresh module.
+  const fresh = async () => { vi.resetModules(); return import('../src/tauri/bridge'); };
+  afterEach(() => { vi.unstubAllEnvs(); });
+
+  it('no token source outside Tauri without VITE_LEDGE_TOKEN', async () => {
+    expect((await fresh()).daemonTokenSource()).toBeUndefined();
+  });
+
+  it('VITE_LEDGE_TOKEN gives a fixed token', async () => {
+    vi.stubEnv('VITE_LEDGE_TOKEN', 'ab12');
+    const source = (await fresh()).daemonTokenSource()!;
+    expect(await source.get(false)).toEqual({ kind: 'token', token: 'ab12' });
+    expect(core.invoke).not.toHaveBeenCalled();
+  });
+
+  it('inside Tauri the source asks daemon_token, once per window', async () => {
+    inTauri();
+    core.invoke.mockResolvedValue({ kind: 'absent' });
+    const bridge = await fresh();
+    const source = bridge.daemonTokenSource()!;
+    expect(bridge.daemonTokenSource()).toBe(source);
+    expect(await source.get(false)).toEqual({ kind: 'absent' });
+    expect(core.invoke).toHaveBeenCalledWith('daemon_token', undefined);
+    expect(source.missing()).toBe(true);
+  });
+});

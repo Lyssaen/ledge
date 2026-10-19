@@ -96,6 +96,8 @@ export interface SurfaceProps {
   soundPlayer?: SoundPlayer;
   /** The version Ledge Desktop found and has not installed (null: none): the « new version » pip on the island. */
   desktopUpdate?: string | null;
+  /** The daemon refuses this Ledge for lack of a token (an older daemon): the status line says to update it. */
+  daemonOutdated?: boolean;
   /** The island's settings from Ledge Desktop (atelier spec §7): hidden, nothing is drawn and nothing takes the mouse, the
    *  asks are still counted; `shows` says what it shows besides asks and questions; the shortcut is only shown. */
   visible?: boolean; shows?: IslandPrefs['shows']; shortcut?: string;
@@ -104,7 +106,7 @@ export interface SurfaceProps {
 /** A text field or editable content: focus there means someone is filling it in. Radios, buttons and rows are not. */
 const isEditable = (el: Element | null) => !!el && ((el.tagName === 'INPUT' && !['radio', 'checkbox', 'button', 'submit'].includes((el as HTMLInputElement).type)) || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable);
 
-export function Surface({ screenH, screenW = window.innerWidth, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, monitors, monitor = null, onMonitor, onSettingsOpen, accent = null, onAccent, soundPlayer, islandPosition = 'center', onIslandPosition, discreet = true, onDiscreet, desktopUpdate = null, visible = true, shows = DEFAULT_ISLAND_PREFS.shows, shortcut }: SurfaceProps) {
+export function Surface({ screenH, screenW = window.innerWidth, theme, client, dnd, onToggleDnd, onToggleTheme, handleScale = 1, panelScale = 1, scales, autoScales, onScale, monitors, monitor = null, onMonitor, onSettingsOpen, accent = null, onAccent, soundPlayer, islandPosition = 'center', onIslandPosition, discreet = true, onDiscreet, desktopUpdate = null, daemonOutdated = false, visible = true, shows = DEFAULT_ISLAND_PREFS.shows, shortcut }: SurfaceProps) {
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
@@ -808,7 +810,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
         }} />
       </div>
       <div data-zoom="status" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-        {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: statusLeft / hs, top: statusTop / hs, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{t.unreachable}</div>}
+        {unreachable && <div ref={statusRef} role="status" style={{ position: 'absolute', left: statusLeft / hs, top: statusTop / hs, fontSize: 12, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{daemonOutdated ? t.daemonOutdated : t.unreachable}</div>}
       </div>
       <div aria-live="polite" role="status" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{handoff}</div>
     </>
