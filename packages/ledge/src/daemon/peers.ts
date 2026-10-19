@@ -23,9 +23,12 @@ export function readPeers(dir: string = defaultDir()): ClaudePeer[] {
   return names.filter(n => n.endsWith('.json')).flatMap(n => parsePeer(join(dir, n)) ?? []);
 }
 
+/** A session name without the ` [ref]` Claude's peer list appends to it (`Pim [ab12]` → `Pim`). */
+export const bareName = (name: string): string => name.replace(/ \[[^\]]*\]$/, '');
+
 /** The Ledge session a peer name (`name` or `name [ref]`) or address (`uds:…/<pid>.sock`) belongs to. */
 export function peerFor(target: string, peers: readonly ClaudePeer[], sessions: readonly Session[], dir: string = defaultDir()): Session | undefined {
-  const name = target.replace(/ \[[^\]]*\]$/, '');
+  const name = bareName(target);
   const found = peers.filter(p => p.name === name || p.address === name);
   if (!found.length && name.startsWith('uds:') && name.endsWith('.sock')) {
     const pid = basename(name, '.sock');
@@ -41,6 +44,6 @@ export function peerFor(target: string, peers: readonly ClaudePeer[], sessions: 
 
 /** The Ledge session a message to `target` goes to: Claude's peer when it is one, else the live session of that Ledge name. */
 export function ledgePeer(target: string, peers: readonly ClaudePeer[], sessions: readonly Session[]): Session | undefined {
-  const name = target.replace(/ \[[^\]]*\]$/, '');
+  const name = bareName(target);
   return peerFor(target, peers, sessions) ?? sessions.find(s => s.name === name && s.state !== 'exited');
 }

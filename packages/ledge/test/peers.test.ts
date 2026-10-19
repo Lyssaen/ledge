@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
-import { readPeers, peerFor, ledgePeer } from '../src/daemon/peers.js';
+import { readPeers, peerFor, ledgePeer, bareName } from '../src/daemon/peers.js';
 
 const ID = 'de4ebbac-117e-4827-9eba-e0db4bb23687';
 const sock = '/run/user/1000/cc-socks/304399.sock';
@@ -63,5 +63,14 @@ describe('ledgePeer: a peer by its Ledge name', () => {
     expect(ledgePeer('Pim [ab12]', [], [codex])).toBe(codex);
     expect(ledgePeer('Pim', [], [fake({ id: 'c', name: 'Pim', state: 'exited' })])).toBeUndefined();
     expect(ledgePeer('Ghost', [], [codex])).toBeUndefined();
+  });
+});
+
+describe('bareName', () => {
+  it('drops a trailing ` [ref]` only', () => {
+    expect(bareName('Pim [ab12]')).toBe('Pim');
+    expect(bareName('Pim')).toBe('Pim');
+    expect(bareName('a [b] c')).toBe('a [b] c');
+    expect(bareName('uds:/x/1.sock [7e2ea7]')).toBe('uds:/x/1.sock');
   });
 });

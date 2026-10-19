@@ -4,6 +4,7 @@ import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
 import { codexPlan } from '../daemon/transcript.js';
 import { gitInfo } from '../daemon/git.js';
+import { bareName } from '../daemon/peers.js';
 import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
@@ -385,7 +386,7 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
   const left = () => Math.max(0, deadline - Date.now());
   const to = input.to as string;
   const snapshot = await client.next('snapshot', left());
-  const tool = snapshot.sessions.find(s => s.name === to.replace(/ \[[^\]]*\]$/, ''))?.tool;
+  const tool = snapshot.sessions.find(s => s.name === bareName(to))?.tool;
   const summary = str(input.summary);
   const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to, text: input.message as string, ...(summary ? { summary } : {}), intercept: true }, left());
   const target = tool ? `${to} (${tool})` : to;

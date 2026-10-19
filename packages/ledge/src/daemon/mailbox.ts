@@ -2,6 +2,7 @@ import { isArchived, type ClientMessage, type MessageAck, type Session, type Too
 import type { Store } from './store.js';
 import { formatLedgeMessage } from './crossSession.js';
 import { free } from './relay.js';
+import { bareName } from './peers.js';
 import { log } from '../log.js';
 
 export interface MailboxDeps {
@@ -72,7 +73,7 @@ export function createMailbox(d: MailboxDeps): Mailbox {
   });
 
   const target = (to: string): Session | undefined => {
-    const name = to.replace(/ \[[^\]]*\]$/, '');
+    const name = bareName(to);
     return d.store.all().find(s => s.name === name && s.state !== 'exited' && !isArchived(s));
   };
   const remember = (rid: string, ack: MessageAck): MessageAck => {
