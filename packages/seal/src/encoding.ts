@@ -30,5 +30,7 @@ export function fromB64u(text: string): Uint8Array<ArrayBuffer> {
       out[o++] = (acc >> bits) & 255;
     }
   }
+  // Only one string encodes given bytes: the leftover bits must be zero.
+  if (acc & ((1 << bits) - 1)) throw new SealError('bad_encoding', 'non-zero trailing bits');
   return out;
 }

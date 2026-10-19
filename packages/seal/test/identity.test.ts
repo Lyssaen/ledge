@@ -16,6 +16,13 @@ describe('identity', () => {
     expect(fromB64u(b64u(bytes))).toEqual(bytes);
     expect(() => fromB64u('a+b/')).toThrow(SealError);
   });
+  it('refuses non-zero leftover bits', () => {
+    expect(fromB64u('AA')).toEqual(new Uint8Array([0]));
+    expect(fromB64u('AAA')).toEqual(new Uint8Array([0, 0]));
+    expect(() => fromB64u('AB')).toThrow(expect.objectContaining({ code: 'bad_encoding' }));
+    expect(() => fromB64u('AAB')).toThrow(expect.objectContaining({ code: 'bad_encoding' }));
+    expect(() => fromB64u('APv_Pj9')).toThrow(expect.objectContaining({ code: 'bad_encoding' }));
+  });
   it('generates a non-extractable P-256 identity by default', async () => {
     const id = await generateIdentity();
     expect(fromB64u(id.publicKey)).toHaveLength(65);
