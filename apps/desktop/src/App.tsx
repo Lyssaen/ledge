@@ -122,7 +122,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useEffect(() => { const w = takeWhatsNew(update.app); if (w) openWhatsNew({ mode: 'updated', ...w }); }, [update.app]);
   const whatsNew = useWhatsNew() !== null;
   // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
-  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local') });
+  // Read at the moment an alert fires, never captured: set below once the place and the prefs are known.
+  const watching = useRef<() => string | null>(() => null);
+  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local') }, { watching: () => watching.current() });
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
   useEffect(() => onTrayAction(action => {
     if (action === 'dnd') setDnd(!getDnd());
@@ -195,6 +197,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const memory = useRef(createSessionMemory()).current;
   useWindowFullscreen(nav.fullscreen, () => dispatch({ type: 'fullscreen', on: false }));
   const session = place.kind === 'session' ? known.find(s => s.id === place.id) ?? null : null;
+  // Ledge shows the agent's screen (focused window, pane open, agent tab active): that is the terminal in front, no sound.
+  watching.current = () => (document.hasFocus() && sessionPrefs.terminal && place.kind === 'session' && session && termStore.active(place.id) === agentTabId(place.id) ? place.id : null);
   // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
   const { threads } = useDaemon();
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;

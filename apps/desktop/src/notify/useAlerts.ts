@@ -11,7 +11,9 @@ import { baselineOf, diffSessions, settledMachines, strongestCue, toastFor, type
 import { appPlayer } from './player';
 import { useDnd, useSoundPrefs } from './prefs';
 
-export interface AlertDeps { player?: SoundPlayer; toast?: (title: string, body: string) => void; terminalInFront?: () => Promise<boolean>; focused?: () => boolean; now?: () => number }
+export interface AlertDeps { player?: SoundPlayer; toast?: (title: string, body: string) => void; terminalInFront?: () => Promise<boolean>; focused?: () => boolean; now?: () => number;
+  /** The session whose agent screen Ledge shows in front right now, if any: it counts as the terminal in front. */
+  watching?: () => string | null }
 export interface Alerts { user(cue: 'accept' | 'deny'): void; test(): 'played' | 'dnd' }
 
 /** The fleet emits one update per session: toast-worthy changes are gathered this long, then shown as one toast. */
@@ -77,7 +79,9 @@ export function useAlerts(input: { sessions: readonly Session[]; machines: reado
     base.current = baselineOf(input.sessions, settled ? settled.split('\n') : []);
     if (changes.length === 0) return;
     const l = live.current;
-    const cue = strongestCue(changes);
+    // Ledge showing the agent's screen is the terminal in front: no sound for that session; the toast logic is untouched.
+    const watched = l.sounds.onlyWhenTerminalBehind ? (l.deps.watching?.() ?? null) : null;
+    const cue = strongestCue(watched ? changes.filter(c => c.id !== watched) : changes);
     if (cue) api.play(cue);
     if (l.dnd || (l.deps.focused ?? windowFocused)()) return;
     queued.current.push(...changes);
