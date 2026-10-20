@@ -3,7 +3,7 @@ import type { Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, backendOf } from '@ledge/protocol';
+import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
@@ -251,7 +251,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -490,7 +490,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     store.upsert({ ...rest, state: 'starting', source: 'launcher' });
     try {
       const cwd = await resolveFolder(s.cwd, opts.home);
-      const spawned = await omp.launch({ id: s.id, name: s.name, cwd, resumeFile: file, ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
+      const spawned = await omp.launch({ id: s.id, name: s.name, cwd, resumeFile: file, ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(s.approval ? { approval: s.approval } : {}) });
       const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project } = s;
       store.upsert({ ...spawned, ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
       log(`resumed ${spawned.name} (omp) in ${spawned.cwd} as ${spawned.id}`);
@@ -545,16 +545,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
   const chatLaunches = new Set<string>();
   /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
-  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string }): Promise<Session> {
+  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval }): Promise<Session> {
     if (req.tool === 'omp') return launchOmp(req);
+    if (req.approval) throw new Error(`launch: ${req.tool} takes no approval mode`);
     return launchTmux({ ...req, tool: req.tool });
   }
   /** `omp --mode rpc-ui` owned by the daemon: no pane. `continue` has no meaning here (a folder's latest journal is never picked). */
-  async function launchOmp(req: { cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string }): Promise<Session> {
+  async function launchOmp(req: { cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval }): Promise<Session> {
     if (req.continue) throw new Error('launch: OMP resumes an exact conversation, not the latest of a folder');
     const cwd = await resolveFolder(req.cwd, opts.home);
     const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
-    const session = await omp.launch({ cwd, ...(req.name ? { name: req.name } : {}), ...(dirs ? { dirs } : {}), ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}) });
+    const session = await omp.launch({ cwd, ...(req.name ? { name: req.name } : {}), ...(dirs ? { dirs } : {}), ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}), ...(req.approval ? { approval: req.approval } : {}) });
     store.touchRecent(session.cwd, session.project, session.startedAt);
     log(`launched ${session.name} (omp) in ${session.cwd} as ${session.id}`);
     const prompt = req.prompt?.trim();

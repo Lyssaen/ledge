@@ -31,6 +31,10 @@ describe('ompArgs', () => {
   it('without a model or an effort, OMP keeps its own', () => {
     expect(ompArgs({ dir: '/s', cwd: '/w' })).toEqual(['--mode', 'rpc-ui', '--session-dir', '/s', '--cwd', '/w', '--approval-mode', 'always-ask']);
   });
+  it('auto mode only when chosen at launch: write or yolo replaces always-ask', () => {
+    expect(ompArgs({ dir: '/s', cwd: '/w', approval: 'yolo' })).toEqual(['--mode', 'rpc-ui', '--session-dir', '/s', '--cwd', '/w', '--approval-mode', 'yolo']);
+    expect(ompArgs({ dir: '/s', cwd: '/w', approval: 'write' })).toContain('write');
+  });
 });
 
 describe('OmpHost', () => {
@@ -39,6 +43,8 @@ describe('OmpHost', () => {
     expect(s).toMatchObject({ tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'idle', source: 'launcher', agentSessionId: 'fake-session', model: 'openai-codex/gpt-6.1-sol', effort: 'low' });
     expect(s.agentSessionFile).toBe(join(dir, 'omp', s.id, '2026-10-20T00-00-00-000Z_fake-session.jsonl'));
     expect(store.get(s.id)).toMatchObject({ id: s.id, state: 'idle' });
+    expect(s.approval).toBeUndefined();
+    expect((await host.launch({ cwd: tmpdir(), approval: 'yolo' })).approval).toBe('yolo');
     expect(cmds()[0]!.argv).toContain(join(dir, 'omp', s.id));
   });
   it('launch failure (no credentials): throws OMP\'s reason and leaves nothing in the store', async () => {
@@ -143,6 +149,13 @@ describe('project', () => {
   it('a failed instruction is an error state; a completed one says nothing', () => {
     expect(run([{ type: 'prompt_result', id: 'p', status: 'completed' }]).events).toEqual([]);
     expect(run([{ type: 'prompt_result', id: 'p', status: 'failed', error: 'quota' }]).events[0]).toMatchObject({ name: 'StopFailure', text: 'quota' });
+  });
+  it('an abort with instructions still queued: OMP stops but never settles (18.12.3), so the aborted result ends the work itself', () => {
+    const { t, events } = run([{ type: 'agent_start' }, { type: 'agent_end', messages: [] }, { type: 'prompt_result', id: 'p', status: 'aborted', sessionSettled: false }]);
+    expect(events.at(-1)).toMatchObject({ name: 'Stop', interrupt: true });
+    expect(t.working).toBe(false);
+    // Settled at once: session_settled follows and carries the Stop, the result adds none.
+    expect(run([{ type: 'agent_start' }, { type: 'prompt_result', id: 'p', status: 'aborted', sessionSettled: true }]).events.map(e => e.name)).toEqual(['UserPromptSubmit']);
   });
   it('answerFor: options by number or exact text; confirm as a boolean; input as text; nothing else', () => {
     const sel = { id: 'q', method: 'select' as const, title: 't', options: ['Approve', 'Deny'] };

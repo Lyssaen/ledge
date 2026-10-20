@@ -1,7 +1,7 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
-import type { DaemonInfo, ProjectColor, ToolStatus, UpdateFailure } from '@ledge/protocol';
+import type { DaemonInfo, OmpApproval, ProjectColor, ToolStatus, UpdateFailure } from '@ledge/protocol';
 import type { PlanDoc, ToolKind, Verb } from '../session/exchanges';
 import type { Change } from '../session/changedFiles';
 import type { TodoStatus } from '../session/todos';
@@ -599,7 +599,10 @@ export const fr = {
       askCard: 'Répondez depuis la carte ci-dessus.',
       afterTurn: 'Entrée : après ce tour', queue: 'Envoyer après ce tour', steer: 'Réorienter maintenant', steerTitle: 'Dévie le tour en cours au lieu d’attendre sa fin',
       interrupt: 'Interrompre', interruptTitle: 'Arrête le travail en cours ; la session et sa conversation restent',
+      stop: (n: string) => `Arrêter ${n}`, stopTitle: 'Arrête le travail en cours et remet les consignes en attente dans le champ ; la session et sa conversation restent',
+      stopKey: 'arrêter', escKey: 'Échap', stopping: 'Arrêt demandé…', stopped: (n: string) => `Vous avez interrompu ${n}.`, whenQueued: 'après ce tour', whenNow: 'maintenant',
       queueLabel: 'Consignes en attente', queued: (n: number) => `En attente (${n})`, queueSteer: 'réorienter', queueAfter: 'après ce tour', restore: 'Interrompre et récupérer', restoreTitle: 'Arrête le travail et remet les consignes en attente dans le champ',
+      queueTitle: (n: number) => plural(n, `${n} message en attente`, `${n} messages en attente`), queueOrder: 'partent dans l’ordre', queueNow: 'maintenant', queueLater: 'après le tour', queueTakeBack: 'Arrêter et reprendre',
       noNote: 'Cet agent ne prend pas de message avec un refus : refusez avec N.', tooLong: (max: number) => `Une note tient en ${max} caractères au plus.`
     },
     model: {
@@ -721,14 +724,20 @@ export const fr = {
   launch: {
     prompt: 'Consigne', placeholder: 'Que doit faire l’agent ? Décrivez le résultat attendu.',
     suggestions: 'Suggestions', ideas: ['Relire la dernière pull request', 'Corriger les tests qui échouent', 'Mettre à jour la documentation'] as readonly string[],
-    agent: 'Agent',
+    agent: 'Agent', agentHint: 'Le moteur de cette session', change: 'Changer', chooseFor: 'Choisir pour cette session', byDefaultTag: 'Par défaut', thisSession: 'Cette session', defaultMark: 'Défaut',
+    isDefault: 'Présélectionné pour vos prochaines sessions.', defaultStays: (n: string) => `Votre défaut reste ${n}.`, setDefault: (n: string) => `Définir ${n} par défaut`, doneChoosing: 'Terminer le choix',
+    onlyThisOne: (n: string) => `Pour cette session uniquement. Défaut : ${n}.`, backToDefault: 'Revenir au défaut',
+    switched: (n: string) => `${n} pour cette session. Consigne, projet et dépôts conservés ; modèle remis au défaut de l’agent.`, defaultSaved: (n: string) => `${n} sera présélectionné pour les prochaines sessions.`,
+    ompNative: 'Conversation pilotée dans Ledge. Seul le shell libre reste disponible, sans suivi terminal OMP.',
+    approval: 'Autorisations', approvalOutdated: 'Mettez à jour Ledge sur cette machine pour choisir les autorisations d’OMP : il demandera avant chaque écriture ou commande.',
+    approvals: { 'always-ask': ['Demander', 'Avant chaque écriture ou commande'], write: ['Fichiers auto', 'Écrit sans demander, demande avant les commandes'], yolo: ['Auto', 'Approuve tout, commandes comprises'] } as Record<OmpApproval, readonly [string, string]>,
     tools: { claude: ['Claude Code', 'Conception, revue'], codex: ['Codex', 'Code et tests'], cursor: ['Cursor Agent', 'Dans l’éditeur'], omp: ['OMP', 'Piloté en natif'] } as Record<'claude' | 'codex' | 'cursor' | 'omp', readonly [string, string]>,
     project: 'Projet', machine: 'Machine', offline: 'hors ligne', offlineTitle: 'Hors ligne : reconnectez la machine dans les réglages',
     repos: (m: string) => `Dossiers et dépôts sur ${m}`, noGit: 'Dossier sans Git', notFound: 'introuvable', oneRepo: (t: string) => `Un seul dossier ou dépôt pour ${t}`,
     noRepos: (p: string, m: string) => `Aucun dossier ni dépôt de ${p} sur ${m}.`, editProject: 'Modifier le projet',
     noProjects: 'Aucun projet pour l’instant.', noProjectsBody: 'Créez un projet pour y lancer des agents.', newProject: 'Nouveau projet',
     newAgent: 'Un nouvel agent', joins: (n: string, t: string) => `${n} rejoindra la table ${t}`, seat: (n: number, m: string, r: string) => `Place ${n} · ${m} · ${r}`, noRepo: 'aucun dossier ni dépôt',
-    missing: { tool: 'Choisissez un agent', prompt: 'Écrivez la consigne', machine: 'Aucune machine en ligne', repos: 'Choisissez au moins un dossier ou un dépôt' } as Record<'tool' | 'prompt' | 'machine' | 'repos', string>,
+    missing: { prompt: 'Écrivez la consigne', machine: 'Aucune machine en ligne', repos: 'Choisissez au moins un dossier ou un dépôt' } as Record<'prompt' | 'machine' | 'repos', string>,
     cancel: 'Annuler', launch: 'Lancer', launching: 'Lancement…',
     started: (n: string, t: string) => `${n} démarre à la table ${t}.`, startedNoTable: (n: string) => `${n} démarre, sans projet.`, refused: (m: string) => `Démarrage refusé : ${m}`,
     timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.',

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { daemonStore, type DaemonError } from '@ledge/fleet';
-import { closeDaemons, LAUNCH_PROJECTS, openLaunch, type MockDaemon } from './helpers';
+import { closeDaemons, LAUNCH_PROJECTS, openLaunch, pickAgent, type MockDaemon } from './helpers';
 import { LAUNCH_TIMEOUT_MS, type LaunchMessage } from '../src/launch/model';
 import { useLaunch } from '../src/launch/useLaunch';
 
@@ -18,7 +18,7 @@ describe('launching', () => {
   it('one launch at a time; launched: the form closes, the seat lights, the notice names agent and table', async () => {
     const { d, user, form } = await openLaunch({ list: false });
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, form, /Codex/);
     d.holdLaunch();                                                    // the fake daemon answers only when released
     await user.keyboard('{Control>}{Enter}{/Control}');
     await user.keyboard('{Control>}{Enter}{/Control}');
@@ -44,7 +44,7 @@ describe('launching', () => {
   it('an agent that lands with no table (its folder left the project meanwhile) is said to start with no project, never at the form’s table', async () => {
     const { d, user, form } = await openLaunch({ list: false });
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, form, /Codex/);
     d.holdLaunch();
     await user.keyboard('{Control>}{Enter}{/Control}');
     await waitFor(() => expect(launches(d)).toHaveLength(1));
@@ -60,7 +60,7 @@ describe('launching', () => {
   it('a refusal stays in the form with its message and values; a retry is possible', async () => {
     const { d, user, form } = await openLaunch();
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, form, /Codex/);
     d.refuseLaunch('codex: command not found');
     await user.click(launchButton(form));
     // With several machines the fleet names the one that refused.
@@ -83,7 +83,7 @@ describe('launching', () => {
   it('another command refused by the machine during a launch does not end it: the machine dropping later is the launch\'s refusal', async () => {
     const { d, user, form } = await openLaunch();
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, form, /Codex/);
     d.holdLaunch();
     await user.click(launchButton(form));
     await waitFor(() => expect(launches(d)).toHaveLength(1));
@@ -100,7 +100,7 @@ describe('launching', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, form, /Codex/);
     d.holdLaunch();
     await user.click(launchButton(form));
     await waitFor(() => expect(launches(d)).toHaveLength(1));
@@ -125,7 +125,7 @@ describe('launching', () => {
   it('Cancel while launching closes the form; the late answer is not announced', async () => {
     const { d, user, form } = await openLaunch();
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, form, /Codex/);
     d.holdLaunch();
     await user.click(launchButton(form));
     await waitFor(() => expect(launches(d)).toHaveLength(1));
@@ -145,7 +145,7 @@ describe('launching', () => {
   it('a late answer for an earlier launch is not taken for the current one; the notice names the launched session and its own table', async () => {
     const { d, user, form } = await openLaunch();
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'A');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, form, /Codex/);
     d.holdLaunch();
     await user.click(launchButton(form));
     await waitFor(() => expect(launches(d)).toHaveLength(1));
@@ -153,7 +153,7 @@ describe('launching', () => {
     await user.keyboard('n');
     const b = within(await screen.findByRole('dialog', { name: 'New session' }));
     await user.type(b.getByRole('textbox', { name: 'Instruction' }), 'B');
-    await user.click(b.getByRole('radio', { name: /Claude Code/ }));
+    await pickAgent(user, b, /Claude Code/);
     await user.click(b.getByRole('radio', { name: /^Payment Service/ }));
     await user.click(launchButton(b));
     await waitFor(() => expect(launches(d)).toHaveLength(2));
@@ -181,7 +181,7 @@ describe('launching', () => {
     const form = within(await screen.findByRole('dialog', { name: 'New session' }));
     await user.click(form.getByRole('radio', { name: 'Ledge' }));
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, form, /Codex/);
     d.options.autoLaunch = true;
     await user.click(launchButton(form));
     await waitFor(() => expect(dialog()).toBeNull());
@@ -201,7 +201,7 @@ describe('launching', () => {
     expect(form.getByRole('radio', { name: /^Payment Service/ })).toBeChecked();
     await user.click(form.getByRole('radio', { name: 'Ledge' }));
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, form, /Codex/);
     d.options.autoLaunch = true;
     await user.click(launchButton(form));
     await waitFor(() => expect(dialog()).toBeNull());
@@ -219,7 +219,7 @@ describe('launching', () => {
     await user.keyboard('n');
     const form = within(await screen.findByRole('dialog', { name: 'New session' }));
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, form, /Codex/);
     d.options.autoLaunch = true;
     await user.click(launchButton(form));
     await waitFor(() => expect(dialog()).toBeNull());

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { basename, join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import type { Session, SessionEvent } from '@ledge/protocol';
+import type { OmpApproval, Session, SessionEvent } from '@ledge/protocol';
 import { pickName } from '@ledge/protocol';
 import { agentEnv, PARENT_AGENT_VARS } from '../../spawn.js';
 import { log } from '../../log.js';
@@ -16,11 +16,12 @@ import { answerFor, askAnswerFor, newTracking, project, requestEvent, type Track
  */
 
 export const OMP_BIN = 'omp';
-/** The permission policy at launch: ask before writes and executions. OMP's own default is `yolo`, never inherited silently. */
-export const APPROVAL_MODE = 'always-ask';
+/** The permission policy at launch unless the person chose another: ask before writes and executions. OMP's own default is `yolo`,
+ *  never inherited silently; `write` or `yolo` (auto mode) only when asked for at launch, and kept by a resume. */
+export const APPROVAL_MODE: OmpApproval = 'always-ask';
 
 export interface OmpLaunch {
-  cwd: string; name?: string; dirs?: string[]; model?: string; effort?: string;
+  cwd: string; name?: string; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval;
   /** Reuses this Ledge id (a resumed session keeps its own). */
   id?: string;
   /** The exact journal of the conversation to continue. */
@@ -44,8 +45,8 @@ interface Live { rpc: OmpRpc; tracking: Tracking; closing: boolean; generation: 
 /** `--model` takes `provider/id`; the id alone is ambiguous across providers, so the picker's ids carry both. */
 export const ompModelArgs = (model?: string, effort?: string): string[] => [...(model ? ['--model', model] : []), ...(effort ? ['--thinking', effort] : [])];
 
-export function ompArgs(o: { dir: string; cwd: string; dirs?: string[]; model?: string; effort?: string; resumeFile?: string }): string[] {
-  return ['--mode', 'rpc-ui', '--session-dir', o.dir, '--cwd', o.cwd, '--approval-mode', APPROVAL_MODE, ...ompModelArgs(o.model, o.effort), ...(o.dirs ?? []).flatMap(d => ['--add-dir', d]), ...(o.resumeFile ? ['--resume', o.resumeFile] : [])];
+export function ompArgs(o: { dir: string; cwd: string; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; resumeFile?: string }): string[] {
+  return ['--mode', 'rpc-ui', '--session-dir', o.dir, '--cwd', o.cwd, '--approval-mode', o.approval ?? APPROVAL_MODE, ...ompModelArgs(o.model, o.effort), ...(o.dirs ?? []).flatMap(d => ['--add-dir', d]), ...(o.resumeFile ? ['--resume', o.resumeFile] : [])];
 }
 
 interface OmpState { sessionFile?: string; sessionId?: string; model?: { id?: string; provider?: string }; thinkingLevel?: string }
@@ -135,7 +136,8 @@ export function createOmpHost(deps: OmpHostDeps) {
         id, name, tool: 'omp', backend: 'omp-rpc', cwd: o.cwd, project, title: `${name} · ${project}`, tmuxSession: null, state: 'idle', helpers: [],
         startedAt: at, lastActivityAt: at, source: 'launcher',
         ...(state.sessionId ? { agentSessionId: state.sessionId } : {}), ...(state.sessionFile ? { agentSessionFile: state.sessionFile } : {}),
-        ...((o.model ?? model) ? { model: o.model ?? model! } : {}), ...((o.effort ?? state.thinkingLevel) ? { effort: o.effort ?? state.thinkingLevel! } : {})
+        ...((o.model ?? model) ? { model: o.model ?? model! } : {}), ...((o.effort ?? state.thinkingLevel) ? { effort: o.effort ?? state.thinkingLevel! } : {}),
+        ...(o.approval && o.approval !== APPROVAL_MODE ? { approval: o.approval } : {})
       };
       attach(id, rpc);
       store.upsert(session);

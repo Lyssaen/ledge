@@ -5,7 +5,7 @@ import type { DaemonClient, MachineState } from '@ledge/fleet';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { LaunchComposer } from '../src/launch/LaunchComposer';
 import { forgetModels } from '../src/launch/useModels';
-import { declarations, boot, closeDaemons, LAUNCH_PROJECTS, LAUNCH_REPOS, listSessions, openLaunch } from './helpers';
+import { declarations, boot, closeDaemons, LAUNCH_PROJECTS, LAUNCH_REPOS, listSessions, openLaunch, pickAgent } from './helpers';
 import { machine } from './fleet-helpers';
 
 beforeEach(() => localStorage.clear());
@@ -15,7 +15,7 @@ const preview = () => document.querySelector('.preview-line')!.textContent;
 const chipOf = (input: HTMLElement) => input.closest('label')!;
 
 describe('New session', () => {
-  it('instruction first with suggestions; no harness by default; the preview names who joins which table', async () => {
+  it('instruction first with suggestions; the default agent preselected and changed behind « Change »; the preview names who joins which table', async () => {
     const { user, form } = await openLaunch();
     expect(form.getByRole('textbox', { name: 'Instruction' })).toHaveFocus();
     expect(form.getByRole('textbox', { name: 'Instruction' })).toHaveAttribute('placeholder', 'What should the agent do? Describe the expected result.');
@@ -24,17 +24,32 @@ describe('New session', () => {
     expect(form.getByRole('textbox', { name: 'Instruction' })).toHaveValue('Fix the failing tests');
     expect(form.getByRole('textbox', { name: 'Instruction' })).toHaveFocus();
     expect(form.queryByRole('button', { name: 'Review the latest pull request' })).toBeNull();
-    // Three tiles, none chosen; the project chips carry their colour.
-    expect(form.getAllByRole('radio').filter(r => r.getAttribute('name') === 'tool')).toHaveLength(4);
-    expect(form.getAllByRole('radio', { checked: true }).map(r => r.getAttribute('name'))).not.toContain('tool');
+    // The default agent preselected (Claude Code until Settings say otherwise), the four agents behind « Change »; the project chips carry their colour.
+    const current = form.getByRole('button', { name: /Change/ });
+    expect(current).toHaveTextContent('Claude Code'); expect(current).toHaveTextContent('Default');
+    expect(current).toHaveAttribute('aria-expanded', 'false');
+    expect(form.queryAllByRole('radio').filter(r => r.getAttribute('name') === 'tool')).toHaveLength(0);
     expect(chipOf(form.getByRole('radio', { name: 'Ledge' })).querySelector('.side-swatch')).not.toBeNull();
     expect(form.getByRole('radio', { name: 'Ledge' })).toBeChecked();
-    expect(document.querySelector('.composer-preview .preview-empty')).not.toBeNull();
-    expect(preview()).toBe('A new agent will join the Ledge table');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    expect(document.querySelector('.composer-preview .preview-empty')).toBeNull();
+    await user.click(current);
+    expect(form.getAllByRole('radio').filter(r => r.getAttribute('name') === 'tool')).toHaveLength(4);
+    expect(form.getByRole('radio', { name: /Claude Code/ })).toBeChecked();
+    await pickAgent(user, form, /Codex/);
     expect(chipOf(form.getByRole('radio', { name: /Codex/ }))).toHaveClass('selected');
     expect(form.getByRole('radio', { name: /Codex/ })).toBeChecked();
-    expect(document.querySelector('.composer-preview .preview-empty')).toBeNull();
+    // A choice for this session only: the default stays, and can be made Codex, or taken back.
+    expect(current).toHaveTextContent('This session');
+    expect(form.getByText('Your default stays Claude Code.')).toBeVisible();
+    await user.click(form.getByRole('button', { name: 'Done' }));
+    expect(form.queryByRole('radio', { name: /Codex/ })).toBeNull();
+    expect(form.getByText('For this session only. Default: Claude Code.')).toBeVisible();
+    await user.click(form.getByRole('button', { name: 'Back to the default' }));
+    expect(current).toHaveTextContent('Claude Code');
+    await pickAgent(user, form, /Codex/);
+    await user.click(form.getByRole('button', { name: 'Make Codex the default' }));
+    expect(current).toHaveTextContent('Default');
+    expect(localStorage.getItem('desktop.tool')).toBe('"codex"');
     expect(preview()).toMatch(/^\w+ will join the Ledge table$/);
     expect(document.querySelector('.composer-preview small')!.textContent).toMatch(/^Seat \d+ · Local · app$/);
     // The rule seats Otto, Bix and Rio at Ledge: the fourth seat.
@@ -45,13 +60,10 @@ describe('New session', () => {
     const { user, form } = await openLaunch();
     expect(form.queryByRole('alert')).toBeNull();
     await user.click(form.getByRole('button', { name: /Launch/ }));
-    expect(form.getByRole('alert')).toHaveTextContent('Choose an agent');
-    expect(form.getByRole('group', { name: 'Agent' })).toHaveAttribute('aria-invalid', 'true');
-    await user.click(form.getByRole('radio', { name: /Claude Code/ }));
+    expect(form.getByRole('alert')).toHaveTextContent('Write the instruction');
     await user.keyboard('{Control>}{Enter}{/Control}');
     expect(form.getByRole('alert')).toHaveTextContent('Write the instruction');
     expect(form.getByRole('textbox', { name: 'Instruction' })).toHaveAttribute('aria-invalid', 'true');
-    expect(form.getByRole('group', { name: 'Agent' })).not.toHaveAttribute('aria-invalid', 'true');
     await user.click(form.getByRole('textbox', { name: 'Instruction' }));
     await user.keyboard('Fix it');
     await user.click(form.getByRole('checkbox', { name: /^app/ }));      // no repository left
@@ -65,7 +77,7 @@ describe('New session', () => {
   it('Claude takes several repositories, Codex one; the branch shows', async () => {
     const { user, form } = await openLaunch();
     const repos = within(form.getByRole('group', { name: 'Folders and repositories on Local' }));
-    await user.click(form.getByRole('radio', { name: /Claude Code/ }));
+    await pickAgent(user, form, /Claude Code/);
     expect(repos.getAllByRole('checkbox')).toHaveLength(2);
     await waitFor(() => expect(chipOf(repos.getByRole('checkbox', { name: /^app/ }))).toHaveAttribute('title', 'desktop'));
     expect(chipOf(repos.getByRole('checkbox', { name: /^docs/ }))).toHaveAttribute('title', 'main');
@@ -74,7 +86,7 @@ describe('New session', () => {
     expect(document.querySelector('.chip-note')!.textContent).toBe('⎇ desktop');
     expect(repos.queryByText('One folder or repository only for Claude Code')).toBeNull();
     expect(document.querySelector('.composer-preview small')!.textContent).toBe('Seat 4 · Local · app, docs');
-    await user.click(form.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, form, /Codex/);
     expect(repos.queryAllByRole('checkbox')).toHaveLength(0);
     expect(repos.getAllByRole('radio', { checked: true }).map(r => r.closest('label')!.textContent)).toEqual(['app']);
     expect(repos.getByText('One folder or repository only for Codex')).toBeVisible();
@@ -105,7 +117,7 @@ describe('New session', () => {
     expect(chipOf(nas)).toHaveTextContent('offline');
     expect(chipOf(nas)).toHaveAttribute('title', 'Offline: reconnect the machine in Settings');
     expect(form.getByRole('radio', { name: 'Local' })).toBeChecked();
-    await user.click(form.getByRole('radio', { name: /Claude Code/ }));
+    await pickAgent(user, form, /Claude Code/);
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Fix it');
     await d.close();
     await waitFor(() => expect(form.getByRole('radio', { name: /^Local/ })).toBeDisabled());
@@ -135,7 +147,7 @@ describe('New session', () => {
     const { user, form } = await openLaunch();
     await user.click(form.getByRole('radio', { name: 'Docs' }));
     expect(form.getByText('No folder or repository of Docs on Local.')).toBeVisible();
-    expect(preview()).toBe('A new agent will join the Docs table');
+    expect(preview()).toMatch(/^\w+ will join the Docs table$/);
     expect(document.querySelector('.composer-preview small')!.textContent).toBe('Seat 1 · Local · no folder or repository');
     await user.click(form.getByRole('button', { name: 'Edit the project' }));
     expect(screen.getByRole('dialog', { name: 'Edit Docs' })).toBeVisible();
@@ -194,13 +206,13 @@ describe('LaunchComposer and its machines', () => {
     const view = render(<LaunchComposer {...props(client, [local, nas])} />);
     await user.click(screen.getByRole('radio', { name: 'Nas' }));
     expect(screen.getByRole('group', { name: 'Folders and repositories on Nas' })).toBeVisible();
-    expect(sent.at(-1)).toMatchObject({ type: 'repos.inspect', paths: ['/srv/ledge'], machineId: 'nas' });
+    expect(sent.filter(m => m.type === 'repos.inspect').at(-1)).toMatchObject({ type: 'repos.inspect', paths: ['/srv/ledge'], machineId: 'nas' });
     view.rerender(<LaunchComposer {...props(client, [local, down(nas)])} />);
     expect(screen.getByRole('radio', { name: 'Local' })).toBeChecked();
     expect(screen.getByRole('radio', { name: /^Nas/ })).toBeDisabled();
     expect(screen.getByRole('group', { name: 'Folders and repositories on Local' })).toBeVisible();
     view.rerender(<LaunchComposer {...props(client, [down(local), down(nas)])} />);
-    await user.click(screen.getByRole('radio', { name: /Cursor Agent/ }));
+    await pickAgent(user, screen, /Cursor Agent/);
     await user.type(screen.getByRole('textbox', { name: 'Instruction' }), 'Go');
     await user.click(screen.getByRole('button', { name: /Launch/ }));
     expect(screen.getByRole('alert')).toHaveTextContent('No machine online');
@@ -285,7 +297,7 @@ describe('LaunchComposer and its machines', () => {
     render(<LaunchComposer {...p} />);
     await user.type(screen.getByRole('textbox', { name: 'Instruction' }), 'Review{Enter}it');
     expect(screen.getByRole('textbox', { name: 'Instruction' })).toHaveValue('Review\nit');
-    await user.click(screen.getByRole('radio', { name: /Codex/ }));
+    await pickAgent(user, screen, /Codex/);
     expect(screen.getByRole('radio', { name: /Codex/ })).toHaveFocus();
     await user.keyboard('{Enter}');
     screen.getByRole('radio', { name: 'Ledge' }).focus();
@@ -301,12 +313,13 @@ describe('LaunchComposer and its machines', () => {
     const { client } = fakeClient();
     const user = userEvent.setup();
     const view = render(<LaunchComposer {...props(client, [local, nas])} paused />);
-    expect(screen.getByRole('radio', { name: 'Claude Code Design, review' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Change/ }));
+    expect(screen.getByRole('radio', { name: /^Claude Code ?Default Design, review$/ })).toBeInTheDocument();
     expect(screen.queryByRole('img')).toBeNull();
     await user.click(screen.getByRole('radio', { name: 'Codex Code and tests' }));
     expect(document.querySelector('.composer-preview')!.textContent).toMatch(/^\w+ will join the Ledge table/);
     const bots = view.container.querySelectorAll('[data-paused]');
-    expect(bots).toHaveLength(5);                                          // four tiles and the preview
+    expect(bots).toHaveLength(6);                                          // the agent chosen, four tiles and the preview
     bots.forEach(b => expect(b).toHaveAttribute('data-paused', 'true'));
     view.rerender(<LaunchComposer {...props(client, [local, nas])} />);
     view.container.querySelectorAll('[data-paused]').forEach(b => expect(b).toHaveAttribute('data-paused', 'false'));
@@ -316,7 +329,7 @@ describe('LaunchComposer and its machines', () => {
     const { client } = fakeClient();
     const user = userEvent.setup();
     render(<LaunchComposer {...props(client, [local, nas])} projects={[]} />);
-    await user.click(screen.getByRole('radio', { name: /Claude Code/ }));
+    await pickAgent(user, screen, /Claude Code/);
     await user.type(screen.getByRole('textbox', { name: 'Instruction' }), 'Go');
     await user.click(screen.getByRole('button', { name: /Launch/ }));
     expect(screen.getByRole('alert')).toHaveTextContent('No project yet.');
@@ -327,7 +340,7 @@ describe('LaunchComposer and its machines', () => {
     const user = userEvent.setup();
     const p = props(client, [local, nas]);
     render(<LaunchComposer {...p} />);
-    await user.click(screen.getByRole('radio', { name: /Claude Code/ }));
+    await pickAgent(user, screen, /Claude Code/);
     await user.click(screen.getByRole('checkbox', { name: /^docs/ }));
     await user.type(screen.getByRole('textbox', { name: 'Instruction' }), ' Review ');
     await user.keyboard('{Control>}{Enter}{/Control}');
@@ -345,8 +358,7 @@ describe('LaunchComposer and its machines', () => {
       const user = userEvent.setup();
       const p = props(client, [local, nas]);
       render(<LaunchComposer {...p} />);
-      expect(screen.queryByRole('group', { name: /model$/ })).toBeNull();
-      await user.click(screen.getByRole('radio', { name: tool }));
+      await pickAgent(user, screen, tool);
       const ask = asked(sent).at(-1)!;
       expect(ask).toMatchObject({ machineId: 'local' });
       await act(async () => { emit({ type: 'models.listing', requestId: ask.requestId, tool: ask.tool, models, ...(error ? { error } : {}) } as ServerMessage); });
@@ -420,12 +432,12 @@ describe('LaunchComposer and its machines', () => {
       await user.click(screen.getByRole('button', { name: /Launch/ }));
       cleanup();
       render(<LaunchComposer {...p} />);
-      await user.click(screen.getByRole('radio', { name: /Codex/ }));
+      await pickAgent(user, screen, /Codex/);
       const ask = asked(sent).at(-1)!;
       await act(async () => { emit({ type: 'models.listing', requestId: ask.requestId, tool: 'codex', models: [{ id: 'sol', label: 'Sol', isDefault: true }] }); });
       expect(trigger('Codex')).toHaveAccessibleName('Codex model : Sol');
       expect(screen.queryByText('Last choice for this project kept')).toBeNull();
-      await user.click(screen.getByRole('radio', { name: /Claude Code/ }));    // known this run: not asked again
+      await pickAgent(user, screen, /Claude Code/);    // known this run: not asked again
       expect(asked(sent).filter(m => m.tool === 'claude')).toHaveLength(1);
       expect(trigger('Claude Code')).toHaveAccessibleName('Claude Code model : Haiku');
       expect(effortValue()).toHaveTextContent('Low');
@@ -464,6 +476,29 @@ describe('LaunchComposer and its machines', () => {
         await user.click(screen.getByRole('button', { name: /Launch/ }));
         expect(p.onLaunch).not.toHaveBeenCalled();
         expect(screen.getByRole('radio', { name: /OMP/ })).toBeChecked();
+      });
+      it('auto mode: the permissions are chosen for OMP where the daemon takes them, sent only when not « Ask »; an older daemon says it will ask', async () => {
+        const { user, p } = await ready(/OMP/, OMP);
+        expect(screen.queryByRole('group', { name: 'Permissions' })).toBeNull();
+        expect(screen.getByText(/choose OMP’s permissions: it will ask before every write or command/)).toBeVisible();
+        await user.click(screen.getByRole('button', { name: /Launch/ }));
+        expect(sentMsg(p)).not.toHaveProperty('approval');
+        cleanup();
+        const { client, emit, sent } = fakeClient();
+        const q = props(client, [machine('local', { daemon: { version: '0.14.0', install: 'npm', systemd: true, models: true, omp: true, ompApproval: true } }), nas]);
+        render(<LaunchComposer {...q} />);
+        await pickAgent(user, screen, /OMP/);
+        const ask = asked(sent).at(-1)!;
+        await act(async () => { emit({ type: 'models.listing', requestId: ask.requestId, tool: ask.tool, models: OMP } as ServerMessage); });
+        const perms = within(screen.getByRole('group', { name: 'Permissions' }));
+        expect(perms.getByRole('radio', { name: 'Ask' })).toBeChecked();
+        await user.click(perms.getByRole('radio', { name: 'Auto' }));
+        expect(perms.getByText('Approves everything, commands included')).toBeVisible();
+        await user.type(screen.getByRole('textbox', { name: 'Instruction' }), 'Go');
+        await user.click(screen.getByRole('button', { name: /Launch/ }));
+        expect(q.onLaunch.mock.calls.at(-1)![0]).toMatchObject({ tool: 'omp', approval: 'yolo' });
+        await pickAgent(user, screen, /Claude Code/);
+        expect(screen.queryByRole('group', { name: 'Permissions' })).toBeNull();
       });
       it('a daemon that does not know OMP says to update it', async () => {
         await ready(/OMP/, [], 'outdated');

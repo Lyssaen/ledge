@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
 export const ToolSchema = z.enum(['claude', 'codex', 'cursor', 'omp']);
+/** OMP's `--approval-mode` as Ledge offers it: ask before writes and executions, approve file writes by themselves, or approve everything (auto). */
+export const OmpApprovalSchema = z.enum(['always-ask', 'write', 'yolo']);
+export type OmpApproval = z.infer<typeof OmpApprovalSchema>;
 export type Tool = z.infer<typeof ToolSchema>;
 
 /** How Ledge drives a session's agent: through a tmux pane (Claude Code, Codex, Cursor Agent), or through the agent's own
@@ -99,6 +102,8 @@ export const SessionSchema =z.object({
   /** The model and effort Ledge launched the agent with (#58); left out, the agent's own default. */
   model: z.string().optional(),
   effort: z.string().optional(),
+  /** OMP: the approval mode it was launched with, kept by a resume; left out, `always-ask`. */
+  approval: OmpApprovalSchema.optional(),
   /** A model change asked while the agent worked (`session.model`), applied at its next free moment; a field left out is the agent's default. */
   modelNext: z.object({ model: z.string().optional(), effort: z.string().optional() }).optional(),
   /** The agent's own session id when Ledge chose it at launch (Claude Code `--session-id`). */

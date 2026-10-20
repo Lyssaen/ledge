@@ -263,16 +263,17 @@ button.tg:disabled{cursor:default}
 .pending-choices small{font-size:11px;color:var(--muted-foreground)}
 .pending-choices .pending-own button{border-style:dashed}
 .pending-relay{font-size:11px;margin:8px 0 0}
-.session-reply form{display:flex;align-items:flex-end;gap:8px;padding:6px;background:var(--well);border:1px solid var(--input);border-radius:var(--radius-lg)}
+.session-reply form{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:6px;background:var(--well);border:1px solid var(--input);border-radius:var(--radius-lg)}
 .session-reply form:focus-within{border-color:var(--ring)}
-.session-reply textarea{flex:1;min-width:0;resize:none;background:none;border:0;font-size:12px;line-height:18px;padding:7px 6px;max-height:120px;field-sizing:content}
+/* Two rows: the prompt across the whole width (two lines at least, growing up to about ten), its controls under it. */
+.session-reply textarea{flex:1 0 100%;min-width:0;resize:none;background:none;border:0;font-size:12px;line-height:18px;padding:7px 6px;min-height:50px;max-height:220px;field-sizing:content}
 .session-reply textarea:focus-visible{outline:none}
 /* #58 lot 2: the session's model and effort beside the field (launch.css draws the chip and its list). */
-.session-reply .model-chip{flex:none;height:28px;max-width:240px;margin-bottom:2px;padding:0 8px 0 10px;gap:6px;font-size:12px;background:var(--background)}
+.session-reply .model-chip{flex:none;height:28px;max-width:240px;margin-right:auto;padding:0 8px 0 10px;gap:6px;font-size:12px;background:var(--background)}
 .model-chip-text{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:500}
 .model-chip-next{flex:none;font-size:11px;color:var(--info)}
 .model-chip.scheduled{border-color:color-mix(in srgb,var(--info) 45%,var(--input))}
-.reply-hint{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted-foreground);white-space:nowrap;padding-bottom:7px}
+.reply-hint{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted-foreground);white-space:nowrap}
 .reply-note{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--well);font-size:12px;line-height:18px;color:var(--muted-foreground)}
 .reply-note>span{flex:1}
 .reply-note strong{color:var(--foreground);font-weight:500}
@@ -350,7 +351,7 @@ button.tg:disabled{cursor:default}
 .session-thread{--col:760px;padding-inline:24px}
 .session-thread>.frozen-banner,.session-thread>.source-note{max-width:var(--col);margin-inline:auto}
 .session-reply>*{width:100%;max-width:760px;margin-inline:auto}
-.session-reply textarea{font-size:13px;line-height:20px}
+.session-reply textarea{font-size:13px;line-height:20px;min-height:54px}
 
 /* Split reading: the thread (and its reply field) on the left, a document, a diff or a plan on the right. */
 .session-split{position:relative;flex:1;min-height:0;display:flex}
@@ -495,7 +496,22 @@ button.tg:disabled{cursor:default}
 .ask-question label>span{display:flex;flex-direction:column;min-width:0}
 .ask-question label small{color:var(--muted-foreground)}
 .ask-other{padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--background);color:inherit;font:inherit}
-.reply-queue{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 10px;margin-bottom:6px;border:1px dashed var(--border);border-radius:var(--radius-md);font-size:.8rem;color:var(--muted-foreground)}
-.reply-queue ul{display:flex;gap:6px;flex-wrap:wrap;list-style:none;margin:0;padding:0;min-width:0;flex:1}
-.reply-queue li{display:flex;gap:6px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 8px;border-radius:999px;background:var(--muted)}
-.reply-queue li small{opacity:.7}
+
+/* OMP's queue (mockup omp-sessions, File B): a stack resting on the field, one row per instruction in the order they leave. */
+.session-reply>.reply-queue{width:calc(100% - 20px);max-width:740px;margin:0 auto -10px;}
+.reply-queue{border:1px solid var(--input);border-bottom:0;border-radius:var(--radius-lg) var(--radius-lg) 0 0;background:var(--card);font-size:12px}
+.reply-queue-head{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 12px;border-bottom:1px solid var(--border)}
+.reply-queue-head strong{font-weight:500}
+.reply-queue-head .ledge-btn{margin-left:auto;height:26px;padding:0 8px;font-size:11px}
+.reply-queue ul{list-style:none;margin:0;padding:0}
+.reply-queue li{display:flex;align-items:center;gap:10px;padding:7px 12px;font-size:13px}
+.reply-queue li+li{border-top:1px solid var(--border)}
+.queue-text{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.queue-tag{flex:none;padding:0 6px;border-radius:5px;font-size:10px;font-weight:500;line-height:16px;background:var(--muted);color:var(--muted-foreground)}
+.queue-tag.now{background:var(--status-info-soft,color-mix(in srgb,var(--info) 18%,transparent));color:var(--info)}
+/* Interrompre A: while OMP works with an empty field, the send button is a stop square; a spinner once asked. */
+.session-reply .reply-stop{background:var(--foreground);color:var(--background)}
+.session-reply .reply-stop:hover:not(:disabled){background:color-mix(in srgb,var(--foreground) 85%,var(--background))}
+.reply-stop-spin{width:12px;height:12px;border-radius:50%;border:2px solid color-mix(in srgb,var(--background) 35%,transparent);border-top-color:var(--background);animation:reply-spin .8s linear infinite}
+@keyframes reply-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.reply-stop-spin{animation:none}}

@@ -8,7 +8,7 @@ import { taskOf } from '../../nav/agents';
 import { ProjectSwatch } from '../../projects/ProjectSwatch';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
-import { HelperBot, SessionBot } from '../SessionBot';
+import { AutoMark, HelperBot, SessionBot } from '../SessionBot';
 import { isFinished, type ProjectGroup } from './model';
 
 const branchIcon = ['M6 3v12', 'M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6', 'M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6', 'M18 9a9 9 0 0 1-9 9'];
@@ -172,7 +172,7 @@ export function Tree(p: {
         {/* No « Name, » label: boot() and the title bar find the atelier seat with /^Name,/. */}
         <button type="button" className="st-main" data-tree-key={treeKey} tabIndex={tabOf(treeKey)}
           onClick={() => helper ? p.onOpen(s.id, helper.id) : p.onOpen(s.id)}>
-          <strong>{name}</strong>{task && <span>{task}</span>}
+          <strong>{name}{!helper && <AutoMark session={s} />}</strong>{task && <span>{task}</span>}
         </button>
         {team.length > 0 && !open && <span className="st-kids" title={t.side.kids(team.length)}>{team.length}</span>}
         <span className={cls('st-time', waiting && timeClass)}>{s.offline ? t.side.offline : shortWhen(s.lastActivityAt, t.list.when.units, t.list.when.now)}</span>

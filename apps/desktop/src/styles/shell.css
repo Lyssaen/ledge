@@ -195,3 +195,7 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .atelier-away h2 { margin: 0; font-size: 15px; color: var(--foreground); }
 .atelier-away p { margin: 0; font-size: 12px; }
 .atelier-away-actions { display: flex; gap: 8px; margin-top: 6px; }
+/* OMP's approval when it is not « ask » (mockup omp-sessions): beside the state badge in the title bar, a bolt in the sidebar. */
+.approval-badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;white-space:nowrap;border:1px solid var(--border);color:var(--muted-foreground);margin-right:6px}
+.approval-badge.yolo{border-color:transparent;background:color-mix(in srgb,var(--destructive) 16%,transparent);color:var(--destructive)}
+.auto-mark{display:inline-flex;vertical-align:-1px;margin-left:5px;color:var(--destructive)}

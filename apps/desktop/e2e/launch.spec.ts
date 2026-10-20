@@ -22,6 +22,11 @@ const pageNoSideScroll = (page: Page) => page.evaluate(() => document.documentEl
 const tiles = (page: Page) => dialog(page).locator('.tool-tile');
 /** The way a person picks: a click on the tile or the chip (its input is hidden under it, as in the mockup). */
 const tile = (form: Locator, name: string) => form.locator('label.tool-tile', { hasText: name });
+/** The default agent is preselected; another is picked behind « Change », whose list stays open once shown. */
+async function pick(form: Locator, name: string) {
+  if (!(await tile(form, name).count())) await form.locator('.harness-current').click();
+  await tile(form, name).click();
+}
 const chip = (form: Locator, name: string) => form.locator('label.chip').filter({ hasText: new RegExp(`^${name}`) });
 
 async function open(page: Page) {
@@ -37,7 +42,7 @@ test('N, an instruction, Claude Code, two repositories, Ctrl Enter: one launch, 
   await open(page);
   const form = dialog(page);
   await form.getByLabel('Instruction').fill('Fix the failing tests');
-  await tile(form, 'Claude Code').click();
+  await pick(form, 'Claude Code');
   await expect(form.getByRole('radio', { name: /Claude Code/ })).toBeChecked();
   await expect(form.getByRole('radio', { name: 'Ledge' })).toBeChecked();
   await expect(form.getByRole('checkbox', { name: 'ledge', exact: true })).toBeChecked();
@@ -67,31 +72,35 @@ test('N, an instruction, Claude Code, two repositories, Ctrl Enter: one launch, 
   expect(launchesOf(daemon.received)).toHaveLength(1);
 });
 
-test('a 900 px window: the form fits without a side scroll; under 700 px the agents stack; Escape closes it', async ({ page }) => {
+test('a 900 px window: the form fits without a side scroll; under 540 px the agents stack; Escape closes it', async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 760 });
   await fakeDaemon(page, fleet, { projects });
   await open(page);
   const form = dialog(page);
   await form.getByLabel('Instruction').fill('Update the documentation');
-  await tile(form, 'Codex').click();
+  await pick(form, 'Codex');
   await expect(form.getByRole('radio', { name: /Codex/ })).toBeChecked();
   expect(await noSideScroll(form)).toBe(true);
   expect(await pageNoSideScroll(page)).toBe(true);
   const box = (await form.boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(900);
-  // Three tiles on one row at 900 px.
+  // Four tiles, two per row at 900 px.
   const row = await Promise.all((await tiles(page).all()).map(async t => (await t.boundingBox())!));
-  expect(row).toHaveLength(3);
-  expect(new Set(row.map(b => Math.round(b.y))).size).toBe(1);
-  // Under 700 px they stack in one column, still without a side scroll.
-  await page.setViewportSize({ width: 680, height: 760 });
+  expect(row).toHaveLength(4);
+  expect(new Set(row.map(b => Math.round(b.y))).size).toBe(2);
+  // Under 540 px they stack in one column, still without a side scroll.
+  await page.setViewportSize({ width: 520, height: 760 });
   await expect.poll(async () => {
     const bs = await Promise.all((await tiles(page).all()).map(async t => (await t.boundingBox())!));
     return new Set(bs.map(b => Math.round(b.x))).size === 1 && bs[0]!.y < bs[1]!.y && bs[1]!.y < bs[2]!.y;
   }).toBe(true);
   expect(await noSideScroll(form)).toBe(true);
   expect(await pageNoSideScroll(page)).toBe(true);
+  // Escape closes the list first (the focus is in it), then the form.
+  await page.keyboard.press('Escape');
+  await expect(tiles(page)).toHaveCount(0);
+  await expect(form.locator('.harness-current')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(form).toBeHidden();
 });
@@ -108,7 +117,7 @@ test('an offline machine: its chip is disabled, the form launches on Local', asy
   await expect(chip(form, 'Devbox')).toContainText('offline');
   await expect(form.getByRole('radio', { name: 'Local' })).toBeChecked();
   await form.getByLabel('Instruction').fill('Review the latest pull request');
-  await tile(form, 'Codex').click();
+  await pick(form, 'Codex');
   await expect(form.getByRole('radio', { name: /Codex/ })).toBeChecked();
   // One repository at a time for Codex.
   await expect(form.getByRole('radio', { name: 'ledge', exact: true })).toBeChecked();
@@ -130,7 +139,7 @@ test('the model (#58): the block under the agents, Sonnet and High chosen, sent 
   await open(page);
   const form = dialog(page);
   await form.getByLabel('Instruction').fill('Fix the failing tests');
-  await tile(form, 'Claude Code').click();
+  await pick(form, 'Claude Code');
   const models = form.getByRole('group', { name: 'Claude Code model' });
   await expect(models).toBeVisible();
   await models.getByRole('button', { name: /^Claude Code model : / }).click();
@@ -159,7 +168,7 @@ test('the model (#58 v2): Codex\'s long names and six efforts stay inside the fo
   await fakeDaemon(page, fleet, { projects, models: { codex } });
   await open(page);
   const form = dialog(page);
-  await tile(form, 'Codex').click();
+  await pick(form, 'Codex');
   const models = form.getByRole('group', { name: 'Codex model' });
   for (let i = 0; i < 4; i++) await models.getByRole('button', { name: 'More effort' }).click();
   await expect(models.getByRole('group', { name: 'Effort' }).getByRole('status')).toHaveText('Ultra');

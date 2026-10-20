@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AskQuestionSchema, PendingSchema, SessionSchema, ToolSchema } from './session.js';
+import { AskQuestionSchema, PendingSchema, SessionSchema, ToolSchema, OmpApprovalSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, MAX_PROPOSALS, ChatProjectProposalSchema } from './chat.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema } from './models.js';
@@ -76,6 +76,7 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Takes `model` and `effort` on `session.launch` and answers `models.list` (#58). */ models: z.boolean().optional(),
   /** Drives OMP over its RPC: launching `omp` sessions is possible when the binary is there (`models.list` says so). */ omp: z.boolean().optional(),
   /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
+  /** Takes `approval` on an OMP `session.launch` (auto mode). */ ompApproval: z.boolean().optional(),
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
@@ -155,6 +156,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     /** Folders in addition to `cwd` (Claude: `--add-dir`); resolved like `cwd`. */ dirs: z.array(z.string().min(1)).max(20).optional(),
     /** The agent's model and effort (#58), the agent's own default when left out; with `qid`, for every row launched. */
     model: ModelIdSchema.optional(), effort: EffortSchema.optional(),
+    /** OMP only: its approval mode, `always-ask` when left out. */ approval: OmpApprovalSchema.optional(),
     /** Routing by the fleet, removed before the message reaches the daemon. */ machineId: z.string().optional() }),
   /** The launch form's folder browser: list a folder's subfolders (home when no `path`), or make `name` inside `parent`
    *  and list it. Both are answered with a `folder.listing`. */

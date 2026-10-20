@@ -179,6 +179,12 @@ export function project(f: Frame, t: Tracking, at: string, helper?: string): Ses
     case 'prompt_result': {
       // The status of one instruction, not the rest of the session: only a failed one says something.
       if (f.status === 'failed' || f.status === 'error') { t.working = false; return [ev({ name: 'StopFailure', text: str(f.error) ?? 'the instruction failed' })]; }
+      // An abort with instructions still in OMP's queue stops the work but leaves the session unsettled: no session_settled
+      // comes (OMP 18.12.3, probed 2026-10-20), so this result is what says the work stopped.
+      if (f.status === 'aborted' && f.sessionSettled === false && t.working) {
+        t.working = false; t.reply = undefined; t.sent = false;
+        return [ev({ name: 'Stop', interrupt: true })];
+      }
       return [];
     }
     default: return [];
