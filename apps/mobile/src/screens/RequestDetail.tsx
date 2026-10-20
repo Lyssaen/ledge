@@ -173,7 +173,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
         onReread={() => { setChanged(false); setChoice(null); setRefused(false); }} onDecide={d => setRefused(!store.decide(sessionId, d))}
         answerable={answerable} choice={choosingOther ? options.length : choice} onAnswer={send}
         answerBlocked={choosingOther ? free.problem !== null : choice === null || choice >= options.length}
-        onCheck={onReconnect} refused={refused}
+        onCheck={onReconnect} refused={refused} store={store} deviceConfirm={state.device?.confirm === true}
       />
     </>
   );

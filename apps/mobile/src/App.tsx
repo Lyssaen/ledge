@@ -6,6 +6,7 @@ import type { LinkState, PhoneLink } from './link/link';
 import { useRoute } from './router';
 import { Agents } from './screens/Agents';
 import { Compare } from './screens/Compare';
+import { ProtectStep } from './screens/Enroll';
 import { Connection } from './screens/Connection';
 import { Denied } from './screens/Denied';
 import { Inbox, clock } from './screens/Inbox';
@@ -143,6 +144,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
             reach={link.reach()} onRetry={retry}
             onSame={() => link.pairing()?.confirmOnPhone()} onCancel={() => link.pairing()?.cancel()}
             onRestart={() => begin(() => link.startPairing())} onDone={() => setDoneSeen(true)}
+            actions={<ProtectStep store={store} onDone={() => setDoneSeen(true)} />}
           />
         );
     }

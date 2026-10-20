@@ -205,6 +205,27 @@ export const copy = {
     /** What the relay's `?signin=` said went wrong; the boards show none, these are the desktop's words. */
     errors: { denied: 'La connexion a été refusée sur GitHub.', failed: 'La connexion à GitHub a échoué. Réessayez.' }
   },
+  /** Confirming a high-impact accept with the device's own check (Face ID, fingerprint, PIN). */
+  confirm: {
+    heading: 'Confirmer l’autorisation',
+    note: 'Une vérification sur votre appareil sera demandée. Elle confirme votre identité, pas la sûreté de la commande.',
+    go: 'Confirmer avec mon appareil', goApple: 'Autoriser avec Face ID',
+    preparing: 'Préparation de la vérification…',
+    asking: 'Vérification en cours sur cet appareil…',
+    cancelled: 'Vérification annulée. Rien n’a été envoyé.',
+    expired: 'La vérification a expiré. Recommencez.',
+    failed: 'La vérification de l’appareil n’a pas abouti. Rien n’a été envoyé. Réessayez.',
+    prepareFailed: 'La vérification n’a pas pu être préparée. Rien n’a été envoyé.',
+    retry: 'Réessayer'
+  },
+  /** Protecting the high-impact accepts with this device, at pairing and in Connection. */
+  enroll: {
+    title: 'Protéger les accords',
+    body: 'Face ID ou le code de ce téléphone sera demandé pour autoriser une commande à impact élevé.',
+    go: 'Protéger les accords', later: 'Plus tard',
+    done: 'Protégés par cet appareil', row: 'Accords à impact élevé',
+    unsupported: 'Cet appareil ne peut pas protéger les accords.'
+  },
   compare: {
     /** The name this phone gives itself in its `pair_commit`, when its user agent names no known device. */
     deviceLabel: 'Téléphone',

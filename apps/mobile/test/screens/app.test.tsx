@@ -1,11 +1,14 @@
-import { act, fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createCredential, platformAvailable } from '../../src/link/webauthn';
 import { forgetIfKeysLost } from '../../src/boot';
 import { memoryKeys, type PinnedPc } from '../../src/link/keys';
 import { LAST_STATE_KEY } from '../../src/state/persist';
 import { pending, session } from '../model/fixtures';
 import { MemoryStorage, snapshot } from '../state/helpers';
 import { app, fakeUpdates } from './app-setup';
+
+vi.mock('../../src/link/webauthn', () => ({ platformAvailable: vi.fn(async () => false), createCredential: vi.fn(), getAssertion: vi.fn() }));
 
 const pc: PinnedPc = { publicKey: 'K', fingerprint: 'abcdEFGHijklMNOPqrstuv', name: 'PC-Desan', pinnedAt: '2026-10-16T08:00:00.000Z' };
 const hashChange = () => act(() => { globalThis.dispatchEvent(new HashChangeEvent('hashchange')); });
@@ -163,5 +166,70 @@ describe('the app', () => {
     await keys.saveIdentity({ publicKey: 'P', privateKey: {} as CryptoKey });
     expect(await forgetIfKeysLost(keys, storage)).toBe(false);
     expect(storage.getItem(LAST_STATE_KEY)).toBe('{}');
+  });
+
+  describe('protecting the high-impact accepts with this device', () => {
+    const challenge = { type: 'confirm.challenge' as const, purpose: 'register' as const, challenge: 'Y2hhbGw', rpId: 'relay.example', expiresInMs: 60_000 };
+    const credential = { id: 'AQ', publicKey: 'AQID', alg: -7 as const, clientDataJSON: 'AQI', authenticatorData: 'Aw' };
+    beforeEach(() => { vi.mocked(platformAvailable).mockResolvedValue(true); vi.mocked(createCredential).mockReset(); });
+    const withDevice = (confirm: boolean) => ({ ...snapshot([], 'PC-Desan'), device: { confirm } }) as never;
+
+    it('Connection without a credential offers « Protéger les accords », and a tap creates the passkey and registers it', async () => {
+      vi.mocked(createCredential).mockResolvedValue(credential);
+      const t = app('ready', { hash: '#/connection' });
+      act(() => t.deliver(withDevice(false)));
+      await waitFor(() => expect(t.of('confirm.prepare')).toMatchObject([{ purpose: 'register' }]));
+      expect(screen.getByText('Accords à impact élevé')).toBeInTheDocument();
+      act(() => t.deliver(challenge));
+      fireEvent.click(await screen.findByRole('button', { name: 'Protéger les accords' }));
+      expect(createCredential).toHaveBeenCalledWith({ challenge: 'Y2hhbGw', rpId: 'relay.example' }, { label: expect.any(String) });
+      await waitFor(() => expect(t.of('credential.register')).toMatchObject([{ credential }]));
+      act(() => t.deliver({ type: 'operation.result', op: t.of('credential.register')[0]!.op, status: 'applied' }));
+      act(() => t.deliver(withDevice(true)));
+      expect(await screen.findByText('Protégés par cet appareil')).toBeInTheDocument();
+    });
+
+    it('Connection with a credential says « Protégés par cet appareil »', async () => {
+      const t = app('ready', { hash: '#/connection' });
+      act(() => t.deliver(withDevice(true)));
+      expect(await screen.findByText('Protégés par cet appareil')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Protéger les accords' })).not.toBeInTheDocument();
+    });
+
+    it('a cancelled passkey says nothing was sent, and registers nothing', async () => {
+      vi.mocked(createCredential).mockResolvedValue('cancelled');
+      const t = app('ready', { hash: '#/connection' });
+      act(() => t.deliver(withDevice(false)));
+      await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+      act(() => t.deliver(challenge));
+      fireEvent.click(await screen.findByRole('button', { name: 'Protéger les accords' }));
+      expect(await screen.findByText('Vérification annulée. Rien n’a été envoyé.')).toBeInTheDocument();
+      expect(t.of('credential.register')).toEqual([]);
+    });
+
+    it('a PC of lot 5 (no device) shows no row', async () => {
+      const t = app('ready', { hash: '#/connection' });
+      act(() => t.deliver(snapshot([], 'PC-Desan')));
+      expect(screen.queryByText('Accords à impact élevé')).not.toBeInTheDocument();
+    });
+
+    it('after the pairing, the step offers the protection, and « Plus tard » leads to the inbox', async () => {
+      const t = app('pairing');
+      act(() => { t.setPairing({ step: 'linked', pc }); t.setPinned(pc); t.set('ready'); });
+      act(() => t.deliver(withDevice(false)));
+      expect(await screen.findByRole('heading', { name: 'Protéger les accords' })).toBeInTheDocument();
+      expect(screen.getByText('Face ID ou le code de ce téléphone sera demandé pour autoriser une commande à impact élevé.')).toBeInTheDocument();
+      await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+      fireEvent.click(screen.getByRole('link', { name: 'Plus tard' }));
+      expect(screen.getByRole('heading', { name: 'À traiter' })).toBeInTheDocument();
+    });
+
+    it('after the pairing, a PC with no device offers nothing but the way in', () => {
+      const t = app('pairing');
+      act(() => { t.setPairing({ step: 'linked', pc }); t.setPinned(pc); t.set('ready'); });
+      act(() => t.deliver(snapshot([], 'PC-Desan')));
+      expect(screen.queryByRole('heading', { name: 'Protéger les accords' })).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Voir ce qui attend' })).toBeInTheDocument();
+    });
   });
 });

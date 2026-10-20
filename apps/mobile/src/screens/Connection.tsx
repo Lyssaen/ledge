@@ -8,6 +8,7 @@ import { useMobile, type MobileStore } from '../state/store';
 import type { BuildInfo } from '../sw/types';
 import { BackHeader, linkView } from '../ui/Header';
 import { OUTLINE } from '../ui/Board';
+import { ProtectRow } from './Enroll';
 
 const N = copy.connection;
 const status = (s: LinkState): string => s === 'ready' ? N.states.online : s === 'handshaking' ? N.states.connecting : N.states.offline;
@@ -41,6 +42,7 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
               <dd className={`min-w-0 text-right break-words ${mono ? 'font-mono' : ''}`}>{value}</dd>
             </div>
           ))}
+          <ProtectRow store={store} />
         </dl>
         <div className="flex-grow" aria-hidden="true" />
         <button type="button" onClick={onSignOut} className={OUTLINE}>{N.signOut}</button>

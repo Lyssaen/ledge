@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { copy } from '../copy';
 import type { Reach } from '../link/link';
@@ -51,10 +51,12 @@ export interface CompareProps {
   onRestart: () => void;
   /** « Voir ce qui attend », once linked. */
   onDone: () => void;
+  /** What leads out of the « linked » step: the way to the inbox, with the offer to protect accepts when there is one. */
+  actions?: ReactNode;
 }
 
 /** Board Compare: the code of both keys, read on the PC and here, then confirmed on both. */
-export function Compare({ step, login, pcName, lost, stalled = false, reach = 'pc_online', onRetry, onSame, onCancel, onRestart, onDone }: CompareProps) {
+export function Compare({ step, login, pcName, lost, stalled = false, reach = 'pc_online', onRetry, onSame, onCancel, onRestart, onDone, actions }: CompareProps) {
   // The user said the codes differ: the cancellation that follows is the board's warning, not a plain one.
   const [differ, setDiffer] = useState(false);
   const pc = pcName ?? copy.yourPc;
@@ -71,7 +73,7 @@ export function Compare({ step, login, pcName, lost, stalled = false, reach = 'p
           <p className="max-w-[300px] text-muted">{C.doneBody}</p>
         </div>
         <Fill />
-        <a href={href({ name: 'inbox' })} onClick={onDone} className={PRIMARY}>{C.seePending}</a>
+        {actions ?? <a href={href({ name: 'inbox' })} onClick={onDone} className={PRIMARY}>{C.seePending}</a>}
       </Board>
     );
   }
