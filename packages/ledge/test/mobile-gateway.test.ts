@@ -6,6 +6,7 @@ import { createPhoneGateway } from '../src/mobile/gateway.js';
 import { createChallengeStore } from '../src/mobile/challenges.js';
 import { challengeOf, rpOf, type DeviceCredential } from '../src/mobile/webauthn.js';
 import { launchFromChat } from '../src/chat/launch.js';
+import { toPhoneTurn } from '../src/mobile/chat.js';
 import { tooWide } from '../src/chat/service.js';
 import { softAuthenticator } from './mobile-soft-authenticator.js';
 
@@ -1518,5 +1519,28 @@ describe('phone gateway: chat cards', () => {
     expect(last(g)).toMatchObject({ status: 'failed' });
     expect(k.launches).toEqual([]);
     expect(k.rows[0]!.error).toBeDefined();
+    expect(toPhoneTurn({ qid: QA, question: 'q', askedAt: T0, steps: [], proposals: k.rows } as never).proposals?.[0]).toMatchObject({ failed: true });
+  });
+
+  it('rows named twice are rejected invalid by the schema and launch nothing', async () => {
+    const { k, g } = make([row('/w/repo')]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    const op = randomUUID();
+    g.send('dev1', { type: 'chat.launch', op, qid: QA, rows: [0, 0], assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(g.got('dev1').at(-1)).toMatchObject({ type: 'operation.result', op, status: 'rejected', reason: 'invalid' });
+    expect(k.launches).toEqual([]);
+  });
+
+  it('a card already launched is failed before the assertion is spent', async () => {
+    const { k, g } = make([{ ...row('/w/repo'), launchedId: 'x' }]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'failed' });
+    expect(k.launches).toEqual([]);
+    expect(g.creds.get('dev1')?.counter).toBe(0);
   });
 });

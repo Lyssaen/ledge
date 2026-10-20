@@ -48,4 +48,12 @@ describe('launchFromChat', () => {
     const g = fake([row('/a')]);
     await expect(launchFromChat({ ...deps, chat: g.chat, inFlight: new Set(['q#0']) }, 'q')).rejects.toThrow('already launched');
   });
+
+  it('launches a row once even when it is named twice', async () => {
+    const f = fake([row('/a')]);
+    let n = 0;
+    const out = await launchFromChat({ chat: f.chat, emit: () => {}, inFlight: new Set(), launch: async () => `s${++n}` }, 'q', [0, 0]);
+    expect(n).toBe(1);
+    expect(out).toEqual({ launched: ['s1'], failed: 0 });
+  });
 });

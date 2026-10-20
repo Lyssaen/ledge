@@ -303,6 +303,8 @@ export function createPhoneGateway(deps: {
       if (!p || (p.prompt?.length ?? 0) > TOOL_TEXT_MAX) return { status: 'rejected', reason: 'invalid' };
     }
     if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
+    // Nothing left to start: answered before the assertion is spent.
+    if (targets.every(r => rows[r]!.launchedId)) return { status: 'failed' };
     const refused = launchAssertionOutcome(deviceId, msg.qid, msg.assertion);
     if (refused) return refused;
     const done = await deps.launchChat(`device:${deviceId}`, msg.qid, targets);
@@ -462,9 +464,9 @@ export function createPhoneGateway(deps: {
       const type = (raw as { type?: unknown } | null | undefined)?.type;
       const request = typeof type === 'string' && REQUEST_NAME.test(type) ? type : undefined;
       log(`phone message refused: ${request ?? '?'}`);
-      // A subscription to an endpoint off the list is an operation the phone waits an answer for.
+      // A subscription to an endpoint off the list, or a launch the schema refuses (a row twice), is an operation the phone waits an answer for.
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
-      if (request === 'push.subscribe' && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
+      if ((request === 'push.subscribe' || request === 'chat.launch') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;

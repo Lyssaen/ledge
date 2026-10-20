@@ -19,14 +19,16 @@ export class LaunchRefused extends Error {}
 /** A chat card's rows (#24) start one after the other, so each launch registers its bot before the next picks a name; a launched row, or one in flight, is passed over. */
 export async function launchFromChat(deps: LaunchDeps, qid: string, rows: number[] = [0]): Promise<{ launched: string[]; failed: number }> {
   const { chat, inFlight } = deps;
-  const todo = rows.filter(r => { const p = chat.proposal(qid, r); return p && !p.launchedId && !inFlight.has(`${qid}#${r}`); });
+  const todo = [...new Set(rows)].filter(r => { const p = chat.proposal(qid, r); return p && !p.launchedId && !inFlight.has(`${qid}#${r}`); });
   if (todo.length === 0) throw new LaunchRefused(rows.some(r => chat.proposal(qid, r)) ? 'already launched' : 'unknown proposal');
   for (const r of todo) inFlight.add(`${qid}#${r}`);
   const launched: string[] = [];
   let failed = 0;
   try {
     for (const r of todo) {
-      const p = chat.proposal(qid, r)!;
+      // Re-checked: a concurrent caller may have launched the row since the filter.
+      const p = chat.proposal(qid, r);
+      if (!p || p.launchedId) { inFlight.delete(`${qid}#${r}`); continue; }
       try {
         const refused = deps.refuse?.(p) ?? null;
         if (refused !== null) throw new Error(refused);

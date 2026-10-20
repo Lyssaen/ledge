@@ -196,7 +196,7 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.reset') }),
   z.object({ type: z.literal('chat.history') }),
   z.object({ type: z.literal('chat.relay'), op: OperationIdSchema, qid: OperationIdSchema }),
-  z.object({ type: z.literal('chat.launch'), op: OperationIdSchema, qid: OperationIdSchema, rows: z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).optional(), assertion: AssertionSchema.optional() }),
+  z.object({ type: z.literal('chat.launch'), op: OperationIdSchema, qid: OperationIdSchema, rows: z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice').optional(), assertion: AssertionSchema.optional() }),
   /** Whether the phone's app is in front: a device that is visible gets no push. */
   z.object({ type: z.literal('presence'), visible: z.boolean() })
 ]);

@@ -231,6 +231,7 @@ describe('phone chat', () => {
     expect(() => PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: 'nope', text: 'hi' })).toThrow();
     expect(() => PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: QID, text: '   ' })).toThrow();
     expect(() => PhoneClientMessageSchema.parse({ type: 'chat.launch', op: OP, qid: QID, rows: [8] })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'chat.launch', op: OP, qid: QID, rows: [0, 0] })).toThrow();
   });
   it('keeps a snapshot without chat valid and accepts chat: true', () => {
     expect(() => PhoneServerMessageSchema.parse({ ...snap, device: { confirm: true } })).not.toThrow();
