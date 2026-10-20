@@ -136,71 +136,83 @@ export async function startHarness(opts: { webDir?: string } = {}): Promise<Harn
   };
   const db = new PGlite();
   const events: RelayLogEvent[] = [];
-
-  // A free port first, so PUBLIC_URL is known before the relay starts, and the same one after every restart.
-  const probe = http.createServer();
-  await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
-  const port = (probe.address() as AddressInfo).port;
-  await new Promise<void>((resolve) => probe.close(() => resolve()));
-  const url = `http://localhost:${port}`;
-  const cfg: AccountsConfig = {
-    mode: 'accounts', port, databaseUrl: 'pglite://memory', clientId: 'fake', clientSecret: 'fake',
-    allowed: new Set([USER.id]), publicUrl: url, webDir
-  };
-
   let current: Awaited<ReturnType<typeof startAccountsRelay>> | null = null;
-  const startRelay = async () => {
-    if (current) throw new Error('relay still running');
-    const app = await startAccountsRelay(cfg, { db, github: gh, log: (e) => events.push(e) });
-    await new Promise<void>((resolve, reject) => {
-      app.server.once('error', reject);
-      app.server.listen(port, '127.0.0.1', () => { app.server.off('error', reject); resolve(); });
-    });
-    current = app;
-  };
+  /** Stops the relay if it runs; the db is closed only after this (apps/relay/src/app.ts). */
   const stopRelay = async () => {
     const app = current;
     current = null;
     await app?.close();
   };
-  await startRelay();
-
-  // The PC signs in as the daemon does: GitHub's device flow, approved at once.
-  const post = async (route: string, body?: unknown) => {
-    const res = await fetch(`http://127.0.0.1:${port}${route}`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {})
-    });
-    return res.json() as Promise<unknown>;
+  let pc: FakePc | undefined;
+  let daemon: FakeDaemon | undefined;
+  /** Everything started so far, in reverse: the relay before its db. */
+  const teardown = async () => {
+    daemon?.stop();
+    await pc?.close();
+    await stopRelay();
+    await web.close();
+    await db.close();
   };
-  const { deviceCode } = DeviceStartResponseSchema.parse(await post('/auth/device/start'));
-  github.approve(deviceCode, USER);
-  const poll = DevicePollResponseSchema.parse(await post('/auth/device/poll', { deviceCode }));
-  if (poll.status !== 'ok') throw new Error(`the PC could not sign in: ${poll.status}`);
 
-  const relay: TestRelay = {
-    url: `http://127.0.0.1:${port}`,
-    port,
-    pcToken: poll.token,
-    deviceToken() { throw new Error('the phone signs in with GitHub here'); },
-    relay: { close: stopRelay },
-    restart: startRelay
-  };
-  const pc = await startFakePc({ relay, learnPeer: true });
-  const daemon = runDaemon(pc);
+  try {
+    // A free port first, so PUBLIC_URL is known before the relay starts, and the same one after every restart.
+    const probe = http.createServer();
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const port = (probe.address() as AddressInfo).port;
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+    const url = `http://localhost:${port}`;
+    const cfg: AccountsConfig = {
+      mode: 'accounts', port, databaseUrl: 'pglite://memory', clientId: 'fake', clientSecret: 'fake',
+      allowed: new Set([USER.id]), publicUrl: url, webDir
+    };
 
-  return {
-    url, pc, daemon, events, stopRelay,
-    async startRelay() {
-      await startRelay();
-      await pc.reconnect();
-    },
-    async close() {
-      daemon.stop();
-      await pc.close();
-      await web.close();
-      await db.close();
-    }
-  };
+    const startRelay = async () => {
+      if (current) throw new Error('relay still running');
+      const app = await startAccountsRelay(cfg, { db, github: gh, log: (e) => events.push(e) });
+      await new Promise<void>((resolve, reject) => {
+        app.server.once('error', reject);
+        app.server.listen(port, '127.0.0.1', () => { app.server.off('error', reject); resolve(); });
+      });
+      current = app;
+    };
+    await startRelay();
+
+    // The PC signs in as the daemon does: GitHub's device flow, approved at once.
+    const post = async (route: string, body?: unknown) => {
+      const res = await fetch(`http://127.0.0.1:${port}${route}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {})
+      });
+      return res.json() as Promise<unknown>;
+    };
+    const { deviceCode } = DeviceStartResponseSchema.parse(await post('/auth/device/start'));
+    github.approve(deviceCode, USER);
+    const poll = DevicePollResponseSchema.parse(await post('/auth/device/poll', { deviceCode }));
+    if (poll.status !== 'ok') throw new Error(`the PC could not sign in: ${poll.status}`);
+
+    const relay: TestRelay = {
+      url: `http://127.0.0.1:${port}`,
+      port,
+      pcToken: poll.token,
+      deviceToken() { throw new Error('the phone signs in with GitHub here'); },
+      relay: { close: stopRelay },
+      restart: startRelay
+    };
+    const thePc = await startFakePc({ relay, learnPeer: true });
+    pc = thePc;
+    daemon = runDaemon(thePc);
+
+    return {
+      url, pc: thePc, daemon, events, stopRelay,
+      async startRelay() {
+        await startRelay();
+        await thePc.reconnect();
+      },
+      close: teardown
+    };
+  } catch (e) {
+    await teardown().catch(() => {});
+    throw e;
+  }
 }
 
 // `pnpm --filter @ledge/mobile serve:local`: the same world, kept running, every pairing approved on the PC.
