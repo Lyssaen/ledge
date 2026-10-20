@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { PROTOCOL_PORT } from '@ledge/protocol';
+import { PROTOCOL_PORT, backendOf } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { realTmux } from '../tmux.js';
 import { attachEnv } from './launch.js';
@@ -24,6 +24,17 @@ export interface AttachOptions {
   write?: (s: string) => void;
 }
 
+/** The name of session `id` when the daemon says it has no terminal (OMP), else null (no daemon, no such session, a tmux one). */
+async function nativeSession(id: string, port: number): Promise<string | null> {
+  try {
+    const c = await connect({ port, timeoutMs: 800 });
+    const snap = await c.next('snapshot');
+    await Promise.race([c.close(), new Promise(r => setTimeout(r, 500))]);
+    const s = snap.sessions.find(x => x.id === id);
+    return s && backendOf(s) === 'omp-rpc' ? s.name : null;
+  } catch { return null; }
+}
+
 /**
  * `ledge attach [--read-only] <id>`: puts this terminal on a session's tmux pane, like the tab `ledge claude` opens. The overlay runs
  * it in a new Windows Terminal tab for a session it launched itself. The tab is renamed after the session's title when
@@ -33,7 +44,12 @@ export async function attach(id: string, opts: AttachOptions = {}): Promise<numb
   if (!id) { console.error('ledge attach: missing session id'); return 2; }
   const tmux = realTmux(opts.tmuxSocket ?? TMUX_SOCKET);
   const tmuxName = `ledge-${id}`;
-  if (!(await tmux.hasSession(tmuxName))) { console.error(`ledge attach: no session ${id}`); return 1; }
+  if (!(await tmux.hasSession(tmuxName))) {
+    // An OMP session has no pane: the daemon drives it over its protocol, and nothing a terminal shows is its state (spec 2026-10-20 §3.5).
+    const native = await nativeSession(id, opts.port ?? PROTOCOL_PORT);
+    console.error(native ? `ledge attach: ${native} is driven by Ledge over OMP's own protocol: there is no terminal to attach to (open a shell from the app)` : `ledge attach: no session ${id}`);
+    return 1;
+  }
   let title = tmuxName;
   try {
     const c = await connect({ port: opts.port ?? PROTOCOL_PORT, timeoutMs: 800 });

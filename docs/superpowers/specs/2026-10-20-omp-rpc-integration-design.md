@@ -1,6 +1,6 @@
 # OMP dans Ledge — intégration native RPC
 
-2026-10-20. **Proposition de design ; intégration non implémentée.**
+2026-10-20. **Implémenté (#63, lots 1 à 5) et vérifié sur OMP 18.12.3.** Écarts assumés par rapport au texte ci-dessous : le texte progressif passe par des cartes `session.thread.item` mises à jour toutes les 120 ms (pas d'événement delta dédié) ; Ask Ledge tourne aussi sur OMP (`omp -p --mode json`, outils `read,grep,glob`) et OMP peut être l'agent par défaut, sur décision de Joffrey (§2, ligne « Ask Ledge »).
 
 ## 1. Décision proposée
 
