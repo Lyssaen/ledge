@@ -8,7 +8,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { Projects, ServerMessage, Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
-import { createChat, tooWide } from '../src/chat/service.js';
+import { createChat, tooWide, TOO_MANY } from '../src/chat/service.js';
 
 // The daemon's log lines, read here (a dropped project path is logged with its reason).
 const logged = vi.hoisted(() => [] as string[]);
@@ -470,5 +470,33 @@ describe('chat service', () => {
       await again.chat.reset(() => {});
       expect(again.chat.queuedRelays()).toEqual([]);
     });
+  });
+});
+
+describe('chat service slots and idle', () => {
+  const kid = (code: number) => (() => {
+    const child: any = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), stdin: new PassThrough(), kill: () => { child.emit('close', null); } });
+    setImmediate(() => setImmediate(() => child.emit('close', code)));
+    return child;
+  }) as unknown as typeof nodeSpawn;
+  it('refuses with TOO_MANY when no slot is free, and gives the slot back whatever the outcome', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ledge-'));
+    let free = 1; const slots = { take: () => (free > 0 ? (free--, true) : false), give: () => { free++; } };
+    const chat = createChat({ store: new Store({ journalPath: join(home, 'j.json') }), tmux, home, today: () => '2026-10-11', env: async () => ({ ...process.env }), spawn: kid(1), slots });
+    const out: ServerMessage[] = [];
+    await chat.ask('q1', 'x', m => out.push(m));
+    expect(free).toBe(1);
+    free = 0;
+    await chat.ask('q2', 'x', m => out.push(m));
+    expect(out.at(-1)).toEqual({ type: 'chat.error', qid: 'q2', message: TOO_MANY });
+  });
+  it('idle resolves at once without a question, and after the running one', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ledge-'));
+    const chat = createChat({ store: new Store({ journalPath: join(home, 'j.json') }), tmux, home, today: () => '2026-10-11', env: async () => ({ ...process.env }), spawn: kid(1) });
+    await chat.idle();
+    const p = chat.ask('q1', 'x', () => {}); let idled = false;
+    const i = chat.idle().then(() => { idled = true; });
+    expect(idled).toBe(false);
+    await p; await i; expect(idled).toBe(true);
   });
 });

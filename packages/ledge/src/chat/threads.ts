@@ -1,0 +1,57 @@
+import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { Tool } from '@ledge/protocol';
+import { createChat, type Chat, type ChatDeps, type ChatMessage } from './service.js';
+
+export type ChatThreadId = 'desktop' | `device:${string}`;
+type Emit = (m: ChatMessage) => void;
+
+/** A pool of places shared by the threads: `take` is refused once `max` questions run. */
+export function createSlots(max = 3): { take(): boolean; give(): void } {
+  let used = 0;
+  return {
+    take() { if (used >= max) return false; used++; return true; },
+    give() { if (used > 0) used--; }
+  };
+}
+
+/** One chat for the desktop and one per paired device, under a common cap on running questions. */
+export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number }) {
+  const { max, ...rest } = deps;
+  const slots = createSlots(max);
+  const desktop = createChat({ ...rest, slots });
+  const devices = new Map<string, Chat>();
+  const emitters = new Map<ChatThreadId, Emit>();
+  const deviceHome = (id: string) => join(deps.home, 'mobile', 'chat', id);
+
+  const device = (id: string): Chat => {
+    let c = devices.get(id);
+    if (!c) { c = createChat({ ...rest, home: deviceHome(id), slots }); devices.set(id, c); }
+    return c;
+  };
+  return {
+    desktop,
+    device,
+    all(): Array<[ChatThreadId, Chat]> { return [['desktop', desktop], ...[...devices].map(([id, c]): [ChatThreadId, Chat] => [`device:${id}`, c])]; },
+    setEmitter(thread: ChatThreadId, emit: Emit): void { emitters.set(thread, emit); },
+    emitterOf(thread: ChatThreadId): Emit | undefined { return emitters.get(thread); },
+    /** The PC's tool of the day file, whatever its day: `claude` without one. */
+    async deviceTool(): Promise<Tool> {
+      try {
+        const t = (JSON.parse(await readFile(join(deps.home, 'chat.json'), 'utf8')) as { tool?: unknown }).tool;
+        return t === 'claude' || t === 'codex' || t === 'cursor' || t === 'omp' ? t : 'claude';
+      } catch { return 'claude'; }
+    },
+    /** Forgets the device's thread (a later question starts a fresh one), stops its question, and removes its folder once nothing runs. */
+    async drop(id: string): Promise<void> {
+      const c = devices.get(id);
+      devices.delete(id); emitters.delete(`device:${id}`);
+      if (c) { for (const t of c.history()) c.cancel(t.qid); await c.idle(); }
+      await rm(deviceHome(id), { recursive: true, force: true });
+    },
+    owner(qid: string): ChatThreadId | undefined {
+      for (const [id, c] of this.all()) if (c.history().some(t => t.qid === qid)) return id;
+      return undefined;
+    }
+  };
+}

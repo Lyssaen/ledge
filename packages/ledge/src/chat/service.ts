@@ -29,6 +29,8 @@ export interface Chat {
   markRelay(qid: string, patch: Pick<ChatRelay, 'status' | 'sentAt' | 'error'>, emit: (m: ChatMessage) => void): void;
   /** Today's queued relays, oldest turn first. */
   queuedRelays(emit?: (m: ChatMessage) => void): Array<{ qid: string; relay: ChatRelay }>;
+  /** Resolves once no question is running (at once when there is none). */
+  idle(): Promise<void>;
 }
 export interface ChatDeps {
   store: Store; tmux: Pick<Tmux, 'capture'>; home: string;
@@ -40,6 +42,8 @@ export interface ChatDeps {
   projects?: () => Projects;
   /** Reads the projects' GitHub/GitLab (#23) into the context, for a question that asks about issues, PR/MR or CI. */
   forge?: Forge;
+  /** A pool shared by several chats: a question takes a place while it runs. */
+  slots?: { take(): boolean; give(): void };
   now?: () => string; today?: () => string; uuid?: () => string; bin?: string[]; bins?: Partial<Record<Tool, string[]>>; spawn?: typeof nodeSpawn; timeoutMs?: number;
 }
 
@@ -48,6 +52,7 @@ const runTool = (tool: Tool, o: RunOptions, onEvent: (e: ClaudeEvent) => void, s
   tool === 'omp' ? runOmp(o, onEvent, spawn) : tool === 'codex' ? runCodex(o, onEvent, spawn) : tool === 'cursor' ? runCursor(o, onEvent, spawn) : runClaude(o, onEvent, spawn);
 
 export const ONE_AT_A_TIME = 'one question at a time: wait for the answer';
+export const TOO_MANY = 'too many questions at once: try again in a moment';
 /** How many of the day's turns are kept for a client that connects later. */
 const HISTORY_MAX = 50;
 /** The lines of a terminal Ledge gets to read. */
@@ -85,6 +90,7 @@ export function createChat(deps: ChatDeps): Chat {
   /** The running question, from its first line (so a Stop while the context is built counts); `handle` once Claude Code has spawned. */
   type Running = { qid: string; handle: RunHandle | null; cancelled: boolean };
   let current: Running | null = null;
+  let idleWaiters: Array<() => void> = [];
   const CANCELLED = { ok: false as const, message: 'cancelled', resumed: false };
 
   /** A new day starts an empty history; the day file decides the Claude session separately. */
@@ -224,6 +230,7 @@ export function createChat(deps: ChatDeps): Chat {
     },
     // A roll caught here is silent otherwise: the overlays would keep showing yesterday's queued card.
     queuedRelays(emit) { if (rollDay()) emit?.({ type: 'chat.history', turns }); return turns.flatMap(t => (t.relay?.status === 'queued' ? [{ qid: t.qid, relay: t.relay }] : [])); },
+    idle: () => (busy ? new Promise<void>(res => { idleWaiters.push(res); }) : Promise.resolve()),
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
     async reset(emit) {
       // The overlay only offers it between questions; a reset racing a question is dropped rather than orphaning its turn.
@@ -235,23 +242,29 @@ export function createChat(deps: ChatDeps): Chat {
     },
     async ask(qid, text, emit, tool = 'claude') {
       if (busy) return emit({ type: 'chat.error', qid, message: ONE_AT_A_TIME });
+      if (deps.slots && !deps.slots.take()) return emit({ type: 'chat.error', qid, message: TOO_MANY });
       busy = true;
-      const mine: Running = current = { qid, handle: null, cancelled: false };
-      const turn: ChatTurn = { qid, question: text, askedAt: now(), steps: [] };
       try {
-        rollDay();
-        turns = [...turns, turn].slice(-HISTORY_MAX);
-        // Every client learns the turn before it streams, including one connected before the question (its steps would map over nothing).
-        emit({ type: 'chat.history', turns });
-        let r = await attempt(turn, emit, false, mine, tool);
-        // A day session whose transcript is gone (or a CLI that forgot it): once more, from a fresh conversation.
-        if (!r.ok && r.resumed && !mine.cancelled) { log(`chat ${qid}: resume failed (${r.message}), starting a new day session`); turn.steps.length = 0; r = await attempt(turn, emit, true, mine, tool); }
-        if (!r.ok) { turn.error = r.message; emit({ type: 'chat.error', qid, message: r.message }); }
-      } catch (e) {
-        // The context folder or the day file could not be written: the overlay still needs its unlock.
-        log(`chat ${qid} failed: ${(e as Error).message}`);
-        turn.error = (e as Error).message; emit({ type: 'chat.error', qid, message: turn.error });
-      } finally { busy = false; current = null; }
+        const mine: Running = current = { qid, handle: null, cancelled: false };
+        const turn: ChatTurn = { qid, question: text, askedAt: now(), steps: [] };
+        try {
+          rollDay();
+          turns = [...turns, turn].slice(-HISTORY_MAX);
+          // Every client learns the turn before it streams, including one connected before the question (its steps would map over nothing).
+          emit({ type: 'chat.history', turns });
+          let r = await attempt(turn, emit, false, mine, tool);
+          // A day session whose transcript is gone (or a CLI that forgot it): once more, from a fresh conversation.
+          if (!r.ok && r.resumed && !mine.cancelled) { log(`chat ${qid}: resume failed (${r.message}), starting a new day session`); turn.steps.length = 0; r = await attempt(turn, emit, true, mine, tool); }
+          if (!r.ok) { turn.error = r.message; emit({ type: 'chat.error', qid, message: r.message }); }
+        } catch (e) {
+          // The context folder or the day file could not be written: the overlay still needs its unlock.
+          log(`chat ${qid} failed: ${(e as Error).message}`);
+          turn.error = (e as Error).message; emit({ type: 'chat.error', qid, message: turn.error });
+        } finally { busy = false; current = null; }
+      } finally {
+        deps.slots?.give();
+        const waiting = idleWaiters; idleWaiters = []; for (const res of waiting) res();
+      }
     }
   };
 }
