@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, backendOf } from '@ledge/protocol';
+import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
@@ -42,6 +42,7 @@ import { serveSsh } from '../transport/ssh.js';
 import type { MobileService } from '../mobile/service.js';
 import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
 import { createNotifier } from '../mobile/push/notifier.js';
+import { chatEndPayload } from '../mobile/push/triggers.js';
 import { pushFor } from '../mobile/push/triggers.js';
 import { createChallengeStore } from '../mobile/challenges.js';
 import { rpOf } from '../mobile/webauthn.js';
@@ -217,6 +218,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const remoteClients = new Set<WebSocket>();
   /** The approved phones' way in and out, when mobile access is up; set once `dispatch` can run. */
   let gateway: PhoneGateway | undefined;
+  /** The notifier is made after the gateway: a chat end reaches it through this. */
+  let notifyChatEnd: ((deviceId: string, code?: ChatErrorCode) => void) | undefined;
   /** Every local front gets it; the phone gateway passes on only what it knows. */
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
   threads.setEmitter('desktop', broadcast);
@@ -891,6 +894,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         refuse: p => { const wide = tooWide(resolve(p.cwd), userHome); return wide ? `the folder is ${wide}` : null; }
       }, qid, rows);
     },
+    onChatEnd: (deviceId, end) => notifyChatEnd?.(deviceId, end.code),
     version: opts.daemon?.version ?? 'unknown',
     boot: randomUUID(),
     log,
@@ -904,6 +908,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   let unsubscribePush: (() => void) | undefined;
   if (mobile) {
     const notifier = createNotifier({ mobile, presence: id => gateway?.visible(id) ?? false, log });
+    notifyChatEnd = (deviceId, code) => {
+      const badge = store.all().filter(s => s.pending).length;
+      void notifier.notify(chatEndPayload(code, badge), undefined, deviceId).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
+    };
     unsubscribePush = store.onApply((before, after) => {
       const p = pushFor(before, after, store.all());
       if (p) void notifier.notify(p, after.id).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));

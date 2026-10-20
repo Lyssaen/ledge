@@ -1,4 +1,4 @@
-import { pendingKey, type PushPayload, type Session } from '@ledge/protocol';
+import { pendingKey, type ChatErrorCode, type PushPayload, type Session } from '@ledge/protocol';
 
 const TAG_MAX = 32;
 const TITLE_MAX = 80;
@@ -44,4 +44,20 @@ export function pushFor(before: Session | undefined, after: Session, all: readon
     return { v: 1, kind: 'finished', title: cut(`${after.name} a terminé`, TITLE_MAX), body: cut((after.lastReply?.text ?? '').trim(), BODY_MAX), url: `/#/thread/${encodeURIComponent(after.id)}`, badge, tag };
   }
   return null;
+}
+
+/** The phone's own words for a question that ended without an answer (a copy of apps/mobile/src/copy.ts: the daemon never imports the phone). */
+const CHAT_ERROR_BODY: Record<ChatErrorCode, string> = {
+  busy: 'Ledge répond déjà à d\'autres questions. Réessayez dans un instant.',
+  timeout: 'Ledge n\'a pas répondu à temps.',
+  failed: 'Ledge n\'a pas pu répondre.',
+  cancelled: 'Question arrêtée.'
+};
+
+/** The end of a device's question: never the text of the answer, only the code's own sentence on an error. */
+export function chatEndPayload(code: ChatErrorCode | undefined, badge: number): PushPayload {
+  return {
+    v: 1, kind: 'chat', title: 'Ledge a répondu', body: code ? CHAT_ERROR_BODY[code] : 'Touchez pour lire la réponse.',
+    url: '/#/chat', badge: Math.max(0, Math.min(999, badge)), tag: 'chat'
+  };
 }

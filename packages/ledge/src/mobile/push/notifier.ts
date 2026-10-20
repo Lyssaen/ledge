@@ -13,7 +13,8 @@ const TTL_S = 3_600;
 const FINISHED_EVERY_MS = 60_000;
 
 export interface Notifier {
-  notify(p: PushPayload, sessionId: string): Promise<void>;
+  /** `sessionId` paces `finished` (none for a chat end); `only` limits the targets to one device. */
+  notify(p: PushPayload, sessionId: string | undefined, only?: string): Promise<void>;
 }
 
 /** The payload as bytes that still fit in one padded record (one octet is the delimiter): its `body` is cut if need be. */
@@ -40,12 +41,12 @@ export function createNotifier(deps: {
   const lastFinished = new Map<string, number>();
 
   return {
-    async notify(payload, sessionId) {
+    async notify(payload, sessionId, only) {
       if (!mobile.state().enabled) return;
       const checked = PushPayloadSchema.safeParse(payload);
       if (!checked.success) { log('push: payload skipped (invalid)'); return; }
       const p = checked.data;
-      if (p.kind === 'finished') {
+      if (p.kind === 'finished' && sessionId !== undefined) {
         const last = lastFinished.get(sessionId);
         if (last !== undefined && now() - last < FINISHED_EVERY_MS) return;
       }
@@ -54,20 +55,21 @@ export function createNotifier(deps: {
       const relayKey = mobile.relayPushKey();
       if (relayKey === null) return;
       const targets = mobile.state().devices.flatMap(d => {
+        if (only !== undefined && d.id !== only) return [];
         const sub = mobile.pushOf(d.id);
         if (!sub || (relayKey !== undefined && sub.key !== relayKey) || deps.presence(d.id)) return [];
         return [{ id: d.id, online: d.online, sub }];
       });
       if (targets.length === 0) return;
       // Only a real send starts the delay: the turn ends once, whatever the number of devices.
-      if (p.kind === 'finished') lastFinished.set(sessionId, now());
+      if (p.kind === 'finished' && sessionId !== undefined) lastFinished.set(sessionId, now());
       await Promise.all(targets.map(async ({ id, sub }) => {
         try {
           const msg: PushSend = {
             endpoint: sub.endpoint,
             body: Buffer.from(encryptPush(plain, { p256dh: sub.p256dh, auth: sub.auth }, { padTo: PAD_TO })).toString('base64url'),
             ttl: TTL_S,
-            urgency: p.kind === 'finished' ? 'normal' : 'high',
+            urgency: p.kind === 'finished' || p.kind === 'chat' ? 'normal' : 'high',
             topic: p.tag
           };
           const r = await mobile.sendPush(msg);

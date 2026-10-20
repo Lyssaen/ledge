@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createECDH, randomBytes } from 'node:crypto';
 import type { MobileState, PushPayload, PushSend, PushSendResult } from '@ledge/protocol';
 import { createNotifier } from '../src/mobile/push/notifier.js';
+import { chatEndPayload } from '../src/mobile/push/triggers.js';
 
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/SECRET-ENDPOINT-TOKEN';
 const TEXT = 'private-words-of-the-agent';
@@ -168,5 +169,38 @@ describe('push notifier', () => {
       expect(all).not.toContain('fcm.googleapis.com');
       expect(all).not.toContain(TEXT);
     }
+  });
+
+  it('the end of a device question: one push to that device only, urgency normal, never the text of the answer', async () => {
+    const t = setup();
+    t.pushes.set('dev2', { ...t.pushes.get('dev1')!, endpoint: ENDPOINT + '-2' });
+    t.visible.add('dev2');
+    await t.n.notify(chatEndPayload(undefined, 3), undefined, 'dev1');
+    expect(t.sent).toHaveLength(1);
+    expect(t.sent[0]).toMatchObject({ endpoint: ENDPOINT, urgency: 'normal', topic: 'chat' });
+    // Hidden or not, `only` names who may be told; the visible one gets nothing.
+    await t.n.notify(chatEndPayload(undefined, 3), undefined, 'dev2');
+    expect(t.sent).toHaveLength(1);
+    t.visible.clear();
+    await t.n.notify(chatEndPayload(undefined, 3), undefined, 'dev2');
+    expect(t.sent).toHaveLength(2);
+    expect(t.sent[1]!.endpoint).toBe(ENDPOINT + '-2');
+  });
+
+  it('chat payloads: the notification of the constraints, the text of the code on an error, a badge', () => {
+    expect(chatEndPayload(undefined, 2)).toEqual({ v: 1, kind: 'chat', title: 'Ledge a répondu', body: 'Touchez pour lire la réponse.', url: '/#/chat', badge: 2, tag: 'chat' });
+    expect(chatEndPayload('busy', 0).body).toBe('Ledge répond déjà à d\'autres questions. Réessayez dans un instant.');
+    expect(chatEndPayload('timeout', 0).body).toBe('Ledge n\'a pas répondu à temps.');
+    expect(chatEndPayload('failed', 0).body).toBe('Ledge n\'a pas pu répondre.');
+    expect(chatEndPayload('cancelled', 0).body).toBe('Question arrêtée.');
+  });
+
+  it('a chat end is not held back by the finished delay, and a device without a subscription gets nothing', async () => {
+    const t = setup();
+    await t.n.notify(chatEndPayload(undefined, 0), undefined, 'dev1');
+    await t.n.notify(chatEndPayload(undefined, 0), undefined, 'dev1');
+    expect(t.sent).toHaveLength(2);
+    await t.n.notify(chatEndPayload(undefined, 0), undefined, 'nobody');
+    expect(t.sent).toHaveLength(2);
   });
 });

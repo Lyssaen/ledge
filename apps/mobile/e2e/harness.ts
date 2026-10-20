@@ -9,7 +9,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   DevicePollResponseSchema, DeviceStartResponseSchema, PHONE_PROTOCOL,
-  type PhoneClientMessage, type PhoneServerMessage, type PhoneSession, type PushSubscription
+  type PhoneChatTurn, type PhoneClientMessage, type PhoneServerMessage, type PhoneSession, type PushSubscription
 } from '@ledge/protocol';
 import { startAccountsRelay } from '../../relay/src/app';
 import type { AccountsConfig } from '../../relay/src/config';
@@ -26,6 +26,7 @@ export const WEB_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathna
 
 const T = '2026-10-20T08:00:00.000Z';
 const CAPS = { freeTextAnswer: true };
+const CHAT_ANSWER = 'Otto attend votre accord.';
 
 /** A session waiting on a low-risk command, as the fake PC shows it first. */
 export const waiting = (): PhoneSession => ({
@@ -50,6 +51,16 @@ export interface FakeDaemon {
   subscription: PushSubscription | null;
   /** The device check, once a test turns it on: the snapshot then says `device`, and a risky accept needs an assertion. */
   device: DeviceCheck | null;
+  /** True: the snapshot says `device.chat`, and the PC answers the chat as scripted (steps, deltas, a relay card, a launch card). */
+  chat: boolean;
+  /** True: a question gets its steps and its text so far, but no `chat.done` until `finishChat()`. */
+  hold: boolean;
+  /** The turns of the phone's thread, as the PC keeps them. */
+  turns: PhoneChatTurn[];
+  /** Ends the held questions in the thread, without telling the phone (its channel may be down); `chat.history` tells. */
+  finishChat(): void;
+  /** The `qid` of every launch typed, in order. */
+  launched: string[];
   /** Replaces a session (or adds it) and tells the phone. */
   update(s: PhoneSession): Promise<void>;
   stop(): void;
@@ -60,7 +71,8 @@ function runDaemon(pc: FakePc): FakeDaemon {
   let seen = 0;
   let busy = false;
   const d: FakeDaemon = {
-    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null,
+    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [],
+    finishChat() { d.turns = d.turns.map((t) => (t.answer === undefined ? finished(t) : t)); },
     async update(s) {
       d.sessions = [...d.sessions.filter((x) => x.id !== s.id), s];
       await pc.send({ type: 'session.updated', session: s });
@@ -70,16 +82,61 @@ function runDaemon(pc: FakePc): FakeDaemon {
   const snapshot = (): PhoneServerMessage => ({
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: d.sessions,
     capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot },
-    ...(d.device || d.push ? { device: { confirm: d.device ? d.device.registered : true, ...(d.push ? { push: d.push } : {}) } } : {})
+    ...(d.device || d.push || d.chat ? { device: { confirm: d.device ? d.device.registered : true, ...(d.push ? { push: d.push } : {}), ...(d.chat ? { chat: true as const } : {}) } } : {})
   });
+  /** The scripted answer: short on purpose, a card is never cut (TOOL_TEXT_MAX). */
+  const finished = (t: PhoneChatTurn): PhoneChatTurn => ({
+    ...t, answer: CHAT_ANSWER, answeredAt: T,
+    relay: { id: 'nova', name: 'Nova', tool: 'claude', text: 'Relance les tests.' },
+    proposals: [{ project: 'ledge', tool: 'claude', prompt: 'Corriger le badge' }]
+  });
+  const replace = (t: PhoneChatTurn) => { d.turns = d.turns.map((x) => (x.qid === t.qid ? t : x)); };
+  const chatMessage = async (m: PhoneClientMessage) => {
+    if (m.type === 'chat.history') return pc.send({ type: 'chat.history', turns: d.turns });
+    if (m.type === 'chat.ask') {
+      const turn: PhoneChatTurn = { qid: m.qid, question: m.text, askedAt: T, steps: [] };
+      d.turns.push(turn);
+      await pc.send({ type: 'chat.step', qid: m.qid, step: { kind: 'sessions' } });
+      await pc.send({ type: 'chat.step', qid: m.qid, step: { kind: 'pane', id: 's1', name: 'Otto' } });
+      await pc.send({ type: 'chat.delta', qid: m.qid, text: 'Otto attend ' });
+      await pc.send({ type: 'chat.delta', qid: m.qid, text: CHAT_ANSWER });
+      if (d.hold) return;
+      const done = finished({ ...turn, steps: [{ kind: 'sessions' }, { kind: 'pane', id: 's1', name: 'Otto' }] });
+      replace(done);
+      return pc.send({ type: 'chat.done', qid: m.qid, turn: done });
+    }
+    if (m.type === 'chat.relay' || m.type === 'chat.launch') {
+      const turn = d.turns.find((t) => t.qid === m.qid);
+      if (!turn) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'unknown_session' });
+      if (m.type === 'chat.launch') {
+        const refused = d.device?.assertLaunch(m);
+        if (refused) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: refused });
+        d.launched.push(m.qid);
+      }
+      await pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+      // The card keeps its button disabled until the PC says what became of it: the updated turn.
+      const after: PhoneChatTurn = m.type === 'chat.relay'
+        ? { ...turn, relay: { ...turn.relay!, status: 'sent', sentAt: T } }
+        : { ...turn, proposals: turn.proposals!.map((p) => ({ ...p, launchedId: 'lancee' })) };
+      replace(after);
+      for (const id of m.type === 'chat.relay' ? ['nova'] : ['lancee']) {
+        if (!d.sessions.some((x) => x.id === id)) {
+          const { pending: _none, ...base } = waiting();
+          d.sessions.push({ ...base, id, name: id === 'nova' ? 'Nova' : 'Lancée', title: id, state: 'working', unread: false });
+        }
+      }
+      return pc.send({ type: 'chat.done', qid: m.qid, turn: after });
+    }
+  };
   const handle = async (m: PhoneClientMessage) => {
     if (m.type === 'snapshot.request') return pc.send(snapshot());
+    if (d.chat && (m.type === 'chat.history' || m.type === 'chat.ask' || m.type === 'chat.relay' || m.type === 'chat.launch')) return chatMessage(m);
     if (m.type === 'session.pending') {
       const s = d.sessions.find((x) => x.id === m.id);
       return s && pc.send({ type: 'session.updated', session: s });
     }
     if (m.type === 'confirm.prepare') {
-      const r = d.device?.prepare(m, d.sessions.some((x) => x.id === m.id));
+      const r = d.device?.prepare(m, m.purpose === 'launch' ? d.turns.some((t) => t.qid === m.qid) : d.sessions.some((x) => x.id === m.id));
       if (r === undefined) return;
       return pc.send(typeof r === 'string' ? { type: 'error', code: r, request: m.type } : r);
     }

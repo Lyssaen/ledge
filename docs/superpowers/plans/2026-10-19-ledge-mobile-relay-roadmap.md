@@ -46,6 +46,7 @@ Chaque plan de lot reprend ces points à son début.
 - **Lot 5** (fait) : un test qui vérifie que le WebCrypto de Safari et de Chrome rejette un point hors courbe, et un vecteur de test de dérivation de clés commun au navigateur et au daemon (`apps/mobile/e2e/crypto.spec.ts` ; Safari seulement là où WebKit est installé).
 - **Lot 6a** (fait) : la confirmation d'un accord à impact élevé par l'appareil (passkey WebAuthn), de bout en bout dans `apps/mobile/e2e/confirm.spec.ts` (Chromium, authentificateur virtuel CDP ; WebKit ignoré comme au lot 5).
 - **Lot 6b** (fait) : Web Push. Le téléphone active les notifications à l'étape de liaison (« Être prévenu quand un agent attend ») ou à la ligne « Notifications » de Connexion ; le PC garde l'abonnement et notifie par le relais. De bout en bout dans `apps/mobile/e2e/push.spec.ts` (Chromium ; WebKit ignoré comme au lot 5).
+- **Lot 6c** (fait) : le chat « Demander à Ledge » sur le téléphone, de bout en bout dans `apps/mobile/e2e/chat.spec.ts` (Chromium, authentificateur virtuel CDP ; le faux PC de `harness.ts` joue un chat scripté ; WebKit ignoré comme au lot 5).
 
 ## Décidé au lot 5
 
@@ -79,6 +80,22 @@ Chaque plan de lot reprend ces points à son début.
 - **Service worker** : il valide le payload à la main (sans zod, pour garder le worker léger) ; un payload illisible affiche le repli « Ledge » / « Une demande attend », car Safari retire l'abonnement d'un site qui reste muet. Toucher la notification ouvre la demande ; les boutons Autoriser et Refuser n'y sont pas (iOS ne les gère pas, et un accord `high` exige l'appareil).
 - **CSP** : `style-src 'self'`, sans `'unsafe-inline'`. React pose ses styles par le CSSOM, que la CSP n'interdit pas ; l'e2e parcourt chaque écran sans `securitypolicyviolation` ni erreur de console.
 - **Bout en bout** : Chromium sans réseau n'a pas de service push, et son mode headless n'a pas de service de notifications (`showNotification` y est refusé). Le test remplace donc `pushManager.subscribe` par un abonnement factice, livre les pushes avec `ServiceWorker.deliverPushMessage`, et relève les appels du worker à `showNotification` plutôt que `getNotifications()`.
+
+## Décidé au lot 6c
+
+- **Un fil par appareil** : un téléphone ne voit ni le fil du PC ni celui d'un autre appareil, et le PC ne voit pas ceux des téléphones. Le retrait d'un appareil annule sa question en cours et supprime son dossier.
+- **Au plus 3 questions en même temps**, tous fils confondus (PC compris) ; au-delà, `chat.error { code: 'busy' }`. Une question à la fois par fil.
+- **Flux en texte entier** : `chat.delta` porte tout le texte jusque-là, au plus un toutes les 250 ms par question, avec une clé de coalescence : une perte en route ne laisse pas de trou.
+- **Lancement sous vérification de l'appareil** : `chat.launch` exige l'assertion (`purpose: 'launch'`, liée au `qid`), et il est refusé depuis le téléphone dans un dossier trop large.
+- **Consigne sans vérification de l'appareil** : `chat.relay` est une écriture sans assertion, comme `session.reply` sans dialogue OMP ; c'est un risque accepté, comme sur le PC.
+- **Une carte n'est jamais coupée** : une consigne ou un prompt de plus de `TOOL_TEXT_MAX` n'est pas montré au téléphone, et la gateway refuse d'agir dessus. Le téléphone ne confirme jamais un texte différent de celui que le PC exécute.
+- **Notification sans le texte de la réponse** : « Ledge a répondu » / « Touchez pour lire la réponse. », urgence normale, vers l'appareil de la question seul et seulement s'il n'est pas visible ; en cas d'erreur, le corps est la phrase du code (le daemon en garde sa propre copie).
+
+### Pour plus tard
+
+- **Historique conservé au redémarrage du daemon** : les tours restent en mémoire, comme sur le PC.
+- **Limite de fréquence des questions par appareil** : le plafond de 3 et « une à la fois » bornent déjà la charge.
+- **Hors lot** : le routage multi-machines (`chat.route`), la carte « projet proposé », le choix de l'outil depuis le téléphone, et l'essai sur un vrai iPhone (lot 7).
 
 ## Reporté par le lot 5
 
