@@ -8,9 +8,15 @@ import { log } from '../log.js';
 const RelaySessionSchema = z.object({ token: z.string().min(1), accountId: z.string().min(1), login: z.string(), relayUrl: z.string() });
 export type RelaySession = z.infer<typeof RelaySessionSchema>;
 
+/** Same fields as `DeviceCredential` (webauthn.ts, which imports nothing but node:crypto). */
+const DeviceCredentialSchema = z.object({
+  id: z.string().min(1), publicKey: z.string().min(1), alg: z.union([z.literal(-7), z.literal(-257)]), counter: z.number().int().nonnegative(),
+  rpId: z.string().min(1), transports: z.array(z.string()).optional()
+});
+
 const ApprovedDeviceSchema = z.object({
   id: z.string().min(1), publicKey: z.string().min(1), label: z.string(), approvedAt: z.string(),
-  lastPeer: z.string().optional(), lastSeenAt: z.string().optional()
+  lastPeer: z.string().optional(), lastSeenAt: z.string().optional(), credential: DeviceCredentialSchema.optional()
 });
 export type ApprovedDevice = z.infer<typeof ApprovedDeviceSchema>;
 

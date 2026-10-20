@@ -7,7 +7,7 @@ import WebSocket from 'ws';
 import { fingerprint } from '@ledge/seal';
 import type { MobileState } from '@ledge/protocol';
 import { createMobileService, type MobileService } from '../src/mobile/service.js';
-import { writeMobileConfig, writeRelaySession } from '../src/mobile/files.js';
+import { writeDevices, writeMobileConfig, writeRelaySession } from '../src/mobile/files.js';
 import { paths } from '../src/paths.js';
 import { startTestRelay, TEST_ACCOUNT, type TestRelay } from './mobile-relay-harness.js';
 import { fakeDevice, type FakeDevice } from './mobile-fake-device.js';
@@ -266,5 +266,26 @@ describe('mobile access service', () => {
     expect(logText).not.toContain(ctx.relay.pcToken);
     expect(logText).not.toContain(DEVICE_CODE);
     expect(logText).not.toContain(pkcs8);
+  });
+});
+
+describe('device credential', () => {
+  const cred = { id: 'cid', publicKey: 'spki', alg: -7 as const, counter: 0, rpId: 'localhost' };
+  it('is the stored one for the current relay and none once the relay moves', async () => {
+    writeMobileConfig({ enabled: false, relayUrl: 'http://localhost:5173' });
+    writeDevices([{ id: 'x', publicKey: 'k', label: 'Phone', approvedAt: '2026-10-19T00:00:00Z' }]);
+    const s = await service();
+    expect(s.credential('x')).toBeNull();
+    s.setCredential('x', cred);
+    expect(s.credential('x')).toEqual(cred);
+    expect(s.credential('nobody')).toBeNull();
+    await s.handle({ type: 'mobile.set', enabled: false, relayUrl: 'https://ledge.paradow.dev' });
+    expect(s.credential('x')).toBeNull();
+  });
+  it('is persisted with the device', async () => {
+    writeMobileConfig({ enabled: false, relayUrl: 'http://localhost:5173' });
+    writeDevices([{ id: 'x', publicKey: 'k', label: 'Phone', approvedAt: '2026-10-19T00:00:00Z' }]);
+    (await service()).setCredential('x', cred);
+    expect(readFileSync(paths().devices, 'utf8')).toContain('"cid"');
   });
 });

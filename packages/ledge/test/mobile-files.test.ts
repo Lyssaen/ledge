@@ -105,3 +105,16 @@ describe('mobile files', () => {
     });
   });
 });
+
+describe('device credential', () => {
+  const base = { id: 'x', publicKey: 'k', label: 'Phone', approvedAt: '2026-10-19T00:00:00Z' };
+  it('still reads a lot 5 devices.json, with no credential', () => {
+    writeFileSync(paths().devices, JSON.stringify([base]));
+    expect(readDevices()).toEqual([base]);
+  });
+  it('round-trips a device with its credential', () => {
+    const credential = { id: 'cid', publicKey: 'spki', alg: -7 as const, counter: 3, rpId: 'ledge.paradow.dev', transports: ['internal'] };
+    writeDevices([{ ...base, credential }]);
+    expect(readDevices()).toEqual([{ ...base, credential }]);
+  });
+});

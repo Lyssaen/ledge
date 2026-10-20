@@ -2,8 +2,8 @@
 // In memory only, so a daemon restart forgets every operation.
 import type { OperationReason, OperationStatus, PhoneClientMessage } from '@ledge/protocol';
 
-// Until the gateway handles the lot 6a writes (credential.register, session.answer, device.forget), they are kept out of this type.
-export type PhoneOperation = Extract<PhoneClientMessage, { op: string; id: string }> extends infer M ? Exclude<M, { type: 'session.answer' }> : never;
+// Until the gateway handles session.answer and device.forget (later tasks), they are kept out of this type.
+export type PhoneOperation = Exclude<Extract<PhoneClientMessage, { op: string }>, { type: 'session.answer' | 'device.forget' }>;
 
 export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; at: number }
 
@@ -11,8 +11,9 @@ export type BeginResult = { kind: 'fresh' | 'replay'; record: OperationRecord } 
 
 /** What the operation does, never its id. */
 export function fingerprint(m: PhoneOperation): string {
-  const f = m as { decision?: string; note?: string; text?: string; expect?: { key: string } };
-  return JSON.stringify([m.type, m.id, f.decision ?? null, f.note ?? null, f.text ?? null, f.expect?.key ?? null]);
+  // Read as the union of every message's fields: a field the message lacks is null. The signed parts of a credential are not part of it.
+  const f = m as { id?: string; decision?: string; note?: string; text?: string; expect?: { key: string } | null; credential?: { id: string }; requestId?: string; answers?: unknown };
+  return JSON.stringify([m.type, f.id ?? null, f.decision ?? null, f.note ?? null, f.text ?? null, f.expect?.key ?? null, f.credential?.id ?? null, f.requestId ?? null, f.answers ?? null]);
 }
 
 /** Bounded (24 h, 500 records): the oldest finished record goes first, and a record still `received` is never evicted. */

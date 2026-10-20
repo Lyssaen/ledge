@@ -95,3 +95,14 @@ describe('fingerprint', () => {
     expect(fingerprint({ ...reply, expect: undefined } as unknown as PhoneOperation)).toBe(fingerprint(reply));
   });
 });
+
+describe('fingerprint of credential.register', () => {
+  const reg = (id: string, signature: string): PhoneOperation => ({
+    type: 'credential.register', op: uid(1),
+    credential: { id, publicKey: 'pk', alg: -7, clientDataJSON: signature, authenticatorData: signature }
+  });
+  it('depends on the credential id, not on the signed parts', () => {
+    expect(fingerprint(reg('cred1', 'a'))).toBe(fingerprint({ ...reg('cred1', 'b'), op: uid(2) }));
+    expect(fingerprint(reg('cred1', 'a'))).not.toBe(fingerprint(reg('cred2', 'a')));
+  });
+});

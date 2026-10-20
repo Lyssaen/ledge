@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
 import { hostname } from 'node:os';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
+import { createChallengeStore } from '../src/mobile/challenges.js';
+import { challengeOf, rpOf, type DeviceCredential } from '../src/mobile/webauthn.js';
+import { softAuthenticator } from './mobile-soft-authenticator.js';
 
 const T0 = '2026-10-20T08:00:00.000Z';
 const T1 = '2026-10-20T09:00:00.000Z';
@@ -19,7 +22,7 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
 });
 
 /** A MobileService stand-in: approved devices, sealed texts sent per device, and a hand on its message and change listeners. */
-function fakeMobile(ids: string[]) {
+function fakeMobile(ids: string[], relayUrl = 'https://relay.test') {
   let devices = ids;
   const sent: Array<[string, string]> = [];
   const messageFns = new Set<(d: string, t: string) => void>();
@@ -33,7 +36,7 @@ function fakeMobile(ids: string[]) {
       onMessage(fn: (d: string, t: string) => void) { messageFns.add(fn); return () => { messageFns.delete(fn); }; },
       onChange(fn: () => void) { changeFns.add(fn); return () => { changeFns.delete(fn); }; },
       state: (): MobileState => ({
-        enabled: true, relayUrl: 'https://relay.test', account: null, signin: null, signinError: null, link: { state: 'online' },
+        enabled: true, relayUrl, account: null, signin: null, signinError: null, link: { state: 'online' },
         devices: devices.map(id => ({ id, label: id, approvedAt: T0, online: true })), pairings: []
       })
     }
@@ -45,8 +48,12 @@ const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => s
 const stops: Array<() => void> = [];
 afterEach(() => { for (const s of stops.splice(0)) s(); });
 
-function setup(opts: { dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void> } = {}) {
-  const fm = fakeMobile(['dev1', 'dev2']);
+function setup(opts: { dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string } = {}) {
+  const fm = fakeMobile(['dev1', 'dev2'], opts.relayUrl);
+  const clock = { t: 1_000_000 };
+  const challenges = createChallengeStore({ now: () => clock.t });
+  const creds = new Map<string, DeviceCredential>();
+  const stored: string[] = [];
   const sessions = new Map<string, Session>([
     ['a', mk('a', { state: 'waiting_permission', pending: { ...PUSH }, lastReply: { text: 'done', at: T1 } })],
     ['b', mk('b', { state: 'waiting_permission', pending: { ...LS } })],
@@ -67,14 +74,18 @@ function setup(opts: { dispatch?: (msg: ClientMessage, reply: (m: ServerMessage)
     dispatch: async (msg, reply) => { if (opts.dispatch) dispatched.push(msg); await dispatch(msg, reply); },
     version: '1.2.3',
     log: line => logs.push(line),
-    now: () => T0
+    now: () => T0,
+    rp: () => rpOf(fm.mobile.state().relayUrl),
+    challenges,
+    credential: id => creds.get(id) ?? null,
+    setCredential: (id, c) => { stored.push(id); creds.set(id, c); }
   });
   stops.push(() => gw.stop());
   /** What `deviceId` received, parsed. */
   const got = (deviceId: string): PhoneServerMessage[] => fm.sent.filter(([d]) => d === deviceId).map(([, t]) => JSON.parse(t) as PhoneServerMessage);
   const results = (deviceId: string) => got(deviceId).filter(m => m.type === 'operation.result');
   const send = (deviceId: string, m: unknown) => fm.receive(deviceId, typeof m === 'string' ? m : JSON.stringify(m));
-  return { fm, gw, sessions, dispatched, logs, got, results, send };
+  return { fm, gw, sessions, dispatched, logs, got, results, send, clock, creds, stored };
 }
 
 const decide = (id: string, decision: 'accept' | 'deny' | 'always', pending: Session['pending'] & object, extra: { key?: string; op?: string } = {}) => ({
@@ -647,5 +658,109 @@ describe('phone gateway: request bodies on demand', () => {
       { type: 'error', code: 'unknown_session', request: 'session.pending' },
       { type: 'error', code: 'unknown_session', request: 'session.pending' }
     ]);
+  });
+});
+
+
+describe('phone gateway: device key', () => {
+  const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
+  const prepare = async (g: ReturnType<typeof setup>, deviceId = 'dev1') => {
+    const before = g.got(deviceId).length;
+    g.send(deviceId, { type: 'confirm.prepare', purpose: 'register' });
+    await flush();
+    const m = g.got(deviceId).slice(before).find(x => x.type === 'confirm.challenge');
+    if (m?.type !== 'confirm.challenge') throw new Error('no challenge');
+    return m;
+  };
+  const register = (g: ReturnType<typeof setup>, cred: unknown, op: string = randomUUID(), deviceId = 'dev1') => g.send(deviceId, { type: 'credential.register', op, credential: cred });
+
+  it('answers confirm.prepare register with a challenge for the relay host', async () => {
+    const g = setup();
+    const c = await prepare(g);
+    expect(c).toMatchObject({ purpose: 'register', rpId: 'relay.test', expiresInMs: 60_000 });
+    expect(c.challenge.length).toBeGreaterThan(20);
+  });
+
+  it('registers a passkey: applied, then a snapshot that says device.confirm', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(g.got('dev1').find(m => m.type === 'snapshot')).toMatchObject({ device: { confirm: false } });
+    const c = await prepare(g);
+    const op = randomUUID();
+    register(g, softAuthenticator().create(rp, c.challenge), op);
+    await flush();
+    expect(g.results('dev1').map(m => m.type === 'operation.result' && m.status)).toEqual(['received', 'applied']);
+    expect(g.stored).toEqual(['dev1']);
+    expect(g.creds.get('dev1')).toMatchObject({ rpId: 'relay.test', counter: 0 });
+    const snaps = g.got('dev1').filter(m => m.type === 'snapshot');
+    expect(snaps.at(-1)).toMatchObject({ device: { confirm: true } });
+    expect(g.got('dev1').at(-1)?.type).toBe('snapshot');
+  });
+
+  it('replays the same op with the same result and stores the key once', async () => {
+    const g = setup();
+    const c = await prepare(g);
+    const op = randomUUID();
+    const cred = softAuthenticator().create(rp, c.challenge);
+    register(g, cred, op);
+    await flush();
+    register(g, cred, op);
+    await flush();
+    expect(g.results('dev1').map(m => m.type === 'operation.result' && m.status)).toEqual(['received', 'applied', 'applied']);
+    expect(g.stored).toEqual(['dev1']);
+  });
+
+  it('refuses a challenge issued to another device', async () => {
+    const g = setup();
+    const c = await prepare(g, 'dev2');
+    register(g, softAuthenticator().create(rp, c.challenge));
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.stored).toEqual([]);
+  });
+
+  it('refuses an unknown or unreadable challenge, and a challenge used twice', async () => {
+    const g = setup();
+    register(g, softAuthenticator().create(rp, 'never-issued'));
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    const c = await prepare(g);
+    const cred = softAuthenticator().create(rp, c.challenge);
+    expect(challengeOf(cred.clientDataJSON)).toBe(c.challenge);
+    register(g, cred);
+    await flush();
+    register(g, cred);
+    await flush();
+    expect(g.results('dev1').slice(-4).map(m => m.type === 'operation.result' && m.status)).toEqual(['received', 'applied', 'received', 'rejected']);
+    expect(g.stored).toEqual(['dev1']);
+  });
+
+  it('refuses an expired challenge with assertion_expired', async () => {
+    const g = setup();
+    const c = await prepare(g);
+    g.clock.t += 60_001;
+    register(g, softAuthenticator().create(rp, c.challenge));
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'assertion_expired' });
+    expect(g.stored).toEqual([]);
+  });
+
+  it('refuses a registration that does not verify', async () => {
+    const g = setup();
+    const c = await prepare(g);
+    register(g, softAuthenticator().create(rp, c.challenge, { origin: 'https://evil.test' }));
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.stored).toEqual([]);
+  });
+
+  it('without a secure relay URL there is no challenge and no device check', async () => {
+    const g = setup({ relayUrl: 'http://192.168.1.10' });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(g.got('dev1')[0]).toEqual({ type: 'error', code: 'invalid', request: 'confirm.prepare' });
+    expect(g.got('dev1').find(m => m.type === 'snapshot')).toMatchObject({ device: { confirm: false } });
   });
 });

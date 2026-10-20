@@ -11,6 +11,8 @@ import { createOutbox } from './outbox.js';
 import { fingerprint, OperationRegistry, type PhoneOperation } from './operations.js';
 import { capabilities, clip, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneThread } from './project.js';
 import { riskOf } from './risk.js';
+import { CHALLENGE_TTL_MS, type ChallengeStore } from './challenges.js';
+import { challengeOf, verifyRegistration, type DeviceCredential, type Rp } from './webauthn.js';
 
 export interface PhoneGateway {
   /** Passes a message the daemon broadcast to the local fronts on to the devices concerned; anything else is ignored. */
@@ -35,6 +37,11 @@ const REQUEST_NAME = /^[a-z][a-z.]{0,39}$/;
 
 export function createPhoneGateway(deps: {
   mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange'>;
+  /** The relying party of the current relay; none when it is not served over https or from localhost. */
+  rp: () => Rp | null;
+  challenges: ChallengeStore;
+  credential: (deviceId: string) => DeviceCredential | null;
+  setCredential: (deviceId: string, c: DeviceCredential) => void;
   sessions: () => Session[];
   session: (id: string) => Session | undefined;
   thread: (id: string) => ThreadItem[] | undefined;
@@ -70,7 +77,8 @@ export function createPhoneGateway(deps: {
   };
   const projected = (deviceId: string, s: Session) => toPhoneSession(s, followers.get(deviceId)?.reads.get(s.id) ?? startedAt);
   const snapshot = (deviceId: string): PhoneServerMessage => ({
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, name: clip(hostname(), 40).text }
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, name: clip(hostname(), 40).text },
+    device: { confirm: deps.credential(deviceId) !== null }
   });
 
   const outbox = createOutbox({
@@ -94,7 +102,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The checks only a phone meets, in order; undefined lets the operation through. */
-  const precheck = (msg: PhoneOperation): Outcome | undefined => {
+  const precheck = (msg: Exclude<PhoneOperation, { type: 'credential.register' }>): Outcome | undefined => {
     const s = live(msg.id);
     if (!s) return { status: 'rejected', reason: 'unknown_session' };
     switch (msg.type) {
@@ -118,7 +126,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The local message the operation stands for, built field by field. */
-  const local = (msg: PhoneOperation): ClientMessage => {
+  const local = (msg: Exclude<PhoneOperation, { type: 'credential.register' }>): ClientMessage => {
     switch (msg.type) {
       case 'session.decide':
         return { type: 'session.decide', id: msg.id, decision: msg.decision, ...(msg.note !== undefined ? { note: msg.note } : {}), expect: { kind: msg.expect.kind, text: msg.expect.text, key: msg.expect.key } };
@@ -135,7 +143,23 @@ export function createPhoneGateway(deps: {
     return { status: 'rejected', reason: known.success ? known.data : 'invalid' };
   };
 
-  const run = async (msg: PhoneOperation): Promise<Outcome> => {
+  /** The device's passkey, checked over the challenge `confirm.prepare` gave it. The challenge is spent whatever the verdict. */
+  const register = (deviceId: string, msg: Extract<PhoneOperation, { type: 'credential.register' }>): Outcome => {
+    const challenge = challengeOf(msg.credential.clientDataJSON);
+    const rp = deps.rp();
+    const invalid: Outcome = { status: 'rejected', reason: 'assertion_invalid' };
+    if (challenge === null) return invalid;
+    const verdict = deps.challenges.consume(challenge, { deviceId, purpose: 'register', subject: '' });
+    if (verdict === 'expired') return { status: 'rejected', reason: 'assertion_expired' };
+    if (verdict !== 'ok' || !rp) return invalid;
+    const verified = verifyRegistration(msg.credential, rp, challenge);
+    if (!verified.ok) return invalid;
+    deps.setCredential(deviceId, verified.credential);
+    return { status: 'applied' };
+  };
+
+  const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
+    if (msg.type === 'credential.register') return register(deviceId, msg);
     const refused = precheck(msg);
     if (refused) return refused;
     const out = local(msg);
@@ -153,7 +177,7 @@ export function createPhoneGateway(deps: {
     let outcome: Outcome;
     try {
       result(deviceId, msg.op, 'received');
-      outcome = await run(msg);
+      outcome = await run(deviceId, msg);
     }
     catch (e) {
       log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
@@ -161,6 +185,8 @@ export function createPhoneGateway(deps: {
     }
     registry.finish(msg.op, outcome.status, outcome.reason);
     result(deviceId, msg.op, outcome.status, outcome.reason);
+    // The phone learns it can confirm from the snapshot that follows.
+    if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
   };
 
   const read = (deviceId: string, msg: Exclude<PhoneClientMessage, PhoneOperation>) => {
@@ -185,6 +211,13 @@ export function createPhoneGateway(deps: {
         const lines = deps.preview(msg.id);
         if (lines) push(deviceId, { type: 'session.preview', id: msg.id, lines: [...lines] }, `session.preview:${msg.id}`);
         return;
+      }
+      case 'confirm.prepare': {
+        // Challenges for a decision come with the device check itself (a later task).
+        const rp = deps.rp();
+        if (msg.purpose !== 'register' || !rp) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        const challenge = deps.challenges.issue({ deviceId, purpose: 'register', subject: '' });
+        return push(deviceId, { type: 'confirm.challenge', purpose: 'register', challenge, rpId: rp.rpId, expiresInMs: CHALLENGE_TTL_MS });
       }
       case 'session.read': {
         const s = live(msg.id);
@@ -212,8 +245,8 @@ export function createPhoneGateway(deps: {
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;
-    // The lot 6a messages are parsed but not handled yet: refused like any unknown request until the gateway learns them.
-    if (msg.type === 'confirm.prepare' || msg.type === 'credential.register' || msg.type === 'session.answer' || msg.type === 'device.forget') {
+    // These lot 6a messages are parsed but not handled yet: refused like any unknown request until the gateway learns them.
+    if (msg.type === 'session.answer' || msg.type === 'device.forget') {
       return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
     }
     if ('op' in msg) {

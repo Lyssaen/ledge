@@ -38,6 +38,8 @@ import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
 import type { MobileService } from '../mobile/service.js';
 import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
+import { createChallengeStore } from '../mobile/challenges.js';
+import { rpOf } from '../mobile/webauthn.js';
 import { MAX_FRAME } from '../transport/frames.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
@@ -868,7 +870,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     dispatch,
     version: opts.daemon?.version ?? 'unknown',
     log,
-    now
+    now,
+    rp: () => rpOf(mobile.state().relayUrl),
+    challenges: createChallengeStore(),
+    credential: id => mobile.credential(id),
+    setCredential: (id, c) => mobile.setCredential(id, c)
   });
 
   wss.on('connection', (ws, req) => {

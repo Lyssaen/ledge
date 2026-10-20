@@ -6,6 +6,7 @@ import {
   clearRelaySession, loadPcIdentity, readDevices, readMobileConfig, readRelaySession, writeDevices, writeMobileConfig, writeRelaySession,
   type ApprovedDevice, type RelaySession
 } from './files.js';
+import { rpOf, type DeviceCredential } from './webauthn.js';
 import { createRelayLink, type LinkState, type RelayLink, type Schedule } from './link.js';
 import { signOut, startSignIn } from './signin.js';
 import { createPairing } from './pairing.js';
@@ -20,6 +21,10 @@ export interface MobileService {
   handle(msg: MobileClientMessage): Promise<void>;
   /** Seals `text` to the device's confirmed channel; false if it has none. */
   send(deviceId: string, text: string): Promise<boolean>;
+  /** The device's passkey, unless it was registered for another relay host than the current one. */
+  credential(deviceId: string): DeviceCredential | null;
+  /** Stores the passkey of an approved device (persisted with it). */
+  setCredential(deviceId: string, c: DeviceCredential): void;
   /** Texts opened from approved devices' sealed messages; returns the unsubscribe. */
   onMessage(fn: (deviceId: string, text: string) => void): () => void;
   stop(): Promise<void>;
@@ -264,6 +269,16 @@ export async function createMobileService(opts: {
         })),
         pairings: pairing.views()
       };
+    },
+
+    credential(deviceId) {
+      const c = devices.find((d) => d.id === deviceId)?.credential;
+      return c && c.rpId === rpOf(config.relayUrl)?.rpId ? c : null;
+    },
+
+    setCredential(deviceId, c) {
+      if (!devices.some((d) => d.id === deviceId)) throw new Error('no such device');
+      saveDevices(devices.map((d) => (d.id === deviceId ? { ...d, credential: c } : d)));
     },
 
     onChange(fn) {
