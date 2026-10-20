@@ -226,7 +226,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
         answerable={answerable} choice={choosingOther ? options.length : choice} onAnswer={send}
         answerBlocked={choosingOther ? free.problem !== null : choice === null || choice >= options.length}
         onCheck={onReconnect} refused={refused} store={store} deviceConfirm={state.device?.confirm === true}
-        optionReply={optionMode ? { canConfirm: guarded ? canConfirm : true, picked: guarded ? picked : null, onBack: () => setPicked(null), onReply: a => picked === null ? null : store.reply(sessionId, String(picked + 1), { assertion: a }) } : undefined}
+        optionReply={optionMode ? { canConfirm: guarded ? canConfirm : true, picked: guarded ? picked : null, onBack: () => setPicked(null), onReply: (a, expect) => picked === null ? null : store.reply(sessionId, String(picked + 1), { assertion: a, expect }) } : undefined}
         multi={askQuestions ? { missing, onSend: () => sendAnswers(false), onCancel: () => sendAnswers(true) } : undefined}
       />
     </>

@@ -113,8 +113,12 @@ export function createPhoneGateway(deps: {
     return false;
   };
 
+  /** What a challenge is bound to: the session and the request, and for an OMP dialog the dialog itself (its requestId), since two dialogs can read the same. */
+  const subjectOf = (id: string, key: string, s: Session | undefined): string =>
+    `${id}:${key}${s?.pending?.source === 'rpc' && s.pending.requestId ? `:${s.pending.requestId}` : ''}`;
+
   /** The device check of a decision: its challenge is spent first, whatever the verdict, and the counter is kept once it verifies. */
-  const assertionOutcome = (deviceId: string, msg: Extract<PhoneOperation, { type: 'session.decide' | 'session.reply' }>): Outcome | undefined => {
+  const assertionOutcome = (deviceId: string, msg: Extract<PhoneOperation, { type: 'session.decide' | 'session.reply' }>, s: Session): Outcome | undefined => {
     const cred = deps.credential(deviceId);
     const rp = deps.rp();
     const key = msg.expect?.key;
@@ -122,7 +126,7 @@ export function createPhoneGateway(deps: {
     const invalid: Outcome = { status: 'rejected', reason: 'assertion_invalid' };
     const challenge = challengeOf(msg.assertion.clientDataJSON);
     if (challenge === null) return invalid;
-    const verdict = deps.challenges.consume(challenge, { deviceId, purpose: 'decide', subject: `${msg.id}:${key}` });
+    const verdict = deps.challenges.consume(challenge, { deviceId, purpose: 'decide', subject: subjectOf(msg.id, key, s) });
     if (verdict === 'expired') return { status: 'rejected', reason: 'assertion_expired' };
     if (verdict !== 'ok') return invalid;
     const verified = verifyAssertion(msg.assertion, cred, rp, challenge);
@@ -143,7 +147,9 @@ export function createPhoneGateway(deps: {
         if (!s.pending || pendingKey(s.pending) !== msg.expect.key) return { status: 'rejected', reason: 'stale' };
         // OMP's dialogs are answered with `session.answer`; refused before any challenge is spent.
         if (backendOf(s) === 'omp-rpc') return { status: 'rejected', reason: 'not_offered' };
-        if (needsAssertion(msg, s)) { const refused = assertionOutcome(deviceId, msg); if (refused) return refused; }
+        // An assertion no check will bind means the request is not the one the phone confirmed: refused, its challenge untouched.
+        if (msg.assertion && !needsAssertion(msg, s)) return { status: 'rejected', reason: 'stale' };
+        if (needsAssertion(msg, s)) { const refused = assertionOutcome(deviceId, msg, s); if (refused) return refused; }
         // The note is typed into the terminal like a reply.
         return msg.note !== undefined && UNTYPABLE.test(msg.note) ? { status: 'rejected', reason: 'untypable' } : undefined;
       case 'session.reply': {
@@ -151,7 +157,8 @@ export function createPhoneGateway(deps: {
         if (msg.expect ? !s.pending || pendingKey(s.pending) !== msg.expect.key : !!s.pending) return { status: 'rejected', reason: 'stale' };
         const options = s.pending?.kind === 'question' ? s.pending.options : undefined;
         if (options?.length && /^[1-9]$/.test(msg.text) && Number(msg.text) > options.length) return { status: 'rejected', reason: 'invalid' };
-        if (needsAssertion(msg, s)) { const refused = assertionOutcome(deviceId, msg); if (refused) return refused; }
+        if (msg.assertion && !needsAssertion(msg, s)) return { status: 'rejected', reason: 'stale' };
+        if (needsAssertion(msg, s)) { const refused = assertionOutcome(deviceId, msg, s); if (refused) return refused; }
         return UNTYPABLE.test(msg.text) ? { status: 'rejected', reason: 'untypable' } : undefined;
       }
       case 'session.answer':
@@ -270,7 +277,7 @@ export function createPhoneGateway(deps: {
           if (!live(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
           const cred = deps.credential(deviceId);
           if (!cred || cred.rpId !== rp.rpId) return invalid();
-          const challenge = deps.challenges.issue({ deviceId, purpose: 'decide', subject: `${msg.id}:${msg.expect.key}` });
+          const challenge = deps.challenges.issue({ deviceId, purpose: 'decide', subject: subjectOf(msg.id, msg.expect.key, live(msg.id)) });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'decide', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
         const challenge = deps.challenges.issue({ deviceId, purpose: 'register', subject: '' });

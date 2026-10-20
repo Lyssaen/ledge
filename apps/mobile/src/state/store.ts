@@ -49,15 +49,18 @@ export const FORGET_MS = 5_000;
 
 export type Answer = Extract<PhoneClientMessage, { type: 'session.answer' }>['answers'][number];
 
+/** The request a challenge was prepared for: what the confirmed operation carries as its `expect`, never rebuilt from the current state. */
+export interface ConfirmedExpect { key: string; kind: PhonePending['kind']; text: string }
+
 export type Decision = Extract<PhoneClientMessage, { type: 'session.decide' }>['decision'];
 
 export interface MobileStore {
   getState(): MobileState;
   subscribe(fn: () => void): () => void;
   /** Answers the session's request. The op's id, or null when nothing was sent (no request, not ready, already answered). */
-  decide(id: string, decision: Decision, opts?: { note?: string; assertion?: Assertion }): string | null;
+  decide(id: string, decision: Decision, opts?: { note?: string; assertion?: Assertion; expect?: ConfirmedExpect }): string | null;
   /** An answer to the session's request when there is one, else an instruction. The op's id, or null when nothing was sent. */
-  reply(id: string, text: string, opts?: { assertion?: Assertion }): string | null;
+  reply(id: string, text: string, opts?: { assertion?: Assertion; expect?: ConfirmedExpect }): string | null;
   /**
    * Asks the PC for a challenge; resolves on the next `confirm.challenge` of that purpose. Rejects (Error message
    * `error`, `timeout` after `PREPARE_MS`, `not_ready`, `superseded`, `lost`). One is pending at a time: a new call supersedes the old one.
@@ -355,17 +358,20 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
 
     decide(id, decision, opts = {}) {
+      // An explicit expect is the request the user confirmed: used as is, the PC says whether it is still the one pending.
       const p = state.sessions.get(id)?.pending;
-      if (!p?.key) return null;
-      return write(op => ({ type: 'session.decide', op, id, decision, ...(opts.note !== undefined ? { note: opts.note } : {}), expect: expectOf(p), ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
+      const expect = opts.expect ?? (p?.key ? expectOf(p) : null);
+      if (!expect) return null;
+      return write(op => ({ type: 'session.decide', op, id, decision, ...(opts.note !== undefined ? { note: opts.note } : {}), expect, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
     },
 
     reply(id, text, opts = {}) {
       const s = state.sessions.get(id);
       if (!s) return null;
       // A request without a key cannot be named: the PC would refuse the reply either way.
-      if (s.pending && !s.pending.key) return null;
-      return write(op => ({ type: 'session.reply', op, id, text, expect: s.pending ? expectOf(s.pending) : null, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
+      if (!opts.expect && s.pending && !s.pending.key) return null;
+      const expect = opts.expect ?? (s.pending ? expectOf(s.pending) : null);
+      return write(op => ({ type: 'session.reply', op, id, text, expect, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
     },
 
     answer(id, requestId, answers, opts) {

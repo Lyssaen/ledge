@@ -6,7 +6,7 @@ import type { Outcome } from '../model/requestOutcome';
 import { href } from '../router';
 import { useBusy } from '../useBusy';
 import { Notice } from '../ui/Notice';
-import type { MobileStore } from '../state/store';
+import type { ConfirmedExpect, MobileStore } from '../state/store';
 import { usePlatform } from './device';
 import { OnPc, RiskConfirm, type ConfirmReason } from './RiskConfirm';
 
@@ -41,7 +41,7 @@ export interface DecisionFooterProps {
    * An OMP dialog answered with an option (the options are in the page): `canConfirm` is whether this phone can sign for the
    * PC (else the PC answers); `picked` the option tapped, awaiting the device's confirmation; `onReply` sends it with the assertion.
    */
-  optionReply?: { canConfirm: boolean; picked: number | null; onBack: () => void; onReply: (assertion: Assertion) => string | null } | undefined;
+  optionReply?: { canConfirm: boolean; picked: number | null; onBack: () => void; onReply: (assertion: Assertion, expect: ConfirmedExpect) => string | null } | undefined;
   /** An OMP `ask` of several questions: how many have no choice yet, and what sending or declining does. */
   multi?: { missing: number; onSend: () => void; onCancel: () => void } | undefined;
 }
@@ -101,7 +101,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
       <button type="button" disabled={!enabled} onClick={multi.onCancel} className={`${full} border-line`}>{copy.answers.cancel}</button>
     </div>
   ) : confirmable && guard ? (
-    <RiskConfirm store={guard} item={item} enabled={enabled} reason={deviceReason} onConfirm={a => guard.decide(item.sessionId, 'accept', { assertion: a })} onDeny={() => onDecide('deny')} />
+    <RiskConfirm store={guard} item={item} enabled={enabled} reason={deviceReason} onConfirm={(a, expect) => guard.decide(item.sessionId, 'accept', { assertion: a, expect })} onDeny={() => onDecide('deny')} />
   ) : answerable ? (
     <button type="button" disabled={!enabled || choice === null || answerBlocked} onClick={() => onAnswer?.()} className={`${full} border-transparent bg-fg text-[#121415]`}>{D.send}</button>
   ) : (

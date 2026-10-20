@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAssertion, platformAvailable } from '../../src/link/webauthn';
 import { RequestDetail } from '../../src/screens/RequestDetail';
+import { RiskConfirm } from '../../src/screens/RiskConfirm';
 import { pending, session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
 import { setup } from './setup';
@@ -158,5 +159,57 @@ describe('a high-impact request with a device check', () => {
     expect(await screen.findByText('La vérification n’a pas pu être préparée. Rien n’a été envoyé.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
     await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(2));
+  });
+
+  // RiskConfirm stays mounted through a change in real use (after a refused attempt, « Réessayer »): rendered alone here.
+  describe('the request changes while the device signs', () => {
+    const toItem = (p: ReturnType<typeof pending>) => ({ sessionId: 'a', key: p.key, kind: p.kind }) as never;
+    /** The gesture is held open; `change` swaps the session's pending (undefined: none), then the device answers. */
+    async function gesture(change: ReturnType<typeof pending> | undefined) {
+      let release!: (a: typeof assertion) => void;
+      vi.mocked(getAssertion).mockReturnValue(new Promise(r => { release = r; }));
+      const p = force();
+      const t = setup();
+      t.deliver({ ...snapshot([session('a', { name: 'Kai', state: 'waiting_permission', pending: p })]), device: { confirm: true } } as never);
+      const onConfirm = vi.fn(() => 'op');
+      render(<RiskConfirm store={t.store} item={toItem(p)} enabled onConfirm={onConfirm} onDeny={() => {}} />);
+      await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+      act(() => t.deliver(challenge));
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirmer avec mon appareil' }));
+      await waitFor(() => expect(getAssertion).toHaveBeenCalled());
+      // The store hears of the change; the card keeps the item it was given.
+      act(() => t.deliver(snapshot([session('a', { name: 'Kai', state: change ? 'waiting_permission' : 'working', ...(change ? { pending: change } : {}) })])));
+      await act(async () => { release(assertion); });
+      return { t, onConfirm, p };
+    }
+
+    it('to a low request: nothing is confirmed, the request is said to have changed', async () => {
+      const { onConfirm } = await gesture(pending({ key: 'p2', text: 'ls src', risk: 'low' }));
+      expect(onConfirm).not.toHaveBeenCalled();
+      expect(screen.getByText('La demande a été mise à jour. Relisez-la avant de décider.')).toBeInTheDocument();
+    });
+
+    it('to another high request: nothing is confirmed', async () => {
+      const { onConfirm } = await gesture(pending({ key: 'p2', text: 'rm -rf build', risk: 'high', riskReason: 'destroys' }));
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+
+    it('to no request: nothing is confirmed', async () => {
+      const { onConfirm } = await gesture(undefined);
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+
+    it('the request unchanged: the assertion goes with the expect the challenge was prepared for', async () => {
+      vi.mocked(getAssertion).mockResolvedValue(assertion);
+      const p = force();
+      const t = setup();
+      t.deliver({ ...snapshot([session('a', { name: 'Kai', state: 'waiting_permission', pending: p })]), device: { confirm: true } } as never);
+      const onConfirm = vi.fn(() => 'op');
+      render(<RiskConfirm store={t.store} item={toItem(p)} enabled onConfirm={onConfirm} onDeny={() => {}} />);
+      await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+      act(() => t.deliver(challenge));
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirmer avec mon appareil' }));
+      await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(assertion, { key: 'p1', kind: 'permission', text: 'git push --force origin main' }));
+    });
   });
 });

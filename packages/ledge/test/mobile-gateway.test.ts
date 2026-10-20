@@ -952,6 +952,38 @@ describe('phone gateway: a high-impact accept carries a device assertion', () =>
     expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'r', text: 'yes' }]);
   });
 
+  it('an assertion no check binds is stale and spends no challenge: a reply with a null expect while idle, a decide on a low request', async () => {
+    const { g, auth } = await enrolled();
+    g.sessions.set('idle', mk('idle'));
+    const challenge = await challengeFor(g, 'a', PUSH);
+    const assertion = auth.get(rp, challenge, { counter: 1 });
+    const reply = { type: 'session.reply', op: randomUUID(), id: 'idle', text: '2', expect: null };
+    g.send('dev1', withAssertion(reply, assertion));
+    const low = decide('b', 'accept', LS);
+    g.send('dev1', withAssertion(low, assertion));
+    await flush();
+    expect(g.results('dev1')).toContainEqual({ type: 'operation.result', op: reply.op, status: 'rejected', reason: 'stale' });
+    expect(g.results('dev1')).toContainEqual({ type: 'operation.result', op: low.op, status: 'rejected', reason: 'stale' });
+    expect(g.dispatched).toEqual([]);
+    const ok = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(ok, assertion));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: ok.op, status: 'applied' });
+  });
+
+  it('a challenge prepared for one OMP dialog does not verify for another dialog with the same content', async () => {
+    const { g, auth } = await enrolled();
+    const A: Pending = { ...RPC, requestId: 'dlg-1' };
+    g.sessions.set('r', mk('r', { state: 'waiting_permission', pending: { ...A } }));
+    const challenge = await challengeFor(g, 'r', A);
+    g.sessions.set('r', mk('r', { state: 'waiting_permission', pending: { ...RPC, requestId: 'dlg-2' } }));
+    const m = { type: 'session.reply', op: randomUUID(), id: 'r', text: '1', expect: seen(A) };
+    g.send('dev1', withAssertion(m, auth.get(rp, challenge, { counter: 1 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.dispatched).toEqual([]);
+  });
+
   it('logs carry neither the challenge nor the signature, even when verification fails', async () => {
     const { g, auth } = await enrolled();
     const challenge = await challengeFor(g, 'a', PUSH);

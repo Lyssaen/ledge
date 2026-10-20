@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { copy } from '../copy';
 import { getAssertion } from '../link/webauthn';
 import type { InboxItem } from '../model/requests';
-import type { ConfirmChallenge, MobileStore } from '../state/store';
+import type { ConfirmChallenge, ConfirmedExpect, MobileStore } from '../state/store';
 import { Notice } from '../ui/Notice';
 import { isApple } from './device';
 
@@ -13,7 +13,8 @@ const full = 'inline-flex min-h-12 w-full items-center justify-center gap-2 roun
 /** What the PC said about the device check of the last accept, when it refused it. */
 export type ConfirmReason = 'assertion_expired' | 'assertion_invalid' | 'confirm_required';
 
-type Problem = 'cancelled' | 'expired' | 'failed' | 'prepareFailed';
+type Problem = 'cancelled' | 'expired' | 'failed' | 'prepareFailed' | 'changed';
+
 
 export interface RiskConfirmProps {
   store: MobileStore;
@@ -22,8 +23,8 @@ export interface RiskConfirmProps {
   enabled: boolean;
   /** The PC refused the last accept for its device check: a new challenge is asked only when « Réessayer » is tapped. */
   reason?: ConfirmReason | undefined;
-  /** Sends what the device confirmed, with its assertion (an accept, or a reply with the option chosen): the op's id, or null when nothing was sent. */
-  onConfirm: (assertion: Assertion) => string | null;
+  /** Sends what the device confirmed, with its assertion and the request it confirmed (an accept, or a reply with the option chosen): the op's id, or null when nothing was sent. */
+  onConfirm: (assertion: Assertion, expect: ConfirmedExpect) => string | null;
   /** The other way out, beside the confirmation: refusing (the default), or going back to choose again. */
   onDeny: () => void;
   denyLabel?: string;
@@ -43,6 +44,10 @@ export function RiskConfirm({ store, item, enabled, reason, onConfirm, onDeny, d
   const [waitingRetry, setWaitingRetry] = useState(reason !== undefined);
   const [attempt, setAttempt] = useState(0);
   const mounted = useRef(true);
+  const enabledNow = useRef(enabled);
+  enabledNow.current = enabled;
+  // The request the live challenge was prepared for.
+  const prepared = useRef<ConfirmedExpect | null>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   useEffect(() => {
@@ -52,9 +57,11 @@ export function RiskConfirm({ store, item, enabled, reason, onConfirm, onDeny, d
     let on = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     setChallenge(null);
-    store.prepareConfirm({ purpose: 'decide', id: item.sessionId, expect: { key: pending.key, kind: pending.kind, text: pending.text } }).then(
+    const expect: ConfirmedExpect = { key: pending.key, kind: pending.kind, text: pending.text };
+    store.prepareConfirm({ purpose: 'decide', id: item.sessionId, expect }).then(
       c => {
         if (!on) return;
+        prepared.current = expect;
         setChallenge(c);
         // A challenge is good for a minute: after that the PC would only refuse it.
         timer = setTimeout(() => { if (on) { setChallenge(null); setProblem('expired'); } }, c.expiresInMs);
@@ -75,20 +82,27 @@ export function RiskConfirm({ store, item, enabled, reason, onConfirm, onDeny, d
     const signed = await getAssertion({ challenge: challenge.challenge, rpId: challenge.rpId, credentialId: challenge.credentialId }).catch(() => 'failed' as const);
     if (!mounted.current) return;
     setAsking(false);
+    // The gesture took a while: only the request it was prepared for may be answered with it.
+    const asked = prepared.current;
+    if (!asked || !enabledNow.current || store.getState().sessions.get(item.sessionId)?.pending?.key !== asked.key) {
+      setChallenge(null);
+      setProblem('changed');
+      return;
+    }
     if (signed === 'cancelled') { setProblem('cancelled'); return; }
     if (signed === 'failed') { setProblem('failed'); return; }
     // The challenge is spent by this accept, whatever the PC says of it.
     setChallenge(null);
-    if (onConfirm(signed) === null) setProblem('failed');
+    if (onConfirm(signed, asked) === null) setProblem('failed');
   };
 
-  const needsNew = shown === 'expired' || shown === 'failed' || shown === 'prepareFailed';
+  const needsNew = shown === 'expired' || shown === 'failed' || shown === 'prepareFailed' || shown === 'changed';
   const label = asking ? C.asking : challenge ? (isApple() ? C.goApple : C.go) : C.preparing;
   return (
     <section aria-labelledby="confirm-title" className="flex flex-col gap-3 rounded-[14px] border border-line bg-surface p-4">
       <h2 id="confirm-title" className="text-[17px] leading-[1.35] font-semibold">{C.heading}</h2>
       <p className="text-xs leading-[1.6] text-muted">{C.note}</p>
-      {shown && <Notice title={C[shown]} tone="warning" role="alert" />}
+      {shown && <Notice title={shown === 'changed' ? copy.decide.changed : C[shown]} tone="warning" role="alert" />}
       {needsNew
         ? <button type="button" disabled={!enabled} onClick={retry} className={`${full} border-transparent bg-fg text-[#121415]`}>{C.retry}</button>
         : <button type="button" disabled={!enabled || asking || !challenge} onClick={() => { void go(); }} className={`${full} border-transparent bg-fg text-[#121415]`}>{label}</button>}
