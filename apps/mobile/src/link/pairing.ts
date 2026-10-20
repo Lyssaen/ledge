@@ -30,7 +30,8 @@ type Offer = { pc: string; fingerprint: string };
 
 /**
  * Sends `pair_commit` at once. Linked only once `pair_ok` came **and** `confirmOnPhone()` was called, in either order,
- * within `ttlMs` of the commit; the pinned key is the one of `pair_offer`. A second `pair_offer` is ignored.
+ * the PC's `pair_ok` within `ttlMs` of the commit (the phone's own confirmation may come later); the pinned key is the
+ * one of `pair_offer`. A second `pair_offer` is ignored. A commitment that cannot be computed ends in `cancelled`.
  */
 export function startPairing(opts: {
   identity: Identity;
@@ -50,7 +51,9 @@ export function startPairing(opts: {
   let offer: Offer | null = null;
 
   const live = () => s.step === 'committing' || s.step === 'compare';
+  /** Once the PC said yes, the window is closed on its side: only the phone's own confirmation is left. */
   const expireIfDue = () => {
+    if (s.step === 'compare' && s.pcConfirmed) return;
     if (live() && now() >= expiresAt) s = { step: 'expired' };
   };
 
@@ -81,9 +84,11 @@ export function startPairing(opts: {
     opts.send({ k: 'pair_reveal', d: opts.identity.publicKey, n: nonce });
   };
 
-  const ready = commit(opts.identity.publicKey, nonce).then((c) => {
-    if (s.step === 'committing') opts.send({ k: 'pair_commit', c, label });
-  });
+  // A commitment that cannot be computed leaves nothing to wait for: cancelled, as if the user gave up, silently.
+  const ready = commit(opts.identity.publicKey, nonce).then(
+    (c) => { if (s.step === 'committing') opts.send({ k: 'pair_commit', c, label }); },
+    () => { if (live()) s = { step: 'cancelled' }; }
+  );
 
   return {
     async receive(f) {

@@ -6,6 +6,10 @@ import { RelayPeerSchema } from './relay.js';
 export const RELAY_SESSION_COOKIE = 'ledge_session';
 /** Close code of a socket whose session was revoked (sign-out, or a newer PC sign-in on the account). */
 export const RELAY_CLOSE_SIGNED_OUT = 4001;
+/** Close code of a socket replaced by a newer socket of the same peer: the client must not reconnect. */
+export const RELAY_CLOSE_REPLACED = 4000;
+/** Close code of a socket past the relay's rate limit: the client waits before reconnecting. */
+export const RELAY_CLOSE_RATE_LIMITED = 4008;
 
 export const DeviceStartResponseSchema = z.object({
   deviceCode: z.string().min(1),

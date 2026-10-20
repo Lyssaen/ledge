@@ -1,4 +1,7 @@
-import { RelayClientMessageSchema, RelayPeerSchema, SEALED_MAX, type RelayPeer, type RelayServerMessage } from '@ledge/protocol';
+import {
+  RELAY_CLOSE_RATE_LIMITED, RELAY_CLOSE_REPLACED, RelayClientMessageSchema, RelayPeerSchema, SEALED_MAX,
+  type RelayPeer, type RelayServerMessage
+} from '@ledge/protocol';
 import type { RelayLog } from './log.js';
 
 export interface Who { accountId: string; peer: RelayPeer }
@@ -42,7 +45,7 @@ export class Hub {
     if (!peers) { peers = new Map(); this.accounts.set(who.accountId, peers); }
     const old = peers.get(who.peer);
     peers.set(who.peer, conn);
-    if (old) old.close(4000, 'replaced');
+    if (old) old.close(RELAY_CLOSE_REPLACED, 'replaced');
     this.log({ ev: 'connect', account: who.accountId, peer: who.peer });
     this.out(conn, { type: 'welcome', accountId: who.accountId, self: who.peer, online: this.onlineFor(who) });
     // A replacement is not a presence change for the others.
@@ -89,7 +92,7 @@ export class Hub {
       // Closing forces a reconnect, hence a fresh handshake.
       st.limited = true;
       this.fail(conn, st, 'rate_limited');
-      return conn.close(4008, 'rate_limited');
+      return conn.close(RELAY_CLOSE_RATE_LIMITED, 'rate_limited');
     }
 
     let json: unknown;

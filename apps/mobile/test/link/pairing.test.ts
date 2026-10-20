@@ -119,6 +119,36 @@ describe('phone pairing against a fake PC on the real relay', () => {
     expect(step(pairing)).toBe('expired');
   });
 
+  it('pair_ok, then the user confirms after the 5 minutes → linked: once the PC said yes, only the phone is left', async () => {
+    const { pc, pairing, clock } = await setup();
+    await until(() => step(pairing) === 'compare', 'compare');
+    pc.ok();
+    await until(() => { const s = pairing.state(); return s.step === 'compare' && s.pcConfirmed; }, 'pcConfirmed');
+    clock.advance(PAIRING_TTL_MS + 60_000);
+    expect(pairing.state()).toMatchObject({ step: 'compare', pcConfirmed: true, phoneConfirmed: false });
+    pairing.confirmOnPhone();
+    const s = pairing.state();
+    expect(s.step === 'linked' && s.pc.publicKey).toBe(pc.identity.publicKey);
+  });
+
+  it('an off-curve pair_offer is ignored, and a later valid one reaches compare with the valid key', async () => {
+    const { pc, pairing, sent, handled } = await setup({ autoOffer: false });
+    await pc.waitFor('pair_commit');
+    const offCurve = 'BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE';
+    pc.sendFrame({ k: 'pair_offer', pc: offCurve, n: randomNonce() });
+    await until(() => handled() === 1, 'the off-curve offer');
+    expect(step(pairing)).toBe('committing');
+    expect(sent.map((f) => f.k)).toEqual(['pair_commit']);
+    pc.offer();
+    await until(() => step(pairing) === 'compare', 'compare');
+    expect(pairing.state()).toMatchObject({ step: 'compare', code: await pc.code() });
+    pc.ok();
+    pairing.confirmOnPhone();
+    await until(() => step(pairing) === 'linked', 'linked');
+    const s = pairing.state();
+    expect(s.step === 'linked' && s.pc).toMatchObject({ publicKey: pc.identity.publicKey, fingerprint: await fingerprint(pc.identity.publicKey) });
+  });
+
   it('a second pair_offer is ignored: one reveal, the same code', async () => {
     const { pc, pairing, sent, handled } = await setup();
     await until(() => step(pairing) === 'compare', 'compare');
@@ -190,5 +220,16 @@ describe('the fake PC', () => {
     const hs = await startHandshake(stranger, 'device', pc.identity.publicKey);
     sock.send('pc', { k: 'hello', e: hs.hello, f: await fingerprint(stranger.publicKey) });
     await until(() => fromPc.some((f) => f.k === 'denied'), 'denied');
+  });
+});
+
+describe('phone pairing on its own', () => {
+  it('a commitment that cannot be computed ends in cancelled, sends nothing, and receive() does not throw', async () => {
+    const identity = { ...(await generateIdentity()), publicKey: '!' };
+    const sent: SealedFrame[] = [];
+    const pairing = startPairing({ identity, label: 'iPhone', send: (f) => sent.push(f) });
+    await pairing.receive({ k: 'pair_offer', pc: (await generateIdentity()).publicKey, n: randomNonce() });
+    expect(step(pairing)).toBe('cancelled');
+    expect(sent).toEqual([]);
   });
 });

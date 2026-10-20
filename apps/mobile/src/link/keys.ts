@@ -7,6 +7,7 @@ export type PinnedPc = { publicKey: string; fingerprint: string; name: string | 
 
 export interface KeyStore {
   identity(): Promise<Identity | null>;
+  /** Rejects when an identity is already stored: it is never replaced, only dropped by `forget()`. */
   saveIdentity(id: Identity): Promise<void>;
   pinned(): Promise<PinnedPc | null>;
   pin(pc: PinnedPc): Promise<void>;
@@ -36,13 +37,31 @@ function clearMobileStorage(storage: Storage | null): void {
   for (const k of doomed) storage.removeItem(k);
 }
 
-/** The stored identity, or a new non-extractable one, saved before it is returned. */
-export async function ensureIdentity(store: KeyStore): Promise<Identity> {
-  const known = await store.identity();
-  if (known) return known;
-  const id = await generateIdentity();
-  await store.saveIdentity(id);
-  return id;
+/** The call in flight per store: two at once in this tab share it. */
+const pending = new WeakMap<KeyStore, Promise<Identity>>();
+
+/**
+ * The stored identity, or a new non-extractable one, saved before it is returned. Concurrent calls on one store share
+ * one generation; when another tab saved first, its identity wins and is the one returned.
+ */
+export function ensureIdentity(store: KeyStore): Promise<Identity> {
+  const inFlight = pending.get(store);
+  if (inFlight) return inFlight;
+  const p = (async () => {
+    const known = await store.identity();
+    if (known) return known;
+    const id = await generateIdentity();
+    try {
+      await store.saveIdentity(id);
+      return id;
+    } catch (e) {
+      const stored = await store.identity();
+      if (stored) return stored;
+      throw e;
+    }
+  })().finally(() => pending.delete(store));
+  pending.set(store, p);
+  return p;
 }
 
 /** For tests: the same contract, in memory. */
@@ -51,7 +70,10 @@ export function memoryKeys(storage: Storage | null = defaultStorage()): KeyStore
   let pc: PinnedPc | null = null;
   return {
     async identity() { return identity; },
-    async saveIdentity(id) { identity = id; },
+    async saveIdentity(id) {
+      if (identity) throw new Error('an identity is already stored');
+      identity = id;
+    },
     async pinned() { return pc; },
     async pin(p) { pc = { ...p }; },
     async forget() {
@@ -113,7 +135,8 @@ export function indexedDbKeys(storage: Storage | null = defaultStorage()): KeySt
       return isIdentity(v) ? { publicKey: v.publicKey, privateKey: v.privateKey } : null;
     },
     async saveIdentity(id) {
-      await run('readwrite', (s) => s.put({ publicKey: id.publicKey, privateKey: id.privateKey }, IDENTITY));
+      // `add`, not `put`: a ConstraintError when another tab stored one first.
+      await run('readwrite', (s) => s.add({ publicKey: id.publicKey, privateKey: id.privateKey }, IDENTITY));
     },
     async pinned() {
       const v = await run('readonly', (s) => s.get(PC));

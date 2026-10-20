@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ensureIdentity, memoryKeys, type PinnedPc } from '../../src/link/keys';
+import { generateIdentity } from '@ledge/seal';
+import { ensureIdentity, memoryKeys, type KeyStore, type PinnedPc } from '../../src/link/keys';
 
 const pc: PinnedPc = {
   publicKey: 'B'.repeat(87),
@@ -18,6 +19,35 @@ describe('keys', () => {
     expect(second).toBe(first);
     expect(first.privateKey.extractable).toBe(false);
     expect(await store.identity()).toBe(first);
+  });
+
+  it('two concurrent ensureIdentity calls return the same, stored identity', async () => {
+    const store = memoryKeys();
+    const [a, b] = await Promise.all([ensureIdentity(store), ensureIdentity(store)]);
+    expect(b).toBe(a);
+    expect(await store.identity()).toBe(a);
+  });
+
+  it('saveIdentity never replaces a stored identity; ensureIdentity then returns the stored one', async () => {
+    const store = memoryKeys();
+    const first = await ensureIdentity(store);
+    await expect(store.saveIdentity(await generateIdentity())).rejects.toThrow();
+    expect(await store.identity()).toBe(first);
+    // Another tab saved first: this one keeps what is stored.
+    const other = memoryKeys();
+    const theirs = await generateIdentity();
+    await other.saveIdentity(theirs);
+    const lost: KeyStore = { ...other, identity: (() => { let n = 0; return async () => (n++ === 0 ? null : other.identity()); })() };
+    expect(await ensureIdentity(lost)).toBe(theirs);
+  });
+
+  it('after forget(), ensureIdentity makes a new identity', async () => {
+    const store = memoryKeys();
+    const first = await ensureIdentity(store);
+    await store.forget();
+    const second = await ensureIdentity(store);
+    expect(second).not.toBe(first);
+    expect(await store.identity()).toBe(second);
   });
 
   it('pin stores the PC that pinned() returns', async () => {

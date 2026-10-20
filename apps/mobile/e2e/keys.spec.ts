@@ -18,3 +18,25 @@ test('an identity stored by indexedDbKeys() survives a reload, stays non-extract
   expect(r.opened).toEqual({ atPc: '{"t":"ready"}', atDevice: '{"t":"ready"}' });
   expect(r.afterForget).toBeNull();
 });
+
+test('a PC pinned in IndexedDB survives a reload; forget() then drops it, the identity and ledge.mobile.*', async ({ page }) => {
+  await page.goto('/e2e/keys.html');
+  await page.waitForFunction(() => (window as any).keysReady === true);
+  const pc = await page.evaluate(() => (window as any).pinFresh());
+
+  await page.reload();
+  await page.waitForFunction(() => (window as any).keysReady === true);
+  const r = await page.evaluate(() => (window as any).reloadPinnedAndForget());
+  expect(r.pinned).toEqual(pc);
+  expect(r.hadIdentity).toBe(true);
+  expect(r.afterForget).toEqual({ pinned: null, identity: null });
+  expect(r.storage).toEqual({ mobile: null, other: 'kept' });
+});
+
+test('two stores racing on ensureIdentity end with one stored identity, returned to both', async ({ page }) => {
+  await page.goto('/e2e/keys.html');
+  await page.waitForFunction(() => (window as any).keysReady === true);
+  const r = await page.evaluate(() => (window as any).twoStoresRace());
+  expect(r.b).toBe(r.a);
+  expect(r.stored).toBe(r.a);
+});

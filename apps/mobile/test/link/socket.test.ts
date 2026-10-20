@@ -155,6 +155,45 @@ describe('openRelaySocket', () => {
     expect(FakeWs.instances).toHaveLength(2);
   });
 
+  it('a /auth/me without an answer within 10 s is aborted, counts as not signed out, and retries', async () => {
+    const timeouts: Array<{ ms: number; ctl: AbortController }> = [];
+    const spy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
+      const ctl = new AbortController();
+      timeouts.push({ ms, ctl });
+      return ctl.signal;
+    });
+    try {
+      const hanging = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('timed out', 'TimeoutError')));
+      }));
+      const { states } = open(hanging as never);
+      last().welcome();
+      last().drop(4001);
+      await vi.advanceTimersByTimeAsync(60_000);
+      // Still waiting on /auth/me: no retry yet.
+      expect(FakeWs.instances).toHaveLength(1);
+      expect(timeouts.map((t) => t.ms)).toEqual([10_000]);
+      timeouts[0]!.ctl.abort();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(FakeWs.instances).toHaveLength(2);
+      expect(states).toEqual(['connecting', 'open', 'connecting']);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it.each(['relay.example', 'ftp://relay.example', 'wss://relay.example', 'https://relay.example/app', 'https://u:p@relay.example', 'https://relay.example/?x=1'])(
+    'refuses %s at once, before any socket', (url) => {
+      expect(() => openRelaySocket({ url, WebSocketImpl: Impl, onFrame: () => {}, onState: () => {} })).toThrow(TypeError);
+      expect(FakeWs.instances).toHaveLength(0);
+    }
+  );
+
+  it('takes http:// for a local relay and opens ws://', () => {
+    openRelaySocket({ url: 'http://127.0.0.1:8787/', WebSocketImpl: Impl, onFrame: () => {}, onState: () => {} });
+    expect(last().url).toBe('ws://127.0.0.1:8787/ws');
+  });
+
   it('close(): closed, the socket closed with 1000, no reconnection', async () => {
     const { sock, states } = open();
     const ws = last();

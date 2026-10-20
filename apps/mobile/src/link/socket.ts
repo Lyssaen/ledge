@@ -1,7 +1,7 @@
 // The phone's websocket to the relay's `/ws`. It authenticates with the session cookie, never with a subprotocol,
 // and follows the relay's close codes: replaced, signed out, rate limited, or a plain loss with backoff.
 import {
-  RELAY_CLOSE_SIGNED_OUT, RelayServerMessageSchema, SEALED_MAX,
+  RELAY_CLOSE_RATE_LIMITED, RELAY_CLOSE_REPLACED, RELAY_CLOSE_SIGNED_OUT, RelayServerMessageSchema, SEALED_MAX,
   type RelayPeer, type RelayServerMessage, type SealedFrame
 } from '@ledge/protocol';
 
@@ -14,14 +14,22 @@ export interface RelaySocket {
   close(): void;
 }
 
-/** Another socket of the same peer took over: never reconnect. */
-export const RELAY_CLOSE_REPLACED = 4000;
-/** The relay's rate limit: wait at least `RATE_LIMITED_WAIT_MS`. */
-export const RELAY_CLOSE_RATE_LIMITED = 4008;
+/** After a 4008 (rate limited), the first retry waits at least this. */
 export const RATE_LIMITED_WAIT_MS = 10_000;
+/** A `/auth/me` without an answer by then counts as "not signed out": the socket retries. */
+export const AUTH_ME_WITHIN_MS = 10_000;
 export const BACKOFF_FIRST_MS = 1_000;
 export const BACKOFF_MAX_MS = 30_000;
 const OPEN = 1;
+
+/** `url` reduced to its origin; throws unless it is an `http:`/`https:` origin with no path, query or credentials. */
+function relayOrigin(url: string): string {
+  let u: URL;
+  try { u = new URL(url); } catch { throw new TypeError('relay URL: not a URL'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new TypeError('relay URL: not http(s)');
+  if (u.username || u.password || u.pathname !== '/' || u.search || u.hash) throw new TypeError('relay URL: not an origin');
+  return u.origin;
+}
 
 /**
  * Connects at once to `<url>/ws` (`url` is the relay origin, `https:` or `http:`) and stays connected until `close()`,
@@ -30,6 +38,7 @@ const OPEN = 1;
  * 401 is `signed_out`, anything else a retry. Retries back off from 1 s, doubling up to 30 s, back to 1 s on `welcome`;
  * after a 4008 the first retry waits at least 10 s.
  * Only frames that pass `RelayServerMessageSchema` reach `onFrame`; nothing of a frame is logged.
+ * Throws at once when `url` is not an `http:`/`https:` origin, so a bad URL never turns into a retry loop.
  */
 export function openRelaySocket(opts: {
   url: string;
@@ -40,9 +49,10 @@ export function openRelaySocket(opts: {
 }): RelaySocket {
   const Impl = opts.WebSocketImpl ?? WebSocket;
   const fetchImpl = opts.fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
-  const wsUrl = new URL('/ws', opts.url);
+  const origin = relayOrigin(opts.url);
+  const wsUrl = new URL('/ws', origin);
   wsUrl.protocol = wsUrl.protocol === 'http:' ? 'ws:' : 'wss:';
-  const meUrl = new URL('/auth/me', opts.url).toString();
+  const meUrl = new URL('/auth/me', origin).toString();
 
   let state: SocketState | null = null;
   let ws: WebSocket | null = null;
@@ -82,7 +92,7 @@ export function openRelaySocket(opts: {
   /** True when the relay no longer knows this phone's session; a network failure or another status is not that. */
   const signedOut = async (): Promise<boolean> => {
     try {
-      const r = await fetchImpl(meUrl, { credentials: 'same-origin', cache: 'no-store' });
+      const r = await fetchImpl(meUrl, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(AUTH_ME_WITHIN_MS) });
       return r.status === 401;
     } catch {
       return false;

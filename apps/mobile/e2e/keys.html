@@ -28,6 +28,38 @@
         await store.forget();
         return { publicKey: id.publicKey, extractable: id.privateKey.extractable, exportRefused, opened, afterForget: await store.identity() };
       };
+      const pc = { publicKey: 'B'.repeat(87), fingerprint: 'f'.repeat(22), name: null, pinnedAt: '2026-10-20T08:00:00.000Z' };
+
+      window.pinFresh = async () => {
+        const store = indexedDbKeys();
+        await store.forget();
+        await ensureIdentity(store);
+        await store.pin(pc);
+        localStorage.setItem('ledge.mobile.snapshot', '{}');
+        localStorage.setItem('ledge.other', 'kept');
+        return pc;
+      };
+
+      window.reloadPinnedAndForget = async () => {
+        const store = indexedDbKeys();
+        const pinned = await store.pinned();
+        const hadIdentity = (await store.identity()) !== null;
+        await store.forget();
+        return {
+          pinned, hadIdentity,
+          afterForget: { pinned: await store.pinned(), identity: await store.identity() },
+          storage: { mobile: localStorage.getItem('ledge.mobile.snapshot'), other: localStorage.getItem('ledge.other') }
+        };
+      };
+
+      // Two stores on the same base, as two tabs would hold: one identity wins, both get it.
+      window.twoStoresRace = async () => {
+        await indexedDbKeys().forget();
+        const [a, b] = await Promise.all([ensureIdentity(indexedDbKeys()), ensureIdentity(indexedDbKeys())]);
+        const stored = await indexedDbKeys().identity();
+        await indexedDbKeys().forget();
+        return { a: a.publicKey, b: b.publicKey, stored: stored.publicKey };
+      };
       window.keysReady = true;
     </script>
   </body>

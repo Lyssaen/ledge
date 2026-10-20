@@ -3,6 +3,8 @@ import {
   DevicePollResponseSchema,
   DeviceStartResponseSchema,
   MeResponseSchema,
+  RELAY_CLOSE_RATE_LIMITED,
+  RELAY_CLOSE_REPLACED,
   RELAY_CLOSE_SIGNED_OUT,
   RELAY_SESSION_COOKIE
 } from '../src/index.js';
@@ -10,9 +12,11 @@ import {
 const DEV = 'd_' + 'a'.repeat(16);
 
 describe('relay auth', () => {
-  it('names the session cookie and the signed-out close code', () => {
+  it('names the session cookie and the close codes', () => {
     expect(RELAY_SESSION_COOKIE).toBe('ledge_session');
+    expect(RELAY_CLOSE_REPLACED).toBe(4000);
     expect(RELAY_CLOSE_SIGNED_OUT).toBe(4001);
+    expect(RELAY_CLOSE_RATE_LIMITED).toBe(4008);
   });
 
   it('accepts a device start answer and refuses an incomplete one', () => {
