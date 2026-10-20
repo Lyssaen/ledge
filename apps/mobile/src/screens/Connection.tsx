@@ -3,6 +3,7 @@ import type { PinnedPc } from '../link/keys';
 import type { LinkState } from '../link/link';
 import { groupFingerprint } from '../model/fingerprint';
 import { href } from '../router';
+import { formatFingerprint } from '../sw/fingerprint';
 import { useMobile, type MobileStore } from '../state/store';
 import type { BuildInfo } from '../sw/types';
 import { BackHeader, linkView } from '../ui/Header';
@@ -27,7 +28,7 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
     [N.pcFingerprint, pinned ? groupFingerprint(pinned.fingerprint) : N.unknown, true],
     [N.status, status(linkState), false],
     [N.version, build?.version ?? N.none, true],
-    [N.appFingerprint, build ? groupFingerprint(build.fingerprint, 6) : N.none, true]
+    [N.appFingerprint, build ? formatFingerprint(build.fingerprint) : N.none, true]
   ];
   return (
     <>

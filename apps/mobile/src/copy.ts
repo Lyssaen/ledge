@@ -257,6 +257,8 @@ export const copy = {
     body: 'Le serveur propose une mise à jour de l’app. Rien ne change tant que vous ne l’acceptez pas.',
     fingerprint: 'Empreinte de cette version',
     current: 'Actuelle : ',
+    /** After « Actuelle : », the running build: its version and short fingerprint. */
+    currentBuild: (v: string, fp: string) => `${v} · ${fp}`,
     compare: (v: string) => `Comparer avec la release ${v} sur GitHub`,
     later: 'Plus tard',
     apply: 'Mettre à jour'

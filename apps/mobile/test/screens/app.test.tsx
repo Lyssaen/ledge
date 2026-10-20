@@ -5,7 +5,7 @@ import { memoryKeys, type PinnedPc } from '../../src/link/keys';
 import { LAST_STATE_KEY } from '../../src/state/persist';
 import { pending, session } from '../model/fixtures';
 import { MemoryStorage, snapshot } from '../state/helpers';
-import { app } from './app-setup';
+import { app, fakeUpdates } from './app-setup';
 
 const pc: PinnedPc = { publicKey: 'K', fingerprint: 'abcdEFGHijklMNOPqrstuv', name: 'PC-Desan', pinnedAt: '2026-10-16T08:00:00.000Z' };
 const hashChange = () => act(() => { globalThis.dispatchEvent(new HashChangeEvent('hashchange')); });
@@ -67,7 +67,7 @@ describe('the app', () => {
   });
 
   it('the connection screen: account, relay, PC and its fingerprint, the app’s version and fingerprint, and sign out', async () => {
-    const t = app('ready', { hash: '#/connection', build: { version: '0.9.1', fingerprint: '0123456789abcdef0123456789abcdef' } });
+    const t = app('ready', { hash: '#/connection', updates: fakeUpdates({ version: '0.9.1', fingerprint: '0123456789abcdef0123456789abcdef' }).watch });
     act(() => t.setPinned(pc));
     expect(screen.getByText('Connexion')).toBeInTheDocument();
     expect(await screen.findByText('@paradow')).toBeInTheDocument();
@@ -86,13 +86,52 @@ describe('the app', () => {
     expect(t.calls).toEqual(['signOut']);
   });
 
-  it('the connection screen before Task 11 gives the build: « — »', () => {
+  it('the connection screen without a service worker: « — » for the build', () => {
     app('pc_offline', { hash: '#/connection', me: null });
     const rows = Object.fromEntries([...document.querySelectorAll('dl dt')].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]));
     expect(rows['Version de l’app']).toBe('—');
     expect(rows['Empreinte de l’app']).toBe('—');
     expect(rows['PC']).toBe('Inconnu');
     expect(rows['État']).toBe('Déconnecté');
+  });
+
+  it('a build waiting for consent → the Update sheet over the screen, as the board shows it', () => {
+    const u = fakeUpdates({ version: '0.5.4', fingerprint: '8e1702af0000000000000000' });
+    app('ready', { updates: u.watch });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    act(() => u.set({ waiting: { version: '0.6.0', fingerprint: '3f9ac21e70bd44e19a02d5c8aaaa' } }));
+    const sheet = screen.getByRole('dialog', { name: 'Nouvelle version · 0.6.0' });
+    expect(sheet).toHaveTextContent('Le serveur propose une mise à jour de l’app. Rien ne change tant que vous ne l’acceptez pas.');
+    expect(within(sheet).getByText('Empreinte de cette version')).toBeInTheDocument();
+    expect(within(sheet).getByText('3f9a c21e 70bd 44e1 9a02 d5c8')).toBeInTheDocument();
+    expect(sheet).toHaveTextContent('Actuelle : 0.5.4 · 8e17 02af');
+    expect(within(sheet).getByRole('link', { name: 'Comparer avec la release v0.6.0 sur GitHub' }))
+      .toHaveAttribute('href', 'https://github.com/Lyssaen/ledge/releases/tag/v0.6.0');
+    expect(within(sheet).getAllByRole('button').map((b) => b.textContent)).toEqual(['Plus tard', 'Mettre à jour']);
+    // The screen stays underneath.
+    expect(screen.getByText('À traiter', { selector: 'h1' })).toBeInTheDocument();
+
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Mettre à jour' }));
+    expect(u.accept).toHaveBeenCalledTimes(1);
+  });
+
+  it('« Plus tard » hides the sheet for that build; a newer one raises it again', () => {
+    const u = fakeUpdates({ version: '0.5.4', fingerprint: '8e1702af' }, { version: '0.6.0', fingerprint: '3f9ac21e' });
+    app('ready', { updates: u.watch });
+    fireEvent.click(screen.getByRole('button', { name: 'Plus tard' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(u.accept).not.toHaveBeenCalled();
+    act(() => u.set({ waiting: { version: '0.6.1', fingerprint: '77aa01bc' } }));
+    expect(screen.getByRole('dialog', { name: 'Nouvelle version · 0.6.1' })).toBeInTheDocument();
+  });
+
+  it('the build on the connection screen follows the service worker', () => {
+    const u = fakeUpdates();
+    app('ready', { hash: '#/connection', updates: u.watch });
+    const row = () => Object.fromEntries([...document.querySelectorAll('dl dt')].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]))['Version de l’app'];
+    expect(row()).toBe('—');
+    act(() => u.set({ current: { version: '0.11.0', fingerprint: 'abcd' } }));
+    expect(row()).toBe('0.11.0');
   });
 
   it('another tab took the link → said, with the way to take it back', () => {

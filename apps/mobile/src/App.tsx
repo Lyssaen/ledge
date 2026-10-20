@@ -15,7 +15,9 @@ import { Offline, Replaced } from './screens/Offline';
 import { RequestDetail } from './screens/RequestDetail';
 import { Terminal } from './screens/Terminal';
 import { Thread } from './screens/Thread';
+import { Update } from './screens/Update';
 import { useMobile, type MobileStore } from './state/store';
+import type { UpdateWatch } from './sw/register';
 import type { BuildInfo } from './sw/types';
 
 /** Every change of the link: its state, its pairing, its pinned PC. */
@@ -27,6 +29,18 @@ function useLink(link: PhoneLink): LinkState {
     return off;
   }, [link]);
   return link.state();
+}
+
+/** The running build and the one waiting for consent, as the service worker tells them. */
+function useUpdates(updates: UpdateWatch | null): { build: BuildInfo | null; waiting: BuildInfo | null } {
+  const [, bump] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    if (!updates) return;
+    const off = updates.subscribe(bump);
+    bump();
+    return off;
+  }, [updates]);
+  return { build: updates?.current() ?? null, waiting: updates?.waiting() ?? null };
 }
 
 /** The GitHub login the relay's session belongs to, asked once signed in; null when unknown or signed out. */
@@ -49,8 +63,8 @@ export interface AppProps {
   store: MobileStore;
   storage?: Storage;
   fetchImpl?: typeof fetch;
-  /** The running build, from the service worker; null until it gives it. */
-  build?: BuildInfo | null;
+  /** The pinned service worker's builds; null where it could not be registered. */
+  updates?: UpdateWatch | null;
   /** The relay's `?signin=` issue, taken from the address at start. */
   signin?: string | null;
   /** The keys were found lost at start, and the cache wiped. */
@@ -61,11 +75,14 @@ export interface AppProps {
 
 const defaultFetch: typeof fetch = (input, init) => globalThis.fetch(input, init);
 
-export function App({ link, store, storage, fetchImpl = defaultFetch, build = null, signin = null, lost = false, relay = globalThis.location.host }: AppProps) {
+export function App({ link, store, storage, fetchImpl = defaultFetch, updates = null, signin = null, lost = false, relay = globalThis.location.host }: AppProps) {
   const state = useLink(link);
   const mobile = useMobile(store);
   const route = useRoute();
   const login = useLogin(fetchImpl, state !== 'signed_out');
+  const { build, waiting } = useUpdates(updates);
+  // « Plus tard » hides the sheet for this build until the page loads again.
+  const [later, setLater] = useState<string | null>(null);
   // The sign-in issue stays until the user moves on: « Utiliser un autre compte » leaves Denied for the login board.
   const [issue, setIssue] = useState(signin);
   const [keysLost, setKeysLost] = useState(lost);
@@ -135,5 +152,12 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, build = nu
     }
   })();
 
-  return <div className="app flex flex-col" data-route={route.name}>{screen}</div>;
+  return (
+    <div className="app flex flex-col" data-route={route.name}>
+      {screen}
+      {updates && waiting && waiting.fingerprint !== later && (
+        <Update next={waiting} current={build} onLater={() => setLater(waiting.fingerprint)} onApply={() => updates.accept()} />
+      )}
+    </div>
+  );
 }
