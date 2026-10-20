@@ -79,6 +79,16 @@ describe('OmpHost', () => {
     await host.interrupt(s.id);
     expect(cmds().filter(c => c.cmd).map(c => c.cmd!.type)).toEqual(['get_state', 'prompt', 'follow_up', 'abort']);
   });
+  it('a follow_up waits for the turn to end, and its prompt enters the thread when its turn starts, once; the first prompt is not recorded twice', async () => {
+    const s = await host.launch({ cwd: tmpdir() });
+    const texts: string[] = []; store.onEvent((_id, e) => { if (e.name === 'UserPromptSubmit' && e.text) texts.push(e.text); });
+    await host.send(s.id, 'first turn with a tool');
+    await until(() => store.get(s.id)!.state === 'waiting_input'); // the turn is still running
+    await host.send(s.id, 'and then this', 'follow_up');
+    expect(await host.answer(s.id, '1')).toBeNull();
+    await until(() => store.get(s.id)!.state === 'idle' && store.get(s.id)!.lastReply?.text === 'done: and then this');
+    expect(texts).toEqual(['first turn with a tool', 'and then this']);
+  });
   it('an unexpected exit ends the session with its signal state; a requested close reports nothing of its own', async () => {
     const a = await host.launch({ cwd: tmpdir() });
     await host.close(a.id);

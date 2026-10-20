@@ -25,7 +25,7 @@ describe('New session', () => {
     expect(form.getByRole('textbox', { name: 'Instruction' })).toHaveFocus();
     expect(form.queryByRole('button', { name: 'Review the latest pull request' })).toBeNull();
     // Three tiles, none chosen; the project chips carry their colour.
-    expect(form.getAllByRole('radio').filter(r => r.getAttribute('name') === 'tool')).toHaveLength(3);
+    expect(form.getAllByRole('radio').filter(r => r.getAttribute('name') === 'tool')).toHaveLength(4);
     expect(form.getAllByRole('radio', { checked: true }).map(r => r.getAttribute('name'))).not.toContain('tool');
     expect(chipOf(form.getByRole('radio', { name: 'Ledge' })).querySelector('.side-swatch')).not.toBeNull();
     expect(form.getByRole('radio', { name: 'Ledge' })).toBeChecked();
@@ -306,7 +306,7 @@ describe('LaunchComposer and its machines', () => {
     await user.click(screen.getByRole('radio', { name: 'Codex Code and tests' }));
     expect(document.querySelector('.composer-preview')!.textContent).toMatch(/^\w+ will join the Ledge table/);
     const bots = view.container.querySelectorAll('[data-paused]');
-    expect(bots).toHaveLength(4);                                          // three tiles and the preview
+    expect(bots).toHaveLength(5);                                          // four tiles and the preview
     bots.forEach(b => expect(b).toHaveAttribute('data-paused', 'true'));
     view.rerender(<LaunchComposer {...props(client, [local, nas])} />);
     view.container.querySelectorAll('[data-paused]').forEach(b => expect(b).toHaveAttribute('data-paused', 'false'));
@@ -444,6 +444,31 @@ describe('LaunchComposer and its machines', () => {
       await user.click(screen.getByRole('button', { name: /Launch/ }));
       expect(sentMsg(p)).not.toHaveProperty('model');
       void first;
+    });
+
+    describe('OMP, driven by the daemon (spec 2026-10-20)', () => {
+      const OMP = [{ id: 'anthropic/claude-opus-5-5', label: 'Claude Opus 5.5', description: 'anthropic', efforts: ['low', 'high'], isDefault: true }, { id: 'openai-codex/gpt-6.1-sol', label: 'GPT-6.1-Sol', description: 'openai-codex' }];
+      it('a fourth tile; the models are the machine\'s, named provider/id in what is sent; several folders go as --add-dir does for Claude', async () => {
+        const { user, p } = await ready(/OMP/, OMP);
+        expect(trigger('OMP')).toHaveAccessibleName('OMP model : Claude Opus 5.5');
+        await user.click(trigger('OMP'));
+        await user.click(menu().getByRole('option', { name: /GPT-6.1-Sol/ }));
+        await user.click(screen.getByRole('checkbox', { name: /^docs/ }));
+        await user.click(screen.getByRole('button', { name: /Launch/ }));
+        expect(sentMsg(p)).toMatchObject({ tool: 'omp', model: 'openai-codex/gpt-6.1-sol', dirs: ['/w/ledge/docs'] });
+      });
+      it('where OMP cannot be reached the launch is blocked with the reason: no other agent is picked for the user', async () => {
+        const { user, p } = await ready(/OMP/, [], 'not installed');
+        expect(screen.getByRole('alert')).toHaveTextContent('OMP cannot be launched on this machine (not installed)');
+        expect(screen.queryByRole('group', { name: 'OMP model' })).toBeNull();
+        await user.click(screen.getByRole('button', { name: /Launch/ }));
+        expect(p.onLaunch).not.toHaveBeenCalled();
+        expect(screen.getByRole('radio', { name: /OMP/ })).toBeChecked();
+      });
+      it('a daemon that does not know OMP says to update it', async () => {
+        await ready(/OMP/, [], 'outdated');
+        expect(screen.getByRole('alert')).toHaveTextContent('OMP cannot be launched here: update Ledge on this machine.');
+      });
     });
   });
 });

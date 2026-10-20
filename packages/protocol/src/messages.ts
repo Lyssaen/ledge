@@ -146,7 +146,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     /** Copied into the `folder.listing` that answers; the fleet relays only that listing, from the machine asked. */ requestId: z.string().min(1).max(100).optional() }),
   z.object({ type: z.literal('folder.create'), parent: z.string().min(1), name: z.string().min(1),
     /** As for `folder.list`: routing by the fleet, and the request its `folder.listing` answers. */ machineId: z.string().optional(), requestId: z.string().min(1).max(100).optional() }),
-  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1) }),
+  /** `steer`: OMP only, redirect the turn running now instead of queueing the text after it. */
+  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1), steer: z.boolean().optional() }),
   /** The chat card's instruction (spec 2026-10-12 relay §4): sent now if the session is free, else queued until it is. */
   z.object({ type: z.literal('session.relay'), qid: z.string().min(1) }),
   /** Takes the card's queued instruction back out of the queue. */

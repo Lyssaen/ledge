@@ -8,7 +8,7 @@ export type Tab = { kind: 'agent'; id: string }
 type ShellTab = Extract<Tab, { kind: 'shell' }>;
 export type AgentLink = { state: 'attached' | 'reconnecting' | 'off'; attempt: number; retryAt?: number };
 export const agentTabId = (sessionId: string): string => `${sessionId}#agent`;
-export interface TermDeps { backend: PtyBackend | null; surface(): TermSurface; agentArgv(id: string, readOnly: boolean): string[] | null; shellArgv(id: string): string[] | null; shellPlace(sessionId: string): { dir: string; remote: boolean }; now?(): number; setTimeout?: typeof setTimeout }
+export interface TermDeps { backend: PtyBackend | null; surface(): TermSurface; agentArgv(id: string, readOnly: boolean): string[] | null; shellArgv(id: string): string[] | null; shellPlace(sessionId: string): { dir: string; remote: boolean; /** OMP: no agent tab, the pane holds shells only. */ native?: boolean }; now?(): number; setTimeout?: typeof setTimeout }
 
 const OFF: AgentLink = { state: 'off', attempt: 0 };
 /** `ssh`'s exit code when the connection fails or drops. */
@@ -16,7 +16,7 @@ const SSH_LOST = 255;
 /** An attachment that held this long was a real connection: its drop starts the backoff over. */
 const HELD_MS = 15000;
 
-type Entry = { tabs: readonly Tab[]; active: string; next: number; link: AgentLink; offlineSince?: number };
+type Entry = { tabs: readonly Tab[]; active: string; next: number; link: AgentLink; offlineSince?: number; native: boolean };
 /** One open (or opening) pseudo-terminal; it is current while the store still points at it, stale once replaced or dropped. */
 type Run = { handle: PtyHandle | null };
 
@@ -74,7 +74,12 @@ export class TermStore {
     this.surfaces.get(tabId)?.dispose();
     this.surfaces.delete(tabId);
     e.tabs = e.tabs.filter(t => t.id !== tabId);
-    if (e.active === tabId) e.active = agentTabId(sessionId);
+    // With no agent tab, the last shell closed leaves a fresh one (not started) rather than a pane of nothing.
+    if (e.native && e.tabs.length === 0) {
+      const shell: ShellTab = { kind: 'shell', id: `${sessionId}#shell-${e.next}`, n: e.next, dir: this.deps.shellPlace(sessionId).dir, remote: this.deps.shellPlace(sessionId).remote, status: 'idle' };
+      e.next += 1; e.tabs = [shell];
+    }
+    if (e.active === tabId) e.active = e.native ? e.tabs[0]!.id : agentTabId(sessionId);
     this.emit();
   }
 
@@ -135,9 +140,10 @@ export class TermStore {
     let e = this.entries.get(sessionId);
     if (!e) {
       // The first shell opens where the session works, on its machine: asked once, when its tabs are made.
-      const { dir, remote } = this.deps.shellPlace(sessionId);
+      const { dir, remote, native = false } = this.deps.shellPlace(sessionId);
       const shell: ShellTab = { kind: 'shell', id: `${sessionId}#shell-1`, n: 1, dir, remote, status: 'idle' };
-      e = { tabs: [{ kind: 'agent', id: agentTabId(sessionId) }, shell], active: agentTabId(sessionId), next: 2, link: OFF };
+      e = native ? { tabs: [shell], active: shell.id, next: 2, link: OFF, native }
+        : { tabs: [{ kind: 'agent', id: agentTabId(sessionId) }, shell], active: agentTabId(sessionId), next: 2, link: OFF, native };
       this.entries.set(sessionId, e);
     }
     return e;

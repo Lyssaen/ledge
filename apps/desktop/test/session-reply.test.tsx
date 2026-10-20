@@ -278,3 +278,33 @@ describe('the reply, beyond the brief (carried items)', () => {
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Approval requested' })).toBeNull());
   });
 });
+
+describe('OMP: queued, redirected, interrupted (spec 2026-10-20 §3.2)', () => {
+  const omp = (extra = {}) => fakeSession('omp1', { name: 'Noor', tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'working', ...extra });
+  it('while it works, Enter queues the text after the turn, with no steer', async () => {
+    const { d, user } = await open('Noor', [omp(), ...listSessions()]);
+    await user.click(field()); await user.type(field(), 'then add tests');
+    expect(screen.getByText('Enter: after this turn')).toBeVisible();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'omp1', text: 'then add tests' }]));
+  });
+  it('« Redirect now » steers the running turn; Interrupt is its own command', async () => {
+    const { d, user } = await open('Noor', [omp(), ...listSessions()]);
+    await user.click(field()); await user.type(field(), 'stop, do this instead');
+    await user.click(screen.getByRole('button', { name: 'Redirect now' }));
+    await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'omp1', text: 'stop, do this instead', steer: true }]));
+    await user.click(screen.getByRole('button', { name: 'Interrupt' }));
+    await waitFor(() => expect(sent(d, 'session.interrupt')).toEqual([{ type: 'session.interrupt', id: 'omp1' }]));
+  });
+  it('at rest there is nothing to interrupt or redirect, and Claude Code never shows them', async () => {
+    await open('Noor', [omp({ state: 'idle' }), ...listSessions()]);
+    expect(screen.queryByRole('button', { name: 'Interrupt' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Redirect now' })).toBeNull();
+  });
+  it('a dialog of OMP is a question with its own options, answered by number', async () => {
+    const asking = omp({ state: 'waiting_input', pending: { kind: 'question', text: 'Allow tool: bash\nCommand: ls', options: ['Approve', 'Approve bash for this session', 'Deny'], source: 'rpc', tool: 'omp' } });
+    const { d, user } = await open('Noor', [asking, ...listSessions()]);
+    await user.click(within(screen.getByRole('region', { name: 'Question from the agent' })).getByRole('button', { name: /Deny/ }));
+    await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'omp1', text: '3' }]));
+  });
+});

@@ -29,7 +29,7 @@ const text = t => ({ role: 'assistant', content: [{ type: 'text', text: t }], pr
 
 async function turn(id, message) {
   settled = false;
-  out({ id, type: 'response', command: 'prompt', success: true });
+  if (id) out({ id, type: 'response', command: 'prompt', success: true });
   out({ type: 'agent_start' }); out({ type: 'turn_start' });
   out({ type: 'message_start', message: { role: 'user', content: [{ type: 'text', text: message }], attribution: 'user' }, messageId: 'msg-1' });
   out({ type: 'message_end', message: { role: 'user', content: [{ type: 'text', text: message }], attribution: 'user' }, messageId: 'msg-1' });
@@ -45,8 +45,10 @@ async function turn(id, message) {
   out({ type: 'message_end', message: text(reply), messageId: 'msg-2' });
   out({ type: 'turn_end', message: text(reply) });
   out({ type: 'agent_end', messages: [] });
+  const next = queued.steering.shift() ?? queued.followUp.shift();
+  if (id) out({ type: 'prompt_result', id, agentInvoked: true, status: 'completed', sessionSettled: next === undefined });
+  if (next !== undefined) return turn(null, next);
   settled = true;
-  out({ type: 'prompt_result', id, agentInvoked: true, status: 'completed', sessionSettled: true });
   out({ type: 'session_settled' });
 }
 
@@ -70,8 +72,13 @@ function handle(c) {
     case 'prompt': return void turn(c.id, c.message);
     case 'follow_up': case 'steer': (c.type === 'steer' ? queued.steering : queued.followUp).push(c.message); return out({ id: c.id, type: 'response', command: c.type, success: true });
     case 'abort': settled = true; out({ id: c.id, type: 'response', command: 'abort', success: true }); if (waiting) { const w = waiting; waiting = null; w({ cancelled: true }); } return;
-    case 'set_model': model.id = c.modelId; model.provider = c.provider; return out({ id: c.id, type: 'response', command: 'set_model', success: true, data: model });
-    case 'set_thinking_level': thinking = c.level; return out({ id: c.id, type: 'response', command: 'set_thinking_level', success: true });
+    case 'set_model':
+      if (c.modelId === 'nope') return out({ id: c.id, type: 'response', command: 'set_model', success: false, error: `Model not found: ${c.provider}/${c.modelId}` });
+      model.id = c.modelId; model.provider = c.provider; model.thinking = { efforts: c.provider === 'openai-codex' ? ['low', 'medium'] : ['low', 'medium', 'high'] };
+      return out({ id: c.id, type: 'response', command: 'set_model', success: true, data: model });
+    case 'get_available_thinking_levels': return out({ id: c.id, type: 'response', command: c.type, success: true, data: { levels: ['off', ...model.thinking.efforts] } });
+    // Like OMP 18.12.3: an unknown level is not refused, it clears the level.
+    case 'set_thinking_level': thinking = model.thinking.efforts.includes(c.level) ? c.level : undefined; return out({ id: c.id, type: 'response', command: 'set_thinking_level', success: true });
     default: return out({ id: c.id, type: 'response', command: c.type, success: false, error: `Unknown command: ${c.type}` });
   }
 }

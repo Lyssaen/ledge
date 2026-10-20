@@ -58,6 +58,7 @@ import { ptyBackend } from './term/backend';
 import { agentTabId, TermStore } from './term/store';
 import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
+import { isNative } from './term/mode';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { useDefaultTool } from './settings/tool';
 
@@ -85,7 +86,7 @@ function useTermStore(client: DaemonClient): TermStore {
       const { sessions, archived } = daemonStore.getState();
       const s = sessions.find(x => x.id === id) ?? archived.find(x => x.id === id);
       const machine = client.fleet?.machines().find(m => m.id === s?.machineId);
-      return { dir: s ? s.workdir ?? s.cwd : '~', remote: !!machine?.ssh };
+      return { dir: s ? s.workdir ?? s.cwd : '~', remote: !!machine?.ssh, native: !!s && isNative(s) };
     }
   }));
   useEffect(() => {

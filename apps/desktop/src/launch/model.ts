@@ -2,8 +2,8 @@ import { splitId, type MachineState } from '@ledge/fleet';
 import { pickName, type ClientMessage, type Project, type Repo, type RepoInfo, type Session } from '@ledge/protocol';
 
 export type Tool = Session['tool'];
-/** Harnesses that take several folders (Claude Code: `--add-dir`); the others get one repository at a time. */
-export const MULTI_REPO_TOOLS: ReadonlySet<Tool> = new Set<Tool>(['claude']);
+/** Harnesses that take several folders (Claude Code and OMP: `--add-dir`); the others get one repository at a time. */
+export const MULTI_REPO_TOOLS: ReadonlySet<Tool> = new Set<Tool>(['claude', 'omp']);
 export const LAUNCH_TIMEOUT_MS = 20_000;
 export type LaunchMessage = Extract<ClientMessage, { type: 'session.launch' }>;
 /** `repos` are paths on `machine`. `model` and `effort` (#58): null leaves the agent's own default, nothing is passed. */

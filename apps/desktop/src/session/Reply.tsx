@@ -12,6 +12,7 @@ import type { NavAction } from '../nav/state';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { SessionBot } from '../shell/SessionBot';
+import { isNative } from '../term/mode';
 import type { SessionMemory } from './memory';
 import { SessionModel } from './SessionModel';
 import { alwaysScope, PendingCard, sortOf, type PendingActions } from './PendingCard';
@@ -65,12 +66,21 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   // A question with options on a harness without free answers (the daemon refuses free text there): the digits only.
   const optionsOnly = sort === 'question' && (pending!.options?.length ?? 0) > 0 && session.tool !== 'claude';
   const shut = noteless || optionsOnly;
+  // OMP is driven over its protocol: what is typed while it works is queued for the turn's end, or redirects the turn now, and
+  // « Interrompre » is its own command (spec 2026-10-20 §3.2).
+  const native = isNative(session) && !offline;
+  const working = native && session.state === 'working' && !pending;
+  const stoppable = native && (session.state === 'working' || session.state === 'waiting_input' || session.state === 'waiting_permission');
 
   /** A refused send gives its text back, if nothing was written since (the memory holds the draft even once the page closed). */
   const restore = (back: string) => {
     if (memory.get(key).draft !== '') return;
     memory.set(key, { draft: back });
     if (mounted.current) setDraftState(back);
+  };
+  const steer = () => {
+    if (!text || !canAct || shut || !working) return;
+    if (decisions.reply(session, text, restore, { steer: true })) setDraft('');
   };
   const submit = () => {
     if (!text || !canAct || shut || tooLong) return;
@@ -123,9 +133,9 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   };
 
   const name = session.name;
-  const placeholder = sort === 'plan' ? tr.placeholder.plan : sort === 'approval' ? tr.placeholder.approval : sort === 'question' ? tr.placeholder.question(name)
+  const placeholder = working ? tr.placeholder.queued(name) : sort === 'plan' ? tr.placeholder.plan : sort === 'approval' ? tr.placeholder.approval : sort === 'question' ? tr.placeholder.question(name)
     : session.state === 'exited' || session.state === 'idle' ? tr.placeholder.done(name) : tr.placeholder.idle(name);
-  const hint = optionsOnly ? tr.optionsOnly : noteless ? tr.noNote : tooLong ? tr.tooLong(NOTE_MAX)
+  const hint = working && text ? tr.afterTurn : optionsOnly ? tr.optionsOnly : noteless ? tr.noNote : tooLong ? tr.tooLong(NOTE_MAX)
     : sort === 'approval' && text ? tr.denyHint : sort === 'plan' && text ? tr.planHint : <><Kbd>R</Kbd> {tr.write}</>;
 
   return (
@@ -151,7 +161,9 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
             maxLength={isNote ? NOTE_MAX : undefined} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} />
           {client && <SessionModel client={client} session={session} notify={notify} />}
           <span className="reply-hint">{hint}</span>
-          <Button variant="primary" size="icon" type="submit" aria-label={sort === 'approval' ? tr.denyWith : tr.send}
+          {working && text && <Button variant="outline" size="sm" type="button" onClick={steer} title={tr.steerTitle}>{tr.steer}</Button>}
+          {stoppable && client && <Button variant="outline" size="sm" type="button" onClick={() => client.send({ type: 'session.interrupt', id: session.id })} title={tr.interruptTitle}>{tr.interrupt}</Button>}
+          <Button variant="primary" size="icon" type="submit" aria-label={sort === 'approval' ? tr.denyWith : working ? tr.queue : tr.send}
             disabled={!text || shut || tooLong || busy} style={{ width: 32, height: 32 }}><Icon d={ICONS.send.d} /></Button>
         </form>
       )}

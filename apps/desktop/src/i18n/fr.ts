@@ -533,12 +533,14 @@ export const fr = {
       label: 'Répondre à l’agent', send: 'Envoyer', denyWith: 'Refuser avec ce message',
       placeholder: {
         plan: 'Ce qu’il faut revoir dans le plan… (Entrée : continuer à planifier)', approval: 'Ou refusez en expliquant quoi faire autrement…',
-        question: (n: string) => `Ou répondez librement à ${n}…`, done: (n: string) => `Relancer ${n} avec une nouvelle consigne…`, idle: (n: string) => `Répondre à ${n}…`
+        queued: (n: string) => `Pour ${n}, après ce tour…`, question: (n: string) => `Ou répondez librement à ${n}…`, done: (n: string) => `Relancer ${n} avec une nouvelle consigne…`, idle: (n: string) => `Répondre à ${n}…`
       },
       denyHint: 'Entrée refuse avec ce message', planHint: 'Entrée renvoie le plan en préparation', write: 'écrire',
       offline: (m: string) => `${m} est hors ligne.`, offlineBody: ' Le fil est figé à la dernière activité connue ; vous pourrez répondre à la reconnexion.', seeMachine: 'Voir la machine',
       viaParent: (n: string, p: string) => `Les réponses à ${n} passent par ${p}, qui l’a lancé.`, openParent: (p: string) => `Ouvrir ${p}`,
       readOnly: 'Session démarrée sans Ledge : lecture seule.', optionsOnly: 'Choisissez une des réponses proposées (1–9).',
+      afterTurn: 'Entrée : après ce tour', queue: 'Envoyer après ce tour', steer: 'Réorienter maintenant', steerTitle: 'Dévie le tour en cours au lieu d’attendre sa fin',
+      interrupt: 'Interrompre', interruptTitle: 'Arrête le travail en cours ; la session et sa conversation restent',
       noNote: 'Cet agent ne prend pas de message avec un refus : refusez avec N.', tooLong: (max: number) => `Une note tient en ${max} caractères au plus.`
     },
     model: {
@@ -677,6 +679,7 @@ export const fr = {
     searchModel: 'Chercher un modèle ou taper un identifiant', searchFew: 'Chercher, ou taper un identifiant', searchMany: (n: number) => `Chercher parmi ${n} modèles, ou taper un identifiant`, resultCount: (n: number, total: number) => `${n} sur ${total}`,
     useAsIs: 'Utiliser tel quel', noMatch: 'Aucun modèle ne correspond.', notAnId: 'Aucun modèle ne correspond, et ce n’est pas un identifiant de modèle.', moreModels: (n: number) => `${n} autres : tapez pour les chercher`,
     modelsLoading: 'Lecture des modèles de la machine…', modelsUnavailable: (e: string) => `Liste des modèles indisponible (${e}) : le défaut et un identifiant exact restent possibles.`,
+    ompOutdated: 'OMP ne peut pas être lancé ici : mettez à jour Ledge sur cette machine.', ompUnavailable: (e: string) => `OMP ne peut pas être lancé sur cette machine (${e}). Choisissez un autre agent ou réparez OMP là-bas ; rien n’est changé à votre place.`,
     modelsOutdated: 'Mettez à jour Ledge sur cette machine pour choisir le modèle.',
     effort: 'Effort', effortHint: 'Temps de réflexion par tour', cursorEffort: 'Effort compris dans le nom du modèle', lessEffort: 'Moins d’effort', moreEffort: 'Plus d’effort',
     efforts: { low: 'Bas', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé', max: 'Max', ultra: 'Ultra' } as Record<string, string>,

@@ -387,10 +387,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   }
 
   /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
-  async function replyTo(id: string, text: string): Promise<string | null> {
+  async function replyTo(id: string, text: string, how: { steer?: boolean } = {}): Promise<string | null> {
     const s = store.get(id); if (!s) return 'unknown session';
     if (s.source === 'hook_only') return READ_ONLY;
-    if (backendOf(s) === 'omp-rpc') return replyOmp(s, text);
+    if (backendOf(s) === 'omp-rpc') return replyOmp(s, text, how.steer === true);
     // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
     if (s.pending && s.pending.kind !== 'question') return `a ${s.pending.kind} prompt takes accept or deny, not a reply`;
     if (text.trim() === '') return 'empty reply';
@@ -407,12 +407,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * A reply to an OMP session: the answer to the dialog it waits on, else an instruction: a new turn at rest, queued behind
    * the running one otherwise (OMP's `follow_up`: « après ce tour »). Null once sent, the refusal otherwise.
    */
-  async function replyOmp(s: Session, text: string): Promise<string | null> {
+  async function replyOmp(s: Session, text: string, steer: boolean): Promise<string | null> {
     if (text.trim() === '') return 'empty reply';
     if (s.state === 'exited') return 'the session has ended';
     if (s.pending) return omp.answer(s.id, text);
     if (!omp.isLive(s.id)) return 'the session is not running';
-    await omp.send(s.id, text, s.state === 'working' ? 'follow_up' : 'prompt');
+    // At rest an instruction starts a turn; while OMP works it waits for the turn's end, unless the user asked to redirect it now.
+    await omp.send(s.id, text, s.state === 'working' ? (steer ? 'steer' : 'follow_up') : 'prompt');
     return null;
   }
 
@@ -482,10 +483,26 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** Sessions restarted on another model, by id: the end hooks of the agent replaced, arriving late, are ignored. */
   const respawned = new Map<string, number>();
   const replacedLately = (id: string) => { const at = respawned.get(id); return at !== undefined && Date.now() - at <= RESPAWN_HOOKS_MS; };
+  /** The change waiting in `modelNext` of an OMP session, applied at its free moment; a refusal leaves the session as it is and is logged. */
+  async function applyOmpModel(s: Session): Promise<void> {
+    const next = s.modelNext!;
+    typing.add(s.id);
+    try { await omp.setModel(s.id, next); log(`model of ${s.id} is now ${next.model ?? 'unchanged'}${next.effort ? ` · ${next.effort}` : ''}`); }
+    catch (e) {
+      const message = (e as Error).message;
+      log(`model change of ${s.id} failed: ${message}`);
+      // The model may have changed anyway (the effort refused): the record keeps the truth, the request is dropped, the fronts told.
+      store.patch(s.id, { modelNext: undefined });
+      broadcast({ type: 'error', id: s.id, message, request: 'session.model' });
+    } finally { typing.delete(s.id); }
+  }
+
   /** A model change waiting for the session's free moment (`modelNext`): the agent stopped and resumed on that model. */
   async function applyModelNext(id: string): Promise<void> {
     const s = store.get(id);
     if (!s?.modelNext || !free(s) || typing.has(id) || chat.queuedRelays().some(q => q.relay.id === id)) return;
+    // OMP changes its model in place (set_model on the same process): nothing is stopped, the conversation is never left.
+    if (backendOf(s) === 'omp-rpc') return applyOmpModel(s);
     const key = resumeKey(s);
     if (!key || s.source !== 'launcher') { store.patch(id, { modelNext: undefined }); return; }
     const { model, effort } = s.modelNext;
@@ -696,7 +713,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.reply': {
-        const refused = await replyTo(msg.id, msg.text);
+        const refused = await replyTo(msg.id, msg.text, { steer: msg.steer });
         if (refused) refuse(refused, msg.id);
         return;
       }
@@ -748,9 +765,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
         if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
         if (s.state === 'exited') return refuse('the session has ended', msg.id);
-        if (backendOf(s) === 'omp-rpc') return refuse('changing the model of an OMP session is not available yet', msg.id);
         if (!resumeKey(s)) return refuse('no conversation to resume', msg.id);
-        if (msg.effort && !EFFORT_ARGS[s.tool as TmuxTool]) return refuse(`${s.tool} takes its effort in the model id`, msg.id);
+        if (backendOf(s) === 'omp-rpc' && !omp.isLive(s.id)) return refuse('the session is not running', msg.id);
+        if (msg.effort && backendOf(s) !== 'omp-rpc' && !EFFORT_ARGS[s.tool as TmuxTool]) return refuse(`${s.tool} takes its effort in the model id`, msg.id);
         const next = { ...(msg.model ? { model: msg.model } : {}), ...(msg.effort ? { effort: msg.effort } : {}) };
         // The model it already runs: a change asked earlier is dropped, nothing restarts.
         if (next.model === s.model && next.effort === s.effort) { if (s.modelNext) store.patch(msg.id, { modelNext: undefined }); return; }

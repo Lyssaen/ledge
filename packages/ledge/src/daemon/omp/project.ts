@@ -17,8 +17,10 @@ export interface Tracking {
   requests: OpenRequest[];
   /** An `agent_start` Ledge did not cause (background work restarting the agent) must still read as working. */
   working: boolean;
+  /** Instructions the host already recorded when it sent them (a prompt at rest): their echo in the stream is not a second prompt. */
+  echo: string[];
 }
-export const newTracking = (): Tracking => ({ requests: [], working: false });
+export const newTracking = (): Tracking => ({ requests: [], working: false, echo: [] });
 
 const DIALOGS: ReadonlySet<string> = new Set<DialogMethod>(['select', 'confirm', 'input', 'editor']);
 const CAP_INPUT = 4000;
@@ -49,6 +51,15 @@ export function project(f: Frame, t: Tracking, at: string): SessionEvent[] {
       if (t.working) return [];
       t.working = true;
       return [ev({ name: 'UserPromptSubmit' })];
+    }
+    case 'message_start': {
+      // The user's instruction as OMP takes it: a queued follow-up or a steer enters the thread when its turn starts, not when it was typed.
+      const m = f.message as { role?: unknown; attribution?: unknown; content?: unknown } | undefined;
+      if (m?.role !== 'user' || m.attribution !== 'user') return [];
+      const text = contentText(m.content).trim(); if (!text) return [];
+      const i = t.echo.indexOf(text);
+      if (i !== -1) { t.echo.splice(i, 1); return []; }
+      return [ev({ name: 'UserPromptSubmit', text })];
     }
     case 'message_end': {
       const m = f.message as { role?: unknown; content?: unknown } | undefined;

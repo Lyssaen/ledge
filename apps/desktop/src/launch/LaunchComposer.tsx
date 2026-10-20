@@ -16,7 +16,7 @@ import { effective, ModelPicker } from './ModelPicker';
 import type { LaunchState } from './useLaunch';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 
-const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor'];
+const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor', 'omp'];
 const folderName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
 
 /** A message with two strong parts (« {name} will join the {table} table »), whatever their order in the language. */
@@ -56,6 +56,9 @@ export function LaunchComposer(p: {
   // #58: the agent's models on that machine; a daemon too old for them takes no model, so none is offered or sent.
   const models = useModels(p.client, online ? form.machine : null, form.tool);
   const outdated = models.error === 'outdated';
+  // OMP is launched by the daemon itself, with no fallback to another harness: where it cannot be reached (not installed, a daemon
+  // that does not know it, no credentials), the launch is blocked with the reason (spec 2026-10-20 §3.1).
+  const unavailable = form.tool === 'omp' && online && models.status === 'ready' && models.error ? models.error : null;
   const memo = form.tool ? loadPick(form.project, form.tool) : null;
   const remembered = !!memo?.remembered && memo.model === form.model && memo.effort === form.effort;
 
@@ -90,7 +93,7 @@ export function LaunchComposer(p: {
   const launching = p.launch.status === 'launching';
   const submit = () => {
     setTried(true);
-    if (missing || launching || !project) return;
+    if (missing || launching || !project || unavailable) return;
     if (!outdated && form.tool) savePick(project.id, form.tool, { model: form.model, effort: form.effort });
     p.onLaunch(launchMessage(outdated ? withPick(form, NO_PICK) : form, name), { name, project: project.name, projectId: project.id });
   };
@@ -137,7 +140,8 @@ export function LaunchComposer(p: {
           })}
         </fieldset>
 
-        {form.tool && online && (outdated ? <small className="models-note">{t.launch.modelsOutdated}</small>
+        {unavailable !== null && <p className="composer-missing" role="alert">{unavailable === 'outdated' ? t.launch.ompOutdated : t.launch.ompUnavailable(unavailable)}</p>}
+        {form.tool && online && !unavailable && (outdated ? <small className="models-note">{t.launch.modelsOutdated}</small>
           : <ModelPicker key={`${form.machine}|${form.tool}|${form.project}`} tool={form.tool} state={models} pick={form} remembered={remembered} onPick={pick => setForm(f => withPick(f, pick))} />)}
 
         {projects.length === 0 ? (
@@ -214,7 +218,7 @@ export function LaunchComposer(p: {
           : p.launch.status === 'refused' ? <p className="composer-missing" role="alert">{t.launch.refused(p.launch.message)}</p>
           : p.launch.status === 'timeout' ? <p className="composer-missing" role="alert">{t.launch.timeout}</p> : null}
         <Button variant="ghost" type="button" onClick={p.onCancel}>{t.launch.cancel}</Button>
-        <Button variant="primary" type="submit" aria-disabled={!!missing || launching}>
+        <Button variant="primary" type="submit" aria-disabled={!!missing || launching || unavailable !== null}>
           <Icon d={ICONS.plus.d} size={14} />{launching ? t.launch.launching : t.launch.launch}<Kbd>Ctrl ↵</Kbd>
         </Button>
       </footer>

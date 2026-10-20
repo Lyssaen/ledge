@@ -15,6 +15,11 @@ describe('agentMode', () => {
     expect(agentMode({ ...live, tmuxSession: null }, null, true)).toEqual({ kind: 'preview', why: 'outside' });
     expect(agentMode({ ...live, state: 'exited' }, null, true)).toEqual({ kind: 'preview', why: 'ended' });
     expect(agentMode(live, null, false)).toEqual({ kind: 'browser' });
+    // OMP has no screen to attach nor to preview, live, ended or archived: the pane holds shells only.
+    const omp = { ...live, tool: 'omp' as const, backend: 'omp-rpc' as const, tmuxSession: null };
+    expect(agentMode(omp, null, true)).toEqual({ kind: 'native' });
+    expect(agentMode({ ...omp, state: 'exited' }, null, true)).toEqual({ kind: 'native' });
+    expect(agentMode(omp, null, false)).toEqual({ kind: 'browser' });
   });
   it('an archived session is ended, even with its tmux name gone', () => {
     expect(agentMode({ ...live, archivedAt: '2026-10-19T09:00:00.000Z', tmuxSession: null }, null, true)).toEqual({ kind: 'preview', why: 'ended' });

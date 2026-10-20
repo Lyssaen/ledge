@@ -119,13 +119,14 @@ export function createOmpHost(deps: OmpHostDeps) {
     /** An instruction at rest starts a turn; while OMP works, it waits for the turn's end (`follow_up`), or redirects it (`steer`). */
     async send(id: string, text: string, mode: 'prompt' | 'follow_up' | 'steer' = 'prompt'): Promise<void> {
       const l = live.get(id); if (!l) throw new Error('the session is not running');
-      if (mode === 'prompt') store.apply(id, { name: 'UserPromptSubmit', at: now(), source: 'daemon', text });
-      l.tracking.working = mode === 'prompt' ? true : l.tracking.working;
+      if (mode === 'prompt') { l.tracking.echo.push(text.trim()); store.apply(id, { name: 'UserPromptSubmit', at: now(), source: 'daemon', text }); l.tracking.working = true; }
       try { await l.rpc.request(mode, { message: text }); }
       catch (e) {
-        if (mode === 'prompt') { l.tracking.working = false; store.apply(id, { name: 'StopFailure', at: now(), source: 'daemon', text: (e as Error).message }); }
+        if (mode === 'prompt') { l.tracking.working = false; l.tracking.echo.pop(); store.apply(id, { name: 'StopFailure', at: now(), source: 'daemon', text: (e as Error).message }); }
         throw e;
       }
+      // Accepted into OMP's queue: the thread shows it when its turn starts; the session moves now, so a front sees the instruction land.
+      if (mode !== 'prompt') store.apply(id, { name: 'Notification', at: now(), source: 'daemon' });
     },
 
     /** `abort` stops the work, not the session: the state follows OMP's own `session_settled`. */
@@ -147,6 +148,38 @@ export function createOmpHost(deps: OmpHostDeps) {
       const next = l.tracking.requests[0];
       if (next) store.apply(id, requestEvent(next, now()));
       return null;
+    },
+
+    /**
+     * Changes the model and then the effort of a live session without restarting it (spec §3.4). The two commands are not one
+     * transaction: a model that changed stays changed when its effort is refused, and the error says so. OMP clears the level
+     * for an unknown name instead of refusing it, so the effort is checked against the levels the new model offers first.
+     * The caller holds the session at rest.
+     */
+    async setModel(id: string, pick: { model?: string; effort?: string }): Promise<void> {
+      const l = live.get(id); if (!l) throw new Error('the session is not running');
+      if (pick.model) {
+        const slash = pick.model.indexOf('/');
+        if (slash < 1 || slash === pick.model.length - 1) throw new Error('an OMP model is named provider/id');
+        await l.rpc.request('set_model', { provider: pick.model.slice(0, slash), modelId: pick.model.slice(slash + 1) });
+      }
+      let failure: Error | null = null;
+      if (pick.effort) {
+        try {
+          const { levels } = await l.rpc.request<{ levels?: string[] }>('get_available_thinking_levels');
+          if (!levels?.includes(pick.effort)) throw new Error(`this model offers no effort “${pick.effort}”`);
+          await l.rpc.request('set_thinking_level', { level: pick.effort });
+        } catch (e) { failure = e as Error; }
+      }
+      const state = await l.rpc.request<OmpState>('get_state');
+      const cur = store.get(id);
+      if (cur) {
+        const { modelNext: _n, ...rest } = cur;
+        const model = state.model?.provider && state.model.id ? `${state.model.provider}/${state.model.id}` : cur.model;
+        const { effort: _e, model: _m, ...bare } = rest;
+        store.upsert({ ...bare, ...(model ? { model } : {}), ...(state.thinkingLevel ? { effort: state.thinkingLevel } : {}) });
+      }
+      if (failure) throw new Error(`the model changed, but its effort did not: ${failure.message}`);
     },
 
     /** Stops the process the way the owner asks: its input closes, OMP saves and leaves. The caller records the end. */

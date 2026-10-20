@@ -28,7 +28,7 @@ export interface Decisions {
    *  `onRefused` rend la note quand le daemon refuse. */
   decide(s: Session, decision: Decision, note?: string, onRefused?: (text: string) => void): boolean;
   /** false sans envoi : hors ligne, lecture seule, texte vide, déjà en vol, demande autre qu'une question. `onRefused` rend le texte. */
-  reply(s: Session, text: string, onRefused?: (text: string) => void): boolean;
+  reply(s: Session, text: string, onRefused?: (text: string) => void, how?: { steer?: boolean }): boolean;
 }
 
 /** What is in flight: the message, the request and the mark it started from, the last error seen then (only a later one
@@ -151,9 +151,9 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
       const payload = { type: 'session.decide' as const, id: s.id, decision, ...(note ? { note } : {}), expect: { kind: p.kind, text: p.text, key: pendingKey(p) } };
       return send(s, 'session.decide', payload, note ? { text: note, onRefused } : {});
     },
-    reply(s, text, onRefused) {
+    reply(s, text, onRefused, how) {
       if (s.offline || s.source === 'hook_only' || !text.trim() || live.current.has(s.id) || (s.pending && s.pending.kind !== 'question')) return false;
-      return send(s, 'session.reply', { type: 'session.reply', id: s.id, text }, { text, onRefused });
+      return send(s, 'session.reply', { type: 'session.reply', id: s.id, text, ...(how?.steer ? { steer: true } : {}) }, { text, onRefused });
     }
   };
 }

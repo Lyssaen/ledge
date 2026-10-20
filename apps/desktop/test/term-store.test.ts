@@ -407,3 +407,24 @@ describe('TermStore size at open', () => {
     expect(backend.opens[0]!.sizes).toEqual([[60, 50]]);
   });
 });
+
+describe('a native session (OMP): shells only', () => {
+  const place = (id: string) => ({ dir: '/w/x', remote: false, native: id.startsWith('omp') });
+  it('has no agent tab: its first shell is the active tab, and showing the agent attaches nothing', async () => {
+    const st = store({ shellPlace: place });
+    expect(st.tabs('omp1').map(t => t.kind)).toEqual(['shell']);
+    expect(st.active('omp1')).toBe('omp1#shell-1');
+    st.showAgent('omp1', { kind: 'native' });
+    expect(backend.opens).toHaveLength(0); expect(agentCalls).toEqual([]);
+    expect(st.tabs('claude1').map(t => t.kind)).toEqual(['agent', 'shell']); // the others are as they were
+  });
+  it('closing its last shell leaves a fresh one, not started, rather than an empty pane', async () => {
+    const st = store({ shellPlace: place });
+    st.select('omp1', 'omp1#shell-1'); await tick();
+    expect(backend.opens).toHaveLength(1);
+    st.close('omp1', 'omp1#shell-1');
+    expect(backend.opens[0]!.closed).toBe(true);
+    expect(st.tabs('omp1')).toEqual([expect.objectContaining({ kind: 'shell', id: 'omp1#shell-2', status: 'idle' })]);
+    expect(st.active('omp1')).toBe('omp1#shell-2');
+  });
+});

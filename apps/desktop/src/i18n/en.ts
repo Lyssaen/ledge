@@ -510,12 +510,14 @@ export const en: Messages = {
       label: 'Reply to the agent', send: 'Send', denyWith: 'Deny with this message',
       placeholder: {
         plan: 'What to revise in the plan… (Enter: keep planning)', approval: 'Or deny and say what to do instead…',
-        question: (n) => `Or answer ${n} freely…`, done: (n) => `Start ${n} again with a new instruction…`, idle: (n) => `Reply to ${n}…`
+        queued: (n) => `For ${n}, after this turn…`, question: (n) => `Or answer ${n} freely…`, done: (n) => `Start ${n} again with a new instruction…`, idle: (n) => `Reply to ${n}…`
       },
       denyHint: 'Enter denies with this message', planHint: 'Enter sends the plan back to planning', write: 'write',
       offline: (m) => `${m} is offline.`, offlineBody: ' The thread is frozen at the last known activity; you can reply once it reconnects.', seeMachine: 'See the machine',
       viaParent: (n, p) => `Replies to ${n} go through ${p}, who started it.`, openParent: (p) => `Open ${p}`,
       readOnly: 'Session started without Ledge: read only.', optionsOnly: 'Choose one of the proposed answers (1–9).',
+      afterTurn: 'Enter: after this turn', queue: 'Send after this turn', steer: 'Redirect now', steerTitle: 'Redirects the turn running now instead of waiting for its end',
+      interrupt: 'Interrupt', interruptTitle: 'Stops the work in progress; the session and its conversation stay',
       noNote: 'This agent takes no message with a refusal: deny with N.', tooLong: (max) => `A note holds ${max} characters at most.`
     },
     model: {
@@ -644,6 +646,7 @@ export const en: Messages = {
     searchModel: 'Search a model or type an id', searchFew: 'Search, or type an id', searchMany: (n: number) => `Search ${n} models, or type an id`, resultCount: (n: number, total: number) => `${n} of ${total}`,
     useAsIs: 'Use as is', noMatch: 'No model matches.', notAnId: 'No model matches, and this is not a model id.', moreModels: (n: number) => `${n} more: type to search them`,
     modelsLoading: 'Reading the machine’s models…', modelsUnavailable: (e: string) => `Model list unavailable (${e}): the default and an exact id still work.`,
+    ompOutdated: 'OMP cannot be launched here: update Ledge on this machine.', ompUnavailable: (e: string) => `OMP cannot be launched on this machine (${e}). Pick another agent or fix OMP there; nothing is switched for you.`,
     modelsOutdated: 'Update Ledge on this machine to choose the model.',
     effort: 'Effort', effortHint: 'Thinking time per turn', cursorEffort: 'Effort is in the model name', lessEffort: 'Less effort', moreEffort: 'More effort',
     efforts: { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' } as Record<string, string>,

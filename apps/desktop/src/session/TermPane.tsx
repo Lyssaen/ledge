@@ -143,7 +143,7 @@ export function TermPane(p: TermPaneProps): JSX.Element {
           )}
         <span className="spacer" />
         <span className="term-chip mono">{remote ? tt.remote(host) : tt.local}</span>
-        {mode.kind !== 'browser' && mode.kind !== 'offline' && (
+        {mode.kind !== 'browser' && mode.kind !== 'offline' && mode.kind !== 'native' && (
           <Button variant="ghost" size="icon" className="term-icon" onClick={external} aria-label={tt.external} title={tt.external}><Icon d={ICONS.external.d} size={14} /></Button>
         )}
         <Button variant="ghost" size="icon" className="term-icon" onClick={p.onMax} aria-label={p.maxed ? tt.unmax : tt.max} title={p.maxed ? tt.unmax : tt.max}>
