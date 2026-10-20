@@ -11,9 +11,8 @@ import { localStore } from './storage';
 export type OpPhase = 'sending' | 'uncertain' | 'applied' | 'rejected' | 'failed';
 
 /** The messages that are operations. */
-// `credential.register` names no session, so it has no `id`. device.forget joins with the phone's code for it.
-// The push operations are not sent by the phone yet (lot 6b, task 7): left out of the type until then.
-export type OpMessage = Exclude<Extract<PhoneClientMessage, { op: string }>, { type: 'device.forget' | 'push.subscribe' | 'push.unsubscribe' }>;
+// `credential.register` and the push operations name no session, so they have no `id`. device.forget joins with the phone's code for it.
+export type OpMessage = Exclude<Extract<PhoneClientMessage, { op: string }>, { type: 'device.forget' }>;
 
 export interface Op {
   op: string;
@@ -47,7 +46,7 @@ export function pruneOps(ops: Record<string, Op>): Record<string, Op> {
 }
 
 /** The key of the request a message answers; undefined for an instruction (`expect: null`) or an interrupt. */
-export const expectKey = (m: OpMessage): string | undefined => m.type === 'session.interrupt' || m.type === 'credential.register' ? undefined : m.expect?.key;
+export const expectKey = (m: OpMessage): string | undefined => 'expect' in m ? m.expect?.key : undefined;
 
 /**
  * How long an instruction or an interrupt of unknown outcome may still be sent again (the same as the thread's
@@ -78,8 +77,8 @@ export function resendable(o: Op, boot: string | null, now: number = Date.now())
  */
 export function isNew(ops: Record<string, Op>, m: OpMessage, boot: string | null, now: number = Date.now()): boolean {
   if (ops[m.op]) return false;
-  // A registration names no session: only its own op id dedupes it (a new attempt is a new op).
-  if (m.type === 'credential.register') return true;
+  // A registration or a push change names no session: only its own op id dedupes it (a new attempt is a new op).
+  if (!('id' in m)) return true;
   const key = expectKey(m);
   return !Object.values(ops).some(o => {
     if (!('id' in o.message) || o.message.id !== m.id) return false;

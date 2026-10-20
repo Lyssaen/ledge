@@ -238,6 +238,16 @@ export const copy = {
     done: 'Protégés par cet appareil', row: 'Accords à impact élevé',
     unsupported: 'Cet appareil ne peut pas protéger les accords.'
   },
+  notifications: {
+    title: 'Être prévenu quand un agent attend', body: 'Activez les notifications pour ouvrir une demande directement depuis votre écran verrouillé.',
+    enable: 'Activer les notifications', later: 'Plus tard', working: 'Activation…', waiting: 'Connexion au PC…',
+    row: 'Notifications', on: 'Activées', off: 'Désactivées',
+    denied: 'Notifications refusées. Vous pourrez les autoriser dans les réglages du téléphone.',
+    unsupported: 'Ce navigateur ne propose pas les notifications. Sur iPhone, ouvrez Ledge depuis son icône de l’écran d’accueil.',
+    failed: 'L’activation n’a pas abouti : le PC n’a pas reçu l’abonnement. Vérifiez la connexion, puis réessayez.',
+    noPush: 'Les notifications ne sont pas disponibles sur ce PC.',
+    stale: 'Le PC a changé de clés : réactivez les notifications pour que ce téléphone les reçoive à nouveau.'
+  },
   compare: {
     /** The name this phone gives itself in its `pair_commit`, when its user agent names no known device. */
     deviceLabel: 'Téléphone',

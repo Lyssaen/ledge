@@ -39,3 +39,14 @@ export function useRoute(): Route {
   const hash = useSyncExternalStore(subscribe, () => globalThis.location.hash, () => '');
   return parseRoute(hash);
 }
+
+/** Where the app may be sent from outside: what a push payload's `url` may be (the same shape PushPayloadSchema checks). */
+const OPENABLE = /^\/#\/[A-Za-z0-9/%._~-]*$/;
+
+/** The service worker's `{ type: 'ledge.open', url }` after a notification tap: goes to `url`; any other message is ignored. */
+export function openFromWorker(data: unknown): void {
+  if (typeof data !== 'object' || data === null) return;
+  const m = data as { type?: unknown; url?: unknown };
+  if (m.type !== 'ledge.open' || typeof m.url !== 'string' || !OPENABLE.test(m.url)) return;
+  globalThis.location.hash = m.url.slice(1);
+}

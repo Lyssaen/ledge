@@ -3,11 +3,12 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { MeResponseSchema } from '@ledge/protocol';
 import type { LinkState, PhoneLink } from './link/link';
-import { useRoute } from './router';
+import { openFromWorker, useRoute } from './router';
 import { Agents } from './screens/Agents';
 import { Compare } from './screens/Compare';
 import { ProtectStep } from './screens/Enroll';
 import { Connection } from './screens/Connection';
+import { NotifyStep, offersNotifications } from './screens/Notifications';
 import { Denied } from './screens/Denied';
 import { Inbox, clock } from './screens/Inbox';
 import { KeyChanged } from './screens/KeyChanged';
@@ -94,6 +95,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   const [forgetNote, setForgetNote] = useState(false);
   // « Voir ce qui attend » was tapped: the pairing's outcome is no longer the screen.
   const [doneSeen, setDoneSeen] = useState(false);
+  // The step after « Protéger les accords »: « Être prévenu quand un agent attend ».
+  const [notifyStep, setNotifyStep] = useState(false);
   // A pairing was started from this page (by itself or by a tap): the ref guards against a second start in the same
   // commit, the state draws the screen.
   const startedRef = useRef(false);
@@ -119,8 +122,16 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   }, [autoPair, link]);
   useEffect(() => {
     if (state === 'ready') { startedRef.current = false; setStarted(false); setKeysLost(false); setForgetNote(false); }
-    if (state === 'unpaired' || state === 'pairing') setDoneSeen(false);
+    if (state === 'unpaired' || state === 'pairing') { setDoneSeen(false); setNotifyStep(false); }
   }, [state]);
+  // A tap on a notification: the service worker tells the page where to go.
+  useEffect(() => {
+    const sw = globalThis.navigator?.serviceWorker;
+    if (!sw) return;
+    const onMessage = (e: MessageEvent) => openFromWorker(e.data);
+    sw.addEventListener('message', onMessage);
+    return () => sw.removeEventListener('message', onMessage);
+  }, []);
 
   const pinned = link.pinned();
   // The pinned PC only while pairing: the name the old PC gave is not the one being paired.
@@ -166,7 +177,9 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
             reach={link.reach()} onRetry={retry}
             onSame={() => link.pairing()?.confirmOnPhone()} onCancel={() => link.pairing()?.cancel()}
             onRestart={() => begin(() => link.startPairing())} onDone={() => setDoneSeen(true)}
-            actions={<ProtectStep store={store} onDone={() => setDoneSeen(true)} />}
+            actions={notifyStep
+              ? <NotifyStep store={store} fetchImpl={fetchImpl} onDone={() => { setNotifyStep(false); setDoneSeen(true); }} />
+              : <ProtectStep store={store} onDone={() => { if (offersNotifications(mobile.device?.push)) setNotifyStep(true); else setDoneSeen(true); }} />}
           />
         );
     }
@@ -176,7 +189,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'terminal': return <Terminal key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} />;
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.
       case 'request': return <RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />;
-      case 'connection': return <Connection store={store} login={login} relay={relay} pinned={pinned} linkState={state} build={build} onSignOut={signOut} />;
+      case 'connection': return <Connection store={store} fetchImpl={fetchImpl} login={login} relay={relay} pinned={pinned} linkState={state} build={build} onSignOut={signOut} />;
       default: {
         const notice = state === 'pc_offline' ? <Offline pcName={pcName} since={clock(mobile.syncedAt)} onRetry={retry} /> : undefined;
         return <Inbox store={store} onReconnect={retry} notice={notice} />;

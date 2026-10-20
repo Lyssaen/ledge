@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type CapabilitiesByTool, type Credential, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type PhoneSession, type ThreadItem
+  type PhoneSession, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { clearOps, expectKey, isLive, isNew, loadOps, newOperationId, pruneOps, resendable, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
@@ -28,7 +28,7 @@ export interface MobileState {
   /** Null until the first snapshot of this run: they are not kept on the phone. */
   capabilities: CapabilitiesByTool | null;
   /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
-  device: { confirm: boolean } | null;
+  device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable' } | null;
   daemon: { version: string; name: string } | null;
   /** True from a snapshot until the channel is lost: what is shown is the PC's state now, not the last known one. */
   fresh: boolean;
@@ -71,6 +71,12 @@ export interface MobileStore {
   /** Registers the passkey with the PC. The op's id, or null when nothing was sent. */
   registerCredential(c: Credential): string | null;
   interrupt(id: string): string | null;
+  /** Gives the PC this phone's push subscription and the VAPID key it was made with. The op's id, or null when nothing was sent. */
+  pushSubscribe(subscription: PushSubscription, key: string): string | null;
+  /** Asks the PC to stop notifying this phone. The op's id, or null when nothing was sent. */
+  pushUnsubscribe(): string | null;
+  /** Says whether the app is in front (a read, not an operation); said again after every ready. */
+  presence(visible: boolean): void;
   /** Marks the session read up to `at` (now by default); the latest mark is sent again after every ready. */
   read(id: string, at?: string): void;
   /** Asks the session's thread; its items then come as the PC pushes them, while the session is watched. */
@@ -112,6 +118,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   let reads = loadReads(storage);
   /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
   let boot: string | null = null;
+  /** What the phone last said about its app being in front; said again after every ready. */
+  let visible: boolean | null = null;
   /** The last thread opened: asked again after every ready. */
   let lastThread: string | null = null;
   /**
@@ -198,6 +206,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     // request go now; the others wait for the snapshot, which tells whether the PC restarted (`resendUnnamed`).
     resend(o => expectKey(o.message) !== undefined);
     for (const [id, at] of Object.entries(reads)) send({ type: 'session.read', id, at });
+    if (visible !== null) send({ type: 'presence', visible });
     if (lastThread && state.threads.get(lastThread)?.status !== 'gone') askThread(lastThread);
   }
 
@@ -412,6 +421,20 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     interrupt(id) {
       if (!state.sessions.has(id)) return null;
       return write(op => ({ type: 'session.interrupt', op, id }));
+    },
+
+    pushSubscribe(subscription, key) {
+      return write(op => ({ type: 'push.subscribe', op, subscription, key }));
+    },
+
+    pushUnsubscribe() {
+      return write(op => ({ type: 'push.unsubscribe', op }));
+    },
+
+    presence(v) {
+      if (closed) return;
+      visible = v;
+      if (ready()) send({ type: 'presence', visible: v });
     },
 
     read(id, at = new Date().toISOString()) {

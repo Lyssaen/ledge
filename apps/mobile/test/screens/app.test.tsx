@@ -1,5 +1,5 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCredential, platformAvailable } from '../../src/link/webauthn';
 import { forgetIfKeysLost } from '../../src/boot';
 import { memoryKeys, type PinnedPc } from '../../src/link/keys';
@@ -273,6 +273,72 @@ describe('the app', () => {
       act(() => t.deliver(snapshot([], 'PC-Desan')));
       expect(screen.queryByRole('heading', { name: 'Protéger les accords' })).not.toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Voir ce qui attend' })).toBeInTheDocument();
+    });
+  });
+
+  describe('notifications', () => {
+    const linked = (push?: 'on' | 'off' | 'stale' | 'unavailable', confirm = true) => ({ ...snapshot([], 'PC-Desan'), device: { confirm, ...(push ? { push } : {}) } }) as never;
+    beforeEach(() => {
+      vi.stubGlobal('Notification', { permission: 'default', requestPermission: vi.fn(async () => 'denied') });
+      vi.stubGlobal('PushManager', class {});
+    });
+    afterEach(() => { vi.unstubAllGlobals(); });
+
+    it('after « Protéger les accords », the step « Être prévenu quand un agent attend » comes, and « Plus tard » leads to the inbox', async () => {
+      const t = app('pairing');
+      act(() => { t.setPairing({ step: 'linked', pc }); t.setPinned(pc); t.set('ready'); });
+      act(() => t.deliver(linked('off')));
+      fireEvent.click(screen.getByRole('link', { name: 'Voir ce qui attend' }));
+      expect(await screen.findByRole('heading', { name: 'Être prévenu quand un agent attend' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Activer les notifications' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('link', { name: 'Plus tard' }));
+      expect(screen.getByRole('heading', { name: 'À traiter' })).toBeInTheDocument();
+    });
+
+    it('a refused permission says so and keeps the step', async () => {
+      const t = app('pairing');
+      act(() => { t.setPairing({ step: 'linked', pc }); t.setPinned(pc); t.set('ready'); });
+      act(() => t.deliver(linked('off')));
+      fireEvent.click(screen.getByRole('link', { name: 'Voir ce qui attend' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Activer les notifications' }));
+      expect(await screen.findByText(/Notifications refusées/)).toBeInTheDocument();
+      expect(t.of('push.subscribe')).toEqual([]);
+    });
+
+    it('a PC without push, or notifications already on, goes straight to the inbox', () => {
+      for (const push of ['unavailable', 'on', undefined] as const) {
+        const t = app('pairing');
+        act(() => { t.setPairing({ step: 'linked', pc }); t.setPinned(pc); t.set('ready'); });
+        act(() => t.deliver(linked(push)));
+        fireEvent.click(screen.getByRole('link', { name: 'Voir ce qui attend' }));
+        expect(screen.queryByRole('heading', { name: 'Être prévenu quand un agent attend' })).not.toBeInTheDocument();
+        cleanup();
+      }
+    });
+  });
+
+  describe('a notification tap (ledge.open from the service worker)', () => {
+    let sw: EventTarget;
+    beforeEach(() => {
+      sw = new EventTarget();
+      Object.defineProperty(globalThis.navigator, 'serviceWorker', { configurable: true, value: sw });
+    });
+    afterEach(() => { Reflect.deleteProperty(globalThis.navigator, 'serviceWorker'); });
+    const post = (data: unknown) => act(() => { sw.dispatchEvent(new MessageEvent('message', { data })); });
+
+    it('goes to the url it names', () => {
+      app('ready');
+      post({ type: 'ledge.open', url: '/#/thread/s1' });
+      expect(globalThis.location.hash).toBe('#/thread/s1');
+    });
+
+    it('ignores every other message and any url outside the app', () => {
+      app('ready');
+      for (const data of [
+        { type: 'ledge.open', url: 'https://evil.example/#/x' }, { type: 'ledge.open', url: '//evil.example' }, { type: 'ledge.open', url: '/#/a b' },
+        { type: 'ledge.open', url: 7 }, { type: 'other', url: '/#/agents' }, 'ledge.open', null
+      ]) post(data);
+      expect(globalThis.location.hash).toBe('#/');
     });
   });
 });
