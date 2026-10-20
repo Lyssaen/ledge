@@ -2073,6 +2073,20 @@ describe('mobile access', () => {
     expect(snap?.type === 'snapshot' && snap.daemon?.mobile).toBe(true);
     ws.close(); await m.close();
   });
+  it('a mobile service that failed to start shows as unavailable, and its commands are refused with code unavailable and no id', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, mobileUnavailable: 'EACCES', daemon: { version: '0.2.2', install: 'npm', systemd: true } });
+    const ws = await open(s.port); const got = collect(ws);
+    await until(() => got.some(x => x.type === 'mobile'));
+    expect(got.find(x => x.type === 'mobile')).toMatchObject({ state: { enabled: false, link: { state: 'unavailable', error: 'EACCES' }, devices: [], pairings: [] } });
+    const snap = got.find(x => x.type === 'snapshot');
+    expect(snap?.type === 'snapshot' && snap.daemon?.mobile).toBe(true);
+    ws.send(JSON.stringify({ type: 'mobile.signin' }));
+    await until(() => got.some(x => x.type === 'error'));
+    const err = got.find(x => x.type === 'error');
+    expect(err).toMatchObject({ type: 'error', request: 'mobile.signin', code: 'unavailable' });
+    expect(err).not.toHaveProperty('id');
+    ws.close(); await s.close();
+  });
   it('mobile.pairing.approve on an unknown id is refused with request: mobile.pairing.approve', async () => {
     const m = await withMobile();
     const ws = await open(m.s.port); const got = collect(ws);

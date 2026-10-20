@@ -3,7 +3,7 @@ import type { Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { basename } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
@@ -141,7 +141,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -189,6 +189,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   let island = readIsland(islandFile);
   const islandMsg = (): ServerMessage => ({ type: 'island', prefs: island });
   const mobile = opts.mobile;
+  /** The mobile service failed to start: fronts see « unavailable » (and its reason), not a daemon too old to know mobile access. */
+  const unavailable: MobileState | undefined = !mobile && opts.mobileUnavailable !== undefined
+    ? { enabled: false, relayUrl: DEFAULT_RELAY_URL, account: null, signin: null, signinError: null, link: { state: 'unavailable', error: opts.mobileUnavailable.slice(0, 200) }, devices: [], pairings: [] }
+    : undefined;
   const send = (ws: WebSocket, msg: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
   // Remote peers must never receive local snapshots, sessions, previews or chat broadcasts.
   const localClients = new Set<WebSocket>();
@@ -233,11 +237,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, ...(mobile ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
     if (mobile) reply({ type: 'mobile', state: mobile.state() }); // then mobile access
+    else if (unavailable) reply({ type: 'mobile', state: unavailable });
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
   };

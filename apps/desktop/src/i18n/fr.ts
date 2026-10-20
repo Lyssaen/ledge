@@ -237,6 +237,7 @@ export const fr = {
       online: 'En ligne', offline: 'Hors ligne', seenNow: "Vu à l'instant", seenAgo: (d: string) => `Vu il y a ${d}`, linkedOn: (date: string) => `Lié le ${date}`,
       revoke: 'Révoquer', revokeAsk: { before: 'Révoquer ', after: " ? Il perd l'accès tout de suite et devra être lié à nouveau pour revenir." },
       emptyTitle: 'Aucun appareil lié.', emptyBefore: ' Sur votre téléphone, ouvrez ', emptyAfter: " et connectez-vous avec le même compte GitHub. Un code s'affichera ici et sur le téléphone.",
+      unavailable: (error: string) => `L'accès mobile n'a pas démarré sur ce PC : ${error}`,
       outdated: 'Le daemon local est trop ancien pour l’accès mobile : mettez-le à jour.',
       refused: { offline: 'Le daemon local est hors ligne : rien n’a changé.', outdated: 'Le daemon local est trop ancien pour l’accès mobile : mettez-le à jour.' }
     },

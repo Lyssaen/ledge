@@ -18,11 +18,11 @@ const ONLINE: MobileState = { ...OFF, enabled: true, account: ACCOUNT, link: { s
 const IPHONE = { id: 'fp-iphone', label: 'iPhone · Safari', approvedAt: '2026-10-19T08:00:00.000Z', online: true };
 
 /** The section alone, in French, on a fake fleet whose `sendMobile` records (or throws `error`). */
-function show(mobile: MobileState | undefined, opts: { error?: string; localUp?: boolean } = {}) {
+function show(mobile: MobileState | undefined, opts: { error?: string; localUp?: boolean; mobileError?: { request: string; message: string } } = {}) {
   const sent: MobileClientMessage[] = [];
   const notes: string[] = [];
   const fleet = { sendMobile(msg: MobileClientMessage) { if (opts.error) throw Object.assign(new Error(opts.error), { name: opts.error }); sent.push(msg); } };
-  const ctx = (m: MobileState | undefined) => ({ fleet, mobile: m, machines: [machine('local', { ready: opts.localUp ?? true })], notify: (t: string) => notes.push(t) }) as unknown as SettingsContext;
+  const ctx = (m: MobileState | undefined) => ({ fleet, mobile: m, mobileError: opts.mobileError, machines: [machine('local', { ready: opts.localUp ?? true })], notify: (t: string) => notes.push(t) }) as unknown as SettingsContext;
   const view = render(<LangProvider lang="fr"><Mobile ctx={ctx(mobile)} /></LangProvider>);
   const update = (m: MobileState | undefined) => view.rerender(<LangProvider lang="fr"><Mobile ctx={ctx(m)} /></LangProvider>);
   return { sent, notes, update, user: userEvent.setup() };
@@ -43,6 +43,19 @@ describe('Settings › Accès mobile', () => {
     expect(field()).toHaveValue(DEFAULT_RELAY_URL);
     expect(screen.getByRole('button', { name: 'Se connecter avec GitHub' })).toBeDisabled();
     expect(card('Connexion').getByRole('status')).toHaveTextContent('Désactivé');
+  });
+
+  it('a service that did not start says so, not « trop ancien »; a daemon without mobile still does', () => {
+    const { update } = show({ ...OFF, link: { state: 'unavailable', error: 'EACCES' } });
+    expect(screen.getByText(/n'a pas démarré/)).toHaveTextContent('EACCES');
+    expect(screen.queryByText(/trop ancien/)).toBeNull();
+    update(undefined);
+    expect(screen.getByText(/trop ancien/)).toBeVisible();
+  });
+
+  it('a refused mobile command is said in an alert under the header', () => {
+    show(ONLINE, { mobileError: { request: 'mobile.pairing.approve', message: 'gone' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('gone');
   });
 
   it('the switch sends mobile.set with the relay URL the daemon holds', async () => {

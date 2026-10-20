@@ -43,9 +43,13 @@ export const mobileAsks = (m: MobileState | undefined, dialogOpen = false): bool
 export function Mobile({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
   const c = t.settings.mobile;
-  const { mobile: m, machines, fleet, notify } = ctx;
+  const { mobile: m, mobileError, machines, fleet, notify } = ctx;
   const localUp = machines.find(x => x.id === 'local')?.ready === true;
   if (m === undefined) return <Card><div role="status" className="set-well"><span>{localUp ? c.outdated : t.offline}</span></div></Card>;
+  // The refusal of the last command, under the header: the daemon's own words, as the phone's errors are.
+  const refusal = mobileError && <div role="alert" className="set-well bad"><Icon d={ICONS.close.d} size={14} /><span>{mobileError.message}</span></div>;
+  // The service did not start on this PC: nothing below can work until the daemon restarts.
+  if (m.link.state === 'unavailable') return <>{refusal}<Card><div role="status" className="set-well bad"><span>{c.unavailable(m.link.error)}</span></div></Card></>;
 
   const send: Send = msg => {
     try { fleet.sendMobile(msg); return true; } catch (e) {
@@ -55,6 +59,7 @@ export function Mobile({ ctx }: { ctx: SettingsContext }): JSX.Element {
   };
   return (
     <>
+      {refusal}
       <Card title={c.connection}>
         {!localUp && <div role="status" className="set-well"><span>{t.offline}</span></div>}
         <SwitchRow label={c.access} hint={c.accessHint} checked={m.enabled} onChange={on => send({ type: 'mobile.set', enabled: on, relayUrl: m.relayUrl })} />

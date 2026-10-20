@@ -63,3 +63,26 @@ describe('mobile access state from the local daemon', () => {
     expect(result.current).toEqual(on);
   });
 });
+
+describe('mobile refusals', () => {
+  it('a mobile.* error fills mobileError, reaches no session, and clears on the next command or mobile state', () => {
+    const { api, local } = setup();
+    const seen: ServerMessage[] = []; api.onMessage(m => seen.push(m));
+    local.emit({ type: 'mobile', state: on });
+    local.emit({ type: 'error', request: 'mobile.pairing.approve', message: 'gone', code: 'unavailable' });
+    expect(api.fleet!.mobileError()).toEqual({ request: 'mobile.pairing.approve', message: 'gone', code: 'unavailable' });
+    expect(seen.filter(m => m.type === 'error')).toEqual([]);
+    api.fleet!.sendMobile({ type: 'mobile.retry' });
+    expect(api.fleet!.mobileError()).toBeUndefined();
+    local.emit({ type: 'error', request: 'mobile.retry', message: 'again' });
+    expect(api.fleet!.mobileError()).toEqual({ request: 'mobile.retry', message: 'again' });
+    local.emit({ type: 'mobile', state: on });
+    expect(api.fleet!.mobileError()).toBeUndefined();
+  });
+  it('sendMobile on an unavailable state does not throw DaemonOutdated', () => {
+    const { api, local } = setup();
+    local.emit({ type: 'mobile', state: { ...off, link: { state: 'unavailable', error: 'EACCES' } } });
+    expect(() => api.fleet!.sendMobile({ type: 'mobile.retry' })).not.toThrow();
+    expect(mobileSent(local)).toHaveLength(1);
+  });
+});

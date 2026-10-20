@@ -220,6 +220,7 @@ export const en: Messages = {
       online: 'Online', offline: 'Offline', seenNow: 'Seen just now', seenAgo: (d) => `Seen ${d} ago`, linkedOn: (date) => `Linked on ${date}`,
       revoke: 'Revoke', revokeAsk: { before: 'Revoke ', after: '? It loses access at once and will have to be linked again to come back.' },
       emptyTitle: 'No linked device.', emptyBefore: ' On your phone, open ', emptyAfter: ' and sign in with the same GitHub account. A code will show here and on the phone.',
+      unavailable: (error: string) => `Mobile access did not start on this PC: ${error}`,
       outdated: 'The local daemon is too old for mobile access: update it.',
       refused: { offline: 'The local daemon is offline: nothing changed.', outdated: 'The local daemon is too old for mobile access: update it.' }
     },

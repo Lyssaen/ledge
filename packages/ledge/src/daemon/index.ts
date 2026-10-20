@@ -32,9 +32,10 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   else log(`history cleanup skipped: ${loaded.reason}`);
   // Mobile access is optional: a failure here (the PC's key unreadable and not writable) leaves the rest of the daemon up.
   let mobile: MobileService | undefined;
+  let mobileUnavailable: string | undefined;
   try { mobile = await createMobileService(); }
-  catch (e) { log(`mobile access not available: ${(e as Error).message}`); }
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile });
+  catch (e) { log(`mobile access not available: ${(e as Error).message}`); mobileUnavailable = (e as Error).message.slice(0, 200); }
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable });
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
   await writeFile(paths().pid, String(process.pid));
   log(`daemon started on ${server.port} with ${store.all().length} sessions`);

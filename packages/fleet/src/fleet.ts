@@ -1,6 +1,6 @@
 import { ChatTurnSchema, isArchived, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
-import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
+import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
@@ -67,6 +67,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   let island: IslandPrefs | null | undefined;
   /** The local daemon's mobile access state: undefined until it sends it. */
   let mobile: MobileState | undefined;
+  /** The local daemon's last refused mobile.* command: cleared by the next command and by every mobile broadcast. */
+  let mobileError: MobileError | undefined;
   let routing: PendingRoute | null = null, resetAt = '', lastStatus: DaemonStatus = 'connecting';
   const emit = (m: ServerMessage) => messages.forEach(fn => fn(m));
   const day = () => new Date().toISOString().slice(0, 10);
@@ -172,7 +174,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     // Mobile access is the local daemon's alone (its relay session and approved devices): a remote machine's is ignored.
     if (m.type === 'mobile') {
       if (machine !== 'local') return;
-      mobile = m.state; listeners.forEach(fn => fn());
+      mobile = m.state; mobileError = undefined; listeners.forEach(fn => fn());
       return;
     }
     machineMessages.forEach(fn => fn(machine, m));
@@ -234,6 +236,11 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     }
     if (m.type === 'error') {
       if (p.restarting) return;
+      // A mobile.* refusal belongs to the Mobile access settings (the local daemon's alone), never to a session.
+      if (m.request?.startsWith('mobile.')) {
+        if (machine === 'local') { mobileError = { request: m.request, message: m.message, ...(m.code ? { code: m.code } : {}) }; listeners.forEach(fn => fn()); }
+        return;
+      }
       if (!p.fresh) { p.error = m.message; publish(); return; }
       // An older daemon does not know repos.inspect (« invalid message »): its pending inspections find nothing, as when it drops.
       if (m.request === 'repos.inspect') { answerUnfoundInspections(machine); return; }
@@ -399,10 +406,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         local.send({ type: 'island.set', prefs: valid });
       },
       mobile: () => mobile,
+      mobileError: () => mobileError,
       sendMobile(msg) {
         const local = peers.get('local')!.client;
         if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
         if (mobile === undefined) throw Object.assign(new Error('Update the local Ledge daemon: it does not know mobile access'), { name: 'DaemonOutdated' });
+        if (mobileError) { mobileError = undefined; listeners.forEach(fn => fn()); }
         local.send(msg);
       }
     }

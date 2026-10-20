@@ -38,6 +38,8 @@ export interface SettingsContext {
   projects: ProjectsState | null;
   island: IslandPrefs | null | undefined;
   mobile: MobileState | undefined;
+  /** The local daemon's last refused mobile.* command, shown by Settings › Mobile access. */
+  mobileError?: { request: string; message: string; code?: string };
   projectIdOf(s: Session): string | null;
   sessions: readonly Session[];
   dispatch(a: NavAction): void;
