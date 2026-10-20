@@ -251,6 +251,14 @@ export const copy = {
     relink: 'Refaire la liaison',
     signOut: 'Se déconnecter'
   },
+  /** The PC answered a hello with `denied` (this phone was removed in Ledge on the PC): no board shows it, KeyChanged is the model. */
+  unrecognized: {
+    title: (pc: string | null) => `${pc ?? 'Votre PC'} ne reconnaît plus ce téléphone`,
+    body: 'Ce téléphone a sans doute été retiré dans Ledge sur le PC. Il n’envoie plus rien à ce PC.',
+    kept: 'Le dernier état connu et vos brouillons restent sur ce téléphone. Refaire la liaison les efface et fait comparer un nouveau code.',
+    relink: 'Refaire la liaison',
+    signOut: 'Se déconnecter'
+  },
   update: {
     title: 'Nouvelle version',
     version: (v: string) => `Nouvelle version · ${v}`,

@@ -15,7 +15,7 @@ export const BAD_HELLO_RETRIES = 3;
 
 /**
  * `ready`: both readies crossed, messages flow. `key_changed`: the PC answered with another key; the channel is dead.
- * `denied`: the PC no longer knows this phone. `too_large`: a message past `PLAIN_MAX` was not sent.
+ * `denied`: the PC answered a hello of ours saying it no longer knows this phone; the channel is dead. `too_large`: a message past `PLAIN_MAX` was not sent.
  */
 export type ChannelEvent = 'ready' | 'key_changed' | 'denied' | 'too_large';
 
@@ -33,7 +33,7 @@ export interface PhoneChannel {
  * The PC's hello must carry `fingerprint(pc.publicKey)`, or the channel ends in `key_changed` and nothing more leaves.
  * Any failure to open a PC message but a replay (a gap, a bad seal) drops the channel and says hello again; a replay is
  * ignored. A PC hello that does not finish says hello again, `BAD_HELLO_RETRIES` times in a row at most. A `rekey`
- * from the PC says hello again. Only messages that pass `PhoneServerMessageSchema` reach `onMessage`, and nothing of a
+ * from the PC says hello again. A `denied` counts only as the answer to a pending hello. Only messages that pass `PhoneServerMessageSchema` reach `onMessage`, and nothing of a
  * message is ever logged.
  */
 export function openChannel(opts: {
@@ -136,6 +136,10 @@ export function openChannel(opts: {
     if (f.k === 'msg') return onMsg(f);
     if (f.k === 'rekey') return sayHello();
     if (f.k === 'denied') {
+      // Not sealed, so anyone on the way can send one: it counts only as the answer to a hello of ours still waiting
+      // for one. Then the channel is over, as on a changed key; any other is ignored.
+      if (!pending) return;
+      dead = true;
       drop();
       opts.onEvent('denied');
     }

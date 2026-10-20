@@ -1,5 +1,5 @@
-// The app: one screen at a time, chosen by the link's state first (signed out, another tab, a changed key, pairing),
-// then by the address.
+// The app: one screen at a time, chosen by the link's state first (signed out, another tab, a changed key, a PC that
+// no longer knows this phone, pairing), then by the address.
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { MeResponseSchema } from '@ledge/protocol';
 import type { LinkState, PhoneLink } from './link/link';
@@ -15,6 +15,7 @@ import { Offline, Replaced } from './screens/Offline';
 import { RequestDetail } from './screens/RequestDetail';
 import { Terminal } from './screens/Terminal';
 import { Thread } from './screens/Thread';
+import { Unrecognized } from './screens/Unrecognized';
 import { Update } from './screens/Update';
 import { useMobile, type MobileStore } from './state/store';
 import type { UpdateWatch } from './sw/register';
@@ -99,6 +100,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     : state === 'signed_out' || loginError || issue === 'another' ? 'login'
     : state === 'replaced' ? 'replaced'
     : state === 'key_changed' ? 'keyChanged'
+    : state === 'denied' ? 'unrecognized'
     : state === 'unpaired' || state === 'pairing' || (step?.step === 'linked' && !doneSeen) ? 'compare'
     : 'route';
   // The pairing starts by itself only once its screen is the one shown (not behind the login or a refusal), and
@@ -128,6 +130,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'replaced': return <Replaced onHere={() => globalThis.location.reload()} />;
       case 'keyChanged':
         return <KeyChanged pcName={pcName} known={pinned} received={link.receivedKey()} onRelink={() => begin(() => { void link.relink(); })} onSignOut={signOut} />;
+      case 'unrecognized':
+        return <Unrecognized pcName={pcName} onRelink={() => begin(() => { void link.relink(); })} onSignOut={signOut} />;
       case 'compare':
         return (
           <Compare

@@ -13,8 +13,9 @@ import { openRelaySocket, type SocketState } from './socket';
  * `unpaired` / `pairing`: no PC pinned, without or with a pairing (its outcome included: refused, expired, cancelled).
  * `pc_offline`: the PC is not on the relay, or the relay is out of reach. `handshaking`: the hello is under way, or the
  * keys are still loading. `ready`: messages flow. `key_changed`: the PC answered with another key; nothing is sent.
+ * `denied`: the PC answered a hello of ours that it no longer knows this phone; nothing is sent, nothing is erased.
  */
-export type LinkState = 'signed_out' | 'unpaired' | 'pairing' | 'pc_offline' | 'handshaking' | 'ready' | 'key_changed' | 'replaced';
+export type LinkState = 'signed_out' | 'unpaired' | 'pairing' | 'pc_offline' | 'handshaking' | 'ready' | 'key_changed' | 'denied' | 'replaced';
 
 export interface PhoneLink {
   state(): LinkState;
@@ -28,7 +29,7 @@ export interface PhoneLink {
   pairing(): Pairing | null;
   /** Starts a new pairing, once the socket is open, unless a PC is pinned. A pairing under way is dropped silently. */
   startPairing(): void;
-  /** Forgets the keys (the pinned PC, the identity, the cache) and pairs again. */
+  /** Forgets the keys (the pinned PC, the identity, the cache) and pairs again: the way out of `key_changed` and `denied`. */
   relink(): Promise<void>;
   /** Closes the socket, `POST /auth/logout`, forgets the keys: `signed_out`, for good. */
   signOut(): Promise<void>;
@@ -69,6 +70,8 @@ export function createPhoneLink(opts: {
   let keyChanged = false;
   /** The fingerprint of the key the PC answered with, once it changed. */
   let receivedKey: string | null = null;
+  /** The PC answered a hello with `denied`: the keys stay until the user relinks or signs out. */
+  let denied = false;
   let signedOut = false;
   let finished = false;
   let channel: PhoneChannel | null = null;
@@ -90,6 +93,7 @@ export function createPhoneLink(opts: {
     if (socketState === 'replaced') return 'replaced';
     if (!loaded) return 'handshaking';
     if (keyChanged) return 'key_changed';
+    if (denied) return 'denied';
     if (!pinned || !identity) return pairingWanted ? 'pairing' : 'unpaired';
     if (pcOnline !== true) return pcOnline === false ? 'pc_offline' : 'handshaking';
     return channel?.ready() ? 'ready' : 'handshaking';
@@ -116,8 +120,9 @@ export function createPhoneLink(opts: {
       receivedKey = received ?? null;
       check();
     } else if (e === 'denied') {
-      // The PC no longer knows this phone: its keys are worth nothing, a new pairing starts from scratch.
-      void forgetKeys();
+      // The PC no longer knows this phone. Nothing is erased and no pairing starts: the user chooses (relink or sign out).
+      denied = true;
+      check();
     }
   };
 
@@ -128,7 +133,7 @@ export function createPhoneLink(opts: {
   };
 
   const helloIfDue = () => {
-    if (!loaded || finished || keyChanged || !identity || !pinned || socketState !== 'open' || pcOnline !== true) return;
+    if (!loaded || finished || keyChanged || denied || !identity || !pinned || socketState !== 'open' || pcOnline !== true) return;
     if (!channel) {
       const ch: PhoneChannel = openChannel({
         identity,
@@ -230,7 +235,7 @@ export function createPhoneLink(opts: {
   };
 
   const beginPairing = () => {
-    if (finished || keyChanged || (loaded && pinned && identity)) return;
+    if (finished || keyChanged || denied || (loaded && pinned && identity)) return;
     dropPairing();
     pairingWanted = true;
     const gen = ++pairingGen;
@@ -266,6 +271,7 @@ export function createPhoneLink(opts: {
     channel = null;
     keyChanged = false;
     receivedKey = null;
+    denied = false;
     pinned = null;
     identity = null;
     pairingWanted = pairAfter;
@@ -408,7 +414,7 @@ export function createPhoneLink(opts: {
       await forgetKeys();
     },
     retry() {
-      if (finished || keyChanged) return;
+      if (finished || keyChanged || denied) return;
       if (socketState === 'open' && pcOnline === true) helloIfDue();
       else sock.reconnect();
     },

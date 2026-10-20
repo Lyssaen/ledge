@@ -8,7 +8,7 @@ import { createPhoneLink, type LinkState, type PhoneLink } from '../../src/link/
 import { memoryKeys, type KeyStore } from '../../src/link/keys';
 import { PAIRING_TTL_MS } from '../../src/link/pairing';
 import { startFakePc, type FakePc } from '../fakePc';
-import { snapshot } from '../state/helpers';
+import { MemoryStorage, snapshot } from '../state/helpers';
 
 /** Polls on real time (performance.now), so a test that fakes Date still times out. */
 async function until(cond: () => boolean, what = 'condition', ms = 3000): Promise<void> {
@@ -205,7 +205,45 @@ describe('PhoneLink', () => {
     expect(await keys.pinned()).not.toBeNull();
   });
 
-  it('denied → the pinned PC and the identity are forgotten, and the link is unpaired', async () => {
+  it('a denied answering our hello → denied: keys and cache kept, nothing erased, no pair_commit', async () => {
+    const identity = await generateIdentity();
+    // A PC that does not know this phone's key: it answers the hello with denied.
+    const pc = await startFakePc();
+    cleanups.push(() => pc.close());
+    const storage = new MemoryStorage();
+    storage.setItem('ledge.mobile.drafts', '{"s1":"brouillon"}');
+    const keys = memoryKeys(storage);
+    await keys.saveIdentity(identity);
+    await keys.pin({ publicKey: pc.identity.publicKey, fingerprint: await fingerprint(pc.identity.publicKey), name: null, pinnedAt: '2026-10-20T08:00:00.000Z' });
+    const { link, states } = open(pc, keys);
+    await until(() => link.state() === 'denied', 'denied');
+    await settle();
+    expect(link.state()).toBe('denied');
+    expect(states).not.toContain('unpaired');
+    expect(await keys.identity()).toBe(identity);
+    expect((await keys.pinned())?.publicKey).toBe(pc.identity.publicKey);
+    expect(storage.getItem('ledge.mobile.drafts')).toBe('{"s1":"brouillon"}');
+    expect(await link.send({ type: 'snapshot.request' })).toBe(false);
+    // Nothing more leaves: no pairing of its own, no hello on a retry or a PC back online.
+    link.retry();
+    pc.injectToPhone({ type: 'presence', peer: 'pc', online: true });
+    await settle();
+    expect(pc.frames.map((f) => f.k)).toEqual(['hello']);
+    expect(link.state()).toBe('denied');
+  });
+
+  it('a forged denied with no hello of ours pending → ignored, nothing erased', async () => {
+    const { pc, link, keys, states } = await ready();
+    pc.injectToPhone({ type: 'deliver', from: 'pc', body: JSON.stringify({ k: 'denied' }) });
+    await settle();
+    expect(link.state()).toBe('ready');
+    expect(states).not.toContain('denied');
+    expect(await keys.pinned()).not.toBeNull();
+    expect(await keys.identity()).not.toBeNull();
+    expect(pc.frames.filter((f) => f.k === 'pair_commit')).toEqual([]);
+  });
+
+  it('denied → relink forgets the keys and pairs again, straight to pairing', async () => {
     const identity = await generateIdentity();
     const pc = await startFakePc();
     cleanups.push(() => pc.close());
@@ -213,9 +251,14 @@ describe('PhoneLink', () => {
     await keys.saveIdentity(identity);
     await keys.pin({ publicKey: pc.identity.publicKey, fingerprint: await fingerprint(pc.identity.publicKey), name: null, pinnedAt: '2026-10-20T08:00:00.000Z' });
     const { link } = open(pc, keys);
-    await until(() => link.state() === 'unpaired', 'unpaired');
+    await until(() => link.state() === 'denied', 'denied');
+    const commit = pc.waitFor('pair_commit');
+    const { states } = watch(link);
+    await link.relink();
     expect(await keys.pinned()).toBeNull();
-    expect(await keys.identity()).toBeNull();
+    await commit;
+    expect(link.state()).toBe('pairing');
+    expect(states).toEqual(['denied', 'pairing']);
   });
 
   it('a hello from another key → key_changed, nothing sent; relink forgets and pairs again', async () => {
@@ -280,18 +323,6 @@ describe('PhoneLink', () => {
     link.startPairing();
     expect(link.state()).toBe('pairing');
     await commit;
-  });
-
-  it('denied with a store that cannot forget → unpaired all the same', async () => {
-    const identity = await generateIdentity();
-    const pc = await startFakePc();
-    cleanups.push(() => pc.close());
-    const base = memoryKeys(null);
-    await base.saveIdentity(identity);
-    await base.pin({ publicKey: pc.identity.publicKey, fingerprint: await fingerprint(pc.identity.publicKey), name: null, pinnedAt: '2026-10-20T08:00:00.000Z' });
-    const { link } = open(pc, { ...base, forget: async () => { throw new Error('blocked'); } });
-    await until(() => link.state() === 'unpaired', 'unpaired');
-    await settle();
   });
 
   it('welcome then presence back to back → one hello on the wire, ready without a rekey', async () => {

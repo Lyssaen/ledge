@@ -132,6 +132,29 @@ describe('the sealed channel to the pinned PC', () => {
     await until(() => events.includes('denied'), 'denied');
     expect(ch.ready()).toBe(false);
     expect(await ch.send(snapshotRequest)).toBe(false);
+    // The channel is over: a hello asked from outside sends nothing.
+    await ch.hello();
+    await settle();
+    expect(pc.frames.map((f) => f.k)).toEqual(['hello']);
+  });
+
+  it('a denied that answers no hello of ours is ignored: the channel stays ready', async () => {
+    const { pc, ch, events } = await ready();
+    pc.sendFrame({ k: 'denied' });
+    await settle();
+    expect(events).toEqual(['ready']);
+    expect(ch.ready()).toBe(true);
+    expect(await ch.send(snapshotRequest)).toBe(true);
+    await until(() => pc.received.length === 1, 'the message');
+  });
+
+  it('a denied before any hello is ignored', async () => {
+    const { pc, ch, events } = await setup();
+    pc.sendFrame({ k: 'denied' });
+    await settle();
+    expect(events).toEqual([]);
+    await ch.hello();
+    await until(() => ch.ready(), 'ready');
   });
 
   it('rekey → a new hello, then ready again', async () => {
