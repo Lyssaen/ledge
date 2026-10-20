@@ -16,10 +16,12 @@ Accounts are GitHub users from an allow-list. The relay keeps accounts and sessi
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | The GitHub OAuth App. |
 | `LEDGE_RELAY_ALLOWED_GITHUB_IDS` | Numeric GitHub ids, positive integers separated by commas, at least one. Checked at every authentication. |
 | `LEDGE_RELAY_PUBLIC_URL` | The relay's public origin, `http(s)://host[:port]`, no path. https is required when `NODE_ENV=production`. A cookie session is accepted only from this `Origin`. |
+| `LEDGE_RELAY_WEB_DIR` | Directory of the built phone app (`@ledge/mobile`), served as static files. Required in production, where it must hold `index.html`, `sw.js`, `build.json` and `manifest.webmanifest`. |
+| `LEDGE_RELAY_VAPID_PUBLIC_KEY`, `LEDGE_RELAY_VAPID_PRIVATE_KEY`, `LEDGE_RELAY_VAPID_SUBJECT` | Web Push identity: an uncompressed P-256 point and a 32-byte scalar (base64url), and a `mailto:` or `https:` contact. Required in production; elsewhere all three or none. |
 | `PORT` | Default `8787`. |
 | `LEDGE_RELAY_GITHUB_WEB_URL`, `LEDGE_RELAY_GITHUB_API_URL` | Point GitHub calls at another server (tests). Refused in production. |
 
-A configuration error is printed on stderr, naming the variable and never its value, and the process exits with code 1.
+In production, every missing required variable is reported at once (`missing in production: ...`). A configuration error is printed on stderr, naming the variable and never its value, and the process exits with code 1.
 
 ### Dev mode
 
