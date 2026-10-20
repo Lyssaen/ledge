@@ -1,4 +1,4 @@
-import { pendingKey, PENDING_BODY_MAX, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
+import { pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
 import type { CapabilitiesByTool, FileChange, Pending, PhonePending, PhoneSession, Session, ThreadItem, Tool } from '@ledge/protocol';
 import { adapterFor } from '../adapters/index.js';
 import { riskOf } from './risk.js';
@@ -13,14 +13,14 @@ function pickSet<T extends object, K extends keyof T>(o: T, keys: readonly K[]):
 }
 
 /** `s` shortened to `max` characters, never inside a surrogate pair. */
-function clip(s: string, max: number): { text: string; cut: boolean } {
+export function clip(s: string, max: number): { text: string; cut: boolean } {
   if (s.length <= max) return { text: s, cut: false };
   const end = /[\ud800-\udbff]/.test(s[max - 1] ?? '') ? max - 1 : max;
   return { text: s.slice(0, end), cut: true };
 }
 
-function toPhonePending(p: Pending, key: string, risk: PhonePending['risk'], riskReason: PhonePending['riskReason']): PhonePending {
-  const body = p.body === undefined ? undefined : clip(p.body, PENDING_BODY_MAX);
+function toPhonePending(p: Pending, key: string, risk: PhonePending['risk'], riskReason: PhonePending['riskReason'], bodyMax: number): PhonePending {
+  const body = p.body === undefined ? undefined : clip(p.body, bodyMax);
   return {
     kind: p.kind, text: p.text, source: p.source,
     ...(body ? { body: body.text } : {}),
@@ -32,8 +32,21 @@ function toPhonePending(p: Pending, key: string, risk: PhonePending['risk'], ris
   };
 }
 
+/**
+ * A session's request as the phone sees it, its body cut to `bodyMax`. A request `riskOf` has no verdict for is still
+ * there, as `high`/`unknown`: the phone shows it, and only the PC can accept it.
+ */
+export function toPhoneRequest(s: Session, bodyMax: number): PhonePending | undefined {
+  if (!s.pending) return undefined;
+  const verdict = riskOf(s) ?? { risk: 'high' as const, reason: 'unknown' as const };
+  return toPhonePending(s.pending, pendingKey(s.pending), verdict.risk, verdict.reason, bodyMax);
+}
+
+/** The request with its whole body (up to `PENDING_BODY_MAX`), for `session.pending`. */
+export const toPhoneFullRequest = (s: Session): PhonePending | undefined => toPhoneRequest(s, PENDING_BODY_MAX);
+
 export function toPhoneSession(s: Session, readAt: string): PhoneSession {
-  const verdict = riskOf(s);
+  const pending = toPhoneRequest(s, SNAPSHOT_BODY_MAX);
   return {
     id: s.id, name: s.name, tool: s.tool, project: s.project, title: s.title, state: s.state,
     startedAt: s.startedAt, lastActivityAt: s.lastActivityAt,
@@ -43,7 +56,7 @@ export function toPhoneSession(s: Session, readAt: string): PhoneSession {
     helpers: s.helpers.map(h => ({ id: h.id, kind: h.kind, task: h.task, state: h.state, ...pickSet(h, ['finishedAt']) })),
     // A preview only: the whole reply is in the thread.
     ...(s.lastReply ? { lastReply: { text: clip(s.lastReply.text, TOOL_TEXT_MAX).text, at: s.lastReply.at, ...pickSet(s.lastReply, ['plan']) } } : {}),
-    ...(s.pending && verdict ? { pending: toPhonePending(s.pending, pendingKey(s.pending), verdict.risk, verdict.reason) } : {}),
+    ...(pending ? { pending } : {}),
     unread: !!s.lastReply && s.lastReply.at > readAt
   };
 }

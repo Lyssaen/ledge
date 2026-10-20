@@ -31,6 +31,8 @@ export const THREAD_TEXT_MAX = 8_192;
 export const TOOL_TEXT_MAX = 2_048;
 /** A request's full body (a plan) as the phone gets it. */
 export const PENDING_BODY_MAX = 65_536;
+/** A request's body inside a snapshot or an update; the whole body comes on demand with `session.pending`. */
+export const SNAPSHOT_BODY_MAX = 2_048;
 
 /** How much a request can do if accepted blindly: `high` needs a fresh device check on the phone. */
 export const RiskSchema = z.enum(['low', 'high']);
@@ -91,6 +93,8 @@ const PhoneExpectSchema = PendingSchema.pick({ kind: true, text: true }).extend(
 export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot.request') }),
   z.object({ type: z.literal('session.thread'), id: sessionId }),
+  /** The session's request with its whole body (up to `PENDING_BODY_MAX`). */
+  z.object({ type: z.literal('session.pending'), id: sessionId }),
   /** The session whose terminal the phone shows; null when it shows none. */
   z.object({ type: z.literal('session.watch'), id: sessionId.nullable() }),
   z.object({ type: z.literal('session.read'), id: sessionId, at: z.string().datetime() }),
@@ -110,9 +114,11 @@ export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;
 
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string() }) }),
+  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40) }) }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
+  /** `pending.cut` is set when even this body was shortened. */
+  z.object({ type: z.literal('session.pending'), id: z.string(), pending: PhonePendingSchema }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
   /** `cut`: the ids of the items shortened; `more`: older items were left out. */
   z.object({ type: z.literal('session.thread'), id: z.string(), items: z.array(ThreadItemSchema), cut: z.array(z.string()), more: z.boolean() }),

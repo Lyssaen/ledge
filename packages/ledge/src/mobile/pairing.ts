@@ -206,6 +206,10 @@ export function createPairing(opts: {
       // Stored before pair_ok, so the device's first hello finds it approved.
       opts.send(e.peer, { k: 'pair_ok' });
       e.state = 'approved';
+      // The wait for the device's first channel starts over: approval may come late in the window.
+      e.cancelTimer();
+      e.expiresAt = now() + ttlMs;
+      e.cancelTimer = schedule(() => onTtl(e), ttlMs);
       opts.onChange();
     },
 

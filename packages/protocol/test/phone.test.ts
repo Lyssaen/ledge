@@ -66,7 +66,10 @@ describe('phone projection', () => {
 describe('phone server messages', () => {
   it('parses a snapshot and a thread', () => {
     const caps = { freeTextAnswer: true };
-    expect(() => PhoneServerMessageSchema.parse({ type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: caps, codex: caps, cursor: caps }, daemon: { version: '1.0.0' } })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: caps, codex: caps, cursor: caps }, daemon: { version: '1.0.0', name: 'pc' } })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: caps, codex: caps, cursor: caps }, daemon: { version: '1.0.0', name: 'x'.repeat(41) } })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'session.pending', id: 's1' })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'session.pending', id: 's1', pending: { kind: 'plan', text: 'x', source: 'hook', key: 'k', risk: 'high', riskReason: 'plan', cut: true } })).not.toThrow();
     expect(() => PhoneServerMessageSchema.parse({ type: 'session.thread', id: 's1', items: [], cut: [], more: false })).not.toThrow();
     expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'rejected', reason: 'confirm_required' })).not.toThrow();
   });

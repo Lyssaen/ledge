@@ -16,7 +16,7 @@ export interface Outbox {
   close(): void;
 }
 
-interface Item { key?: string; text: string; cost: number }
+interface Item { key?: string; text: string; cost: number; priority?: true }
 
 /** Base64 of the sealed text plus the frame envelope. */
 const costOf = (padded: string) => Math.ceil(Buffer.byteLength(padded, 'utf8') * 4 / 3) + 256;
@@ -96,16 +96,21 @@ export function createOutbox(opts: {
     }
   };
 
-  const enqueue = (deviceId: string, text: string, key: string | undefined) => {
+  const enqueue = (deviceId: string, text: string, key: string | undefined, priority = false) => {
     const cost = costOf(text);
     let queue = queues.get(deviceId);
     const at = key === undefined ? -1 : (queue?.findIndex((q) => q.key === key) ?? -1);
     if (queue && at >= 0) {
       queuedBytes.set(deviceId, (queuedBytes.get(deviceId) ?? 0) - queue[at]!.cost + cost);
-      queue[at] = { key, text, cost };
+      queue[at] = { key, text, cost, ...(queue[at]!.priority ? { priority: true as const } : {}) };
     } else {
       queue ??= [];
-      queue.push({ key, text, cost });
+      // An answer to the phone goes ahead of the updates, behind the answers already waiting.
+      if (priority) {
+        let i = 0;
+        while (queue[i]?.priority) i++;
+        queue.splice(i, 0, { key, text, cost, priority: true });
+      } else queue.push({ key, text, cost });
       queues.set(deviceId, queue);
       queuedBytes.set(deviceId, (queuedBytes.get(deviceId) ?? 0) + cost);
       if (!turn.includes(deviceId)) turn.push(deviceId);
@@ -127,10 +132,10 @@ export function createOutbox(opts: {
       if (padded === null) {
         opts.log(`phone message too large: ${msg.type} ${Buffer.byteLength(json, 'utf8')} bytes`);
         const err = pad(JSON.stringify({ type: 'error', code: 'too_large', request: msg.type } satisfies PhoneServerMessage))!;
-        enqueue(deviceId, err, `too_large:${msg.type}`);
+        enqueue(deviceId, err, `too_large:${msg.type}`, true);
         return;
       }
-      enqueue(deviceId, padded, key);
+      enqueue(deviceId, padded, key, msg.type === 'operation.result' || msg.type === 'error');
     },
     drop: clear,
     close() {

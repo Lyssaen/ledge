@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { PAD_TIERS, PLAIN_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
+import { PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
+import { hostname } from 'node:os';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
 
 const T0 = '2026-10-20T08:00:00.000Z';
@@ -127,7 +128,7 @@ describe('phone gateway: reads and forward', () => {
     g.send('dev1', { type: 'snapshot.request' });
     await flush();
     const [snap] = g.got('dev1');
-    expect(PhoneServerMessageSchema.parse(snap)).toMatchObject({ type: 'snapshot', protocol: 1, daemon: { version: '1.2.3' } });
+    expect(PhoneServerMessageSchema.parse(snap)).toMatchObject({ type: 'snapshot', protocol: 1, daemon: { version: '1.2.3', name: hostname().slice(0, 40) } });
     if (snap?.type !== 'snapshot') throw new Error('no snapshot');
     expect(snap.sessions.map(s => s.id)).toEqual(['a', 'b', 'c', 'q']);
     expect(snap.sessions[0]).toMatchObject({ unread: true, pending: { risk: 'high', riskReason: 'pushes' } });
@@ -583,5 +584,58 @@ describe('phone gateway: sizes', () => {
       expect(snap.sessions[0]!.lastReply!.text).toHaveLength(2_048);
       expect(snap.sessions[0]!.topic).toHaveLength(TOPIC_MAX);
     }
+  });
+});
+
+describe('phone gateway: request bodies on demand', () => {
+  const BIG = 'x'.repeat(65_536);
+  const withPlans = (g: ReturnType<typeof setup>, n = 12) => {
+    for (let i = 0; i < n; i++) g.sessions.set(`p${i}`, mk(`p${i}`, { state: 'waiting_permission', pending: { kind: 'plan', text: `plan ${i}`, body: BIG, source: 'hook' } }));
+  };
+
+  it('a snapshot of 12 sessions waiting on a 64 KiB body stays under PLAIN_MAX, every body cut', async () => {
+    const g = setup();
+    withPlans(g);
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const [snap] = g.got('dev1');
+    expect(g.got('dev1').filter(m => m.type === 'error')).toEqual([]);
+    if (snap?.type !== 'snapshot') throw new Error('no snapshot');
+    const plans = snap.sessions.filter(s => s.id.startsWith('p'));
+    expect(plans).toHaveLength(12);
+    for (const s of plans) expect(s.pending).toMatchObject({ cut: true, body: 'x'.repeat(SNAPSHOT_BODY_MAX) });
+    expect(Buffer.byteLength(g.fm.sent[0]![1], 'utf8')).toBeLessThanOrEqual(PLAIN_MAX);
+  });
+
+  it('session.updated cuts the body too', async () => {
+    const g = setup();
+    withPlans(g, 1);
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    g.gw.forward({ type: 'session.updated', session: g.sessions.get('p0')! });
+    await flush();
+    const upd = g.got('dev1').find(m => m.type === 'session.updated');
+    expect(upd?.type === 'session.updated' && upd.session.pending).toMatchObject({ cut: true, body: 'x'.repeat(SNAPSHOT_BODY_MAX) });
+  });
+
+  it('session.pending gives the whole body, with its key and risk', async () => {
+    const g = setup();
+    withPlans(g, 1);
+    g.send('dev1', { type: 'session.pending', id: 'p0' });
+    await flush();
+    const [m] = g.got('dev1');
+    expect(PhoneServerMessageSchema.parse(m)).toMatchObject({ type: 'session.pending', id: 'p0', pending: { kind: 'plan', body: BIG, risk: 'high', riskReason: 'plan' } });
+    if (m?.type === 'session.pending') expect(m.pending.cut).toBeUndefined();
+  });
+
+  it('session.pending on a session without a request, or an unknown one, is error unknown_session', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'session.pending', id: 'c' });
+    g.send('dev1', { type: 'session.pending', id: 'nope' });
+    await flush();
+    expect(g.got('dev1')).toEqual([
+      { type: 'error', code: 'unknown_session', request: 'session.pending' },
+      { type: 'error', code: 'unknown_session', request: 'session.pending' }
+    ]);
   });
 });

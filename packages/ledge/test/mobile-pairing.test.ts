@@ -263,3 +263,21 @@ describe('device pairing on the PC', () => {
     expect(s.pairing.views()).toEqual([]);
   });
 });
+
+describe('approval reopens the window', () => {
+  it('approve at 4 min 59 s, the first channel at 9 min 30 s: linked, not expired', async () => {
+    const s = await setup();
+    const phone = await s.device(1);
+    const { result } = await phone.pair();
+    await until(() => s.pairing.views()[0]?.state === 'confirm', 'confirm view');
+    const view = s.pairing.views()[0]!;
+    s.clock.advance(PAIRING_TTL_MS - 1_000);
+    s.pairing.approve(view.id);
+    expect(await result).toBe('ok');
+    expect(s.pairing.views()[0]!.expiresAt).toBe(new Date(s.clock.now() + PAIRING_TTL_MS).toISOString());
+    s.clock.advance(9 * 60_000 + 30_000 - (PAIRING_TTL_MS - 1_000));
+    expect(s.pairing.views()[0]!.state).toBe('approved');
+    s.pairing.linked(await fingerprint(phone.publicKey));
+    expect(s.pairing.views()[0]!.state).toBe('linked');
+  });
+});

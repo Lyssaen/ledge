@@ -1,6 +1,7 @@
 // The phone gateway: texts from approved devices are read against the whitelist, reads are answered here, writes go
 // through the operation registry and then the local fronts' own `dispatch`. What the daemon broadcasts is projected for
 // the devices that follow it. Logs carry a type, a code or an error's name, never a message's content.
+import { hostname } from 'node:os';
 import {
   PHONE_PROTOCOL, PhoneClientMessageSchema, RefusalCodeSchema, UNTYPABLE, isArchived, pendingKey,
   type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
@@ -8,7 +9,7 @@ import {
 import type { MobileService } from './service.js';
 import { createOutbox } from './outbox.js';
 import { fingerprint, OperationRegistry, type PhoneOperation } from './operations.js';
-import { capabilities, toPhoneItem, toPhoneSession, toPhoneThread } from './project.js';
+import { capabilities, clip, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneThread } from './project.js';
 import { riskOf } from './risk.js';
 
 export interface PhoneGateway {
@@ -69,7 +70,7 @@ export function createPhoneGateway(deps: {
   };
   const projected = (deviceId: string, s: Session) => toPhoneSession(s, followers.get(deviceId)?.reads.get(s.id) ?? startedAt);
   const snapshot = (deviceId: string): PhoneServerMessage => ({
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version }
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, name: clip(hostname(), 40).text }
   });
 
   const outbox = createOutbox({
@@ -170,6 +171,12 @@ export function createPhoneGateway(deps: {
       case 'session.thread': {
         if (!live(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
         return push(deviceId, { type: 'session.thread', id: msg.id, ...toPhoneThread(deps.thread(msg.id) ?? []) });
+      }
+      case 'session.pending': {
+        const session = live(msg.id);
+        const pending = session && toPhoneFullRequest(session);
+        if (!pending) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
+        return push(deviceId, { type: 'session.pending', id: msg.id, pending });
       }
       case 'session.watch': {
         if (msg.id === null) { follower(deviceId).watching = null; return; }

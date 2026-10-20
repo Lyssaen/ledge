@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CapabilitiesByToolSchema, PhoneSessionSchema, PhoneSessionSchema as S, pendingKey, THREAD_BUDGET, THREAD_ITEMS_MAX, type Session, type ThreadItem } from '@ledge/protocol';
 import { adapterFor } from '../src/adapters/index.js';
-import { capabilities, toPhoneItem, toPhoneSession, toPhoneThread } from '../src/mobile/project.js';
+import { capabilities, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneThread } from '../src/mobile/project.js';
 
 const T = '2026-10-20T10:00:00.000Z';
 const session = (extra: Partial<Session> = {}): Session => ({
@@ -27,10 +27,14 @@ describe('toPhoneSession', () => {
     expect(p.pending).not.toHaveProperty('cut');
   });
 
-  it('cuts a huge body and says so', () => {
-    const p = toPhoneSession(session({ pending: { kind: 'plan', text: 'plan', body: 'a'.repeat(100_000), source: 'hook' } }), T);
-    expect(p.pending?.body).toHaveLength(65_536);
+  it('cuts a body to SNAPSHOT_BODY_MAX in the projection, and to PENDING_BODY_MAX on demand, and says so', () => {
+    const s = session({ pending: { kind: 'plan', text: 'plan', body: 'a'.repeat(100_000), source: 'hook' } });
+    const p = toPhoneSession(s, T);
+    expect(p.pending?.body).toHaveLength(2_048);
     expect(p.pending?.cut).toBe(true);
+    const full = toPhoneFullRequest(s);
+    expect(full?.body).toHaveLength(65_536);
+    expect(full?.cut).toBe(true);
   });
 
   it('computes unread', () => {

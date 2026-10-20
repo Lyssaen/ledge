@@ -177,3 +177,21 @@ describe('outbox', () => {
     expect(sent).toHaveLength(2);
   });
 });
+
+describe('outbox priority lane', () => {
+  const result = (op: string): PhoneServerMessage => ({ type: 'operation.result', op, status: 'applied' });
+
+  it('an operation.result queued behind 50 coalesced updates goes before them, results and errors keep their order', async () => {
+    const { outbox, sent } = make({ frames: 1 });
+    outbox.push('d1', removed('first'));
+    await flush();
+    for (let i = 0; i < 50; i++) outbox.push('d1', { type: 'session.updated', session: { id: `s${i}` } } as unknown as PhoneServerMessage, `session.updated:s${i}`);
+    outbox.push('d1', result('00000000-0000-4000-8000-000000000001'));
+    outbox.push('d1', { type: 'error', code: 'unknown_session', request: 'session.pending' });
+    outbox.push('d1', result('00000000-0000-4000-8000-000000000002'));
+    for (let i = 0; i < 60; i++) await vi.advanceTimersByTimeAsync(10_000);
+    const types = sent.map(([, t]) => (JSON.parse(t) as { type: string }).type);
+    expect(types.slice(0, 5)).toEqual(['session.removed', 'operation.result', 'error', 'operation.result', 'session.updated']);
+    expect(sent).toHaveLength(54);
+  });
+});
