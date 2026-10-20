@@ -261,6 +261,7 @@ button.tg:disabled{cursor:default}
 .pending-choices button>span{display:flex;flex-direction:column;min-width:0}
 .pending-choices strong{font-size:12px;font-weight:500}
 .pending-choices small{font-size:11px;color:var(--muted-foreground)}
+.pending-choices .pending-own button{border-style:dashed}
 .pending-relay{font-size:11px;margin:8px 0 0}
 .session-reply form{display:flex;align-items:flex-end;gap:8px;padding:6px;background:var(--well);border:1px solid var(--input);border-radius:var(--radius-lg)}
 .session-reply form:focus-within{border-color:var(--ring)}

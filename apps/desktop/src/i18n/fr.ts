@@ -514,6 +514,7 @@ export const fr = {
       toTerminal: (k: string) => `Donner le clavier au terminal · Ctrl ${k}`, toThread: (k: string) => `Le clavier va au terminal · revenir au fil : Ctrl ${k}`
     },
     pending: {
+      writeOwn: 'Écrire ma propre réponse', writeOwnHint: 'Dans le champ ci-dessous, puis Entrée',
       ask: { send: 'Envoyer les réponses', decline: 'Décliner', other: (q: string) => `Autre réponse à « ${q} »`, otherPlaceholder: 'Autre réponse…' },
       regions: { approval: 'Autorisation demandée', plan: 'Plan à approuver', question: 'Question de l’agent' } as Record<'approval' | 'plan' | 'question', string>,
       command: (n: string) => `${n} veut exécuter une commande`, edit: (n: string) => `${n} veut modifier un fichier`, approval: (n: string) => `${n} veut votre accord`,

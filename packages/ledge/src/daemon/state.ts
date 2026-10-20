@@ -1,6 +1,7 @@
 import { cleanTopic, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
 import { crossSession, crossSessionNotices } from './crossSession.js';
+import { sameQuestion } from '../adapters/types.js';
 
 export const HOOK_PRIORITY_MS = 2000;
 
@@ -288,9 +289,14 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       return { ...s, state: rest, pending: undefined, lastHookAt: at, lastActivityAt: at };
     }
     case 'PanePrompt': {
-      if (s.pending?.source === 'hook') return s;
-      if (hooksReportPrompts(s) && lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
-      let pending = mergePending(s.pending, pendingFor(ev)!);
+      const incoming = pendingFor(ev)!;
+      // A hook question the pane has moved past (the next question of an AskUserQuestion, its review: the last one
+      // answered in the terminal) gives way to what the pane asks. No hook reports the next one: only the end of all.
+      const moved = s.pending?.source === 'hook' && s.pending.kind === 'question' && incoming.kind === 'question'
+        && !sameQuestion(incoming.text, s.pending.text);
+      if (s.pending?.source === 'hook' && !moved) return s;
+      if (!moved && hooksReportPrompts(s) && lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
+      let pending = moved ? { ...incoming, ...(s.pending!.helperId ? { helperId: s.pending!.helperId } : {}) } : mergePending(s.pending, incoming);
       // Codex asks "Implement this plan?" under the plan it just proposed: its last reply is what to review.
       if (pending.kind === 'plan' && !pending.body && s.tool === 'codex' && s.lastReply) pending = { ...pending, body: s.lastReply.text };
       if (s.pending && samePending(s.pending, pending)) return s;
