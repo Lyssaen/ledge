@@ -99,9 +99,10 @@ describe('outbox', () => {
     outbox.push('d1', removed('first'));
     await flush();
     const big: PhoneServerMessage = { type: 'session.preview', id: 's', lines: ['x'.repeat(600_000)] };
-    for (let i = 0; i < 8; i++) outbox.push('d1', big);
+    // Each costs ceil(655360 * 4 / 3) + 256 = 874 069: nine fit in 8 MiB, the tenth crosses.
+    for (let i = 0; i < 9; i++) outbox.push('d1', big);
     expect(overflow).toEqual([]);
-    for (let i = 0; i < 8; i++) outbox.push('d1', big);
+    outbox.push('d1', big);
     expect(overflow).toEqual(['d1']);
   });
 
@@ -139,6 +140,40 @@ describe('outbox', () => {
     outbox.push('d2', removed('c'));
     outbox.close();
     await vi.advanceTimersByTimeAsync(30_000);
+    expect(sent).toHaveLength(2);
+  });
+
+  it('arms one timer however many pushes arrive while blocked, and none after close', async () => {
+    const { outbox } = make({ frames: 1 });
+    outbox.push('d1', removed('first'));
+    await flush();
+    for (let i = 0; i < 20; i++) outbox.push('d1', removed(`s${i}`));
+    expect(vi.getTimerCount()).toBe(1);
+    outbox.close();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('survives a throwing onGone and a rejecting send, and keeps draining', async () => {
+    const calls: string[] = [];
+    const { outbox, logs } = make({
+      send: async (d, t) => { calls.push(`${d}:${idOf(t)}`); if (d === 'boom') throw new Error('x'); return d !== 'dead'; },
+      onGone: () => { throw new TypeError('nope'); }
+    });
+    outbox.push('dead', removed('a'));
+    outbox.push('boom', removed('b'));
+    outbox.push('ok', removed('c'));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toEqual(['dead:a', 'boom:b', 'ok:c']);
+    expect(logs.join('\n')).toContain('onGone failed (TypeError)');
+  });
+
+  it('coalesces repeated too_large errors for the same type', async () => {
+    const { outbox, sent } = make({ frames: 1 });
+    outbox.push('d1', removed('first'));
+    await flush();
+    const huge: PhoneServerMessage = { type: 'session.preview', id: 's', lines: ['x'.repeat(700_000)] };
+    for (let i = 0; i < 5; i++) outbox.push('d1', huge);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(sent).toHaveLength(2);
   });
 });

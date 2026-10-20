@@ -31,7 +31,7 @@ export function createOutbox(opts: {
   bytes?: number;
   windowMs?: number;
 }): Outbox {
-  const now = opts.now ?? Date.now;
+  const now = opts.now ?? (() => performance.now());
   const frames = opts.frames ?? 200;
   const bytes = opts.bytes ?? 4 * 1_048_576;
   const windowMs = opts.windowMs ?? 10_000;
@@ -60,7 +60,7 @@ export function createOutbox(opts: {
   };
 
   const pump = async () => {
-    if (running || closed) return;
+    if (running || closed || timer !== null) return;
     running = true;
     try {
       while (!closed && turn.length > 0) {
@@ -86,7 +86,9 @@ export function createOutbox(opts: {
         try { ok = await opts.send(deviceId, item.text); } catch { ok = false; }
         if (!ok && !closed) {
           clear(deviceId);
-          opts.onGone(deviceId);
+          try { opts.onGone(deviceId); } catch (err) {
+            opts.log(`phone outbox: onGone failed (${err instanceof Error ? err.name : 'error'})`);
+          }
         }
       }
     } finally {
@@ -125,7 +127,7 @@ export function createOutbox(opts: {
       if (padded === null) {
         opts.log(`phone message too large: ${msg.type} ${Buffer.byteLength(json, 'utf8')} bytes`);
         const err = pad(JSON.stringify({ type: 'error', code: 'too_large', request: msg.type } satisfies PhoneServerMessage))!;
-        enqueue(deviceId, err, undefined);
+        enqueue(deviceId, err, `too_large:${msg.type}`);
         return;
       }
       enqueue(deviceId, padded, key);
