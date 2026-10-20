@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { useToast } from '../src/shell/Toast';
-import { useKeys } from '../src/nav/useKeys';
+import { focusThread, useKeys } from '../src/nav/useKeys';
 import { initialNav } from '../src/nav/state';
 import type { Overview } from '../src/nav/overview';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -250,6 +250,20 @@ describe('the terminal and the keyboard', () => {
     expect(fireEvent.keyDown(document.body, { key: '`', code: 'Backquote', ctrlKey: true })).toBe(false);
     expect(toTerminal).toHaveBeenCalledTimes(2);
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl + ² from the terminal goes back to the thread, or to the session page’s panel when Changes hides it', () => {
+    const body = document.createElement('div');
+    body.className = 'session-body'; body.tabIndex = -1;
+    const thread = document.createElement('div');
+    thread.setAttribute('data-thread-focus', ''); thread.tabIndex = -1;
+    body.append(thread); document.body.append(body); onTestFinished(() => body.remove());
+    focusThread();
+    expect(thread).toHaveFocus();
+    document.body.focus();
+    thread.hidden = true;                                                 // the « Modifications » view
+    focusThread();
+    expect(body).toHaveFocus();
   });
 
   it('the shortcuts help names the key of the user\'s layout', async () => {

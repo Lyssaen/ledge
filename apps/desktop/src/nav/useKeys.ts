@@ -72,3 +72,9 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 }
+
+/** The terminal's Ctrl + ²: the keyboard goes back to the thread's scroller, or to the page's panel while « Modifications » hides it. */
+export function focusThread(): void {
+  const to = document.querySelector<HTMLElement>('[data-thread-focus]:not([hidden])') ?? document.querySelector<HTMLElement>('.session-body');
+  to?.focus({ preventScroll: true });
+}

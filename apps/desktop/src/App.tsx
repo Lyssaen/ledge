@@ -19,7 +19,7 @@ import { initialNav, navReducer, reconcile, type NavAction, type NavState } from
 import { loadOverview, saveOverview } from './nav/overview';
 import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { mainOrder } from './nav/agents';
-import { useKeys } from './nav/useKeys';
+import { focusThread, useKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
 import { TitleBar } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
@@ -75,7 +75,7 @@ function useTermStore(client: DaemonClient): TermStore {
     surface: () => {
       const chunk = loadedWorkspace();
       if (!chunk) throw new Error('a terminal is drawn only once the session page has loaded');
-      return chunk.createSurface({ theme: rootTermTheme(), onThread: () => document.querySelector<HTMLElement>('[data-thread-focus]')?.focus({ preventScroll: true }) });
+      return chunk.createSurface({ theme: rootTermTheme(), onThread: focusThread });
     },
     agentArgv: (id, readOnly) => client.fleet?.terminal(id, { readOnly }) ?? null,
     shellArgv: id => client.fleet?.shell(id) ?? null,
