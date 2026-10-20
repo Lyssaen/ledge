@@ -46,6 +46,11 @@ export function openRelaySocket(opts: {
   fetchImpl?: typeof fetch;
   onFrame(m: RelayServerMessage): void;
   onState(s: SocketState): void;
+  /**
+   * A connection attempt failed or an open socket was lost (not a replacement): the state may stay `connecting`
+   * across attempts, so this is how a caller tells "still trying" from "the first try".
+   */
+  onAttemptFailed?(): void;
 }): RelaySocket {
   const Impl = opts.WebSocketImpl ?? WebSocket;
   const fetchImpl = opts.fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
@@ -101,6 +106,7 @@ export function openRelaySocket(opts: {
 
   const onClosed = (code: number, opened: boolean) => {
     if (code === RELAY_CLOSE_REPLACED) return finish('replaced');
+    opts.onAttemptFailed?.();
     if (code === RELAY_CLOSE_RATE_LIMITED) return retry(RATE_LIMITED_WAIT_MS);
     if (code !== RELAY_CLOSE_SIGNED_OUT && opened) return retry();
     setState('connecting');
@@ -119,6 +125,7 @@ export function openRelaySocket(opts: {
       // No second argument: a subprotocol would put a credential where the cookie belongs.
       sock = new Impl(wsUrl.toString());
     } catch {
+      opts.onAttemptFailed?.();
       retry();
       return;
     }

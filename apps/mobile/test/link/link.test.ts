@@ -1,5 +1,6 @@
 // @vitest-environment node
 // Node's own WebSocket reaches the real relay; jsdom's would replace it.
+import { createServer } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneServerMessage, RelayServerMessage } from '@ledge/protocol';
 import { fingerprint, generateIdentity } from '@ledge/seal';
@@ -72,6 +73,15 @@ async function ready() {
   const s = await paired();
   await until(() => s.link.state() === 'ready', 'ready');
   return s;
+}
+
+/** A local port nothing listens on: a socket to it is refused at once. */
+async function closedPort(): Promise<number> {
+  const srv = createServer();
+  await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+  const { port } = srv.address() as { port: number };
+  await new Promise<void>((r) => srv.close(() => r()));
+  return port;
 }
 
 const parsed = (pc: FakePc) => pc.received.map((t) => JSON.parse(t) as unknown);
@@ -227,6 +237,103 @@ describe('PhoneLink', () => {
     await link.relink();
     expect(await keys.pinned()).toBeNull();
     await commit;
+    expect(link.state()).toBe('pairing');
+  });
+
+  it('a launch with the relay out of reach → pc_offline; once it is reachable → handshaking, then ready', async () => {
+    const identity = await generateIdentity();
+    const pc = await startFakePc({ devicePublicKey: identity.publicKey });
+    cleanups.push(() => pc.close());
+    const keys = memoryKeys(null);
+    await keys.saveIdentity(identity);
+    await keys.pin({ publicKey: pc.identity.publicKey, fingerprint: await fingerprint(pc.identity.publicKey), name: null, pinnedAt: '2026-10-20T08:00:00.000Z' });
+    const dead = `ws://127.0.0.1:${await closedPort()}/ws`;
+    let reachable = false;
+    const Flaky = class extends pc.PhoneWebSocket {
+      constructor(url: string | URL) { super(reachable ? url : dead); }
+    } as typeof WebSocket;
+    const auth = authStub();
+    const link = createPhoneLink({ keys, url: pc.url, WebSocketImpl: Flaky, fetchImpl: auth.fetchImpl });
+    cleanups.push(() => link.close());
+    const { states } = watch(link);
+    await until(() => link.state() === 'pc_offline', 'pc_offline');
+    reachable = true;
+    await until(() => link.state() === 'ready', 'ready', 5000);
+    expect(states).toEqual(['handshaking', 'pc_offline', 'handshaking', 'ready']);
+  });
+
+  it('a pin the store refuses → unpaired, and a new pairing can start', async () => {
+    const pc = await startFakePc();
+    cleanups.push(() => pc.close());
+    const keys: KeyStore = { ...memoryKeys(null), pin: async () => { throw new Error('quota'); } };
+    const { link } = open(pc, keys);
+    link.startPairing();
+    await until(() => link.pairing()?.state().step === 'compare', 'compare');
+    pc.ok();
+    link.pairing()!.confirmOnPhone();
+    await until(() => link.state() === 'unpaired', 'unpaired');
+    const commit = pc.waitFor('pair_commit');
+    link.startPairing();
+    expect(link.state()).toBe('pairing');
+    await commit;
+  });
+
+  it('denied with a store that cannot forget → unpaired all the same', async () => {
+    const identity = await generateIdentity();
+    const pc = await startFakePc();
+    cleanups.push(() => pc.close());
+    const base = memoryKeys(null);
+    await base.saveIdentity(identity);
+    await base.pin({ publicKey: pc.identity.publicKey, fingerprint: await fingerprint(pc.identity.publicKey), name: null, pinnedAt: '2026-10-20T08:00:00.000Z' });
+    const { link } = open(pc, { ...base, forget: async () => { throw new Error('blocked'); } });
+    await until(() => link.state() === 'unpaired', 'unpaired');
+    await settle();
+  });
+
+  it('welcome then presence back to back → one hello on the wire, ready without a rekey', async () => {
+    const identity = await generateIdentity();
+    const pc = await startFakePc({ devicePublicKey: identity.publicKey });
+    cleanups.push(() => pc.close());
+    const keys = memoryKeys(null);
+    await keys.saveIdentity(identity);
+    await keys.pin({ publicKey: pc.identity.publicKey, fingerprint: await fingerprint(pc.identity.publicKey), name: null, pinnedAt: '2026-10-20T08:00:00.000Z' });
+    // Right behind the welcome, before anything else, the relay says the PC is online.
+    const Echo = class extends pc.PhoneWebSocket {
+      constructor(url: string | URL) {
+        super(url);
+        this.addEventListener('message', (ev: MessageEvent) => {
+          if (!String(ev.data).includes('"welcome"')) return;
+          queueMicrotask(() => this.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'presence', peer: 'pc', online: true }) })));
+        });
+      }
+    } as typeof WebSocket;
+    const auth = authStub();
+    const link = createPhoneLink({ keys, url: pc.url, WebSocketImpl: Echo, fetchImpl: auth.fetchImpl });
+    cleanups.push(() => link.close());
+    await until(() => link.state() === 'ready', 'ready');
+    await settle();
+    expect(pc.frames.filter((f) => f.k === 'hello')).toHaveLength(1);
+    expect(pc.sent.filter((f) => f.k === 'rekey')).toEqual([]);
+    expect(link.state()).toBe('ready');
+  });
+
+  it('a pairing frame the socket cannot send → the pairing is cancelled', async () => {
+    const pc = await startFakePc({ autoOffer: false });
+    cleanups.push(() => pc.close());
+    let jammed = false;
+    const Jammable = class extends pc.PhoneWebSocket {
+      override get readyState() { return jammed ? 3 : super.readyState; }
+    } as typeof WebSocket;
+    const auth = authStub();
+    const link = createPhoneLink({ keys: memoryKeys(null), url: pc.url, WebSocketImpl: Jammable, fetchImpl: auth.fetchImpl });
+    cleanups.push(() => link.close());
+    const commit = pc.waitFor('pair_commit');
+    link.startPairing();
+    await commit;
+    // The offer arrives, the reveal it calls for cannot leave.
+    jammed = true;
+    pc.offer();
+    await until(() => link.pairing()?.state().step === 'cancelled', 'cancelled');
     expect(link.state()).toBe('pairing');
   });
 

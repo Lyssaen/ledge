@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { SealedFrameSchema, type PhoneClientMessage, type PhoneServerMessage } from '@ledge/protocol';
 import { b64u, fingerprint, generateIdentity } from '@ledge/seal';
 import { openRelaySocket, type SocketState } from '../../src/link/socket';
-import { openChannel, type ChannelEvent } from '../../src/link/channel';
+import { BAD_HELLO_RETRIES, openChannel, type ChannelEvent } from '../../src/link/channel';
 import type { PinnedPc } from '../../src/link/keys';
 import { startFakePc } from '../fakePc';
 
@@ -159,6 +159,28 @@ describe('the sealed channel to the pinned PC', () => {
     forged.set(seq);
     pc.sendFrame({ k: 'msg', s: b64u(forged) });
     await until(() => hellos() === 2 && pc.ready && ch.ready(), 'the second ready');
+  });
+
+  it('a PC hello that does not finish → a new hello at once, then ready', async () => {
+    const { pc, ch, events, hellos } = await setup();
+    pc.badHellos(1);
+    await ch.hello();
+    await until(() => hellos() === 2 && pc.ready && ch.ready(), 'the second ready');
+    expect(events).toEqual(['ready']);
+  });
+
+  it('PC hellos that never finish → a bounded number of new hellos, then it waits', async () => {
+    const { pc, ch, hellos } = await setup();
+    pc.badHellos(100);
+    await ch.hello();
+    await until(() => hellos() === 1 + BAD_HELLO_RETRIES, 'the retries');
+    await settle();
+    expect(hellos()).toBe(1 + BAD_HELLO_RETRIES);
+    expect(ch.ready()).toBe(false);
+    // A hello asked from outside (a welcome, a presence) starts a new round.
+    pc.badHellos(0);
+    await ch.hello();
+    await until(() => pc.ready && ch.ready(), 'ready');
   });
 
   it('a replayed message is ignored, and the channel stays', async () => {

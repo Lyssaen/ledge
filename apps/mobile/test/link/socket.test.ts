@@ -146,6 +146,31 @@ describe('openRelaySocket', () => {
     expect(FakeWs.instances).toHaveLength(1);
   });
 
+  it('tells every failed attempt, the refused ones before any welcome included, while the state stays connecting', async () => {
+    const states: SocketState[] = [];
+    let failed = 0;
+    openRelaySocket({
+      url: 'https://relay.example',
+      WebSocketImpl: Impl,
+      fetchImpl: answer(200) as unknown as typeof fetch,
+      onFrame: () => {},
+      onState: (s) => states.push(s),
+      onAttemptFailed: () => { failed++; }
+    });
+    last().drop(1006);
+    expect(failed).toBe(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(FakeWs.instances).toHaveLength(2);
+    last().drop(1006);
+    expect(failed).toBe(2);
+    expect(states).toEqual(['connecting']);
+    await vi.advanceTimersByTimeAsync(2_000);
+    last().welcome();
+    last().drop(4000);
+    // Replaced is final, not a failed attempt.
+    expect(failed).toBe(2);
+  });
+
   it('a socket refused before it opened, with /auth/me answering 200, retries on the backoff', async () => {
     open(answer(200));
     last().drop(1006);

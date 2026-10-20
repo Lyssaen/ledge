@@ -14,6 +14,8 @@ const READY = '{"t":"ready"}';
 const ONLINE_WITHIN_MS = 3000;
 /** Every wait for the phone fails after this, rather than hanging until vitest's timeout. */
 const REPLY_WITHIN_MS = 4000;
+/** A P-256 point off the curve (packages/seal/test/vectors.json): it passes the frame schema, never `finish`. */
+const OFF_CURVE = 'BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE';
 
 /**
  * A WebSocket class that offers `token` as `Authorization: Bearer` (Node's WebSocket takes headers; a browser's does not).
@@ -66,6 +68,8 @@ export interface FakePc {
   answerAs(identity: Identity): void;
   /** Forgets the phone's key: its next hello gets `denied` (a revoked device). */
   forgetDevice(): void;
+  /** Answers the phone's next `n` hellos with a key that is not one (an off-curve point), the right fingerprint kept. */
+  badHellos(n: number): void;
   /** Seals a message on the confirmed channel and drops it, so the next one reaches the phone with a gap. */
   skip(): Promise<void>;
   /** Closes the PC's socket (the phone sees `presence` offline) and forgets its channel; `reconnect()` opens a new one. */
@@ -92,6 +96,7 @@ export async function startFakePc(opts: {
 
   let devicePublicKey = opts.devicePublicKey ?? null;
   let helloIdentity = identity;
+  let badHellosLeft = 0;
   let commitment: { c: string; pcNonce: string } | null = null;
   let channel: Channel | null = null;
   let ready = false;
@@ -116,6 +121,11 @@ export async function startFakePc(opts: {
     if (!devicePublicKey || frame.f !== (await fingerprint(devicePublicKey))) { sendFrame({ k: 'denied' }); return; }
     channel = null;
     ready = false;
+    if (badHellosLeft > 0) {
+      badHellosLeft--;
+      sendFrame({ k: 'hello', e: OFF_CURVE, f: await fingerprint(helloIdentity.publicKey) });
+      return;
+    }
     const as = helloIdentity;
     const hs = await startHandshake(as, 'pc', devicePublicKey);
     const ch = await hs.finish(frame.e);
@@ -253,6 +263,7 @@ export async function startFakePc(opts: {
     sendFrame,
     answerAs(id) { helloIdentity = id; },
     forgetDevice() { devicePublicKey = null; },
+    badHellos(n) { badHellosLeft = n; },
     async skip() {
       if (!channel || !ready) throw new Error('fake PC: no confirmed channel');
       await channel.seal(padPlain('{}')!);

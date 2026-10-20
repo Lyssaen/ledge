@@ -8,6 +8,12 @@ import type { PinnedPc } from './keys';
 const READY = '{"t":"ready"}';
 
 /**
+ * A PC hello whose key does not finish the handshake is answered by a new hello at once, this many times in a row at
+ * most; then the channel waits for a hello asked from outside (a welcome, the PC back online, a rekey).
+ */
+export const BAD_HELLO_RETRIES = 3;
+
+/**
  * `ready`: both readies crossed, messages flow. `key_changed`: the PC answered with another key; the channel is dead.
  * `denied`: the PC no longer knows this phone. `too_large`: a message past `PLAIN_MAX` was not sent.
  */
@@ -26,8 +32,9 @@ export interface PhoneChannel {
 /**
  * The PC's hello must carry `fingerprint(pc.publicKey)`, or the channel ends in `key_changed` and nothing more leaves.
  * Any failure to open a PC message but a replay (a gap, a bad seal) drops the channel and says hello again; a replay is
- * ignored. A `rekey` from the PC says hello again. Only messages that pass `PhoneServerMessageSchema` reach `onMessage`,
- * and nothing of a message is ever logged.
+ * ignored. A PC hello that does not finish says hello again, `BAD_HELLO_RETRIES` times in a row at most. A `rekey`
+ * from the PC says hello again. Only messages that pass `PhoneServerMessageSchema` reach `onMessage`, and nothing of a
+ * message is ever logged.
  */
 export function openChannel(opts: {
   identity: Identity;
@@ -41,6 +48,8 @@ export function openChannel(opts: {
   let pending: Handshake | null = null;
   let channel: Channel | null = null;
   let confirmed = false;
+  /** PC hellos in a row that did not finish; back to 0 on ready and on a hello asked from outside. */
+  let badHellos = 0;
   // Computed on first use, so a rejection surfaces in the call that needs it.
   let pcFp: Promise<string> | null = null;
   let ownFp: Promise<string> | null = null;
@@ -86,8 +95,10 @@ export function openChannel(opts: {
     try {
       ch = await hs.finish(frame.e);
     } catch {
-      // Not a key: ignored, as a frame that fails its schema; the next welcome, presence or rekey says hello again.
-      return;
+      // Not a key: the PC stays online and the socket open, so nothing else would start a new handshake.
+      if (badHellos >= BAD_HELLO_RETRIES) return;
+      badHellos++;
+      return sayHello();
     }
     channel = ch;
     // Sealed before the channel counts as confirmed, so the phone's ready is its first sealed message.
@@ -108,6 +119,7 @@ export function openChannel(opts: {
     if (!confirmed) {
       if (text !== READY) return sayHello();
       confirmed = true;
+      badHellos = 0;
       opts.onEvent('ready');
       return;
     }
@@ -133,6 +145,7 @@ export function openChannel(opts: {
     hello() {
       // Not ready from this call on: nothing is sealed to the old channel while the hello waits its turn.
       if (!dead) drop();
+      badHellos = 0;
       return serial(sayHello);
     },
     receive: (f) => serial(() => handle(f)),

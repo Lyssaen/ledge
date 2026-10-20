@@ -151,7 +151,16 @@ export function createPhoneLink(opts: {
 
   const onLinked = async (p: Pairing, pc: PinnedPc) => {
     const gen = keysGen;
-    await keys.pin(pc);
+    try {
+      await keys.pin(pc);
+    } catch {
+      // Not pinned, so not paired: back to unpaired, from where a new pairing can start.
+      if (pairing !== p || finished || gen !== keysGen) return;
+      pairingWanted = false;
+      dropPairing();
+      check();
+      return;
+    }
     if (pairing !== p || finished || gen !== keysGen) return;
     pinned = pc;
     pairingWanted = false;
@@ -232,7 +241,11 @@ export function createPhoneLink(opts: {
     pairingWanted = false;
     dropPairing();
     check();
-    await keys.forget();
+    try {
+      await keys.forget();
+    } catch {
+      // Forgotten in memory all the same: nothing is sealed with them for as long as this page lives.
+    }
   };
 
   // ---- the socket ----
@@ -257,6 +270,12 @@ export function createPhoneLink(opts: {
       if (s !== 'open' && pcOnline !== null) pcOnline = false;
       check();
     },
+    onAttemptFailed() {
+      // Out of reach of the relay, from launch on too: the state stays `connecting` across retries, this says so.
+      if (finished) return;
+      pcOnline = false;
+      check();
+    },
     onFrame(m) {
       if (finished) return;
       switch (m.type) {
@@ -267,12 +286,17 @@ export function createPhoneLink(opts: {
           launchPairing();
           check();
           return;
-        case 'presence':
+        case 'presence': {
           if (m.peer !== 'pc') return;
+          // Only a PC coming back says hello: one already known online has the hello of the welcome (or of the error)
+          // under way, and a second one would be finished with the wrong handshake. A replaced PC is no presence change;
+          // it answers the phone's next message with a rekey.
+          const back = m.online && pcOnline !== true;
           pcOnline = m.online;
-          if (m.online) helloIfDue();
+          if (back) helloIfDue();
           check();
           return;
+        }
         case 'error':
           // A sealed body that was not delivered: the channel lost a sequence number. Once only, from a ready channel,
           // so a hello the relay bounces (the PC just left) does not bounce forever; presence brings the PC back.
