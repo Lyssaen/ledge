@@ -257,15 +257,18 @@ export function createPhoneLink(opts: {
 
   // ---- keys ----
 
-  /** Forgets the keys: nothing is sealed to the old PC from here on, even before the store answers. */
-  const forgetKeys = async () => {
+  /**
+   * Forgets the keys: nothing is sealed to the old PC from here on, even before the store answers. `pairAfter`: a
+   * pairing follows, so the state goes straight to `pairing` instead of passing by `unpaired` (which starts one too).
+   */
+  const forgetKeys = async (pairAfter = false) => {
     keysGen++;
     channel = null;
     keyChanged = false;
     receivedKey = null;
     pinned = null;
     identity = null;
-    pairingWanted = false;
+    pairingWanted = pairAfter;
     dropPairing();
     check();
     try {
@@ -390,7 +393,7 @@ export function createPhoneLink(opts: {
     startPairing: beginPairing,
     async relink() {
       if (finished) return;
-      await forgetKeys();
+      await forgetKeys(true);
       beginPairing();
     },
     async signOut() {

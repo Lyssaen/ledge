@@ -235,10 +235,13 @@ describe('PhoneLink', () => {
     expect(link.state()).toBe('key_changed');
 
     const commit = pc.waitFor('pair_commit');
+    const { states } = watch(link);
     await link.relink();
     expect(await keys.pinned()).toBeNull();
     await commit;
     expect(link.state()).toBe('pairing');
+    // Straight to pairing: an « unpaired » in between would have the app start a second pairing.
+    expect(states).toEqual(['key_changed', 'pairing']);
   });
 
   it('a launch with the relay out of reach → pc_offline; once it is reachable → handshaking, then ready', async () => {

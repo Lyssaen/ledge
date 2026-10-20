@@ -6,8 +6,8 @@ import {
   type PhoneSession, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
-import { isLive, isNew, loadOps, newOperationId, pruneOps, resendable, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
-import { loadLastState, loadReads, saveLastState, saveReads } from './persist';
+import { clearOps, isLive, isNew, loadOps, newOperationId, pruneOps, resendable, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
+import { clearLastState, loadLastState, loadReads, saveLastState, saveReads } from './persist';
 
 /** `loading`: asked, not answered yet. `gone`: the PC no longer knows the session. */
 export interface ThreadState {
@@ -252,8 +252,25 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
   const expectOf = (p: PhonePending) => ({ key: p.key, kind: p.kind, text: p.text });
 
+  /** The link has no PC any more (forgotten, or pairing a new one): nothing of the old PC is kept or sent again. */
+  function forget() {
+    const held = state.sessions.size || state.threads.size || state.previews.size || state.daemon || state.capabilities
+      || state.syncedAt || Object.keys(state.ops).length || Object.keys(reads).length || lastThread !== null;
+    if (!held) return;
+    for (const id of [...timers.keys()]) stopTimer(id);
+    reads = {};
+    lastThread = null;
+    threadAsks = [];
+    previewsDirty = false;
+    clearLastState(storage);
+    clearOps(storage);
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, daemon: null, fresh: false, syncedAt: null, ops: {} });
+  }
+
   let wasReady = ready();
   const offState = link.subscribe(() => {
+    const at = link.state();
+    if (at === 'unpaired' || at === 'pairing') forget();
     const now = ready();
     if (now && !wasReady) { wasReady = true; onReady(); }
     else if (!now && wasReady) { wasReady = false; onLost(); }

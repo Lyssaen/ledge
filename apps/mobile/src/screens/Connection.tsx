@@ -19,7 +19,7 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
   onSignOut: () => void;
 }) {
   const state = useMobile(store);
-  const pc = state.daemon?.name ?? pinned?.name ?? null;
+  const pc = pinned?.name ?? state.daemon?.name ?? null;
   const rows: [string, string, boolean][] = [
     [N.account, login ? copy.account(login) : N.unknown, false],
     [N.relay, relay, true],

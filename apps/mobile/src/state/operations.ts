@@ -102,3 +102,7 @@ export function loadOps(storage?: Storage): Record<string, Op> {
 export function saveOps(ops: Record<string, Op>, storage?: Storage): void {
   try { localStore(storage)?.setItem(OPS_KEY, JSON.stringify(ops)); } catch { /* storage full or blocked: the live state still works */ }
 }
+
+export function clearOps(storage?: Storage): void {
+  try { localStore(storage)?.removeItem(OPS_KEY); } catch { /* ignore */ }
+}

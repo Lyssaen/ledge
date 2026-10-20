@@ -38,6 +38,8 @@ export interface CompareProps {
   pcName: string | null;
   /** The keys were found lost at start: said until the phone is linked again. */
   lost: boolean;
+  /** A pairing was asked and the link fell back to unpaired without one: only a new start gets out of it. */
+  stalled?: boolean;
   onSame: () => void;
   /** Cancels the pairing (« Ils sont différents » and « Annuler »). */
   onCancel: () => void;
@@ -47,7 +49,7 @@ export interface CompareProps {
 }
 
 /** Board Compare: the code of both keys, read on the PC and here, then confirmed on both. */
-export function Compare({ step, login, pcName, lost, onSame, onCancel, onRestart, onDone }: CompareProps) {
+export function Compare({ step, login, pcName, lost, stalled = false, onSame, onCancel, onRestart, onDone }: CompareProps) {
   // The user said the codes differ: the cancellation that follows is the board's warning, not a plain one.
   const [differ, setDiffer] = useState(false);
   const pc = pcName ?? copy.yourPc;
@@ -60,7 +62,7 @@ export function Compare({ step, login, pcName, lost, onSame, onCancel, onRestart
       <Board top="pt-40">
         <div className="flex flex-col items-center gap-3.5 text-center">
           <ResidentMascot size={88} theme="dark" />
-          <h1 className={H1}>{C.doneTitle(pcName ?? step.pc.name ?? copy.yourPc)}</h1>
+          <h1 className={H1}>{C.doneTitle(step.pc.name ?? pcName ?? copy.yourPc)}</h1>
           <p className="max-w-[300px] text-muted">{C.doneBody}</p>
         </div>
         <Fill />
@@ -87,6 +89,7 @@ export function Compare({ step, login, pcName, lost, onSame, onCancel, onRestart
   }
 
   const ended = step?.step === 'cancelled' ? [C.cancelledTitle, null]
+    : !step && stalled ? [C.stalledTitle, C.stalledBody]
     : step?.step === 'expired' ? [C.expiredTitle, C.expiredBody]
     : step?.step === 'refused' ? [C.refusedTitle, C.refusedBody]
     : null;
@@ -98,6 +101,7 @@ export function Compare({ step, login, pcName, lost, onSame, onCancel, onRestart
           <h1 className={H1}>{ended[0]}</h1>
           {ended[1] && <p className="text-muted">{ended[1]}</p>}
         </div>
+        {lostNotice}
         <Fill />
         {restartButton}
       </Board>

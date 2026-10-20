@@ -44,6 +44,7 @@ describe('comparing the code', () => {
       t.set('ready');
     });
     act(() => t.deliver(snapshot([], 'PC-Desan')));
+    act(() => t.setPinned({ ...pc, name: 'PC-Desan' }));
     expect(screen.getByRole('heading', { name: 'Téléphone lié à PC-Desan' })).toBeInTheDocument();
     expect(screen.getByText('Vous pouvez lire, approuver et écrire. Retirez ce téléphone à tout moment depuis Ledge sur le PC.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: 'Voir ce qui attend' }));
@@ -60,8 +61,8 @@ describe('comparing the code', () => {
     const t = app('pairing');
     act(() => t.setPairing(compare()));
     fireEvent.click(screen.getByRole('button', { name: 'Ils sont différents' }));
+    // Only cancel(), which sends no frame (pairing.test: « cancel() is silent »).
     expect(t.calls).toEqual(['cancel']);
-    expect(t.sent).toEqual([]);
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('Liaison annulée');
     expect(alert).toHaveTextContent('Des codes différents signifient que ce téléphone et le PC ne voient pas les mêmes clés.');
@@ -87,5 +88,34 @@ describe('comparing the code', () => {
     expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Recommencer' }));
     expect(t.calls).toEqual(['startPairing']);
+  });
+
+  it('relinking to another PC: the old PC’s name is not said of the new one', () => {
+    const t = app('ready');
+    act(() => {
+      t.setPinned({ ...pc, name: 'PC-Desan' });
+      t.deliver(snapshot([], 'PC-Desan'));
+    });
+    act(() => {
+      t.setPinned(null);
+      t.set('pairing');
+      t.setPairing(compare());
+    });
+    expect(screen.getByText(/Ledge vient d’afficher un code sur/)).toHaveTextContent('Ledge vient d’afficher un code sur votre PC.');
+    act(() => t.setPairing({ step: 'linked', pc }));
+    expect(screen.getByRole('heading', { name: 'Téléphone lié à votre PC' })).toBeInTheDocument();
+  });
+
+  it('a pairing that could not start (no identity, keys not stored) → « Recommencer », not a spinner forever', () => {
+    const t = app('unpaired');
+    expect(t.calls).toEqual(['startPairing']);
+    act(() => t.set('pairing'));
+    expect(screen.getByRole('status')).toHaveTextContent('En attente du code du PC…');
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    act(() => t.set('unpaired'));
+    expect(t.calls).toEqual(['startPairing']);
+    expect(screen.getByRole('heading', { name: 'La liaison n’a pas pu démarrer' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Recommencer' }));
+    expect(t.calls).toEqual(['startPairing', 'startPairing']);
   });
 });

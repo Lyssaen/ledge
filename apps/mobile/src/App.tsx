@@ -71,39 +71,55 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, build = nu
   const [keysLost, setKeysLost] = useState(lost);
   // « Voir ce qui attend » was tapped: the pairing's outcome is no longer the screen.
   const [doneSeen, setDoneSeen] = useState(false);
-  const pairingStarted = useRef(false);
-  const pairing = link.pairing()?.state() ?? null;
+  // A pairing was started from this page (by itself or by a tap): the ref guards against a second start in the same
+  // commit, the state draws the screen.
+  const startedRef = useRef(false);
+  const [started, setStarted] = useState(false);
+  const step = link.pairing()?.state() ?? null;
+
+  const loginError = signinError(issue);
+  const kind = issue === 'not_allowed' ? 'denied'
+    : state === 'signed_out' || loginError || issue === 'another' ? 'login'
+    : state === 'replaced' ? 'replaced'
+    : state === 'key_changed' ? 'keyChanged'
+    : state === 'unpaired' || state === 'pairing' || (step?.step === 'linked' && !doneSeen) ? 'compare'
+    : 'route';
+  // The pairing starts by itself only once its screen is the one shown (not behind the login or a refusal), and
+  // only once: when it falls back to unpaired without a step, the screen offers to start again.
+  const autoPair = kind === 'compare' && state === 'unpaired' && step === null && !started;
+  const begin = (start: () => void) => { startedRef.current = true; setStarted(true); start(); };
 
   useEffect(() => {
-    if (state === 'unpaired' && !pairingStarted.current) {
-      pairingStarted.current = true;
-      link.startPairing();
-    }
-    if (state === 'ready') { pairingStarted.current = false; setKeysLost(false); }
+    if (autoPair && !startedRef.current) begin(() => link.startPairing());
+  }, [autoPair, link]);
+  useEffect(() => {
+    if (state === 'ready') { startedRef.current = false; setStarted(false); setKeysLost(false); }
     if (state === 'unpaired' || state === 'pairing') setDoneSeen(false);
-  }, [state, link]);
+  }, [state]);
 
   const pinned = link.pinned();
-  const pcName = mobile.daemon?.name ?? pinned?.name ?? null;
+  // The pinned PC only while pairing: the name the old PC gave is not the one being paired.
+  const pairingName = pinned?.name ?? null;
+  const pcName = pinned?.name ?? mobile.daemon?.name ?? null;
   const retry = () => link.retry();
   const signOut = () => { void link.signOut(); };
 
   const screen = (() => {
-    if (issue === 'not_allowed') return <Denied onOther={() => setIssue('another')} />;
-    const loginError = signinError(issue);
-    if (state === 'signed_out' || loginError || issue === 'another') return <Login server={relay} error={loginError} />;
-    if (state === 'replaced') return <Replaced onHere={() => globalThis.location.reload()} />;
-    if (state === 'key_changed') {
-      return <KeyChanged pcName={pcName} known={pinned} received={link.receivedKey()} onRelink={() => { void link.relink(); }} onSignOut={signOut} />;
-    }
-    if (state === 'unpaired' || state === 'pairing' || (pairing?.step === 'linked' && !doneSeen)) {
-      return (
-        <Compare
-          step={pairing} login={login} pcName={pcName} lost={keysLost}
-          onSame={() => link.pairing()?.confirmOnPhone()} onCancel={() => link.pairing()?.cancel()}
-          onRestart={() => link.startPairing()} onDone={() => setDoneSeen(true)}
-        />
-      );
+    switch (kind) {
+      case 'denied': return <Denied onOther={() => setIssue('another')} />;
+      case 'login': return <Login server={relay} error={loginError} />;
+      case 'replaced': return <Replaced onHere={() => globalThis.location.reload()} />;
+      case 'keyChanged':
+        return <KeyChanged pcName={pcName} known={pinned} received={link.receivedKey()} onRelink={() => begin(() => { void link.relink(); })} onSignOut={signOut} />;
+      case 'compare':
+        return (
+          <Compare
+            step={step} login={login} pcName={pairingName} lost={keysLost}
+            stalled={state === 'unpaired' && step === null && started}
+            onSame={() => link.pairing()?.confirmOnPhone()} onCancel={() => link.pairing()?.cancel()}
+            onRestart={() => begin(() => link.startPairing())} onDone={() => setDoneSeen(true)}
+          />
+        );
     }
     switch (route.name) {
       case 'agents': return <Agents store={store} onReconnect={retry} />;

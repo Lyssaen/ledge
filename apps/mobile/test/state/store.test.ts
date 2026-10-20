@@ -404,3 +404,39 @@ describe('the store, cached on the phone', () => {
     expect(t.listening()).toBe(0);
   });
 });
+
+describe('the store, when the link has no PC any more', () => {
+  it.each(['unpaired', 'pairing'] as const)('%s → the old PC’s sessions, threads, previews, name, operations and cache are dropped', (to) => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')], 'PC-Desan'));
+    t.deliver({ type: 'session.preview', id: 'a', lines: ['$ pnpm test'] });
+    t.store.openThread('a');
+    t.deliver({ type: 'session.thread', id: 'a', items: [prompt('p1', 'go')], cut: [], more: false });
+    t.store.read('a');
+    expect(t.store.decide('a', 'accept')).not.toBeNull();
+    expect(t.storage.getItem(LAST_STATE_KEY)).not.toBeNull();
+    t.set(to);
+    const s = t.state();
+    expect(s.sessions.size).toBe(0);
+    expect(s.threads.size).toBe(0);
+    expect(s.previews.size).toBe(0);
+    expect(s.daemon).toBeNull();
+    expect(s.capabilities).toBeNull();
+    expect(s.syncedAt).toBeNull();
+    expect(s.ops).toEqual({});
+    expect(t.storage.getItem(LAST_STATE_KEY)).toBeNull();
+    expect(t.storage.getItem(OPS_KEY)).toBeNull();
+    expect(t.storage.getItem('ledge.mobile.reads')).toBeNull();
+    // Nothing of the old PC comes back with the next ready.
+    t.set('ready');
+    expect(t.of('session.decide')).toHaveLength(1);
+    expect(t.of('session.read')).toHaveLength(1);
+    expect(t.of('session.thread')).toHaveLength(1);
+  });
+
+  it('a phone never paired: nothing to drop, nothing written', () => {
+    const t = setup({ state: 'unpaired' });
+    t.set('pairing');
+    expect(t.storage.length).toBe(0);
+  });
+});

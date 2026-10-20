@@ -50,4 +50,10 @@ describe('signing in', () => {
     expect(screen.getByRole('heading', { name: 'Vos agents, dans la poche' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  it('the login board in front: no pairing starts behind it', () => {
+    const t = app('unpaired', { signin: 'error' });
+    expect(screen.getByRole('heading', { name: 'Vos agents, dans la poche' })).toBeInTheDocument();
+    expect(t.calls).toEqual([]);
+  });
 });

@@ -165,7 +165,7 @@ export const copy = {
   },
   loading: 'Chargement de la demande…',
   connection: {
-    title: 'Connexion', back: 'Retour aux demandes', pc: 'PC', device: 'Ce téléphone', status: 'État', unknown: 'Inconnu',
+    title: 'Connexion', back: 'Retour aux demandes', pc: 'PC', status: 'État', unknown: 'Inconnu',
     status_: { online: 'Connecté', offline: 'Déconnecté', connecting: 'Connexion en cours…' },
     account: 'Compte', relay: 'Serveur', pcFingerprint: 'Empreinte du PC', version: 'Version de l’app', appFingerprint: 'Empreinte de l’app',
     /** A value not known yet (the build, before the service worker gives it). */
@@ -185,10 +185,15 @@ export const copy = {
     title: 'Connexion non sécurisée',
     body: 'Ledge sur téléphone ne s’ouvre que sur une adresse HTTPS. Ouvrez l’adresse https:// du serveur.'
   },
+  /** The app or its start failed to load (a lost connection mid-update, a blocked storage): no board shows it. */
+  bootFailed: {
+    title: 'Ledge n’a pas pu démarrer',
+    body: 'Le chargement de l’app a échoué. Vérifiez la connexion du téléphone, puis rechargez la page.',
+    reload: 'Recharger'
+  },
   login: {
     title: 'Vos agents, dans la poche',
     subtitle: 'Connectez-vous avec le même compte GitHub que dans Ledge sur votre PC.',
-    server: 'server.ledge.paradow.dev',
     notes: [
       'Ce téléphone crée sa propre clé. Elle ne le quitte jamais.',
       'Rien n’est accessible avant que vous ayez confirmé un code sur votre PC.',
@@ -222,11 +227,13 @@ export const copy = {
     refusedBody: 'Ledge sur le PC a refusé ce téléphone.',
     lostTitle: 'Ce téléphone n’est plus lié',
     lostBody: 'Ses clés ont disparu (données du site effacées ou navigation privée) et le dernier état connu a été effacé avec. Comparez un nouveau code pour le lier.',
+    /** A pairing was asked and none could start (no key could be made, the link closed): no board shows it. */
+    stalledTitle: 'La liaison n’a pas pu démarrer',
+    stalledBody: 'Ce téléphone n’a pas pu préparer sa clé. Recommencez ; si cela persiste, rechargez la page.',
     retry: 'Recommencer'
   },
   denied: {
     title: 'Ce compte n’a pas accès',
-    body: (login: string) => `${login} n’est pas dans la liste de ce serveur. Demandez à son administrateur de vous ajouter.`,
     /** The relay's redirect names no account: the board's sentence without the login. */
     bodyNoLogin: 'Ce compte GitHub n’est pas dans la liste de ce serveur. Demandez à son administrateur de vous ajouter.',
     other: 'Utiliser un autre compte'

@@ -37,6 +37,15 @@ describe('the PC’s key changed', () => {
     expect(t.calls).toEqual(['relink']);
   });
 
+  it('« Refaire la liaison » starts one pairing: the relink’s own, not a second one from the app', () => {
+    const t = changed();
+    fireEvent.click(screen.getByRole('button', { name: 'Refaire la liaison' }));
+    act(() => { t.setPinned(null); t.set('pairing'); });
+    act(() => t.set('unpaired'));
+    expect(t.calls).toEqual(['relink']);
+    expect(screen.getByRole('heading', { name: 'La liaison n’a pas pu démarrer' })).toBeInTheDocument();
+  });
+
   it('« Se déconnecter » signs out: POST /auth/logout, then the keys forgotten (PhoneLink.signOut)', () => {
     const t = changed();
     fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
