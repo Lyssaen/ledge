@@ -30,6 +30,7 @@ export const copy = {
       repo: (repo: string) => `Qu'est-ce qui a changé dans ${repo} aujourd'hui ?`
     },
     stop: 'Arrêter',
+    stepsLabel: 'Étapes',
     sources: 'Sources : ',
     field: 'Question pour Ledge',
     placeholder: 'Demander à Ledge…',

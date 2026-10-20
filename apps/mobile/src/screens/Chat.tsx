@@ -1,5 +1,6 @@
 // « Demander à Ledge »: the phone's own thread with Ledge. The turns are the PC's; this screen only asks, stops and starts over.
 import { useEffect, useRef, useState } from 'react';
+import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { copy } from '../copy';
 import { useChat, useMobile, type MobileStore } from '../state/store';
 import { Composer } from '../ui/chat/Composer';
@@ -26,15 +27,17 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   const repos = new Set(sessions.map(s => s.repo).filter(Boolean));
   const [text, setText] = useState('');
   // A refusal for load: the screen says so (the store has already forgotten it) and the question is back in the field.
-  const [refused, setRefused] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
   const running = chat.live !== null;
   const offline = !state.fresh;
 
   useEffect(() => {
-    if (chat.error?.code !== 'busy') return;
-    setText(chat.error.text ?? '');
-    setRefused(true);
+    const e = chat.error;
+    if (e?.text === undefined) return;
+    // Not a newer draft's loss: the question only comes back into an empty field.
+    setText(prev => prev || e.text!);
+    setRefused(e.code === 'busy' ? copy.chat.busy : e.code === 'offline' ? copy.chat.offline : copy.chat.failed);
     store.clearChatError();
   }, [chat.error, store]);
   useEffect(() => { end.current?.scrollIntoView?.({ block: 'end' }); }, [chat.turns.length, chat.live?.text, chat.live?.steps.length]);
@@ -42,22 +45,23 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   const send = () => {
     const q = text.trim();
     if (!q || running || offline) return;
-    setRefused(false);
+    setRefused(null);
     store.ask(q);
     setText('');
   };
-  const note = refused ? copy.chat.busy : offline ? copy.chat.offline : null;
+  const note = refused ?? (offline ? copy.chat.offline : null);
 
   return (
     <>
       <header className="flex flex-none items-center gap-3 border-b border-line pt-3 pb-3">
+        <div aria-hidden="true" className="flex-none"><ResidentMascot size={36} theme="dark" frozen={offline} /></div>
         <div className="min-w-0 flex-1">
           <LinkStatus link={linkView(state)} />
           <h1 className="text-xl leading-[26px] font-bold tracking-[-0.4px]">{copy.chat.title}<span className="text-danger-fg">.</span></h1>
           <p className="text-xs text-muted">{copy.chat.subtitle(sessions.length, repos.size)}</p>
         </div>
         <button
-          type="button" disabled={running} onClick={() => { setRefused(false); store.resetChat(); }}
+          type="button" disabled={running} onClick={() => { setRefused(null); store.resetChat(); }}
           aria-label={copy.chat.reset} title={copy.chat.reset}
           className="grid size-11 flex-none place-items-center rounded-control disabled:opacity-40"
         >

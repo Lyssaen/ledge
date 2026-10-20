@@ -137,7 +137,18 @@ describe('the chat screen', () => {
     expect(t.of('chat.ask')).toHaveLength(0);
   });
 
+  const pointer = (fine: boolean) => { globalThis.matchMedia = ((q: string) => ({ matches: fine && q.includes('pointer: fine') })) as typeof matchMedia; };
+
+  it('on a touch keyboard Enter does not send', () => {
+    pointer(false);
+    const t = chatSetup();
+    type('Une question');
+    fireEvent.keyDown(screen.getByLabelText('Question pour Ledge'), { key: 'Enter' });
+    expect(t.of('chat.ask')).toHaveLength(0);
+  });
+
   it('Enter sends, Shift+Enter does not', () => {
+    pointer(true);
     const t = chatSetup();
     type('Une question');
     const field = screen.getByLabelText('Question pour Ledge');

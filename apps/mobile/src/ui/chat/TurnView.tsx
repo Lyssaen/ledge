@@ -23,11 +23,11 @@ function sourcesOf(steps: PhoneChatStep[]): string {
 function Steps({ steps, sessions, running }: { steps: PhoneChatStep[]; sessions: number; running: boolean }) {
   if (steps.length === 0) return null;
   return (
-    <ul className="flex flex-col gap-2 px-1 py-0.5" aria-label="Étapes">
+    <ul className="flex flex-col gap-2 px-1 py-0.5" aria-label={copy.chat.stepsLabel}>
       {steps.map((s, i) => {
         const doing = running && i === steps.length - 1;
         return (
-          <li key={s.id ?? `${s.kind}${i}`} className={`flex items-center gap-2 text-xs text-muted ${doing ? 'motion-safe:animate-pulse' : ''}`}>
+          <li key={`${i}:${s.kind}:${s.id ?? ''}`} className={`flex items-center gap-2 text-xs text-muted ${doing ? 'motion-safe:animate-pulse' : ''}`}>
             {doing
               ? <svg className={`${ICON} motion-safe:animate-spin`} viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.22-8.56" /></svg>
               : <svg className={`${ICON} text-ok`} viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>}
@@ -52,7 +52,7 @@ export function TurnView({ turn, live, sessions, onStop }: { turn: PhoneChatTurn
     <div className="flex flex-col gap-3">
       <div className="max-w-[80%] self-end whitespace-pre-wrap break-words rounded-[18px_18px_4px_18px] bg-raised px-3.5 py-2.5">{turn.question}</div>
       <Steps steps={steps} sessions={sessions} running={!!live && !live.text} />
-      {text && <p className="px-1 whitespace-pre-wrap break-words">{text}</p>}
+      {text && <p aria-live={live ? 'polite' : undefined} className="px-1 whitespace-pre-wrap break-words">{text}</p>}
       {!live && turn.answer && steps.length > 0 && <span className="px-1 text-xs text-muted">{copy.chat.sources}{sourcesOf(steps)}</span>}
       {!live && turn.cut && <span className="px-1 text-xs text-muted">{copy.chat.cut}</span>}
       {!live && turn.error && <p role="status" className="px-1 text-[13px] text-danger-fg">{ERROR[turn.error]}</p>}

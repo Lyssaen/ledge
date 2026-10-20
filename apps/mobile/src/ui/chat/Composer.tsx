@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
+import { MESSAGE_MAX } from '@ledge/protocol';
 import { copy } from '../../copy';
 
 const MIN = 44;
@@ -11,16 +12,17 @@ export function Composer({ value, onChange, onSend, canSend }: { value: string; 
     const el = field.current;
     if (!el) return;
     el.style.height = `${MIN}px`;
-    el.style.height = `${Math.min(MAX, Math.max(MIN, el.scrollHeight))}px`;
+    el.style.height = `${Math.min(MAX, Math.max(MIN, el.scrollHeight + el.offsetHeight - el.clientHeight))}px`;
   }, [value]);
   return (
     <form className="flex flex-none items-end gap-2 border-t border-line py-2.5" onSubmit={(e) => { e.preventDefault(); if (canSend) onSend(); }}>
       <label htmlFor="chat-ask" className="sr-only">{copy.chat.field}</label>
       <textarea
-        id="chat-ask" ref={field} rows={1} value={value} placeholder={copy.chat.placeholder}
+        id="chat-ask" ref={field} rows={1} maxLength={MESSAGE_MAX} value={value} placeholder={copy.chat.placeholder}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+          // Only a physical keyboard sends on Enter; on a touch keyboard Enter is a new line (the button sends).
+          if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || !globalThis.matchMedia?.('(hover: hover) and (pointer: fine)').matches) return;
           e.preventDefault();
           if (canSend) onSend();
         }}
