@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PushPayloadSchema } from '@ledge/protocol';
 import { fingerprintOf } from '../../src/sw/fingerprint';
 
 const ORIGIN = 'https://relay.test';
@@ -321,6 +322,45 @@ describe('the pinned service worker', () => {
       const w = await firstVisit(o);
       delete (w.self.registration as { setAppBadge?: unknown }).setAppBadge;
       await w.push(payload);
+      expect(w.self.registration.showNotification).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows the real notification exactly when PushPayloadSchema accepts the payload', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      const show = w.self.registration.showNotification;
+      const fixtures: Record<string, unknown> = {
+        valid: payload,
+        'v 2': { ...payload, v: 2 },
+        'bad kind': { ...payload, kind: 'other' },
+        'title 80': { ...payload, title: 't'.repeat(80) },
+        'title 81': { ...payload, title: 't'.repeat(81) },
+        'body 120': { ...payload, body: 'b'.repeat(120) },
+        'body 121': { ...payload, body: 'b'.repeat(121) },
+        'url //evil': { ...payload, url: '//evil' },
+        'url with space': { ...payload, url: '/#/a b' },
+        'url 300': { ...payload, url: '/#/' + 'a'.repeat(297) },
+        'url 301': { ...payload, url: '/#/' + 'a'.repeat(298) },
+        'badge -1': { ...payload, badge: -1 },
+        'badge 1.5': { ...payload, badge: 1.5 },
+        'badge 999': { ...payload, badge: 999 },
+        'badge 1000': { ...payload, badge: 1000 },
+        'bad tag': { ...payload, tag: 'a b' },
+        'extra key': { ...payload, extra: 1 }
+      };
+      for (const [name, fixture] of Object.entries(fixtures)) {
+        show.mockClear();
+        await w.push(fixture);
+        expect(show).toHaveBeenCalledTimes(1);
+        expect((show.mock.calls[0] as unknown[])[0] !== 'Ledge', name).toBe(PushPayloadSchema.safeParse(fixture).success);
+      }
+    });
+
+    it('a badge API that throws does not fail the push', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      w.self.registration.setAppBadge.mockImplementation(() => { throw new Error('sync'); });
+      await expect(w.push(payload)).resolves.toBeDefined();
       expect(w.self.registration.showNotification).toHaveBeenCalledTimes(1);
     });
 

@@ -203,7 +203,8 @@ sw.addEventListener('push', (e) => {
   e.waitUntil((async () => {
     if (!payload) return sw.registration.showNotification('Ledge', { body: 'Une demande attend', tag: 'ledge' });
     await sw.registration.showNotification(payload.title, { body: payload.body, tag: payload.tag, data: { url: payload.url }, icon: '/icon-192.png' });
-    await sw.registration.setAppBadge?.(payload.badge)?.catch(() => {});
+    // The badge is a courtesy: neither a throw nor a rejection of it may fail the notification.
+    try { await sw.registration.setAppBadge?.(payload.badge); } catch { /* ignored */ }
   })());
 });
 
