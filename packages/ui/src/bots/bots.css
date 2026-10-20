@@ -148,6 +148,7 @@
 .bot[data-tool="claude"] { --bot-roll-pre: 0deg; --bot-roll-top: 0deg; --bot-roll-land: 5deg; }
 .bot[data-tool="codex"] { --bot-roll-pre: -4deg; --bot-roll-top: 5deg; --bot-roll-land: 2deg; }
 .bot[data-tool="cursor"] { --bot-roll-pre: -2deg; --bot-roll-top: 7deg; --bot-roll-land: 2deg; }
+.bot[data-tool="omp"] { --bot-roll-pre: -2deg; --bot-roll-top: 2deg; --bot-roll-land: -2deg; }
 .bot[data-detailed="true"][data-hop="true"] .signature,
 .bot[data-detailed="true"][data-hop="true"] .antenna-group,
 .bot[data-detailed="true"][data-hop="true"][data-halo="false"] .ground {

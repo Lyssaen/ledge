@@ -7,8 +7,11 @@ import { seedHash, type BotState } from './poseFor';
 import { useBotMotion, useBotNod, BOT_MOTION, useBotVisibility } from './useBotMotion';
 import { useUiCopy } from '../i18n/copy';
 
+/** Visual identities include omp independently of the daemon's supported harnesses. */
+type BotIdentity = Tool | 'omp';
+
 export interface BotProps {
-  tool: Tool;
+  tool: BotIdentity;
   state: BotState;
   pose: 1 | 2 | 3;
   size: number;
@@ -31,7 +34,7 @@ export interface BotProps {
   className?: string;
 }
 
-const TOOL_NAMES: Record<Tool, string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' };
+const TOOL_NAMES: Record<BotIdentity, string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'omp' };
 
 type Eyes = 'open' | 'wide' | 'happy' | 'error' | 'sleep';
 interface Expression { eyes: Eyes; eye: string; tilt?: readonly [number, number, number]; lift?: number }
@@ -51,15 +54,17 @@ const EXPRESSIONS: Record<BotState, Expression> = {
 const FULL_VIEWBOX = '0 0 96 96';
 const HEAD_VIEWBOX = '12 16 72 68';
 
-const SHINE: Record<Tool, string> = {
+const SHINE: Record<BotIdentity, string> = {
   claude: 'M25 36Q27 28 38 28H59',
   codex: 'M25 32Q35 19 51 22',
-  cursor: 'M27 41 34 24Q35 23 37 25'
+  cursor: 'M27 41 34 24Q35 23 37 25',
+  omp: 'M22 42 30 28Q32 25 36 25H59'
 };
 
-function Shell({ tool, fill }: { tool: Tool; fill: string }) {
+function Shell({ tool, fill }: { tool: BotIdentity; fill: string }) {
   if (tool === 'codex') return <ellipse className="shell" cx="48" cy="49" rx="32" ry="31" fill={fill} />;
   if (tool === 'cursor') return <path className="shell" d="M23 77 Q14 78 17 66 L30 22 Q33 12 42 20 L79 54 Q88 63 77 67 L58 71 46 83 Q40 88 36 80 L32 73Z" fill={fill} />;
+  if (tool === 'omp') return <path className="shell" d="M35 21H61Q67 21 70 26L82 44Q85 49 82 54L70 74Q67 79 61 79H35Q29 79 26 74L14 54Q11 49 14 44L26 26Q29 21 35 21Z" fill={fill} />;
   return <rect className="shell" x="15" y="22" width="66" height="56" rx="20" fill={fill} />;
 }
 
