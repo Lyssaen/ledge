@@ -325,6 +325,47 @@ describe('PhoneLink', () => {
     await commit;
   });
 
+  it('a key store that cannot be read → storage_unavailable: nothing erased, no pairing', async () => {
+    const pc = await startFakePc();
+    cleanups.push(() => pc.close());
+    const storage = new MemoryStorage();
+    storage.setItem('ledge.mobile.lastState', '{}');
+    const base = memoryKeys(storage);
+    const forget = vi.fn(async () => base.forget());
+    const lost = async (): Promise<never> => { throw new DOMException('Connection to Indexed Database server lost', 'UnknownError'); };
+    const keys: KeyStore = { ...base, identity: lost, pinned: lost, saveIdentity: lost, forget };
+    const { link, states } = open(pc, keys);
+    await until(() => link.state() === 'storage_unavailable', 'storage_unavailable');
+    link.startPairing();
+    await settle();
+    expect(link.state()).toBe('storage_unavailable');
+    expect(states).not.toContain('unpaired');
+    expect(states).not.toContain('pairing');
+    expect(pc.frames).toEqual([]);
+    expect(forget).not.toHaveBeenCalled();
+    expect(storage.getItem('ledge.mobile.lastState')).toBe('{}');
+  });
+
+  it('storage_unavailable, then « Réessayer » once the store reads again → the normal path, ready', async () => {
+    const identity = await generateIdentity();
+    const pc = await startFakePc({ devicePublicKey: identity.publicKey });
+    cleanups.push(() => pc.close());
+    const base = memoryKeys(null);
+    await base.saveIdentity(identity);
+    await base.pin({ publicKey: pc.identity.publicKey, fingerprint: await fingerprint(pc.identity.publicKey), name: null, pinnedAt: '2026-10-20T08:00:00.000Z' });
+    let broken = true;
+    const keys: KeyStore = {
+      ...base,
+      identity: async () => { if (broken) throw new Error('lost'); return base.identity(); },
+      pinned: async () => { if (broken) throw new Error('lost'); return base.pinned(); }
+    };
+    const { link } = open(pc, keys);
+    await until(() => link.state() === 'storage_unavailable', 'storage_unavailable');
+    broken = false;
+    link.retry();
+    await until(() => link.state() === 'ready', 'ready');
+  });
+
   it('welcome then presence back to back → one hello on the wire, ready without a rekey', async () => {
     const identity = await generateIdentity();
     const pc = await startFakePc({ devicePublicKey: identity.publicKey });

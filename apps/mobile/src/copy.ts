@@ -259,6 +259,13 @@ export const copy = {
     relink: 'Refaire la liaison',
     signOut: 'Se déconnecter'
   },
+  /** The key store could not be read (a lost IndexedDB connection): no board shows it. Nothing was erased. */
+  storage: {
+    title: 'Stockage du téléphone illisible',
+    body: 'Le navigateur n’a pas pu lire les clés de ce téléphone. Rien n’a été effacé : réessayez, ou rechargez la page.',
+    retry: 'Réessayer',
+    reload: 'Recharger'
+  },
   update: {
     title: 'Nouvelle version',
     version: (v: string) => `Nouvelle version · ${v}`,

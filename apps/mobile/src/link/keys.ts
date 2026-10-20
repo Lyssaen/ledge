@@ -115,16 +115,33 @@ const isPinned = (v: unknown): v is PinnedPc =>
 /** IndexedDB base `ledge`, version 1, store `keys`, entries `identity` and `pc`. */
 export function indexedDbKeys(storage: Storage | null = defaultStorage()): KeyStore {
   let db: Promise<IDBDatabase> | null = null;
-  const connect = () => {
-    db ??= openDb().then((d) => {
+  const connect = (): Promise<IDBDatabase> => {
+    if (db) return db;
+    const p: Promise<IDBDatabase> = openDb().then((d) => {
+      const drop = () => { if (db === p) db = null; };
       // Another tab upgrading the base: let it, and reopen on the next call.
-      d.onversionchange = () => { d.close(); db = null; };
+      d.onversionchange = () => { d.close(); drop(); };
+      // Closed by the browser (iOS Safari: « Connection to Indexed Database server lost »): reopen on the next call.
+      d.onclose = drop;
       return d;
-    }, (e: unknown) => { db = null; throw e; });
-    return db;
+    }, (e: unknown) => { if (db === p) db = null; throw e; });
+    db = p;
+    return p;
+  };
+  /** A transaction on the cached connection; one the browser closed without a word (InvalidStateError) is reopened once. */
+  const transaction = async (mode: IDBTransactionMode): Promise<IDBTransaction> => {
+    const p = connect();
+    const d = await p;
+    try {
+      return d.transaction(STORE, mode);
+    } catch (e) {
+      if (!(e instanceof DOMException && e.name === 'InvalidStateError')) throw e;
+      if (db === p) db = null;
+      return (await connect()).transaction(STORE, mode);
+    }
   };
   const run = async <T>(mode: IDBTransactionMode, op: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> => {
-    const tx = (await connect()).transaction(STORE, mode);
+    const tx = await transaction(mode);
     // Both awaited together: a failed request aborts the transaction, and neither rejection goes unhandled.
     const [result] = await Promise.all([request(op(tx.objectStore(STORE))), committed(tx)]);
     return result;
@@ -147,7 +164,7 @@ export function indexedDbKeys(storage: Storage | null = defaultStorage()): KeySt
       await run('readwrite', (s) => s.put({ ...pc }, PC));
     },
     async forget() {
-      const tx = (await connect()).transaction(STORE, 'readwrite');
+      const tx = await transaction('readwrite');
       const store = tx.objectStore(STORE);
       store.delete(IDENTITY);
       store.delete(PC);

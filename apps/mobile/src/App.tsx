@@ -1,5 +1,5 @@
 // The app: one screen at a time, chosen by the link's state first (signed out, another tab, a changed key, a PC that
-// no longer knows this phone, pairing), then by the address.
+// no longer knows this phone, an unreadable key store, pairing), then by the address.
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { MeResponseSchema } from '@ledge/protocol';
 import type { LinkState, PhoneLink } from './link/link';
@@ -13,6 +13,7 @@ import { KeyChanged } from './screens/KeyChanged';
 import { Login, signinError } from './screens/Login';
 import { Offline, Replaced } from './screens/Offline';
 import { RequestDetail } from './screens/RequestDetail';
+import { StorageUnavailable } from './screens/StorageUnavailable';
 import { Terminal } from './screens/Terminal';
 import { Thread } from './screens/Thread';
 import { Unrecognized } from './screens/Unrecognized';
@@ -101,6 +102,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     : state === 'replaced' ? 'replaced'
     : state === 'key_changed' ? 'keyChanged'
     : state === 'denied' ? 'unrecognized'
+    : state === 'storage_unavailable' ? 'storage'
     : state === 'unpaired' || state === 'pairing' || (step?.step === 'linked' && !doneSeen) ? 'compare'
     : 'route';
   // The pairing starts by itself only once its screen is the one shown (not behind the login or a refusal), and
@@ -132,6 +134,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
         return <KeyChanged pcName={pcName} known={pinned} received={link.receivedKey()} onRelink={() => begin(() => { void link.relink(); })} onSignOut={signOut} />;
       case 'unrecognized':
         return <Unrecognized pcName={pcName} onRelink={() => begin(() => { void link.relink(); })} onSignOut={signOut} />;
+      case 'storage': return <StorageUnavailable onRetry={retry} onReload={() => globalThis.location.reload()} />;
       case 'compare':
         return (
           <Compare

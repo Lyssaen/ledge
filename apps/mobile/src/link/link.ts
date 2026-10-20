@@ -14,8 +14,10 @@ import { openRelaySocket, type SocketState } from './socket';
  * `pc_offline`: the PC is not on the relay, or the relay is out of reach. `handshaking`: the hello is under way, or the
  * keys are still loading. `ready`: messages flow. `key_changed`: the PC answered with another key; nothing is sent.
  * `denied`: the PC answered a hello of ours that it no longer knows this phone; nothing is sent, nothing is erased.
+ * `storage_unavailable`: the key store could not be read, which is not an empty one: nothing is erased, no pairing starts.
  */
-export type LinkState = 'signed_out' | 'unpaired' | 'pairing' | 'pc_offline' | 'handshaking' | 'ready' | 'key_changed' | 'denied' | 'replaced';
+export type LinkState =
+  | 'signed_out' | 'unpaired' | 'pairing' | 'pc_offline' | 'handshaking' | 'ready' | 'key_changed' | 'denied' | 'storage_unavailable' | 'replaced';
 
 export interface PhoneLink {
   state(): LinkState;
@@ -34,8 +36,9 @@ export interface PhoneLink {
   /** Closes the socket, `POST /auth/logout`, forgets the keys: `signed_out`, for good. */
   signOut(): Promise<void>;
   /**
-   * Tries again now, for a screen's « Réessayer »: a hello when the PC is known online on an open socket, else a new
-   * socket (its welcome says where the PC is) unless one is already being tried or a 4008 asked to wait.
+   * Tries again now, for a screen's « Réessayer »: in `storage_unavailable`, reads the key store again; else a hello when
+   * the PC is known online on an open socket, else a new socket (its welcome says where the PC is) unless one is already
+   * being tried or a 4008 asked to wait.
    */
   retry(): void;
   /** The PC this phone trusts, named from its snapshots; null when unpaired. */
@@ -60,6 +63,10 @@ export function createPhoneLink(opts: {
   const fetchImpl = opts.fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
 
   let loaded = false;
+  /** The last read of the key store failed; `retry()` reads it again. */
+  let unreadable = false;
+  /** A read asked by `retry()` is under way. */
+  let rereading = false;
   /** Bumped when the keys are forgotten, so a load still under way does not bring them back. */
   let keysGen = 0;
   let identity: Identity | null = null;
@@ -92,6 +99,7 @@ export function createPhoneLink(opts: {
     if (signedOut || socketState === 'signed_out') return 'signed_out';
     if (socketState === 'replaced') return 'replaced';
     if (!loaded) return 'handshaking';
+    if (unreadable) return 'storage_unavailable';
     if (keyChanged) return 'key_changed';
     if (denied) return 'denied';
     if (!pinned || !identity) return pairingWanted ? 'pairing' : 'unpaired';
@@ -235,7 +243,7 @@ export function createPhoneLink(opts: {
   };
 
   const beginPairing = () => {
-    if (finished || keyChanged || denied || (loaded && pinned && identity)) return;
+    if (finished || keyChanged || denied || unreadable || (loaded && pinned && identity)) return;
     dropPairing();
     pairingWanted = true;
     const gen = ++pairingGen;
@@ -243,7 +251,7 @@ export function createPhoneLink(opts: {
     void (async () => {
       await loading;
       if (gen !== pairingGen || finished) return;
-      if (pinned && identity) {
+      if (unreadable || (pinned && identity)) {
         pairingWanted = false;
         check();
         return;
@@ -354,7 +362,8 @@ export function createPhoneLink(opts: {
   });
   const logoutUrl = new URL('/auth/logout', opts.url).toString();
 
-  const loading = (async () => {
+  /** Reads the key store, then goes on from what it holds. Never rejects. */
+  const load = async () => {
     const gen = keysGen;
     try {
       const [id, pc] = await Promise.all([keys.identity(), keys.pinned()]);
@@ -362,16 +371,18 @@ export function createPhoneLink(opts: {
       identity = id;
       // A pinned PC without the identity it was paired with cannot be talked to: unpaired.
       pinned = id ? pc : null;
+      unreadable = false;
     } catch {
-      // A store that cannot be read is an empty one: the phone offers to pair.
+      // A store that cannot be read is not an empty one (boot.ts says the same): nothing is erased, no pairing starts.
+      if (gen === keysGen) unreadable = true;
     } finally {
       loaded = true;
     }
-  })().then(() => {
     helloIfDue();
     launchPairing();
     check();
-  });
+  };
+  let loading = load();
 
   const finish = () => {
     finished = true;
@@ -415,6 +426,12 @@ export function createPhoneLink(opts: {
     },
     retry() {
       if (finished || keyChanged || denied) return;
+      if (unreadable) {
+        if (rereading) return;
+        rereading = true;
+        loading = load().finally(() => { rereading = false; });
+        return;
+      }
       if (socketState === 'open' && pcOnline === true) helloIfDue();
       else sock.reconnect();
     },
