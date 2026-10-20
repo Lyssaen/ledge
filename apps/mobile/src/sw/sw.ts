@@ -6,6 +6,7 @@
 // app is closed, consent or not. What stays pinned is the app's files: whichever worker runs serves the cache the
 // marker in `ledge-meta` names, and moves it only on { type: 'accept' }.
 import { fingerprintOf, hexOf, type FileHash } from './fingerprint';
+import type { PushPayload } from '@ledge/protocol';
 import type { BuildAnswer, BuildInfo } from './types';
 
 /** The app's files and their hashes, without sw.js (vite.sw.config.ts). */
@@ -18,18 +19,27 @@ declare const __BUILD_ID__: string;
 // The parts of the worker scope used here: the DOM lib this app compiles against has no worker types.
 type Extendable = { waitUntil(p: Promise<unknown>): void };
 type FetchEvent = Extendable & { request: Request; respondWith(r: Promise<Response>): void };
+type PushEvent = Extendable & { data: { json(): unknown } | null };
+type ClickEvent = Extendable & { notification: { close(): void; data?: { url?: unknown } } };
 type MessageEvent = Extendable & { data: unknown; ports: readonly { postMessage(m: unknown): void }[] };
 interface WorkerScope {
   location: { origin: string };
-  registration: { active: object | null };
+  registration: {
+    active: object | null;
+    showNotification(title: string, o?: { body?: string; tag?: string; data?: { url: string }; icon?: string }): Promise<void>;
+    setAppBadge?(n: number): Promise<void>;
+  };
   skipWaiting(): Promise<void>;
   clients: {
     claim(): Promise<void>;
-    matchAll(o: { type: 'window'; includeUncontrolled: boolean }): Promise<readonly { postMessage(m: unknown): void }[]>;
+    matchAll(o: { type: 'window'; includeUncontrolled: boolean }): Promise<readonly { postMessage(m: unknown): void; focus?(): Promise<unknown> }[]>;
+    openWindow(url: string): Promise<unknown>;
   };
   addEventListener(type: 'install' | 'activate', fn: (e: Extendable) => void): void;
   addEventListener(type: 'fetch', fn: (e: FetchEvent) => void): void;
   addEventListener(type: 'message', fn: (e: MessageEvent) => void): void;
+  addEventListener(type: 'push', fn: (e: PushEvent) => void): void;
+  addEventListener(type: 'notificationclick', fn: (e: ClickEvent) => void): void;
 }
 
 const sw = self as unknown as WorkerScope;
@@ -42,7 +52,14 @@ const OWN = `${PREFIX}${__VERSION__}-${__BUILD_ID__}`;
 const META = `${PREFIX}meta`;
 const ACCEPTED = '/accepted';
 /** The relay's own routes: always the network, never the cache. */
-const NETWORK = /^\/(auth(\/.*)?|ws|healthz)$/;
+const NETWORK = /^\/(auth(\/.*)?|ws|healthz|push\/key)$/;
+/** Where a worker that is installing writes down that its cache is not an orphan: `/pending/<cache name>` = the time. */
+const PENDING = '/pending/';
+const PENDING_TTL = 24 * 3_600_000;
+// The shapes of PushPayloadSchema (packages/protocol/src/push.ts), checked by hand: zod would weigh the pinned worker
+// down by far more than this. Keep the two in step.
+const PUSH_URL = /^\/#\/[A-Za-z0-9/%._~-]*$/;
+const PUSH_TAG = /^[A-Za-z0-9_-]{1,32}$/;
 
 const sha256 = async (bytes: ArrayBuffer): Promise<string> => hexOf(await crypto.subtle.digest('SHA-256', bytes));
 
@@ -55,6 +72,20 @@ async function marked(): Promise<string | null> {
 /** The cache of the build the user accepted; this worker's own while none is marked. */
 const accepted = async (): Promise<string> => (await marked()) ?? OWN;
 
+/** The caches of the workers installing right now: registered less than a day ago (older ones are abandoned). */
+async function installing(): Promise<string[]> {
+  const meta = await caches.open(META);
+  const names: string[] = [];
+  for (const key of await meta.keys()) {
+    const path = new URL(key.url).pathname;
+    if (!path.startsWith(PENDING)) continue;
+    const since = Number(await (await meta.match(path))?.text());
+    if (Date.now() - since < PENDING_TTL) names.push(path.slice(PENDING.length));
+    else await meta.delete(path);
+  }
+  return names;
+}
+
 async function accept(): Promise<void> {
   await (await caches.open(META)).put(ACCEPTED, new Response(OWN));
   await prune();
@@ -62,7 +93,7 @@ async function accept(): Promise<void> {
 
 /** Drops the caches of builds that are neither this worker's nor the accepted one. */
 async function prune(): Promise<void> {
-  const keep = new Set([META, OWN, await accepted()]);
+  const keep = new Set([META, OWN, await accepted(), ...(await installing())]);
   for (const name of await caches.keys()) if (name.startsWith(PREFIX) && !keep.has(name)) await caches.delete(name);
 }
 
@@ -75,6 +106,9 @@ async function fetchChecked(path: string, want?: string): Promise<Response> {
 }
 
 async function install(): Promise<void> {
+  const meta = await caches.open(META);
+  // Before its cache exists: a worker that prunes meanwhile must not take it for an orphan.
+  await meta.put(PENDING + OWN, new Response(String(Date.now())));
   const cache = await caches.open(OWN);
   try {
     const files = await Promise.all([...MANIFEST.map((f) => fetchChecked(f.path, f.sha256).then((res) => [f.path, res] as const)), fetchChecked(SELF).then((res) => [SELF, res] as const)]);
@@ -82,6 +116,7 @@ async function install(): Promise<void> {
   } catch (e) {
     // Never the accepted build's cache, should this very build be installed again.
     if ((await marked()) !== OWN) await caches.delete(OWN);
+    await meta.delete(PENDING + OWN);
     throw e;
   }
   // The first installation has no build to keep: it is the accepted one and serves at once. Any later one waits.
@@ -92,6 +127,7 @@ async function install(): Promise<void> {
 }
 
 async function activate(): Promise<void> {
+  await (await caches.open(META)).delete(PENDING + OWN);
   await prune();
   await sw.clients.claim();
 }
@@ -145,4 +181,40 @@ sw.addEventListener('message', (e) => {
       for (const page of await sw.clients.matchAll({ type: 'window', includeUncontrolled: true })) page.postMessage({ type: 'changed' });
     })());
   }
+});
+
+/** The payload when it has the shape of PushPayloadSchema, else null. */
+function payloadOf(raw: unknown): PushPayload | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const p = raw as Record<string, unknown>;
+  const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
+  const ok =
+    p.v === 1 && (p.kind === 'request' || p.kind === 'question' || p.kind === 'finished') &&
+    str(p.title, 80) && str(p.body, 120) && str(p.url, 300) && PUSH_URL.test(p.url) &&
+    typeof p.badge === 'number' && Number.isInteger(p.badge) && p.badge >= 0 && p.badge <= 999 &&
+    typeof p.tag === 'string' && PUSH_TAG.test(p.tag);
+  return ok ? (raw as PushPayload) : null;
+}
+
+// Every push shows a notification, whatever it carries: Safari drops the subscription of a site that stays silent.
+sw.addEventListener('push', (e) => {
+  let payload: PushPayload | null = null;
+  try { payload = payloadOf(e.data?.json()); } catch { /* unreadable: the fallback below */ }
+  e.waitUntil((async () => {
+    if (!payload) return sw.registration.showNotification('Ledge', { body: 'Une demande attend', tag: 'ledge' });
+    await sw.registration.showNotification(payload.title, { body: payload.body, tag: payload.tag, data: { url: payload.url }, icon: '/icon-192.png' });
+    await sw.registration.setAppBadge?.(payload.badge)?.catch(() => {});
+  })());
+});
+
+sw.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const raw = e.notification.data?.url;
+  const url = typeof raw === 'string' && raw.length <= 300 && PUSH_URL.test(raw) ? raw : '/#/';
+  e.waitUntil((async () => {
+    const [page] = await sw.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (!page) return void (await sw.clients.openWindow(url));
+    await page.focus?.();
+    page.postMessage({ type: 'ledge.open', url });
+  })());
 });
