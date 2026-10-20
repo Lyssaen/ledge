@@ -35,6 +35,14 @@ export function filesOf(tool: string | undefined, input: Record<string, unknown>
       return path ? [{ path, change: 'edit', diff: cap(edits.flatMap(e => edit(str(e.old_string) ?? '', str(e.new_string) ?? ''))) }] : [];
     }
     case 'NotebookEdit': return path ? [{ path, change: 'edit' }] : [];
+    // OMP (lower case): `write` names the path and the content; a finished `edit` names the path and the diff OMP reports (`- old` / `+ new`, its line numbers dropped).
+    case 'write': { const p = str(input.path); return p && path === undefined ? [{ path: p, change: 'write', ...(str(input.content) !== undefined ? { diff: cap(str(input.content)!.split('\n').map(l => `+ ${l}`)) } : {}) }] : []; }
+    case 'edit': {
+      const p = str(input.path); const diff = str(input.diff);
+      if (!p || path !== undefined) return [];
+      const lines = (diff ?? '').split('\n').filter(l => l[0] === '+' || l[0] === '-').map(l => `${l[0]} ${l.slice(1).replace(/^\d+\|/, '')}`);
+      return [{ path: p, change: 'edit', ...(lines.length ? { diff: cap(lines) } : {}) }];
+    }
     case 'apply_patch': return fromPatch(str(input.patch) ?? str(input.input) ?? '');
     case 'shell': case 'Bash': {
       // Codex may run apply_patch through its shell: `command` is then ['apply_patch', '<patch>'].

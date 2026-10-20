@@ -19,8 +19,14 @@ export interface Tracking {
   working: boolean;
   /** Instructions the host already recorded when it sent them (a prompt at rest): their echo in the stream is not a second prompt. */
   echo: string[];
+  /** Tool calls in flight, by id: the result frame does not repeat the arguments (a write's path). */
+  /** This process's own tag in the ids of its messages: OMP numbers them from 1 in each process, and a resumed session has several. */
+  tag: string;
+  /** The Stop of the turn need not repeat the text: every assistant message already went to the thread. */
+  sent: boolean;
+  calls: Map<string, { name: string; args?: Record<string, unknown> }>;
 }
-export const newTracking = (): Tracking => ({ requests: [], working: false, echo: [] });
+export const newTracking = (tag = 'p'): Tracking => ({ requests: [], working: false, echo: [], tag, sent: false, calls: new Map() });
 
 const DIALOGS: ReadonlySet<string> = new Set<DialogMethod>(['select', 'confirm', 'input', 'editor']);
 const CAP_INPUT = 4000;
@@ -43,6 +49,14 @@ function boundedArgs(args: unknown): Record<string, unknown> | undefined {
 
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
+/** The input a finished `edit` or `write` is recorded with so the thread can list the file: its path and the change as OMP reports it. */
+function changeOf(tool: string, args: Record<string, unknown> | undefined, details: unknown): Record<string, unknown> | undefined {
+  const d = (details && typeof details === 'object' ? details : {}) as Record<string, unknown>;
+  if (tool === 'write') { const path = str(d.resolvedPath) ?? str(args?.path); return path ? { path, ...(str(args?.content) !== undefined ? { content: args!.content } : {}) } : undefined; }
+  if (tool === 'edit') { const path = str(d.path); return path ? { path, ...(str(d.diff) ? { diff: cap(d.diff as string, CAP_OUTPUT) } : {}) } : undefined; }
+  return undefined;
+}
+
 /** The events a frame stands for, in order; updates `t`. Frames Ledge has no use for yield none. */
 export function project(f: Frame, t: Tracking, at: string): SessionEvent[] {
   const ev = (e: Omit<SessionEvent, 'at' | 'source'>): SessionEvent => ({ at, source: 'daemon', ...e });
@@ -61,21 +75,37 @@ export function project(f: Frame, t: Tracking, at: string): SessionEvent[] {
       if (i !== -1) { t.echo.splice(i, 1); return []; }
       return [ev({ name: 'UserPromptSubmit', text })];
     }
+    case 'message_update': {
+      const m = (f.assistantMessageEvent as { type?: unknown; partial?: { content?: unknown } } | undefined);
+      const id = str(f.messageId);
+      if (!id || !m || (m.type !== 'text_delta' && m.type !== 'text_end')) return [];
+      const text = contentText(m.partial?.content);
+      return text.trim() ? [ev({ name: 'AgentMessage', messageId: `${t.tag}-${id}`, text, streaming: m.type === 'text_delta' })] : [];
+    }
     case 'message_end': {
       const m = f.message as { role?: unknown; content?: unknown } | undefined;
-      if (m?.role === 'assistant') { const text = contentText(m.content).trim(); if (text) t.reply = text; }
-      return [];
+      if (m?.role !== 'assistant') return [];
+      const text = contentText(m.content).trim();
+      const id = str(f.messageId);
+      if (!text) return [];
+      t.reply = text; t.sent = !!id;
+      return id ? [ev({ name: 'AgentMessage', messageId: `${t.tag}-${id}`, text })] : [];
     }
     case 'tool_execution_start': {
       const tool = str(f.toolName); if (!tool) return [];
       const input = boundedArgs(f.args);
+      if (str(f.toolCallId)) t.calls.set(str(f.toolCallId)!, { name: tool, ...(input ? { args: input } : {}) });
       return [ev({ name: 'PreToolUse', tool, ...(str(f.toolCallId) ? { toolUseId: str(f.toolCallId)! } : {}), ...(str(f.intent) ? { text: str(f.intent)! } : {}), ...(input ? { toolInput: input } : {}) })];
     }
     case 'tool_execution_end': {
       const tool = str(f.toolName); if (!tool) return [];
       const output = cap(contentText((f.result as { content?: unknown } | undefined)?.content), CAP_OUTPUT);
       const failed = f.isError === true;
-      return [ev({ name: failed ? 'PostToolUseFailure' : 'PostToolUse', tool, ...(str(f.toolCallId) ? { toolUseId: str(f.toolCallId)! } : {}), ...(output ? { output } : {}), ...(failed ? { error: output || 'failed' } : {}) })];
+      const id = str(f.toolCallId);
+      const call = id ? t.calls.get(id) : undefined; if (id) t.calls.delete(id);
+      // A file edit is known to have happened only now, with what the harness says it changed (spec §3.2).
+      const changed = failed ? undefined : changeOf(tool, call?.args, (f.result as { details?: unknown } | undefined)?.details);
+      return [ev({ name: failed ? 'PostToolUseFailure' : 'PostToolUse', tool, ...(id ? { toolUseId: id } : {}), ...(output ? { output } : {}), ...(failed ? { error: output || 'failed' } : {}), ...(changed ? { toolInput: changed } : {}) })];
     }
     case 'extension_ui_request': {
       const method = str(f.method); const id = str(f.id);
@@ -97,7 +127,8 @@ export function project(f: Frame, t: Tracking, at: string): SessionEvent[] {
     case 'session_settled': {
       t.working = false;
       const text = t.reply; t.reply = undefined;
-      return [ev({ name: 'Stop', ...(text ? { text } : {}) })];
+      const streamed = t.sent; t.sent = false;
+      return [ev({ name: 'Stop', ...(text ? { text } : {}), ...(streamed ? { streamed: true } : {}) })];
     }
     case 'prompt_result': {
       // The status of one instruction, not the rest of the session: only a failed one says something.

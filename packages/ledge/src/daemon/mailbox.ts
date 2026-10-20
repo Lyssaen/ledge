@@ -1,4 +1,4 @@
-import { isArchived, type ClientMessage, type MessageAck, type Session, type Tool } from '@ledge/protocol';
+import { backendOf, isArchived, type ClientMessage, type MessageAck, type Session, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import { formatLedgeMessage } from './crossSession.js';
 import { free } from './relay.js';
@@ -92,7 +92,8 @@ export function createMailbox(d: MailboxDeps): Mailbox {
       if (!t) return refuse(`aucune session Ledge nommée ${m.to}`);
       const sender = d.store.get(m.from);
       if (!sender) return refuse('session émettrice inconnue');
-      if (t.source === 'hook_only' || !t.tmuxSession) return refuse(`${t.name} n'a pas été lancée par Ledge : impossible de lui écrire`);
+      // An OMP session has no pane: its messages travel as instructions over its protocol (server `replyTo`).
+      if (t.source === 'hook_only' || (!t.tmuxSession && backendOf(t) !== 'omp-rpc')) return refuse(`${t.name} n'a pas été lancée par Ledge : impossible de lui écrire`);
       d.sent.record(m.from, { rid: m.rid, at: now(), to: t.name, peer: t.id, text: m.text, ...(m.summary ? { summary: m.summary } : {}) });
       const outcome = ready(t.id) ? 'accepted' : 'queued';
       queue.push({ rid: m.rid, from: m.from, sender: { name: sender.name, tool: sender.tool }, target: t.id, text: m.text });

@@ -158,7 +158,9 @@ export class History {
           return this.put(id, sent ? { ...sent, status: failed ? 'failed' : 'delivered' } : this.sentOf(ev, common, failed ? 'failed' : 'delivered')); // the result came first: the card from its input
         }
         const row = this.callFor(id, ev);
-        const base: ToolItem = row ?? { kind: 'tool', id: ev.toolUseId ?? `tool-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, label: ev.text ?? ev.tool, status: 'running', files: filesOf(ev.tool, ev.toolInput) };
+        // A harness that only says what changed once the action is done (OMP's edit): the files come from its result.
+        const late = row && row.files.length === 0 && ev.toolInput ? filesOf(ev.tool, ev.toolInput) : [];
+        const base: ToolItem = row ? { ...row, ...(late.length ? { files: late } : {}) } : { kind: 'tool', id: ev.toolUseId ?? `tool-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, label: ev.text ?? ev.tool, status: 'running', files: filesOf(ev.tool, ev.toolInput) };
         const error = failed ? ev.error ?? (ev.interrupt ? 'interrupted' : 'failed') : undefined;
         return this.put(id, { ...base, status: failed ? 'failed' : 'success', ...(ev.output !== undefined ? { output: ev.output } : {}), ...(error ? { error } : {}), ...(ev.durationMs !== undefined ? { durationMs: ev.durationMs } : {}) });
       }
@@ -176,8 +178,16 @@ export class History {
         const perm = [...this.items(id)].reverse().find(i => i.kind === 'permission' && i.decision === undefined);
         return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision: ev.decision }) : undefined;
       }
+      case 'AgentMessage': {
+        if (!ev.messageId || !ev.text) return undefined;
+        const itemId = `msg-${ev.messageId}`;
+        const prev = this.items(id).find(i => i.id === itemId);
+        // The card keeps the moment its first words came; its text follows the stream.
+        return this.put(id, { kind: 'reply', id: itemId, at: prev?.at ?? ev.at, turn: prev?.turn ?? turn, text: ev.text, ...(ev.helperId ? { helperId: ev.helperId } : {}) });
+      }
       case 'Stop': {
         if (!ev.helperId) this.settle(id, i => i.turn === turn && !i.helperId);
+        if (ev.streamed) return undefined;
         return ev.text ? this.put(id, { kind: 'reply', id: `reply-${turn}`, at: ev.at, turn, text: ev.text }) : undefined;
       }
       case 'SubagentStart': {

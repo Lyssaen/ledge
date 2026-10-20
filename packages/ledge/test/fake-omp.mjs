@@ -23,7 +23,7 @@ const state = () => ({ model, thinkingLevel: thinking, isStreaming: !settled, is
 out({ type: 'ready', protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864 });
 out({ type: 'extension_ui_request', id: 'w1', method: 'setWidget', widgetKey: 'autoresearch' });
 
-let waiting = null; // the open dialog: resolves with the response frame
+let msgs = 1; let waiting = null; // the open dialog: resolves with the response frame
 const ask = frame => new Promise(res => { waiting = res; out({ type: 'extension_ui_request', ...frame }); });
 const text = t => ({ role: 'assistant', content: [{ type: 'text', text: t }], provider: model.provider, model: model.id });
 
@@ -33,7 +33,7 @@ async function turn(id, message) {
   out({ type: 'agent_start' }); out({ type: 'turn_start' });
   out({ type: 'message_start', message: { role: 'user', content: [{ type: 'text', text: message }], attribution: 'user' }, messageId: 'msg-1' });
   out({ type: 'message_end', message: { role: 'user', content: [{ type: 'text', text: message }], attribution: 'user' }, messageId: 'msg-1' });
-  if (message.includes('tool')) {
+  if (message.includes('run a tool') || message.includes('with a tool')) {
     out({ type: 'tool_execution_start', toolCallId: 't1', toolName: 'bash', args: { command: 'echo hi' }, intent: 'Running echo' });
     const r = await ask({ id: 'q1', method: 'select', title: 'Allow tool: bash\nCommand: echo hi', options: ['Approve', 'Approve bash for this session', 'Deny'] });
     if (r.cancelled || r.value === 'Deny') out({ type: 'tool_execution_end', toolCallId: 't1', toolName: 'bash', result: { content: [{ type: 'text', text: 'denied' }] }, isError: true });
@@ -41,8 +41,13 @@ async function turn(id, message) {
   }
   if (message.includes('slow')) await new Promise(r => { waiting = r; });
   const reply = `done: ${message}`;
-  out({ type: 'message_start', message: text(reply), messageId: 'msg-2' });
-  out({ type: 'message_end', message: text(reply), messageId: 'msg-2' });
+  const mid = `msg-${++msgs}`; const half = reply.slice(0, Math.ceil(reply.length / 2));
+  out({ type: 'message_start', message: text(half), messageId: mid });
+  out({ type: 'message_update', messageId: mid, assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: half, partial: text(half) } });
+  if (message.includes('stream')) await new Promise(r => setTimeout(r, 400));
+  out({ type: 'message_update', messageId: mid, assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: reply.slice(half.length), partial: text(reply) } });
+  out({ type: 'message_update', messageId: mid, assistantMessageEvent: { type: 'text_end', contentIndex: 0, content: reply, partial: text(reply) } });
+  out({ type: 'message_end', message: text(reply), messageId: mid });
   out({ type: 'turn_end', message: text(reply) });
   out({ type: 'agent_end', messages: [] });
   const next = queued.steering.shift() ?? queued.followUp.shift();

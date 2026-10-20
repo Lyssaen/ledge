@@ -16,7 +16,7 @@ import { DecisionSchema, NOTE_MAX } from './decisions.js';
 export const PROTOCOL_PORT = 47831;
 
 export const SessionEventSchema = z.object({
-  name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PaneTitle', 'Renamed', 'NativeRequest']),
+  name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PaneTitle', 'Renamed', 'NativeRequest', 'AgentMessage']),
   at: z.string().datetime(),
   source: z.enum(['hook', 'pane', 'daemon']),
   tool: z.string().optional(),
@@ -33,6 +33,10 @@ export const SessionEventSchema = z.object({
   task: z.string().optional(),
   /** PostToolUseFailure: the user interrupted the turn (Esc); Claude then waits for input with no Stop. */
   interrupt: z.boolean().optional(),
+  /** AgentMessage: the harness's own message, its text so far (`streaming`) or whole. `messageId` is unique for the session's life. */
+  messageId: z.string().optional(), streaming: z.boolean().optional(),
+  /** Stop: its text is already in the thread as AgentMessage cards, which the reply card must not repeat. */
+  streamed: z.boolean().optional(),
   /** Native tracking (spec 2026-10-13 §2): the harness's id of the tool call, so its result lands on the same row. */
   toolUseId: z.string().optional(),
   /** The tool's input as the harness gave it, every string capped by the hook. */

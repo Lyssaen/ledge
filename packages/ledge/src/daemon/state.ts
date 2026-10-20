@@ -297,6 +297,7 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       const state = pending.kind === 'question' ? 'waiting_input' : 'waiting_permission';
       return { ...s, state, pending, lastActivityAt: at };
     }
+    case 'AgentMessage': return s.lastActivityAt === at ? s : { ...s, lastActivityAt: at };
     case 'NativeRequest': {
       // A second dialog waits in the harness's queue (the host keeps it): the first request holds the card until it is answered.
       if (s.pending) return s;

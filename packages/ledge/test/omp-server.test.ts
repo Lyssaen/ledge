@@ -25,6 +25,19 @@ beforeEach(async () => {
 afterEach(async () => { await srv.close(); delete process.env.FAKE_OMP_LOG; });
 
 describe('server: OMP sessions', () => {
+  it('another session\'s message reaches an OMP session as an instruction, attributed, and the sender\'s card is delivered', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    const T = '2026-10-20T12:00:00.000Z';
+    store.upsert({ id: 'pim', name: 'Pim', tool: 'claude', cwd: dir, project: 'p', title: 'Pim', tmuxSession: 'ledge-pim', state: 'working', helpers: [], startedAt: T, lastActivityAt: T, source: 'launcher' });
+    c.send({ type: 'session.launch', tool: 'omp', cwd: dir });
+    const { id } = await c.next('session.launched');
+    const name = store.get(id)!.name;
+    c.send({ type: 'session.message', rid: 'r1', from: 'pim', to: name, text: 'please check the build' });
+    expect(await c.next('message.ack')).toMatchObject({ rid: 'r1', outcome: 'accepted' });
+    await until(() => /please check the build/.test(store.get(id)!.lastReply?.text ?? ''), 3000).catch(e => { console.log(JSON.stringify(store.get(id))); throw e; });
+    expect(store.get(id)!.lastReply!.text).toMatch(/Pim/);
+    await c.close();
+  });
   it('the snapshot tells a front this daemon drives OMP', async () => {
     const c = await connect({ port: srv.port });
     expect((await c.next('snapshot')).daemon).toMatchObject({ omp: true, models: true });

@@ -8,6 +8,8 @@ import { createOmpHost, ompArgs, type OmpHost } from '../src/daemon/omp/host.js'
 import { answerFor, newTracking, project } from '../src/daemon/omp/project.js';
 import { ompChoices } from '../src/daemon/omp/catalog.js';
 import { until } from './helpers.js';
+import { filesOf } from '../src/daemon/files.js';
+import { History } from '../src/daemon/history.js';
 
 const FAKE = [process.execPath, fileURLToPath(new URL('./fake-omp.mjs', import.meta.url))];
 const T = '2026-10-20T12:00:00.000Z';
@@ -50,7 +52,7 @@ describe('OmpHost', () => {
     await host.send(s.id, 'hello');
     await until(() => store.get(s.id)!.state === 'idle' && !!store.get(s.id)!.lastReply);
     expect(store.get(s.id)).toMatchObject({ state: 'idle', topic: 'hello', lastReply: { text: 'done: hello' } });
-    expect(events).toEqual(['UserPromptSubmit', 'Stop']);
+    expect(events.filter(n => n !== 'AgentMessage')).toEqual(['UserPromptSubmit', 'Stop']);
   });
   it('an approval is a pending question with OMP\'s own options; answering by number or exact text unblocks the tool', async () => {
     const s = await host.launch({ cwd: tmpdir() });
@@ -151,6 +153,54 @@ describe('project', () => {
     expect(answerFor({ id: 'c', method: 'confirm', title: 't' }, 'No')).toEqual({ frame: { type: 'extension_ui_response', id: 'c', confirmed: false } });
     expect(answerFor({ id: 'i', method: 'input', title: 't' }, 'some text')).toEqual({ frame: { type: 'extension_ui_response', id: 'i', value: 'some text' } });
     expect(answerFor({ id: 'i', method: 'input', title: 't' }, '  ')).toEqual({ refused: 'empty reply' });
+  });
+});
+
+describe('streamed text', () => {
+  it('a message is one card of the thread that grows, its id never reused by a resumed process; the Stop adds no second card', async () => {
+    const h = new History(); store.onEvent((id, e) => h.record(id, e));
+    const s = await host.launch({ cwd: tmpdir() });
+    await host.send(s.id, 'stream something');
+    await until(() => h.items(s.id).some(i => i.kind === 'reply'));
+    const first = h.items(s.id).find(i => i.kind === 'reply') as { id: string; text: string };
+    expect(first.text.length).toBeLessThan('done: stream something'.length); // seen while the message is still being written
+    await until(() => store.get(s.id)!.state === 'idle' && !!store.get(s.id)!.lastReply);
+    const replies = h.items(s.id).filter(i => i.kind === 'reply') as Array<{ id: string; text: string }>;
+    expect(replies).toHaveLength(1);
+    expect(replies[0]).toMatchObject({ id: first.id, text: 'done: stream something' });
+    expect(store.get(s.id)!.lastReply!.text).toBe('done: stream something');
+    await host.close(s.id);
+    const again = await host.launch({ id: s.id, name: s.name, cwd: tmpdir(), resumeFile: s.agentSessionFile });
+    await host.send(again.id, 'second');
+    await until(() => (h.items(s.id).filter(i => i.kind === 'reply').length === 2));
+    expect(new Set(h.items(s.id).filter(i => i.kind === 'reply').map(i => i.id)).size).toBe(2);
+  });
+});
+
+describe('files changed by OMP (spec §3.2: a change counts once its result says it happened)', () => {
+  const frames = (name: string, args: unknown, details: unknown, isError = false) => [
+    { type: 'tool_execution_start', toolCallId: 'c1', toolName: name, args },
+    { type: 'tool_execution_end', toolCallId: 'c1', toolName: name, result: { content: [{ type: 'text', text: 'ok' }], details }, isError }
+  ];
+  const events = (fs: Array<Record<string, unknown>>) => { const t = newTracking(); return fs.flatMap(f => project(f as { type: string }, t, T)); };
+  it('a write is listed from its path and content; an edit from the path and the diff OMP reports, without its line numbers', () => {
+    expect(filesOf('write', { path: 'a.txt', content: 'hello\nworld' })).toEqual([{ path: 'a.txt', change: 'write', diff: '+ hello\n+ world' }]);
+    expect(filesOf('edit', { input: '[b.txt#0127]\nPUT 2.=2:\n+2' })).toEqual([]); // the call alone names no file
+    expect(filesOf('edit', { path: '/w/b.txt', diff: ' 1|one\n-2|two\n+2|2' })).toEqual([{ path: '/w/b.txt', change: 'edit', diff: '- two\n+ 2' }]);
+    expect(filesOf('write', { file_path: '/x', path: 'y' })).toEqual([]); // not another harness's Write
+  });
+  it('the finished edit carries path and diff for the thread; a failed one carries nothing', () => {
+    const ok = events(frames('edit', { input: 'x' }, { path: '/w/b.txt', diff: ' 1|one\n-2|two\n+2|2' }));
+    expect(ok[1]).toMatchObject({ name: 'PostToolUse', tool: 'edit', toolInput: { path: '/w/b.txt', diff: ' 1|one\n-2|two\n+2|2' } });
+    expect(events(frames('edit', { input: 'x' }, { path: '/w/b.txt', diff: '+1|a' }, true))[1]).not.toHaveProperty('toolInput');
+    expect(events(frames('write', { path: 'a.txt', content: 'hi' }, { resolvedPath: '/w/a.txt' }))[1]).toMatchObject({ toolInput: { path: '/w/a.txt', content: 'hi' } });
+  });
+  it('in the thread: an edit denied is a failed action with no file, one that succeeded lists its file with the diff', () => {
+    const h = new History();
+    for (const e of events(frames('edit', { input: 'x' }, { path: '/w/b.txt', diff: ' 1|one\n-2|two\n+2|2' }))) h.record('s', e);
+    expect(h.items('s')[0]).toMatchObject({ kind: 'tool', tool: 'edit', status: 'success', files: [{ path: '/w/b.txt', change: 'edit', diff: '- two\n+ 2' }] });
+    for (const e of events(frames('edit', { input: 'x' }, {}, true))) h.record('t', e);
+    expect(h.items('t')[0]).toMatchObject({ status: 'failed', files: [] });
   });
 });
 

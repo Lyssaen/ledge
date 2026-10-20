@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { basename, join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import type { Session } from '@ledge/protocol';
+import type { Session, SessionEvent } from '@ledge/protocol';
 import { pickName } from '@ledge/protocol';
 import { agentEnv, PARENT_AGENT_VARS } from '../../spawn.js';
 import { log } from '../../log.js';
@@ -36,7 +36,9 @@ export interface OmpHostDeps {
   now?: () => string;
 }
 
-interface Live { rpc: OmpRpc; tracking: Tracking; closing: boolean; generation: number }
+/** How often a message still being written reaches the thread: a card updated this often reads as live without a frame per token. */
+export const STREAM_MS = 120;
+interface Live { rpc: OmpRpc; tracking: Tracking; closing: boolean; generation: number; held: Map<string, SessionEvent>; flush: NodeJS.Timeout | null }
 
 /** `--model` takes `provider/id`; the id alone is ambiguous across providers, so the picker's ids carry both. */
 export const ompModelArgs = (model?: string, effort?: string): string[] => [...(model ? ['--model', model] : []), ...(effort ? ['--thinking', effort] : [])];
@@ -67,18 +69,35 @@ export function createOmpHost(deps: OmpHostDeps) {
     } catch (e) { await rpc.close(); throw e; }
   }
 
+  /** Sends the held messages, oldest first. */
+  function drain(id: string, l: Live): void {
+    if (l.flush) { clearTimeout(l.flush); l.flush = null; }
+    const held = [...l.held.values()]; l.held.clear();
+    for (const e of held) store.apply(id, e);
+  }
+
   function attach(id: string, rpc: OmpRpc): Live {
-    const l: Live = { rpc, tracking: newTracking(), closing: false, generation: ++generations };
+    const l: Live = { rpc, tracking: newTracking(randomBytes(3).toString('hex')), closing: false, generation: ++generations, held: new Map(), flush: null };
     live.set(id, l);
     rpc.onFrame(f => {
       if (live.get(id) !== l) return;
-      const events = project(f, l.tracking, now());
-      for (const e of events) store.apply(id, e);
+      for (const e of project(f, l.tracking, now())) {
+        // A message in progress is held and sent as its latest text every STREAM_MS; anything else (its end included) goes at
+        // once, after what was held, so the thread never shows an older text over a newer.
+        if (e.name === 'AgentMessage' && e.streaming && e.messageId) {
+          l.held.set(e.messageId, e);
+          l.flush ??= setTimeout(() => { l.flush = null; drain(id, l); }, STREAM_MS);
+          continue;
+        }
+        drain(id, l);
+        store.apply(id, e);
+      }
     });
     rpc.onBad(reason => log(`omp ${id}: dropped a frame (${reason})`));
     rpc.onExit(e => {
       if (live.get(id) === l) live.delete(id);
-      if (l.closing) return;
+      if (l.closing) { if (l.flush) clearTimeout(l.flush); return; }
+      drain(id, l);
       const detail = e.stderr.trim().split('\n').pop() ?? '';
       log(`omp ${id} ended unexpectedly (code ${e.code}, signal ${e.signal})${detail ? `: ${detail}` : ''}`);
       // The reason first (an `error` state keeps its text through the exit), then the end.
