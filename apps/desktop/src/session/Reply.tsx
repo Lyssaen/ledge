@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type MutableRefObject } from 'react';
+import type { DaemonClient } from '@ledge/fleet';
 import { NOTE_MAX, offers, type Helper, type Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -12,6 +13,7 @@ import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { SessionBot } from '../shell/SessionBot';
 import type { SessionMemory } from './memory';
+import { SessionModel } from './SessionModel';
 import { alwaysScope, PendingCard, sortOf, type PendingActions } from './PendingCard';
 
 export interface ReplyProps {
@@ -29,11 +31,13 @@ export interface ReplyProps {
   keys: MutableRefObject<ScreenKeyHandler | null>;
   /** The pinned plan's « Lire le plan ». */
   onReadPlan(): void;
+  /** For the model chip (#58 lot 2); left out, no chip. */
+  client?: DaemonClient;
 }
 
 /** The reply area under the thread (session.tsx `replyArea`): the pinned request, then the field, or a note saying why
  *  there is none (offline, read only, a subagent's page). The draft lives in the shell's memory, written at each keystroke. */
-export function Reply({ session, helper, asker, since, decisions, memory, memoKey: key, notify, dispatch, focusOnArrival, keys, onReadPlan }: ReplyProps): JSX.Element {
+export function Reply({ session, helper, asker, since, decisions, memory, memoKey: key, notify, dispatch, focusOnArrival, keys, onReadPlan, client }: ReplyProps): JSX.Element {
   const { t } = useI18n();
   const tp = t.session.pending;
   const tr = t.session.reply;
@@ -145,6 +149,7 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
         <form className={cls(pending && 'with-pending')} onSubmit={e => { e.preventDefault(); submit(); }}>
           <textarea ref={input} rows={1} aria-label={tr.label} placeholder={placeholder} value={draft} disabled={shut}
             maxLength={isNote ? NOTE_MAX : undefined} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} />
+          {client && <SessionModel client={client} session={session} notify={notify} />}
           <span className="reply-hint">{hint}</span>
           <Button variant="primary" size="icon" type="submit" aria-label={sort === 'approval' ? tr.denyWith : tr.send}
             disabled={!text || shut || tooLong || busy} style={{ width: 32, height: 32 }}><Icon d={ICONS.send.d} /></Button>

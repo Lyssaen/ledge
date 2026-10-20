@@ -61,6 +61,7 @@ export const SEMVER = /^\d+\.\d+\.\d+$/;
  *  as the systemd service, and the command a person runs by hand when it cannot update itself. */
 export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional(), archive: z.boolean().optional(),
   /** Takes `model` and `effort` on `session.launch` and answers `models.list` (#58). */ models: z.boolean().optional(),
+  /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
@@ -167,6 +168,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.restore'), id: z.string() }),
   /** Starts the agent again on an archived session's conversation. */
   z.object({ type: z.literal('session.resume'), id: z.string() }),
+  /** Changes a live session's model and effort (#58, lot 2), `null` for the agent's own default: the daemon restarts the
+   *  agent on the same conversation with them, at once when the session is free, else at its next free moment. */
+  z.object({ type: z.literal('session.model'), id: z.string(), model: ModelIdSchema.nullable(), effort: EffortSchema.nullable() }),
   /** Deletes a session for good, archived or not. */
   z.object({ type: z.literal('session.delete'), id: z.string() }),
   /** The user names the session's topic from the overlay (500 characters at most, the hook's prompt cap); an empty topic hands back to the automatic sources. */

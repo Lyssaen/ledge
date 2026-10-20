@@ -29,7 +29,7 @@ import { readProjects, writeProjects } from './projects.js';
 import { readIsland, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
-import { createRelay } from './relay.js';
+import { createRelay, free } from './relay.js';
 import { createMailbox } from './mailbox.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
@@ -78,6 +78,8 @@ class NoteNotTyped extends Error { constructor() { super('denied, but the note c
  */
 /** How long the hooks of a deleted session are ignored: its late SessionEnd or last Stop must not bring it back. */
 export const DELETED_TTL_MS = 5 * 60 * 1000;
+/** How long after a model change the end hooks of the agent it replaced are ignored: they must not end the new one. */
+export const RESPAWN_HOOKS_MS = 10 * 1000;
 
 export const ALLOWED_ORIGINS: readonly string[] = [
   'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', 'http://localhost:1420', 'http://127.0.0.1:1420',
@@ -221,10 +223,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       tmux.setOption(c.session.tmuxSession, '@ledge_title', c.session.title).catch(e => log(`tab title not set for ${c.session.id}: ${(e as Error).message}`));
     }
     if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); }
+    if (c.type === 'updated' && c.session.modelNext) void applyModelNext(c.session.id).catch(e => log(`model change of ${c.session.id} failed: ${(e as Error).message}`));
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true } } : {}) });
+    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true } } : {}) });
     send(ws, machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     send(ws, projectsMsg()); // then the shared projects (build spec §5)
     send(ws, islandMsg()); // then the island's settings
@@ -404,6 +407,61 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     deleted.delete(id); return false;
   }
 
+  /**
+   * Starts the agent again on its conversation, under the same id and name, with `model` and `effort` (the agent's
+   * default where left out): session.resume, and a model change on a live session. Null once spawned, the refusal otherwise.
+   */
+  async function respawn(s: Session, key: string, model: string | undefined, effort: string | undefined): Promise<string | null> {
+    // Marked live before the first await: a second resume arriving while this one spawns is then refused.
+    const { archivedAt: _a, exitedAt: _e, exitCode: _c, modelNext: _n, ...rest } = s;
+    store.upsert({ ...rest, state: 'starting', source: 'launcher', agentSessionId: key });
+    try {
+      const cwd = await resolveFolder(s.cwd, opts.home);
+      const env = await agentEnv();
+      const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, args: [...RESUME_ARGS[s.tool](key), ...(model ? MODEL_ARGS[s.tool](model) : []), ...(effort ? EFFORT_ARGS[s.tool]?.(effort) ?? [] : [])], cwd, tmux, now, env, taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
+      // Deleted or archived while it spawned: that request wins, the agent just started is stopped and not recorded.
+      const cur = store.get(s.id);
+      if (!cur || cur.archivedAt !== undefined) {
+        if (spawned.tmuxSession) await tmux.killSession(spawned.tmuxSession).catch(e => log(`kill of ${spawned.tmuxSession} failed: ${(e as Error).message}`));
+        log(`resume of ${s.id} dropped: the session was ${cur ? 'archived' : 'deleted'} meanwhile`);
+        return null;
+      }
+      const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project, transcriptPath } = s;
+      store.upsert({ ...spawned, agentSessionId: key, ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(transcriptPath ? { transcriptPath } : {}), ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
+      log(`resumed ${spawned.name} (${spawned.tool}) in ${spawned.cwd} as ${spawned.id}${model || effort ? ` on ${model ?? 'its default model'}${effort ? ` · ${effort}` : ''}` : ''}`);
+      return null;
+    } catch (e) {
+      // Put the old record back only over the interim one: a delete or an archive since then stands.
+      const cur = store.get(s.id);
+      if (cur && cur.archivedAt === undefined && cur.state === 'starting') store.upsert(s);
+      return (e as Error).message;
+    }
+  }
+
+  /** Sessions restarted on another model, by id: the end hooks of the agent replaced, arriving late, are ignored. */
+  const respawned = new Map<string, number>();
+  const replacedLately = (id: string) => { const at = respawned.get(id); return at !== undefined && Date.now() - at <= RESPAWN_HOOKS_MS; };
+  /** A model change waiting for the session's free moment (`modelNext`): the agent stopped and resumed on that model. */
+  async function applyModelNext(id: string): Promise<void> {
+    const s = store.get(id);
+    if (!s?.modelNext || !free(s) || typing.has(id) || chat.queuedRelays().some(q => q.relay.id === id)) return;
+    const key = resumeKey(s);
+    if (!key || s.source !== 'launcher') { store.patch(id, { modelNext: undefined }); return; }
+    const { model, effort } = s.modelNext;
+    // Held like a typing: neither the mailbox nor the relay writes into the agent being replaced.
+    typing.add(id);
+    try {
+      for (const [k, at] of respawned) if (Date.now() - at > RESPAWN_HOOKS_MS) respawned.delete(k);
+      respawned.set(id, Date.now());
+      await endSession(s);
+      const ended = store.get(id);
+      if (!ended || ended.archivedAt !== undefined) return;
+      const refused = await respawn({ ...ended, modelNext: undefined }, key, model, effort);
+      // The session stays ended, as it was before the respawn: Resume brings it back on its former model.
+      if (refused) log(`model change of ${id} failed: ${refused}`);
+    } finally { typing.delete(id); }
+  }
+
   /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
   const chatLaunches = new Set<string>();
   /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
@@ -527,6 +585,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           catch (e) { log(`transcript not read for ${msg.id}: ${(e as Error).message}`); }
         }
         const terminal = ev.name === 'SessionEnd' || ev.name === 'PaneGone';
+        // The end of the agent a model change replaced: the one resumed in its place goes on.
+        if (terminal && ev.source === 'hook' && replacedLately(msg.id)) return;
         const stored = store.get(msg.id);
         // A hook from an archived session still running (hook_only): it is alive again. An exited one stays archived,
         // and so does one whose hook says it ends.
@@ -555,6 +615,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.unregister':
+        if (replacedLately(msg.id)) return;
         store.apply(msg.id, { name: 'SessionEnd', at: now(), source: 'hook', exitCode: msg.exitCode });
         return;
       case 'session.decide': {
@@ -617,29 +678,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
         if (s.state !== 'exited') return refuse('the session is still running', msg.id);
         const key = resumeKey(s); if (!key) return refuse('no conversation to resume', msg.id);
-        // Marked live before the first await: a second resume arriving while this one spawns is then refused above.
-        const { archivedAt: _a, exitedAt: _e, exitCode: _c, ...rest } = s;
-        store.upsert({ ...rest, state: 'starting', source: 'launcher', agentSessionId: key });
-        try {
-          const cwd = await resolveFolder(s.cwd, opts.home);
-          const env = await agentEnv();
-          const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, args: [...RESUME_ARGS[s.tool](key), ...(s.model ? MODEL_ARGS[s.tool](s.model) : []), ...(s.effort ? EFFORT_ARGS[s.tool]?.(s.effort) ?? [] : [])], cwd, tmux, now, env, taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
-          // Deleted or archived while it spawned: that request wins, the agent just started is stopped and not recorded.
-          const cur = store.get(s.id);
-          if (!cur || cur.archivedAt !== undefined) {
-            if (spawned.tmuxSession) await tmux.killSession(spawned.tmuxSession).catch(e => log(`kill of ${spawned.tmuxSession} failed: ${(e as Error).message}`));
-            log(`resume of ${s.id} dropped: the session was ${cur ? 'archived' : 'deleted'} meanwhile`);
-            return;
-          }
-          const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project, transcriptPath, model, effort } = s;
-          store.upsert({ ...spawned, agentSessionId: key, ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(transcriptPath ? { transcriptPath } : {}), ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
-          log(`resumed ${spawned.name} (${spawned.tool}) in ${spawned.cwd} as ${spawned.id}`);
-        } catch (e) {
-          // Put the old record back only over the interim one: a delete or an archive since then stands.
-          const cur = store.get(s.id);
-          if (cur && cur.archivedAt === undefined && cur.state === 'starting') store.upsert(s);
-          return refuse((e as Error).message, msg.id);
-        }
+        const refused = await respawn(s, key, s.model, s.effort);
+        if (refused) refuse(refused, msg.id);
+        return;
+      }
+      case 'session.model': {
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
+        if (s.state === 'exited') return refuse('the session has ended', msg.id);
+        if (!resumeKey(s)) return refuse('no conversation to resume', msg.id);
+        if (msg.effort && !EFFORT_ARGS[s.tool]) return refuse(`${s.tool} takes its effort in the model id`, msg.id);
+        const next = { ...(msg.model ? { model: msg.model } : {}), ...(msg.effort ? { effort: msg.effort } : {}) };
+        // The model it already runs: a change asked earlier is dropped, nothing restarts.
+        if (next.model === s.model && next.effort === s.effort) { if (s.modelNext) store.patch(msg.id, { modelNext: undefined }); return; }
+        store.patch(msg.id, { modelNext: next });
+        await applyModelNext(msg.id);
         return;
       }
       case 'session.delete': {

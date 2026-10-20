@@ -412,4 +412,10 @@ describe('protocol: model and effort (#58)', () => {
     expect(parseServerMessage({ type: 'models.listing', requestId: 'm1', tool: 'codex', models: [], error: 'offline' })).toMatchObject({ error: 'offline' });
     expect(() => parseClientMessage({ type: 'models.list', requestId: 'm1', tool: 'vim' })).toThrow();
   });
+  it('session.model changes a live session\'s model and effort, null for the agent\'s default (lot 2)', () => {
+    expect(parseClientMessage({ type: 'session.model', id: 's1', model: 'gpt-6-astra', effort: 'high' })).toEqual({ type: 'session.model', id: 's1', model: 'gpt-6-astra', effort: 'high' });
+    expect(parseClientMessage({ type: 'session.model', id: 's1', model: null, effort: null })).toMatchObject({ model: null, effort: null });
+    expect(() => parseClientMessage({ type: 'session.model', id: 's1', model: '--yolo', effort: null })).toThrow();
+    expect(() => parseClientMessage({ type: 'session.model', id: 's1', model: 'opus' })).toThrow();
+  });
 });

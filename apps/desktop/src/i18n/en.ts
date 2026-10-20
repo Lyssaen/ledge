@@ -518,6 +518,12 @@ export const en: Messages = {
       readOnly: 'Session started without Ledge: read only.', optionsOnly: 'Choose one of the proposed answers (1–9).',
       noNote: 'This agent takes no message with a refusal: deny with N.', tooLong: (max) => `A note holds ${max} characters at most.`
     },
+    model: {
+      label: 'Model and effort', apply: 'Apply', schedule: 'Schedule', cancel: 'Cancel', nextTurn: 'next turn',
+      applyHint: (n) => `${n} restarts on the same conversation and keeps its context.`,
+      scheduleHint: (n) => `${n} is working: the change applies at the end of this turn.`,
+      refused: (m) => `Model change refused: ${m}`
+    },
     thread: {
       label: 'Session thread',
       you: 'You', fromParent: (n) => `Instruction from ${n}`,
@@ -634,10 +640,12 @@ export const en: Messages = {
     timeout: 'The launch did not answer. Check the machine, then try again.',
     modelOf: (t: string) => `${t} model`, remembered: 'Last choice for this project kept',
     byDefault: 'Default', byDefaultHint: 'The one the agent picks by itself', defaultBadge: 'default',
-    otherModel: 'Other…', otherModelHint: 'An exact id', otherPlaceholder: 'Model id, passed as is',
-    modelsLoading: 'Reading the machine’s models…', modelsUnavailable: (e: string) => `Model list unavailable (${e}): the default and « Other… » still work.`,
+    exactId: 'An exact id, passed as is', currentBadge: 'current',
+    searchModel: 'Search a model or type an id', searchFew: 'Search, or type an id', searchMany: (n: number) => `Search ${n} models, or type an id`,
+    useAsIs: 'Use as is', noMatch: 'No model matches.', notAnId: 'No model matches, and this is not a model id.', moreModels: (n: number) => `${n} more: type to search them`,
+    modelsLoading: 'Reading the machine’s models…', modelsUnavailable: (e: string) => `Model list unavailable (${e}): the default and an exact id still work.`,
     modelsOutdated: 'Update Ledge on this machine to choose the model.',
-    effort: 'Effort', effortHint: 'Thinking time per turn', cursorEffort: 'For Cursor, the effort is part of the model name.',
+    effort: 'Effort', effortHint: 'Thinking time per turn', cursorEffort: 'Effort is in the model name', lessEffort: 'Less effort', moreEffort: 'More effort',
     efforts: { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
     modelHints: { 'claude:fable': 'The most capable', 'claude:opus': 'Very capable, slower', 'claude:sonnet': 'Balanced, everyday use', 'claude:haiku': 'Fast and economical' } as Record<string, string>,
     pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)

@@ -355,65 +355,87 @@ describe('LaunchComposer and its machines', () => {
     }
     const sentMsg = (p: ReturnType<typeof props>) => p.onLaunch.mock.calls.at(-1)![0];
 
+    const trigger = (agent: string) => screen.getByRole('button', { name: new RegExp(`^${agent} model : `) });
+    const menu = () => within(screen.getByRole('dialog', { name: /model$/ }));
+    const effortValue = () => within(screen.getByRole('group', { name: 'Effort' })).getByRole('status');
+
     it('appears under the agents once one is chosen; its default passes nothing, another model and effort are sent and summed up', async () => {
       const { user, p } = await ready(/Claude Code/, CLAUDE);
       const group = within(screen.getByRole('group', { name: 'Claude Code model' }));
-      expect(group.getByRole('radio', { name: /Opus/ })).toBeChecked();
+      expect(trigger('Claude Code')).toHaveAccessibleName('Claude Code model : Opus');
       expect(group.getByText('default')).toBeVisible();
-      expect(group.getByRole('radio', { name: /Fable/ })).toBeInTheDocument();
-      expect(group.getByRole('radio', { name: 'High' })).not.toBeChecked();
+      expect(effortValue()).toHaveTextContent('—');
       expect(document.querySelector('.preview-model')!.textContent).toBe('Opus');
       await user.click(screen.getByRole('button', { name: /Launch/ }));
       expect(sentMsg(p)).not.toHaveProperty('model'); expect(sentMsg(p)).not.toHaveProperty('effort');
-      await user.click(group.getByRole('radio', { name: /Sonnet/ }));
-      await user.click(group.getByRole('radio', { name: 'High' }));
+      await user.click(trigger('Claude Code'));
+      expect(menu().getAllByRole('option').map(o => o.textContent)).toEqual(['OpusdefaultVery capable, slower', 'FableThe most capable', 'SonnetBalanced, everyday use', 'HaikuFast and economical']);
+      expect(menu().getByRole('option', { name: /Opus/ })).toHaveAttribute('aria-selected', 'true');
+      await user.click(menu().getByRole('option', { name: /Sonnet/ }));
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(trigger('Claude Code')).toHaveAccessibleName('Claude Code model : Sonnet');
+      await user.click(screen.getByRole('button', { name: 'More effort' }));
+      await user.click(screen.getByRole('button', { name: 'More effort' }));
+      expect(effortValue()).toHaveTextContent('High');
+      expect(screen.getByRole('button', { name: 'More effort' })).toBeEnabled();
       expect(document.querySelector('.preview-model')!.textContent).toBe('Sonnet · high');
       await user.click(screen.getByRole('button', { name: /Launch/ }));
       expect(sentMsg(p)).toMatchObject({ model: 'sonnet', effort: 'high' });
     });
 
-    it('« Other… » takes an exact id among the machine\'s models or not; one that reads as a flag is not sent', async () => {
+    it('the list is searched; a model the machine does not list is used as is, one that reads as a flag never', async () => {
       const cursor = [{ id: 'auto', label: 'Auto', isDefault: true }, ...Array.from({ length: 8 }, (_, i) => ({ id: `m-${i}`, label: `M ${i}` }))];
       const { user, p } = await ready(/Cursor/, cursor);
-      const group = within(screen.getByRole('group', { name: 'Cursor Agent model' }));
-      expect(group.getAllByRole('radio').filter(r => r.getAttribute('name') === 'model')).toHaveLength(5); // four cards and Other…
-      expect(group.getByText('For Cursor, the effort is part of the model name.')).toBeVisible();
-      await user.click(group.getByRole('radio', { name: /Other/ }));
-      const typed = group.getByRole('combobox', { name: 'Other…' });
-      expect(document.querySelectorAll('datalist option')).toHaveLength(9);
-      await user.type(typed, '-p');
-      expect(typed).toHaveAttribute('aria-invalid', 'true');
-      await user.click(screen.getByRole('button', { name: /Launch/ }));
-      expect(sentMsg(p)).not.toHaveProperty('model');
-      await user.clear(typed); await user.type(typed, 'm-7');
+      expect(screen.getByText('Effort is in the model name')).toBeVisible();
+      expect(screen.queryByRole('group', { name: 'Effort' })).toBeNull();
+      await user.click(trigger('Cursor Agent'));
+      expect(menu().getAllByRole('option')).toHaveLength(9);
+      const search = menu().getByRole('combobox', { name: 'Search a model or type an id' });
+      expect(search).toHaveFocus();
+      await user.type(search, '-p');
+      expect(menu().queryAllByRole('option')).toHaveLength(0);
+      expect(menu().getByText('No model matches, and this is not a model id.')).toBeVisible();
+      await user.clear(search); await user.type(search, 'm-7{Enter}');
+      expect(trigger('Cursor Agent')).toHaveAccessibleName('Cursor Agent model : M 7');
       await user.click(screen.getByRole('button', { name: /Launch/ }));
       expect(sentMsg(p)).toMatchObject({ model: 'm-7' });
       expect(sentMsg(p)).not.toHaveProperty('effort');
+      await user.click(trigger('Cursor Agent'));
+      await user.type(menu().getByRole('combobox'), 'gpt-9-x');
+      await user.click(menu().getByRole('option', { name: /Use as is/ }));
+      expect(trigger('Cursor Agent')).toHaveAccessibleName('Cursor Agent model : gpt-9-x');
+      await user.click(screen.getByRole('button', { name: /Launch/ }));
+      expect(sentMsg(p)).toMatchObject({ model: 'gpt-9-x' });
+      await user.click(trigger('Cursor Agent'));
+      await user.keyboard('{Escape}');
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(trigger('Cursor Agent')).toHaveFocus();
     });
 
     it('the last pick is kept per project and agent; changing agent takes that agent\'s own', async () => {
       const { user, p, sent, emit } = await ready(/Claude Code/, CLAUDE);
-      await user.click(screen.getByRole('radio', { name: /Haiku/ }));
-      await user.click(screen.getByRole('radio', { name: 'Low' }));
+      await user.click(trigger('Claude Code'));
+      await user.click(menu().getByRole('option', { name: /Haiku/ }));
+      await user.click(screen.getByRole('button', { name: 'More effort' }));
       await user.click(screen.getByRole('button', { name: /Launch/ }));
       cleanup();
       render(<LaunchComposer {...p} />);
       await user.click(screen.getByRole('radio', { name: /Codex/ }));
       const ask = asked(sent).at(-1)!;
       await act(async () => { emit({ type: 'models.listing', requestId: ask.requestId, tool: 'codex', models: [{ id: 'sol', label: 'Sol', isDefault: true }] }); });
-      expect(screen.getByRole('radio', { name: /Sol/ })).toBeChecked();
+      expect(trigger('Codex')).toHaveAccessibleName('Codex model : Sol');
       expect(screen.queryByText('Last choice for this project kept')).toBeNull();
       await user.click(screen.getByRole('radio', { name: /Claude Code/ }));    // known this run: not asked again
       expect(asked(sent).filter(m => m.tool === 'claude')).toHaveLength(1);
-      expect(screen.getByRole('radio', { name: /Haiku/ })).toBeChecked();
-      expect(screen.getByRole('radio', { name: 'Low' })).toBeChecked();
+      expect(trigger('Claude Code')).toHaveAccessibleName('Claude Code model : Haiku');
+      expect(effortValue()).toHaveTextContent('Low');
       expect(screen.getByText('Last choice for this project kept')).toBeVisible();
     });
 
     it('a machine that cannot list its models still offers the default and Other…; an older daemon offers no model and sends none', async () => {
       const first = await ready(/Codex/, [], 'not installed');
       const group = within(screen.getByRole('group', { name: 'Codex model' }));
-      expect(group.getByRole('radio', { name: /Default/ })).toBeChecked();
+      expect(trigger('Codex')).toHaveAccessibleName('Codex model : Default');
       expect(group.getByText(/Model list unavailable \(not installed\)/)).toBeVisible();
       cleanup(); forgetModels();
       const { user, p } = await ready(/Codex/, [], 'outdated');

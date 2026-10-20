@@ -80,6 +80,8 @@ export const SessionSchema =z.object({
   /** The model and effort Ledge launched the agent with (#58); left out, the agent's own default. */
   model: z.string().optional(),
   effort: z.string().optional(),
+  /** A model change asked while the agent worked (`session.model`), applied at its next free moment; a field left out is the agent's default. */
+  modelNext: z.object({ model: z.string().optional(), effort: z.string().optional() }).optional(),
   /** The agent's own session id when Ledge chose it at launch (Claude Code `--session-id`). */
   agentSessionId: z.string().optional(),
   /** The agent's transcript: the latest one a hook named (it follows /clear and --resume), else the one the launch implies. */

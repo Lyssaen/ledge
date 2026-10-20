@@ -541,6 +541,12 @@ export const fr = {
       readOnly: 'Session démarrée sans Ledge : lecture seule.', optionsOnly: 'Choisissez une des réponses proposées (1–9).',
       noNote: 'Cet agent ne prend pas de message avec un refus : refusez avec N.', tooLong: (max: number) => `Une note tient en ${max} caractères au plus.`
     },
+    model: {
+      label: 'Modèle et effort', apply: 'Appliquer', schedule: 'Programmer', cancel: 'Annuler', nextTurn: 'au prochain tour',
+      applyHint: (n: string) => `${n} redémarre sur la même conversation et garde son contexte.`,
+      scheduleHint: (n: string) => `${n} travaille : le changement s’appliquera à la fin de ce tour.`,
+      refused: (m: string) => `Changement de modèle refusé : ${m}`
+    },
     thread: {
       label: 'Fil de la session',
       you: 'Vous', fromParent: (n: string) => `Consigne de ${n}`,
@@ -667,10 +673,12 @@ export const fr = {
     timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.',
     modelOf: (t: string) => `Modèle de ${t}`, remembered: 'Dernier choix pour ce projet retenu',
     byDefault: 'Par défaut', byDefaultHint: 'Celui que l’agent prend de lui-même', defaultBadge: 'défaut',
-    otherModel: 'Autre…', otherModelHint: 'Un identifiant exact', otherPlaceholder: 'Identifiant du modèle, passé tel quel',
-    modelsLoading: 'Lecture des modèles de la machine…', modelsUnavailable: (e: string) => `Liste des modèles indisponible (${e}) : le défaut et « Autre… » restent possibles.`,
+    exactId: 'Identifiant exact, passé tel quel', currentBadge: 'actuel',
+    searchModel: 'Chercher un modèle ou taper un identifiant', searchFew: 'Chercher, ou taper un identifiant', searchMany: (n: number) => `Chercher parmi ${n} modèles, ou taper un identifiant`,
+    useAsIs: 'Utiliser tel quel', noMatch: 'Aucun modèle ne correspond.', notAnId: 'Aucun modèle ne correspond, et ce n’est pas un identifiant de modèle.', moreModels: (n: number) => `${n} autres : tapez pour les chercher`,
+    modelsLoading: 'Lecture des modèles de la machine…', modelsUnavailable: (e: string) => `Liste des modèles indisponible (${e}) : le défaut et un identifiant exact restent possibles.`,
     modelsOutdated: 'Mettez à jour Ledge sur cette machine pour choisir le modèle.',
-    effort: 'Effort', effortHint: 'Temps de réflexion par tour', cursorEffort: 'Pour Cursor, l’effort fait partie du nom du modèle.',
+    effort: 'Effort', effortHint: 'Temps de réflexion par tour', cursorEffort: 'Effort compris dans le nom du modèle', lessEffort: 'Moins d’effort', moreEffort: 'Plus d’effort',
     efforts: { low: 'Bas', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
     modelHints: { 'claude:fable': 'Le plus capable', 'claude:opus': 'Très capable, plus lent', 'claude:sonnet': 'Équilibré, usage courant', 'claude:haiku': 'Rapide et économique' } as Record<string, string>,
     pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
