@@ -86,7 +86,38 @@ describe('the app', () => {
       'Empreinte de l’app': '0123 4567 89ab cdef 0123 4567'
     });
     fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
+    // The PC is asked to remove this phone first; the phone signs out once it said applied.
+    const forget = t.of('device.forget')[0]!;
+    expect(t.calls).toEqual([]);
+    await act(async () => { t.deliver({ type: 'operation.result', op: forget.op, status: 'received' }); });
+    expect(t.calls).toEqual([]);
+    await act(async () => { t.deliver({ type: 'operation.result', op: forget.op, status: 'applied' }); });
     expect(t.calls).toEqual(['signOut']);
+    expect(screen.queryByText(/Le PC n’a pas confirmé/)).toBeNull();
+  });
+
+  it('« Se déconnecter » offline: signs out at once, and the screen the user lands on says the PC did not confirm', () => {
+    const t = app('pc_offline', { hash: '#/connection' });
+    fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
+    expect(t.of('device.forget')).toEqual([]);
+    expect(t.calls).toEqual(['signOut']);
+    act(() => t.set('signed_out'));
+    expect(screen.getByText('Le PC n’a pas confirmé. Retirez ce téléphone dans Ledge sur le PC, section Accès mobile.')).toBeInTheDocument();
+  });
+
+  it('« Se déconnecter » without an answer from the PC: erased after 5 s, with the note', async () => {
+    vi.useFakeTimers();
+    try {
+      const t = app('ready', { hash: '#/connection' });
+      fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
+      expect(t.of('device.forget')).toHaveLength(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(4_900); });
+      expect(t.calls).toEqual([]);
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      expect(t.calls).toEqual(['signOut']);
+      act(() => t.set('signed_out'));
+      expect(screen.getByText(/Le PC n’a pas confirmé/)).toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
   });
 
   it('the connection screen without a service worker: « — » for the build', () => {

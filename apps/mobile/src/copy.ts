@@ -182,6 +182,10 @@ export const copy = {
     none: '—',
     signOut: 'Se déconnecter'
   },
+  /** The user left while the PC could not confirm that it removed this phone: shown on the screen they land on. */
+  forget: {
+    pending: 'Le PC n’a pas confirmé. Retirez ce téléphone dans Ledge sur le PC, section Accès mobile.'
+  },
   /** The GitHub login, as the boards write it. */
   account: (login: string) => `@${login}`,
   /** The PC before its first snapshot named it. */

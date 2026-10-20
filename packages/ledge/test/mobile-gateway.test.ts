@@ -25,14 +25,18 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
 function fakeMobile(ids: string[], relayUrl = 'https://relay.test') {
   let devices = ids;
   const sent: Array<[string, string]> = [];
+  /** How many texts had been sent when each device was revoked: the answer must be among them. */
+  const revoked: Array<{ id: string; sentBefore: number }> = [];
   const messageFns = new Set<(d: string, t: string) => void>();
   const changeFns = new Set<() => void>();
   return {
     sent,
+    revoked,
     receive(deviceId: string, text: string) { for (const fn of messageFns) fn(deviceId, text); },
     setDevices(next: string[]) { devices = next; for (const fn of changeFns) fn(); },
     mobile: {
       async send(deviceId: string, text: string) { sent.push([deviceId, text]); return devices.includes(deviceId); },
+      async revoke(id: string) { revoked.push({ id, sentBefore: sent.length }); devices = devices.filter(d => d !== id); for (const fn of changeFns) fn(); },
       onMessage(fn: (d: string, t: string) => void) { messageFns.add(fn); return () => { messageFns.delete(fn); }; },
       onChange(fn: () => void) { changeFns.add(fn); return () => { changeFns.delete(fn); }; },
       state: (): MobileState => ({
@@ -1048,5 +1052,29 @@ describe('phone gateway: OMP requests answered with their own questions', () => 
     await flush();
     expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'not_offered' }]);
     expect(g.dispatched).toEqual([]);
+  });
+});
+
+describe('phone gateway: device.forget', () => {
+  it('answers applied first, then revokes the device', async () => {
+    const g = setup();
+    const op = randomUUID();
+    g.send('dev1', { type: 'device.forget', op });
+    await flush();
+    expect(g.results('dev1').map(m => m.type === 'operation.result' && m.status)).toEqual(['received', 'applied']);
+    expect(g.fm.revoked).toEqual([{ id: 'dev1', sentBefore: 2 }]);
+    expect(g.fm.mobile.state().devices.map(d => d.id)).toEqual(['dev2']);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('a resend of the same op raises nothing and revokes once', async () => {
+    const g = setup();
+    const op = randomUUID();
+    g.send('dev1', { type: 'device.forget', op });
+    await flush();
+    g.send('dev1', { type: 'device.forget', op });
+    await flush();
+    expect(g.fm.revoked).toHaveLength(1);
+    expect(g.got('dev1').some(m => m.type === 'error')).toBe(false);
   });
 });

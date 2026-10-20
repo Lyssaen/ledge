@@ -89,3 +89,15 @@ export function readDevices(): ApprovedDevice[] {
 export function writeDevices(list: ApprovedDevice[]): void {
   writePrivate(paths().devices, JSON.stringify(z.array(ApprovedDeviceSchema).parse(list), null, 2) + '\n');
 }
+
+/** A relay peer whose revocation the relay has not confirmed yet. */
+const RevocationSchema = z.object({ peer: z.string().min(1), at: z.string() });
+export type Revocation = z.infer<typeof RevocationSchema>;
+
+export function readRevocations(): Revocation[] {
+  return readJson(paths().revocations, 'revocations.json', z.array(RevocationSchema)) ?? [];
+}
+
+export function writeRevocations(list: Revocation[]): void {
+  writePrivate(paths().revocations, JSON.stringify(z.array(RevocationSchema).parse(list), null, 2) + '\n');
+}

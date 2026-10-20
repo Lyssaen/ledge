@@ -7,7 +7,7 @@ import WebSocket from 'ws';
 import { fingerprint } from '@ledge/seal';
 import type { MobileState } from '@ledge/protocol';
 import { createMobileService, type MobileService } from '../src/mobile/service.js';
-import { writeDevices, writeMobileConfig, writeRelaySession } from '../src/mobile/files.js';
+import { readRevocations, writeDevices, writeMobileConfig, writeRelaySession, writeRevocations } from '../src/mobile/files.js';
 import { paths } from '../src/paths.js';
 import { startTestRelay, TEST_ACCOUNT, type TestRelay } from './mobile-relay-harness.js';
 import { fakeDevice, type FakeDevice } from './mobile-fake-device.js';
@@ -106,9 +106,9 @@ async function service(opts: Parameters<typeof createMobileService>[0] = {}): Pr
 }
 
 /** Enabled and signed in through the simulated device flow, link online. */
-async function signedIn() {
+async function signedIn(serviceOpts: Parameters<typeof createMobileService>[0] = {}) {
   const r = await relayWithAuth();
-  const s = await service();
+  const s = await service(serviceOpts);
   await s.handle({ type: 'mobile.set', enabled: true, relayUrl: r.relay.url });
   await s.handle({ type: 'mobile.signin' });
   await until(() => s.state().signin !== null, 'sign-in code');
@@ -288,4 +288,66 @@ describe('device credential', () => {
     (await service()).setCredential('x', cred);
     expect(readFileSync(paths().devices, 'utf8')).toContain('"cid"');
   });
+});
+
+describe('relay revocations', () => {
+  const DAY = 86_400_000;
+  /** The real fetch, except that the revoke call answers `mode.status` (200 lets it through). */
+  const revokeAnswering = (mode: { status: number | 'network' }): typeof fetch => async (input, init) => {
+    if (String(input).endsWith('/auth/devices/revoke') && mode.status !== 200) {
+      if (mode.status === 'network') throw new TypeError('fetch failed');
+      return new Response(null, { status: mode.status });
+    }
+    return fetch(input, init);
+  };
+
+  it('a relay that answers 503 keeps the entry (0600); the link online again retries, a 200 removes it', async () => {
+    const mode = { status: 503 as number | 'network' };
+    const ctx = await signedIn({ fetchImpl: revokeAnswering(mode) });
+    const phone = await linkedPhone(ctx);
+    const id = await fingerprint(phone.publicKey);
+    await ctx.s.handle({ type: 'mobile.device.revoke', id });
+    expect(readRevocations().map((r) => r.peer)).toEqual([PEER]);
+    expect(statSync(paths().revocations).mode & 0o777).toBe(0o600);
+    expect(ctx.calls.revoked).toHaveLength(0);
+    mode.status = 200;
+    await ctx.s.handle({ type: 'mobile.set', enabled: false, relayUrl: ctx.relay.url });
+    await ctx.s.handle({ type: 'mobile.set', enabled: true, relayUrl: ctx.relay.url });
+    await until(() => readRevocations().length === 0, 'entry removed after the retry');
+    expect(ctx.calls.revoked.map((c) => c.peer)).toEqual([PEER]);
+  });
+
+  it('a daemon restarted reads the file and retries', async () => {
+    const mode = { status: 503 as number | 'network' };
+    const ctx = await signedIn({ fetchImpl: revokeAnswering(mode) });
+    const phone = await linkedPhone(ctx);
+    await ctx.s.handle({ type: 'mobile.device.revoke', id: await fingerprint(phone.publicKey) });
+    expect(readRevocations()).toHaveLength(1);
+    await ctx.s.stop();
+    await service({ fetchImpl: revokeAnswering({ status: 200 }) });
+    await until(() => readRevocations().length === 0, 'entry removed after the restart');
+    expect(ctx.calls.revoked.map((c) => c.peer)).toEqual([PEER]);
+  });
+
+  it('an entry older than 30 days is dropped and logged, not sent; a younger one is', async () => {
+    writeRevocations([
+      { peer: 'd_oldoldoldoldold', at: new Date(Date.now() - 31 * DAY).toISOString() },
+      { peer: 'd_newnewnewnewnew', at: new Date(Date.now() - 29 * DAY).toISOString() }
+    ]);
+    const ctx = await signedIn();
+    await until(() => readRevocations().length === 0, 'entries settled');
+    expect(ctx.calls.revoked.map((c) => c.peer)).toEqual(['d_newnewnewnewnew']);
+  });
+
+  it.each([[200, true], [204, true], [404, true], [401, false], [429, false], [500, false], [503, false], ['network', false]] as const)(
+    'relay answer %s: entry removed is %s', async (status, removed) => {
+      const mode = { status: status as number | 'network' };
+      writeRevocations([{ peer: PEER, at: new Date().toISOString() }]);
+      let tried = 0;
+      const inner = revokeAnswering(mode);
+      await signedIn({ fetchImpl: async (i, init) => { if (String(i).endsWith('/auth/devices/revoke')) tried++; return inner(i, init); } });
+      await until(() => tried > 0, 'a revoke attempt');
+      await settle();
+      expect(readRevocations().length).toBe(removed ? 0 : 1);
+    });
 });

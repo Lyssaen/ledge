@@ -3,8 +3,8 @@
 import type WebSocket from 'ws';
 import { SealedFrameSchema, type MobileClientMessage, type MobileConfig, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
 import {
-  clearRelaySession, loadPcIdentity, readDevices, readMobileConfig, readRelaySession, writeDevices, writeMobileConfig, writeRelaySession,
-  type ApprovedDevice, type RelaySession
+  clearRelaySession, loadPcIdentity, readDevices, readMobileConfig, readRelaySession, readRevocations, writeDevices, writeMobileConfig, writeRelaySession, writeRevocations,
+  type ApprovedDevice, type RelaySession, type Revocation
 } from './files.js';
 import { rpOf, type DeviceCredential } from './webauthn.js';
 import { createRelayLink, type LinkState, type RelayLink, type Schedule } from './link.js';
@@ -21,6 +21,8 @@ export interface MobileService {
   handle(msg: MobileClientMessage): Promise<void>;
   /** Seals `text` to the device's confirmed channel; false if it has none. */
   send(deviceId: string, text: string): Promise<boolean>;
+  /** Removes the device from the PC (as the `mobile.device.revoke` command does); a device already gone is not an error. */
+  revoke(deviceId: string): Promise<void>;
   /** The device's passkey, unless it was registered for another relay host than the current one. */
   credential(deviceId: string): DeviceCredential | null;
   /** Stores the passkey of an approved device (persisted with it). */
@@ -31,6 +33,8 @@ export interface MobileService {
 }
 
 const REVOKE_TIMEOUT_MS = 15_000;
+/** A revocation the relay never confirmed in this long is given up. */
+const REVOCATION_MAX_AGE_MS = 30 * 86_400_000;
 
 /**
  * Reads the files once, then keeps them in step with the commands. `fetchImpl` serves the /auth calls,
@@ -51,6 +55,7 @@ export async function createMobileService(opts: {
   let config: MobileConfig = readMobileConfig();
   let session: RelaySession | null = readRelaySession();
   let devices: ApprovedDevice[] = readDevices();
+  let revocations: Revocation[] = readRevocations();
   let link: RelayLink | null = null;
   let linkState: LinkState = { state: 'off' };
   let signin: MobileState['signin'] = null;
@@ -161,6 +166,7 @@ export async function createMobileService(opts: {
         if (self.link !== null && link !== self.link) return;
         linkState = s;
         changed();
+        if (s.state === 'online') void retryRevocations();
       },
       onMessage(m) {
         if (link !== self.link) return;
@@ -217,9 +223,19 @@ export async function createMobileService(opts: {
     });
   };
 
-  /** Asks the relay to close the revoked device's sessions and sockets. Logged on failure, never retried. */
-  const revokeOnRelay = async (peer: string) => {
-    if (!session || linkState.state !== 'online') return;
+  const saveRevocations = (next: Revocation[]) => {
+    try { writeRevocations(next); }
+    catch (e) { log(`mobile: revocations.json not written (${(e as Error).message})`); }
+    revocations = next;
+  };
+
+  /** Peers with a call to the relay under way, so a retry never doubles one. */
+  const revoking = new Set<string>();
+
+  /** One call. The entry leaves the file on a 2xx or a 404 (the relay has no such peer); on 401, 429, 5xx or a network error it stays. */
+  const tryRevoke = async (peer: string) => {
+    if (!session || linkState.state !== 'online' || revoking.has(peer)) return;
+    revoking.add(peer);
     try {
       const res = await fetchImpl(new URL('/auth/devices/revoke', session.relayUrl).toString(), {
         method: 'POST',
@@ -228,11 +244,32 @@ export async function createMobileService(opts: {
         signal: AbortSignal.timeout(REVOKE_TIMEOUT_MS)
       });
       await res.body?.cancel();
-      if (!res.ok) log(`mobile: relay did not revoke peer ${peer} (status ${res.status})`);
-      else log(`mobile: relay revoked peer ${peer}`);
+      if (res.ok || res.status === 404) {
+        saveRevocations(revocations.filter((r) => r.peer !== peer));
+        log(`mobile: relay revoked peer ${peer}`);
+      } else log(`mobile: relay did not revoke peer ${peer} (status ${res.status}), kept for a retry`);
     } catch (e) {
-      log(`mobile: relay did not revoke peer ${peer} (${(e as Error).name})`);
+      log(`mobile: relay did not revoke peer ${peer} (${(e as Error).name}), kept for a retry`);
+    } finally {
+      revoking.delete(peer);
     }
+  };
+
+  /** The whole list, each time the link comes online; an entry too old is dropped first. */
+  const retryRevocations = async () => {
+    const limit = now() - REVOCATION_MAX_AGE_MS;
+    const stale = revocations.filter((r) => Date.parse(r.at) < limit);
+    if (stale.length > 0) {
+      for (const r of stale) log(`mobile: giving up the revocation of peer ${r.peer} (older than 30 days)`);
+      saveRevocations(revocations.filter((r) => !stale.includes(r)));
+    }
+    await Promise.all(revocations.map((r) => tryRevoke(r.peer)));
+  };
+
+  /** Writes the peer down first, so a relay that cannot be reached (or a daemon that stops) does not lose it. */
+  const revokeOnRelay = async (peer: string) => {
+    if (!revocations.some((r) => r.peer === peer)) saveRevocations([...revocations, { peer, at: new Date(now()).toISOString() }]);
+    await tryRevoke(peer);
   };
 
   const revoke = async (id: string) => {
@@ -270,6 +307,8 @@ export async function createMobileService(opts: {
         pairings: pairing.views()
       };
     },
+
+    revoke,
 
     credential(deviceId) {
       const c = devices.find((d) => d.id === deviceId)?.credential;

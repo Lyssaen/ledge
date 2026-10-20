@@ -19,6 +19,7 @@ import { Terminal } from './screens/Terminal';
 import { Thread } from './screens/Thread';
 import { Unrecognized } from './screens/Unrecognized';
 import { Update } from './screens/Update';
+import { copy } from './copy';
 import { useMobile, type MobileStore } from './state/store';
 import type { UpdateWatch } from './sw/register';
 import type { BuildInfo } from './sw/types';
@@ -89,6 +90,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   // The sign-in issue stays until the user moves on: « Utiliser un autre compte » leaves Denied for the login board.
   const [issue, setIssue] = useState(signin);
   const [keysLost, setKeysLost] = useState(lost);
+  // The PC did not confirm that it removed this phone when the user left.
+  const [forgetNote, setForgetNote] = useState(false);
   // « Voir ce qui attend » was tapped: the pairing's outcome is no longer the screen.
   const [doneSeen, setDoneSeen] = useState(false);
   // A pairing was started from this page (by itself or by a tap): the ref guards against a second start in the same
@@ -115,7 +118,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     if (autoPair && !startedRef.current) begin(() => link.startPairing());
   }, [autoPair, link]);
   useEffect(() => {
-    if (state === 'ready') { startedRef.current = false; setStarted(false); setKeysLost(false); }
+    if (state === 'ready') { startedRef.current = false; setStarted(false); setKeysLost(false); setForgetNote(false); }
     if (state === 'unpaired' || state === 'pairing') setDoneSeen(false);
   }, [state]);
 
@@ -124,7 +127,22 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   const pairingName = pinned?.name ?? null;
   const pcName = pinned?.name ?? mobile.daemon?.name ?? null;
   const retry = () => link.retry();
-  const signOut = () => { void link.signOut(); };
+  // Leaving (signing out, relinking) first asks the PC to remove this phone. Without its confirmation (offline, no
+  // answer in time) the phone is erased all the same, and the note says the PC still has to be told. A PC that
+  // denied this phone has already removed it.
+  const leave = (then: () => void) => {
+    if (state !== 'ready') {
+      if (state !== 'denied') setForgetNote(true);
+      then();
+      return;
+    }
+    void store.forgetDevice().then((applied) => {
+      if (!applied) setForgetNote(true);
+      then();
+    });
+  };
+  const signOut = () => leave(() => { void link.signOut(); });
+  const relink = () => leave(() => begin(() => { void link.relink(); }));
 
   const screen = (() => {
     switch (kind) {
@@ -132,9 +150,9 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'login': return <Login server={relay} error={loginError} />;
       case 'replaced': return <Replaced onHere={() => globalThis.location.reload()} />;
       case 'keyChanged':
-        return <KeyChanged pcName={pcName} known={pinned} received={link.receivedKey()} onRelink={() => begin(() => { void link.relink(); })} onSignOut={signOut} />;
+        return <KeyChanged pcName={pcName} known={pinned} received={link.receivedKey()} onRelink={relink} onSignOut={signOut} />;
       case 'unrecognized':
-        return <Unrecognized pcName={pcName} onRelink={() => begin(() => { void link.relink(); })} onSignOut={signOut} />;
+        return <Unrecognized pcName={pcName} onRelink={relink} onSignOut={signOut} />;
       case 'storage': return <StorageUnavailable onRetry={retry} onReload={() => globalThis.location.reload()} />;
       case 'compare':
         return (
@@ -164,6 +182,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
 
   return (
     <div className="app flex flex-col" data-route={route.name}>
+      {forgetNote && state !== 'ready' && <p role="status" className="mx-4 my-3 text-[13px] text-muted">{copy.forget.pending}</p>}
       {screen}
       {updates && waiting && waiting.fingerprint !== later && (
         <Update next={waiting} current={build} onLater={() => setLater(waiting.fingerprint)} onApply={() => updates.accept()} />

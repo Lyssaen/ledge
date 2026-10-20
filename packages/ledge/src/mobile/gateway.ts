@@ -33,10 +33,13 @@ interface Follower {
 type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason };
 
 /** The plain shape of a message type: only such a name is logged or echoed back. */
+/** How long a signing-out device's answer may wait in the queue before its revoke goes ahead anyway. */
+const FLUSH_BEFORE_REVOKE_MS = 5_000;
+
 const REQUEST_NAME = /^[a-z][a-z.]{0,39}$/;
 
 export function createPhoneGateway(deps: {
-  mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange'>;
+  mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke'>;
   /** The relying party of the current relay; none when it is not served over https or from localhost. */
   rp: () => Rp | null;
   challenges: ChallengeStore;
@@ -104,7 +107,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
-  const needsAssertion = (msg: Exclude<PhoneOperation, { type: 'credential.register' }>, s: Session): boolean => {
+  const needsAssertion = (msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' }>, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
     if (msg.type === 'session.reply') return !!msg.expect && s.pending?.source === 'rpc' && riskOf(s)?.risk !== 'low';
     return false;
@@ -132,7 +135,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The checks only a phone meets, in order; undefined lets the operation through. */
-  const precheck = (deviceId: string, msg: Exclude<PhoneOperation, { type: 'credential.register' }>): Outcome | undefined => {
+  const precheck = (deviceId: string, msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' }>): Outcome | undefined => {
     const s = live(msg.id);
     if (!s) return { status: 'rejected', reason: 'unknown_session' };
     switch (msg.type) {
@@ -162,7 +165,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The local message the operation stands for, built field by field. */
-  const local = (msg: Exclude<PhoneOperation, { type: 'credential.register' }>): ClientMessage => {
+  const local = (msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' }>): ClientMessage => {
     switch (msg.type) {
       case 'session.decide':
         return { type: 'session.decide', id: msg.id, decision: msg.decision, ...(msg.note !== undefined ? { note: msg.note } : {}), expect: { kind: msg.expect.kind, text: msg.expect.text, key: msg.expect.key } };
@@ -197,6 +200,8 @@ export function createPhoneGateway(deps: {
 
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
     if (msg.type === 'credential.register') return register(deviceId, msg);
+    // Applied here; the device is revoked by `write`, once the answer has left.
+    if (msg.type === 'device.forget') return { status: 'applied' };
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
@@ -224,6 +229,11 @@ export function createPhoneGateway(deps: {
     result(deviceId, msg.op, outcome.status, outcome.reason);
     // The phone learns it can confirm from the snapshot that follows.
     if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
+    if (msg.type === 'device.forget' && outcome.status === 'applied') {
+      // Revoking closes the channel and drops what is queued: the answer must be on its way first (bounded: a slow relay must not hold the revoke).
+      await Promise.race([outbox.flush(deviceId), new Promise<void>(r => setTimeout(r, FLUSH_BEFORE_REVOKE_MS).unref())]);
+      if (!stopped) await mobile.revoke(deviceId);
+    }
   };
 
   const read = (deviceId: string, msg: Exclude<PhoneClientMessage, PhoneOperation>) => {
@@ -290,10 +300,6 @@ export function createPhoneGateway(deps: {
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;
-    // This lot 6a message is parsed but not handled yet: refused like any unknown request until the gateway learns it.
-    if (msg.type === 'device.forget') {
-      return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
-    }
     if ('op' in msg) {
       void write(deviceId, msg).catch((e: unknown) => log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`));
       return;

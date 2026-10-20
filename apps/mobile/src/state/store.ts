@@ -44,6 +44,8 @@ export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: 
 
 /** How long `prepareConfirm` waits for the PC's challenge. */
 export const PREPARE_MS = 10_000;
+/** How long « Se déconnecter » waits for the PC to confirm that it removed this phone. */
+export const FORGET_MS = 5_000;
 
 export type Answer = Extract<PhoneClientMessage, { type: 'session.answer' }>['answers'][number];
 
@@ -74,6 +76,12 @@ export interface MobileStore {
   watch(id: string | null): void;
   /** Asks the session's request with its whole body. */
   loadPending(id: string): void;
+  /**
+   * Tells the PC to remove this phone (`device.forget`, not kept as an operation: the state it would belong to is
+   * about to be erased) and resolves true on its `applied`. False at once when the link is not ready, and after
+   * `FORGET_MS` without an answer, or when the link drops first.
+   */
+  forgetDevice(): Promise<boolean>;
   /** Stops listening to the link and every timer. */
   close(): void;
 }
@@ -119,6 +127,15 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     preparing = null;
     clearTimeout(p.timer);
     if (outcome instanceof Error) p.reject(outcome); else p.resolve(outcome);
+  };
+  /** The `forgetDevice` waiting for its result. */
+  let forgetting: { op: string; resolve: (applied: boolean) => void; timer: ReturnType<typeof setTimeout> } | null = null;
+  const settleForget = (applied: boolean) => {
+    const f = forgetting;
+    if (!f) return;
+    forgetting = null;
+    clearTimeout(f.timer);
+    f.resolve(applied);
   };
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const listeners = new Set<() => void>();
@@ -181,6 +198,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   }
 
   function onLost() {
+    settleForget(false);
     // Requests sent on the lost channel get no answer.
     threadAsks = [];
     settle(new Error('lost'));
@@ -253,6 +271,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         return;
       }
       case 'operation.result': {
+        if (forgetting?.op === m.op) {
+          if (m.status !== 'received') settleForget(m.status === 'applied');
+          return;
+        }
         const o = state.ops[m.op];
         if (!o || !isLive(o.phase)) return;
         if (m.status === 'received') {
@@ -365,6 +387,16 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       return write(op => ({ type: 'credential.register', op, credential: c }));
     },
 
+    forgetDevice() {
+      if (closed || !ready()) return Promise.resolve(false);
+      settleForget(false);
+      return new Promise<boolean>(resolve => {
+        const op = newOperationId();
+        forgetting = { op, resolve, timer: setTimeout(() => settleForget(false), FORGET_MS) };
+        send({ type: 'device.forget', op });
+      });
+    },
+
     interrupt(id) {
       if (!state.sessions.has(id)) return null;
       return write(op => ({ type: 'session.interrupt', op, id }));
@@ -401,6 +433,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     close() {
       if (closed) return;
       closed = true;
+      settleForget(false);
       settle(new Error('lost'));
       if (previewsDirty) persist();
       offState();
