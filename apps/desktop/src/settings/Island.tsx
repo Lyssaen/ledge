@@ -10,19 +10,18 @@ import { useMotionPreferences } from '../motionPreferences';
 import { useDnd } from '../notify/prefs';
 import { useTheme } from '../shell/theme';
 import { Card, Row, Segmented, SwitchRow } from './controls';
-import { useIslandScreens, type IslandScreen } from './screens';
+import { screenHere, screenValue, useIslandScreens, type IslandScreen } from './screens';
 import { useIslandSave } from './useIslandSave';
 import type { SettingsContext } from './SettingsPage';
 
-type Screen = IslandPrefs['screen'];
 type Position = IslandPrefs['position'];
 type Shows = IslandPrefs['shows'];
 type ScaleChoice = 'auto' | '1' | '1.25' | '1.5' | '2';
 const toChoice = (s: UiScale): ScaleChoice => String(s) as ScaleChoice;
 const toScale = (c: ScaleChoice): UiScale => (c === 'auto' ? 'auto' : (Number(c) as UiScale));
 const POSITIONS: readonly Position[] = ['left', 'center', 'right'];
-/** The preview's screens, as wide as the mockup draws them. */
-const GLASS: Record<Screen, number> = { primary: 236, second: 176 };
+/** The preview's screens, as wide as the mockup draws them (the primary, the others); they narrow to fit more. */
+const glassOf = (s: IslandScreen) => (s.primary ? 236 : 176);
 const sizeOf = (s: IslandScreen) => `${s.width} × ${s.height}`;
 
 /** A stored shortcut (`Ctrl Alt Shift Win L`, the names the island reads) as this language shows it (`Ctrl Alt Maj ⊞ L`). */
@@ -54,7 +53,14 @@ export function Island({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const show = (key: keyof Shows, on: boolean, what: string) => set(key, { shows: { ...p.shows, [key]: on } }, what);
 
   // The screen the island sits on gives Auto its size (as the island reads it: the handle from 1080 px, its windows from 2160).
-  const here = (p.screen === 'second' && screens.second) || screens.primary;
+  const screenAt = screenValue(p.screen, screens);
+  const here = screenHere(screenAt, screens);
+  const screenName = (s: IslandScreen) => (s.primary ? c.screens.primary : c.screens.nth(s.n));
+  // Every screen plugged in; a chosen one that is not stays an option, checked, so the choice remains visible.
+  const screenOptions = [
+    ...screens.map(s => ({ value: s.id, label: screenName(s) })),
+    ...(screens.some(s => s.id === screenAt) ? [] : [{ value: screenAt, label: c.screens.missing }])
+  ];
   const scaleOptions = (auto: number) => UI_SCALES.map(s => ({ value: toChoice(s), label: s === 'auto' ? a.autoAt(a.percent(auto)) : a.percent(s), wide: s === 'auto' }));
   const scaleLabel = (s: UiScale) => (s === 'auto' ? a.auto : a.percent(s));
 
@@ -85,10 +91,10 @@ export function Island({ ctx }: { ctx: SettingsContext }): JSX.Element {
         {!localUp ? <div role="status" className="set-well"><span>{t.offline}</span></div>
           : island === undefined && <div role="status" className="set-well"><span>{c.outdated}</span></div>}
         <SwitchRow label={c.show} hint={c.showHint} error={errorOf('visible')} checked={p.visible} onChange={on => set('visible', { visible: on }, on ? c.shown : c.hidden)} />
-        <div className="set-row stack"><IslandPreview prefs={p} screens={[['primary', screens.primary], ['second', screens.second]]} paused={ctx.paused} /></div>
+        <div className="set-row stack"><IslandPreview prefs={p} screens={screens} at={here.id} name={screenName} paused={ctx.paused} /></div>
         <Row label={c.screen} hint={c.screenHint(sizeOf(here))} error={errorOf('screen')}>
-          {describedBy => <Segmented label={c.screen} value={p.screen} disabled={off} describedBy={describedBy} onChange={v => set('screen', { screen: v }, c.screenSaved[v])}
-            options={[{ value: 'primary', label: c.screens.primary }, { value: 'second', label: c.screens.second }]} />}
+          {describedBy => <Segmented label={c.screen} value={screenAt} disabled={off} describedBy={describedBy} options={screenOptions}
+            onChange={v => { const s = screens.find(x => x.id === v); if (s) set('screen', { screen: v }, s.primary ? c.screenSaved.primary : c.screenSaved.nth(s.n)); }} />}
         </Row>
         <Row label={c.position} hint={c.positionHint} error={errorOf('position')}>
           {describedBy => <Segmented label={c.position} value={p.position} disabled={off} describedBy={describedBy} onChange={v => set('position', { position: v }, c.positionSaved(c.positions[v]))}
@@ -122,10 +128,10 @@ export function Island({ ctx }: { ctx: SettingsContext }): JSX.Element {
   );
 }
 
-/** The mockup's preview (settings.tsx, IslandPreview): the two screens, the island on the chosen one, where it is set, at its size;
+/** The mockup's preview (settings.tsx, IslandPreview): every screen, the island on the one it sits on (`at`), where it is set, at its size;
  *  « Simulate a maximised window » covers them, and the discreet island turns into a line. The bubble is an agent's sentence: shown
- *  while their words are, and never under Do not disturb. A screen that is not there is not drawn. */
-function IslandPreview({ prefs, screens, paused }: { prefs: IslandPrefs; screens: readonly [Screen, IslandScreen | null][]; paused: boolean }): JSX.Element {
+ *  while their words are, and never under Do not disturb. */
+function IslandPreview({ prefs, screens, at, name, paused }: { prefs: IslandPrefs; screens: readonly IslandScreen[]; at: string; name(s: IslandScreen): string; paused: boolean }): JSX.Element {
   const { t } = useI18n();
   const c = t.settings.island;
   const theme = useTheme();
@@ -137,12 +143,11 @@ function IslandPreview({ prefs, screens, paused }: { prefs: IslandPrefs; screens
   return (
     <figure className="island-preview" aria-label={c.preview}>
       <div className="preview-desk">
-        {screens.map(([id, s]) => {
-          if (!s) return null;
-          const here = prefs.visible && prefs.screen === id;
+        {screens.map(s => {
+          const here = prefs.visible && s.id === at;
           const strip = here && covered && prefs.discreet;
           return (
-            <div key={id} className={here ? 'preview-screen here' : 'preview-screen'} style={{ width: GLASS[id] }}>
+            <div key={s.id} className={here ? 'preview-screen here' : 'preview-screen'} style={{ width: glassOf(s) }}>
               <div className="preview-glass">
                 {covered && <div className="preview-window" aria-hidden="true"><i /><i /><i /></div>}
                 {here && (
@@ -152,7 +157,7 @@ function IslandPreview({ prefs, screens, paused }: { prefs: IslandPrefs; screens
                 )}
                 {here && !strip && !dnd && prefs.shows.say && <div className={`preview-bubble pos-${prefs.position}`}>{c.bubble}</div>}
               </div>
-              <span className="preview-caption"><strong>{c.screens[id]}</strong> {sizeOf(s)}</span>
+              <span className="preview-caption"><strong>{name(s)}</strong> {sizeOf(s)}</span>
             </div>
           );
         })}

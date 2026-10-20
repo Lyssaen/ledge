@@ -9,7 +9,7 @@ import { useTokenMissing } from '@ledge/fleet';
 import { Surface } from './surface/Surface';
 import { daemonTokenSource, isTauri, listMonitors, screenHeight, screenWidth, setMonitor } from './tauri/bridge';
 import { autoScale, loadScale, migrateLegacyScale, resolveScale, saveScale, type ScaleTarget, type UiScale } from './scale';
-import { loadMonitor, saveMonitor, type MonitorInfo } from './monitor';
+import { loadMonitor, monitorOfScreen, saveMonitor, type MonitorInfo } from './monitor';
 import { LangProvider, loadLang, type Lang } from './i18n/lang';
 import { LANGS } from './i18n/messages';
 import { DND_KEY, UPDATE_KEY, loadDesktopUpdate, loadDnd, onStorageKey } from './shared';
@@ -64,12 +64,14 @@ export function App() {
     saveIslandPrefs(island); setIslandPosition(island.position); setDiscreet(island.discreet);
     setScales(x => (x.handle === island.islandScale && x.panel === island.panelScale ? x : { handle: island.islandScale, panel: island.panelScale }));
   }, [island]);
-  // The second screen is the first one that is not the primary, listed again whenever it is asked for; none: the primary.
+  // The screen Desktop chose: the primary, or a monitor by its id; an older `second` is the first one that is not the primary,
+  // listed again whenever it is asked for.
   const screen = island?.screen;
   useEffect(() => { if (screen === 'second') refreshMonitors(); }, [screen]);
   useEffect(() => {
-    if (screen === 'primary') setMonitorChoice(null);
-    else if (screen === 'second' && monitors.length) setMonitorChoice(monitors.find(m => !m.primary)?.id ?? null);
+    if (screen === undefined) return;
+    const id = monitorOfScreen(screen, monitors);
+    if (id !== undefined) setMonitorChoice(id);
   }, [screen, monitors]);
   // A daemon that holds no settings yet gets the island's own, once; the first front to send them wins, like the machines.
   const migrated = useRef(false);

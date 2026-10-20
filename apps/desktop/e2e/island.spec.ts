@@ -51,7 +51,7 @@ test('Settings › Notch: every control sends island.set with the whole settings
   await expect(page.locator('.preview-bubble')).toHaveClass(/pos-right/);
   // Screen: the notch goes to the second screen, the hint gives its size, Auto reads it.
   await option(page, 'Screen', 'Screen 2').click();
-  await expectLast(2, { screen: 'second', position: 'right' }, 'Setting saved · Screen 2');
+  await expectLast(2, { screen: '#1', position: 'right' }, 'Setting saved · Screen 2');
   await expect(page.locator('.preview-screen.here .preview-caption')).toHaveText('Screen 2 1920 × 1080');
   await expect(page.getByText('The notch sits at the top of this screen (1920 × 1080).')).toBeVisible();
   await expect(group(page, 'Notch size').getByRole('radio', { name: 'Auto (100%)' })).toBeChecked();
@@ -85,7 +85,7 @@ test('Settings › Notch: every control sends island.set with the whole settings
   // Each change is said once, and the whole settings went each time.
   await expect.poll(async () => (await savedSaid(page)).length).toBe(9);
   expect(setsOf(daemon.received).at(-1)!.prefs).toEqual({
-    ...DEFAULT_ISLAND_PREFS, screen: 'second', position: 'right', discreet: false, islandScale: 1.5, panelScale: 2, shows: { quick: false, finished: false, say: false, helpers: false }
+    ...DEFAULT_ISLAND_PREFS, screen: '#1', position: 'right', discreet: false, islandScale: 1.5, panelScale: 2, shows: { quick: false, finished: false, say: false, helpers: false }
   });
 });
 

@@ -244,9 +244,9 @@ export const fr = {
         hidden: 'L’encoche est masquée. Ledge Desktop continue de vous prévenir.'
       },
       cover: 'Simuler une fenêtre maximisée', uncover: 'Retirer la fenêtre',
-      screen: 'Écran', screens: { primary: 'Principal', second: 'Écran 2' } as Record<'primary' | 'second', string>,
+      screen: 'Écran', screens: { primary: 'Principal', nth: (n: number) => `Écran ${n}`, missing: 'Débranché' },
       screenHint: (size: string | null) => (size ? `L’encoche se pose en haut de cet écran (${size}).` : 'L’encoche se pose en haut de cet écran.'),
-      screenSaved: { primary: 'Écran principal', second: 'Écran 2' } as Record<'primary' | 'second', string>,
+      screenSaved: { primary: 'Écran principal', nth: (n: number) => `Écran ${n}` },
       position: 'Position de l’encoche', positionHint: 'Au centre du bord supérieur, ou décalée au quart de l’écran pour laisser libres les titres et les onglets.',
       positions: { left: 'À gauche', center: 'Centre', right: 'À droite' } as Record<'left' | 'center' | 'right', string>, positionSaved: (p: string) => `Position : ${p}`,
       discreet: 'Mode discret sous une fenêtre', discreetHint: 'Un simple trait quand une fenêtre maximisée occupe l’écran ; un survol la redéploie.', discreetOn: 'Mode discret', discreetOff: 'Encoche toujours entière',

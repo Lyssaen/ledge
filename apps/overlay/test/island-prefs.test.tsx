@@ -145,10 +145,10 @@ describe('App and the daemon’s island settings', () => {
   beforeEach(() => { FakeSocket.all = []; vi.stubGlobal('WebSocket', FakeSocket); localStorage.clear(); localStorage.setItem('desktop.lang', 'en'); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-  it('the island’s own values, a chosen monitor read as the second screen', () => {
+  it('the island’s own values, a chosen monitor by its id', () => {
     localStorage.setItem('ledge.islandPosition', 'left'); localStorage.setItem('ledge.discreet', '0'); localStorage.setItem('ledge.monitor', 'X');
     localStorage.setItem('ledge.handleScale', '1.5'); localStorage.setItem('ledge.panelScale', '2');
-    expect(localIslandPrefs()).toEqual(prefs({ position: 'left', discreet: false, screen: 'second', islandScale: 1.5, panelScale: 2 }));
+    expect(localIslandPrefs()).toEqual(prefs({ position: 'left', discreet: false, screen: 'X', islandScale: 1.5, panelScale: 2 }));
     localStorage.clear();
     expect(localIslandPrefs()).toEqual(DEFAULT_ISLAND_PREFS);
   });
@@ -177,6 +177,9 @@ describe('App and the daemon’s island settings', () => {
     await act(async () => { await sleep(20); });
     expect(localStorage.getItem('ledge.monitor')).toBe(monitors[1]!.id);
     expect(localStorage.getItem('ledge.islandPosition')).toBe('center');
+    // Any monitor by its id, a third one too.
+    await speak(prefs({ screen: '\\\\.\\DISPLAY3' }));
+    expect(localStorage.getItem('ledge.monitor')).toBe('\\\\.\\DISPLAY3');
     await speak(prefs({ visible: false }));
     expect(surface()).toBeNull();
     await speak(prefs());
