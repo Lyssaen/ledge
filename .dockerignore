@@ -1,8 +1,10 @@
 **/node_modules
 **/dist
-target
+**/target
 .git
 .claude
 .playwright-mcp
+.worktrees
+.superpowers
 **/test-results
-.env
+**/.env*
