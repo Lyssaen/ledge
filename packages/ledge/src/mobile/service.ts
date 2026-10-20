@@ -258,7 +258,7 @@ export async function createMobileService(opts: {
   /** The whole list, each time the link comes online; an entry too old is dropped first. */
   const retryRevocations = async () => {
     const limit = now() - REVOCATION_MAX_AGE_MS;
-    const stale = revocations.filter((r) => Date.parse(r.at) < limit);
+    const stale = revocations.filter((r) => !(Date.parse(r.at) >= limit));
     if (stale.length > 0) {
       for (const r of stale) log(`mobile: giving up the revocation of peer ${r.peer} (older than 30 days)`);
       saveRevocations(revocations.filter((r) => !stale.includes(r)));

@@ -339,6 +339,13 @@ describe('relay revocations', () => {
     expect(ctx.calls.revoked.map((c) => c.peer)).toEqual(['d_newnewnewnewnew']);
   });
 
+  it('an entry whose date cannot be read is dropped, not retried forever', async () => {
+    writeRevocations([{ peer: 'd_baddatebaddate0', at: 'not a date' }]);
+    const ctx = await signedIn();
+    await until(() => readRevocations().length === 0, 'entry dropped');
+    expect(ctx.calls.revoked).toEqual([]);
+  });
+
   it.each([[200, true], [204, true], [404, true], [401, false], [429, false], [500, false], [503, false], ['network', false]] as const)(
     'relay answer %s: entry removed is %s', async (status, removed) => {
       const mode = { status: status as number | 'network' };

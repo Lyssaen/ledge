@@ -129,7 +129,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     if (outcome instanceof Error) p.reject(outcome); else p.resolve(outcome);
   };
   /** The `forgetDevice` waiting for its result. */
-  let forgetting: { op: string; resolve: (applied: boolean) => void; timer: ReturnType<typeof setTimeout> } | null = null;
+  type Forgetting = { op: string; resolve: (applied: boolean) => void; timer: ReturnType<typeof setTimeout>; promise: Promise<boolean> };
+  let forgetting: Forgetting | null = null;
   const settleForget = (applied: boolean) => {
     const f = forgetting;
     if (!f) return;
@@ -389,12 +390,17 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
     forgetDevice() {
       if (closed || !ready()) return Promise.resolve(false);
-      settleForget(false);
-      return new Promise<boolean>(resolve => {
+      // A second call while one waits shares it: one device.forget, one answer.
+      if (forgetting) return forgetting.promise;
+      let entry!: Forgetting;
+      const promise = new Promise<boolean>(resolve => {
         const op = newOperationId();
-        forgetting = { op, resolve, timer: setTimeout(() => settleForget(false), FORGET_MS) };
+        entry = { op, resolve, timer: setTimeout(() => settleForget(false), FORGET_MS), promise: null as unknown as Promise<boolean> };
         send({ type: 'device.forget', op });
       });
+      entry.promise = promise;
+      forgetting = entry;
+      return promise;
     },
 
     interrupt(id) {

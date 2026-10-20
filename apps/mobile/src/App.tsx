@@ -130,13 +130,17 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   // Leaving (signing out, relinking) first asks the PC to remove this phone. Without its confirmation (offline, no
   // answer in time) the phone is erased all the same, and the note says the PC still has to be told. A PC that
   // denied this phone has already removed it.
+  const leaving = useRef(false);
   const leave = (then: () => void) => {
+    if (leaving.current) return;
     if (state !== 'ready') {
       if (state !== 'denied') setForgetNote(true);
       then();
       return;
     }
+    leaving.current = true;
     void store.forgetDevice().then((applied) => {
+      leaving.current = false;
       if (!applied) setForgetNote(true);
       then();
     });

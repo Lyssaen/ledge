@@ -96,6 +96,18 @@ describe('the app', () => {
     expect(screen.queryByText(/Le PC n’a pas confirmé/)).toBeNull();
   });
 
+  it('« Se déconnecter » tapped twice: one device.forget, one sign-out on applied, no note', async () => {
+    const t = app('ready', { hash: '#/connection' });
+    const button = screen.getByRole('button', { name: 'Se déconnecter' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(t.of('device.forget')).toHaveLength(1);
+    await act(async () => { t.deliver({ type: 'operation.result', op: t.of('device.forget')[0]!.op, status: 'applied' }); });
+    expect(t.calls).toEqual(['signOut']);
+    act(() => t.set('signed_out'));
+    expect(screen.queryByText(/Le PC n’a pas confirmé/)).toBeNull();
+  });
+
   it('« Se déconnecter » offline: signs out at once, and the screen the user lands on says the PC did not confirm', () => {
     const t = app('pc_offline', { hash: '#/connection' });
     fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));

@@ -231,7 +231,9 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
     if (msg.type === 'device.forget' && outcome.status === 'applied') {
       // Revoking closes the channel and drops what is queued: the answer must be on its way first (bounded: a slow relay must not hold the revoke).
-      await Promise.race([outbox.flush(deviceId), new Promise<void>(r => setTimeout(r, FLUSH_BEFORE_REVOKE_MS).unref())]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([outbox.flush(deviceId), new Promise<void>(r => { timer = setTimeout(r, FLUSH_BEFORE_REVOKE_MS); })]);
+      clearTimeout(timer);
       if (!stopped) await mobile.revoke(deviceId);
     }
   };
