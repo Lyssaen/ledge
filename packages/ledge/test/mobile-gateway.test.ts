@@ -1310,6 +1310,18 @@ describe('phone gateway: chat', () => {
     expect(bad.got('../evil')).toEqual([{ type: 'chat.error', qid: Q1, code: 'failed' }]);
   });
 
+  it('survives a thread dropped while its question ends', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    const emit = c.chats.device('dev1');
+    g.send('dev1', ask(Q1));
+    await flush();
+    c.dropping.add('dev1');
+    const e = c.emitters.get('device:dev1') as (m: unknown) => void;
+    expect(() => e({ type: 'chat.done', qid: randomUUID(), text: '', at: T0 })).not.toThrow();
+    void emit;
+  });
+
   it('answers a chat message without threads with error invalid', async () => {
     const g = setup();
     g.send('dev1', { type: 'chat.history' });

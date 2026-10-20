@@ -28,8 +28,9 @@ export function toPhoneTurn(t: ChatTurn): PhoneChatTurn {
   }
   if (t.answeredAt !== undefined) out.answeredAt = t.answeredAt;
   if (t.error !== undefined) out.error = errorCode(t.error);
-  const proposals: PhoneChatProposal[] = proposalRows(t)
-    .filter(p => (p.prompt?.length ?? 0) <= TOOL_TEXT_MAX)
+  // All or nothing: the phone's row i is the PC's row i, so a card with one row too long is not projected at all.
+  const rows = proposalRows(t);
+  const proposals: PhoneChatProposal[] = rows.some(p => (p.prompt?.length ?? 0) > TOOL_TEXT_MAX) ? [] : rows
     .map(p => ({
       project: p.project.slice(0, 80), tool: p.tool, ...(p.prompt !== undefined ? { prompt: p.prompt } : {}),
       ...(p.launchedId !== undefined ? { launchedId: p.launchedId } : {}), ...(p.error !== undefined ? { failed: true as const } : {})
@@ -73,13 +74,19 @@ export function phoneEmitter(
     flushLive(qid);
     live.delete(qid);
     const turn = chat.history().find(t => t.qid === qid);
+    // A turn gone from the history (a reset) must still end for the phone.
     if (turn) send({ type: 'chat.done', qid, turn: toPhoneTurn(turn) });
+    else send({ type: 'chat.error', qid, code: 'failed' });
   };
+  /** The questions that ended: a late delta for one is ignored. Bounded. */
+  const finished = new Set<string>();
+  const finish = (qid: string) => { finished.add(qid); if (finished.size > 200) finished.delete(finished.values().next().value!); };
   return (m) => {
     switch (m.type) {
       case 'chat.history': return send({ type: 'chat.history', turns: toPhoneHistory(m.turns) }, 'chat.history');
       case 'chat.step': return send({ type: 'chat.step', qid: m.qid, step: stepOf(m.step) });
       case 'chat.delta': {
+        if (finished.has(m.qid)) return;
         const l = live.get(m.qid) ?? { text: '', sent: '', at: Number.NEGATIVE_INFINITY };
         live.set(m.qid, l);
         l.text += m.text;
@@ -88,9 +95,11 @@ export function phoneEmitter(
       }
       case 'chat.done':
         done(m.qid);
+        finish(m.qid);
         return opts.onEnd?.({ qid: m.qid });
       case 'chat.error': {
         live.delete(m.qid);
+        finish(m.qid);
         const code = errorCode(m.message);
         send({ type: 'chat.error', qid: m.qid, code });
         return opts.onEnd?.({ qid: m.qid, code });

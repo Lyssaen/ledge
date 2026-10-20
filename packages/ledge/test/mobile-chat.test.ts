@@ -36,7 +36,9 @@ describe('toPhoneTurn', () => {
       proposals: [{ cwd: '/w', project: 'p', prompt: 'z'.repeat(3_000), tool: 'claude' }, { cwd: '/w', project: 'q', prompt: 'ok', tool: 'codex' }]
     }));
     expect(long).not.toHaveProperty('relay');
-    expect(long.proposals).toEqual([{ project: 'q', tool: 'codex', prompt: 'ok' }]);
+    expect(long).not.toHaveProperty('proposals');
+    const fits = toPhoneTurn(turn({ proposals: [{ cwd: '/w', project: 'a', prompt: 'z'.repeat(2_048), tool: 'claude' }, { cwd: '/w', project: 'b', tool: 'codex' }] }));
+    expect(fits.proposals?.map(p => p.project)).toEqual(['a', 'b']);
     expect(toPhoneTurn(turn({ relay: { id: 's', name: 'n', tool: 'claude', text: 'y'.repeat(2_048) } })).relay?.text).toHaveLength(2_048);
   });
 
@@ -99,6 +101,20 @@ describe('phoneEmitter', () => {
     r.clock.t = 250;
     r.emit({ type: 'chat.delta', qid: 'q', text: 'b' });
     expect(r.sent.map(([m]) => m.type === 'chat.delta' && m.text)).toEqual(['a', 'ab']);
+  });
+
+  it('ends with chat.error failed when the turn is gone from the history, and ignores a late delta', () => {
+    const r = rig([]);
+    r.emit({ type: 'chat.delta', qid: 'q', text: 'a' });
+    r.emit({ type: 'chat.done', qid: 'q', text: 'a', at: AT });
+    expect(r.sent.at(-1)![0]).toEqual({ type: 'chat.error', qid: 'q', code: 'failed' });
+    expect(r.ends).toEqual([{ qid: 'q' }]);
+    const n = r.sent.length;
+    r.clock.t += 1_000;
+    r.emit({ type: 'chat.delta', qid: 'q', text: 'late' });
+    r.emit({ type: 'chat.error', qid: 'e', message: 'x' });
+    r.emit({ type: 'chat.delta', qid: 'e', text: 'late' });
+    expect(r.sent.length).toBe(n + 1);
   });
 
   it('sends a code for an error, then ends once, with the code', () => {

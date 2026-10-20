@@ -105,7 +105,7 @@ export function createPhoneGateway(deps: {
     let e = emitters.get(deviceId);
     if (!e) {
       const chats = deps.chats!;
-      e = phoneEmitter((m, key) => push(deviceId, m, key), { history: () => chats.device(deviceId).history() }, {
+      e = phoneEmitter((m, key) => push(deviceId, m, key), { history: () => { try { return chats.device(deviceId).history(); } catch { return []; } } }, {
         ...(deps.chatThrottleMs !== undefined ? { throttleMs: deps.chatThrottleMs } : {}),
         onEnd: end => deps.onChatEnd?.(deviceId, end)
       });
