@@ -295,13 +295,13 @@ describe('the pinned service worker', () => {
 
   describe('notifications', () => {
     const payload = { v: 1, kind: 'request', title: 'api attend votre accord', body: 'rm -rf build', url: '/#/request/s1/k1', badge: 3, tag: 's1-k1' };
-    const FALLBACK = ['Ledge', { body: 'Une demande attend', tag: 'ledge' }];
+    const FALLBACK = ['Ledge', { body: 'Une demande attend', tag: 'ledge', renotify: true }];
 
     it('a valid push shows its title, body and url, and sets the badge', async () => {
       const o = origin();
       const w = await firstVisit(o);
       await w.push(payload);
-      expect(w.self.registration.showNotification).toHaveBeenCalledWith('api attend votre accord', { body: 'rm -rf build', tag: 's1-k1', data: { url: '/#/request/s1/k1' }, icon: '/icon-192.png' });
+      expect(w.self.registration.showNotification).toHaveBeenCalledWith('api attend votre accord', { body: 'rm -rf build', tag: 's1-k1', data: { url: '/#/request/s1/k1' }, icon: '/icon-192.png', renotify: true });
       expect(w.self.registration.setAppBadge).toHaveBeenCalledWith(3);
     });
 
@@ -315,6 +315,18 @@ describe('the pinned service worker', () => {
       await w.push({ ...payload, kind: 'other' });
       expect(show).toHaveBeenCalledTimes(4);
       for (const call of show.mock.calls) expect(call).toEqual(FALLBACK);
+    });
+
+    it('re-rings on a tag already shown, except for a finished turn', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      const show = w.self.registration.showNotification;
+      for (const kind of ['request', 'question', 'chat', 'finished'] as const) {
+        show.mockClear();
+        await w.push({ ...payload, kind });
+        expect((show.mock.calls[0] as unknown as [string, { tag: string; renotify?: boolean }])[1]).toMatchObject({ tag: 's1-k1', ...(kind === 'finished' ? {} : { renotify: true }) });
+        if (kind === 'finished') expect((show.mock.calls[0] as unknown as [string, object])[1]).not.toHaveProperty('renotify', true);
+      }
     });
 
     it('a push still shows when the badge API is missing', async () => {

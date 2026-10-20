@@ -23,12 +23,6 @@ const toBytes = (b64u: string): Uint8Array<ArrayBuffer> => {
   const bin = atob(b64u.replace(/-/g, '+').replace(/_/g, '/'));
   return Uint8Array.from(bin, c => c.charCodeAt(0));
 };
-const same = (a: ArrayBuffer | null | undefined, b: Uint8Array) => {
-  if (!a || a.byteLength !== b.length) return false;
-  const x = new Uint8Array(a);
-  return x.every((v, i) => v === b[i]);
-};
-
 /** Resolves with the operation's last known phase: `applied`, or anything else when it did not go through. */
 function outcome(store: MobileStore, op: string): Promise<'applied' | 'other'> {
   return new Promise(resolve => {
@@ -47,7 +41,7 @@ function outcome(store: MobileStore, op: string): Promise<'applied' | 'other'> {
 
 /**
  * The permission is asked first, inside the tap (iOS wants it before any other wait), then the relay's key (404: it does
- * not push), then the browser's subscription (made again when it was made with another key), then the PC, which must
+ * not push), then the browser's subscription (the old one dropped, a new one made), then the PC, which must
  * say `applied`.
  */
 export async function enablePush(store: MobileStore, fetchImpl: typeof fetch = (i, o) => globalThis.fetch(i, o)): Promise<EnableResult> {
@@ -63,12 +57,9 @@ export async function enablePush(store: MobileStore, fetchImpl: typeof fetch = (
     const key = body.publicKey;
     const keyBytes = toBytes(key);
     const { pushManager } = await navigator.serviceWorker.ready;
-    let sub = await pushManager.getSubscription();
-    if (sub && !same(sub.options.applicationServerKey, keyBytes)) {
-      await sub.unsubscribe();
-      sub = null;
-    }
-    sub ??= await pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes });
+    // Always made again: after a 410 the browser may still hand back the dead subscription, whatever its key.
+    await (await pushManager.getSubscription())?.unsubscribe();
+    const sub = await pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes });
     const subscription = PushSubscriptionSchema.safeParse(sub.toJSON());
     if (!subscription.success) return 'failed';
     const op = store.pushSubscribe(subscription.data, key);

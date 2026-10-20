@@ -26,7 +26,7 @@ interface WorkerScope {
   location: { origin: string };
   registration: {
     active: object | null;
-    showNotification(title: string, o?: { body?: string; tag?: string; data?: { url: string }; icon?: string }): Promise<void>;
+    showNotification(title: string, o?: { body?: string; tag?: string; data?: { url: string }; icon?: string; renotify?: boolean }): Promise<void>;
     setAppBadge?(n: number): Promise<void>;
   };
   skipWaiting(): Promise<void>;
@@ -201,8 +201,8 @@ sw.addEventListener('push', (e) => {
   let payload: PushPayload | null = null;
   try { payload = payloadOf(e.data?.json()); } catch { /* unreadable: the fallback below */ }
   e.waitUntil((async () => {
-    if (!payload) return sw.registration.showNotification('Ledge', { body: 'Une demande attend', tag: 'ledge' });
-    await sw.registration.showNotification(payload.title, { body: payload.body, tag: payload.tag, data: { url: payload.url }, icon: '/icon-192.png' });
+    if (!payload) return sw.registration.showNotification('Ledge', { body: 'Une demande attend', tag: 'ledge', renotify: true });
+    await sw.registration.showNotification(payload.title, { body: payload.body, tag: payload.tag, data: { url: payload.url }, icon: '/icon-192.png', renotify: payload.kind !== 'finished' });
     // The badge is a courtesy: neither a throw nor a rejection of it may fail the notification.
     try { await sw.registration.setAppBadge?.(payload.badge); } catch { /* ignored */ }
   })());

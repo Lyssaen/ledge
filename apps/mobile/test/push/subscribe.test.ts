@@ -111,12 +111,12 @@ describe('enablePush', () => {
     expect(await p).toBe('on');
   });
 
-  it('a subscription with the same key is kept', async () => {
+  it('a subscription with the same key is dropped and made again: after a 410 the old one is dead', async () => {
     const e = env({ existingKey: KEY });
     const t = setup();
     const p = enablePush(t.store, e.fetchImpl as unknown as typeof fetch);
     await vi.waitFor(() => expect(t.of('push.subscribe')).toHaveLength(1));
-    expect(e.calls).toEqual(['permission', 'fetch']);
+    expect(e.calls).toEqual(['permission', 'fetch', 'unsubscribe', 'subscribe']);
     t.deliver({ type: 'operation.result', op: t.of('push.subscribe')[0]!.op, status: 'applied' });
     expect(await p).toBe('on');
   });
