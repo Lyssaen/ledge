@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { copy } from '../copy';
+import { useBusy } from '../useBusy';
 
 const tones = { plain: 'border-line bg-surface', warning: 'border-attention/15 bg-attention/[0.045]', danger: 'border-danger-fg/15 bg-danger-bg' } as const;
 export function Notice({ title, tone = 'plain', children, role }: { title: string; tone?: keyof typeof tones; children?: ReactNode; role?: 'alert' | 'status' }) {
@@ -16,12 +17,7 @@ export function Notice({ title, tone = 'plain', children, role }: { title: strin
  * one; the link reconnects on its own either way.
  */
 export function OfflineBanner({ onReconnect }: { onReconnect?: (() => void) | undefined }) {
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!busy) return;
-    const t = setTimeout(() => setBusy(false), 4000);
-    return () => clearTimeout(t);
-  }, [busy]);
+  const [busy, setBusy] = useBusy();
   return (
     <Notice title={copy.offline.pcOffline} tone="warning" role="status">
       <p>{copy.link.lostBody}</p>

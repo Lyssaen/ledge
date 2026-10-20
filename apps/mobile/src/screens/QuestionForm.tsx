@@ -6,9 +6,11 @@ import { OTHER_MAX, type FreeAnswerProblem } from '../model/freeAnswer';
  * free answer (`other`). The free answer is the radio after the last option (`value === options.length`); a question
  * without options shows the field alone. The send button lives in the footer (`DecisionFooter`).
  */
-export function QuestionForm({ options, value, onChange, disabled = false, botName, other }: {
+export function QuestionForm({ options, value, onChange, disabled = false, botName, other, onSubmit }: {
   options: string[]; value: number | null; onChange: (index: number) => void; disabled?: boolean;
   botName: string;
+  /** Enter in the free answer: the field holds one line, so Enter sends rather than breaking it. */
+  onSubmit?: (() => void) | undefined;
   /** Present when the tool accepts a free answer: the text typed so far and what stops it from being sent. */
   other?: { text: string; onText: (t: string) => void; problem: FreeAnswerProblem | null } | undefined;
 }) {
@@ -39,10 +41,11 @@ export function QuestionForm({ options, value, onChange, disabled = false, botNa
               <label htmlFor="other-answer" className="mt-3 mb-2 block text-xs text-muted">{copy.question.fieldLabel(botName)}</label>
               <textarea
                 id="other-answer" rows={2} value={other.text} onChange={e => other.onText(e.target.value)} placeholder={copy.question.placeholder}
-                aria-invalid={showProblem} aria-describedby={showProblem ? 'other-problem' : undefined} autoComplete="off"
+                aria-invalid={showProblem} aria-describedby={showProblem ? 'other-problem' : undefined} autoComplete="off" enterKeyHint="send"
+                onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); onSubmit?.(); } }}
                 className="max-h-[120px] min-h-12 w-full min-w-0 resize-y rounded-[12px] border border-line bg-surface p-3 text-base leading-[22px] text-fg placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-info"
               />
-              {showProblem && <p id="other-problem" role="alert" className="mt-2 text-xs text-danger-fg">{other.problem === 'long' ? copy.question.long(OTHER_MAX) : copy.question.untypable}</p>}
+              {showProblem && <p id="other-problem" role="alert" className="mt-2 text-xs text-danger-fg">{other.problem === 'long' ? copy.question.long(OTHER_MAX) : other.problem === 'digit' ? copy.question.digit : copy.question.untypable}</p>}
             </div>
           )}
         </>

@@ -6,6 +6,7 @@ import { outcomeFor } from '../model/requestOutcome';
 import { ageLabel, headline, requestsOf, type InboxItem } from '../model/requests';
 import { href } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
+import { useBusy } from '../useBusy';
 import { useNow } from '../useNow';
 import { Badge } from '../ui/Badge';
 import { Command } from '../ui/Command';
@@ -18,12 +19,7 @@ import { QuestionForm } from './QuestionForm';
 import { Result } from './Result';
 
 function Lost({ onReconnect }: { onReconnect?: (() => void) | undefined }) {
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!busy) return;
-    const t = setTimeout(() => setBusy(false), 4000);
-    return () => clearTimeout(t);
-  }, [busy]);
+  const [busy, setBusy] = useBusy();
   return (
     <Notice title={copy.link.lostTitle} tone="warning" role="status">
       <p>{copy.link.lostDetail}</p>
@@ -52,7 +48,9 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
   const [changed, setChanged] = useState(false);
   const [choice, setChoice] = useState<number | null>(null);
   const [otherText, setOtherText] = useState('');
-  useEffect(() => { setKey(requestKey); setChanged(false); setChoice(null); setOtherText(''); }, [requestKey]);
+  // The last tap sent nothing (the store refused the write): said in the footer until the next tap.
+  const [refused, setRefused] = useState(false);
+  useEffect(() => { setKey(requestKey); setChanged(false); setChoice(null); setOtherText(''); setRefused(false); }, [requestKey]);
 
   const sessions = [...state.sessions.values()];
   const item = requestsOf(sessions).find(i => i.sessionId === sessionId && i.key === key);
@@ -107,8 +105,8 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
   const busy = outcome.kind === 'sending' || outcome.kind === 'uncertain';
 
   const send = () => {
-    if (choosingOther) { if (free.problem === null) store.reply(sessionId, free.text); }
-    else if (choice !== null && choice < options.length) store.reply(sessionId, String(choice + 1));
+    if (choosingOther) { if (free.problem === null) setRefused(!store.reply(sessionId, free.text)); }
+    else if (choice !== null && choice < options.length) setRefused(!store.reply(sessionId, String(choice + 1)));
   };
 
   return (
@@ -130,8 +128,9 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
         {isQuestion ? (
           <>
             {answerable && (
-              <QuestionForm options={options} value={choice} onChange={setChoice} botName={req.botName} disabled={busy}
-                other={canOther ? { text: otherText, onText: setOtherText, problem: free.problem } : undefined} />
+              <QuestionForm options={options} value={choice} onChange={c => { setChoice(c); setRefused(false); }} botName={req.botName} disabled={busy}
+                other={canOther ? { text: otherText, onText: t => { setOtherText(t); setRefused(false); }, problem: free.problem } : undefined}
+                onSubmit={fresh && !changed && !busy && item !== undefined ? send : undefined} />
             )}
             {!canOther && options.length > 0 && <p className="mb-3.5 text-xs text-muted">{copy.decide.otherUnsupported}</p>}
           </>
@@ -152,7 +151,10 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
             </dl>
             {lines.length > 0 && (
               <details className="group mt-[18px] border-t border-line">
-                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between text-xs [&::-webkit-details-marker]:hidden">{copy.detail.context}</summary>
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between text-xs [&::-webkit-details-marker]:hidden">
+                  {copy.detail.context}
+                  <svg className="size-4 flex-none fill-none stroke-current text-muted [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 17 6-6-6-6M12 19h8" /></svg>
+                </summary>
                 <pre className="pt-2 pb-4 font-mono text-xs leading-[1.7] break-words whitespace-pre-wrap text-muted [overflow-wrap:anywhere]">{lines.join('\n')}</pre>
               </details>
             )}
@@ -162,10 +164,10 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
       </main>
       <DecisionFooter
         item={req} outcome={outcome} fresh={fresh} changed={changed} stillPending={item !== undefined}
-        onReread={() => { setChanged(false); setChoice(null); }} onDecide={d => store.decide(sessionId, d)}
+        onReread={() => { setChanged(false); setChoice(null); setRefused(false); }} onDecide={d => setRefused(!store.decide(sessionId, d))}
         answerable={answerable} choice={choosingOther ? options.length : choice} onAnswer={send}
         answerBlocked={choosingOther ? free.problem !== null : choice === null || choice >= options.length}
-        onCheck={onReconnect}
+        onCheck={onReconnect} refused={refused}
       />
     </>
   );

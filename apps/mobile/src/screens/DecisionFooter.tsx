@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { copy } from '../copy';
 import type { InboxItem } from '../model/requests';
 import type { Outcome } from '../model/requestOutcome';
 import { href } from '../router';
+import { useBusy } from '../useBusy';
 import { Notice } from '../ui/Notice';
 import { RiskConfirm } from './RiskConfirm';
 
@@ -28,12 +29,17 @@ export interface DecisionFooterProps {
   answerBlocked?: boolean;
   /** Reconnect, so an operation of unknown outcome is sent again and the PC says where it ended up. */
   onCheck?: (() => void) | undefined;
+  /** The phone could not send the last tap at all (link not ready, a request it cannot name): said, not swallowed. */
+  refused?: boolean;
 }
 
 function reasonText(item: InboxItem, r: Extract<Outcome, { kind: 'rejected' | 'failed' }>['reason']): string {
   const D = copy.decide;
   switch (r) {
-    case 'invalid': case 'free_text': case 'untypable': return item.kind === 'question' ? D.otherInvalid : D.failed;
+    case 'invalid': return item.kind === 'question' ? D.otherInvalid : D.failed;
+    // The dialog on the PC has no row for a free answer.
+    case 'free_text': return D.otherUnsupported;
+    case 'untypable': return item.kind === 'question' ? copy.question.untypable : D.failed;
     case 'busy': return D.busy;
     case 'not_taken': return D.notTaken;
     case 'read_only': return D.readOnly;
@@ -47,22 +53,21 @@ function reasonText(item: InboxItem, r: Extract<Outcome, { kind: 'rejected' | 'f
  * footer never offers one it could not honour. A high-impact accept is done on the PC (`RiskConfirm`).
  */
 export function DecisionFooter(p: DecisionFooterProps) {
-  const { item, outcome, fresh, changed, stillPending, onReread, onDecide, answerable = false, choice = null, onAnswer, answerBlocked = false, onCheck } = p;
+  const { item, outcome, fresh, changed, stillPending, onReread, onDecide, answerable = false, choice = null, onAnswer, answerBlocked = false, onCheck, refused = false } = p;
   const D = copy.decide;
-  const [checking, setChecking] = useState(false);
-  useEffect(() => {
-    if (!checking) return;
-    const t = setTimeout(() => setChecking(false), 4000);
-    return () => clearTimeout(t);
-  }, [checking]);
+  const [checking, setChecking] = useBusy();
 
   const thread = <a href={href({ name: 'thread', sessionId: item.sessionId })} className={`${full} border-transparent text-muted`}>{copy.result.thread(item.botName)}</a>;
-  const wrap = (children: ReactNode, withThread = true) => (
-    <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg px-side pt-3 pb-4">{children}{withThread && thread}</footer>
+  // The board's order: what to do, then the way to the thread, then what a tap does.
+  const wrap = (children: ReactNode, hint?: string, withThread = true) => (
+    <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg px-side pt-3 pb-4">
+      {children}
+      {withThread && thread}
+      {hint && <p className="text-center text-[10px] text-muted">{hint}</p>}
+    </footer>
   );
-  const hint = (t: string) => <p className="text-center text-[10px] text-muted">{t}</p>;
 
-  if (item.kind === 'question' && !answerable) return wrap(hint(D.answerOnPc));
+  if (item.kind === 'question' && !answerable) return wrap(null, D.answerOnPc);
 
   const onPc = item.risk === 'high' || (outcome.kind === 'rejected' && outcome.reason === 'confirm_required');
   const live = fresh && !changed && stillPending;
@@ -77,7 +82,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
     </div>
   );
   const linkHint = !fresh ? D.offlineHint : onPc && !answerable ? D.onPcHint : answerable ? D.answerHint : D.hint;
-  const decide = (notice?: ReactNode) => wrap(<>{notice}{buttons(live)}{hint(linkHint)}</>);
+  const decide = (notice?: ReactNode) => wrap(<>{notice}{buttons(live)}</>, linkHint);
 
   // A decision in flight or of unknown delivery always comes first: a newer request never hides it.
   if (changed && outcome.kind !== 'sending' && outcome.kind !== 'uncertain') {
@@ -104,12 +109,12 @@ export function DecisionFooter(p: DecisionFooterProps) {
         return wrap(<>
           <Notice title={D.changed} tone="warning" role="alert" />
           <a href={href({ name: 'inbox' })} className={`${full} border-line bg-surface`}>{copy.result.back}</a>
-        </>, false);
+        </>, undefined, false);
       }
       const notice = <Notice title={reasonText(item, r)} tone="warning" role="alert" />;
       return stillPending ? decide(notice) : wrap(notice);
     }
     default:
-      return decide();
+      return decide(refused ? <Notice title={D.failed} tone="warning" role="alert" /> : undefined);
   }
 }

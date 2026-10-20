@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { UNTYPABLE } from '@ledge/protocol';
 import { copy } from '../copy';
 import { MESSAGE_MAX, QUICK_REPLIES, type Composer } from '../model/thread';
 import type { Op } from '../state/operations';
+import { useBusy } from '../useBusy';
 import { Notice } from '../ui/Notice';
 
 const ICON = 'size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
@@ -33,12 +34,7 @@ export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, ch
   name: string; composer: Composer; draft: string; onDraft: (t: string) => void; onSend: () => void; fresh: boolean;
   taken: boolean; checking: boolean; error: { title: string; body: string } | null; onReconnect?: (() => void) | undefined;
 }) {
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!busy) return;
-    const t = setTimeout(() => setBusy(false), 4000);
-    return () => clearTimeout(t);
-  }, [busy]);
+  const [busy, setBusy] = useBusy();
   const status = taken ? { tone: 'ok' as const, label: C.status.taken } : checking ? { tone: 'muted' as const, label: copy.decide.checking } : composer.status;
   const problem = replyProblem(draft);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -67,6 +63,7 @@ export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, ch
       <div className="flex items-end gap-2">
         <label htmlFor="draft" className="sr-only">{C.label(name)}</label>
         <textarea id="draft" ref={ref} rows={1} value={draft} disabled={!composer.enabled} placeholder={composer.placeholder} onChange={e => onDraft(e.target.value)}
+          enterKeyHint="send" onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); if (draft.trim() && problem === null) onSend(); } }}
           aria-invalid={problem !== null} aria-describedby={problem ? 'draft-problem' : undefined}
           className="max-h-[120px] min-h-12 w-full min-w-0 resize-none rounded-control border border-line bg-surface p-3 text-base leading-[22px] text-fg placeholder:text-muted disabled:opacity-60" />
         <button type="button" disabled={!composer.enabled || !draft.trim() || problem !== null} onClick={onSend} aria-label={C.send(name)} className="inline-flex size-12 flex-none items-center justify-center rounded-control bg-fg text-[#16181a] disabled:opacity-45">

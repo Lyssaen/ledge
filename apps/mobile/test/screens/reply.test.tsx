@@ -41,4 +41,13 @@ describe('an instruction from the phone', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Envoyer à Kai' }));
     expect(t.of('session.reply')).toMatchObject([{ text: 'Lance les tests' }]);
   });
+
+  it('takes Enter as send, never as a line break', () => {
+    const t = opened();
+    const field = screen.getByLabelText('Message pour Kai');
+    expect(field).toHaveAttribute('enterkeyhint', 'send');
+    fireEvent.change(field, { target: { value: 'Lance les tests' } });
+    expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(false);
+    expect(t.of('session.reply')).toMatchObject([{ text: 'Lance les tests' }]);
+  });
 });

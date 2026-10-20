@@ -1,18 +1,23 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MESSAGE_MAX, type PhonePending, type PhoneSession } from '@ledge/protocol';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { RequestDetail } from '../../src/screens/RequestDetail';
+import type { MobileStore } from '../../src/state/store';
 import { pending, session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
 import { setup } from './setup';
 
-function opened(p: PhonePending, extra: Partial<PhoneSession> = {}) {
+function opened(p: PhonePending, extra: Partial<PhoneSession> = {}, props: { store?: (s: MobileStore) => MobileStore; onReconnect?: () => void } = {}) {
   const t = setup();
   const s = session('a', { name: 'Kai', topic: 'Inbox mobile', repo: 'ledge', branch: 'feat/x', state: 'waiting_permission', pending: p, ...extra });
   t.deliver(snapshot([s]));
-  const view = render(<RequestDetail store={t.store} sessionId="a" requestKey={p.key} />);
+  const store = props.store ? props.store(t.store) : t.store;
+  const view = render(<RequestDetail store={store} sessionId="a" requestKey={p.key} {...(props.onReconnect ? { onReconnect: props.onReconnect } : {})} />);
   return { ...t, s, view };
 }
+
+/** The footer's parts in the order a reader meets them. */
+const footerOrder = () => [...document.querySelectorAll('footer button, footer a, footer p')].map(e => e.textContent);
 
 const question = (extra: Partial<PhonePending> = {}) => pending({ kind: 'question', text: 'Quel thème ?', options: ['Sombre', 'Clair'], riskReason: 'question', ...extra });
 
@@ -131,5 +136,83 @@ describe('a question', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Envoyer ma réponse' }));
     act(() => t.deliver({ type: 'operation.result', op: t.of('session.reply')[0]!.op, status: 'applied' }));
     expect(screen.getByRole('heading', { name: 'Réponse prise en compte' })).toBeInTheDocument();
+  });
+});
+
+describe('the decision footer', () => {
+  it('reads as the board: the buttons, then the way to the thread, then what a tap does', () => {
+    opened(pending());
+    expect(footerOrder()).toEqual(['Refuser', 'Autoriser une fois', 'Voir le fil de Kai', 'La décision sera transmise immédiatement au PC.']);
+  });
+
+  it('a question it cannot answer from here sends to the PC, the thread link before the hint', () => {
+    opened(question({ options: [] }), { tool: 'cursor' });
+    expect(screen.queryByRole('button', { name: 'Envoyer ma réponse' })).not.toBeInTheDocument();
+    expect(footerOrder()).toEqual(['Voir le fil de Kai', 'Cet agent ne peut pas recevoir de réponse libre depuis le téléphone. Répondez sur le PC.']);
+  });
+
+  it('a decision whose delivery is unknown is checked by reconnecting', () => {
+    const onReconnect = vi.fn();
+    const t = opened(pending(), {}, { onReconnect });
+    fireEvent.click(screen.getByRole('button', { name: 'Autoriser une fois' }));
+    act(() => t.set('pc_offline'));
+    expect(screen.getByText('Réception non confirmée')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnecter et vérifier' }));
+    expect(onReconnect).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Vérification…' })).toBeDisabled();
+  });
+
+  it('says so when the phone could not send the decision at all', () => {
+    opened(pending(), {}, { store: s => ({ ...s, decide: () => null }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Autoriser une fois' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('La décision n’a pas pu être transmise.');
+  });
+
+  it('a dialog without a free-text row says to answer on the PC', () => {
+    const t = opened(question());
+    fireEvent.click(screen.getByRole('radio', { name: 'Autre réponse' }));
+    fireEvent.change(screen.getByLabelText('Votre réponse à Kai'), { target: { value: 'Bleu nuit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Envoyer ma réponse' }));
+    act(() => t.deliver({ type: 'operation.result', op: t.of('session.reply')[0]!.op, status: 'rejected', reason: 'free_text' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('ne peut pas recevoir de réponse libre');
+  });
+
+  it('a free answer the PC could not type says why', () => {
+    const t = opened(question());
+    fireEvent.click(screen.getByRole('radio', { name: 'Autre réponse' }));
+    fireEvent.change(screen.getByLabelText('Votre réponse à Kai'), { target: { value: 'Bleu nuit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Envoyer ma réponse' }));
+    act(() => t.deliver({ type: 'operation.result', op: t.of('session.reply')[0]!.op, status: 'rejected', reason: 'untypable' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('La réponse doit tenir sur une ligne');
+  });
+});
+
+describe('a free answer', () => {
+  it('of a lone digit is stopped: the PC would take it for an option', () => {
+    const t = opened(question());
+    fireEvent.click(screen.getByRole('radio', { name: 'Autre réponse' }));
+    fireEvent.change(screen.getByLabelText('Votre réponse à Kai'), { target: { value: '2' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('numéro d’une option');
+    expect(screen.getByRole('button', { name: 'Envoyer ma réponse' })).toBeDisabled();
+    expect(t.of('session.reply')).toEqual([]);
+  });
+
+  it('takes Enter as send, never as a line break', () => {
+    const t = opened(question());
+    fireEvent.click(screen.getByRole('radio', { name: 'Autre réponse' }));
+    const field = screen.getByLabelText('Votre réponse à Kai');
+    expect(field).toHaveAttribute('enterkeyhint', 'send');
+    fireEvent.change(field, { target: { value: 'Bleu nuit' } });
+    expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(false);
+    expect(t.of('session.reply')).toMatchObject([{ text: 'Bleu nuit' }]);
+  });
+});
+
+describe('the request context', () => {
+  it('carries the terminal icon of the board', () => {
+    const t = opened(pending());
+    act(() => t.deliver({ type: 'session.preview', id: 'a', lines: ['Kai : je lance les tests.'] }));
+    const summary = screen.getByText('Contexte de la demande');
+    expect(summary.querySelector('svg')).not.toBeNull();
   });
 });

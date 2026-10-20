@@ -136,7 +136,8 @@ export const copy = {
     fieldLabel: (bot: string) => `Votre réponse à ${bot}`,
     placeholder: 'Précisez votre choix…',
     long: (max: number) => `La réponse est trop longue (${max} caractères au plus).`,
-    untypable: 'La réponse doit tenir sur une ligne, sans saut de ligne ni caractère de contrôle.'
+    untypable: 'La réponse doit tenir sur une ligne, sans saut de ligne ni caractère de contrôle.',
+    digit: 'Un chiffre seul serait lu comme le numéro d’une option. Choisissez l’option ci-dessus, ou écrivez la réponse en toutes lettres.'
   },
   consequence: {
     forceTitle: 'Peut remplacer l’historique distant',
