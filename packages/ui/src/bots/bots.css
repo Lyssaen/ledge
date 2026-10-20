@@ -79,6 +79,12 @@
 .bot[data-eyes="wide"] .eye-open { transform: scaleY(1.2); }
 .bot[data-eyes="happy"] .eye-open, .bot[data-eyes="error"] .eye-open, .bot[data-eyes="sleep"] .eye-open { opacity: 0; }
 .bot[data-eyes="happy"] .eye-happy, .bot[data-eyes="error"] .eye-error, .bot[data-eyes="sleep"] .eye-sleep { opacity: 1; }
+/* Logo bots wear no visor: dark eyes sit on the shell and the state colour survives as a glint (and the halo). */
+.bot:not(.legacy-bot) .eye-open { fill: var(--bot-visor); }
+.bot:not(.legacy-bot) :is(.eye-happy, .eye-error, .eye-sleep) { stroke: var(--bot-visor); }
+.bot .eye-glint { fill: var(--bot-eye); transition: opacity var(--bot-eye-ms, 260ms) var(--bot-ease), fill var(--bot-eye-ms, 260ms) var(--bot-ease); }
+.bot:is([data-eyes="happy"], [data-eyes="error"], [data-eyes="sleep"]) .eye-glint { opacity: 0; }
+.bot[data-eyes="wide"] .eye-glint { transform: translateY(-1px); }
 .bot[data-state="approval"] .arm { opacity: 1; transform: rotate(-22deg) translateY(-5px); transition-delay: 180ms; }
 .bot[data-state="done"] { opacity: .55; }
 .bot[data-state="done"] .body, .bot[data-state="error"] .body { animation: none; }

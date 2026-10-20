@@ -49,7 +49,7 @@ const EXPRESSIONS: Record<BotState, Expression> = {
 };
 
 const FULL_VIEWBOX = '0 0 96 96';
-/** Head crop at ≤ 20 px, per silhouette: each shell fills the box so the visor and eyes stay as large as they can. */
+/** Head crop at ≤ 20 px, per silhouette: each shell fills the box so the eyes stay as large as they can. */
 const HEAD_VIEWBOX: Record<Tool, string> = {
   claude: '10 18 76 64',
   codex: '5 7 87 82',
@@ -70,8 +70,19 @@ const SHELLS: Record<Tool, string> = {
   omp: 'M17 22H79Q83 22 83 26V48Q83 52 79 52H71V79Q71 83 67 83H58Q54 83 54 79V52H41V67Q41 71 37 71H28Q24 71 24 67V52H17Q13 52 13 48V26Q13 22 17 22Z'
 };
 
-/** Vertical offset of the visor and eyes, where each body has room for a face. */
-const VISOR_SHIFT: Record<Tool, number> = { claude: -6, codex: 0, cursor: 5, omp: -7 };
+/**
+ * No visor: each logo carries its eyes on the shell itself, where its body has room for a face.
+ * Cursor's look follows the cube's front face.
+ */
+const FACES: Record<Tool, string | undefined> = {
+  claude: 'translate(0 -8)',
+  codex: undefined,
+  cursor: 'translate(31.5 58) skewY(27) scale(.86) translate(-48.5 -49)',
+  omp: 'translate(0 -12)'
+};
+
+/** The eyes follow the pointer up to this many screen pixels beyond the bot's edges. */
+const GAZE_REACH = 240;
 
 /**
  * Session mascot: one persistent SVG whose layers (shell, pose, gaze, eyes, accessories) stay mounted
@@ -103,7 +114,7 @@ export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly 
   const detailed = !simplified && shown > 20;
   const motionEnabled = !reduced && !readOnly && state !== 'readonly' && !frozen && !paused;
   useBotVisibility(ref);
-  useBotMotion(ref, { seed, state, askKey, nodKey, enabled: motionEnabled && detailed });
+  useBotMotion(ref, { seed, state, askKey, nodKey, enabled: motionEnabled && detailed, gazeReach: GAZE_REACH });
   useBotNod(ref, nodKey, motionEnabled && detailed, state, askKey);
 
   const style = {
@@ -178,15 +189,19 @@ export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly 
                     </g>
                   )}
                   {tool === 'claude' && <path className="shine" d="M27 28H69" />}
-                  <g transform={VISOR_SHIFT[tool] ? `translate(0 ${VISOR_SHIFT[tool]})` : undefined}>
-                    <rect className="visor" x="25" y="35" width="47" height={tool === 'omp' ? 22 : 29} rx={tool === 'omp' ? 9 : 13} />
-                    <path className="reflection" d="M39 37H60Q68 37 69 44H28Q29 37 39 37" />
+                  <g transform={FACES[tool]}>
                     <g className="gaze">
                       <g className="eye-blink">
                         <g className="eye-open">
-                          <rect x="36" y="43" width="6" height="12" rx="3" />
-                          <rect x="55" y="43" width="6" height="12" rx="3" />
+                          <rect x="36" y="43" width="6" height="12" rx={tool === 'claude' ? 0.6 : 3} />
+                          <rect x="55" y="43" width="6" height="12" rx={tool === 'claude' ? 0.6 : 3} />
                         </g>
+                        {detailed && (
+                          <g className="eye-glint">
+                            <rect x="37.5" y="44.5" width="2.4" height="2.4" rx={tool === 'claude' ? 0 : 1.2} />
+                            <rect x="56.5" y="44.5" width="2.4" height="2.4" rx={tool === 'claude' ? 0 : 1.2} />
+                          </g>
+                        )}
                         <path className="eye-happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51" />
                         <path className="eye-error" d="m35 45 8 3m11 0 8-3M38 54h2m16 0h2" />
                         <path className="eye-sleep" d="M35 50q4 3 8 0m11 0q4 3 8 0" />

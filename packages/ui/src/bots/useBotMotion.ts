@@ -61,9 +61,9 @@ function setGaze(el: SVGSVGElement, x: number, y: number) {
  */
 export function useBotMotion(
   ref: RefObject<SVGSVGElement | null>,
-  options: { seed: string; state: BotState; enabled: boolean; askKey?: string; nodKey?: number }
+  options: { seed: string; state: BotState; enabled: boolean; askKey?: string; nodKey?: number; gazeReach?: number }
 ): void {
-  const { seed, state, enabled, askKey, nodKey } = options;
+  const { seed, state, enabled, askKey, nodKey, gazeReach = 0 } = options;
   const h = seedHash(seed);
   const ambient = enabled && !STILL.has(state);
   const clock = useRef<Clock | null>(null);
@@ -177,12 +177,22 @@ export function useBotMotion(
       if (!interactive() || event.pointerType === 'touch') return;
       const box = el.getBoundingClientRect();
       if (!box.width || !box.height) return;
+      const dx = event.clientX - box.left - box.width / 2;
+      const dy = event.clientY - box.top - box.height / 2;
+      // Past the bot's edge plus `gazeReach`, the pointer is out of sight.
+      if (gazeReach > 0 && (Math.abs(dx) > box.width / 2 + gazeReach || Math.abs(dy) > box.height / 2 + gazeReach)) {
+        if (el.hasAttribute('data-hover')) leave();
+        return;
+      }
       el.setAttribute('data-hover', 'true');
       el.removeAttribute('data-idle');
       const clamp = (n: number) => Math.max(-2, Math.min(2, n));
-      setGaze(el, clamp((event.clientX - box.left - box.width / 2) / box.width * 4), clamp((event.clientY - box.top - box.height / 2) / box.height * 4));
+      setGaze(el, clamp(dx / (box.width / 2 + gazeReach) * 2), clamp(dy / (box.height / 2 + gazeReach) * 2));
     };
     const leave = () => { el.removeAttribute('data-hover'); setGaze(el, 0, 0); };
+    // A reach beyond the bot needs pointer moves from the whole page, not only over the SVG.
+    const pointerArea: EventTarget = gazeReach > 0 ? window : el;
+    const leaveArea: EventTarget = gazeReach > 0 ? document.documentElement : el;
     let touchEnd: ReturnType<typeof setTimeout> | undefined;
     const click = () => {
       if (!interactive()) return;
@@ -193,14 +203,14 @@ export function useBotMotion(
       el.setAttribute('data-touch', 'true');
       touchEnd = later(() => el.removeAttribute('data-touch'), BOT_MOTION.touchMs);
     };
-    el.addEventListener('pointermove', move);
-    el.addEventListener('pointerleave', leave);
+    pointerArea.addEventListener('pointermove', move as EventListener);
+    leaveArea.addEventListener('pointerleave', leave);
     el.addEventListener('click', click);
     const unwatch = watchActivity(el, () => { if (!active(el)) { interrupted = true; stop(); } });
     return () => {
       stop(); unwatch();
-      el.removeEventListener('pointermove', move);
-      el.removeEventListener('pointerleave', leave);
+      pointerArea.removeEventListener('pointermove', move as EventListener);
+      leaveArea.removeEventListener('pointerleave', leave);
       el.removeEventListener('click', click);
       // StrictMode's effect replay must not swallow the pending request.
       const blocked = ['data-paused', 'data-frozen', 'data-reduced', 'data-readonly'].some(a => el.getAttribute(a) === 'true');
@@ -208,7 +218,7 @@ export function useBotMotion(
         prevAsk.current = prevKey;
       }
     };
-  }, [ref, state, enabled, askKey, nodKey, h]);
+  }, [ref, state, enabled, askKey, nodKey, h, gazeReach]);
 }
 
 /** One 650 ms nod each time `nodKey` changes: it confirms that a decision was received, never that the task succeeded. */

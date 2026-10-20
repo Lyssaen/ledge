@@ -47,20 +47,25 @@ describe('session bot choreography', () => {
     expect(svg).not.toHaveAttribute('data-gesture');
   });
 
-  it('tracks the cursor within two SVG units and lets selection clicks bubble', () => {
+  it('tracks the cursor from up to 240 px away, within two SVG units, and lets selection clicks bubble', () => {
     const selected = vi.fn();
     const { container } = render(<button onClick={selected}><Bot {...base} /></button>);
     const svg = container.querySelector('svg')!;
     vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 20, width: 32, height: 32 } as DOMRect);
-    fireEvent(svg, new MouseEvent('pointermove', { clientX: 100, clientY: -100, bubbles: true }));
+    // The box's centre is (26, 36); the reach ends 16 + 240 px from it.
+    fireEvent(svg, new MouseEvent('pointermove', { clientX: 282, clientY: -220, bubbles: true }));
     expect(svg.style.getPropertyValue('--bot-gx')).toBe('2px');
     expect(svg.style.getPropertyValue('--bot-gy')).toBe('-2px');
+    fireEvent(svg, new MouseEvent('pointermove', { clientX: 400, clientY: 36, bubbles: true }));
+    expect(svg.style.getPropertyValue('--bot-gx')).toBe('0px');
+    fireEvent(svg, new MouseEvent('pointermove', { clientX: 282, clientY: -220, bubbles: true }));
     fireEvent.click(svg);
     expect(selected).toHaveBeenCalledOnce();
     expect(svg).toHaveAttribute('data-touch', 'true');
     advance(360);
     expect(svg).not.toHaveAttribute('data-touch');
-    fireEvent(svg, new MouseEvent('pointerleave'));
+    // Leaving the bot alone keeps the look; leaving the window releases it.
+    fireEvent(document.documentElement, new MouseEvent('pointerleave'));
     expect(svg.style.getPropertyValue('--bot-gx')).toBe('0px');
   });
 

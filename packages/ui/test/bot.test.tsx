@@ -87,13 +87,15 @@ describe('Bot', () => {
     }
   });
 
-  it('keeps the Ledge face on every silhouette: rounded eyes in a visor, no antenna or feet of the old bots', () => {
+  it('keeps the Ledge face on every silhouette: eyes on the shell with a state glint, no visor, antenna or feet of the old bots', () => {
     for (const tool of ['claude', 'codex', 'cursor', 'omp'] as const) {
       const { container } = render(<Bot {...props} tool={tool} size={48} theme="dark" />);
       const eyes = [...container.querySelectorAll('.eye-open rect')];
       expect(eyes).toHaveLength(2);
-      eyes.forEach(e => expect(e.getAttribute('rx')).toBe('3'));
-      expect(container.querySelector('.visor')).not.toBeNull();
+      // Clawd keeps its pixel eyes; the other logos keep rounded ones.
+      eyes.forEach(e => expect(e.getAttribute('rx')).toBe(tool === 'claude' ? '0.6' : '3'));
+      expect(container.querySelectorAll('.eye-glint rect')).toHaveLength(2);
+      expect(container.querySelector('.visor')).toBeNull();
       for (const old of ['.antenna', '.antenna-light', '.feet']) expect(container.querySelector(old), `${tool} ${old}`).toBeNull();
       cleanup();
     }
