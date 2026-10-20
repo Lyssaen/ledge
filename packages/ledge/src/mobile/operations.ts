@@ -2,8 +2,8 @@
 // In memory only, so a daemon restart forgets every operation.
 import type { OperationReason, OperationStatus, PhoneClientMessage } from '@ledge/protocol';
 
-// Until the gateway handles session.answer and device.forget (later tasks), they are kept out of this type.
-export type PhoneOperation = Exclude<Extract<PhoneClientMessage, { op: string }>, { type: 'session.answer' | 'device.forget' }>;
+// Until the gateway handles device.forget (a later task), it is kept out of this type.
+export type PhoneOperation = Exclude<Extract<PhoneClientMessage, { op: string }>, { type: 'device.forget' }>;
 
 export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; at: number }
 

@@ -96,6 +96,17 @@ describe('fingerprint', () => {
   });
 });
 
+describe('fingerprint of session.answer', () => {
+  const answer = (selected: string): PhoneOperation => ({
+    type: 'session.answer', op: uid(1), id: 's1', requestId: 'r1', answers: [{ id: 'q1', selected: [selected] }], expect: { kind: 'question', text: 'q', key: 'k1' }
+  });
+  it('changes when an answer changes, not with the operation id', () => {
+    expect(fingerprint(answer('a'))).not.toBe(fingerprint(answer('b')));
+    expect(fingerprint({ ...answer('a'), op: uid(2) })).toBe(fingerprint(answer('a')));
+    expect(fingerprint({ ...answer('a'), requestId: 'r2' } as PhoneOperation)).not.toBe(fingerprint(answer('a')));
+  });
+});
+
 describe('fingerprint of credential.register', () => {
   const reg = (id: string, signature: string): PhoneOperation => ({
     type: 'credential.register', op: uid(1),

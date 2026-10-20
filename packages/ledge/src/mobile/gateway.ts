@@ -138,6 +138,8 @@ export function createPhoneGateway(deps: {
     switch (msg.type) {
       case 'session.decide':
         if (!s.pending || pendingKey(s.pending) !== msg.expect.key) return { status: 'rejected', reason: 'stale' };
+        // OMP's dialogs are answered with `session.answer`; refused before any challenge is spent.
+        if (backendOf(s) === 'omp-rpc') return { status: 'rejected', reason: 'not_offered' };
         if (needsAssertion(msg, s)) { const refused = assertionOutcome(deviceId, msg); if (refused) return refused; }
         // The note is typed into the terminal like a reply.
         return msg.note !== undefined && UNTYPABLE.test(msg.note) ? { status: 'rejected', reason: 'untypable' } : undefined;
@@ -149,6 +151,10 @@ export function createPhoneGateway(deps: {
         if (needsAssertion(msg, s)) { const refused = assertionOutcome(deviceId, msg); if (refused) return refused; }
         return UNTYPABLE.test(msg.text) ? { status: 'rejected', reason: 'untypable' } : undefined;
       }
+      case 'session.answer':
+        if (!s.pending || pendingKey(s.pending) !== msg.expect.key) return { status: 'rejected', reason: 'stale' };
+        if (backendOf(s) !== 'omp-rpc') return { status: 'rejected', reason: 'not_offered' };
+        return s.pending.requestId === msg.requestId ? undefined : { status: 'rejected', reason: 'stale' };
       case 'session.interrupt':
         // The local handler returns silently without a terminal: the phone would read a no-op as applied. OMP stops over its RPC.
         return s.tmuxSession || backendOf(s) === 'omp-rpc' ? undefined : { status: 'rejected', reason: 'read_only' };
@@ -161,6 +167,7 @@ export function createPhoneGateway(deps: {
       case 'session.decide':
         return { type: 'session.decide', id: msg.id, decision: msg.decision, ...(msg.note !== undefined ? { note: msg.note } : {}), expect: { kind: msg.expect.kind, text: msg.expect.text, key: msg.expect.key } };
       case 'session.reply': return { type: 'session.reply', id: msg.id, text: msg.text };
+      case 'session.answer': return { type: 'session.answer', id: msg.id, requestId: msg.requestId, answers: msg.answers, ...(msg.cancel ? { cancel: true } : {}) };
       case 'session.interrupt': return { type: 'session.interrupt', id: msg.id };
     }
   };
@@ -283,8 +290,8 @@ export function createPhoneGateway(deps: {
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;
-    // These lot 6a messages are parsed but not handled yet: refused like any unknown request until the gateway learns them.
-    if (msg.type === 'session.answer' || msg.type === 'device.forget') {
+    // This lot 6a message is parsed but not handled yet: refused like any unknown request until the gateway learns it.
+    if (msg.type === 'device.forget') {
       return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
     }
     if ('op' in msg) {

@@ -960,3 +960,93 @@ describe('phone gateway: a high-impact accept carries a device assertion', () =>
     for (const secret of [challenge, assertion.signature, assertion.clientDataJSON, assertion.authenticatorData]) expect(g.logs.some(l => l.includes(secret))).toBe(false);
   });
 });
+
+describe('phone gateway: OMP requests answered with their own questions', () => {
+  const ASK: Pending = {
+    kind: 'question', text: 'Two questions', source: 'rpc', tool: 'omp', requestId: 'ask-2',
+    questions: [
+      { id: 'q1', question: 'Which colour?', options: [{ label: 'red' }, { label: 'green' }] },
+      { id: 'q2', question: 'Which size?', multi: true, options: [{ label: 'S' }, { label: 'M' }] }
+    ]
+  };
+  const omp = () => {
+    const g = setup();
+    g.sessions.set('o', mk('o', { tool: 'omp', tmuxSession: null, backend: 'omp-rpc', state: 'waiting_input', pending: { ...ASK } }));
+    return g;
+  };
+  const answer = (extra: Record<string, unknown> = {}) => ({
+    type: 'session.answer', op: randomUUID(), id: 'o', requestId: 'ask-2',
+    answers: [{ id: 'q1', selected: ['red'] }, { id: 'q2', selected: ['S', 'M'], text: 'and XL' }],
+    expect: { kind: ASK.kind, text: ASK.text, key: pendingKey(ASK) }, ...extra
+  });
+  const final = (g: ReturnType<typeof setup>) => g.results('dev1').filter(r => r.type === 'operation.result' && r.status !== 'received');
+
+  it('the snapshot announces what each tool can do', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const snap = g.got('dev1').find(m => m.type === 'snapshot');
+    expect(snap?.type === 'snapshot' && snap.capabilities.omp).toEqual({ freeTextAnswer: false, decide: false, questions: true });
+    expect(snap?.type === 'snapshot' && snap.capabilities.claude).toMatchObject({ decide: true, questions: false });
+  });
+
+  it('an answer to the ask of 2 questions reaches the local front, with no field of the phone added', async () => {
+    const g = omp();
+    const m = answer({ cancel: true });
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'applied' }]);
+    expect(g.dispatched).toEqual([{ type: 'session.answer', id: 'o', requestId: 'ask-2', answers: m.answers, cancel: true }]);
+    const plain = answer();
+    g.send('dev1', plain);
+    await flush();
+    expect(g.dispatched[1]).toEqual({ type: 'session.answer', id: 'o', requestId: 'ask-2', answers: plain.answers });
+    expect(Object.keys(g.dispatched[1]!).sort()).toEqual(['answers', 'id', 'requestId', 'type']);
+  });
+
+  it('the requestId of an earlier ask is stale', async () => {
+    const g = omp();
+    const m = answer({ requestId: 'ask-1' });
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'stale' }]);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('an answer to a request that changed is stale', async () => {
+    const g = omp();
+    const m = answer({ expect: { kind: ASK.kind, text: ASK.text, key: 'k-old' } });
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'stale' }]);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('an answer to a session that is not OMP is not offered', async () => {
+    const g = setup();
+    const m = answer({ id: 'q', expect: seen(PICK) });
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'not_offered' }]);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('an answer to an unknown session is refused as such', async () => {
+    const g = omp();
+    const m = answer({ id: 'nope' });
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'unknown_session' }]);
+  });
+
+  it('an accept on an OMP session is not offered, never confirm_required, and spends no challenge', async () => {
+    const g = omp();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
+    await flush();
+    const m = { type: 'session.decide', op: randomUUID(), id: 'o', decision: 'accept', expect: { kind: ASK.kind, text: ASK.text, key: pendingKey(ASK) } };
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'not_offered' }]);
+    expect(g.dispatched).toEqual([]);
+  });
+});
