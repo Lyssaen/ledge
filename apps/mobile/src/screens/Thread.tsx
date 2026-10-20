@@ -115,14 +115,14 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
     const waiting = !gone && !fresh && state.syncedAt === null;
     return (
       <>
-        <header className="flex-none border-b border-line px-side pt-2 pb-3">
+        <header className="flex-none border-b border-line pt-2 pb-3">
           <div className="flex items-center gap-2.5">
             <BackTo label={copy.thread.back} />
             <span className="min-w-0 flex-1 truncate">{copy.thread.title}</span>
             <LinkStatus link={linkView(state)} />
           </div>
         </header>
-        <main className="min-h-0 flex-1 px-side pt-7 text-[13px] text-muted" role="status">{waiting ? copy.thread.loading : copy.thread.unknown}</main>
+        <main className="min-h-0 flex-1 pt-7 text-[13px] text-muted" role="status">{waiting ? copy.thread.loading : copy.thread.unknown}</main>
       </>
     );
   }
@@ -142,7 +142,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
 
   return (
     <>
-      <header className="flex-none border-b border-line px-side pt-2 pb-3">
+      <header className="flex-none border-b border-line pt-2 pb-3">
         <div className="flex items-center gap-2.5">
           <BackTo label={copy.thread.back} />
           <MobileBot tool={session.tool} seed={session.id} state={session.state} frozen={!fresh} />
@@ -156,7 +156,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
         </div>
         <p className="mt-2 ml-[46px] text-[11px] [overflow-wrap:anywhere] text-muted">{session.repo ?? session.project}{session.branch && <> · <code className={`font-mono text-[.9em] ${session.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{session.branch}</code></>}</p>
       </header>
-      <main ref={scroller} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain px-side pt-5 pb-4">
+      <main ref={scroller} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain pt-5 pb-4">
         {thread?.more && <p className="text-center text-[11px] text-muted">{copy.thread.more}</p>}
         {!ready && items.length === 0 && <p className="text-center text-[11px] text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
         {ready && items.length === 0 && <p className="text-center text-[11px] text-muted">{copy.thread.empty}</p>}

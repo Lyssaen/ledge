@@ -92,7 +92,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
       return (
         <>
           <BackHeader title={copy.gone.header} backTo={back} label={copy.detail.back} link={link} />
-          <main className="min-h-0 flex-1 px-side pt-7 text-[13px] text-muted" role="status">{copy.loading}</main>
+          <main className="min-h-0 flex-1 pt-7 text-[13px] text-muted" role="status">{copy.loading}</main>
         </>
       );
     }
@@ -118,7 +118,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
   return (
     <>
       <BackHeader title={copy.detail.heading[req.kind]} backTo={back} label={copy.detail.back} link={link} />
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-side pb-[22px]">
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         <div className="mt-4 flex items-start gap-3 rounded-[14px] border border-line bg-surface p-3.5">
           <MobileBot tool={req.tool} seed={req.sessionId} state={state.sessions.get(sessionId)?.state ?? 'idle'} frozen={!fresh} />
           <div className="min-w-0 flex-1">

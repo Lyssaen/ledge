@@ -40,10 +40,11 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
   return (
     <>
       <Header title={copy.agents.title} subtitle={subtitle} link={linkView(state)} />
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-side pb-[22px]">
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {offline && <div className="mb-3"><OfflineBanner onReconnect={onReconnect} /></div>}
         {groups.map(g => (
-          <section key={g.label} aria-label={g.label}>
+          // Two groups can share a name (a repository and a project); a session belongs to one group only.
+          <section key={g.rows[0]!.sessionId} aria-label={g.label}>
             <div className="py-3 text-[11px] tracking-[.4px] text-muted">{g.label}</div>
             {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} />)}
           </section>

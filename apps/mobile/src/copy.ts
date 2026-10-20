@@ -30,7 +30,9 @@ export const copy = {
     open: (name: string, task: string) => `${name} · ${task}`
   },
   link: {
-    online: 'connecté', offline: 'déconnecté', settings: 'Connexion du téléphone',
+    online: 'connecté', offline: 'déconnecté',
+    /** The header's way to the connection screen, for screen readers. */
+    openConnection: 'Connexion du téléphone',
     lostTitle: 'Connexion au PC perdue',
     lostBody: 'Le PC, le réseau ou Tailscale est indisponible. Les demandes ci-dessous peuvent avoir changé.',
     lostDetail: 'Dernier état connu. Reconnectez-vous pour vérifier si cette demande attend toujours une décision.',
@@ -166,7 +168,7 @@ export const copy = {
   loading: 'Chargement de la demande…',
   connection: {
     title: 'Connexion', back: 'Retour aux demandes', pc: 'PC', status: 'État', unknown: 'Inconnu',
-    status_: { online: 'Connecté', offline: 'Déconnecté', connecting: 'Connexion en cours…' },
+    states: { online: 'Connecté', offline: 'Déconnecté', connecting: 'Connexion en cours…' },
     account: 'Compte', relay: 'Serveur', pcFingerprint: 'Empreinte du PC', version: 'Version de l’app', appFingerprint: 'Empreinte de l’app',
     /** A value not known yet (the build, before the service worker gives it). */
     none: '—',

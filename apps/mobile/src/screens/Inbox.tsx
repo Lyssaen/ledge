@@ -48,11 +48,12 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
   const all = requestsOf([...state.sessions.values()]);
   const list = filterItems(all, filter);
   const offline = !state.fresh;
-  const subtitle = offline ? copy.link.lastKnownAt(clock(state.syncedAt)) : copy.inbox.subtitle(all.length);
+  // Offline before any state was received: no time to give, so no separator either.
+  const subtitle = offline ? (state.syncedAt ? copy.link.lastKnownAt(clock(state.syncedAt)) : copy.inbox.lastKnown) : copy.inbox.subtitle(all.length);
   return (
     <>
       <Header title={copy.inbox.title} subtitle={subtitle} link={linkView(state)} />
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-side pb-[22px]">
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {offline && <div className="mb-3">{notice ?? <OfflineBanner onReconnect={onReconnect} />}</div>}
         <div role="group" aria-label={copy.inbox.filtersLabel} className="mb-1.5 flex gap-1">
           {FILTERS.map(f => (

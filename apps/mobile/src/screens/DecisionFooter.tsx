@@ -60,7 +60,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
   const thread = <a href={href({ name: 'thread', sessionId: item.sessionId })} className={`${full} border-transparent text-muted`}>{copy.result.thread(item.botName)}</a>;
   // The board's order: what to do, then the way to the thread, then what a tap does.
   const wrap = (children: ReactNode, hint?: string, withThread = true) => (
-    <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg px-side pt-3 pb-4">
+    <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-4">
       {children}
       {withThread && thread}
       {hint && <p className="text-center text-[10px] text-muted">{hint}</p>}

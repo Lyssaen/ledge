@@ -10,7 +10,7 @@ import { BackHeader, linkView } from '../ui/Header';
 import { OUTLINE } from '../ui/Board';
 
 const N = copy.connection;
-const status = (s: LinkState): string => s === 'ready' ? N.status_.online : s === 'handshaking' ? N.status_.connecting : N.status_.offline;
+const status = (s: LinkState): string => s === 'ready' ? N.states.online : s === 'handshaking' ? N.states.connecting : N.states.offline;
 
 /** The account, the relay, the PC this phone trusts and the app it runs, each one checkable, and the way out. */
 export function Connection({ store, login, relay, pinned, linkState, build, onSignOut }: {

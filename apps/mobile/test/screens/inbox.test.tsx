@@ -56,6 +56,14 @@ describe('the inbox', () => {
     expect(screen.getByText('Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.')).toBeInTheDocument();
   });
 
+  it('offline with no state ever received: « Dernier état connu », without a separator or an empty time', () => {
+    const t = setup('pc_offline');
+    render(<Inbox store={t.store} />);
+    expect(t.store.getState().syncedAt).toBeNull();
+    expect(screen.queryByText(/Dernier état connu ·/)).not.toBeInTheDocument();
+    expect(screen.getAllByText('Dernier état connu').length).toBeGreaterThan(0);
+  });
+
   it('offers to reconnect only when told how', () => {
     const t = setup('pc_offline');
     let asked = 0;

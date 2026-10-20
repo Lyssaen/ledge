@@ -1,5 +1,5 @@
 import { act, render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Agents } from '../../src/screens/Agents';
 import { pending, session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
@@ -22,6 +22,19 @@ describe('the agents', () => {
     const relay = screen.getByRole('region', { name: 'relay' });
     expect(within(relay).getByText('● Non lu')).toBeInTheDocument();
     expect(within(relay).getByText('Disponible')).toBeInTheDocument();
+  });
+
+  it('two groups with the same name (a repository and a project both « ledge ») are both drawn, each with its own key', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = setup();
+    t.deliver(snapshot([
+      session('a', { name: 'Kai', repo: 'ledge' }),
+      session('b', { name: 'Ada', project: 'ledge' })
+    ]));
+    render(<Agents store={t.store} />);
+    expect(screen.getAllByRole('region', { name: 'ledge' })).toHaveLength(2);
+    expect(errors.mock.calls.flat().join(' ')).not.toMatch(/same key/);
+    errors.mockRestore();
   });
 
   it('says when no session runs', () => {

@@ -52,7 +52,7 @@ export function Terminal({ store, sessionId, storage }: { store: MobileStore; se
     return (
       <>
         <BackHeader title={copy.thread.title} backTo={back} label={copy.terminal.back} link={link} />
-        <main className="min-h-0 flex-1 px-side pt-7 text-[13px] text-muted" role="status">{!fresh && state.syncedAt === null ? copy.thread.loading : copy.terminal.unknown}</main>
+        <main className="min-h-0 flex-1 pt-7 text-[13px] text-muted" role="status">{!fresh && state.syncedAt === null ? copy.thread.loading : copy.terminal.unknown}</main>
       </>
     );
   }
@@ -81,7 +81,7 @@ export function Terminal({ store, sessionId, storage }: { store: MobileStore; se
   return (
     <>
       <BackHeader title={copy.terminal.title(session.name)} backTo={back} label={copy.terminal.back} link={link} />
-      <main className="flex min-h-0 flex-1 flex-col px-side">
+      <main className="flex min-h-0 flex-1 flex-col">
         <div className="mt-2 mb-4 flex items-center justify-between gap-2">
           <span role="status" className="text-xs text-muted">{status}</span>
           <div className="flex gap-2">
@@ -95,7 +95,7 @@ export function Terminal({ store, sessionId, storage }: { store: MobileStore; se
             : <pre data-size={size} style={{ fontSize: size }} className="m-0 w-max min-w-full font-mono leading-[1.5] whitespace-pre text-[#c5ccc7]">{lines.join('\n')}</pre>}
         </div>
       </main>
-      <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg px-side pt-3 pb-[max(16px,env(safe-area-inset-bottom))] [@media(max-height:650px)]:pb-2.5">
+      <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-[max(16px,env(safe-area-inset-bottom))] [@media(max-height:650px)]:pb-2.5">
         <p className="text-center text-[10px] text-muted">{copy.terminal.scrollHint}</p>
         {problem && <p role="alert" className="text-center text-xs text-attention">{problem}</p>}
         <button type="button" disabled={!enabled} onClick={interrupt} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control border border-line bg-surface px-4 py-2.5 text-[13px] font-medium disabled:opacity-45">

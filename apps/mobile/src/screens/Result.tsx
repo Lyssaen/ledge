@@ -19,7 +19,7 @@ export function Result({ store, title, body, item, final = false, children }: {
   return (
     <>
       <BackHeader title={copy.result.header} backTo={back} label={copy.detail.back} link={link} />
-      <main className="min-h-0 flex-1 overflow-y-auto px-side pb-[22px]">
+      <main className="min-h-0 flex-1 overflow-y-auto pb-[22px]">
         <div className="flex flex-col items-start gap-4 pt-7">
           <div className="grid size-14 place-items-center rounded-full border border-ok/20 bg-ok/[0.045] text-ok">
             <svg className="size-[26px] fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
