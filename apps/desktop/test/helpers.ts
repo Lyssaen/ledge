@@ -144,6 +144,12 @@ export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, l
 }
 
 /** The app on the atelier with listSessions, LAUNCH_PROJECTS, Local and NAS (offline), then N: the New session dialog. */
+/** The New session form preselects the default agent: another one is picked behind « Change », whose list stays open once shown. */
+export async function pickAgent(user: UserEvent, scope: Pick<typeof screen, 'queryByRole' | 'getByRole'>, name: RegExp | string): Promise<void> {
+  if (!scope.queryByRole('radio', { name })) await user.click(scope.getByRole('button', { name: /Change/ }));
+  await user.click(scope.getByRole('radio', { name }));
+}
+
 export async function openLaunch(opts: { repoInfo?: Map<string, RepoInfo>; list?: boolean } = {}) {
   const env = await boot({ sessions: listSessions(), list: opts.list ?? true, projects: LAUNCH_PROJECTS, machines: LOCAL_AND_NAS, repoInfo: opts.repoInfo ?? LAUNCH_REPOS() });
   await env.user.keyboard('n');

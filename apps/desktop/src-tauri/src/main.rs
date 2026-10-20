@@ -213,6 +213,9 @@ fn main() {
             notch::list_monitors, notch::set_monitor, open_atelier, pty::pty_open, pty::pty_write, pty::pty_resize, pty::pty_close,
         ])
         .setup(|app| {
+            // WSL stops once no `wsl.exe` holds it: Ledge holds one from login until it quits, so the daemon stays reachable.
+            // After the single-instance plugin, so a second launch never starts a second one.
+            ledge_native::wsl_keepalive::start();
             build_tray(app)?;
             // Before the tray-only check: the notch shows even when the login item starts us minimized.
             notch::setup(app)?;

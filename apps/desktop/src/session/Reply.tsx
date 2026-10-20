@@ -81,6 +81,19 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   const native = isNative(session) && !offline;
   const working = native && session.state === 'working' && !pending;
   const stoppable = native && (session.state === 'working' || session.state === 'waiting_input' || session.state === 'waiting_permission');
+  // « Arrêter » asked: said in the field until OMP's work stops, then once as a toast (mockup omp-sessions, Interrompre A).
+  const [stopping, setStopping] = useState(false);
+  useEffect(() => {
+    if (!stopping || stoppable) return;
+    setStopping(false);
+    notify(tr.stopped(session.name));
+  }, [stopping, stoppable]);
+  /** Stops OMP and takes back what waited in its queue, into the draft (abort_and_restore_queue): nothing is left stranded there. */
+  const stop = () => {
+    if (!client || !stoppable || stopping) return;
+    setStopping(true);
+    client.send({ type: 'session.interrupt', id: session.id, restoreQueue: true });
+  };
 
   /** A refused send gives its text back, if nothing was written since (the memory holds the draft even once the page closed). */
   const restore = (back: string) => {
@@ -140,15 +153,23 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
-    // Escape leaves the field and keeps the draft; the page stays (navigation never sees it).
-    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); e.currentTarget.blur(); }
+    // While OMP works, Ctrl / ⌘ Enter redirects the turn now; Enter alone queues the text for the turn's end.
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && working && text) { e.preventDefault(); steer(); }
+    else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+    // Escape stops OMP at work when nothing is typed; otherwise it leaves the field and keeps the draft (navigation never sees it).
+    else if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      if (stoppable && !text && client) stop(); else e.currentTarget.blur();
+    }
   };
 
   const name = session.name;
   const placeholder = working ? tr.placeholder.queued(name) : sort === 'plan' ? tr.placeholder.plan : sort === 'approval' ? tr.placeholder.approval : sort === 'question' ? tr.placeholder.question(name)
     : session.state === 'exited' || session.state === 'idle' ? tr.placeholder.done(name) : tr.placeholder.idle(name);
-  const hint = working && text ? tr.afterTurn : askCard ? tr.askCard : optionsOnly ? tr.optionsOnly : noteless ? tr.noNote : tooLong ? tr.tooLong(NOTE_MAX)
+  const hint = stopping ? tr.stopping
+    : working && text ? <><Kbd>↵</Kbd> {tr.whenQueued} · <Kbd>Ctrl ↵</Kbd> {tr.whenNow}</>
+    : stoppable && client && !askCard ? <><Kbd>{tr.escKey}</Kbd> {tr.stopKey}</>
+    : askCard ? tr.askCard : optionsOnly ? tr.optionsOnly : noteless ? tr.noNote : tooLong ? tr.tooLong(NOTE_MAX)
     : sort === 'approval' && text ? tr.denyHint : sort === 'plan' && text ? tr.planHint : <><Kbd>R</Kbd> {tr.write}</>;
 
   return (
@@ -171,21 +192,27 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
       ) : (
         <>
         {native && (session.queue?.length ?? 0) > 0 && (
-          <div className="reply-queue" role="status" aria-label={tr.queueLabel}>
-            <strong>{tr.queued(session.queue!.length)}</strong>
-            <ul>{session.queue!.map((q, i) => <li key={i} title={q.text}><small>{q.mode === 'steer' ? tr.queueSteer : tr.queueAfter}</small>{q.text}</li>)}</ul>
-            {client && <Button variant="ghost" size="sm" type="button" onClick={() => client.send({ type: 'session.interrupt', id: session.id, restoreQueue: true })} title={tr.restoreTitle}>{tr.restore}</Button>}
+          <div className="reply-queue" role="region" aria-label={tr.queueLabel}>
+            <div className="reply-queue-head">
+              <Icon d={SHELL_ICONS.clock} size={14} />
+              <strong>{tr.queueTitle(session.queue!.length)}</strong><span className="muted">· {tr.queueOrder}</span>
+              {client && <Button variant="ghost" size="sm" type="button" onClick={stop} title={tr.restoreTitle}>{tr.queueTakeBack}</Button>}
+            </div>
+            <ul>{session.queue!.map((q, i) => (
+              <li key={i} title={q.text}><span className={cls('queue-tag', q.mode === 'steer' && 'now')}>{q.mode === 'steer' ? tr.queueNow : tr.queueLater}</span><span className="queue-text">{q.text}</span></li>
+            ))}</ul>
           </div>
         )}
-        <form className={cls(pending && 'with-pending')} onSubmit={e => { e.preventDefault(); submit(); }}>
+        <form className={cls(pending && 'with-pending', (session.queue?.length ?? 0) > 0 && native && 'under-queue')} onSubmit={e => { e.preventDefault(); submit(); }}>
           <textarea ref={input} rows={1} aria-label={tr.label} placeholder={placeholder} value={draft} disabled={shut}
             maxLength={isNote ? NOTE_MAX : undefined} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} />
           {client && <SessionModel client={client} session={session} notify={notify} />}
           <span className="reply-hint">{hint}</span>
-          {working && text && <Button variant="outline" size="sm" type="button" onClick={steer} title={tr.steerTitle}>{tr.steer}</Button>}
-          {stoppable && client && <Button variant="outline" size="sm" type="button" onClick={() => client.send({ type: 'session.interrupt', id: session.id })} title={tr.interruptTitle}>{tr.interrupt}</Button>}
-          <Button variant="primary" size="icon" type="submit" aria-label={sort === 'approval' ? tr.denyWith : working ? tr.queue : tr.send}
-            disabled={!text || shut || tooLong || busy} style={{ width: 32, height: 32 }}><Icon d={ICONS.send.d} /></Button>
+          {stoppable && client && !text && !askCard
+            ? <Button variant="primary" size="icon" type="button" className="reply-stop" onClick={stop} disabled={stopping} aria-label={stopping ? tr.stopping : tr.stop(session.name)} title={tr.stopTitle}
+                style={{ width: 32, height: 32 }}>{stopping ? <span className="reply-stop-spin" aria-hidden="true" /> : <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" /></svg>}</Button>
+            : <Button variant="primary" size="icon" type="submit" aria-label={sort === 'approval' ? tr.denyWith : working ? tr.queue : tr.send}
+                disabled={!text || shut || tooLong || busy} style={{ width: 32, height: 32 }}><Icon d={ICONS.send.d} /></Button>}
         </form>
         </>
       )}

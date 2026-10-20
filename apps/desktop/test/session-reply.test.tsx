@@ -298,22 +298,36 @@ describe('OMP: queued, redirected, interrupted (spec 2026-10-20 §3.2)', () => {
   it('while it works, Enter queues the text after the turn, with no steer', async () => {
     const { d, user } = await open('Noor', [omp(), ...listSessions()]);
     await user.click(field()); await user.type(field(), 'then add tests');
-    expect(screen.getByText('Enter: after this turn')).toBeVisible();
+    expect(document.querySelector('.reply-hint')).toHaveTextContent('↵ after this turn · Ctrl ↵ now');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'omp1', text: 'then add tests' }]));
   });
-  it('« Redirect now » steers the running turn; Interrupt is its own command', async () => {
+  it('Ctrl Enter redirects the running turn; with the field empty, Send is « Stop », which takes the queue back too, then says it once', async () => {
     const { d, user } = await open('Noor', [omp(), ...listSessions()]);
     await user.click(field()); await user.type(field(), 'stop, do this instead');
-    await user.click(screen.getByRole('button', { name: 'Redirect now' }));
+    expect(screen.queryByRole('button', { name: 'Stop Noor' })).toBeNull();          // typed: the button sends
+    await user.keyboard('{Control>}{Enter}{/Control}');
     await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'omp1', text: 'stop, do this instead', steer: true }]));
-    await user.click(screen.getByRole('button', { name: 'Interrupt' }));
-    await waitFor(() => expect(sent(d, 'session.interrupt')).toEqual([{ type: 'session.interrupt', id: 'omp1' }]));
+    expect(document.querySelector('.reply-hint')).toHaveTextContent('Esc stop');
+    await user.click(screen.getByRole('button', { name: 'Stop Noor' }));
+    await waitFor(() => expect(sent(d, 'session.interrupt')).toEqual([{ type: 'session.interrupt', id: 'omp1', restoreQueue: true }]));
+    expect(screen.getByRole('button', { name: 'Stop requested…' })).toBeDisabled();
+    d.upsert(omp({ state: 'idle' }));
+    await waitFor(() => expect(screen.getByText('You interrupted Noor.')).toBeVisible());
+    expect(screen.queryByRole('button', { name: /Stop/ })).toBeNull();
   });
-  it('at rest there is nothing to interrupt or redirect, and Claude Code never shows them', async () => {
+  it('Escape in an empty field stops OMP at work; with a draft it only leaves the field', async () => {
+    const { d, user } = await open('Noor', [omp(), ...listSessions()]);
+    await user.click(field()); await user.type(field(), 'draft');
+    await user.keyboard('{Escape}');
+    expect(sent(d, 'session.interrupt')).toEqual([]); expect(field()).not.toHaveFocus();
+    await user.click(field()); await user.clear(field()); await user.keyboard('{Escape}');
+    await waitFor(() => expect(sent(d, 'session.interrupt')).toEqual([{ type: 'session.interrupt', id: 'omp1', restoreQueue: true }]));
+  });
+  it('at rest there is nothing to stop or redirect, and Claude Code never shows them', async () => {
     await open('Noor', [omp({ state: 'idle' }), ...listSessions()]);
-    expect(screen.queryByRole('button', { name: 'Interrupt' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Redirect now' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Stop Noor' })).toBeNull();
+    expect(document.querySelector('.reply-hint')).not.toHaveTextContent('Esc');
   });
   it('a dialog of OMP is a question with its own options, answered by number', async () => {
     const asking = omp({ state: 'waiting_input', pending: { kind: 'question', text: 'Allow tool: bash\nCommand: ls', options: ['Approve', 'Approve bash for this session', 'Deny'], source: 'rpc', tool: 'omp' } });
@@ -325,12 +339,13 @@ describe('OMP: queued, redirected, interrupted (spec 2026-10-20 §3.2)', () => {
 
 describe('OMP: the waiting queue', () => {
   const queued = () => fakeSession('omp1', { name: 'Noor', tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'working', queue: [{ text: 'hurry', mode: 'steer' as const }, { text: 'then the tests', mode: 'follow_up' as const }] });
-  it('shows what waits as OMP reports it; « Interrupt and take back » asks for it and the texts return to the field, appended to what is typed', async () => {
+  it('a stack on the field shows what waits as OMP reports it, in order; « Stop and take back » returns the texts to the field, appended', async () => {
     const { d, user } = await open('Noor', [queued(), ...listSessions()]);
-    const q = within(screen.getByRole('status', { name: 'Waiting instructions' }));
-    expect(q.getByText('Waiting (2)')).toBeVisible(); expect(q.getByText('hurry')).toBeVisible(); expect(q.getByText('then the tests')).toBeVisible();
+    const q = within(screen.getByRole('region', { name: 'Waiting instructions' }));
+    expect(q.getByText('2 messages waiting')).toBeVisible(); expect(q.getByText('hurry')).toBeVisible(); expect(q.getByText('then the tests')).toBeVisible();
+    expect(q.getAllByRole('listitem').map(li => li.textContent)).toEqual(['nowhurry', 'after the turnthen the tests']);
     await user.click(field()); await user.type(field(), 'mine');
-    await user.click(q.getByRole('button', { name: 'Interrupt and take back' }));
+    await user.click(q.getByRole('button', { name: 'Stop and take back' }));
     await waitFor(() => expect(sent(d, 'session.interrupt')).toEqual([{ type: 'session.interrupt', id: 'omp1', restoreQueue: true }]));
     d.push({ type: 'session.queue.restored', id: 'omp1', texts: ['hurry', 'then the tests'] });
     await waitFor(() => expect(field()).toHaveValue('mine\n\nhurry\n\nthen the tests'));

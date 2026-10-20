@@ -54,14 +54,19 @@ export function TermPane(p: TermPaneProps): JSX.Element {
   const key = useBackquote();
   const [focused, setFocused] = useState(false);
   const body = useRef<HTMLDivElement>(null);
+  // A tab clicked, a shell added or reopened: its screen takes the keyboard once it is in, as Ctrl + ² does.
+  const take = useRef(false);
 
   useLayoutEffect(() => {
+    const want = take.current;
+    take.current = false;
     const el = body.current;
     if (!el || !shown) return;
     // The xterm moves in, never re-made: its screen and scrollback stay.
     for (const c of [...el.children]) if (c !== shown.host) c.remove();
     if (shown.host.parentElement !== el) el.appendChild(shown.host);
     shown.fit();
+    if (want) shown.focus();
     // A tab change takes the focus away with the xterm it moves out, without a blur everywhere.
     setFocused(el.contains(document.activeElement));
     if (typeof ResizeObserver === 'undefined') return;
@@ -69,6 +74,8 @@ export function TermPane(p: TermPaneProps): JSX.Element {
     ro.observe(el);
     return () => ro.disconnect();
   }, [shown]);
+  // Asked in a render that did not change the screen: not for the next screen to come in.
+  useLayoutEffect(() => { take.current = false; });
 
   const label = (x: Tab) => (x.kind === 'agent' ? tt.agentTab(session.name) : tt.shellTab(x.n, folder(x.dir)));
   /** Starts or restarts a shell through `act`, its first line saying where it runs, before the shell's own output. */
@@ -76,6 +83,8 @@ export function TermPane(p: TermPaneProps): JSX.Element {
     const before = store.surface(id);
     const was = store.tabs(sid).find(x => x.id === id);
     act();
+    if (shown && store.surface(id) === shown) shown.focus();
+    else take.current = true;
     const after = store.tabs(sid).find((x): x is ShellTab => x.id === id && x.kind === 'shell');
     if (!after || after.status !== 'running' || (was?.kind === 'shell' && was.status === 'running')) return;
     const intro = after.remote ? tt.shellIntroSsh(host, session.name, folder(after.dir)) : tt.shellIntro(session.name, folder(after.dir));

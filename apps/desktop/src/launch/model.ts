@@ -1,17 +1,20 @@
 import { splitId, type MachineState } from '@ledge/fleet';
-import { pickName, type ClientMessage, type Project, type Repo, type RepoInfo, type Session } from '@ledge/protocol';
+import { pickName, type ClientMessage, type OmpApproval, type Project, type Repo, type RepoInfo, type Session } from '@ledge/protocol';
 
 export type Tool = Session['tool'];
 /** Harnesses that take several folders (Claude Code and OMP: `--add-dir`); the others get one repository at a time. */
 export const MULTI_REPO_TOOLS: ReadonlySet<Tool> = new Set<Tool>(['claude', 'omp']);
 export const LAUNCH_TIMEOUT_MS = 20_000;
 export type LaunchMessage = Extract<ClientMessage, { type: 'session.launch' }>;
-/** `repos` are paths on `machine`. `model` and `effort` (#58): null leaves the agent's own default, nothing is passed. */
-export interface LaunchForm { tool: Tool | null; prompt: string; project: string | null; machine: string | null; repos: string[]; model: string | null; effort: string | null }
+/** `repos` are paths on `machine`. `tool` starts as the default agent (Settings › General). `model` and `effort` (#58): null leaves the agent's
+ *  own default, nothing is passed. */
+export interface LaunchForm { tool: Tool; prompt: string; project: string | null; machine: string | null; repos: string[]; model: string | null; effort: string | null;
+  /** OMP's approval mode; the others ignore it. `always-ask` is what a daemon passes when nothing is sent. */
+  approval: OmpApproval }
 /** The model and effort chosen for an agent, as the form keeps them per project. */
 export interface ModelPick { model: string | null; effort: string | null }
 export const NO_PICK: ModelPick = { model: null, effort: null };
-export type Missing = 'tool' | 'prompt' | 'machine' | 'repos';
+export type Missing = 'prompt' | 'machine' | 'repos';
 type Infos = ReadonlyMap<string, RepoInfo>;
 
 /** Online: what the fleet takes (connected, fresh, its snapshot there), not merely a socket open. */
@@ -29,11 +32,12 @@ function firstRepo(project: Project | undefined, machine: string | null, infos?:
   return r ? [r.path] : [];
 }
 
-export function launchDefaults(projects: readonly Project[], machines: readonly MachineState[], wanted: { project?: string; filter?: string }, infos?: Infos): LaunchForm {
+/** A new form: the default agent preselected (spec 2026-10-20 §3.1), the wanted project, the local machine when it is up. */
+export function launchDefaults(projects: readonly Project[], machines: readonly MachineState[], wanted: { project?: string; filter?: string }, tool: Tool, infos?: Infos): LaunchForm {
   const project = (find(projects, wanted.project ?? null) ?? find(projects, wanted.filter ?? null) ?? projects[0])?.id ?? null;
   const up = machines.filter(isUp);
   const machine = (up.find(m => m.id === 'local') ?? up[0])?.id ?? null;
-  return { tool: null, prompt: '', project, machine, repos: firstRepo(find(projects, project), machine, infos), ...NO_PICK };
+  return { tool, prompt: '', project, machine, repos: firstRepo(find(projects, project), machine, infos), ...NO_PICK, approval: 'always-ask' };
 }
 
 export function withProject(f: LaunchForm, projects: readonly Project[], id: string, infos?: Infos): LaunchForm {
@@ -50,13 +54,12 @@ export function withPick(f: LaunchForm, pick: ModelPick): LaunchForm {
   return { ...f, model: pick.model, effort: pick.effort };
 }
 export function toggleRepo(f: LaunchForm, path: string): LaunchForm {
-  if (f.tool !== null && !MULTI_REPO_TOOLS.has(f.tool)) return { ...f, repos: [path] };
+  if (!MULTI_REPO_TOOLS.has(f.tool)) return { ...f, repos: [path] };
   return { ...f, repos: f.repos.includes(path) ? f.repos.filter(p => p !== path) : [...f.repos, path] };
 }
 
-/** The first missing field: agent, instruction, machine (none online, or the chosen one went down), repository. */
+/** The first missing field: instruction, machine (none online, or the chosen one went down), repository. */
 export function missingOf(f: LaunchForm, machines: readonly MachineState[]): Missing | null {
-  if (f.tool === null) return 'tool';
   if (!f.prompt.trim()) return 'prompt';
   if (f.machine === null || !machines.some(m => m.id === f.machine && isUp(m))) return 'machine';
   if (f.repos.length === 0) return 'repos';
@@ -73,7 +76,8 @@ export function previewOf(f: LaunchForm, sessions: readonly Session[], projectId
 
 export function launchMessage(f: LaunchForm, name: string): LaunchMessage {
   const [cwd = '', ...rest] = f.repos;
-  const tool = f.tool!;
+  const { tool } = f;
   return { type: 'session.launch', tool, cwd, ...(MULTI_REPO_TOOLS.has(tool) && rest.length ? { dirs: rest } : {}), name, prompt: f.prompt.trim(),
-    ...(f.model ? { model: f.model } : {}), ...(f.effort ? { effort: f.effort } : {}), ...(f.machine ? { machineId: f.machine } : {}) };
+    ...(f.model ? { model: f.model } : {}), ...(f.effort ? { effort: f.effort } : {}), ...(tool === 'omp' && f.approval !== 'always-ask' ? { approval: f.approval } : {}),
+    ...(f.machine ? { machineId: f.machine } : {}) };
 }

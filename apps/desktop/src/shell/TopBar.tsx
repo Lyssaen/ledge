@@ -8,7 +8,7 @@ import { taskOf } from '../nav/agents';
 import type { NavAction, NavState, ProjectFilter } from '../nav/state';
 import { isArchived } from '@ledge/protocol';
 import { SHELL_ICONS } from './icons';
-import { HelperBot, SessionBot, StateBadge } from './SessionBot';
+import { ApprovalBadge, HelperBot, SessionBot, StateBadge } from './SessionBot';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 /** The session menu opens under its button, its right edge on the button's (Menu keeps it inside the window). */
@@ -88,7 +88,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
         <div className="header-view header-session">
           {isArchived(session)
             ? <button type="button" className="archived-pill" onClick={() => onRevealArchives?.()}><Icon d={SHELL_ICONS.archive} size={12} />{t.manage.archivedBanner.pill}</button>
-            : <StateBadge state={helper ? helperState(helper) : botState(session)} offline={!!session.offline} />}
+            : <>{!helper && <ApprovalBadge session={session} />}<StateBadge state={helper ? helperState(helper) : botState(session)} offline={!!session.offline} /></>}
           <span className="view-actions-sep" />
           <Button variant="ghost" size="icon" aria-pressed={terminal} aria-label={terminal ? t.top.terminalHide : t.top.terminalShow} title={terminal ? t.top.terminalHideTitle : t.top.terminalShowTitle} onClick={onTerminal}>
             <Icon d={SHELL_ICONS.terminal} size={16} />

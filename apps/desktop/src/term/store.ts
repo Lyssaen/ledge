@@ -119,6 +119,10 @@ export class TermStore {
     } else if (mode.kind === 'live' || mode.kind === 'parent') {
       e.offlineSince = undefined;
       this.connect();
+    } else if (mode.kind === 'native') {
+      // No agent screen to show: the pane opens on its first shell, started now rather than left blank until its tab is clicked.
+      const tab = e.tabs.find(t => t.id === e.active);
+      if (tab?.kind === 'shell' && tab.status === 'idle') this.start(sessionId, tab);
     }
     this.emit();
   }

@@ -410,12 +410,15 @@ describe('TermStore size at open', () => {
 
 describe('a native session (OMP): shells only', () => {
   const place = (id: string) => ({ dir: '/w/x', remote: false, native: id.startsWith('omp') });
-  it('has no agent tab: its first shell is the active tab, and showing the agent attaches nothing', async () => {
+  it('has no agent tab: its first shell is the active tab, started as the pane shows; no agent is attached', async () => {
     const st = store({ shellPlace: place });
     expect(st.tabs('omp1').map(t => t.kind)).toEqual(['shell']);
     expect(st.active('omp1')).toBe('omp1#shell-1');
-    st.showAgent('omp1', { kind: 'native' });
-    expect(backend.opens).toHaveLength(0); expect(agentCalls).toEqual([]);
+    expect(backend.opens).toHaveLength(0);                                 // nothing before the pane shows
+    st.showAgent('omp1', { kind: 'native' }); await tick();
+    expect(backend.opens.map(o => o.argv)).toEqual([shellArgv('omp1')]); expect(agentCalls).toEqual([]);
+    st.showAgent('omp1', { kind: 'native' }); await tick();
+    expect(backend.opens).toHaveLength(1);                                 // shown again: the same shell, not a second
     expect(st.tabs('claude1').map(t => t.kind)).toEqual(['agent', 'shell']); // the others are as they were
   });
   it('closing its last shell leaves a fresh one, not started, rather than an empty pane', async () => {

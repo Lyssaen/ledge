@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type ReactNode } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
-import type { Project, Session } from '@ledge/protocol';
+import type { OmpApproval, Project, Session } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -14,9 +14,12 @@ import { useModels } from './useModels';
 import { loadPick, savePick } from './modelPrefs';
 import { effective, ModelPicker } from './ModelPicker';
 import type { LaunchState } from './useLaunch';
+import { cls } from '../shell/cls';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
+import { useDefaultTool } from '../settings/tool';
 
 const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor', 'omp'];
+const APPROVALS: readonly OmpApproval[] = ['always-ask', 'write', 'yolo'];
 const folderName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
 
 /** A message with two strong parts (« {name} will join the {table} table »), whatever their order in the language. */
@@ -25,8 +28,9 @@ function emphasized(text: (a: string, b: string) => string, a: string, b: string
   return parts.map((part, i) => (part === '\u0001' ? <strong key={i}>{a}</strong> : part === '\u0002' ? <strong key={i}>{b}</strong> : part));
 }
 
-/** Starting a session (the mockup's LaunchComposer): the instruction first, the harness picked by its bot, then the project, the machine and
- *  the repositories there; the preview shows who joins which table. Nothing is sent while a field is missing: it is named instead. */
+/** Starting a session (the mockup's LaunchComposer, ledge-harness-integration #launch): the instruction first, then the agent, preselected as
+ *  the default (Settings › General) and changed for this session only behind « Change », then the project, the machine and the repositories
+ *  there; the preview shows who joins which table. Nothing is sent while a field is missing: it is named instead. */
 export function LaunchComposer(p: {
   client: DaemonClient; projects: readonly Project[]; machines: readonly MachineState[]; sessions: readonly Session[];
   projectIdOf(s: Session): string | null; wanted: { project?: string; filter?: string }; onEditProject(id: string): void; onNewProject(): void;
@@ -39,9 +43,13 @@ export function LaunchComposer(p: {
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
   const { projects, machines } = p;
-  const [form, setForm] = useState<LaunchForm>(() => launchDefaults(projects, machines, p.wanted));
+  const [defaultTool, setDefaultTool] = useDefaultTool();
+  const [form, setForm] = useState<LaunchForm>(() => { const f = launchDefaults(projects, machines, p.wanted, defaultTool); return withPick(f, loadPick(f.project, f.tool)); });
   const [tried, setTried] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const [feedback, setFeedback] = useState('');
   const field = useRef<HTMLTextAreaElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => { field.current?.focus(); }, []);
 
   const project = projects.find(x => x.id === form.project);
@@ -59,7 +67,7 @@ export function LaunchComposer(p: {
   // OMP is launched by the daemon itself, with no fallback to another harness: where it cannot be reached (not installed, a daemon
   // that does not know it, no credentials), the launch is blocked with the reason (spec 2026-10-20 §3.1).
   const unavailable = form.tool === 'omp' && online && models.status === 'ready' && models.error ? models.error : null;
-  const memo = form.tool ? loadPick(form.project, form.tool) : null;
+  const memo = loadPick(form.project, form.tool);
   const remembered = !!memo?.remembered && memo.model === form.model && memo.effort === form.effort;
 
   // A project removed, or the projects arriving after the form: the first one. The chosen machine going offline: the first one online, if any.
@@ -94,8 +102,9 @@ export function LaunchComposer(p: {
   const submit = () => {
     setTried(true);
     if (missing || launching || !project || unavailable) return;
-    if (!outdated && form.tool) savePick(project.id, form.tool, { model: form.model, effort: form.effort });
-    p.onLaunch(launchMessage(outdated ? withPick(form, NO_PICK) : form, name), { name, project: project.name, projectId: project.id });
+    if (!outdated) savePick(project.id, form.tool, { model: form.model, effort: form.effort });
+    const sent = { ...(outdated ? withPick(form, NO_PICK) : form), approval: approvable ? form.approval : 'always-ask' as const };
+    p.onLaunch(launchMessage(sent, name), { name, project: project.name, projectId: project.id });
   };
   // Only Ctrl / ⌘ ↵ and « Launch » send: a plain Enter on a tile or a chip would submit the form implicitly (the textarea keeps its newline).
   const onKeyDown = (e: KeyboardEvent) => {
@@ -104,12 +113,21 @@ export function LaunchComposer(p: {
     else if (e.target instanceof HTMLInputElement) e.preventDefault();
   };
 
-  const multi = form.tool === null || MULTI_REPO_TOOLS.has(form.tool);
-  const run = form.tool && !outdated ? effective(models.models, form) : {};
+  const multi = MULTI_REPO_TOOLS.has(form.tool);
+  const run = !outdated ? effective(models.models, form) : {};
+  // OMP's approval mode is chosen only where the daemon takes it; an older one launches it asking (its own policy, said under the field).
+  const approvable = chosen?.daemon?.ompApproval === true;
+  const label = (id: Tool) => t.launch.tools[id][0];
+  const choose = (next: Tool) => {
+    if (next === form.tool) return;
+    setForm(f => withTool(f, next, loadPick(f.project, next)));
+    setFeedback(t.launch.switched(label(next)));
+  };
+  const closeChoice = () => { setChoosing(false); trigger.current?.focus(); };
   const machineLabel = chosen?.label ?? form.machine ?? '—';
   const branch = form.repos[0] ? infos.get(form.repos[0])?.branch : null;
   // After a try, every field still incomplete is marked (the mockup); the message names the first one.
-  const incomplete = { tool: form.tool === null, prompt: !form.prompt.trim(), machine: !online, repos: form.repos.length === 0 };
+  const incomplete = { prompt: !form.prompt.trim(), machine: !online, repos: form.repos.length === 0 };
   const invalid = (k: keyof typeof incomplete) => tried && incomplete[k];
 
   return (
@@ -126,23 +144,54 @@ export function LaunchComposer(p: {
           </div>
         )}
 
-        <fieldset className="composer-tools" aria-invalid={invalid('tool')}>
-          <legend className="composer-label">{t.launch.agent}</legend>
-          {TOOLS.map(id => {
-            const [label, hint] = t.launch.tools[id];
-            return (
-              <label key={id} className={`tool-tile ${form.tool === id ? 'selected' : ''}`}>
-                <input type="radio" name="tool" value={id} checked={form.tool === id} onChange={() => setForm(f => withTool(f, id, loadPick(f.project, id)))} />
-                <span className="composer-bot" aria-hidden="true"><Bot tool={id} state={form.tool === id ? 'working' : 'idle'} pose={1} size={46} theme={theme} seed={'pick-' + id} paused={p.paused} reducedMotion={reduced} /></span>
-                <span><strong>{label}</strong><small>{hint}</small></span>
-              </label>
-            );
-          })}
-        </fieldset>
-
-        {unavailable !== null && <p className="composer-missing" role="alert">{unavailable === 'outdated' ? t.launch.ompOutdated : t.launch.ompUnavailable(unavailable)}</p>}
-        {form.tool && online && !unavailable && (outdated ? <small className="models-note">{t.launch.modelsOutdated}</small>
-          : <ModelPicker key={`${form.machine}|${form.tool}|${form.project}`} tool={form.tool} state={models} pick={form} remembered={remembered} onPick={pick => setForm(f => withPick(f, pick))} />)}
+        <section className="integrated-harness" aria-label={t.launch.agent}>
+          <div className="harness-field-label"><span className="composer-label">{t.launch.agent}</span><span>{t.launch.agentHint}</span></div>
+          <button type="button" className="harness-current" ref={trigger} aria-expanded={choosing} aria-controls="harness-choices" onClick={() => setChoosing(c => !c)}>
+            <span className="composer-bot" aria-hidden="true"><Bot tool={form.tool} state="working" pose={1} size={36} theme={theme} seed={'launch-' + form.tool} paused={p.paused} reducedMotion={reduced} /></span>
+            <span className="harness-current-copy"><strong>{label(form.tool)}</strong><small>{t.launch.tools[form.tool][1]}</small></span>
+            <span className="harness-choice-tag">{form.tool === defaultTool ? t.launch.byDefaultTag : t.launch.thisSession}</span>
+            <span className="harness-change">{t.launch.change}</span>
+            <span className={cls('harness-chevron', choosing && 'open')}><Icon d={ICONS.chevronRight.d} size={14} /></span>
+          </button>
+          {choosing && (
+            <div id="harness-choices" className="harness-choice-panel" onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeChoice(); } }}>
+              <fieldset className="composer-tools">
+                <legend className="composer-label">{t.launch.chooseFor}</legend>
+                {TOOLS.map(id => (
+                  <label key={id} className={cls('tool-tile', form.tool === id && 'selected')}>
+                    <input type="radio" name="tool" value={id} checked={form.tool === id} onChange={() => choose(id)} />
+                    <span className="composer-bot" aria-hidden="true"><Bot tool={id} state="working" pose={1} size={36} theme={theme} seed={'pick-' + id} paused={p.paused} reducedMotion={reduced} /></span>
+                    <span><strong>{label(id)}{defaultTool === id && <span className="harness-default-mark">{t.launch.defaultMark}</span>}</strong><small>{t.launch.tools[id][1]}</small></span>
+                  </label>
+                ))}
+              </fieldset>
+              <div className="harness-default-action">
+                <span>{form.tool === defaultTool ? t.launch.isDefault : t.launch.defaultStays(label(defaultTool))}</span>
+                {form.tool !== defaultTool && <Button type="button" variant="ghost" size="sm" onClick={() => { setDefaultTool(form.tool); setFeedback(t.launch.defaultSaved(label(form.tool))); }}>{t.launch.setDefault(label(form.tool))}</Button>}
+                <Button type="button" variant="ghost" size="sm" onClick={closeChoice}>{t.launch.doneChoosing}</Button>
+              </div>
+            </div>
+          )}
+          {!choosing && form.tool !== defaultTool && (
+            <div className="harness-override"><span>{t.launch.onlyThisOne(label(defaultTool))}</span><button type="button" onClick={() => choose(defaultTool)}>{t.launch.backToDefault}</button></div>
+          )}
+          {unavailable !== null && <p className="harness-unavailable" role="alert">{unavailable === 'outdated' ? t.launch.ompOutdated : t.launch.ompUnavailable(unavailable)}</p>}
+          {online && !unavailable && (outdated ? <small className="models-note">{t.launch.modelsOutdated}</small>
+            : <ModelPicker key={`${form.machine}|${form.tool}|${form.project}`} tool={form.tool} state={models} pick={form} remembered={remembered} onPick={pick => setForm(f => withPick(f, pick))} />)}
+          {form.tool === 'omp' && !unavailable && (approvable ? (
+            <fieldset className="chip-group harness-approval">
+              <legend className="composer-label">{t.launch.approval}</legend>
+              {APPROVALS.map(a => (
+                <label key={a} className={cls('chip', form.approval === a && 'selected')} title={t.launch.approvals[a][1]}>
+                  <input type="radio" name="approval" checked={form.approval === a} onChange={() => setForm(f => ({ ...f, approval: a }))} />{t.launch.approvals[a][0]}
+                </label>
+              ))}
+              <small className="chip-hint">{t.launch.approvals[form.approval][1]}</small>
+            </fieldset>
+          ) : online && <small className="models-note">{t.launch.approvalOutdated}</small>)}
+          {form.tool === 'omp' && <p className="harness-native">{t.launch.ompNative}</p>}
+          <p className="harness-live" role="status">{feedback}</p>
+        </section>
 
         {projects.length === 0 ? (
           <div className="composer-empty">
@@ -194,7 +243,7 @@ export function LaunchComposer(p: {
                         </label>
                       );
                     })}
-                    {!multi && here.length > 1 && <small className="chip-hint">{t.launch.oneRepo(t.launch.tools[form.tool!][0])}</small>}
+                    {!multi && here.length > 1 && <small className="chip-hint">{t.launch.oneRepo(label(form.tool))}</small>}
                     {branch && <span className="chip-note">⎇ {branch}</span>}
                   </>
                 )}
@@ -206,10 +255,10 @@ export function LaunchComposer(p: {
 
       <footer className="composer-footer">
         <div className="composer-preview" aria-live="polite">
-          {form.tool ? <span className="composer-bot" aria-hidden="true"><Bot tool={form.tool} state="starting" pose={1} size={30} theme={theme} seed={'preview-' + form.tool} paused={p.paused} reducedMotion={reduced} /></span> : <span className="preview-empty" aria-hidden="true" />}
+          <span className="composer-bot" aria-hidden="true"><Bot tool={form.tool} state="starting" pose={1} size={30} theme={theme} seed={'preview-' + form.tool} paused={p.paused} reducedMotion={reduced} /></span>
           {project && (
             <span>
-              <span className="preview-line">{emphasized(t.launch.joins, form.tool ? name : t.launch.newAgent, project.name)}</span>
+              <span className="preview-line">{emphasized(t.launch.joins, name, project.name)}</span>
               <small>{t.launch.seat(seat, machineLabel, form.repos.map(folderName).join(', ') || t.launch.noRepo)}{run.model && <span className="preview-model">{t.launch.pickSummary(run.model.label, run.effort && ((t.launch.efforts as Record<string, string | undefined>)[run.effort] ?? run.effort).toLowerCase())}</span>}</small>
             </span>
           )}
