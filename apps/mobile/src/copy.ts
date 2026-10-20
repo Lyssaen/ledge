@@ -167,7 +167,19 @@ export const copy = {
   connection: {
     title: 'Connexion', back: 'Retour aux demandes', pc: 'PC', device: 'Ce téléphone', status: 'État', unknown: 'Inconnu',
     status_: { online: 'Connecté', offline: 'Déconnecté', connecting: 'Connexion en cours…' },
+    account: 'Compte', relay: 'Serveur', pcFingerprint: 'Empreinte du PC', version: 'Version de l’app', appFingerprint: 'Empreinte de l’app',
+    /** A value not known yet (the build, before the service worker gives it). */
+    none: '—',
     signOut: 'Se déconnecter'
+  },
+  /** The GitHub login, as the boards write it. */
+  account: (login: string) => `@${login}`,
+  /** The PC before its first snapshot named it. */
+  yourPc: 'votre PC',
+  replaced: {
+    title: 'Ledge est ouvert ailleurs',
+    body: 'Un autre onglet de ce téléphone a pris la connexion. Fermez-le, ou reprenez la connexion ici.',
+    here: 'Utiliser ici'
   },
   insecure: {
     title: 'Connexion non sécurisée',
@@ -182,12 +194,16 @@ export const copy = {
       'Rien n’est accessible avant que vous ayez confirmé un code sur votre PC.',
       'Le serveur relaie des messages chiffrés : il ne peut ni les lire, ni répondre à votre place.'
     ],
-    github: 'Continuer avec GitHub'
+    github: 'Continuer avec GitHub',
+    /** What the relay's `?signin=` said went wrong; the boards show none, these are the desktop's words. */
+    errors: { denied: 'La connexion a été refusée sur GitHub.', failed: 'La connexion à GitHub a échoué. Réessayez.' }
   },
   compare: {
     /** The name this phone gives itself in its `pair_commit`, when its user agent names no known device. */
     deviceLabel: 'Téléphone',
     title: 'Comparez ce code',
+    waitCode: 'En attente du code du PC…',
+    codeLabel: (code: string) => `Code de liaison ${code}`,
     intro: (pc: string) => `Ledge vient d’afficher un code sur ${pc}. Il doit être identique à celui-ci.`,
     basis: 'Calculé à partir des clés du PC et de ce téléphone',
     same: 'Les codes sont identiques',
@@ -200,11 +216,19 @@ export const copy = {
     seePending: 'Voir ce qui attend',
     cancelledTitle: 'Liaison annulée',
     cancelledBody: 'Des codes différents signifient que ce téléphone et le PC ne voient pas les mêmes clés. Quelqu’un tente peut-être de s’interposer. Refusez aussi sur le PC.',
+    expiredTitle: 'Code expiré',
+    expiredBody: 'Le code n’a pas été confirmé à temps sur les deux appareils.',
+    refusedTitle: 'Liaison refusée sur le PC',
+    refusedBody: 'Ledge sur le PC a refusé ce téléphone.',
+    lostTitle: 'Ce téléphone n’est plus lié',
+    lostBody: 'Ses clés ont disparu (données du site effacées ou navigation privée) et le dernier état connu a été effacé avec. Comparez un nouveau code pour le lier.',
     retry: 'Recommencer'
   },
   denied: {
     title: 'Ce compte n’a pas accès',
     body: (login: string) => `${login} n’est pas dans la liste de ce serveur. Demandez à son administrateur de vous ajouter.`,
+    /** The relay's redirect names no account: the board's sentence without the login. */
+    bodyNoLogin: 'Ce compte GitHub n’est pas dans la liste de ce serveur. Demandez à son administrateur de vous ajouter.',
     other: 'Utiliser un autre compte'
   },
   keyChanged: {
@@ -232,8 +256,10 @@ export const copy = {
   },
   offline: {
     lastKnown: (t: string) => `Dernier état connu · ${t}`,
-    title: (pc: string) => `${pc} ne répond plus`,
+    title: (pc: string | null) => pc ? `${pc} ne répond plus` : 'Votre PC ne répond plus',
     body: (t: string) => `Le PC est sans doute en veille depuis ${t}. Ledge n’envoie aucune décision plus tard à votre place : une demande peut avoir changé entre-temps.`,
+    /** The board's sentence when no state was ever received, so no time to give. */
+    bodyUnknown: 'Le PC est sans doute en veille. Ledge n’envoie aucune décision plus tard à votre place : une demande peut avoir changé entre-temps.',
     retry: 'Réessayer',
     seen: (when: string) => `vu à ${when}`,
     badge: 'Hors ligne',

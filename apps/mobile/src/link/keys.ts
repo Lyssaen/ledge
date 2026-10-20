@@ -27,7 +27,8 @@ function defaultStorage(): Storage | null {
   try { return globalThis.localStorage ?? null; } catch { return null; }
 }
 
-function clearMobileStorage(storage: Storage | null): void {
+/** Drops every `ledge.mobile.*` entry of `storage`; other entries stay. */
+export function clearMobileStorage(storage: Storage | null): void {
   if (!storage) return;
   const doomed: string[] = [];
   for (let i = 0; i < storage.length; i++) {

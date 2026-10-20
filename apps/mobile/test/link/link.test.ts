@@ -8,6 +8,7 @@ import { createPhoneLink, type LinkState, type PhoneLink } from '../../src/link/
 import { memoryKeys, type KeyStore } from '../../src/link/keys';
 import { PAIRING_TTL_MS } from '../../src/link/pairing';
 import { startFakePc, type FakePc } from '../fakePc';
+import { snapshot } from '../state/helpers';
 
 /** Polls on real time (performance.now), so a test that fakes Date still times out. */
 async function until(cond: () => boolean, what = 'condition', ms = 3000): Promise<void> {
@@ -344,5 +345,45 @@ describe('PhoneLink', () => {
     expect(await keys.identity()).toBeNull();
     expect(await keys.pinned()).toBeNull();
     expect(link.state()).toBe('signed_out');
+  });
+
+  it('names the pinned PC from the snapshot, and keeps the name in the key store', async () => {
+    const { pc, link, keys } = await ready();
+    expect(link.pinned()?.name).toBeNull();
+    const notified = vi.fn();
+    link.subscribe(notified);
+    await pc.send(snapshot([], 'PC-Desan'));
+    await until(() => link.pinned()?.name === 'PC-Desan', 'the name');
+    expect(notified).toHaveBeenCalled();
+    await settle();
+    expect((await keys.pinned())?.name).toBe('PC-Desan');
+    expect(link.pinned()?.publicKey).toBe(pc.identity.publicKey);
+  });
+
+  it('key_changed → the received fingerprint is kept for the screen', async () => {
+    const identity = await generateIdentity();
+    const pc = await startFakePc({ devicePublicKey: identity.publicKey });
+    cleanups.push(() => pc.close());
+    const other = await generateIdentity();
+    pc.answerAs(other);
+    const keys = memoryKeys(null);
+    await keys.saveIdentity(identity);
+    await keys.pin({ publicKey: pc.identity.publicKey, fingerprint: await fingerprint(pc.identity.publicKey), name: null, pinnedAt: '2026-10-20T08:00:00.000Z' });
+    const { link } = open(pc, keys);
+    expect(link.receivedKey()).toBeNull();
+    await until(() => link.state() === 'key_changed', 'key_changed');
+    expect(link.receivedKey()).toBe(await fingerprint(other.publicKey));
+  });
+
+  it('retry(): a PC said offline on an open socket → a new socket, its welcome, the hello, ready', async () => {
+    const { pc, link, hellos } = await ready();
+    const before = hellos();
+    pc.injectToPhone({ type: 'presence', peer: 'pc', online: false });
+    await until(() => link.state() === 'pc_offline', 'pc_offline');
+    await settle();
+    expect(link.state()).toBe('pc_offline');
+    link.retry();
+    await until(() => link.state() === 'ready', 'ready again');
+    expect(hellos()).toBeGreaterThan(before);
   });
 });

@@ -50,7 +50,13 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
   const [otherText, setOtherText] = useState('');
   // The last tap sent nothing (the store refused the write): said in the footer until the next tap.
   const [refused, setRefused] = useState(false);
-  useEffect(() => { setKey(requestKey); setChanged(false); setChoice(null); setOtherText(''); setRefused(false); }, [requestKey]);
+  // The address this screen wrote itself (a request replaced in place) comes back as `requestKey`: nothing to reset.
+  const keyRef = useRef(key);
+  keyRef.current = key;
+  useEffect(() => {
+    if (requestKey === keyRef.current) return;
+    setKey(requestKey); setChanged(false); setChoice(null); setOtherText(''); setRefused(false);
+  }, [requestKey]);
 
   const sessions = [...state.sessions.values()];
   const item = requestsOf(sessions).find(i => i.sessionId === sessionId && i.key === key);

@@ -1,5 +1,7 @@
 import { PHONE_PROTOCOL, type PhoneClientMessage, type PhoneServerMessage, type PhoneSession } from '@ledge/protocol';
+import type { PinnedPc } from '../../src/link/keys';
 import type { LinkState, PhoneLink } from '../../src/link/link';
+import type { Pairing, PairingState } from '../../src/link/pairing';
 
 /** A Storage held in memory, one per test, so nothing leaks between them. */
 export class MemoryStorage implements Storage {
@@ -18,6 +20,24 @@ export function fakeLink(initial: LinkState = 'ready') {
   const listeners = new Set<() => void>();
   const handlers = new Set<(m: PhoneServerMessage) => void>();
   const sent: PhoneClientMessage[] = [];
+  /** The link's own calls (pairing, relink, signOut, retry), in order. */
+  const calls: string[] = [];
+  let pairingState: PairingState | null = null;
+  let pinned: PinnedPc | null = null;
+  let received: string | null = null;
+  const notify = () => { for (const f of [...listeners]) f(); };
+  const pairing: Pairing = {
+    async receive() {},
+    confirmOnPhone() {
+      calls.push('confirmOnPhone');
+      if (pairingState?.step === 'compare') { pairingState = { ...pairingState, phoneConfirmed: true }; notify(); }
+    },
+    cancel() {
+      calls.push('cancel');
+      if (pairingState?.step === 'committing' || pairingState?.step === 'compare') { pairingState = { step: 'cancelled' }; notify(); }
+    },
+    state: () => pairingState ?? { step: 'committing' }
+  };
   const link: PhoneLink = {
     state: () => state,
     subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
@@ -27,10 +47,13 @@ export function fakeLink(initial: LinkState = 'ready') {
       sent.push(m);
       return true;
     },
-    pairing: () => null,
-    startPairing() {},
-    async relink() {},
-    async signOut() {},
+    pairing: () => pairingState ? pairing : null,
+    startPairing() { calls.push('startPairing'); },
+    async relink() { calls.push('relink'); },
+    async signOut() { calls.push('signOut'); },
+    retry() { calls.push('retry'); },
+    pinned: () => pinned,
+    receivedKey: () => received,
     close() {}
   };
   return {
@@ -38,7 +61,12 @@ export function fakeLink(initial: LinkState = 'ready') {
     sent,
     /** The messages of one type sent so far. */
     of<T extends PhoneClientMessage['type']>(type: T) { return sent.filter((m): m is Extract<PhoneClientMessage, { type: T }> => m.type === type); },
-    set(s: LinkState) { state = s; for (const f of [...listeners]) f(); },
+    calls,
+    set(s: LinkState) { state = s; notify(); },
+    /** The pairing under way as the link would show it; null for none. */
+    setPairing(s: PairingState | null) { pairingState = s; notify(); },
+    setPinned(pc: PinnedPc | null) { pinned = pc; notify(); },
+    setReceivedKey(fp: string | null) { received = fp; notify(); },
     deliver(m: PhoneServerMessage) { for (const h of [...handlers]) h(m); },
     listening: () => handlers.size + listeners.size
   };

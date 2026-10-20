@@ -32,6 +32,15 @@ export interface PhoneLink {
   relink(): Promise<void>;
   /** Closes the socket, `POST /auth/logout`, forgets the keys: `signed_out`, for good. */
   signOut(): Promise<void>;
+  /**
+   * Tries again now, for a screen's « Réessayer »: a hello when the PC is known online on an open socket, else a new
+   * socket (its welcome says where the PC is) unless one is already being tried or a 4008 asked to wait.
+   */
+  retry(): void;
+  /** The PC this phone trusts, named from its snapshots; null when unpaired. */
+  pinned(): PinnedPc | null;
+  /** The fingerprint the PC answered with once its key changed; null otherwise. */
+  receivedKey(): string | null;
   /** Closes the socket and stops every timer, keys untouched. Final. */
   close(): void;
 }
@@ -58,6 +67,8 @@ export function createPhoneLink(opts: {
   /** The PC's presence on the relay: null before the first welcome, false once the socket dropped. */
   let pcOnline: boolean | null = null;
   let keyChanged = false;
+  /** The fingerprint of the key the PC answered with, once it changed. */
+  let receivedKey: string | null = null;
   let signedOut = false;
   let finished = false;
   let channel: PhoneChannel | null = null;
@@ -95,13 +106,14 @@ export function createPhoneLink(opts: {
 
   // ---- the channel ----
 
-  const onChannelEvent = (ch: PhoneChannel, e: ChannelEvent) => {
+  const onChannelEvent = (ch: PhoneChannel, e: ChannelEvent, received?: string) => {
     if (channel !== ch) return;
     if (e === 'ready') {
       check();
       void afterReady(ch);
     } else if (e === 'key_changed') {
       keyChanged = true;
+      receivedKey = received ?? null;
       check();
     } else if (e === 'denied') {
       // The PC no longer knows this phone: its keys are worth nothing, a new pairing starts from scratch.
@@ -122,12 +134,26 @@ export function createPhoneLink(opts: {
         identity,
         pc: pinned,
         send: (f) => { sock.send('pc', f); },
-        onMessage: (m) => { if (channel === ch) for (const fn of [...messageListeners]) fn(m); },
-        onEvent: (e) => onChannelEvent(ch, e)
+        onMessage: (m) => {
+          if (channel !== ch) return;
+          if (m.type === 'snapshot') nameFrom(m.daemon.name);
+          for (const fn of [...messageListeners]) fn(m);
+        },
+        onEvent: (e, received) => onChannelEvent(ch, e, received)
       });
       channel = ch;
     }
     void channel.hello().then(() => check(), () => check());
+  };
+
+  /** The PC's name is learned from its snapshot (pairing does not carry it), and kept with the pinned key. */
+  const nameFrom = (name: string) => {
+    const pc = pinned;
+    if (!pc || pc.name === name) return;
+    pinned = { ...pc, name };
+    // Not kept: the next snapshot names it again.
+    keys.pin(pinned).catch(() => {});
+    check(true);
   };
 
   // ---- the pairing ----
@@ -236,6 +262,7 @@ export function createPhoneLink(opts: {
     keysGen++;
     channel = null;
     keyChanged = false;
+    receivedKey = null;
     pinned = null;
     identity = null;
     pairingWanted = false;
@@ -377,6 +404,13 @@ export function createPhoneLink(opts: {
       }
       await forgetKeys();
     },
+    retry() {
+      if (finished || keyChanged) return;
+      if (socketState === 'open' && pcOnline === true) helloIfDue();
+      else sock.reconnect();
+    },
+    pinned: () => pinned,
+    receivedKey: () => receivedKey,
     close() {
       if (finished) return;
       finish();

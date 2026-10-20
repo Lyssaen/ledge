@@ -10,6 +10,11 @@ export type SocketState = 'connecting' | 'open' | 'signed_out' | 'replaced' | 'c
 export interface RelaySocket {
   /** False unless the relay welcomed this socket, or when the sealed body is past `SEALED_MAX`. */
   send(to: RelayPeer, frame: SealedFrame): boolean;
+  /**
+   * Connects again now (an open socket is dropped first), unless an attempt or `/auth/me` is under way, a 4008 asked to
+   * wait, or the socket is finished. The backoff keeps counting.
+   */
+  reconnect(): void;
   /** Closes the socket and stops reconnecting: `closed`. Final. */
   close(): void;
 }
@@ -64,6 +69,10 @@ export function openRelaySocket(opts: {
   let failures = 0;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let finished = false;
+  /** `/auth/me` is under way: its answer decides what comes next. */
+  let asking = false;
+  /** Before this (a 4008), no attempt is made, asked for or not. */
+  let notBefore = 0;
 
   const setState = (s: SocketState) => {
     if (s === state) return;
@@ -107,10 +116,15 @@ export function openRelaySocket(opts: {
   const onClosed = (code: number, opened: boolean) => {
     if (code === RELAY_CLOSE_REPLACED) return finish('replaced');
     opts.onAttemptFailed?.();
-    if (code === RELAY_CLOSE_RATE_LIMITED) return retry(RATE_LIMITED_WAIT_MS);
+    if (code === RELAY_CLOSE_RATE_LIMITED) {
+      notBefore = Date.now() + RATE_LIMITED_WAIT_MS;
+      return retry(RATE_LIMITED_WAIT_MS);
+    }
     if (code !== RELAY_CLOSE_SIGNED_OUT && opened) return retry();
     setState('connecting');
+    asking = true;
     void signedOut().then((out) => {
+      asking = false;
       if (finished) return;
       if (out) finish('signed_out');
       else retry();
@@ -119,6 +133,9 @@ export function openRelaySocket(opts: {
 
   function connect() {
     if (finished) return;
+    clearTimeout(retryTimer);
+    retryTimer = undefined;
+    detach();
     setState('connecting');
     let sock: WebSocket;
     try {
@@ -161,6 +178,11 @@ export function openRelaySocket(opts: {
       if (body.length > SEALED_MAX) return false;
       ws.send(JSON.stringify({ type: 'send', to, body }));
       return true;
+    },
+    reconnect() {
+      if (finished || asking || Date.now() < notBefore) return;
+      if (ws && state !== 'open') return;
+      connect();
     },
     close() {
       if (finished) return;

@@ -41,7 +41,8 @@ export function openChannel(opts: {
   pc: PinnedPc;
   send(f: SealedFrame): void;
   onMessage(m: PhoneServerMessage): void;
-  onEvent(e: ChannelEvent): void;
+  /** `received`: with `key_changed`, the fingerprint the PC answered with. */
+  onEvent(e: ChannelEvent, received?: string): void;
 }): PhoneChannel {
   let dead = false;
   /** The handshake whose answer is awaited; consumed by the PC's hello. */
@@ -88,7 +89,7 @@ export function openChannel(opts: {
     if (frame.f !== (await pcFingerprint())) {
       dead = true;
       drop();
-      opts.onEvent('key_changed');
+      opts.onEvent('key_changed', frame.f);
       return;
     }
     let ch: Channel;

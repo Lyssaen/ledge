@@ -231,4 +231,52 @@ describe('openRelaySocket', () => {
     expect(FakeWs.instances).toHaveLength(1);
     expect(sock.send('pc', { k: 'pair_ok' })).toBe(false);
   });
+
+  it('reconnect() while waiting out a backoff: a new attempt at once, and the backoff timer dropped', async () => {
+    const { sock } = open();
+    last().welcome();
+    last().drop(1006);
+    sock.reconnect();
+    expect(FakeWs.instances).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(FakeWs.instances).toHaveLength(2);
+  });
+
+  it('reconnect() on an open socket: the old one closed with 1000, a new one opened', () => {
+    const { sock, states } = open();
+    const ws = last();
+    ws.welcome();
+    sock.reconnect();
+    expect(ws.closedWith).toBe(1000);
+    expect(FakeWs.instances).toHaveLength(2);
+    expect(states).toEqual(['connecting', 'open', 'connecting']);
+  });
+
+  it('reconnect() does nothing during an attempt, while /auth/me is asked, or within the 10 s of a 4008', async () => {
+    let answerMe: (r: Response) => void = () => {};
+    const slow = vi.fn(() => new Promise<Response>((r) => { answerMe = r; }));
+    const { sock } = open(slow as unknown as ReturnType<typeof answer>);
+    sock.reconnect();
+    expect(FakeWs.instances).toHaveLength(1);
+    last().drop(1006);
+    sock.reconnect();
+    expect(FakeWs.instances).toHaveLength(1);
+    answerMe({ status: 200 } as Response);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(FakeWs.instances).toHaveLength(2);
+    last().welcome();
+    last().drop(4008);
+    sock.reconnect();
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(FakeWs.instances).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(FakeWs.instances).toHaveLength(3);
+  });
+
+  it('reconnect() after close(): nothing', () => {
+    const { sock } = open();
+    sock.close();
+    sock.reconnect();
+    expect(FakeWs.instances).toHaveLength(1);
+  });
 });

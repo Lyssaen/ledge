@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import type { PhoneSession } from '@ledge/protocol';
 import { copy } from '../copy';
@@ -37,8 +37,11 @@ function Row({ item, session, now, offline }: { item: InboxItem; session: PhoneS
   );
 }
 
-/** « À traiter »: the requests waiting on the PC, the oldest first. Offline, the last known ones, said to be so. */
-export function Inbox({ store, onReconnect }: { store: MobileStore; onReconnect?: () => void }) {
+/**
+ * « À traiter »: the requests waiting on the PC, the oldest first. Offline, the last known ones, said to be so: by
+ * `notice` when given (the PC off the relay), else by the banner.
+ */
+export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onReconnect?: () => void; notice?: ReactNode }) {
   const state = useMobile(store);
   const [filter, setFilter] = useState<Filter>('all');
   const now = useNow();
@@ -50,7 +53,7 @@ export function Inbox({ store, onReconnect }: { store: MobileStore; onReconnect?
     <>
       <Header title={copy.inbox.title} subtitle={subtitle} link={linkView(state)} />
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-side pb-[22px]">
-        {offline && <div className="mb-3"><OfflineBanner onReconnect={onReconnect} /></div>}
+        {offline && <div className="mb-3">{notice ?? <OfflineBanner onReconnect={onReconnect} />}</div>}
         <div role="group" aria-label={copy.inbox.filtersLabel} className="mb-1.5 flex gap-1">
           {FILTERS.map(f => (
             <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)} className={`min-h-11 rounded-[10px] px-3 text-xs ${filter === f ? 'bg-raised text-fg' : 'text-muted'}`}>{copy.inbox.filters[f]}</button>
