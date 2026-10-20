@@ -136,6 +136,23 @@ export const copy = {
     long: (max: number) => `La réponse est trop longue (${max} caractères au plus).`,
     untypable: 'La réponse doit tenir sur une ligne, sans saut de ligne ni caractère de contrôle.'
   },
+  consequence: {
+    forceTitle: 'Peut remplacer l’historique distant',
+    forceBody: (dest?: string) => `Les commits présents sur ${dest ?? 'le dépôt distant'} peuvent être écrasés. Les autres personnes travaillant sur cette branche peuvent être affectées.`,
+    pushTitle: 'Publie sur un dépôt distant',
+    pushBody: 'Les modifications seront visibles par les personnes qui ont accès à ce dépôt.',
+    configuredRemote: 'le dépôt distant configuré',
+    destroys: ['Supprime des fichiers ou des modifications', 'Des fichiers ou des modifications non enregistrées peuvent être perdus.'],
+    deploys: ['Modifie un déploiement ou une infrastructure', 'Un environnement en service peut changer ou devenir indisponible.'],
+    publishes: ['Publie un paquet', 'Une version publiée peut déjà avoir été téléchargée et ne se retire pas toujours.'],
+    pipes_to_shell: ['Exécute un script téléchargé', 'Le code téléchargé s’exécute sans avoir été lu, avec les permissions de cette session.'],
+    network: ['Accède au réseau', 'La commande peut envoyer ou recevoir des données sur le réseau.'],
+    writes_outside_folder: ['Écrit hors du dossier de la session', 'La commande peut modifier des fichiers en dehors du dossier de cette session.'],
+    sensitive_path: ['Touche un fichier sensible', 'Ce fichier peut contenir des secrets ou une configuration sensible.'],
+    script: ['Exécute un script du dépôt', 'Il s’exécute avec les permissions de cette session et peut modifier des fichiers ou accéder au réseau.'],
+    plan: ['Valide un plan : l’agent passera à l’exécution', 'Après votre accord, l’agent exécute le plan sans redemander chaque étape.'],
+    unknown: ['Commande que Ledge ne sait pas analyser', 'Ledge ne peut pas dire ce que cette commande fera. Lisez-la attentivement avant de confirmer.']
+  },
   risk: {
     badge: 'Impact élevé'
   },
