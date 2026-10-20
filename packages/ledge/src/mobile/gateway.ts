@@ -107,7 +107,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
-  const needsAssertion = (msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' }>, s: Session): boolean => {
+  const needsAssertion = (msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' }>, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
     if (msg.type === 'session.reply') return !!msg.expect && s.pending?.source === 'rpc' && riskOf(s)?.risk !== 'low';
     return false;
@@ -139,7 +139,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The checks only a phone meets, in order; undefined lets the operation through. */
-  const precheck = (deviceId: string, msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' }>): Outcome | undefined => {
+  const precheck = (deviceId: string, msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' }>): Outcome | undefined => {
     const s = live(msg.id);
     if (!s) return { status: 'rejected', reason: 'unknown_session' };
     switch (msg.type) {
@@ -172,7 +172,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The local message the operation stands for, built field by field. */
-  const local = (msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' }>): ClientMessage => {
+  const local = (msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' }>): ClientMessage => {
     switch (msg.type) {
       case 'session.decide':
         return { type: 'session.decide', id: msg.id, decision: msg.decision, ...(msg.note !== undefined ? { note: msg.note } : {}), expect: { kind: msg.expect.kind, text: msg.expect.text, key: msg.expect.key } };
@@ -209,6 +209,8 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'credential.register') return register(deviceId, msg);
     // Applied here; the device is revoked by `write`, once the answer has left.
     if (msg.type === 'device.forget') return { status: 'applied' };
+    // Push subscriptions are not handled yet (lot 6b, task 5): refused rather than typed into the terminal.
+    if (msg.type === 'push.subscribe' || msg.type === 'push.unsubscribe') return { status: 'rejected', reason: 'invalid' };
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);

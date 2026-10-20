@@ -172,3 +172,33 @@ describe('phone device confirmation (lot 6a)', () => {
     for (const r of ['assertion_invalid', 'assertion_expired']) expect(OperationReasonSchema.parse(r)).toBe(r);
   });
 });
+
+describe('phone push and presence', () => {
+  const sub = { endpoint: 'https://web.push.apple.com/QZ', keys: { p256dh: 'A'.repeat(87), auth: 'B'.repeat(22) } };
+  const key = 'A'.repeat(87);
+  it('accepts push.subscribe, push.unsubscribe and presence', () => {
+    for (const m of [
+      { type: 'push.subscribe', op: OP, subscription: sub, key },
+      { type: 'push.unsubscribe', op: OP },
+      { type: 'presence', visible: true },
+      { type: 'presence', visible: false }
+    ]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
+  });
+  it('requires an op for push.subscribe and push.unsubscribe, a valid subscription and key', () => {
+    expect(() => PhoneClientMessageSchema.parse({ type: 'push.subscribe', subscription: sub, key })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'push.unsubscribe' })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'push.subscribe', op: OP, subscription: { ...sub, endpoint: 'https://evil.example/x' }, key })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'push.subscribe', op: OP, subscription: sub, key: 'A'.repeat(86) })).toThrow();
+  });
+  it('requires a boolean visible on presence', () => {
+    expect(() => PhoneClientMessageSchema.parse({ type: 'presence' })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'presence', visible: 'yes' })).toThrow();
+  });
+  it('takes snapshot.device.push as an optional enum', () => {
+    const cap = { freeTextAnswer: true };
+    const snap = (device: object) => ({ type: 'snapshot', protocol: 1, sessions: [], capabilities: { claude: cap, codex: cap, cursor: cap, omp: cap }, daemon: { version: '1', name: 'pc' }, device });
+    expect(() => PhoneServerMessageSchema.parse(snap({ confirm: true }))).not.toThrow();
+    for (const push of ['on', 'off', 'stale', 'unavailable']) expect(() => PhoneServerMessageSchema.parse(snap({ confirm: true, push }))).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse(snap({ confirm: true, push: 'maybe' }))).toThrow();
+  });
+});

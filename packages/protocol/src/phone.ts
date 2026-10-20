@@ -3,6 +3,7 @@ import { PendingSchema, SessionSchema, type Tool } from './session.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { ThreadItemSchema } from './thread.js';
 import { MESSAGE_MAX, RefusalCodeSchema } from './messages.js';
+import { PushSubscriptionSchema } from './push.js';
 
 /** The phone/PC messages have their own schemas: a type or a field that is not here never crosses the relay. */
 export const PHONE_PROTOCOL = 1;
@@ -153,13 +154,18 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('session.interrupt'), op: OperationIdSchema, id: sessionId }),
   /** The phone drops its passkey from the daemon. */
-  z.object({ type: z.literal('device.forget'), op: OperationIdSchema })
+  z.object({ type: z.literal('device.forget'), op: OperationIdSchema }),
+  /** The phone's push subscription, with the VAPID key it was made with (so a key change is seen). */
+  z.object({ type: z.literal('push.subscribe'), op: OperationIdSchema, subscription: PushSubscriptionSchema, key: B64U.length(87) }),
+  z.object({ type: z.literal('push.unsubscribe'), op: OperationIdSchema }),
+  /** Whether the phone's app is in front: a device that is visible gets no push. */
+  z.object({ type: z.literal('presence'), visible: z.boolean() })
 ]);
 export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;
 
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional() }), device: z.object({ confirm: z.boolean() }).optional() }),
+  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional() }).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PUSH_HOSTS, PushSendResultSchema, PushSendSchema, pushEndpointAllowed } from '../src/index.js';
+import { PUSH_HOSTS, PushPayloadSchema, PushSendResultSchema, PushSendSchema, PushSubscriptionSchema, pushEndpointAllowed } from '../src/index.js';
 
 describe('pushEndpointAllowed', () => {
   it.each([
@@ -49,5 +49,41 @@ describe('PushSendResultSchema', () => {
     expect(PushSendResultSchema.parse({ result: 'gone', status: 410 })).toEqual({ result: 'gone', status: 410 });
     expect(PushSendResultSchema.parse({ result: 'failed' })).toEqual({ result: 'failed' });
     expect(PushSendResultSchema.safeParse({ result: 'refused' }).success).toBe(false);
+  });
+});
+
+describe('PushSubscriptionSchema', () => {
+  const ok = { endpoint: 'https://web.push.apple.com/QZ', keys: { p256dh: 'A'.repeat(87), auth: 'B'.repeat(22) } };
+  it('accepts a typical Apple subscription', () => expect(PushSubscriptionSchema.parse(ok)).toEqual(ok));
+  it('refuses an endpoint off PUSH_HOSTS', () => {
+    expect(PushSubscriptionSchema.safeParse({ ...ok, endpoint: 'https://evil.example/x' }).success).toBe(false);
+    expect(PushSubscriptionSchema.safeParse({ ...ok, endpoint: 'http://web.push.apple.com/x' }).success).toBe(false);
+  });
+  it('bounds the keys to their exact length', () => {
+    expect(PushSubscriptionSchema.safeParse({ ...ok, keys: { ...ok.keys, p256dh: 'A'.repeat(86) } }).success).toBe(false);
+    expect(PushSubscriptionSchema.safeParse({ ...ok, keys: { ...ok.keys, auth: 'B'.repeat(23) } }).success).toBe(false);
+    expect(PushSubscriptionSchema.safeParse({ ...ok, keys: { ...ok.keys, auth: 'B'.repeat(21) + '+' } }).success).toBe(false);
+  });
+});
+
+describe('PushPayloadSchema', () => {
+  const ok = { v: 1, kind: 'request', title: 'Claude attend votre accord', body: 'Lancer ls ?', url: '/#/s/abc', badge: 2, tag: 'abc_1' };
+  it('accepts a payload', () => expect(PushPayloadSchema.parse(ok)).toEqual(ok));
+  it('refuses a url that leaves the app or breaks out of an attribute', () => {
+    expect(PushPayloadSchema.safeParse({ ...ok, url: 'https://evil.example' }).success).toBe(false);
+    expect(PushPayloadSchema.safeParse({ ...ok, url: '/#/x"><script' }).success).toBe(false);
+  });
+  it('bounds the texts, the badge and the tag', () => {
+    expect(PushPayloadSchema.safeParse({ ...ok, title: 'a'.repeat(81) }).success).toBe(false);
+    expect(PushPayloadSchema.safeParse({ ...ok, body: 'a'.repeat(121) }).success).toBe(false);
+    expect(PushPayloadSchema.safeParse({ ...ok, badge: 1_000 }).success).toBe(false);
+    expect(PushPayloadSchema.safeParse({ ...ok, badge: -1 }).success).toBe(false);
+    expect(PushPayloadSchema.safeParse({ ...ok, tag: 'a b' }).success).toBe(false);
+    expect(PushPayloadSchema.safeParse({ ...ok, tag: 'a'.repeat(33) }).success).toBe(false);
+  });
+  it('takes the three kinds and version 1 only', () => {
+    for (const kind of ['request', 'question', 'finished']) expect(PushPayloadSchema.safeParse({ ...ok, kind }).success).toBe(true);
+    expect(PushPayloadSchema.safeParse({ ...ok, kind: 'other' }).success).toBe(false);
+    expect(PushPayloadSchema.safeParse({ ...ok, v: 2 }).success).toBe(false);
   });
 });

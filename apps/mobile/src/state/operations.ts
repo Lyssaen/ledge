@@ -12,7 +12,8 @@ export type OpPhase = 'sending' | 'uncertain' | 'applied' | 'rejected' | 'failed
 
 /** The messages that are operations. */
 // `credential.register` names no session, so it has no `id`. device.forget joins with the phone's code for it.
-export type OpMessage = Exclude<Extract<PhoneClientMessage, { op: string }>, { type: 'device.forget' }>;
+// The push operations are not sent by the phone yet (lot 6b, task 7): left out of the type until then.
+export type OpMessage = Exclude<Extract<PhoneClientMessage, { op: string }>, { type: 'device.forget' | 'push.subscribe' | 'push.unsubscribe' }>;
 
 export interface Op {
   op: string;
