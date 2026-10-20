@@ -19,7 +19,7 @@ const ATTESTED = HEADER + 16 + 2;
 const fail = (why: string): Fail => ({ ok: false, why });
 const sha256 = (b: Buffer | string): Buffer => createHash('sha256').update(b).digest();
 const B64U = /^[A-Za-z0-9_-]+$/;
-const bytes = (s: unknown): Buffer | null => (typeof s === 'string' && B64U.test(s) ? Buffer.from(s, 'base64url') : null);
+const bytes = (s: unknown): Buffer | null => (typeof s === 'string' && B64U.test(s) && s.length % 4 !== 1 ? Buffer.from(s, 'base64url') : null);
 const same = (a: Buffer, b: Buffer): boolean => a.length === b.length && timingSafeEqual(a, b);
 
 /** The relying party of a relay URL: its host and origin. None unless the page is served over https or from localhost. */
@@ -52,7 +52,7 @@ export function challengeOf(clientDataJSON: string): string | null {
 function checkClient(c: NonNullable<ReturnType<typeof parseClientData>>, type: string, rp: Rp, challenge: string): Fail | null {
   if (c.type !== type) return fail('type');
   if (typeof c.challenge !== 'string' || !same(Buffer.from(c.challenge), Buffer.from(challenge))) return fail('challenge');
-  if (c.origin !== rp.origin || c.crossOrigin === true) return fail('origin');
+  if (c.origin !== rp.origin || (c.crossOrigin !== undefined && c.crossOrigin !== false)) return fail('origin');
   return null;
 }
 
@@ -60,16 +60,18 @@ function publicKeyOf(spki: Buffer, alg: -7 | -257): KeyObject | null {
   try {
     const key = createPublicKey({ key: spki, format: 'der', type: 'spki' });
     if (alg === -7) return key.asymmetricKeyType === 'ec' && key.asymmetricKeyDetails?.namedCurve === 'prime256v1' ? key : null;
-    return key.asymmetricKeyType === 'rsa' ? key : null;
+    return key.asymmetricKeyType === 'rsa' && (key.asymmetricKeyDetails?.modulusLength ?? 0) >= 2048 ? key : null;
   } catch { return null; }
 }
 
 export function verifyRegistration(c: CredentialInput, rp: Rp, challenge: string): { ok: true; credential: DeviceCredential } | Fail {
+  if (challenge === '') return fail('challenge');
   const id = bytes(c?.id);
   const spki = bytes(c?.publicKey);
   const authData = bytes(c?.authenticatorData);
   const client = parseClientData(c?.clientDataJSON);
   if (!id || !spki || !authData || !client || authData.length < HEADER) return fail('malformed');
+  if (id.length < 16 || id.length > 1023) return fail('credential');
   if (c.alg !== -7 && c.alg !== -257) return fail('alg');
   const bad = checkClient(client, 'webauthn.create', rp, challenge);
   if (bad) return bad;
@@ -87,6 +89,7 @@ export function verifyRegistration(c: CredentialInput, rp: Rp, challenge: string
 }
 
 export function verifyAssertion(a: AssertionInput, cred: DeviceCredential, rp: Rp, challenge: string): { ok: true; counter: number } | Fail {
+  if (challenge === '') return fail('challenge');
   const authData = bytes(a?.authenticatorData);
   const sig = bytes(a?.signature);
   const spki = bytes(cred?.publicKey);

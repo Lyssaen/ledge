@@ -4,7 +4,6 @@ import { softAuthenticator } from './mobile-soft-authenticator.js';
 
 const rp = { rpId: 'relay.example.com', origin: 'https://relay.example.com' };
 const CH = 'Y2hhbGxlbmdl';
-const reg = (auth = softAuthenticator()) => verifyRegistration(auth.create(rp, CH), rp, CH);
 const stored = (auth = softAuthenticator(), counter = 0): DeviceCredential => {
   const r = verifyRegistration(auth.create(rp, CH), rp, CH);
   if (!r.ok) throw new Error(r.why);
@@ -50,11 +49,45 @@ describe('verifyRegistration', () => {
     expect(verifyRegistration({ ...ec, alg: -257 }, rp, CH)).toEqual({ ok: false, why: 'alg' });
     const rsa = softAuthenticator({ alg: -257 }).create(rp, CH);
     expect(verifyRegistration({ ...rsa, alg: -7 }, rp, CH)).toEqual({ ok: false, why: 'alg' });
-    expect(verifyRegistration({ ...ec, publicKey: 'AAAA' }, rp, CH)).toMatchObject({ ok: false });
+    expect(verifyRegistration({ ...ec, publicKey: 'AAAA' }, rp, CH)).toEqual({ ok: false, why: 'alg' });
     for (const k of ['id', 'publicKey', 'clientDataJSON', 'authenticatorData'] as const)
       expect(verifyRegistration({ ...ec, [k]: '' }, rp, CH)).toEqual({ ok: false, why: 'malformed' });
     expect(verifyRegistration({ ...ec, clientDataJSON: '!!' }, rp, CH)).toEqual({ ok: false, why: 'malformed' });
     expect(verifyRegistration({ ...ec, clientDataJSON: cdj([1]) }, rp, CH)).toEqual({ ok: false, why: 'malformed' });
+  });
+
+  it('refuses UP absent', () => {
+    expect(verifyRegistration(softAuthenticator({ up: false }).create(rp, CH), rp, CH)).toEqual({ ok: false, why: 'flags' });
+  });
+
+  it('refuses weak or foreign keys', () => {
+    expect(verifyRegistration(softAuthenticator({ curve: 'P-384' }).create(rp, CH), rp, CH)).toEqual({ ok: false, why: 'alg' });
+    expect(verifyRegistration(softAuthenticator({ alg: -257, rsaBits: 1024 }).create(rp, CH), rp, CH)).toEqual({ ok: false, why: 'alg' });
+  });
+
+  it('refuses a credential id of an odd size', () => {
+    expect(verifyRegistration(softAuthenticator({ idLength: 15 }).create(rp, CH), rp, CH)).toEqual({ ok: false, why: 'credential' });
+    expect(verifyRegistration(softAuthenticator({ idLength: 1024 }).create(rp, CH), rp, CH)).toEqual({ ok: false, why: 'credential' });
+    expect(verifyRegistration(softAuthenticator({ idLength: 16 }).create(rp, CH), rp, CH)).toMatchObject({ ok: true });
+  });
+
+  it('refuses base64url of an impossible length', () => {
+    const c = softAuthenticator().create(rp, CH);
+    expect(verifyRegistration({ ...c, id: 'AAAAA' }, rp, CH)).toEqual({ ok: false, why: 'malformed' });
+    expect(verifyRegistration({ ...c, publicKey: 'AAAAA' }, rp, CH)).toEqual({ ok: false, why: 'malformed' });
+  });
+
+  it('refuses an empty expected challenge', () => {
+    const c = softAuthenticator().create(rp, '');
+    expect(verifyRegistration(c, rp, '')).toEqual({ ok: false, why: 'challenge' });
+  });
+
+  it('accepts only an absent or false crossOrigin', () => {
+    const c = softAuthenticator().create(rp, CH);
+    const withCross = (v: unknown) => ({ ...c, clientDataJSON: cdj({ type: 'webauthn.create', challenge: CH, origin: rp.origin, crossOrigin: v }) });
+    expect(verifyRegistration(withCross(undefined), rp, CH)).toMatchObject({ ok: true });
+    expect(verifyRegistration(withCross(false), rp, CH)).toMatchObject({ ok: true });
+    for (const v of ['false', 0, null, 'yes']) expect(verifyRegistration(withCross(v), rp, CH)).toEqual({ ok: false, why: 'origin' });
   });
 
   it('keeps the transports', () => {
@@ -102,6 +135,11 @@ describe('verifyAssertion', () => {
     expect(verifyAssertion(a.get(rp, CH, { counter: 1 }), { ...cred, rpId: 'other.example' }, rp, CH)).toEqual({ ok: false, why: 'rp' });
   });
 
+  it('refuses an empty expected challenge', () => {
+    const a = softAuthenticator();
+    expect(verifyAssertion(a.get(rp, ''), stored(a, 0), rp, '')).toEqual({ ok: false, why: 'challenge' });
+  });
+
   it('refuses empty or garbage fields without throwing', () => {
     const a = softAuthenticator();
     const cred = stored(a, 0);
@@ -110,8 +148,7 @@ describe('verifyAssertion', () => {
       expect(verifyAssertion({ ...good, [k]: '' }, cred, rp, CH)).toEqual({ ok: false, why: 'malformed' });
     expect(verifyAssertion({ ...good, authenticatorData: cut(good.authenticatorData, 10) }, cred, rp, CH)).toEqual({ ok: false, why: 'malformed' });
     expect(verifyAssertion({ ...good, signature: 'AAAA' }, cred, rp, CH)).toEqual({ ok: false, why: 'signature' });
-    expect(verifyAssertion(good, { ...cred, publicKey: 'AAAA' }, rp, CH)).toMatchObject({ ok: false });
-    expect(reg().ok).toBe(true);
+    expect(verifyAssertion(good, { ...cred, publicKey: 'AAAA' }, rp, CH)).toEqual({ ok: false, why: 'alg' });
   });
 });
 

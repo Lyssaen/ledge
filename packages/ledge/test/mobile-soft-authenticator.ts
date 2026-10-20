@@ -11,13 +11,13 @@ export interface SoftOpts { counter?: number; type?: string; origin?: string; cr
 
 const sha256 = (b: Buffer | string): Buffer => createHash('sha256').update(b).digest();
 
-export function softAuthenticator(init: { alg?: -7 | -257; uv?: boolean; up?: boolean } = {}) {
+export function softAuthenticator(init: { alg?: -7 | -257; uv?: boolean; up?: boolean; idLength?: number; rsaBits?: number; curve?: string } = {}) {
   const alg = init.alg ?? -7;
   const up = init.up ?? true;
   const uv = init.uv ?? true;
   const { publicKey, privateKey }: { publicKey: KeyObject; privateKey: KeyObject } =
-    alg === -7 ? generateKeyPairSync('ec', { namedCurve: 'P-256' }) : generateKeyPairSync('rsa', { modulusLength: 2048 });
-  const rawId = randomBytes(32);
+    alg === -7 ? generateKeyPairSync('ec', { namedCurve: init.curve ?? 'P-256' }) : generateKeyPairSync('rsa', { modulusLength: init.rsaBits ?? 2048 });
+  const rawId = randomBytes(init.idLength ?? 32);
   const flags = (up ? 0x01 : 0) | (uv ? 0x04 : 0);
 
   const clientData = (type: string, rp: SoftRp, challenge: string, o: SoftOpts): string =>
