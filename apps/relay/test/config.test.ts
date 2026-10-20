@@ -73,6 +73,17 @@ describe('loadConfig, accounts mode', () => {
   });
 });
 
+describe('loadConfig, LEDGE_RELAY_WEB_DIR', () => {
+  it('is read in accounts mode and absent by default', () => {
+    expect(loadConfig({ ...FULL, LEDGE_RELAY_WEB_DIR: '/srv/web' })).toMatchObject({ webDir: '/srv/web' });
+    expect(loadConfig(FULL)).not.toHaveProperty('webDir');
+  });
+  it('is read in dev mode', () => {
+    const tokens = JSON.stringify({ t: { accountId: 'a', peer: 'pc' } });
+    expect(loadConfig({ LEDGE_RELAY_DEV_TOKENS: tokens, LEDGE_RELAY_WEB_DIR: '/srv/web' })).toMatchObject({ mode: 'dev', webDir: '/srv/web' });
+  });
+});
+
 describe('loadConfig, dev mode', () => {
   const TOKENS = JSON.stringify({ 'tok-pc-0123456789abcdef': { accountId: 'me', peer: 'pc' } });
 

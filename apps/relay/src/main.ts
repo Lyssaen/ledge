@@ -3,7 +3,9 @@ import { startAccountsRelay } from './app.js';
 import { devTokens } from './auth.js';
 import { ConfigError, loadConfig } from './config.js';
 import { githubHttp } from './github.js';
+import { jsonLog } from './log.js';
 import { createRelay } from './server.js';
+import { staticRoutes } from './static.js';
 
 function die(msg: string): never {
   process.stderr.write(`ledge-relay: ${msg}\n`);
@@ -28,7 +30,10 @@ const onSignals = (stop: () => Promise<void>) => {
 };
 
 if (cfg.mode === 'dev') {
-  const relay = createRelay({ authenticator: devTokens(cfg.tokens) });
+  const relay = createRelay({
+    authenticator: devTokens(cfg.tokens),
+    ...(cfg.webDir ? { http: staticRoutes({ root: cfg.webDir, log: jsonLog }) } : {})
+  });
   listening(relay.server);
   onSignals(() => relay.close());
 } else {

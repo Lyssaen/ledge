@@ -22,11 +22,15 @@ export interface AccountsConfig {
   publicUrl: string;
   githubWeb?: string;
   githubApi?: string;
+  /** Directory of the built phone PWA; unset, no static file is served. */
+  webDir?: string;
 }
 export interface DevConfig {
   mode: 'dev';
   port: number;
   tokens: Record<string, Who>;
+  /** Directory of the built phone PWA; unset, no static file is served. */
+  webDir?: string;
 }
 export type Config = AccountsConfig | DevConfig;
 
@@ -78,6 +82,7 @@ function optionalBase(env: NodeJS.ProcessEnv, name: string, production: boolean)
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
   const production = env.NODE_ENV === 'production';
   const port = parsePort(env);
+  const webDir = env.LEDGE_RELAY_WEB_DIR ? { webDir: env.LEDGE_RELAY_WEB_DIR } : {};
 
   if (env.DATABASE_URL) {
     const githubWeb = optionalBase(env, 'LEDGE_RELAY_GITHUB_WEB_URL', production);
@@ -91,7 +96,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
       allowed: parseAllowed(required(env, 'LEDGE_RELAY_ALLOWED_GITHUB_IDS')),
       publicUrl: parsePublicUrl(required(env, 'LEDGE_RELAY_PUBLIC_URL'), production),
       ...(githubWeb ? { githubWeb } : {}),
-      ...(githubApi ? { githubApi } : {})
+      ...(githubApi ? { githubApi } : {}),
+      ...webDir
     };
   }
 
@@ -101,5 +107,5 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   if (!raw) throw new ConfigError(`DATABASE_URL and LEDGE_RELAY_DEV_TOKENS are not set; set DATABASE_URL for accounts, or LEDGE_RELAY_DEV_TOKENS (${usage})`);
   let tokens: Record<string, Who>;
   try { tokens = TokensSchema.parse(JSON.parse(raw)); } catch { throw new ConfigError(`LEDGE_RELAY_DEV_TOKENS is not valid: ${usage}`); }
-  return { mode: 'dev', port, tokens };
+  return { mode: 'dev', port, tokens, ...webDir };
 }

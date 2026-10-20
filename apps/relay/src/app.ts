@@ -6,6 +6,7 @@ import type { GitHub } from './github.js';
 import { jsonLog, type RelayLog } from './log.js';
 import { authRoutes } from './routes.js';
 import { createRelay } from './server.js';
+import { chain, staticRoutes } from './static.js';
 import { Store } from './store.js';
 
 /**
@@ -21,7 +22,7 @@ export async function startAccountsRelay(
   await store.migrate();
   const accounts: AccountsDeps = { store, allowed: cfg.allowed, publicUrl: cfg.publicUrl, log };
   const routes = authRoutes({ ...accounts, github: deps.github });
-  const relay = createRelay({ authenticator: accountsAuthenticator(accounts), http: routes, log });
+  const relay = createRelay({ authenticator: accountsAuthenticator(accounts), http: chain(routes, ...(cfg.webDir ? [staticRoutes({ root: cfg.webDir, publicUrl: cfg.publicUrl, log })] : [])), log });
   let closing: Promise<void> | undefined;
   return {
     server: relay.server,
