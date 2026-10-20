@@ -23,14 +23,18 @@ export interface TermSurface {
 /** Ctrl V with nothing to paste: the raw byte, so Claude Code can read an image from the clipboard itself. */
 const PASTE_BYTE = '\x16';
 
-export function createSurface(opts: { theme: TermTheme; onThread(): void }): TermSurface {
+export function createSurface(opts: { theme: TermTheme; onThread(): void; openUrl(url: string): void }): TermSurface {
   const host = document.createElement('div');
   host.setAttribute('data-terminal', '');
   // Capped scrollback: an agent redrawing its screen emits megabytes, memory must not follow.
-  const term = new Terminal({ scrollback: 5000, fontFamily: 'Geist Mono, monospace', theme: opts.theme });
+  // Every link the screen prints (plain URLs, OSC 8) goes to the system browser: `window.open` opens nothing useful in the webview.
+  const term = new Terminal({
+    scrollback: 5000, fontFamily: 'Geist Mono, monospace', theme: opts.theme,
+    linkHandler: { activate: (_, uri) => opts.openUrl(uri), allowNonHttpProtocols: false }
+  });
   const fitter = new FitAddon();
   term.loadAddon(fitter);
-  term.loadAddon(new WebLinksAddon());
+  term.loadAddon(new WebLinksAddon((_, uri) => opts.openUrl(uri)));
   term.open(host);
   try {
     const webgl = new WebglAddon();

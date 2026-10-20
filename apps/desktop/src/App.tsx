@@ -76,7 +76,7 @@ function useTermStore(client: DaemonClient): TermStore {
     surface: () => {
       const chunk = loadedWorkspace();
       if (!chunk) throw new Error('a terminal is drawn only once the session page has loaded');
-      return chunk.createSurface({ theme: rootTermTheme(), onThread: focusThread });
+      return chunk.createSurface({ theme: rootTermTheme(), onThread: focusThread, openUrl });
     },
     agentArgv: (id, readOnly) => client.fleet?.terminal(id, { readOnly }) ?? null,
     shellArgv: id => client.fleet?.shell(id) ?? null,

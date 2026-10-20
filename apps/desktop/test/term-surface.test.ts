@@ -22,11 +22,11 @@ const xt = vi.hoisted(() => {
     hasSelection() { return this.selection !== ''; }
     getSelection() { return this.selection; }
   }
-  return { terms, FakeTerminal, webglThrows: false, contextLost: [] as (() => void)[], webgl: [] as { dispose: ReturnType<typeof vi.fn> }[] };
+  return { terms, links: [] as unknown[], FakeTerminal, webglThrows: false, contextLost: [] as (() => void)[], webgl: [] as { dispose: ReturnType<typeof vi.fn> }[] };
 });
 vi.mock('@xterm/xterm', () => ({ Terminal: xt.FakeTerminal }));
 vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { fit = vi.fn(); } }));
-vi.mock('@xterm/addon-web-links', () => ({ WebLinksAddon: class {} }));
+vi.mock('@xterm/addon-web-links', () => ({ WebLinksAddon: class { constructor(public handler?: (e: MouseEvent, uri: string) => void) { xt.links.push(this); } } }));
 vi.mock('@xterm/addon-webgl', () => ({
   WebglAddon: class {
     dispose = vi.fn();
@@ -42,10 +42,10 @@ const key = (o: Partial<KeyboardEvent>) => {
   const e = { type: 'keydown', code: '', key: '', ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, preventDefault: vi.fn(), stopPropagation: vi.fn(), ...o };
   return e as unknown as KeyboardEvent & { preventDefault: ReturnType<typeof vi.fn>; stopPropagation: ReturnType<typeof vi.fn> };
 };
-const surface = (onThread = vi.fn()) => { const s = createSurface({ theme: { background: '#101112' }, onThread }); return { s, t: xt.terms.at(-1)!, onThread }; };
+const surface = (onThread = vi.fn(), openUrl = vi.fn()) => { const s = createSurface({ theme: { background: '#101112' }, onThread, openUrl }); return { s, t: xt.terms.at(-1)!, onThread }; };
 
 beforeEach(() => { Object.defineProperty(navigator, 'clipboard', { value: clip, configurable: true }); });
-afterEach(() => { xt.terms.length = 0; xt.webgl.length = 0; xt.contextLost.length = 0; xt.webglThrows = false; clip.text = ''; vi.clearAllMocks(); });
+afterEach(() => { xt.terms.length = 0; xt.links.length = 0; xt.webgl.length = 0; xt.contextLost.length = 0; xt.webglThrows = false; clip.text = ''; vi.clearAllMocks(); });
 
 it('one xterm with a capped scrollback, in a host marked as the terminal', () => {
   const { s, t } = surface();
@@ -119,4 +119,14 @@ it('WebGL falls back to the DOM renderer when it throws or loses its context', (
   expect(xt.webgl).toHaveLength(1);
   xt.contextLost[0]!();
   expect(xt.webgl[0]!.dispose).toHaveBeenCalled();
+});
+
+it('links the terminal prints open in the system browser, not in the webview', () => {
+  const openUrl = vi.fn();
+  const { t } = surface(vi.fn(), openUrl);
+  const click = {} as MouseEvent;
+  (xt.links[0] as { handler: (e: MouseEvent, uri: string) => void }).handler(click, 'https://example.com/pr/1');
+  (t.options.linkHandler as { activate(e: MouseEvent, uri: string): void; allowNonHttpProtocols: boolean }).activate(click, 'https://example.com/docs');
+  expect(openUrl.mock.calls).toEqual([['https://example.com/pr/1'], ['https://example.com/docs']]);
+  expect((t.options.linkHandler as { allowNonHttpProtocols: boolean }).allowNonHttpProtocols).toBe(false);
 });
