@@ -7,6 +7,7 @@ import { useFleet } from './fleet/useFleet';
 import { useDecisions } from './fleet/decisions';
 import { useWaits } from './fleet/waits';
 import { useAlerts } from './notify/useAlerts';
+import { watchedSession } from './notify/watching';
 import { getDnd, setDnd, useDnd } from './notify/prefs';
 import { MarkdownLinks } from '@ledge/ui/documents/links';
 // The reader's styles stay in the first bundle, before app.css (as when the reader itself was there): session.css overrides them.
@@ -198,7 +199,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useWindowFullscreen(nav.fullscreen, () => dispatch({ type: 'fullscreen', on: false }));
   const session = place.kind === 'session' ? known.find(s => s.id === place.id) ?? null : null;
   // Ledge shows the agent's screen (focused window, pane open, agent tab active): that is the terminal in front, no sound.
-  watching.current = () => (document.hasFocus() && sessionPrefs.terminal && place.kind === 'session' && session && termStore.active(place.id) === agentTabId(place.id) ? place.id : null);
+  watching.current = () => (place.kind === 'session' && session ? watchedSession({ focused: document.hasFocus(), terminal: sessionPrefs.terminal, placeId: place.id, helper: place.helper, active: termStore.active(place.id), agentTab: agentTabId(place.id) }) : null);
   // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
   const { threads } = useDaemon();
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
