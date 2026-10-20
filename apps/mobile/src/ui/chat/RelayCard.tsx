@@ -13,11 +13,13 @@ export function RelayCard({ store, qid, relay, repo, known }: { store: MobileSto
   const [hidden, setHidden] = useState(false);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Applied: the PC's updated turn is on its way; until it lands the card must not offer a second send.
+  const [applied, setApplied] = useState(false);
   const done = relay.status !== undefined;
   if (hidden && !done) return null;
   const go = () => {
     setBusy(true); setFailed(false);
-    void store.relay(qid).then(r => { if (r.status === 'failed' || r.status === 'rejected') setFailed(true); }, () => setFailed(true)).finally(() => setBusy(false));
+    void store.relay(qid).then(r => { if (r.status === 'applied') setApplied(true); else if (r.status === 'failed' || r.status === 'rejected') setFailed(true); }, () => setFailed(true)).finally(() => setBusy(false));
   };
   const outcome = relay.status === 'sent'
     ? <p role="status" className="text-[13px] text-ok">{copy.chat.sentTo(relay.name)}{known ? threadLink(relay.id, copy.chat.seeThread) : copy.chat.seeThread}</p>
@@ -30,8 +32,8 @@ export function RelayCard({ store, qid, relay, repo, known }: { store: MobileSto
       {outcome}
       {!done && (
         <div className="flex gap-2">
-          <button type="button" className={GHOST} onClick={() => setHidden(true)}>{copy.chat.ignore}</button>
-          <button type="button" className={PRIMARY} disabled={busy} onClick={go}>{copy.chat.relayGo}</button>
+          {!applied && <button type="button" className={GHOST} onClick={() => setHidden(true)}>{copy.chat.ignore}</button>}
+          <button type="button" className={PRIMARY} disabled={busy || applied} onClick={go}>{copy.chat.relayGo}</button>
         </div>
       )}
     </section>

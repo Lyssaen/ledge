@@ -52,7 +52,11 @@ const ERROR: Record<ChatErrorCode, string> = { busy: copy.chat.busy, timeout: co
 export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string }[]; canConfirm: boolean; onStop: () => void }) {
   const steps = live?.steps ?? turn.steps;
   const text = live ? live.text : turn.answer;
-  const names = new Map(list.filter(x => x.name).map(x => [x.name, x.id] as const));
+  // A name two sessions share says nothing about which one is meant: it is not linked.
+  const names = new Map<string, string>();
+  const shared = new Set<string>();
+  for (const x of list) { if (!x.name) continue; if (names.has(x.name)) shared.add(x.name); else names.set(x.name, x.id); }
+  for (const n of shared) names.delete(n);
   const relay = turn.relay;
   return (
     <div className="flex flex-col gap-3">

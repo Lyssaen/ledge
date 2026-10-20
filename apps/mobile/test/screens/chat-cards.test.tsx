@@ -40,6 +40,38 @@ describe('the answer', () => {
   });
 });
 
+describe('names in an answer', () => {
+  it('does not link a name held by two sessions', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a', { name: 'Bix' }), session('b', { name: 'Bix' }), session('c', { name: 'Nova' })], 'Atelier', undefined, { confirm: true, chat: true }));
+    t.deliver(chat.history(chat.turn(QID, { answer: 'Bix et Nova.', answeredAt: '2026-10-20T10:00:05.000Z' })));
+    render(<Chat store={t.store} />);
+    expect(screen.queryByRole('link', { name: 'Bix' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Nova' })).toBeInTheDocument();
+  });
+
+  it('links whole words only', () => {
+    open({ answer: 'Bixby, puis Bix.' });
+    expect(screen.getAllByRole('link', { name: 'Bix' })).toHaveLength(1);
+    expect(screen.getByText(/Bixby/)).toBeInTheDocument();
+  });
+
+  it('matches a name with regex characters literally', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a', { name: 'a.b' }), session('b', { name: 'C++' })], 'Atelier', undefined, { confirm: true, chat: true }));
+    t.deliver(chat.history(chat.turn(QID, { answer: 'a.b, aXb et C++ ici.', answeredAt: '2026-10-20T10:00:05.000Z' })));
+    render(<Chat store={t.store} />);
+    expect(screen.getByRole('link', { name: 'a.b' })).toHaveAttribute('href', '#/thread/a');
+    expect(screen.getByRole('link', { name: 'C++' })).toHaveAttribute('href', '#/thread/b');
+    expect(screen.getAllByRole('link').filter(l => /thread/.test(l.getAttribute('href') ?? ''))).toHaveLength(2);
+  });
+
+  it('leaves a name inside a code span as text', () => {
+    open({ answer: 'Voir `Bix` ici.' });
+    expect(screen.queryByRole('link', { name: 'Bix' })).toBeNull();
+  });
+});
+
 describe('the instruction card', () => {
   const relay = { id: 'b', name: 'Nova', tool: 'claude' as const, text: 'Rebase sur main' };
 
@@ -49,7 +81,10 @@ describe('the instruction card', () => {
     expect(screen.getByRole('region', { name: 'Consigne proposée' })).toHaveTextContent('Envoyer à Nova · relay');
     fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
     expect(spy).toHaveBeenCalledWith(QID);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Envoyer' })).toBeEnabled());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Ignorer' })).toBeNull());
+    expect(screen.getByRole('button', { name: 'Envoyer' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it('says « Pas envoyé. » when the send fails', async () => {
@@ -90,7 +125,10 @@ describe('the launch cards', () => {
     expect(go).toHaveLength(2);
     fireEvent.click(go[1]!);
     expect(spy).toHaveBeenCalledWith(QID, [1]);
-    await waitFor(() => expect(go[1]).toBeEnabled());
+    await waitFor(() => expect(go[1]).toBeDisabled());
+    fireEvent.click(go[1]!);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(go[0]).toBeEnabled();
   });
 
   it('says the Face ID text on an iPhone', () => {
@@ -104,6 +142,7 @@ describe('the launch cards', () => {
     vi.spyOn(t.store, 'launch').mockResolvedValue({ status: 'cancelled' });
     fireEvent.click(screen.getAllByRole('button', { name: copy.confirm.go })[0]!);
     expect(await screen.findByText(copy.confirm.cancelled)).toBeInTheDocument();
+    expect(screen.getByText(copy.confirm.cancelled)).not.toHaveClass('text-danger-fg');
     expect(screen.getAllByRole('button', { name: copy.confirm.go })).toHaveLength(2);
   });
 
