@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { DaemonInfo, ServerMessage } from '@ledge/protocol';
-import { createDaemonUpdater, npmCommand, npmEnv, lastLines, type UpdaterDeps } from '../src/update/run-update.js';
+import { createDaemonUpdater, npmCommand, npmEnv, lastLines, realUpdaterDeps, type UpdaterDeps } from '../src/update/run-update.js';
 
 const NPM_INFO: DaemonInfo = { version: '0.2.2', install: 'npm', systemd: true };
 function deps(over: Partial<UpdaterDeps> = {}): UpdaterDeps & { calls: string[] } {
@@ -107,5 +107,12 @@ describe('createDaemonUpdater', () => {
     expect(asker.sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'busy' }]);
     expect(all.sent).not.toContainEqual(expect.objectContaining({ reason: 'busy' }));
     release(); await first;
+  });
+});
+
+describe('realUpdaterDeps: OMP processes the daemon owns', () => {
+  it('a live OMP session puts the update at risk (a restart would end it), whatever tmux says; none, tmux decides', async () => {
+    const live = realUpdaterDeps({ info: NPM_INFO, save: async () => {}, ownedLive: () => 1 });
+    expect(await live.atRisk()).toBe(true);
   });
 });

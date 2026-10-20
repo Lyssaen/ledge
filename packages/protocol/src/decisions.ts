@@ -16,7 +16,9 @@ export const NOTE_NOT_TYPED = 'note_not_typed';
 export const DECISION_OFFERS: Record<Tool, { always: readonly Pending['kind'][]; note: readonly Pending['kind'][] }> = {
   claude: { always: ['permission', 'diff', 'plan'], note: ['permission', 'diff', 'plan'] },
   codex: { always: ['permission', 'diff'], note: ['permission', 'diff', 'plan'] },
-  cursor: { always: [], note: ['permission', 'plan'] }
+  cursor: { always: [], note: ['permission', 'plan'] },
+  /** OMP answers its own native requests (spec 2026-10-20 §3.3): no « always », no note until those are typed. */
+  omp: { always: [], note: [] }
 };
 
 export function offers(tool: Tool, kind: Pending['kind'], what: 'always' | 'note'): boolean {

@@ -1,7 +1,7 @@
 import { projectOf } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
 
-const TOOLS: Record<Session['tool'], string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' };
+const TOOLS: Record<Session['tool'], string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'OMP' };
 export const toolName = (tool: Session['tool']): string => TOOLS[tool];
 export const taskOf = (s: Session): string => s.topic ?? s.title;
 /** The machine an agent runs on: the fleet's label, else its id. */

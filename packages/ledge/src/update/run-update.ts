@@ -62,10 +62,10 @@ export function createDaemonUpdater(deps: UpdaterDeps) {
   };
 }
 
-export function realUpdaterDeps(opts: { info: DaemonInfo; save: () => Promise<void> }): UpdaterDeps {
+export function realUpdaterDeps(opts: { info: DaemonInfo; save: () => Promise<void>; /** OMP processes the daemon itself owns: restarting it would end each of them (spec 2026-10-20 §6). */ ownedLive?: () => number }): UpdaterDeps {
   return {
     info: () => opts.info,
-    atRisk: () => tmuxServerAtRisk(),
+    atRisk: async () => (opts.ownedLive?.() ?? 0) > 0 || await tmuxServerAtRisk(),
     npm: async cmd => {
       const env = npmEnv(process.execPath, { ...process.env, ...(await loginShellEnv()) });
       const r = await runFile(cmd.file, cmd.args, env, { timeoutMs: NPM_TIMEOUT_MS });

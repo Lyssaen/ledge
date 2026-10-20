@@ -628,7 +628,7 @@ export const en: Messages = {
     prompt: 'Instruction', placeholder: 'What should the agent do? Describe the expected result.',
     suggestions: 'Suggestions', ideas: ['Review the latest pull request', 'Fix the failing tests', 'Update the documentation'],
     agent: 'Agent',
-    tools: { claude: ['Claude Code', 'Design, review'], codex: ['Codex', 'Code and tests'], cursor: ['Cursor Agent', 'In the editor'] },
+    tools: { claude: ['Claude Code', 'Design, review'], codex: ['Codex', 'Code and tests'], cursor: ['Cursor Agent', 'In the editor'], omp: ['OMP', 'Driven natively'] },
     project: 'Project', machine: 'Machine', offline: 'offline', offlineTitle: 'Offline: reconnect the machine in Settings',
     repos: (m) => `Folders and repositories on ${m}`, noGit: 'Folder without Git', notFound: 'not found', oneRepo: (t) => `One folder or repository only for ${t}`,
     noRepos: (p, m) => `No folder or repository of ${p} on ${m}.`, editProject: 'Edit the project',

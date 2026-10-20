@@ -661,7 +661,7 @@ export const fr = {
     prompt: 'Consigne', placeholder: 'Que doit faire l’agent ? Décrivez le résultat attendu.',
     suggestions: 'Suggestions', ideas: ['Relire la dernière pull request', 'Corriger les tests qui échouent', 'Mettre à jour la documentation'] as readonly string[],
     agent: 'Agent',
-    tools: { claude: ['Claude Code', 'Conception, revue'], codex: ['Codex', 'Code et tests'], cursor: ['Cursor Agent', 'Dans l’éditeur'] } as Record<'claude' | 'codex' | 'cursor', readonly [string, string]>,
+    tools: { claude: ['Claude Code', 'Conception, revue'], codex: ['Codex', 'Code et tests'], cursor: ['Cursor Agent', 'Dans l’éditeur'], omp: ['OMP', 'Piloté en natif'] } as Record<'claude' | 'codex' | 'cursor' | 'omp', readonly [string, string]>,
     project: 'Projet', machine: 'Machine', offline: 'hors ligne', offlineTitle: 'Hors ligne : reconnectez la machine dans les réglages',
     repos: (m: string) => `Dossiers et dépôts sur ${m}`, noGit: 'Dossier sans Git', notFound: 'introuvable', oneRepo: (t: string) => `Un seul dossier ou dépôt pour ${t}`,
     noRepos: (p: string, m: string) => `Aucun dossier ni dépôt de ${p} sur ${m}.`, editProject: 'Modifier le projet',

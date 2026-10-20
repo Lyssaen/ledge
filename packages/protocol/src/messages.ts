@@ -16,7 +16,7 @@ import { DecisionSchema, NOTE_MAX } from './decisions.js';
 export const PROTOCOL_PORT = 47831;
 
 export const SessionEventSchema = z.object({
-  name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PaneTitle', 'Renamed']),
+  name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PaneTitle', 'Renamed', 'NativeRequest']),
   at: z.string().datetime(),
   source: z.enum(['hook', 'pane', 'daemon']),
   tool: z.string().optional(),
@@ -61,6 +61,7 @@ export const SEMVER = /^\d+\.\d+\.\d+$/;
  *  as the systemd service, and the command a person runs by hand when it cannot update itself. */
 export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional(), archive: z.boolean().optional(),
   /** Takes `model` and `effort` on `session.launch` and answers `models.list` (#58). */ models: z.boolean().optional(),
+  /** Drives OMP over its RPC: launching `omp` sessions is possible when the binary is there (`models.list` says so). */ omp: z.boolean().optional(),
   /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;

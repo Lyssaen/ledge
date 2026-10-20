@@ -1,9 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import { homedir } from 'node:os';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool } from '@ledge/protocol';
+import { NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
@@ -14,7 +14,9 @@ import { DETECT_LINES } from './poller.js';
 import { answeredBy, pendingTool } from './state.js';
 import { claudeOpenCall, claudeToolAnswered } from './transcript.js';
 import { pickName } from '../names.js';
-import { spawnSession } from '../spawn.js';
+import { spawnSession, type TmuxTool } from '../spawn.js';
+import { createOmpHost, type OmpHost } from './omp/host.js';
+import { ompChoices } from './omp/catalog.js';
 import { inspectRepos } from './repos.js';
 import { extraRoots, scanRepos } from './scan.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
@@ -37,27 +39,29 @@ import { serveSsh } from '../transport/ssh.js';
 import { MAX_FRAME } from '../transport/frames.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
-export const CONTINUE_ARGS: Record<Tool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
+export const CONTINUE_ARGS: Record<TmuxTool, string[]> = { claude: ['--continue'], codex: ['resume', '--last'], cursor: ['--continue'] };
 
 /** How each agent continues one conversation by its own id (Claude Code and Cursor Agent `--resume <id>`, Codex `resume <id>`). */
-export const RESUME_ARGS: Record<Tool, (id: string) => string[]> = { claude: id => ['--resume', id], codex: id => ['resume', id], cursor: id => ['--resume', id] };
+export const RESUME_ARGS: Record<TmuxTool, (id: string) => string[]> = { claude: id => ['--resume', id], codex: id => ['resume', id], cursor: id => ['--resume', id] };
 
 /** The agent's own conversation id: the one its hooks gave, else, for Claude Code, the name of its transcript file. */
 export function resumeKey(s: Session): string | undefined {
+  // OMP resumes by the exact journal, never by "the latest one of the folder" (spec 2026-10-20 §4).
+  if (s.tool === 'omp') return s.agentSessionFile;
   if (s.agentSessionId) return s.agentSessionId;
   return s.tool === 'claude' && s.transcriptPath ? basename(s.transcriptPath, '.jsonl') : undefined;
 }
 
 /** The harnesses that take extra folders, and how. Claude only (verified: `claude --add-dir a b -- "prompt"`). */
-export const MULTI_DIR_ARGS: Partial<Record<Tool, (dirs: string[]) => string[]>> = { claude: dirs => ['--add-dir', ...dirs] };
+export const MULTI_DIR_ARGS: Partial<Record<TmuxTool, (dirs: string[]) => string[]>> = { claude: dirs => ['--add-dir', ...dirs] };
 
 /** How each agent takes a model (#58): Claude Code `--model`, Codex `-m` (also after `resume`), Cursor Agent `--model`. */
-export const MODEL_ARGS: Record<Tool, (model: string) => string[]> = { claude: m => ['--model', m], codex: m => ['-m', m], cursor: m => ['--model', m] };
+export const MODEL_ARGS: Record<TmuxTool, (model: string) => string[]> = { claude: m => ['--model', m], codex: m => ['-m', m], cursor: m => ['--model', m] };
 /** How each agent takes an effort; Cursor Agent has none apart from its model id (`gpt-5.3-codex-high`). */
-export const EFFORT_ARGS: Partial<Record<Tool, (effort: string) => string[]>> = { claude: e => ['--effort', e], codex: e => ['-c', `model_reasoning_effort="${e}"`] };
+export const EFFORT_ARGS: Partial<Record<TmuxTool, (effort: string) => string[]>> = { claude: e => ['--effort', e], codex: e => ['-c', `model_reasoning_effort="${e}"`] };
 
 /** The agent's arguments for a `session.launch`: the resume flag, the model and effort, then the first instruction as the positional prompt. */
-export function launchArgs(msg: { tool: Tool; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string }): string[] {
+export function launchArgs(msg: { tool: TmuxTool; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string }): string[] {
   const prompt = msg.prompt?.trim();
   const more = msg.dirs?.length ? MULTI_DIR_ARGS[msg.tool]?.(msg.dirs) : undefined;
   const model = msg.model ? MODEL_ARGS[msg.tool](msg.model) : [];
@@ -119,6 +123,8 @@ export interface ServerHandle {
   port: number; close(): Promise<void>; broadcast(msg: ServerMessage): void;
   /** Remembers a session's terminal preview and broadcasts it; a client that connects later gets it after the snapshot. */
   preview(id: string, lines: string[]): void;
+  /** The OMP processes this daemon owns. */
+  omp: OmpHost;
 }
 
 /**
@@ -139,7 +145,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; omp?: OmpHost }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -148,7 +154,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }) });
   const router = createRouter({ env: agentEnv });
-  const models = opts.models ?? createModels({ env: agentEnv });
+  const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now });
+  const models = opts.models ?? createModels({ env: agentEnv, omp: async () => ompChoices(await omp.catalog(opts.home ?? homedir())) });
   const token = await ensureDaemonToken();
   const httpServer = createServer(unauthorized);
   const sockets = new Set<Socket>();
@@ -227,7 +234,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true } } : {}) });
+    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true } } : {}) });
     send(ws, machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     send(ws, projectsMsg()); // then the shared projects (build spec §5)
     send(ws, islandMsg()); // then the island's settings
@@ -374,6 +381,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** A live session Ledge launched is stopped (its tmux killed, a failure only logged) and marked exited; any other is left as it is. */
   async function endSession(s: Session): Promise<void> {
     if (s.source !== 'launcher' || s.state === 'exited') return;
+    if (backendOf(s) === 'omp-rpc') { await omp.close(s.id).catch(e => log(`close of omp ${s.id} failed: ${(e as Error).message}`)); store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' }); return; }
     if (s.tmuxSession) await tmux.killSession(s.tmuxSession).catch(e => log(`kill of ${s.tmuxSession} failed: ${(e as Error).message}`));
     store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' });
   }
@@ -382,6 +390,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   async function replyTo(id: string, text: string): Promise<string | null> {
     const s = store.get(id); if (!s) return 'unknown session';
     if (s.source === 'hook_only') return READ_ONLY;
+    if (backendOf(s) === 'omp-rpc') return replyOmp(s, text);
     // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
     if (s.pending && s.pending.kind !== 'question') return `a ${s.pending.kind} prompt takes accept or deny, not a reply`;
     if (text.trim() === '') return 'empty reply';
@@ -391,6 +400,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (pending?.kind === 'question' && !/^[1-9]$/.test(text.trim()) && !adapter.freeText) return FREE_TEXT;
     // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
     await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending);
+    return null;
+  }
+
+  /**
+   * A reply to an OMP session: the answer to the dialog it waits on, else an instruction: a new turn at rest, queued behind
+   * the running one otherwise (OMP's `follow_up`: « après ce tour »). Null once sent, the refusal otherwise.
+   */
+  async function replyOmp(s: Session, text: string): Promise<string | null> {
+    if (text.trim() === '') return 'empty reply';
+    if (s.state === 'exited') return 'the session has ended';
+    if (s.pending) return omp.answer(s.id, text);
+    if (!omp.isLive(s.id)) return 'the session is not running';
+    await omp.send(s.id, text, s.state === 'working' ? 'follow_up' : 'prompt');
     return null;
   }
 
@@ -412,6 +434,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * default where left out): session.resume, and a model change on a live session. Null once spawned, the refusal otherwise.
    */
   async function respawn(s: Session, key: string, model: string | undefined, effort: string | undefined): Promise<string | null> {
+    if (s.tool === 'omp') return respawnOmp(s, key, model, effort);
     // Marked live before the first await: a second resume arriving while this one spawns is then refused.
     const { archivedAt: _a, exitedAt: _e, exitCode: _c, modelNext: _n, ...rest } = s;
     store.upsert({ ...rest, state: 'starting', source: 'launcher', agentSessionId: key });
@@ -432,6 +455,24 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       return null;
     } catch (e) {
       // Put the old record back only over the interim one: a delete or an archive since then stands.
+      const cur = store.get(s.id);
+      if (cur && cur.archivedAt === undefined && cur.state === 'starting') store.upsert(s);
+      return (e as Error).message;
+    }
+  }
+
+  /** OMP continued from its exact journal under the same Ledge id and name: a new process, the same conversation. */
+  async function respawnOmp(s: Session, file: string, model: string | undefined, effort: string | undefined): Promise<string | null> {
+    const { archivedAt: _a, exitedAt: _e, exitCode: _c, modelNext: _n, lastError: _l, ...rest } = s;
+    store.upsert({ ...rest, state: 'starting', source: 'launcher' });
+    try {
+      const cwd = await resolveFolder(s.cwd, opts.home);
+      const spawned = await omp.launch({ id: s.id, name: s.name, cwd, resumeFile: file, ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
+      const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project } = s;
+      store.upsert({ ...spawned, ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
+      log(`resumed ${spawned.name} (omp) in ${spawned.cwd} as ${spawned.id}`);
+      return null;
+    } catch (e) {
       const cur = store.get(s.id);
       if (cur && cur.archivedAt === undefined && cur.state === 'starting') store.upsert(s);
       return (e as Error).message;
@@ -466,6 +507,23 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const chatLaunches = new Set<string>();
   /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
   async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string }): Promise<Session> {
+    if (req.tool === 'omp') return launchOmp(req);
+    return launchTmux({ ...req, tool: req.tool });
+  }
+  /** `omp --mode rpc-ui` owned by the daemon: no pane. `continue` has no meaning here (a folder's latest journal is never picked). */
+  async function launchOmp(req: { cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string }): Promise<Session> {
+    if (req.continue) throw new Error('launch: OMP resumes an exact conversation, not the latest of a folder');
+    const cwd = await resolveFolder(req.cwd, opts.home);
+    const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
+    const session = await omp.launch({ cwd, ...(req.name ? { name: req.name } : {}), ...(dirs ? { dirs } : {}), ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}) });
+    store.touchRecent(session.cwd, session.project, session.startedAt);
+    log(`launched ${session.name} (omp) in ${session.cwd} as ${session.id}`);
+    const prompt = req.prompt?.trim();
+    // The session exists and is usable: a first instruction that fails is its error state, not a failed launch.
+    if (prompt) await omp.send(session.id, prompt).catch(e => log(`first prompt of ${session.id} failed: ${(e as Error).message}`));
+    return store.get(session.id) ?? session;
+  }
+  async function launchTmux(req: { tool: TmuxTool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string }): Promise<Session> {
     if (req.dirs?.length && !MULTI_DIR_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes one folder`);
     if (req.effort && !EFFORT_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes its effort in the model id`);
     const cwd = await resolveFolder(req.cwd, opts.home);
@@ -625,6 +683,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (msg.expect && (s.pending?.kind !== msg.expect.kind || s.pending.text !== msg.expect.text
           || (msg.expect.key !== undefined && pendingKey(s.pending) !== msg.expect.key))) return refuse(STALE, msg.id);
         if (!s.pending) return refuse('nothing to decide', msg.id);
+        // OMP's requests are its own dialogs, answered with the option or the text they ask for (a reply), never accept/deny keys.
+        if (backendOf(s) === 'omp-rpc') return refuse('answer this request with one of its options', msg.id);
         const pending = s.pending; const adapter = adapterFor(s.tool);
         // What the harness cannot do is refused before any key (a question never takes `always` or a note).
         if (msg.decision === 'always' && !offers(s.tool, pending.kind, 'always')) return refuse(NOT_OFFERED, msg.id);
@@ -643,6 +703,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.interrupt': {
         const s = store.get(msg.id);
         if (s?.source === 'hook_only') return refuse(READ_ONLY, msg.id);
+        if (s && backendOf(s) === 'omp-rpc') return void await omp.interrupt(s.id).catch(e => refuse((e as Error).message, msg.id));
         if (!s?.tmuxSession) return;
         await tmux.sendKeys(s.tmuxSession, adapterFor(s.tool).interruptKeys());
         return;
@@ -650,6 +711,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;
         if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
+        if (backendOf(s) === 'omp-rpc') return endSession(s);
         if (s.tmuxSession) await tmux.killSession(s.tmuxSession);
         store.apply(msg.id, { name: 'PaneGone', at: now(), source: 'daemon' });
         return;
@@ -686,8 +748,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
         if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
         if (s.state === 'exited') return refuse('the session has ended', msg.id);
+        if (backendOf(s) === 'omp-rpc') return refuse('changing the model of an OMP session is not available yet', msg.id);
         if (!resumeKey(s)) return refuse('no conversation to resume', msg.id);
-        if (msg.effort && !EFFORT_ARGS[s.tool]) return refuse(`${s.tool} takes its effort in the model id`, msg.id);
+        if (msg.effort && !EFFORT_ARGS[s.tool as TmuxTool]) return refuse(`${s.tool} takes its effort in the model id`, msg.id);
         const next = { ...(msg.model ? { model: msg.model } : {}), ...(msg.effort ? { effort: msg.effort } : {}) };
         // The model it already runs: a change asked earlier is dropped, nothing restarts.
         if (next.model === s.model && next.effort === s.effort) { if (s.modelNext) store.patch(msg.id, { modelNext: undefined }); return; }
@@ -763,6 +826,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port,
     broadcast,
     preview,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); relay.close(); mailbox.close(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    omp,
+    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); relay.close(); mailbox.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

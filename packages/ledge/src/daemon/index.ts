@@ -1,4 +1,5 @@
 import { writeFile, rm } from 'node:fs/promises';
+import { backendOf } from '@ledge/protocol';
 import { Store } from './store.js';
 import { History } from './history.js';
 import { startServer } from './server.js';
@@ -21,8 +22,16 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   if (live) for (const s of store.all()) {
     if (s.tmuxSession && !live.has(s.tmuxSession)) store.apply(s.id, { name: 'PaneGone', at: new Date().toISOString(), source: 'daemon' });
   }
+  // An OMP process lives and dies with this daemon: after a restart its session is over, resumable from its journal.
+  for (const s of store.all()) {
+    if (backendOf(s) !== 'omp-rpc' || s.state === 'exited') continue;
+    const at = new Date().toISOString();
+    store.apply(s.id, { name: 'StopFailure', at, source: 'daemon', text: 'Ledge restarted: the OMP process ended with it' });
+    store.apply(s.id, { name: 'SessionEnd', at, source: 'daemon', exitCode: null });
+  }
   const daemon = await daemonInfo();
-  const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save() }));
+  let ompLive = () => 0;
+  const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save(), ownedLive: () => ompLive() }));
   const history = new History({ peerOf: t => ledgePeer(t, readPeers(), store.all())?.id });
   try { await history.load(); } catch (e) { log(`history not loaded: ${(e as Error).message}`); }
   // Threads of sessions the store no longer holds (deleted, or past the archive cap) go now; only when the journal was
@@ -30,6 +39,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   if (loaded.clean) { for (const id of history.ids()) if (!store.get(id)) history.forget(id); }
   else log(`history cleanup skipped: ${loaded.reason}`);
   const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history });
+  ompLive = () => server.omp.liveCount();
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
   await writeFile(paths().pid, String(process.pid));
   log(`daemon started on ${server.port} with ${store.all().length} sessions`);

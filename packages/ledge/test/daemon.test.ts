@@ -16,6 +16,25 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
   state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra
 });
 
+describe('startDaemon: OMP sessions', () => {
+  it('an OMP session that was live when the daemon stopped is over after the restart (its process ended with the daemon), resumable from its journal', async () => {
+    process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
+    await ensureLedgeDir();
+    const seed = new Store();
+    seed.upsert(mk('omp1', { tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'working', agentSessionFile: '/s/omp1/a.jsonl' }));
+    seed.upsert(mk('omp2', { tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'exited', exitCode: 0, exitedAt: T0 }));
+    await seed.save();
+    const tmux = { async listSessions() { return []; } } as unknown as Tmux;
+    const d = await startDaemon({ port: 0, tmux });
+    try {
+      const c = await connect({ port: d.port });
+      const snap = (await c.next('snapshot')).sessions; c.close();
+      expect(snap.find(s => s.id === 'omp1')).toMatchObject({ state: 'exited', exitCode: null, agentSessionFile: '/s/omp1/a.jsonl', lastError: 'Ledge restarted: the OMP process ended with it' });
+      expect(snap.find(s => s.id === 'omp2')).toMatchObject({ state: 'exited', exitCode: 0 });
+    } finally { await d.stop(); }
+  });
+});
+
 describe('startDaemon', () => {
   it('restores live sessions, marks dead ones exited, keeps hook-only ones and serves a snapshot', async () => {
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));

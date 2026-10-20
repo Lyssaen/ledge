@@ -42,7 +42,7 @@ export interface ChatDeps {
   now?: () => string; today?: () => string; uuid?: () => string; bin?: string[]; bins?: Partial<Record<Tool, string[]>>; spawn?: typeof nodeSpawn; timeoutMs?: number;
 }
 
-const TOOL_LABEL: Record<Tool, string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' };
+const TOOL_LABEL: Record<Tool, string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'OMP' };
 const runTool = (tool: Tool, o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawn?: typeof nodeSpawn) =>
   tool === 'codex' ? runCodex(o, onEvent, spawn) : tool === 'cursor' ? runCursor(o, onEvent, spawn) : runClaude(o, onEvent, spawn);
 
@@ -233,6 +233,8 @@ export function createChat(deps: ChatDeps): Chat {
       await rm(dayFile, { force: true }).catch(e => log(`chat reset: day file not removed: ${(e as Error).message}`));
     },
     async ask(qid, text, emit, tool = 'claude') {
+      // Ask Ledge run by OMP is a path of its own (read-only runner, spec 2026-10-20 §7): the harness being a session's does not make it the assistant's.
+      if (tool === 'omp') return emit({ type: 'chat.error', qid, message: 'Ask Ledge cannot run on OMP yet' });
       if (busy) return emit({ type: 'chat.error', qid, message: ONE_AT_A_TIME });
       busy = true;
       const mine: Running = current = { qid, handle: null, cancelled: false };

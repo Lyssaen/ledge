@@ -1,7 +1,12 @@
 import { z } from 'zod';
 
-export const ToolSchema = z.enum(['claude', 'codex', 'cursor']);
+export const ToolSchema = z.enum(['claude', 'codex', 'cursor', 'omp']);
 export type Tool = z.infer<typeof ToolSchema>;
+
+/** How Ledge drives a session's agent: through a tmux pane (Claude Code, Codex, Cursor Agent), or through the agent's own
+ *  JSONL protocol with the daemon owning the process (OMP, spec 2026-10-20 §4). A session without it is a tmux one. */
+export const BackendSchema = z.enum(['tmux', 'omp-rpc']);
+export type Backend = z.infer<typeof BackendSchema>;
 
 export const SessionStateSchema = z.enum(['starting', 'working', 'waiting_input', 'waiting_permission', 'idle', 'exited', 'error']);
 export type SessionState = z.infer<typeof SessionStateSchema>;
@@ -15,7 +20,8 @@ export const PendingSchema = z.object({
   options: z.array(z.string()).optional(),
   /** Each option's description, by index ('' when it has none); left out when no option has one. */
   optionDetails: z.array(z.string()).optional(),
-  source: z.enum(['hook', 'pane']),
+  /** `rpc`: the harness's own protocol asked (OMP): answered on its request id, never by typing. */
+  source: z.enum(['hook', 'pane', 'rpc']),
   /** Set when the request comes from a helper (subagent): it is routed through its parent. */
   helperId: z.string().optional(),
   /** For a helper-routed request: the state the parent returns to once it is answered (main thread may stop meanwhile). */
@@ -68,6 +74,8 @@ export const SessionSchema =z.object({
   /** The folder the agent works in now, as its last hook reported it: `cwd` stays where it started, this follows a worktree it entered. */
   workdir: z.string().optional(),
   tmuxSession: z.string().nullable(),
+  /** Left out for a tmux session. `omp-rpc`: no pane, nothing to attach to; the daemon holds the process (see `agentSessionFile`). */
+  backend: BackendSchema.optional(),
   state: SessionStateSchema,
   pending: PendingSchema.optional(),
   helpers: z.array(HelperSchema).default([]),
@@ -84,6 +92,8 @@ export const SessionSchema =z.object({
   modelNext: z.object({ model: z.string().optional(), effort: z.string().optional() }).optional(),
   /** The agent's own session id when Ledge chose it at launch (Claude Code `--session-id`). */
   agentSessionId: z.string().optional(),
+  /** OMP: the exact journal file of the conversation, what a resume names (never "the latest of the folder"). */
+  agentSessionFile: z.string().optional(),
   /** The agent's transcript: the latest one a hook named (it follows /clear and --resume), else the one the launch implies. */
   transcriptPath: z.string().optional(),
   exitCode: z.number().int().nullable().optional(),
@@ -96,6 +106,11 @@ export const SessionSchema =z.object({
   restoredAt: z.string().datetime().optional()
 });
 export type Session = z.infer<typeof SessionSchema>;
+
+/** The transport a session's agent is driven through. */
+export function backendOf(s: Pick<Session, 'backend'>): Backend {
+  return s.backend ?? 'tmux';
+}
 
 /** Whether the session sits in the archive. */
 export function isArchived(s: Pick<Session, 'archivedAt'>): boolean {

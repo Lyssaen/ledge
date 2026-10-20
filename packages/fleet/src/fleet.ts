@@ -9,7 +9,7 @@ const toWire = (list: MachineConfig[]): Machine[] => list.map(({ id, label, ssh 
 type Binding = { machine: string; raw: string };
 /** The commands tracked as a machine's operation in flight (`operations`, set in `send`): their answer, their refusal or the machine's drop ends it. */
 const OPERATIONS: ReadonlySet<string> = new Set(['session.launch', 'session.relay', 'session.relay.cancel']);
-type PendingRoute = { qid: string; text: string; tool?: 'claude' | 'codex' | 'cursor'; coordinator: string };
+type PendingRoute = { qid: string; text: string; tool?: Tool; coordinator: string };
 
 export interface FleetOptions {
   /** Storage key prefix: `ledge` (island) or `desktop` (spec §7). */

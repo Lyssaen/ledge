@@ -38,6 +38,10 @@ function pendingFor(ev: SessionEvent): Pending | undefined {
   if (ev.name === 'Notification' && ev.kind === 'permission') {
     return { kind: 'permission', text: ev.text ?? '', source: 'hook' };
   }
+  if (ev.name === 'NativeRequest') {
+    // OMP's own dialog (spec 2026-10-20 §3.3): its exact text and options, nothing inferred about permission.
+    return { kind: 'question', text: ev.text ?? '', ...(ev.options?.length ? { options: ev.options } : {}), source: 'rpc', tool: 'omp' };
+  }
   if (ev.name === 'PanePrompt') {
     return { kind: ev.kind ?? 'permission', text: ev.text ?? '', ...(ev.body ? { body: ev.body } : {}), options: ev.options, ...details(ev), source: 'pane' };
   }
@@ -292,6 +296,11 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       if (s.pending && samePending(s.pending, pending)) return s;
       const state = pending.kind === 'question' ? 'waiting_input' : 'waiting_permission';
       return { ...s, state, pending, lastActivityAt: at };
+    }
+    case 'NativeRequest': {
+      // A second dialog waits in the harness's queue (the host keeps it): the first request holds the card until it is answered.
+      if (s.pending) return s;
+      return { ...s, state: 'waiting_input', pending: pendingFor(ev)!, lastActivityAt: at };
     }
     case 'SessionStart':
     case 'UserPromptSubmit':
