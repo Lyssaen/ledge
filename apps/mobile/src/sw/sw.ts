@@ -189,7 +189,7 @@ function payloadOf(raw: unknown): PushPayload | null {
   const p = raw as Record<string, unknown>;
   const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
   const ok =
-    p.v === 1 && (p.kind === 'request' || p.kind === 'question' || p.kind === 'finished') &&
+    p.v === 1 && (p.kind === 'request' || p.kind === 'question' || p.kind === 'finished' || p.kind === 'chat') &&
     str(p.title, 80) && str(p.body, 120) && str(p.url, 300) && PUSH_URL.test(p.url) &&
     typeof p.badge === 'number' && Number.isInteger(p.badge) && p.badge >= 0 && p.badge <= 999 &&
     typeof p.tag === 'string' && PUSH_TAG.test(p.tag);

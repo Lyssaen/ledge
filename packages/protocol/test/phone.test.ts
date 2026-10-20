@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema, PAD_TIERS, PLAIN_MAX, padPlain } from '../src/index.js';
+import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema, PAD_TIERS, PLAIN_MAX, padPlain, PushPayloadSchema } from '../src/index.js';
 
 const OP = '123e4567-e89b-42d3-a456-426614174000';
 const expectKey = { kind: 'permission', text: 'Run ls', key: 'k1' };
@@ -146,7 +146,7 @@ describe('phone device confirmation (lot 6a)', () => {
       expect(() => PhoneClientMessageSchema.parse({ type: 'credential.register', op: OP, credential: { ...credential, clientDataJSON: bad } })).toThrow();
       expect(() => PhoneClientMessageSchema.parse({ type: 'session.decide', op: OP, id: 's1', decision: 'accept', expect: expectKey, assertion: { ...assertion, signature: bad } })).toThrow();
     }
-    expect(() => PhoneClientMessageSchema.parse({ type: 'confirm.prepare', purpose: 'launch' })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'confirm.prepare', purpose: 'bogus' })).toThrow();
   });
   it('bounds session.answer like the local one', () => {
     const base = { type: 'session.answer', op: OP, id: 's1', requestId: 'r1', expect: expectKey };
@@ -200,5 +200,43 @@ describe('phone push and presence', () => {
     expect(() => PhoneServerMessageSchema.parse(snap({ confirm: true }))).not.toThrow();
     for (const push of ['on', 'off', 'stale', 'unavailable']) expect(() => PhoneServerMessageSchema.parse(snap({ confirm: true, push }))).not.toThrow();
     expect(() => PhoneServerMessageSchema.parse(snap({ confirm: true, push: 'maybe' }))).toThrow();
+  });
+});
+
+describe('phone chat', () => {
+  const QID = '223e4567-e89b-42d3-a456-426614174001';
+  const turn = { qid: QID, question: 'q', askedAt: '2026-10-20T10:00:00.000Z', steps: [{ kind: 'pane', id: 's1', name: 'api' }] };
+  const snap = { type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: { freeTextAnswer: true }, codex: { freeTextAnswer: true }, cursor: { freeTextAnswer: true }, omp: { freeTextAnswer: true } }, daemon: { version: '1.0.0', name: 'pc' } };
+  it('accepts a turn and refuses a cwd in a proposal or a path in a step', () => {
+    expect(() => PhoneServerMessageSchema.parse({ type: 'chat.done', qid: QID, turn: { ...turn, answer: 'a', proposals: [{ project: 'p', tool: 'claude', prompt: 'go' }], relay: { id: 's1', name: 'api', tool: 'claude', text: 'x' } } })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'chat.done', qid: QID, turn: { ...turn, proposals: [{ project: 'p', tool: 'claude', cwd: '/home/x' }] } })).toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'chat.done', qid: QID, turn: { ...turn, steps: [{ kind: 'repo', path: '/etc/passwd' }] } })).toThrow();
+  });
+  it('parses the server messages', () => {
+    for (const m of [
+      { type: 'chat.history', turns: [turn] },
+      { type: 'chat.step', qid: QID, step: { kind: 'git', id: 's1' } },
+      { type: 'chat.delta', qid: QID, text: 'abc' },
+      { type: 'chat.error', qid: QID, code: 'busy' }
+    ]) expect(() => PhoneServerMessageSchema.parse(m)).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'chat.error', qid: QID, code: 'boom' })).toThrow();
+  });
+  it('checks the client messages', () => {
+    for (const m of [
+      { type: 'chat.ask', qid: QID, text: '  hi ' }, { type: 'chat.cancel', qid: QID }, { type: 'chat.reset' }, { type: 'chat.history' },
+      { type: 'chat.relay', op: OP, qid: QID }, { type: 'chat.launch', op: OP, qid: QID, rows: [0, 7] },
+      { type: 'confirm.prepare', purpose: 'launch', qid: QID }
+    ]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
+    expect(PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: QID, text: '  hi ' })).toMatchObject({ text: 'hi' });
+    expect(() => PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: 'nope', text: 'hi' })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: QID, text: '   ' })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'chat.launch', op: OP, qid: QID, rows: [8] })).toThrow();
+  });
+  it('keeps a snapshot without chat valid and accepts chat: true', () => {
+    expect(() => PhoneServerMessageSchema.parse({ ...snap, device: { confirm: true } })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ ...snap, device: { confirm: true, chat: true } })).not.toThrow();
+  });
+  it('accepts a chat push payload', () => {
+    expect(PushPayloadSchema.safeParse({ v: 1, kind: 'chat', title: 'Ledge a répondu', body: 'Touchez pour lire la réponse.', url: '/#/chat', badge: 0, tag: 'chat' }).success).toBe(true);
   });
 });

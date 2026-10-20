@@ -127,7 +127,9 @@ export function createPhoneGateway(deps: {
   };
 
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
-  const needsAssertion = (msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' }>, s: Session): boolean => {
+  /** The operations that act on a tracked session (the chat ones are the gateway's own, Task 5). */
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' }>;
+  const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
     if (msg.type === 'session.reply') return !!msg.expect && s.pending?.source === 'rpc' && riskOf(s)?.risk !== 'low';
     return false;
@@ -159,7 +161,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The checks only a phone meets, in order; undefined lets the operation through. */
-  const precheck = (deviceId: string, msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' }>): Outcome | undefined => {
+  const precheck = (deviceId: string, msg: SessionOperation): Outcome | undefined => {
     const s = live(msg.id);
     if (!s) return { status: 'rejected', reason: 'unknown_session' };
     switch (msg.type) {
@@ -192,7 +194,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The local message the operation stands for, built field by field. */
-  const local = (msg: Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' }>): ClientMessage => {
+  const local = (msg: SessionOperation): ClientMessage => {
     switch (msg.type) {
       case 'session.decide':
         return { type: 'session.decide', id: msg.id, decision: msg.decision, ...(msg.note !== undefined ? { note: msg.note } : {}), expect: { kind: msg.expect.kind, text: msg.expect.text, key: msg.expect.key } };
@@ -239,6 +241,8 @@ export function createPhoneGateway(deps: {
       mobile.setPush(deviceId, null);
       return { status: 'applied' };
     }
+    // The phone's chat is not served yet: refused rather than read as a session operation.
+    if (msg.type === 'chat.relay' || msg.type === 'chat.launch') return { status: 'rejected', reason: 'invalid' };
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);

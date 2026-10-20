@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { PendingSchema, SessionSchema, type Tool } from './session.js';
+import { PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
+import { ChatStepSchema, MAX_PROPOSALS } from './chat.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { ThreadItemSchema } from './thread.js';
 import { MESSAGE_MAX, RefusalCodeSchema } from './messages.js';
@@ -114,8 +115,39 @@ export const AssertionSchema = z.object({
 export type Assertion = z.infer<typeof AssertionSchema>;
 
 /** What a challenge is for. */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide']);
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
+
+/** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
+export const PhoneChatStepSchema = ChatStepSchema.pick({ kind: true, id: true, name: true }).strict();
+export type PhoneChatStep = z.infer<typeof PhoneChatStepSchema>;
+
+export const PhoneChatProposalSchema = z.object({
+  project: z.string().max(80), tool: ToolSchema, prompt: z.string().max(TOOL_TEXT_MAX).optional(),
+  launchedId: z.string().optional(), failed: z.literal(true).optional()
+}).strict();
+export type PhoneChatProposal = z.infer<typeof PhoneChatProposalSchema>;
+
+export const PhoneChatRelaySchema = z.object({
+  id: z.string().min(1), name: z.string(), tool: ToolSchema, text: z.string().max(TOOL_TEXT_MAX),
+  status: z.enum(['queued', 'sent']).optional(), sentAt: z.string().datetime().optional(), failed: z.literal(true).optional()
+}).strict();
+export type PhoneChatRelay = z.infer<typeof PhoneChatRelaySchema>;
+
+/** Why a question ended without an answer. */
+export const ChatErrorCodeSchema = z.enum(['busy', 'timeout', 'cancelled', 'failed']);
+export type ChatErrorCode = z.infer<typeof ChatErrorCodeSchema>;
+
+export const PhoneChatTurnSchema = z.object({
+  qid: OperationIdSchema, question: z.string().max(MESSAGE_MAX), askedAt: z.string().datetime(),
+  steps: z.array(PhoneChatStepSchema).max(50), answer: z.string().max(THREAD_TEXT_MAX).optional(), answeredAt: z.string().datetime().optional(),
+  error: ChatErrorCodeSchema.optional(), proposals: z.array(PhoneChatProposalSchema).max(MAX_PROPOSALS).optional(),
+  relay: PhoneChatRelaySchema.optional(), cut: z.literal(true).optional()
+}).strict();
+export type PhoneChatTurn = z.infer<typeof PhoneChatTurnSchema>;
+
+/** The `chat.history` sent to a phone keeps the most recent turns whose JSON fits: 60 % of `PLAIN_MAX`. */
+export const CHAT_HISTORY_BUDGET = 393_216;
 
 const sessionId = z.string().min(1).max(100);
 /** The request the phone showed, named by its key. */
@@ -131,7 +163,7 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.watch'), id: sessionId.nullable() }),
   z.object({ type: z.literal('session.read'), id: sessionId, at: z.string().datetime() }),
   /** Asks for a challenge. One object for both purposes: the gateway refuses a `decide` without `id` and `expect`. */
-  z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional() }),
+  z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional(), qid: OperationIdSchema.optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
@@ -158,6 +190,13 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   /** The phone's push subscription, with the VAPID key it was made with (so a key change is seen). */
   z.object({ type: z.literal('push.subscribe'), op: OperationIdSchema, subscription: PushSubscriptionSchema, key: B64U.length(87) }),
   z.object({ type: z.literal('push.unsubscribe'), op: OperationIdSchema }),
+  /** The phone's own chat with Ledge. */
+  z.object({ type: z.literal('chat.ask'), qid: OperationIdSchema, text: z.string().trim().min(1).max(MESSAGE_MAX) }),
+  z.object({ type: z.literal('chat.cancel'), qid: OperationIdSchema }),
+  z.object({ type: z.literal('chat.reset') }),
+  z.object({ type: z.literal('chat.history') }),
+  z.object({ type: z.literal('chat.relay'), op: OperationIdSchema, qid: OperationIdSchema }),
+  z.object({ type: z.literal('chat.launch'), op: OperationIdSchema, qid: OperationIdSchema, rows: z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).optional(), assertion: AssertionSchema.optional() }),
   /** Whether the phone's app is in front: a device that is visible gets no push. */
   z.object({ type: z.literal('presence'), visible: z.boolean() })
 ]);
@@ -165,7 +204,7 @@ export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;
 
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional() }).optional() }),
+  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional() }).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
@@ -176,6 +215,12 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.thread'), id: z.string(), items: z.array(ThreadItemSchema), cut: z.array(z.string()), more: z.boolean() }),
   z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema, cut: z.literal(true).optional() }),
   z.object({ type: z.literal('operation.result'), op: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional() }),
+  z.object({ type: z.literal('chat.history'), turns: z.array(PhoneChatTurnSchema).max(50) }),
+  z.object({ type: z.literal('chat.step'), qid: OperationIdSchema, step: PhoneChatStepSchema }),
+  /** The whole text so far, not an increment. */
+  z.object({ type: z.literal('chat.delta'), qid: OperationIdSchema, text: z.string().max(THREAD_TEXT_MAX) }),
+  z.object({ type: z.literal('chat.done'), qid: OperationIdSchema, turn: PhoneChatTurnSchema }),
+  z.object({ type: z.literal('chat.error'), qid: OperationIdSchema, code: ChatErrorCodeSchema }),
   /** Never carries free text. */
   z.object({ type: z.literal('error'), code: z.enum(['invalid', 'unknown_session', 'too_large']), request: z.string().max(40).optional() })
 ]);

@@ -332,6 +332,7 @@ describe('the pinned service worker', () => {
       const fixtures: Record<string, unknown> = {
         valid: payload,
         'v 2': { ...payload, v: 2 },
+        'kind chat': { ...payload, kind: 'chat', title: 'Ledge a répondu', body: 'Touchez pour lire la réponse.', url: '/#/chat', tag: 'chat' },
         'bad kind': { ...payload, kind: 'other' },
         'title 80': { ...payload, title: 't'.repeat(80) },
         'title 81': { ...payload, title: 't'.repeat(81) },
