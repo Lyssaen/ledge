@@ -12,6 +12,15 @@ const fromPane = (f: string): RiskInput => {
   return { kind: m.kind, text: m.text, cwd: '/w/repo', source: 'pane' };
 };
 
+describe('classify: OMP dialogs', () => {
+  it('an rpc question is high/unknown whatever its kind; a pane question stays low', () => {
+    expect(classify({ kind: 'question', text: 'Allow edit?', cwd: '/w/repo', source: 'rpc' })).toMatchObject({ risk: 'high', reason: 'unknown' });
+    const s = { id: 'x', cwd: '/w/repo', pending: { kind: 'question', source: 'rpc', tool: 'omp', text: 'Pick', options: ['a', 'b'] } } as unknown as Session;
+    expect(riskOf(s)).toMatchObject({ risk: 'high', reason: 'unknown' });
+    expect(classify({ kind: 'question', text: 'Pick', cwd: '/w/repo', source: 'pane' })).toMatchObject({ risk: 'low' });
+  });
+});
+
 describe('classify', () => {
   it.each([
     [{ kind: 'permission', tool: 'Bash', text: 'git push --force origin main' }, 'high', 'pushes'],

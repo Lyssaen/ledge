@@ -101,7 +101,7 @@ export function createPhoneGateway(deps: {
     push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}) });
   };
 
-  /** Whether the operation needs the device's own check: an accept of a request that is not low, or an answer to an OMP dialog. */
+  /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: Exclude<PhoneOperation, { type: 'credential.register' }>, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
     if (msg.type === 'session.reply') return !!msg.expect && s.pending?.source === 'rpc' && riskOf(s)?.risk !== 'low';

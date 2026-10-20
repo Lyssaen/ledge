@@ -767,13 +767,13 @@ describe('phone gateway: device key', () => {
 
 describe('phone gateway: a high-impact accept carries a device assertion', () => {
   const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
-  const RPC: Pending = { kind: 'permission', text: 'Allow the edit?', source: 'rpc' };
+  const RPC: Pending = { kind: 'question', text: 'Allow the edit?', tool: 'omp', options: ['Allow', 'Reject'], source: 'rpc' };
   type G = ReturnType<typeof setup>;
-  const challengeFor = async (g: G, id: string, pending: Pending, key = pendingKey(pending), purpose: 'decide' | 'register' = 'decide'): Promise<string> => {
+  const challengeFor = async (g: G, id: string, pending: Pending, purpose: 'decide' | 'register' = 'decide'): Promise<string> => {
     const before = g.got('dev1').length;
     g.send('dev1', purpose === 'register'
       ? { type: 'confirm.prepare', purpose }
-      : { type: 'confirm.prepare', purpose, id, expect: { kind: pending.kind, text: pending.text, key } });
+      : { type: 'confirm.prepare', purpose, id, expect: { kind: pending.kind, text: pending.text, key: pendingKey(pending) } });
     await flush();
     const m = g.got('dev1').slice(before).find(x => x.type === 'confirm.challenge');
     if (m?.type !== 'confirm.challenge') throw new Error('no challenge');
@@ -784,7 +784,7 @@ describe('phone gateway: a high-impact accept carries a device assertion', () =>
     const g = setup();
     g.sessions.set('r', mk('r', { state: 'waiting_permission', pending: { ...RPC } }));
     const auth = softAuthenticator();
-    const c = await challengeFor(g, '', RPC, '', 'register');
+    const c = await challengeFor(g, '', RPC, 'register');
     g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: auth.create(rp, c) });
     await flush();
     g.stored.length = 0;
@@ -844,7 +844,10 @@ describe('phone gateway: a high-impact accept carries a device assertion', () =>
     g.send('dev1', deny);
     g.send('dev1', low);
     await flush();
-    expect(g.results('dev1').filter(r => r.type === 'operation.result' && r.status === 'applied').map(r => r.type === 'operation.result' && r.op).slice(-2)).toEqual([deny.op, low.op]);
+    const results = g.results('dev1');
+    expect(results).toContainEqual({ type: 'operation.result', op: deny.op, status: 'applied' });
+    expect(results).toContainEqual({ type: 'operation.result', op: low.op, status: 'applied' });
+    expect(g.dispatched.map(d => d.type === 'session.decide' && [d.id, d.decision])).toEqual([['a', 'deny'], ['b', 'accept']]);
   });
 
   it('a stale expect.key is stale even with a valid assertion, and the challenge stays usable', async () => {
@@ -879,6 +882,7 @@ describe('phone gateway: a high-impact accept carries a device assertion', () =>
     const m = decide('a', 'accept', PUSH);
     g.send('dev1', withAssertion(m, assertion));
     await flush();
+    // The replay answers from the registry: a re-run would find the challenge spent and answer assertion_invalid.
     g.send('dev1', withAssertion(m, assertion));
     await flush();
     expect(g.results('dev1').slice(-2).map(r => r.type === 'operation.result' && r.status)).toEqual(['applied', 'applied']);
@@ -930,13 +934,15 @@ describe('phone gateway: a high-impact accept carries a device assertion', () =>
     expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'r', text: 'yes' }]);
   });
 
-  it('logs carry neither the challenge nor the signature', async () => {
+  it('logs carry neither the challenge nor the signature, even when verification fails', async () => {
     const { g, auth } = await enrolled();
     const challenge = await challengeFor(g, 'a', PUSH);
-    const assertion = auth.get(rp, challenge, { counter: 1 });
-    g.send('dev1', withAssertion(decide('a', 'accept', PUSH), assertion));
-    g.send('dev1', withAssertion(decide('a', 'accept', PUSH), assertion));
+    const assertion = auth.get(rp, challenge, { counter: 0, type: 'webauthn.create' });
+    const m = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(m, assertion));
     await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.logs).toContain('phone: assertion refused for device dev1');
     for (const secret of [challenge, assertion.signature, assertion.clientDataJSON, assertion.authenticatorData]) expect(g.logs.some(l => l.includes(secret))).toBe(false);
   });
 });
