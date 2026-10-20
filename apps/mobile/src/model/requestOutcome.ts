@@ -1,5 +1,5 @@
 import type { OperationReason, PhoneSession } from '@ledge/protocol';
-import type { Op } from '../state/operations';
+import { expectKey, type Op } from '../state/operations';
 
 export type Outcome =
   | { kind: 'idle' }
@@ -13,16 +13,12 @@ export type Outcome =
 
 export interface OutcomeTarget { sessionId: string; key: string }
 
-/** The key of the request an operation answers, if it answers one. */
-export const expectKey = (o: Op): string | undefined =>
-  o.message.type === 'session.interrupt' ? undefined : o.message.expect?.key;
-
 /** What the phone can honestly say about one request: its own operation first, else what the PC shows now. */
 export function outcomeFor(target: OutcomeTarget, sessions: PhoneSession[], ops: Record<string, Op>): Outcome {
   const pending = sessions.find(s => s.id === target.sessionId)?.pending;
   const same = pending?.key === target.key;
   const mine = Object.values(ops)
-    .filter(o => o.message.id === target.sessionId && expectKey(o) === target.key)
+    .filter(o => o.message.id === target.sessionId && expectKey(o.message) === target.key)
     .sort((a, b) => a.at.localeCompare(b.at));
   const o = mine.find(x => x.phase === 'applied') ?? mine[mine.length - 1];
   if (o) {

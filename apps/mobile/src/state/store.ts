@@ -6,7 +6,7 @@ import {
   type PhoneSession, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
-import { isLive, isNew, loadOps, newOperationId, pruneOps, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
+import { isLive, isNew, loadOps, newOperationId, pruneOps, resendable, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
 import { loadLastState, loadReads, saveLastState, saveReads } from './persist';
 
 /** `loading`: asked, not answered yet. `gone`: the PC no longer knows the session. */
@@ -77,8 +77,15 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     ops: loadOps(storage)
   };
   let reads = loadReads(storage);
-  /** The last thread asked: an `unknown_session` error to `session.thread` is about it. */
+  /** The last thread opened: asked again after every ready. */
   let lastThread: string | null = null;
+  /**
+   * The `session.thread` requests not answered yet, oldest first. The PC answers in order, and its `unknown_session`
+   * error names no session: it is about the oldest one.
+   */
+  let threadAsks: string[] = [];
+  /** A preview changed since the cache was last written. */
+  let previewsDirty = false;
   let closed = false;
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const listeners = new Set<() => void>();
@@ -88,9 +95,12 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
   const notify = () => { for (const fn of [...listeners]) fn(); };
   const set = (patch: Partial<MobileState>) => { state = { ...state, ...patch }; notify(); };
-  const persist = () => saveLastState({
-    sessions: [...state.sessions.values()], previews: Object.fromEntries(state.previews), daemon: state.daemon, syncedAt: state.syncedAt
-  }, storage);
+  const persist = () => {
+    previewsDirty = false;
+    saveLastState({
+      sessions: [...state.sessions.values()], previews: Object.fromEntries(state.previews), daemon: state.daemon, syncedAt: state.syncedAt
+    }, storage);
+  };
   const setOps = (ops: Record<string, Op>) => {
     const kept = pruneOps(ops);
     saveOps(kept, storage);
@@ -110,6 +120,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     }, UNCERTAIN_MS));
   };
 
+  const askThread = (id: string) => { threadAsks.push(id); send({ type: 'session.thread', id }); };
   const setThread = (id: string, t: ThreadState) => set({ threads: new Map(state.threads).set(id, t) });
   const gone = (threads: Map<string, ThreadState>, id: string) => {
     const t = threads.get(id);
@@ -118,7 +129,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
   function onReady() {
     // Every operation whose outcome is unknown goes again with its own op: the PC applies it once, and answers it again.
-    const live = Object.values(state.ops).filter(o => isLive(o.phase)).sort((a, b) => a.at.localeCompare(b.at));
+    // An instruction or interrupt too old to be sent again stays uncertain (see RESEND_MAX_MS).
+    const now = Date.now();
+    const live = Object.values(state.ops).filter(o => resendable(o, now)).sort((a, b) => a.at.localeCompare(b.at));
     if (live.length) {
       const ops = { ...state.ops };
       for (const o of live) ops[o.op] = { ...o, phase: 'sending' };
@@ -126,10 +139,12 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       for (const o of live) { send(o.message); arm(o.op); }
     }
     for (const [id, at] of Object.entries(reads)) send({ type: 'session.read', id, at });
-    if (lastThread && state.threads.get(lastThread)?.status !== 'gone') send({ type: 'session.thread', id: lastThread });
+    if (lastThread && state.threads.get(lastThread)?.status !== 'gone') askThread(lastThread);
   }
 
   function onLost() {
+    // Requests sent on the lost channel get no answer.
+    threadAsks = [];
     for (const id of [...timers.keys()]) stopTimer(id);
     const ops = Object.values(state.ops).filter(o => o.phase === 'sending');
     if (ops.length) setOps({ ...state.ops, ...Object.fromEntries(ops.map(o => [o.op, { ...o, phase: 'uncertain' as const }])) });
@@ -176,12 +191,16 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         return;
       }
       case 'session.preview':
+        // A watched terminal sends these often: the cache takes them with its next write, or at close.
         set({ previews: new Map(state.previews).set(m.id, m.lines) });
-        persist();
+        previewsDirty = true;
         return;
-      case 'session.thread':
+      case 'session.thread': {
+        const at = threadAsks.indexOf(m.id);
+        if (at >= 0) threadAsks.splice(at, 1);
         setThread(m.id, { status: 'ready', items: m.items, cut: m.cut, more: m.more });
         return;
+      }
       case 'session.thread.item': {
         const t = state.threads.get(m.id);
         if (!t || t.status === 'gone') return;
@@ -195,6 +214,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const o = state.ops[m.op];
         if (!o || !isLive(o.phase)) return;
         if (m.status === 'received') {
+          // The PC has it and always sends its outcome after. Should that never come while the link holds, the op
+          // stays `sending` until the link drops (then uncertain); an instruction or interrupt stops blocking the
+          // next one once older than RESEND_MAX_MS (isNew), an answer once its request is gone.
           stopTimer(m.op);
           if (o.phase !== 'sending') patchOp(m.op, x => ({ ...x, phase: 'sending' }));
           return;
@@ -207,9 +229,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         return;
       }
       case 'error':
-        if (m.code === 'unknown_session' && m.request === 'session.thread' && lastThread) {
-          const t = state.threads.get(lastThread);
-          setThread(lastThread, { items: [], cut: [], more: false, ...t, status: 'gone' });
+        if (m.code === 'unknown_session' && m.request === 'session.thread') {
+          const id = threadAsks.shift();
+          if (id !== undefined) setThread(id, { items: [], cut: [], more: false, ...state.threads.get(id), status: 'gone' });
         }
         return;
     }
@@ -284,7 +306,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       lastThread = id;
       const t = state.threads.get(id);
       setThread(id, { items: t?.items ?? [], cut: t?.cut ?? [], more: t?.more ?? false, status: 'loading' });
-      if (ready()) send({ type: 'session.thread', id });
+      if (ready()) askThread(id);
     },
 
     watch(id) { if (!closed) send({ type: 'session.watch', id }); },
@@ -294,6 +316,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     close() {
       if (closed) return;
       closed = true;
+      if (previewsDirty) persist();
       offState();
       offMessage();
       for (const id of [...timers.keys()]) stopTimer(id);

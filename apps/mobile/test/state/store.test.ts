@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneSession, ThreadItem } from '@ledge/protocol';
 import { createStore, type MobileStore } from '../../src/state/store';
-import { OPS_KEY, UNCERTAIN_MS } from '../../src/state/operations';
+import { OPS_KEY, RESEND_MAX_MS, UNCERTAIN_MS } from '../../src/state/operations';
 import { LAST_STATE_KEY } from '../../src/state/persist';
 import { outcomeFor } from '../../src/model/requestOutcome';
 import { pending, session } from '../model/fixtures';
@@ -82,6 +82,24 @@ describe('the store, from the PC', () => {
     t.store.openThread('zz');
     t.deliver({ type: 'error', code: 'unknown_session', request: 'session.thread' });
     expect(t.state().threads.get('zz')?.status).toBe('gone');
+  });
+
+  it('an unknown_session error goes to the oldest thread still unanswered, not the last one asked', () => {
+    const t = setup();
+    t.deliver(snapshot([session('b')]));
+    t.store.openThread('a');
+    t.store.openThread('b');
+    t.deliver({ type: 'error', code: 'unknown_session', request: 'session.thread' });
+    expect(t.state().threads.get('a')?.status).toBe('gone');
+    expect(t.state().threads.get('b')?.status).toBe('loading');
+    t.deliver({ type: 'session.thread', id: 'b', items: [], cut: [], more: false });
+    expect(t.state().threads.get('b')?.status).toBe('ready');
+    t.store.openThread('c');
+    t.store.openThread('d');
+    t.deliver({ type: 'session.thread', id: 'c', items: [], cut: [], more: false });
+    t.deliver({ type: 'error', code: 'unknown_session', request: 'session.thread' });
+    expect(t.state().threads.get('c')?.status).toBe('ready');
+    expect(t.state().threads.get('d')?.status).toBe('gone');
   });
 
   it('losing the channel makes the state stale, the sessions kept', () => {
@@ -280,6 +298,28 @@ describe('the store, across reconnections', () => {
     expect(t.of('session.read')).toHaveLength(6);
   });
 
+  it('an instruction left uncertain too long is not sent again, and no longer blocks a new one; a decision still is', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-14T10:00:00.000Z'));
+    const t = setup();
+    t.deliver(snapshot([session('a'), waiting('b')]));
+    const old = t.store.reply('a', 'Lance les tests')!;
+    const stop = t.store.interrupt('a')!;
+    const decision = t.store.decide('b', 'accept')!;
+    t.set('pc_offline');
+    vi.setSystemTime(Date.parse('2026-10-14T10:00:00.000Z') + RESEND_MAX_MS);
+    t.set('ready');
+    expect(t.of('session.reply').map(m => m.op)).toEqual([old]);
+    expect(t.of('session.interrupt').map(m => m.op)).toEqual([stop]);
+    expect(t.of('session.decide').map(m => m.op)).toEqual([decision, decision]);
+    expect(t.state().ops[old]?.phase).toBe('uncertain');
+    expect(t.state().ops[stop]?.phase).toBe('uncertain');
+    const next = t.store.reply('a', 'Lance les tests');
+    expect(next).not.toBeNull();
+    expect(next).not.toBe(old);
+    expect(t.store.interrupt('a')).not.toBeNull();
+  });
+
   it('a read made offline is sent at the next ready', () => {
     const t = setup({ state: 'pc_offline' });
     t.store.read('a', '2026-10-14T10:05:00.000Z');
@@ -304,6 +344,21 @@ describe('the store, cached on the phone', () => {
     expect(s.daemon?.name).toBe('Atelier');
     expect(s.fresh).toBe(false);
     expect(s.syncedAt).not.toBeNull();
+  });
+
+  it('a terminal preview does not rewrite the cache by itself; the next write or close keeps it', () => {
+    const storage = new MemoryStorage();
+    const t = setup({ storage });
+    t.deliver(snapshot([session('a'), session('b')]));
+    const before = storage.getItem(LAST_STATE_KEY);
+    t.deliver({ type: 'session.preview', id: 'a', lines: ['$ pnpm test'] });
+    t.deliver({ type: 'session.preview', id: 'a', lines: ['$ pnpm test', 'ok'] });
+    expect(storage.getItem(LAST_STATE_KEY)).toBe(before);
+    t.deliver({ type: 'session.updated', session: session('b', { state: 'working' }) });
+    expect(JSON.parse(storage.getItem(LAST_STATE_KEY)!).previews).toEqual({ a: ['$ pnpm test', 'ok'] });
+    t.deliver({ type: 'session.preview', id: 'b', lines: ['…'] });
+    t.store.close();
+    expect(JSON.parse(storage.getItem(LAST_STATE_KEY)!).previews).toEqual({ a: ['$ pnpm test', 'ok'], b: ['…'] });
   });
 
   it('a cache that does not parse, or holds an invalid session, is dropped', () => {

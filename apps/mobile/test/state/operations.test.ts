@@ -6,7 +6,7 @@ import { fingerprint, generateIdentity } from '@ledge/seal';
 import { createPhoneLink } from '../../src/link/link';
 import { memoryKeys } from '../../src/link/keys';
 import { createStore } from '../../src/state/store';
-import { isNew, KEEP_FINISHED, loadOps, OPS_KEY, pruneOps, saveOps, type Op, type OpPhase } from '../../src/state/operations';
+import { isNew, KEEP_FINISHED, loadOps, OPS_KEY, pruneOps, resendable, RESEND_MAX_MS, saveOps, type Op, type OpPhase } from '../../src/state/operations';
 import { startFakePc } from '../fakePc';
 import { pending, session } from '../model/fixtures';
 import { MemoryStorage, snapshot } from './helpers';
@@ -19,6 +19,8 @@ const decideOp = (n: number, phase: OpPhase, key = 'p1', id = 'a'): Op => ({
 });
 const replyOp = (n: number, phase: OpPhase, id = 'a'): Op => ({ op: uuid(n), phase, at: at(n), message: { type: 'session.reply', op: uuid(n), id, text: 'Bonjour', expect: null } });
 const byId = (...ops: Op[]) => Object.fromEntries(ops.map(o => [o.op, o]));
+/** A moment just after every op above was made. */
+const NOW = Date.parse(at(60));
 
 describe('pruneOps', () => {
   it('keeps every unresolved operation and the 50 latest finished ones', () => {
@@ -42,24 +44,51 @@ describe('pruneOps', () => {
 describe('isNew', () => {
   it('refuses a second answer to a request already answered or on its way, not after a refusal', () => {
     const next = decideOp(9, 'sending').message;
-    expect(isNew(byId(decideOp(1, 'sending')), next)).toBe(false);
-    expect(isNew(byId(decideOp(1, 'uncertain')), next)).toBe(false);
-    expect(isNew(byId(decideOp(1, 'applied')), next)).toBe(false);
-    expect(isNew(byId(decideOp(1, 'rejected')), next)).toBe(true);
-    expect(isNew(byId(decideOp(1, 'failed')), next)).toBe(true);
-    expect(isNew(byId(decideOp(1, 'applied', 'p0')), next)).toBe(true);
-    expect(isNew(byId(decideOp(1, 'applied', 'p1', 'b')), next)).toBe(true);
+    expect(isNew(byId(decideOp(1, 'sending')), next, NOW)).toBe(false);
+    expect(isNew(byId(decideOp(1, 'uncertain')), next, NOW)).toBe(false);
+    expect(isNew(byId(decideOp(1, 'applied')), next, NOW)).toBe(false);
+    expect(isNew(byId(decideOp(1, 'rejected')), next, NOW)).toBe(true);
+    expect(isNew(byId(decideOp(1, 'failed')), next, NOW)).toBe(true);
+    expect(isNew(byId(decideOp(1, 'applied', 'p0')), next, NOW)).toBe(true);
+    expect(isNew(byId(decideOp(1, 'applied', 'p1', 'b')), next, NOW)).toBe(true);
   });
   it('an instruction waits for the one before it on that session; a finished one does not stop it', () => {
     const next = replyOp(9, 'sending').message;
-    expect(isNew(byId(replyOp(1, 'sending')), next)).toBe(false);
-    expect(isNew(byId(replyOp(1, 'uncertain')), next)).toBe(false);
-    expect(isNew(byId(replyOp(1, 'applied')), next)).toBe(true);
-    expect(isNew(byId(replyOp(1, 'sending', 'b')), next)).toBe(true);
+    expect(isNew(byId(replyOp(1, 'sending')), next, NOW)).toBe(false);
+    expect(isNew(byId(replyOp(1, 'uncertain')), next, NOW)).toBe(false);
+    expect(isNew(byId(replyOp(1, 'applied')), next, NOW)).toBe(true);
+    expect(isNew(byId(replyOp(1, 'sending', 'b')), next, NOW)).toBe(true);
   });
   it('an operation id already used is never new', () => {
     const o = replyOp(1, 'applied');
-    expect(isNew(byId(o), o.message)).toBe(false);
+    expect(isNew(byId(o), o.message, NOW)).toBe(false);
+  });
+  it('an instruction or interrupt of unknown outcome stops blocking once too old to be sent again', () => {
+    const next = replyOp(9, 'sending').message;
+    const old = Date.parse(at(1)) + RESEND_MAX_MS;
+    expect(isNew(byId(replyOp(1, 'uncertain')), next, old - 1)).toBe(false);
+    expect(isNew(byId(replyOp(1, 'uncertain')), next, old)).toBe(true);
+    expect(isNew(byId(replyOp(1, 'sending')), next, old)).toBe(true);
+    // An answer to a request is bound to it by its key: it blocks however old.
+    expect(isNew(byId(decideOp(1, 'uncertain')), decideOp(9, 'sending').message, old + 1e9)).toBe(false);
+  });
+});
+
+describe('resendable', () => {
+  const bound = Date.parse(at(1)) + RESEND_MAX_MS;
+  it('an answer to a request is always sent again while its outcome is unknown', () => {
+    expect(resendable(decideOp(1, 'uncertain'), bound + 1e9)).toBe(true);
+    expect(resendable(decideOp(1, 'sending'), bound + 1e9)).toBe(true);
+    expect(resendable(decideOp(1, 'applied'), NOW)).toBe(false);
+  });
+  it('an instruction or interrupt only while younger than RESEND_MAX_MS', () => {
+    const interrupt: Op = { op: uuid(1), phase: 'uncertain', at: at(1), message: { type: 'session.interrupt', op: uuid(1), id: 'a' } };
+    expect(RESEND_MAX_MS).toBe(300_000);
+    expect(resendable(replyOp(1, 'uncertain'), bound - 1)).toBe(true);
+    expect(resendable(replyOp(1, 'uncertain'), bound)).toBe(false);
+    expect(resendable(interrupt, bound - 1)).toBe(true);
+    expect(resendable(interrupt, bound)).toBe(false);
+    expect(resendable(replyOp(1, 'rejected'), NOW)).toBe(false);
   });
 });
 
