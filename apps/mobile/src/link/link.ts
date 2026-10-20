@@ -19,9 +19,17 @@ import { openRelaySocket, type SocketState } from './socket';
 export type LinkState =
   | 'signed_out' | 'unpaired' | 'pairing' | 'pc_offline' | 'handshaking' | 'ready' | 'key_changed' | 'denied' | 'storage_unavailable' | 'replaced';
 
+/**
+ * Where the PC is, from this phone: `connecting` before the first welcome, `relay_unreachable` when no socket reaches the
+ * relay, `pc_offline` when the relay is reached and the PC is not on it, `pc_online` when it is. The pairing screens say
+ * it, since `unpaired` and `pairing` do not.
+ */
+export type Reach = 'connecting' | 'relay_unreachable' | 'pc_offline' | 'pc_online';
+
 export interface PhoneLink {
   state(): LinkState;
-  /** `fn` runs on every change of `state()`, and of the pairing's state. */
+  reach(): Reach;
+  /** `fn` runs on every change of `state()`, of `reach()`, and of the pairing's state. */
   subscribe(fn: () => void): () => void;
   /** Every valid message of the PC; an invalid one never reaches it. */
   onMessage(fn: (m: PhoneServerMessage) => void): () => void;
@@ -107,12 +115,20 @@ export function createPhoneLink(opts: {
     return channel?.ready() ? 'ready' : 'handshaking';
   };
 
+  const reach = (): Reach =>
+    pcOnline === true ? 'pc_online'
+    : pcOnline === null ? 'connecting'
+    : socketState === 'open' ? 'pc_offline' : 'relay_unreachable';
+
   let emitted: LinkState = 'handshaking';
-  /** Tells the listeners when the state changed, or always with `force` (the pairing moved). */
+  let emittedReach: Reach = 'connecting';
+  /** Tells the listeners when the state or the reach changed, or always with `force` (the pairing moved). */
   const check = (force = false) => {
     const s = compute();
-    if (!force && s === emitted) return;
+    const r = reach();
+    if (!force && s === emitted && r === emittedReach) return;
     emitted = s;
+    emittedReach = r;
     for (const fn of [...listeners]) fn();
   };
 
@@ -216,9 +232,12 @@ export function createPhoneLink(opts: {
     pairingSeen = null;
   };
 
-  /** Starts the pairing asked for, once there is an identity and the socket is open: a commit sent earlier is lost. */
+  /**
+   * Starts the pairing asked for, once there is an identity and the PC is on the relay: a commit to a PC away is lost
+   * (the relay drops it), and the PC's code would never come.
+   */
   const launchPairing = () => {
-    if (!pairingWanted || pairing || !identity || pinned || socketState !== 'open' || finished) return;
+    if (!pairingWanted || pairing || !identity || pinned || socketState !== 'open' || pcOnline !== true || finished) return;
     const id = identity;
     const p: Pairing = startPairing({
       identity: id,
@@ -240,6 +259,15 @@ export function createPhoneLink(opts: {
     };
     pairingTimer = setInterval(watchPairing, PAIRING_POLL_MS);
     watchPairing();
+  };
+
+  /**
+   * The PC is away: a commit still waiting for its offer is dropped (the PC lost it, or never got it), and the pairing,
+   * still wanted, starts again once the PC is back. A pairing past its commit (the code shown) is left as it is.
+   */
+  const pcAway = () => {
+    pcOnline = false;
+    if (pairing?.state().step === 'committing') dropPairing();
   };
 
   const beginPairing = () => {
@@ -311,7 +339,7 @@ export function createPhoneLink(opts: {
     onState(s) {
       socketState = s;
       // Out of reach of the relay is out of reach of the PC; the next welcome says where it is.
-      if (s !== 'open' && pcOnline !== null) pcOnline = false;
+      if (s !== 'open' && pcOnline !== null) pcAway();
       check();
     },
     onAttemptFailed() {
@@ -336,8 +364,12 @@ export function createPhoneLink(opts: {
           // under way, and a second one would be finished with the wrong handshake. A replaced PC is no presence change;
           // it answers the phone's next message with a rekey.
           const back = m.online && pcOnline !== true;
-          pcOnline = m.online;
-          if (back) helloIfDue();
+          if (m.online) pcOnline = true;
+          else pcAway();
+          if (back) {
+            helloIfDue();
+            launchPairing();
+          }
           check();
           return;
         }
@@ -345,6 +377,9 @@ export function createPhoneLink(opts: {
           // A sealed body that was not delivered: the channel lost a sequence number. Once only, from a ready channel,
           // so a hello the relay bounces (the PC just left) does not bounce forever; presence brings the PC back.
           if (m.to !== undefined && m.to !== 'pc') return;
+          // A commit waiting for its offer, and the PC not on the relay: the commit (or what followed it) was dropped,
+          // and its presence back starts the pairing again. A paired channel keeps the hello below instead.
+          if (m.code === 'offline' && m.to === 'pc' && pairing?.state().step === 'committing') pcAway();
           if ((m.code === 'offline' || m.code === 'too_large' || m.code === 'rate_limited') && channel?.ready()) helloIfDue();
           check();
           return;
@@ -392,6 +427,7 @@ export function createPhoneLink(opts: {
 
   return {
     state: compute,
+    reach,
     subscribe(fn) {
       listeners.add(fn);
       return () => { listeners.delete(fn); };

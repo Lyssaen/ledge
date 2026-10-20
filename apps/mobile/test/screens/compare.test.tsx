@@ -57,6 +57,45 @@ describe('comparing the code', () => {
     expect(screen.getByRole('heading', { name: 'Comparez ce code' })).toBeInTheDocument();
   });
 
+  it('the PC offline while waiting for its code → said, with « Réessayer », not a bare spinner', () => {
+    const t = app('pairing');
+    act(() => t.setReach('pc_offline'));
+    expect(screen.getByRole('heading', { name: 'PC hors ligne' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Activez l’accès mobile dans Ledge sur votre PC : la liaison démarre dès qu’il est en ligne.');
+    expect(screen.queryByText('En attente du code du PC…')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Réessayer']);
+    fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(t.calls).toEqual(['retry']);
+    // The PC back: the wait for its code, as before.
+    act(() => t.setReach('pc_online'));
+    expect(screen.getByRole('status')).toHaveTextContent('En attente du code du PC…');
+  });
+
+  it('the relay out of reach while waiting → said, with « Réessayer »', () => {
+    const t = app('pairing');
+    act(() => t.setReach('relay_unreachable'));
+    expect(screen.getByRole('heading', { name: 'Relais injoignable' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Ce téléphone n’arrive pas à joindre le relais Ledge. Vérifiez sa connexion à internet, puis réessayez.');
+    expect(screen.queryByText('En attente du code du PC…')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(t.calls).toEqual(['retry']);
+  });
+
+  it('a commit under way when the PC goes away → said, « Réessayer » and « Annuler » both offered', () => {
+    const t = app('pairing');
+    act(() => { t.setPairing({ step: 'committing' }); t.setReach('pc_offline'); });
+    expect(screen.getByRole('heading', { name: 'PC hors ligne' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Réessayer', 'Annuler']);
+    fireEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(t.calls).toEqual(['cancel']);
+  });
+
+  it('the PC offline once the code is shown → the code stays: the comparison is not interrupted', () => {
+    const t = app('pairing');
+    act(() => { t.setPairing(compare()); t.setReach('pc_offline'); });
+    expect(screen.getByRole('heading', { name: 'Comparez ce code' })).toBeInTheDocument();
+  });
+
   it('different → « Liaison annulée », nothing confirmed, and « Recommencer » pairs again', () => {
     const t = app('pairing');
     act(() => t.setPairing(compare()));

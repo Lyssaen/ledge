@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { copy } from '../copy';
+import type { Reach } from '../link/link';
 import type { PairingState } from '../link/pairing';
 import { href } from '../router';
 import { Notice } from '../ui/Notice';
@@ -40,6 +41,10 @@ export interface CompareProps {
   lost: boolean;
   /** A pairing was asked and the link fell back to unpaired without one: only a new start gets out of it. */
   stalled?: boolean;
+  /** Where the PC is: while its code is awaited, a PC away or a relay out of reach is said, not a bare spinner. */
+  reach?: Reach;
+  /** « Réessayer », with the PC away or the relay out of reach. */
+  onRetry?: () => void;
   onSame: () => void;
   /** Cancels the pairing (« Ils sont différents » and « Annuler »). */
   onCancel: () => void;
@@ -49,7 +54,7 @@ export interface CompareProps {
 }
 
 /** Board Compare: the code of both keys, read on the PC and here, then confirmed on both. */
-export function Compare({ step, login, pcName, lost, stalled = false, onSame, onCancel, onRestart, onDone }: CompareProps) {
+export function Compare({ step, login, pcName, lost, stalled = false, reach = 'pc_online', onRetry, onSame, onCancel, onRestart, onDone }: CompareProps) {
   // The user said the codes differ: the cancellation that follows is the board's warning, not a plain one.
   const [differ, setDiffer] = useState(false);
   const pc = pcName ?? copy.yourPc;
@@ -149,6 +154,28 @@ export function Compare({ step, login, pcName, lost, stalled = false, onSame, on
     );
   }
 
+  const cancelButton = step && <button type="button" onClick={onCancel} className={OUTLINE}>{C.cancel}</button>;
+
+  // No PC to send the code: said, with what to do. The pairing starts by itself once the PC is on the relay.
+  const away = reach === 'pc_offline' ? [C.offlineTitle, C.offlineBody(pc)] : reach === 'relay_unreachable' ? [C.relayTitle, C.relayBody] : null;
+  if (away) {
+    return (
+      <Board top="pt-40">
+        <Account login={login} />
+        <div role="status" className="flex flex-col gap-2 text-center">
+          <h1 className={H1}>{away[0]}</h1>
+          <p className="text-muted">{away[1]}</p>
+        </div>
+        {lostNotice}
+        <Fill />
+        <div className="flex flex-col gap-3">
+          <button type="button" onClick={onRetry} className={PRIMARY}>{C.retryNow}</button>
+          {cancelButton}
+        </div>
+      </Board>
+    );
+  }
+
   // No pairing yet, or its first frame on the way: the PC's code comes next.
   return (
     <Board top="pt-40">
@@ -159,7 +186,7 @@ export function Compare({ step, login, pcName, lost, stalled = false, onSame, on
       </div>
       {lostNotice}
       <Fill />
-      {step && <button type="button" onClick={onCancel} className={OUTLINE}>{C.cancel}</button>}
+      {cancelButton}
     </Board>
   );
 }

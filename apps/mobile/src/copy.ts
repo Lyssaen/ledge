@@ -230,7 +230,13 @@ export const copy = {
     /** A pairing was asked and none could start (no key could be made, the link closed): no board shows it. */
     stalledTitle: 'La liaison n’a pas pu démarrer',
     stalledBody: 'Ce téléphone n’a pas pu préparer sa clé. Recommencez ; si cela persiste, rechargez la page.',
-    retry: 'Recommencer'
+    retry: 'Recommencer',
+    /** Waiting for the PC's code while it is not on the relay: the pairing starts by itself once it is. */
+    offlineTitle: 'PC hors ligne',
+    offlineBody: (pc: string) => `Activez l’accès mobile dans Ledge sur ${pc} : la liaison démarre dès qu’il est en ligne.`,
+    relayTitle: 'Relais injoignable',
+    relayBody: 'Ce téléphone n’arrive pas à joindre le relais Ledge. Vérifiez sa connexion à internet, puis réessayez.',
+    retryNow: 'Réessayer'
   },
   denied: {
     title: 'Ce compte n’a pas accès',

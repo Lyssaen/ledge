@@ -85,6 +85,24 @@ async function closedPort(): Promise<number> {
   return port;
 }
 
+/** A link to `pc` whose socket records every frame the phone sends: the relay drops one to an offline PC, this does not. */
+function recording(pc: FakePc) {
+  const wire: string[] = [];
+  const Recording = class extends pc.PhoneWebSocket {
+    override send(data: string | ArrayBufferLike | Blob | ArrayBufferView) { wire.push(String(data)); super.send(data); }
+  } as typeof WebSocket;
+  const link = createPhoneLink({ keys: memoryKeys(null), url: pc.url, WebSocketImpl: Recording, fetchImpl: authStub().fetchImpl });
+  cleanups.push(() => link.close());
+  return { link, wire, commits: () => wire.filter((t) => t.includes('pair_commit')).length };
+}
+
+/** Every reach the link's listeners were told of, without repeats. */
+function reachesOf(link: PhoneLink) {
+  const reaches: string[] = [link.reach()];
+  link.subscribe(() => { const r = link.reach(); if (reaches[reaches.length - 1] !== r) reaches.push(r); });
+  return reaches;
+}
+
 const parsed = (pc: FakePc) => pc.received.map((t) => JSON.parse(t) as unknown);
 const afterReady = (watched: string | null) => [{ type: 'snapshot.request' }, { type: 'session.watch', id: watched }];
 
@@ -118,6 +136,78 @@ describe('PhoneLink', () => {
     const commit = pc.waitFor('pair_commit');
     link.startPairing();
     expect((await commit).k).toBe('pair_commit');
+  });
+
+  it('unpaired with the PC offline → no pair_commit on the wire; the PC comes online → exactly one', async () => {
+    const pc = await startFakePc();
+    cleanups.push(() => pc.close());
+    await pc.disconnect();
+    const { link, commits } = recording(pc);
+    const reaches = reachesOf(link);
+    link.startPairing();
+    await until(() => link.reach() === 'pc_offline', 'pc_offline');
+    await settle();
+    expect(commits()).toBe(0);
+    expect(link.state()).toBe('pairing');
+    expect(link.pairing()).toBeNull();
+    const commit = pc.waitFor('pair_commit');
+    await pc.reconnect();
+    await commit;
+    await until(() => link.pairing()?.state().step === 'compare', 'compare');
+    await settle();
+    expect(commits()).toBe(1);
+    // The listeners heard the PC come and go, though the state stayed `pairing`.
+    expect(reaches).toEqual(expect.arrayContaining(['pc_offline', 'pc_online']));
+  });
+
+  it.each([
+    ['presence offline', (pc: FakePc) => pc.disconnect(), (pc: FakePc) => pc.reconnect()],
+    // The relay bounced a frame: the PC left. Its presence back is what brings it back.
+    ['error offline to:pc', async (pc: FakePc) => { pc.injectToPhone({ type: 'error', code: 'offline', to: 'pc' }); },
+      async (pc: FakePc) => { pc.injectToPhone({ type: 'presence', peer: 'pc', online: true }); }]
+  ] as const)('a commit waiting when the PC goes away (%s) → dropped, back to waiting; the PC back → exactly one new commit', async (_, away, back) => {
+    const pc = await startFakePc({ autoOffer: false });
+    cleanups.push(() => pc.close());
+    const { link, commits } = recording(pc);
+    const first = pc.waitFor('pair_commit');
+    link.startPairing();
+    await first;
+    expect(link.pairing()!.state().step).toBe('committing');
+    await away(pc);
+    await until(() => link.pairing() === null, 'the commit dropped');
+    expect(link.state()).toBe('pairing');
+    expect(link.reach()).toBe('pc_offline');
+    await settle();
+    expect(commits()).toBe(1);
+    const again = pc.waitFor('pair_commit');
+    await back(pc);
+    await again;
+    await until(() => link.pairing()?.state().step === 'committing', 'committing again');
+    await settle();
+    expect(commits()).toBe(2);
+  });
+
+  it('a pairing with the relay out of reach → relay_unreachable, no commit; « Réessayer » once it is reachable → the commit', async () => {
+    const pc = await startFakePc();
+    cleanups.push(() => pc.close());
+    const dead = `ws://127.0.0.1:${await closedPort()}/ws`;
+    let reachable = false;
+    const Flaky = class extends pc.PhoneWebSocket {
+      constructor(url: string | URL) { super(reachable ? url : dead); }
+    } as typeof WebSocket;
+    const link = createPhoneLink({ keys: memoryKeys(null), url: pc.url, WebSocketImpl: Flaky, fetchImpl: authStub().fetchImpl });
+    cleanups.push(() => link.close());
+    const reaches = reachesOf(link);
+    link.startPairing();
+    await until(() => link.reach() === 'relay_unreachable', 'relay_unreachable');
+    expect(link.state()).toBe('pairing');
+    expect(link.pairing()).toBeNull();
+    expect(reaches).toContain('relay_unreachable');
+    reachable = true;
+    const commit = pc.waitFor('pair_commit');
+    link.retry();
+    await commit;
+    expect(link.reach()).toBe('pc_online');
   });
 
   it('surfaces an expired pairing to its listeners, without a frame from the PC', async () => {

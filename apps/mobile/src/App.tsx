@@ -140,6 +140,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           <Compare
             step={step} login={login} pcName={pairingName} lost={keysLost}
             stalled={state === 'unpaired' && step === null && started}
+            reach={link.reach()} onRetry={retry}
             onSame={() => link.pairing()?.confirmOnPhone()} onCancel={() => link.pairing()?.cancel()}
             onRestart={() => begin(() => link.startPairing())} onDone={() => setDoneSeen(true)}
           />

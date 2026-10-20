@@ -1,6 +1,6 @@
 import { PHONE_PROTOCOL, type PhoneClientMessage, type PhoneServerMessage, type PhoneSession } from '@ledge/protocol';
 import type { PinnedPc } from '../../src/link/keys';
-import type { LinkState, PhoneLink } from '../../src/link/link';
+import type { LinkState, PhoneLink, Reach } from '../../src/link/link';
 import type { Pairing, PairingState } from '../../src/link/pairing';
 
 /** A Storage held in memory, one per test, so nothing leaks between them. */
@@ -25,6 +25,7 @@ export function fakeLink(initial: LinkState = 'ready') {
   let pairingState: PairingState | null = null;
   let pinned: PinnedPc | null = null;
   let received: string | null = null;
+  let reach: Reach = 'pc_online';
   const notify = () => { for (const f of [...listeners]) f(); };
   const pairing: Pairing = {
     async receive() {},
@@ -40,6 +41,7 @@ export function fakeLink(initial: LinkState = 'ready') {
   };
   const link: PhoneLink = {
     state: () => state,
+    reach: () => reach,
     subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
     onMessage(fn) { handlers.add(fn); return () => { handlers.delete(fn); }; },
     async send(m) {
@@ -67,6 +69,7 @@ export function fakeLink(initial: LinkState = 'ready') {
     setPairing(s: PairingState | null) { pairingState = s; notify(); },
     setPinned(pc: PinnedPc | null) { pinned = pc; notify(); },
     setReceivedKey(fp: string | null) { received = fp; notify(); },
+    setReach(r: Reach) { reach = r; notify(); },
     deliver(m: PhoneServerMessage) { for (const h of [...handlers]) h(m); },
     listening: () => handlers.size + listeners.size
   };
